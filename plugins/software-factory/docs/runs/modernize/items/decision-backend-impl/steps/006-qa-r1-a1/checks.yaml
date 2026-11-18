@@ -1,8 +1,7 @@
 checks:
   - id: red-test
     status: pass
-    message:
-      "red-test passed: all 8 tests fail when prod changes are restored to
+    message: "red-test passed: all 8 tests fail when prod changes are restored to
       test-first commit"
     details:
       command: uv run pytest tests/checkers/test_decision_backend.py
@@ -91,9 +90,9 @@ checks:
 
         \     assert backend.calls == []
 
-        \\
+        \\ 
 
-        \\
+        \\ 
 
         +def test_bare_directive_stays_meaningful_when_semantic_disabled(
 
@@ -132,7 +131,7 @@ checks:
 
         \ # ── Suppressed-code normalization ──────────────────────────────────
 
-        \\
+        \\ 
 
         \ "
       files:

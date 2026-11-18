@@ -14,13 +14,13 @@ target:
   command: uv run pytest -q
   customTarget: true
 evidence:
-  - 'Reproduction/current state: `uv run lint --tools ''pylint,pylint-pyi,pylint
-    tests''` reports PASSED with `"messages": []` for all three pylint passes
+  - "Reproduction/current state: `uv run lint --tools 'pylint,pylint-pyi,pylint
+    tests'` reports PASSED with `\"messages\": []` for all three pylint passes
     (zero W9704); the historic red sites are recorded in
     .factory/tasks/modernize/infra.yaml (generic_key_dict_checker.py:40 and
     testing.py:34). Local env lacks optional sentence-transformers, so W9704
     exercises the heuristic fallback; new comments are more code-specific for
-    the reranker path.'
+    the reranker path."
   - "Format gate: `uv run ruff format --check --config config/ruff.toml src
     tests` -> '181 files already formatted' (exit 0); touched-file check after
     edits also clean."

@@ -1,5 +1,4 @@
 Your previous output failed deterministic validation with these errors (fix ONLY these; yield NEW items only, never re-emit existing ones, never invent outlineRefs):
-
 - Total items (57) exceeds maximum items limit of 50
 - Item "decision-cache-storage-v2" references unknown dependency "cache-contract-assumptions"
 - Item "decision-cache-refresh-wiring-v2" references unknown dependency "source-simplifications"

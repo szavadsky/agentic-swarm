@@ -7,8 +7,7 @@ suggestions:
   - id: stub-module-headroom
     disposition: optional
     summary: _factories_stub.py at 474/500 lines leaves 26 lines of C0302 headroom
-    detail:
-      Largest split module is tests/checkers/_factories_stub.py at 474 lines
+    detail: Largest split module is tests/checkers/_factories_stub.py at 474 lines
       against max-module-lines=500 (config/.pylintrc-tests:20). Within budget
       and no too-many-lines disable needed, so not a defect; on next growth of
       stub rows, extract the import-contract tables/builders into a sibling

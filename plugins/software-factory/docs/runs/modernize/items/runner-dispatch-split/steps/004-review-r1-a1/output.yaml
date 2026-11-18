@@ -1,8 +1,7 @@
 status: approved
 summary: "minimal registry split verified: 449/102 lines, identity intact, gates green"
 suggestions:
-  - detail:
-      dispatch.py:44-46 keeps '# Tool definitions' header though literal moved
+  - detail: dispatch.py:44-46 keeps '# Tool definitions' header though literal moved
       to _tool_specs.py:9; header now describes re-export comment below. Rename
       to re-export/registry header to avoid implying definitions live here.
       _tool_specs.py:7 correctly retains the header.

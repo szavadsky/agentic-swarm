@@ -222,8 +222,7 @@ checks:
     status: pass
     message: "target-green passed: selected tests passed"
     details:
-      command:
-        bun --cwd=plugins/software-factory test test/engine/merge-setup.test.ts
+      command: bun --cwd=plugins/software-factory test test/engine/merge-setup.test.ts
         --reporter=junit
         --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-green-1794279806234-jse7zphthr.xml
       junitCaseCount: 5

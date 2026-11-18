@@ -53,11 +53,9 @@ evidence:
     test/records-and-fingerprint.test.ts test/engine/status-budget.test.ts` ->
     17 pass, 0 fail."
 remarkable:
-  - chosen:
-      Declare expectRed ids as bare Bun test names rather than file-qualified
+  - chosen: Declare expectRed ids as bare Bun test names rather than file-qualified
       `file::test` node ids.
-    why:
-      "Bun's JUnit reporter emits ids as `<innermost describe>.<test name>` with
+    why: "Bun's JUnit reporter emits ids as `<innermost describe>.<test name>` with
       no file path in the id; the engine's normalizer matches a bare id by
       suffix (`id.endsWith('.' + expectId)`). Verified against parseJunit
       output: all 11 ids match exactly one failing case."
@@ -65,11 +63,9 @@ remarkable:
       - File-qualified `test/...::test` ids (would not match Bun's
         describe-based JUnit ids unless the describe name is also embedded).
       - Full `<describe>.<test>` ids (brittle to describe renames).
-  - chosen:
-      Specify zero-default aggregation and optional schema properties, with no
+  - chosen: Specify zero-default aggregation and optional schema properties, with no
       migration of historical records.
-    why:
-      "Matches the assignment contract: absent cache keys in old meta.yaml/NDJSON
+    why: "Matches the assignment contract: absent cache keys in old meta.yaml/NDJSON
       must read as 0 and remain schema-valid, while new records persist
       cacheReadTokens/cacheWriteTokens/totalTokens and a cost breakdown."
     alternatives:
@@ -77,12 +73,10 @@ remarkable:
       - Required schema fields (would invalidate historical records).
 concerns:
   - kind: tech-debt
-    summary:
-      Child/merge worktrees still need infra.setup (bun install) before the
+    summary: Child/merge worktrees still need infra.setup (bun install) before the
       bun test runner can collect tests; this worktree had no node_modules until
       installed manually
-    detail:
-      Running `bun test` in a fresh worktree failed with `Cannot find package
+    detail: Running `bun test` in a fresh worktree failed with `Cannot find package
       'yaml'` from test/records-and-fingerprint.test.ts and src/core/prompts.ts
       until `bun install` was run. This is the pre-existing open concern
       c-552344216d (missing infra.setup in merge-child worktrees), not

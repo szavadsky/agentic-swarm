@@ -33,8 +33,7 @@ suggestions:
     location:
       file: .factory/tasks/omp-workspaces/items/spike-cache-key/steps/001-research-r1-a1/output.yaml
     summary: Long/none retention probes lack archived NDJSON
-  - detail:
-      Docstring implies resume determinism but harness.ts:318-326 re-resolves
+  - detail: Docstring implies resume determinism but harness.ts:318-326 re-resolves
       @role every turn; role-map/fallback change silently switches model (spike
       measured cacheRead=0, 8.9x cost). Note re-resolution; M7 already tasked to
       record literal model.
@@ -44,8 +43,7 @@ suggestions:
       file: plugins/software-factory/src/harness/omp/harness.ts
       line: 280
     summary: harness.ts:280 docstring overstates resume guarantee
-  - detail:
-      Transport audit cites steps/architect-resume; IMPLEMENTATION.md flags
+  - detail: Transport audit cites steps/architect-resume; IMPLEMENTATION.md flags
       that fragment dead. Harness mechanism identical
       (harness.ts:286-350,368-389) so byte diffs (sysprompt cb92bbca, prompt
       4a9d87d4, overlay 6ebf5894/1472B, argv differs only -p @path) still valid,

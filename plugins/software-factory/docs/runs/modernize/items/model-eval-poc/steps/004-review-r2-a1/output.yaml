@@ -6,8 +6,7 @@ suggestions:
   - id: ablation-recall-column-duplicates-precision
     disposition: fix
     summary: Report 4.3 Recall column shows Precision twice (wrong numbers for all rows)
-    detail:
-      "report.py:250 renders Recall as pct(precision and precision) instead of
+    detail: "report.py:250 renders Recall as pct(precision and precision) instead of
       pct(meaningful_recall). Verified against metrics.json: decider-nano rubric
       0.5/veto displays Recall 3.1% but true recall is 27.9%; bekko rubric
       displays 11.8% vs true 37.7%; ettin/minilm display n/a vs true 100%.
@@ -21,8 +20,7 @@ suggestions:
       line: 250
   - id: ettin-model-stats-include-unused-heads
     disposition: optional
-    summary:
-      Ettin params/bytes overcounted by unused Dense/LayerNorm heads (~592K
+    summary: Ettin params/bytes overcounted by unused Dense/LayerNorm heads (~592K
       params)
     detail: model_stats.py rglob sums all 4 safetensors (149,606,401 params /
       598,439,036 bytes) but CrossEncoder loads only model.safetensors (134 keys
@@ -39,8 +37,7 @@ suggestions:
     disposition: optional
     summary: GLiDE exclusion rationale 'cannot be smallest' is logically invalid
       when 0 compliant
-    detail:
-      "metrics.py exclusion text (and report.md §6) argues GLiDE/395M 'cannot
+    detail: "metrics.py exclusion text (and report.md §6) argues GLiDE/395M 'cannot
       be the smallest compliant option' because it is largest. That holds only
       if a smaller compliant candidate exists; with 0 contracted-compliant among
       scored models, a compliant GLiDE would be the smallest by default
@@ -57,8 +54,7 @@ suggestions:
     disposition: optional
     summary: Table 2 presents contended p50/p95 as point estimates; annotate as
       upper bounds
-    detail:
-      "Report §6 discloses bekko/ettin/minilm overlapped the GLiDE run, but
+    detail: "Report §6 discloses bekko/ettin/minilm overlapped the GLiDE run, but
       Table 2 shows bare '439 ms / 1103 ms' (ettin) and '224 ms / 1341 ms'
       (minilm). Verified inflation vs isolated smoke: ettin p50 439ms vs ~90ms
       smoke, minilm p50 224ms vs ~15ms smoke (5-15x). p50 is the 4th
@@ -72,8 +68,7 @@ suggestions:
     disposition: optional
     summary: Table 2 labels GLiDE 'eligible' while §6 excludes it from the
       compliance matrix
-    detail:
-      "Status derives from MODEL_SPECS eligible flag (True) even though all
+    detail: "Status derives from MODEL_SPECS eligible flag (True) even though all
       three GLiDE prompts are status incomplete (6/336) and §6 explicitly
       excludes GLiDE from compliance. Table shows '0 MB / n/a ms / eligible',
       contradicting the exclusion list directly below. Change Table 2 status for
@@ -86,8 +81,7 @@ suggestions:
     disposition: optional
     summary: Bekko excluded for 'no declared license' but decider/ettin licenses
       unaudited
-    detail:
-      Cache contains a licenses/ dir only for glide (Ettin-encoder-400m MIT);
+    detail: Cache contains a licenses/ dir only for glide (Ettin-encoder-400m MIT);
       bekko, decider-nano, ettin, minilm snapshots all lack license files, yet
       only bekko is marked ineligible for license. Either document license
       provenance for all five candidates (model cards / HF metadata) or drop
@@ -101,8 +95,7 @@ suggestions:
     disposition: human-awareness
     summary: No-go reflects corpus structure (0 contracted accepted negatives) +
       single-rater labels
-    detail:
-      "Verified: contracted accepted stratum is 215 meaningful / 0 meaningless
+    detail: "Verified: contracted accepted stratum is 215 meaningful / 0 meaningless
       (the sole repo_suppression negative c188 is heuristic-rejected), so 95%
       precision is unevaluable by construction and heuristic baseline is 100% by
       definition (test-table labels assert heuristic behavior). All 183 repo

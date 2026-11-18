@@ -1,6 +1,5 @@
 adrs:
-  - consequences:
-      No model ships in iteration 3; intent's swap clause is deferred
+  - consequences: No model ships in iteration 3; intent's swap clause is deferred
       until a compliant model is proven. Epics build backend/cache
       infrastructure against FakeBackend + tracked cache; model wiring is a
       bounded follow-up once the verdict lands. Close-up must not claim the swap
@@ -35,18 +34,15 @@ adrs:
       first if unmerged)."
     id: ADR-010
     title: Adopt iteration-2 semantic spike contracts as build baseline
-  - consequences:
-      Subsystem epics start with dispute-free ownership; no concurrent
+  - consequences: Subsystem epics start with dispute-free ownership; no concurrent
       shared-infra edits; AGENTS.md conflicts avoided by heading split + merge
       order; M3 close-out consumes a single handoff record instead of chasing
       epic internals.
-    context:
-      M4 audits merged with the unified 5-owner map but report completeness
+    context: M4 audits merged with the unified 5-owner map but report completeness
       validates at iteration-3 replan via HEAD re-glob; AGENTS.md section split
       and the epic-to-root shift-report handoff need machine-checkable
       definitions because no cross-epic dependency edges exist.
-    decision:
-      "Re-validate the unified map at iteration-3 start, then spawn runner,
+    decision: "Re-validate the unified map at iteration-3 start, then spawn runner,
       checkers, and semantic epics in one wave under the narrowed protocol
       (semantic NEVER writes tests/data/**; tests/assumptions append-only;
       shared .py symbol ownership only). AGENTS.md split by heading with merge
@@ -72,8 +68,7 @@ adrs:
       import (e.g. no_try_import_checker.py:80). Adding @beartype breaks import;
       dropping the disable retriggers the custom missing-beartype checker, so
       'remove suppressions via typed register()' is unimplementable as stated."
-    decision:
-      Retain the missing-beartype disable on all register() functions with a
+    decision: Retain the missing-beartype disable on all register() functions with a
       standardized justification (PyLinter is a pylint internal type unavailable
       at runtime for beartype; circular import). Annotation stays PyLinter under
       TYPE_CHECKING. No @beartype is added to register(). Only type-ignore[misc]
@@ -81,33 +76,28 @@ adrs:
     id: ADR-012
     title: register() missing-beartype exemption for PyLinter circular import
 assumptions:
-  - assumption:
-      Material behavior = golden 158 findings (SEMANTIC=0) + checker unit
+  - assumption: Material behavior = golden 158 findings (SEMANTIC=0) + checker unit
       tests + CLI flags/exit codes + baseline/autofix semantics + shipped
       configs/scopes. Heuristic rejections are material; model accept/reject was
       never material (dormant path). Tightening remains intentional when a model
       eventually ships.
     disposition: confirm with human
-    why:
-      Preserves the iteration-1/2 operator-approved boundary; golden stays the
+    why: Preserves the iteration-1/2 operator-approved boundary; golden stays the
       mechanical contract.
   - assumption: Iteration-2 spike reports (candidate matrix, CPU eval no-go,
       runtime-pinning skip, pylint writer verdict if merged, coding-rules +
       test-debloat audits) are durable and readable at replan per ADR-008;
       validation re-globs HEAD.
     why: Plan-2 ADR-008 durability decision; verified pattern for both audits.
-  - assumption:
-      Dev/CI do not install the `semantic` extra; gates run heuristic +
+  - assumption: Dev/CI do not install the `semantic` extra; gates run heuristic +
       cache hits. Any real-model test is slow + with_real_api, never in the
       default suite.
     why: Matches current venv and keeps gates offline, fast, deterministic.
-  - assumption:
-      "'Never test linting' bans pytest asserting this repo passes its own
+  - assumption: "'Never test linting' bans pytest asserting this repo passes its own
       gates (subprocess re-lint, AST re-implementation, config re-checks).
       Golden/integration contracts are retained."
     disposition: confirm with human
-    why:
-      Operator-approved in iteration 1; removes gate-duplicating tests without
+    why: Operator-approved in iteration 1; removes gate-duplicating tests without
       deleting the fit-for-purpose contract.
   - assumption: detect-secrets MemoryError on huge tracked artifacts is
       environmental (worktree state), not a product violation; validate on
@@ -116,36 +106,29 @@ assumptions:
   - assumption: "Operator's secrets answers stand: journals stay committed;
       ^\\.factory/ filter lands in .secrets.baseline filters_used (task-branch
       commit); harness filter-seeding is a follow-up outside this task."
-    why:
-      Steering directive 1794158471467; M1 acceptance cites mechanism + pinned
+    why: Steering directive 1794158471467; M1 acceptance cites mechanism + pinned
       HEAD.
-  - assumption:
-      Integration gate contract is 9 collected, 0 failed with pre-commit
+  - assumption: Integration gate contract is 9 collected, 0 failed with pre-commit
       env pinned (9 passed where pre-commit is installed; 7 passed + 2 skipped
       via ensure_precommit_or_skip where missing). AGENTS.md Quick Commands
       integration row is reconciled to this contract, not unconditional 9/9 or
       stale 7 pass.
-    why:
-      tests/integration.py:197-257 skip 2 tests without pre-commit; unconditional
+    why: tests/integration.py:197-257 skip 2 tests without pre-commit; unconditional
       9/9 fails on minimal envs while stale 7 pass under-reports.
-  - assumption:
-      "Iteration 3 ships semantic infrastructure only (DecisionBackend,
+  - assumption: "Iteration 3 ships semantic infrastructure only (DecisionBackend,
       tracked cache, FakeBackend, docs); the headline model swap is NOT complete
       at close-up and must not be claimed as such. Follow-up triggers:
       double-rated real brush-off sample repairing the 215/0 corpus defect,
       human Fastino license decision if GLiDE is recommended, CPU latency/RSS
       benchmark on the chosen runtime."
     disposition: confirm with human
-    why:
-      ADR-009 no-go gating; operator must approve infra-only close-up per review
+    why: ADR-009 no-go gating; operator must approve infra-only close-up per review
       human-awareness item.
-  - assumption:
-      The three epics run as child tasks with their own iteration budgets
+  - assumption: The three epics run as child tasks with their own iteration budgets
       outside the root maxItemsPerPlan cap; advisory per-epic budgets are runner
       ≤12 items, checkers ≤12 items, semantic ≤10 items. Root iteration-3 holds
       7 items.
-    why:
-      Prevents unbudgeted expansion against the 50-item cap while keeping epic
+    why: Prevents unbudgeted expansion against the 50-item cap while keeping epic
       scopes accountable.
 epics:
   - intent: >-
@@ -389,8 +372,7 @@ epics:
     slug: epic-semantic-infrastructure
 itemOutlines:
   - deps: []
-    description:
-      "Validate ADR-008 durability at iteration-3 start: re-glob HEAD for
+    description: "Validate ADR-008 durability at iteration-3 start: re-glob HEAD for
       the ownership universe (src+scripts+tests minus tests/data), confirm
       unified 5-owner counts (expect 67/83/15/4/15 modulo iteration-3 HEAD
       drift), symbol exclusions (_semantic.py+.pyi,
@@ -408,8 +390,7 @@ itemOutlines:
     slug: ownership-map-revalidation
     title: Re-validate unified ownership map at HEAD
   - deps: []
-    description:
-      "Land the operator-approved exclusion so the lint gate is green on
+    description: "Land the operator-approved exclusion so the lint gate is green on
       clean checkouts. Pre-validate the filters_used schema against the
       installed detect-secrets version first (should_exclude_file signature;
       list-pattern vs scalar form) and use the version-correct form; then insert
@@ -462,8 +443,7 @@ itemOutlines:
     title: Epic kickoff and ownership-dispute gate
   - deps:
       - epic-kickoff-gate
-    description:
-      "Root-owned fan-in (report-only, zero repo writes), scheduled after
+    description: "Root-owned fan-in (report-only, zero repo writes), scheduled after
       M2 epic close-ups via milestone ordering (no cross-epic machine edges
       exist — ordering is the fan-in mechanism). Read the three epic close-up
       reports; extract each epic's shift-report section (or explicit no-shift
@@ -480,8 +460,7 @@ itemOutlines:
     title: Consolidate epic shift reports into handoff record
   - deps:
       - epic-shift-report-collection
-    description:
-      "Root-owned regen hatch, executed ONLY on a reviewed shift report
+    description: "Root-owned regen hatch, executed ONLY on a reviewed shift report
       in the handoff record (heuristic outcome change, e.g. real suppressed
       codes): run PYTHON_SETUP_LINT_UPDATE_GOLDEN=1 locally (never under CI),
       verify byte-identical double run, review the added/removed diff key-by-key
@@ -655,12 +634,10 @@ techDebt:
       epic-semantic-infrastructure builds backend/cache against FakeBackend so a
       compliant model plugs in via get_backend()."
   - category: blocking
-    description:
-      "M4 audit report completeness + unified-map drift: reports live in
+    description: "M4 audit report completeness + unified-map drift: reports live in
       orchestration records; evidence lines may be stale at iteration-3 HEAD."
     id: TD3-B2
-    resolution:
-      ownership-map-revalidation re-globs HEAD and produces the validated
+    resolution: ownership-map-revalidation re-globs HEAD and produces the validated
       map + drift list; epic-kickoff-gate resolves disputes before epic waves
       scale.
   - category: impacting
@@ -668,22 +645,19 @@ techDebt:
       pylint-cache-assumptions running at close-up); cache concurrency design
       cannot be invented.
     id: TD3-I1
-    resolution:
-      pylint-cache-semantics-closure lands or verifies the single verdict
+    resolution: pylint-cache-semantics-closure lands or verifies the single verdict
       file first; epic-semantic-infrastructure consumes it and must not invent
       lock/merge semantics.
   - category: impacting
     description: detect-secrets gate red on factory journals (environmental) +
       MemoryError on huge tracked artifacts in dirty worktrees.
     id: TD3-I2
-    resolution:
-      secrets-baseline-exclusion lands the approved ^\.factory/ filter in
+    resolution: secrets-baseline-exclusion lands the approved ^\.factory/ filter in
       version-correct form after schema pre-validation (journals stay
       committed); final validation runs on scoped/clean checkout and cites
       mechanism + HEAD.
   - category: adjacent
-    description:
-      "Docs/ADR drift: AGENTS.md stale counts + missing ruff-format scope
+    description: "Docs/ADR drift: AGENTS.md stale counts + missing ruff-format scope
       row; CHANGELOG v1.2.9 vs pyproject 1.2.10; README v1.2.5 pin; 8
       problem-statement ADRs partly stale; design/ vs docs/adr location split."
     id: TD3-A1
@@ -694,19 +668,16 @@ techDebt:
       cross-reference) via final-gate follow-up. Kickoff records assignments;
       unassigned rows stay with root."
   - category: adjacent
-    description:
-      Over-limit modules with disables (dispatch.py 542, _factories.py
+    description: Over-limit modules with disables (dispatch.py 542, _factories.py
       1393, _factories_extras.py 511 + duplicate disables,
       test_semantic_check.py 506), dead compat shims, duplicated test helpers,
       milestone-ID test names, hardcoded checkout paths.
     id: TD3-A2
-    resolution:
-      Owned by the three epics per audit rows (register() disables exempt
+    resolution: Owned by the three epics per audit rows (register() disables exempt
       per ADR-012); each removal names a survivor; blocking-debt limbs pinned or
       explicitly flagged.
 uncertainties:
-  - description:
-      Audit evidence may have drifted since iteration 2 (file:line moves,
+  - description: Audit evidence may have drifted since iteration 2 (file:line moves,
       renames, merged items). Epic scopes built on stale rows would misfire.
     id: U1
     spikeOutlines:

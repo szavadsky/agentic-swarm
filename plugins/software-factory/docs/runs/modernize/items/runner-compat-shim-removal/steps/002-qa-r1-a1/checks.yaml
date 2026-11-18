@@ -14,11 +14,11 @@ checks:
 
         @@ -9,12 +9,10 @@ from typing import Any
 
-        \\
+        \\ 
 
         \ import pytest
 
-        \\
+        \\ 
 
         -from python_setup_lint.runner import Record, peek_fallback_tools
 
@@ -46,15 +46,15 @@ checks:
 
         \ from tests.runner._factories import diff_baseline_with
 
-        \\
+        \\ 
 
         @@ -440,20 +438,7 @@ class TestDiffBaselineErrors:
 
         \         assert check(violations, reloaded)
 
-        \\
+        \\ 
 
-        \\
+        \\ 
 
         -# ── Fallback/frozen-stub and dedup pinning limbs ────────────────
 
@@ -90,9 +90,9 @@ checks:
 
         +# ── Flat-record round-trip and dedup pinning limbs ──────────────
 
-        \\
+        \\ 
 
-        \\
+        \\ 
 
         \ class TestFlatRecordRoundTrip:
 
@@ -109,7 +109,7 @@ checks:
 
         \ import pytest
 
-        \\
+        \\ 
 
         \ from python_setup_lint.runner import Record
 

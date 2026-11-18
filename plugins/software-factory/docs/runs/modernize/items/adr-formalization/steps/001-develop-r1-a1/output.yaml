@@ -16,8 +16,8 @@ target:
 evidence:
   - "`uv run pytest -q` -> 1357 passed, 4 skipped, 18 deselected, 4 warnings in
     46.68s (exit 0); no test files changed."
-  - '`uv run lint --tools "rumdl check"` -> [rumdl check] PASSED, exit 0, ''No
-    issues found in 25 files'' (project config, 22ms).'
+  - "`uv run lint --tools \"rumdl check\"` -> [rumdl check] PASSED, exit 0, 'No
+    issues found in 25 files' (project config, 22ms)."
   - "`uv run rumdl check --config config/rumdl.toml docs/adr` -> 'Success: No
     issues found in 13 files' (exit 0)."
   - "Structural check over all 12 ADR files: ADR-009/010/011/012 each contain

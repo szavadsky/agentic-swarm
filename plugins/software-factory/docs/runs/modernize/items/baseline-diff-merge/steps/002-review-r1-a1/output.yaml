@@ -33,8 +33,7 @@ suggestions:
   - id: duplicate-capture-one-header
     disposition: optional
     summary: Duplicate _capture_one section header from merge
-    detail:
-      Identical '# ── _capture_one edge cases ──' headers at lines 296 and 299
+    detail: Identical '# ── _capture_one edge cases ──' headers at lines 296 and 299
       with blank lines between; delete one.
     location:
       file: tests/runner/test_baseline_diff_parsers.py

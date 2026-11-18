@@ -22,8 +22,7 @@ remarkable:
   - alternatives:
       - Treat red baseline as blocking
       - Infer fixes from raw log text comparison
-    chosen:
-      Judged gates solely from Gate Diff table; lint and test count as fixed
+    chosen: Judged gates solely from Gate Diff table; lint and test count as fixed
       (fail to pass), format and test-integration remain green
     why: Per close-up rules, raw output text differs run to run; only
       baseline-vs-now verdicts are authoritative, and both red-baseline gates

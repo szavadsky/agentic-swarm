@@ -308,8 +308,7 @@ concerns:
   - kind: assumption
     summary: coding-rules-audit UNIFIED ownership map was unavailable in the
       prompt/inter-dep
-    detail:
-      ADR-013 states the map lives in orchestration records, which this agent
+    detail: ADR-013 states the map lives in orchestration records, which this agent
       must not inspect. Owners were aligned to ADR-011's visible five-owner
       taxonomy (runner/checkers/setup-testing/semantic/root); downstream
       implementation must confirm each row against the UNIFIED map rather than
@@ -321,8 +320,7 @@ concerns:
   - kind: tech-debt
     summary: Shipped rcfile parity is unguarded after test_config_consistency.py
       deletion
-    detail:
-      644774e deleted the only test enforcing DESIGN/STUB-CHECKER consistency
+    detail: 644774e deleted the only test enforcing DESIGN/STUB-CHECKER consistency
       across config/.pylintrc, config/.pylintrc-tests and config/.pylintrc-pyi.
       No surviving parity test exists; the semantic jobs watchdog that touches
       rcfiles is SKIPPED. Removing further config re-checks would deepen this
@@ -337,8 +335,7 @@ concerns:
       - test-debloat-impl
   - kind: risk
     summary: Fixture data test file is collected and leaks a temp directory
-    detail:
-      tests/data/minimal_sample_project/tests/test_tempfile.py::test_create_temp_dir
+    detail: tests/data/minimal_sample_project/tests/test_tempfile.py::test_create_temp_dir
       is collected in the default suite (verified with pytest --collect-only)
       and calls tempfile.mkdtemp without cleanup. tests/data should be excluded
       from collection.
@@ -351,8 +348,7 @@ concerns:
       - test-harness
   - kind: risk
     summary: Benchmark test has zero assertions and cannot gate regressions
-    detail:
-      tests/runner/test_bench_runner_overhead.py contains no assert statement;
+    detail: tests/runner/test_bench_runner_overhead.py contains no assert statement;
       it computes PASS/FAIL only into a tmp_path artifact and prints. It is
       marked slow but provides no enforcement.
     severity: low
@@ -403,8 +399,7 @@ concerns:
   - kind: question
     summary: Removing test_runner_private_imports.py broadens the never-linting
       definition
-    detail:
-      The prune precedent 644774e kept this guard after trimming it. Removing
+    detail: The prune precedent 644774e kept this guard after trimming it. Removing
       it now assumes public-API lint guards are also out of scope; this needs an
       explicit policy call rather than a mechanical deletion.
     severity: low
@@ -416,8 +411,7 @@ concerns:
       - policy
   - kind: tech-debt
     summary: Assignment citation for semantic_check.py is stale/out of range
-    detail:
-      tests/checkers/test_semantic_check.py is 133 lines at HEAD, so the cited
+    detail: tests/checkers/test_semantic_check.py is 133 lines at HEAD, so the cited
       :159-257 cannot exist. Downstream semantic items should re-cite against
       HEAD to avoid planning on a stale branch state.
     severity: low
@@ -435,8 +429,7 @@ remarkable:
       - Block the audit until the map is provided
       - Invent new owner labels
       - Treat every module as root-owned
-  - chosen:
-      Keep tests for shipped python_setup_lint.testing and treat it as product
+  - chosen: Keep tests for shipped python_setup_lint.testing and treat it as product
       coverage
     why: src/python_setup_lint/testing.py exposes FakeRunCmd, make_lint_result,
       test_checked_main and precommit validators to consumers; deleting
@@ -445,8 +438,7 @@ remarkable:
       - Remove it as test-infra self-test
       - Move testing.py out of the shipped package
   - chosen: Delete the zero-assert benchmark instead of fixing its threshold
-    why:
-      It cannot fail, duplicates startup-overhead checks, and is slow-only; no
+    why: It cannot fail, duplicates startup-overhead checks, and is slow-only; no
       lint/check behavior is lost.
     alternatives:
       - Add an assert and keep it slow
@@ -458,11 +450,9 @@ remarkable:
     alternatives:
       - Delete redundant pure-helper tests only
       - Keep 7 modules and only dedupe factories
-  - chosen:
-      Use integration.py + 158-finding golden as canonical end-to-end coverage
+  - chosen: Use integration.py + 158-finding golden as canonical end-to-end coverage
       and remove the real smoke test
-    why:
-      The smoke test asserts only tool-name presence on a synthetic project, a
+    why: The smoke test asserts only tool-name presence on a synthetic project, a
       strict subset of the golden run, and unnecessarily spawns 14 real tools in
       the default suite.
     alternatives:

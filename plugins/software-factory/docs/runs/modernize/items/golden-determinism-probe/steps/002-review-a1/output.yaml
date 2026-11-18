@@ -32,8 +32,7 @@ suggestions:
       file: src/python_setup_lint/runner/_record_parsers.py
       line: 55
     summary: Normalize R0801/R0401 rule-embedded paths, not just msg
-  - detail:
-      _violation_sort_key orders by (tool,file,line,col,rule) excluding msg
+  - detail: _violation_sort_key orders by (tool,file,line,col,rule) excluding msg
       while _violation_tuple equality includes msg; _compare_violation_lists
       two-pointer merge assumes sort consistent with equality, and
       same-key-different-msg duplicates keep input order. A msg-dropping
@@ -47,8 +46,7 @@ suggestions:
       file: src/python_setup_lint/runner/baseline.py
       line: 48
     summary: Prove no same-key-different-msg duplicates or specify multiset compare
-  - detail:
-      "ToolSpec ruff format runs mutating `ruff format` (no --check) early in
+  - detail: "ToolSpec ruff format runs mutating `ruff format` (no --check) early in
       the pipeline, so sequential captures on the same temp copy are not
       independent: first run reformats, shifting line numbers for later tools
       (pylint/mypy/R0801). Findings must state one-run-per-fresh-copy with
@@ -61,8 +59,7 @@ suggestions:
       file: src/python_setup_lint/runner/dispatch.py
       line: 40
     summary: Control for ruff-format write hazard on temp copies
-  - detail:
-      _make_config string-replaces '"tests/data", ' in shipped rumdl.toml —
+  - detail: _make_config string-replaces '"tests/data", ' in shipped rumdl.toml —
       silent no-op if config reformats (multiline, no trailing space), causing
       rumdl to exclude the sample AGENTS.md and the snapshot to silently lose MD
       violations. Snapshot story should assert the replacement fired (e.g.

@@ -15,8 +15,14 @@
       "name": "pylint",
       "peak_rss_mb": 80.08,
       "rcfile": "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc",
-      "stderr_tail": ["\tPage size (bytes): 4096", "\tExit status: 0"],
-      "stdout_tail": ["    }", "}"],
+      "stderr_tail": [
+        "\tPage size (bytes): 4096",
+        "\tExit status: 0"
+      ],
+      "stdout_tail": [
+        "    }",
+        "}"
+      ],
       "target": "src/app.py",
       "time_reported_seconds": 1.32,
       "timed_out": false
@@ -35,7 +41,10 @@
       "name": "pylint-pyi",
       "peak_rss_mb": 79.67,
       "rcfile": "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc-pyi",
-      "stderr_tail": ["\tPage size (bytes): 4096", "\tExit status: 0"],
+      "stderr_tail": [
+        "\tPage size (bytes): 4096",
+        "\tExit status: 0"
+      ],
       "stdout_tail": [
         "--------------------------------------------------------------------",
         "Your code has been rated at 10.00/10 (previous run: 10.00/10, +0.00)"
@@ -58,8 +67,14 @@
       "name": "pylint tests",
       "peak_rss_mb": 62.09,
       "rcfile": "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc-tests",
-      "stderr_tail": ["\tPage size (bytes): 4096", "\tExit status: 0"],
-      "stdout_tail": ["    }", "}"],
+      "stderr_tail": [
+        "\tPage size (bytes): 4096",
+        "\tExit status: 0"
+      ],
+      "stdout_tail": [
+        "    }",
+        "}"
+      ],
       "target": "tests/test_app.py",
       "time_reported_seconds": 0.61,
       "timed_out": false
