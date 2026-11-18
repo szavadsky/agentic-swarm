@@ -1,7 +1,6 @@
 iteration: 5
 items:
-  - assignment:
-      "Create NEW tests/assumptions/test_decision_cache_contracts.py ONLY
+  - assignment: "Create NEW tests/assumptions/test_decision_cache_contracts.py ONLY
       (append-only). FORBIDDEN: root __init__ edits, astroid/beartype/pylint
       contract modules, tests/assumptions/test_pylint_cache_semantics.py, any
       src, docs, tests/data, baseline changes. Build tmp JSON inline WITHOUT
@@ -34,8 +33,7 @@ items:
     slug: cache-contract-assumptions
     title: Pin tracked-cache file format contracts
     wave: 13
-  - assignment:
-      "Create NEW tests/assumptions/test_decision_loader_contracts.py ONLY
+  - assignment: "Create NEW tests/assumptions/test_decision_loader_contracts.py ONLY
       with same forbiddens as cache-contracts (no root __init__, no
       astroid/beartype/pylint contracts, no test_pylint_cache_semantics.py, no
       src, docs, tests/data, baseline). DELTA ONLY: honors, ignores and
@@ -66,8 +64,7 @@ items:
     slug: backend-loading-assumptions
     title: Pin backend loader delta contracts
     wave: 13
-  - assignment:
-      "Report-only with zero repo writes; prove no tracked modifications.
+  - assignment: "Report-only with zero repo writes; prove no tracked modifications.
       Build decision-model candidate matrix for GLiDE-0.4B plus
       permissively-licensed Decision-Index smalls plus MiniLM baseline; recount
       families from I5 pack section 6 plus live cards and verify each. Columns
@@ -90,8 +87,7 @@ items:
     slug: model-candidate-matrix
     title: Decision-model candidate matrix
     wave: 13
-  - assignment:
-      "Report-only with zero repo writes; no committed corpus in I5 and
+  - assignment: "Report-only with zero repo writes; no committed corpus in I5 and
       eval poc consumes report tables via schema. Collect N real repo
       suppressions plus threshold 115-row table plus brush-off and meaningful
       tables, DEDUPED by normalized justification with strip plus collapse
@@ -120,8 +116,7 @@ items:
     slug: brush-off-corpus-pilot
     title: Build two-pass brush-off pilot sample
     wave: 14
-  - assignment:
-      "Report-only with zero repo writes; tmp copies plus tmp poc only, no
+  - assignment: "Report-only with zero repo writes; tmp copies plus tmp poc only, no
       committed code, no golden change. First reproduce at HEAD with exact
       commands plus outputs: tmp pyi with companion py even syntactically broken
       to test skipped versus orphan pyi to test linted with pyi-underscore
@@ -147,8 +142,7 @@ items:
     slug: pylint-pyi-scope-spike
     title: Decide pylint-pyi companion-stub scope
     wave: 14
-  - assignment:
-      "Single-source checker-test harness with behavior identical. Owns
+  - assignment: "Single-source checker-test harness with behavior identical. Owns
       src/python_setup_lint/testing.py plus testing.pyi with atomic sync and
       stubtest must pass for _make_tc and _walk_and_release options plus
       _msg_ids and _msg_ids_sorted ONLY plus tests/checkers/test_*.py local
@@ -274,8 +268,7 @@ items:
     slug: ruff-format-check-only-fix
     title: Make ruff format ToolSpec check-only
     wave: 16
-  - assignment:
-      "Rename legacy scan and remove dead compat with W9704 byte-identical
+  - assignment: "Rename legacy scan and remove dead compat with W9704 byte-identical
       under SEMANTIC 0. Owns
       src/python_setup_lint/checkers/conformance/suppression_justification_chec\
       ker.py _legacy_scan rename plus trivial _legacy_* plus astroid 3.x branch

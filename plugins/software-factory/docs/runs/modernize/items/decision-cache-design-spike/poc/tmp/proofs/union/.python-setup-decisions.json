@@ -1,7 +1,11 @@
 [
   {
     "decision": true,
-    "files": ["src/a.py", "src/b.py", "src/c.py"],
+    "files": [
+      "src/a.py",
+      "src/b.py",
+      "src/c.py"
+    ],
     "justification": "retry loop must not swallow keyboard interrupt",
     "key": "dk1.rqe7hoh6.wtubtklk.wdme4ym5.2rmpzejw.r6abbzdo.b73dpz7a.pwxa",
     "last_seen": "2026-11-08",

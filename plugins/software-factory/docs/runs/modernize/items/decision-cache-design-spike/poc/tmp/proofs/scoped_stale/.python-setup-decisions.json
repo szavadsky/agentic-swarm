@@ -1,7 +1,10 @@
 [
   {
     "decision": true,
-    "files": ["src/a.py", "src/b.py"],
+    "files": [
+      "src/a.py",
+      "src/b.py"
+    ],
     "justification": "shared specific technical reason for retrying",
     "key": "dk1.dkca4eg3.gdxugnmy.wl5hxsqn.nwb25qos.pn7jxq27.ulb354x3.ivla",
     "last_seen": "2026-11-08",

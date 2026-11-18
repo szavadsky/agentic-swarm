@@ -25,8 +25,7 @@ remarkable:
       decision.
 status: approved
 suggestions:
-  - detail:
-      Spike probes 2-5 enumerate the exact 9-value enum (auto, apfs, btrfs,
+  - detail: Spike probes 2-5 enumerate the exact 9-value enum (auto, apfs, btrfs,
       zfs, reflink, overlayfs, projfs, block-clone, rcopy), fresh-profile
       default auto, host profile rcopy, and FICLONE-fallback behavior on
       ext4/WSL2; independently re-verified via config-set oracle on omp 18.18.5.
@@ -38,8 +37,7 @@ suggestions:
       file: .factory/tasks/omp-workspaces/items/spike-omp-isolation/steps/002-research-r1-a2/output.yaml
       line: 18
     summary: Backend enum now documented; retire unknown
-  - detail:
-      "Spike confirms with probes 17/27: bogus overlay keys pass (BADKEY_OK
+  - detail: "Spike confirms with probes 17/27: bogus overlay keys pass (BADKEY_OK
       rc=0) and missing overlay is silently ignored by --version (rc=0,
       re-verified). Read-only spike cannot fix prod code; architect to schedule
       dev item replacing the preflight.ts:364-394 check with key/enum/catalog
@@ -74,8 +72,7 @@ suggestions:
       file: .factory/tasks/omp-workspaces/items/spike-omp-isolation/steps/002-research-r1-a2/output.yaml
       line: 229
     summary: "Correct probe 26: in-base explicit paths are listed"
-  - detail:
-      omp config get ignores --config overlays (returns auto identically with
+  - detail: omp config get ignores --config overlays (returns auto identically with
       and without the invalid-backend overlay, re-verified), so reading auto
       proves nothing about runtime coercion. Drop probe 18 from the no-op trio
       or re-probe via a real turn; probes 17/27 already prove static checks are
@@ -86,8 +83,7 @@ suggestions:
       file: .factory/tasks/omp-workspaces/items/spike-omp-isolation/steps/002-research-r1-a2/output.yaml
       line: 117
     summary: "Soften probe 18: coercion claim unproven via config get"
-  - detail:
-      F6/probe 23 describe the probe shape (one -p --no-session turn spawning
+  - detail: F6/probe 23 describe the probe shape (one -p --no-session turn spawning
       an isolated marker subagent with apply:false, assert .patch or omp/task/*
       artifact, cleanup, ~16s) but give no copy-paste eval snippet, exact argv,
       artifact assertion, or cleanup steps that M4 can implement directly. Add
@@ -98,8 +94,7 @@ suggestions:
       file: .factory/tasks/omp-workspaces/items/spike-omp-isolation/steps/002-research-r1-a2/output.yaml
       line: 245
     summary: Add exact preflight round-trip command to findings
-  - detail:
-      F3 overturns omp-1-topology.md:195-201 by claiming isolated failures now
+  - detail: F3 overturns omp-1-topology.md:195-201 by claiming isolated failures now
       preserve branch/patch artifacts, citing throwaway-repo SHAs without
       archived transcripts. Attach minimal transcript excerpts or scope the
       claim to single-host 18.18.5 so 19.1 merge/gc design does not over-rely on

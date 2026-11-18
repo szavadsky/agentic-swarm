@@ -30,8 +30,7 @@ suggestions:
   - id: subgroup-ns-slow-only
     disposition: optional
     summary: Two subgroup rows claim 1/1 for single slow tests (should be 0/1)
-    detail:
-      TestRunLintFixDownstream (:44-112) holds one test at :56 marked slow;
+    detail: TestRunLintFixDownstream (:44-112) holds one test at :56 marked slow;
       TestDownstreamIntegration (:310-370) holds one test at :314 marked slow.
       Under N=default-collected each is 0/1, not 1/1. Per-file rows 31 (12|1)
       and 49 (21|1) are correct; slow-budget arithmetic unaffected. Correct
@@ -55,8 +54,7 @@ suggestions:
   - id: sources-path-typo
     disposition: optional
     summary: "Sources typo: baseline-diff-edge cited under tests/checkers/"
-    detail:
-      Line 344 lists tests/checkers/test_baseline_diff_edge.py:74-110; file
+    detail: Line 344 lists tests/checkers/test_baseline_diff_edge.py:74-110; file
       lives at tests/runner/test_baseline_diff_edge.py (308 lines;
       TestPerfBenchmark :74-110 verified). Correct path. No finding affected.
     location:

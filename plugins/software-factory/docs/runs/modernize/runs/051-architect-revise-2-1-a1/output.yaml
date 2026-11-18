@@ -8,8 +8,7 @@ adrs:
       phase-1a (mutate) and normal pass (check) both call build_command with
       _fix=False so a generic flag cannot distinguish them; 6 tests + docs
       assert 13 vs 14-entry TOOLS."
-    decision:
-      "Retain 14. Add _RuffFormatLintTool(LintTool) per dispatch strategy
+    decision: "Retain 14. Add _RuffFormatLintTool(LintTool) per dispatch strategy
       pattern: build_command emits check mode (ruff format --check --config
       <ruff.toml>) by default; build_format_command emits mutating mode. cli.py
       phase-1a calls build_format_command, normal pass calls build_command. Map
@@ -22,8 +21,7 @@ adrs:
       from python_setup_lint.runner."
     id: ADR-005
     title: Ruff format strategy with explicit check vs format modes
-  - consequences:
-      Golden stays byte-identical; crash/empty sensitivity explicit in
+  - consequences: Golden stays byte-identical; crash/empty sensitivity explicit in
       caller; overlay uses shared slicer; no invented sentinel; no blind regen.
     context: Merged collect_findings runs a second pipeline on the private
       record-parser subset (avoids formatter pollution and baseline capture, not
@@ -43,12 +41,10 @@ adrs:
       identical False; accepted+hit equals persisted model verdict;
       accepted+miss+absent equals heuristic True. Cache updates explicit,
       reviewable, CI-guarded. Iteration 3 implements against spike verdict."
-    context:
-      Current cache is per-machine, gitignored, unbounded, 64-bit truncated
+    context: Current cache is per-machine, gitignored, unbounded, 64-bit truncated
       keys, no cleanup. A lint-written tracked cache would be non-hermetic;
       full-hex keys would trip detect-secrets.
-    decision:
-      "Tracked cache is source of truth; normal lint is read-only (cache-hit
+    decision: "Tracked cache is source of truth; normal lint is read-only (cache-hit
       + heuristic), zero writes asserted by file hash/mtime. Writes only via
       explicit refresh command/flag (lockfile + merge + atomic temp+move,
       CI-guarded, DECISIONS_PATH isolation). Key encoding is spike-chosen
@@ -62,8 +58,7 @@ adrs:
       validation; subsystem epics spawn in iteration 3 with disjoint ownership;
       semantic implementation follows spike verdicts. No concurrent shared-infra
       edits.
-    context:
-      Remaining scope spans runner/checkers/setup plus semantic swap. Audits
+    context: Remaining scope spans runner/checkers/setup plus semantic swap. Audits
       must read final post-M2 HEAD; M3 spikes and M4 audits run in parallel with
       one replan gate.
     decision: "Iteration 2: green baseline, infra completion, spikes, audits.
@@ -91,19 +86,15 @@ assumptions:
       isolation; operator confirms filename/location before iteration-3
       implementation.
     disposition: confirm with human
-    why:
-      Decisions must reproduce in CI without the model; weights are 0.03-0.8GB
+    why: Decisions must reproduce in CI without the model; weights are 0.03-0.8GB
       with own licenses; committed file affects
       gitignore/hatch/consumers/secrets.
-  - assumption:
-      Dev/CI do not install the `semantic` extra; gates run heuristic +
+  - assumption: Dev/CI do not install the `semantic` extra; gates run heuristic +
       cache hits. Real-model tests are slow + with_real_api, never in the
       default suite.
-    why:
-      Matches current venv (no torch/transformers); keeps gates offline, fast,
+    why: Matches current venv (no torch/transformers); keeps gates offline, fast,
       deterministic.
-  - assumption:
-      "'Never test linting' bans pytest asserting this repo passes its own
+  - assumption: "'Never test linting' bans pytest asserting this repo passes its own
       gates (subprocess re-lint, AST re-implementation, config re-checks).
       Golden/integration behavior contracts are retained, not removed."
     disposition: confirm with human
@@ -121,13 +112,11 @@ assumptions:
       mutation hazard) or --overwrite-baseline; captures run on temp copies
       only."
     why: Bare lint mutates pre-M1; split gates are the check-only workaround.
-  - assumption:
-      Semantic epic record spawns in iteration 2; its implementation runs
+  - assumption: Semantic epic record spawns in iteration 2; its implementation runs
       in iteration 3 after spikes. Runner/checkers/setup-testing epics spawn at
       the iteration-3 replan from M4 audits. Single replanAfter on M4; M3 spikes
       report without replanning.
-    why:
-      Parallel M3/M4 with one replan gate avoids premature/deadlocked replans and
+    why: Parallel M3/M4 with one replan gate avoids premature/deadlocked replans and
       pins the spawn wave.
 epics:
   - intent: >-
@@ -215,8 +204,7 @@ epics:
     slug: semantic-decision-model
 itemOutlines:
   - deps: []
-    description:
-      "Retain 14. (1) Add _RuffFormatLintTool(LintTool) in dispatch.py:
+    description: "Retain 14. (1) Add _RuffFormatLintTool(LintTool) in dispatch.py:
       build_command -> check mode with --check --config; build_format_command ->
       mutating mode; register in _strategy_for; map 'ruff format'->ruff.toml in
       _config.py + _config_flag_for. cli.py phase-1a calls build_format_command,
@@ -320,8 +308,7 @@ itemOutlines:
     title: Decision-model candidate matrix
   - deps:
       - model-candidate-matrix
-    description:
-      "No committed code; report only (temp venv/copy permitted, network
+    description: "No committed code; report only (temp venv/copy permitted, network
       inside spike only). Corpus: threshold 30 meaningful + 50 meaningless +
       brush-off/meaningful tables + N real repo suppressions (target >=100
       total); label rubric: specific technical justification vs
@@ -360,8 +347,7 @@ itemOutlines:
     slug: cache-design-spike
     title: Tracked cache schema and determinism prototype
   - deps: []
-    description:
-      "Writer-first reframing (runner is sequential, pylint specs pass no
+    description: "Writer-first reframing (runner is sequential, pylint specs pass no
       -j: no contention today). Identify FIRST: writer (checker open()/close()
       during pylint subprocess vs runner post-process merge) + write timing
       (per-visit vs end-of-run) + --path scoping across
@@ -378,8 +364,7 @@ itemOutlines:
     title: Pin pylint writer, timing, and path scoping
   - deps:
       - model-eval-poc
-    description:
-      "Conditional on eval recommendation (no-go -> report-only skip, no
+    description: "Conditional on eval recommendation (no-go -> report-only skip, no
       file). For the chosen runtime only: verify py3.14 CPU wheels
       (linux/mac/win), import/device/offline contract (CPU fallback, no network
       on hit), and custom-code pinning (vendored revision, never unpinned
@@ -596,13 +581,11 @@ milestones:
     title: Debloat inventory and subsystem epic decomposition
 techDebt:
   - category: blocking
-    description:
-      "`ruff format` ToolSpec mutates the worktree (plain `ruff format`,
+    description: "`ruff format` ToolSpec mutates the worktree (plain `ruff format`,
       no --check/--config, default 88 vs shipped 130); phase-1a vs normal pass
       indistinguishable at _fix=False."
     id: TD2-B1
-    resolution:
-      "Resolved by runner-format-contract: _RuffFormatLintTool with check
+    resolution: "Resolved by runner-format-contract: _RuffFormatLintTool with check
       vs format modes, phase-1a mutates (fix-only), normal pass checks with
       shipped config."
   - category: blocking
@@ -625,8 +608,7 @@ techDebt:
       11-helper matrix incl write_project_file, >=161 removed to <=500, both
       suppressions removed, golden byte-identical).
   - category: impacting
-    description:
-      "Golden drift: tool-order vs sort placement, len!=0/crash asserts
+    description: "Golden drift: tool-order vs sort placement, len!=0/crash asserts
       unplaced, invented __CRASH__ sentinel, unused slice_tool_section with
       unpinned markers."
     id: TD2-I2
@@ -634,22 +616,18 @@ techDebt:
       serialize/diff sorting, caller len/crash asserts, no sentinel,
       slicer('[pylint]','[pylint-pyi]') in overlay test, no blind regen."
   - category: impacting
-    description:
-      Semantic tests patch module globals and builtins.__import__, import
+    description: Semantic tests patch module globals and builtins.__import__, import
       privates under type:ignore, carry vacuous `is None or ...` asserts +
       ImportError-propagation test; heuristic tables duplicated across two
       modules.
     id: TD2-I3
-    resolution:
-      Resolved by semantic epic iteration-3 implementation (FakeBackend
+    resolution: Resolved by semantic epic iteration-3 implementation (FakeBackend
       injection, merged table, modules <=500, vacuous tests deleted).
   - category: impacting
-    description:
-      W9704/W9738 pass their own symbol as `rule`; rule-echo heuristic
+    description: W9704/W9738 pass their own symbol as `rule`; rule-echo heuristic
       and future model never see actually-suppressed codes.
     id: TD2-I4
-    resolution:
-      Resolved by semantic epic req5 (joined suppressed codes, echo on any
+    resolution: Resolved by semantic epic req5 (joined suppressed codes, echo on any
       element, shift report + root regen).
   - category: adjacent
     description: "Over-limit/duplicated test infra: _factories.py 1393 lines,
@@ -657,8 +635,7 @@ techDebt:
       3 runner files overlapping, test_golden.py 341 lines of helper-unit
       tests."
     id: TD2-A1
-    resolution:
-      Inventoried by test-debloat-audit; iteration-3 checkers/runner epics
+    resolution: Inventoried by test-debloat-audit; iteration-3 checkers/runner epics
       merge/split per CodingRules.
   - category: adjacent
     description: "Legacy/compat and docs drift:
@@ -684,8 +661,7 @@ uncertainties:
       - "decision-runtime-pinning (test-assumptions, conditional on eval):
         py3.14 CPU wheels + import/device/offline + custom-code pinning for the
         chosen runtime (skip on no-go)"
-  - description:
-      "Cache key encoding, schema extras, prune/update semantics, writer
+  - description: "Cache key encoding, schema extras, prune/update semantics, writer
       identity/timing, and --path scoping are unknown. Open: secrets-clean
       encoding (not full hex), version/prompt-hash/last-seen fields, refresh
       command, CI guard, checker- vs runner-side writer, write timing, sweep

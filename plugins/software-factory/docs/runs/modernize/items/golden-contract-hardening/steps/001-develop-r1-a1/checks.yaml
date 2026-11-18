@@ -11,8 +11,7 @@ checks:
           Would reformat: tests/_golden.py
           1 file would be reformatted, 180 files already formatted
       - id: lint
-        command:
-          uv run lint --tools 'tach check,ruff check,rumdl check,mypy,yamllint,ty
+        command: uv run lint --tools 'tach check,ruff check,rumdl check,mypy,yamllint,ty
           check,mypy.stubtest,pyright check,pyright verify
           types,pylint,pylint-pyi,pylint tests,detect-secrets'
         status: fail

@@ -1,7 +1,7 @@
 slug: consolidate-integration-helpers-v3
 kind: test-only
 title: Single-source helpers; integration.py under 500 lines
-assignment: 'Single-source test project helpers per replaced outline (test-only
+assignment: "Single-source test project helpers per replaced outline (test-only
   enforcement). Create tests/_project_helpers.py as sole definition site for 10
   helpers: copy_sample_project, git_init_and_stage (git init + config user
   test/test@test + `git add .`, integration/detect-secrets semantics),
@@ -9,7 +9,7 @@ assignment: 'Single-source test project helpers per replaced outline (test-only
   semantics — identities NOT unified), stage_file, commit_all,
   shipped_config_paths, make_runner_config (package_name + rumdl override,
   preserving _make_config side-effect contract: writes/overwrites
-  <project>/rumdl.toml derived from config/rumdl.toml with ''"tests/data", ''
+  <project>/rumdl.toml derived from config/rumdl.toml with '\"tests/data\", '
   removed, idempotent same-bytes, no-op when shipped rumdl.toml missing, OSError
   propagates), build_pylint_overlay_config(project, disable_rule)->Path,
   ensure_precommit_or_skip()->None, install_twice_assert_idempotent(project,
@@ -35,7 +35,7 @@ assignment: 'Single-source test project helpers per replaced outline (test-only
   pass; tests/integration.py <=500 lines no suppression; golden+counts
   byte-identical (diff before/after); each helper defined exactly once; no new
   lint violations in touched files (pre-existing SIM102/R0914/C0208 persist,
-  baseline-relative).'
+  baseline-relative)."
 outlineRef: consolidate-integration-helpers
 milestone: M2
 wave: 11

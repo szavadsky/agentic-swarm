@@ -20,8 +20,7 @@ suggestions:
   - id: observation-score-unavailable
     disposition: fix
     summary: Sidecar needs score but bool APIs hide float under zero-diff
-    detail:
-      "Observation {file,justification,rule,model,score} requires float, but
+    detail: "Observation {file,justification,rule,model,score} requires float, but
       check_if_meaningful()->bool (_base.py:160) and semantic_check()->bool|None
       hide score; M3 forbids bodies so checker cannot obtain score without
       duplicating heuristic+backend (drift). Fix: allow minimal scored API
@@ -46,8 +45,7 @@ suggestions:
   - id: testing-pyi-missing
     disposition: fix
     summary: Harness changes testing.py without testing.pyi ownership
-    detail:
-      "Harness-dedup adds open_checker/module_name to testing.py:25 but owns
+    detail: "Harness-dedup adds open_checker/module_name to testing.py:25 but owns
       testing.py only; testing.pyi:35 mirror must sync or mypy.stubtest fails
       14-tool gate. Fix: add src/python_setup_lint/testing.pyi to harness-dedup
       owns (atomic)."
@@ -80,8 +78,7 @@ suggestions:
   - id: backend-injection-unproven
     disposition: fix
     summary: Call-counts unobservable; subprocess dotted-path import fails
-    detail:
-      "_walk_and_release takes no backend (testing.py:25), checkers pass no
+    detail: "_walk_and_release takes no backend (testing.py:25), checkers pass no
       backend, get_backend() news instance per call (_decision_backend.py:37),
       so test counts stay 0 even in-process; subprocess cwd=tmp lacks tests on
       PYTHONPATH (_run_cmd output.py:153 does no PYTHONPATH). Fix: define
@@ -115,8 +112,7 @@ suggestions:
   - id: adr-index-gap
     disposition: fix
     summary: README must index 013..024 but 017/018 files missing
-    detail:
-      "README indexes 001..012 (docs/adr/README.md:18); 017/018 never merged
+    detail: "README indexes 001..012 (docs/adr/README.md:18); 017/018 never merged
       per ADR-019 context, 013/015 stubs unowned. Cannot index missing files.
       Fix: index 013-016,019-024 with 017/018 noted planned-unmerged (or
       placeholders) + own 013/015 if rewrite needed."
@@ -126,8 +122,7 @@ suggestions:
   - id: integration-gate-brittle
     disposition: fix
     summary: Gate requires 9 passed but 7+2 skipped is expected without pre-commit
-    detail:
-      "Final-gate demands 9 passed with env pinned, yet assumption allows 7+2
+    detail: "Final-gate demands 9 passed with env pinned, yet assumption allows 7+2
       skipped when pre-commit missing (tests/integration.py dry_run/pre_commit
       skip, 0 failed). Factory without binary forces red. Fix: green = 9
       collected, 0 failed (allow 2 skips with env+reasons cited)."
@@ -137,8 +132,7 @@ suggestions:
   - id: bash-junk-ownership
     disposition: fix
     summary: No item owns :bash junk yet absolute green required
-    detail:
-      "TD5-A3 leaves root ':bash' (186B) to operator outside iteration while
+    detail: "TD5-A3 leaves root ':bash' (186B) to operator outside iteration while
       final-gate needs green; yamllint scans '.' and detect-secrets scans
       tracked files could fail. Fix: own deletion/verification in iteration (git
       ls-files proof) or explicitly prove :bash gate-neutral and exclude."
@@ -159,8 +153,7 @@ suggestions:
   - id: prune-vs-path-rules
     disposition: fix
     summary: Prune missing/stale vs --path retain + stale undefined
-    detail:
-      "Auto-prune missing/stale conflicts with '--path retains unscanned' when
+    detail: "Auto-prune missing/stale conflicts with '--path retains unscanned' when
       unscanned missing; stale model-ids (prompt bump drops all?) and
       file-vs-entry granularity undefined. RunnerConfig lacks refresh fields
       (types.py:48). Fix: define scanned-only missing prune, stale=current
@@ -171,8 +164,7 @@ suggestions:
   - id: loader-unknown-runtime
     disposition: fix
     summary: Story must wire loader for spike-unknown runtime + offline lock regen
-    detail:
-      "Wiring (hint 80) implements loader for U1-unknown runtime (transformers
+    detail: "Wiring (hint 80) implements loader for U1-unknown runtime (transformers
       vs glide-vendored vs onnx APIs differ) + allowlist pins (shape undefined)
       + uv.lock regen (needs PyPI network) with no loader poc; get_backend has
       no prod path (_decision_backend.py:49). Fix: per-family loader
@@ -224,8 +216,7 @@ suggestions:
   - id: human-approval-workflow
     disposition: fix
     summary: M4 steer-ID gate has no filing/discovery workflow
-    detail:
-      "GO needs recorded license+second-rater steer IDs (ADR-009/020 gating)
+    detail: "GO needs recorded license+second-rater steer IDs (ADR-009/020 gating)
       but 6 confirm-with-human assumptions lack resolution flow, spikes cannot
       file (see steer finding), story cannot read engine steer records per
       containment. Fix: define who files what/when, ID linkage in reports, check
@@ -236,8 +227,7 @@ suggestions:
   - id: docs-strings-brittle
     disposition: optional
     summary: Exact-strings checklist brittle on reranker/ty comment
-    detail:
-      "Semantic-justification 'no reranker' vs troubleshooting must-mention
+    detail: "Semantic-justification 'no reranker' vs troubleshooting must-mention
       deprecated RERANKER_MODEL; ty.toml:8 sentence_transformers comment removal
       lacks replacement (GO runtime vs NO-GO dead ignore). Suggest: scope
       grep-zero to code refs + per-branch ty text."
@@ -256,8 +246,7 @@ suggestions:
   - id: gate-docs-independence
     disposition: optional
     summary: Final gate cites docs grep instead of independent rerun
-    detail:
-      "Gate independence weakened by trusting producer proof. Suggest: rerun
+    detail: "Gate independence weakened by trusting producer proof. Suggest: rerun
       cheap offline greps in final-gate and cite both."
     location:
       file: tests/test_golden.py
@@ -265,8 +254,7 @@ suggestions:
   - id: orphan-enforcement-gap
     disposition: human-awareness
     summary: Orphan-only leaves companion stubs unenforced vs intent
-    detail:
-      ORPHAN (stubtest-only, pyi-underscore orphan-only) leaves ~205 latent
+    detail: ORPHAN (stubtest-only, pyi-underscore orphan-only) leaves ~205 latent
       symbols + 42/43 findings unenforced; FIX needs temp-tree+cleanup+regen.
       Architect may choose with spike evidence; operator should note gap
       (stubtest≠style).

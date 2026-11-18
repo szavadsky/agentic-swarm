@@ -6,8 +6,7 @@ suggestions:
   - id: downstream-scratch-outside-tmp
     disposition: optional
     summary: Slow downstream test still uses fixed Path.home()/.tmp scratch dir
-    detail:
-      Portable via Path.home() so assignment satisfied, but fixed shared path
+    detail: Portable via Path.home() so assignment satisfied, but fixed shared path
       breaks test isolation (CodingRules Isolation); consider tmp_path_factory
       when test is next touched. Out of scope, non-blocking.
     location:

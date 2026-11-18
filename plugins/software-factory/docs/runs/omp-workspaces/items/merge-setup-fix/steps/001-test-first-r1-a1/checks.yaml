@@ -11,8 +11,7 @@ checks:
     status: pass
     message: "target-red passed: all 3 expected tests failed with assertion failures"
     details:
-      command:
-        bun --cwd=plugins/software-factory test test/engine/merge-setup.test.ts
+      command: bun --cwd=plugins/software-factory test test/engine/merge-setup.test.ts
         --reporter=junit
         --reporter-outfile=/home/slava/aiexp/agentic-swarm.factory-wt/.factory-runtime/tmp/junit-1794276734716-3kdgmfp2jbu.xml
       junitCaseCount: 5

@@ -41,7 +41,9 @@
   "contract_detect_secrets": {
     "cache": "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/.factory/tasks/modernize/items/decision-cache-design-spike/poc/tmp/proofs/secrets/.python-setup-decisions.json",
     "findings": 0,
-    "negative_control": ["Hex High Entropy String"],
+    "negative_control": [
+      "Hex High Entropy String"
+    ],
     "ok": true,
     "real_model_findings": [],
     "seconds": 0.082,
@@ -62,7 +64,11 @@
     "unique_keys": 25000
   },
   "contract_files_union_posix": {
-    "files": ["src/a.py", "src/b.py", "src/c.py"],
+    "files": [
+      "src/a.py",
+      "src/b.py",
+      "src/c.py"
+    ],
     "ok": true,
     "seconds": 0.0182
   },
@@ -112,7 +118,14 @@
     "status": " M .factory/tasks/modernize/items/decision-cache-design-spike/poc/out/proofs.json\n"
   },
   "contract_prune": {
-    "after_missing": [["src/a.py"], ["src/b.py"]],
+    "after_missing": [
+      [
+        "src/a.py"
+      ],
+      [
+        "src/b.py"
+      ]
+    ],
     "after_stale": 0,
     "ok": true,
     "seconds": 0.0219
@@ -147,14 +160,29 @@
     ],
     "ok": true,
     "order": [
-      ["C0111", "a justification", "fake-backend rev test prompt-v1"],
-      ["C0111", "b justification", "fake-backend rev test prompt-v1"],
-      ["W9704", "z justification", "fake-backend rev other prompt-v1"]
+      [
+        "C0111",
+        "a justification",
+        "fake-backend rev test prompt-v1"
+      ],
+      [
+        "C0111",
+        "b justification",
+        "fake-backend rev test prompt-v1"
+      ],
+      [
+        "W9704",
+        "z justification",
+        "fake-backend rev other prompt-v1"
+      ]
     ],
     "seconds": 0.001
   },
   "contract_scoped_stale_mixed": {
-    "files": ["src/a.py", "src/b.py"],
+    "files": [
+      "src/a.py",
+      "src/b.py"
+    ],
     "full_entries": 1,
     "ok": true,
     "scoped_entries": 2,

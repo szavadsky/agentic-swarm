@@ -36,7 +36,6 @@ remarkable:
       - human-async block awaiting operator (stalls autonomous wave for an
         engine bug)
     chosen: abandon now with v2 reschedule note
-    why:
-      Fails fast without burning another full-suite redrive; preserves complete
+    why: Fails fast without burning another full-suite redrive; preserves complete
       docs on the branch for a cheap v2; root cause is engine + target-choice,
       not item content.

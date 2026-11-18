@@ -15,6 +15,5 @@ suggestions:
     location:
       file: tests/checkers/test_semantic_threshold.py
       line: 19
-    summary:
-      Header overlap arithmetic omits the 30-row pack and misstates the dedup
+    summary: Header overlap arithmetic omits the 30-row pack and misstates the dedup
       math

@@ -4,11 +4,9 @@ summary: "no-behavior comment-only W9704 fix verified: 4 files, zero
 suggestions:
   - id: semantic-reranker-unvalidated
     disposition: optional
-    summary:
-      Cross-encoder score>=0.5 not machine-validated locally (semantic extra
+    summary: Cross-encoder score>=0.5 not machine-validated locally (semantic extra
       absent); heuristic + pylint green only
-    detail:
-      "Independent verification: check_if_meaningful returns True for both new
+    detail: "Independent verification: check_if_meaningful returns True for both new
       comments via heuristic fallback; semantic_check_if_meaningful returns
       None; sentence_transformers import fails with ModuleNotFoundError
       (developer's claim confirmed). Scoped pylint

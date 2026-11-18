@@ -6,8 +6,7 @@ outlines:
       - third-party-assumption-tests
       - consolidate-integration-helpers
       - docs-counts-sync
-    description:
-      "Read-only audit of src/** and scripts/** vs CodingRules/AGENTS.
+    description: "Read-only audit of src/** and scripts/** vs CodingRules/AGENTS.
       Semantic exclusions are symbol/file-level (mark skipped, audit rest
       normally): checkers/_semantic.py+.pyi, new
       _decision_backend/_decision_cache modules (+.pyi),
@@ -34,8 +33,7 @@ outlines:
       - consolidate-integration-helpers
       - docs-counts-sync
       - coding-rules-audit
-    description:
-      "Read-only audit of tests/**. Semantic exclusions (mark skipped):
+    description: "Read-only audit of tests/**. Semantic exclusions (mark skipped):
       tests/checkers/test_semantic_check.py, test_semantic_threshold.py,
       TestSuppressionRerankerPipeline class, tests/checkers/conftest.py
       (epic-created), tests/assumptions runtime/decision/cache modules

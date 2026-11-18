@@ -58,8 +58,7 @@ items:
     slug: runner-format-contract
     title: Ruff format strategy and 14-tool registry fix
     wave: 1
-  - assignment:
-      "GOAL: Single-source test project helpers and bring integration.py
+  - assignment: "GOAL: Single-source test project helpers and bring integration.py
       to 500 lines or less. SCOPE: tests only. FORBIDDEN: lint.baseline,
       AGENTS.md, docs, src. Red-test-exempt. STEPS: Create
       tests/_project_helpers.py as sole site with 11 pinned helpers:
@@ -135,8 +134,7 @@ items:
     slug: model-candidate-matrix
     title: Decision-model candidate matrix
     wave: 1
-  - assignment:
-      "GOAL: Pin pylint cache writer, timing, and path scoping before lock
+  - assignment: "GOAL: Pin pylint cache writer, timing, and path scoping before lock
       design (U2 writer-first). Runner is sequential, pylint specs pass no -j:
       no contention today. STEPS: Identify FIRST via code plus invocation tests:
       writer (checker open and close during pylint subprocess vs runner
@@ -192,8 +190,7 @@ items:
     slug: baseline-violations-fix
     title: Fix SIM102, too-many-locals, C0208
     wave: 2
-  - assignment:
-      "GOAL: Triage detect-secrets flags on clean checkout to define M1
+  - assignment: "GOAL: Triage detect-secrets flags on clean checkout to define M1
       lint-green for that tool (U4, TD2-B3). No repo edits; report only. STEPS:
       On clean checkout run declared lint gate and detect-secrets scan; capture
       every flagged file plus sha256 plus baseline entry. Verdict: environmental
@@ -217,8 +214,7 @@ items:
     slug: secrets-triage-spike
     title: Triage detect-secrets factory-journal flags
     wave: 2
-  - assignment:
-      "GOAL: Harden golden contract via caller asserts and shared slicer
+  - assignment: "GOAL: Harden golden contract via caller asserts and shared slicer
       per ADR-006; committed files never mutated by proofs. SCOPE: tests only.
       STEPS: Keep collect_findings(project,config) in tool order with no sort
       (synthetic-empty safe); sorting stays in serialize_write plus _diff_keys;
@@ -293,8 +289,7 @@ items:
     slug: model-eval-poc
     title: CPU accuracy/latency evaluation over all candidates
     wave: 2
-  - assignment:
-      "GOAL: Tracked cache schema and determinism prototype on temp copies
+  - assignment: "GOAL: Tracked cache schema and determinism prototype on temp copies
       per ADR-007 (U2). Prototype on temp copies only; no committed files.
       Consumes writer-first verdict from pylint-cache-assumptions. STEPS: Design
       unified tracked schema: JSON array sorted by rule,justification,model with
@@ -330,8 +325,7 @@ items:
     slug: cache-design-spike
     title: Tracked cache schema and determinism prototype
     wave: 3
-  - assignment:
-      "GOAL: Pin chosen runtime wheels and API contracts conditional on
+  - assignment: "GOAL: Pin chosen runtime wheels and API contracts conditional on
       eval recommendation. Conditional: no-go from model-eval-poc means
       report-only skip with no file. STEPS: For chosen runtime only verify
       py3.14 CPU wheels for linux,mac,win, import and device and offline

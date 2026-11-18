@@ -3,7 +3,10 @@
     "ci_fail": {
       "evidence": "contract_ci_fail",
       "exit_code": 2,
-      "variables": ["CI", "GITHUB_ACTIONS"],
+      "variables": [
+        "CI",
+        "GITHUB_ACTIONS"
+      ],
       "writes_nothing": true
     },
     "decisions_path": {
@@ -16,7 +19,10 @@
       "bare_hex": "no contiguous run >= 20; groups cap at 8",
       "collision_safe": "full 256-bit digest; 25000-key probe had zero collisions",
       "detect_secrets": "clean against .secrets.baseline; full-hex negative control flagged",
-      "evidence": ["contract_encoding_collision", "contract_detect_secrets"],
+      "evidence": [
+        "contract_encoding_collision",
+        "contract_detect_secrets"
+      ],
       "scheme": "dk1 + dot-separated lowercase base32 groups of 8 over the full SHA-256 digest"
     },
     "files": {
@@ -59,8 +65,14 @@
           "name": "pylint",
           "peak_rss_mb": 80.08,
           "rcfile": "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc",
-          "stderr_tail": ["\tPage size (bytes): 4096", "\tExit status: 0"],
-          "stdout_tail": ["    }", "}"],
+          "stderr_tail": [
+            "\tPage size (bytes): 4096",
+            "\tExit status: 0"
+          ],
+          "stdout_tail": [
+            "    }",
+            "}"
+          ],
           "target": "src/app.py",
           "time_reported_seconds": 1.32,
           "timed_out": false
@@ -79,7 +91,10 @@
           "name": "pylint-pyi",
           "peak_rss_mb": 79.67,
           "rcfile": "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc-pyi",
-          "stderr_tail": ["\tPage size (bytes): 4096", "\tExit status: 0"],
+          "stderr_tail": [
+            "\tPage size (bytes): 4096",
+            "\tExit status: 0"
+          ],
           "stdout_tail": [
             "--------------------------------------------------------------------",
             "Your code has been rated at 10.00/10 (previous run: 10.00/10, +0.00)"
@@ -102,8 +117,14 @@
           "name": "pylint tests",
           "peak_rss_mb": 62.09,
           "rcfile": "/home/slava/aiexp/python-setup.factory-wt/topic_modernize--decision-cache-design-spike/config/.pylintrc-tests",
-          "stderr_tail": ["\tPage size (bytes): 4096", "\tExit status: 0"],
-          "stdout_tail": ["    }", "}"],
+          "stderr_tail": [
+            "\tPage size (bytes): 4096",
+            "\tExit status: 0"
+          ],
+          "stdout_tail": [
+            "    }",
+            "}"
+          ],
           "target": "tests/test_app.py",
           "time_reported_seconds": 0.61,
           "timed_out": false
@@ -112,18 +133,27 @@
     },
     "path_scoping": {
       "behavior": "scoped sweep and prune; entries for unscanned files retained; missing unscanned files retained",
-      "evidence": ["contract_path_scoping", "contract_scoped_stale_mixed"],
+      "evidence": [
+        "contract_path_scoping",
+        "contract_scoped_stale_mixed"
+      ],
       "stale_mixed_entry": "retained while it has an unscanned share; full refresh prunes it"
     },
     "placement": {
       "decisions_depends_on": [],
-      "edges": ["checkers -> decisions", "runner -> decisions"],
+      "edges": [
+        "checkers -> decisions",
+        "runner -> decisions"
+      ],
       "evidence": "contract_tach_placement",
       "module": "python_setup_lint/decisions/_decision_cache.py (+ .pyi)",
       "tach": "legal placement exit 0; decisions -> checkers negative control exit 1"
     },
     "project_root": {
-      "evidence": ["contract_root_guard", "contract_checker_root_hint"],
+      "evidence": [
+        "contract_root_guard",
+        "contract_checker_root_hint"
+      ],
       "guard": "resolved cache path must stay within cwd; symlink, parent and absolute escapes rejected",
       "value": "config.cwd"
     },
@@ -161,7 +191,11 @@
       ],
       "evidence": "contract_schema_sort",
       "indent": 2,
-      "sort_key": ["rule", "justification", "model"],
+      "sort_key": [
+        "rule",
+        "justification",
+        "model"
+      ],
       "sort_keys": true,
       "top_level": "JSON array",
       "trailing_newline": true

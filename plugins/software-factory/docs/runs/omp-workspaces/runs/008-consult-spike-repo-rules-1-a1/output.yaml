@@ -12,13 +12,11 @@ concerns:
       byte-deterministic across machines.
     kind: risk
     severity: medium
-    summary:
-      User-level prompt files leak into factory role prompts; harness sets no
+    summary: User-level prompt files leak into factory role prompts; harness sets no
       isolation flags
   - affects:
       - "19.9"
-    detail:
-      Roots reframed as already-hydrated (exactly once); scout behavior per
+    detail: Roots reframed as already-hydrated (exactly once); scout behavior per
       docs (drop AGENTS.md, keep RULES.md/extra) could not be confirmed live. M8
       must re-probe scouts through the mock provider (deterministic request
       capture) before implementing the scout hydration path.

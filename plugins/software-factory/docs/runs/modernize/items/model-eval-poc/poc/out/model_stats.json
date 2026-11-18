@@ -2,19 +2,26 @@
   "glide": {
     "params": 395042816,
     "weights_bytes": 790103664,
-    "files": ["model-00001-of-00001.safetensors", "readout.safetensors"],
+    "files": [
+      "model-00001-of-00001.safetensors",
+      "readout.safetensors"
+    ],
     "tensor_count": 171
   },
   "decider-nano": {
     "params": 149015041,
     "weights_bytes": 298044578,
-    "files": ["model.safetensors"],
+    "files": [
+      "model.safetensors"
+    ],
     "tensor_count": 136
   },
   "bekko-17m": {
     "params": 16798211,
     "weights_bytes": 67198244,
-    "files": ["0_BekkoInference/model.safetensors"],
+    "files": [
+      "0_BekkoInference/model.safetensors"
+    ],
     "tensor_count": 50
   },
   "ettin-reranker-150m": {
@@ -31,7 +38,9 @@
   "minilm-l6-v2": {
     "params": 22713728,
     "weights_bytes": 90868376,
-    "files": ["model.safetensors"],
+    "files": [
+      "model.safetensors"
+    ],
     "tensor_count": 104
   }
 }

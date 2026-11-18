@@ -1,32 +1,30 @@
 # Step: Architect Consult (Item)
 
 ## Goal
-
 Resolve an item-level blockage, retry exhaustion, size violation, or reviewer escalation.
 
 ## Rules
-
 - Exploration budget: diagnose root causes from the assignment, prior attempts, current diff, review feedback, and the prepared context pack (`# Context Pack — `modernize` (iteration 5 starting state)
 
 **Repository**: `python-setup` v1.2.10 (`pyproject.toml:1-4`), Python `>=3.14`, MIT (`pyproject.toml:19-20`). Worktree `topic/modernize`, HEAD `0944670`.
 
 **Gates verified in this worktree on 2026-11-09** (read-only execution):
 
-| Gate                                    | Result                                        | Evidence                                                                                     |
-| --------------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `uv run pytest -q`                      | 1357 passed, 7 deselected, 4 warnings, 26.6 s | default collection does **not** include `tests/integration.py` (filename is not `test_*.py`) |
-| `uv run pytest tests/integration.py -v` | 9 passed, 56.6 s                              | run explicitly per AGENTS/README                                                             |
-| `uv run lint`                           | exit 0, all 14 tools PASSED, 57.7 s           | `lint.baseline` is `[]` (`lint.baseline:1`)                                                  |
+| Gate | Result | Evidence |
+|---|---|---|
+| `uv run pytest -q` | 1357 passed, 7 deselected, 4 warnings, 26.6 s | default collection does **not** include `tests/integration.py` (filename is not `test_*.py`) |
+| `uv run pytest tests/integration.py -v` | 9 passed, 56.6 s | run explicitly per AGENTS/README |
+| `uv run lint` | exit 0, all 14 tools PASSED, 57.7 s | `lint.baseline` is `[]` (`lint.baseline:1`) |
 
 **Intent status at a glance**
 
-| Intent clause                                                                         | State at HEAD                                                                                                                           | Primary evidence                                                                                                                                                                         |
-| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Enforce `CodingRules.md` / `AGENTS.md`                                                | Mostly done; lint gates green, but docs/ADR drift and some dead placeholders remain                                                     | `lint.baseline:1`; `AGENTS.md:9-11`, `AGENTS.md:79-85`; `docs/adr/ADR-016.md:1-5`                                                                                                        |
-| Debloat code and tests; keep test intent                                              | Partially done (recent prune removed self-lint/config-consistency tests); concrete duplication and dead helpers remain                  | §4.4 below; `tests/checkers/test_tmp_path_checker.py:19-32`; `tests/runner/_factories.py:167,200`; `tests/runner/test_real_pipeline_smoke.py:1-42`                                       |
+| Intent clause | State at HEAD | Primary evidence |
+|---|---|---|
+| Enforce `CodingRules.md` / `AGENTS.md` | Mostly done; lint gates green, but docs/ADR drift and some dead placeholders remain | `lint.baseline:1`; `AGENTS.md:9-11`, `AGENTS.md:79-85`; `docs/adr/ADR-016.md:1-5` |
+| Debloat code and tests; keep test intent | Partially done (recent prune removed self-lint/config-consistency tests); concrete duplication and dead helpers remain | §4.4 below; `tests/checkers/test_tmp_path_checker.py:19-32`; `tests/runner/_factories.py:167,200`; `tests/runner/test_real_pipeline_smoke.py:1-42` |
 | Replace embedding/rerank justification check with a CPU-friendly small decision model | **Half done**: reranker is gone and the veto backend protocol exists, but no production model is wired and no optional dependency ships | `src/python_setup_lint/checkers/_semantic.py:1-65`; `src/python_setup_lint/checkers/_decision_backend.py:37-59`; `pyproject.toml:28-30`; `tests/checkers/test_semantic_check.py:119-123` |
-| Keep a git-stored cache with cleanup                                                  | **Not implemented**: only a process-local memo exists; no `.python-setup-decisions.json`, refresh path, or pruning                      | `src/python_setup_lint/checkers/_semantic.py:15-25,47-64`; `tests/assumptions/test_pylint_cache_semantics.py:8-12`; `docs/adr/ADR-010.md:26-36`                                          |
-| Preserve every material lint/check behavior                                           | Green at HEAD; golden pins 158 findings including 18 W9704, but semantic is disabled during golden capture                              | `tests/data/golden/minimal_sample_project_findings.json`; `tests/integration.py:110-129`; `tests/_golden.py:54`                                                                          |
+| Keep a git-stored cache with cleanup | **Not implemented**: only a process-local memo exists; no `.python-setup-decisions.json`, refresh path, or pruning | `src/python_setup_lint/checkers/_semantic.py:15-25,47-64`; `tests/assumptions/test_pylint_cache_semantics.py:8-12`; `docs/adr/ADR-010.md:26-36` |
+| Preserve every material lint/check behavior | Green at HEAD; golden pins 158 findings including 18 W9704, but semantic is disabled during golden capture | `tests/data/golden/minimal_sample_project_findings.json`; `tests/integration.py:110-129`; `tests/_golden.py:54` |
 
 ---
 
@@ -34,81 +32,81 @@ Resolve an item-level blockage, retry exhaustion, size violation, or reviewer es
 
 ### 1.1 Semantic justification subsystem (primary intent area)
 
-| Path                                                                              | Responsibility                                                                                                                               | Key lines                                  |
-| --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `src/python_setup_lint/checkers/_decision_backend.py`                             | `DecisionBackend` protocol, `FakeBackend`, test-only dotted-path loader, `get_backend()`, pinned threshold/prompt constants, warn-once state | `:10-13`, `:16-30`, `:37-59`               |
-| `src/python_setup_lint/checkers/_decision_backend.pyi`                            | Public stub: `DECISION_THRESHOLD`, `PROMPT_VERSION`, protocol, `FakeBackend`, `get_backend`                                                  | `:1-20`                                    |
-| `src/python_setup_lint/checkers/_semantic.py`                                     | Thin adapter: resolves backend, computes SHA-256 cache key, applies `>= DECISION_THRESHOLD`, owns in-memory memo                             | `:1-65`                                    |
-| `src/python_setup_lint/checkers/_semantic.pyi`                                    | Stub documenting the adapter contract                                                                                                        | `:1-23`                                    |
-| `src/python_setup_lint/checkers/_base.py`                                         | `normalize_suppressed_codes`, heuristic-first `check_if_meaningful`, env gate, lazy `_semantic` import                                       | `:145-156`, `:159-252`                     |
-| `src/python_setup_lint/checkers/conformance/suppression_justification_checker.py` | W9704 `unjustified-suppression`: scans suppression comments and `Any` annotations, calls `check_if_meaningful`                               | `:33-41`, `:63-91`, `:136-162`, `:330-388` |
-| `src/python_setup_lint/checkers/conformance/bare_except_comment_checker.py`       | W9738 `bare-except-comment`, second consumer of `check_if_meaningful`                                                                        | `:14`, `:103-118`                          |
-| `docs/semantic-justification.md`                                                  | Current _stale_ narrative of the reranker pipeline and caches                                                                                | `:1-62`                                    |
-| `docs/custom-checks.md`                                                           | Checker-authoring guide; semantic helper description stale                                                                                   | `:97`, `:104`                              |
+| Path | Responsibility | Key lines |
+|---|---|---|
+| `src/python_setup_lint/checkers/_decision_backend.py` | `DecisionBackend` protocol, `FakeBackend`, test-only dotted-path loader, `get_backend()`, pinned threshold/prompt constants, warn-once state | `:10-13`, `:16-30`, `:37-59` |
+| `src/python_setup_lint/checkers/_decision_backend.pyi` | Public stub: `DECISION_THRESHOLD`, `PROMPT_VERSION`, protocol, `FakeBackend`, `get_backend` | `:1-20` |
+| `src/python_setup_lint/checkers/_semantic.py` | Thin adapter: resolves backend, computes SHA-256 cache key, applies `>= DECISION_THRESHOLD`, owns in-memory memo | `:1-65` |
+| `src/python_setup_lint/checkers/_semantic.pyi` | Stub documenting the adapter contract | `:1-23` |
+| `src/python_setup_lint/checkers/_base.py` | `normalize_suppressed_codes`, heuristic-first `check_if_meaningful`, env gate, lazy `_semantic` import | `:145-156`, `:159-252` |
+| `src/python_setup_lint/checkers/conformance/suppression_justification_checker.py` | W9704 `unjustified-suppression`: scans suppression comments and `Any` annotations, calls `check_if_meaningful` | `:33-41`, `:63-91`, `:136-162`, `:330-388` |
+| `src/python_setup_lint/checkers/conformance/bare_except_comment_checker.py` | W9738 `bare-except-comment`, second consumer of `check_if_meaningful` | `:14`, `:103-118` |
+| `docs/semantic-justification.md` | Current *stale* narrative of the reranker pipeline and caches | `:1-62` |
+| `docs/custom-checks.md` | Checker-authoring guide; semantic helper description stale | `:97`, `:104` |
 
 ### 1.2 Checker subsystem
 
-| Path                                          | Responsibility                                                                                                                                                                                                                                                                          | Key lines                                                                          |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `src/python_setup_lint/checkers/conformance/` | Conformance checkers: beartype, no-try-import, tmp-path, structlog, suppression justification, bare-except, missing error-chain, silent-except, generic-key-dict, unnamed-tuple-dict, trivial-wrapper, redundant-type-guard, pyi-underscore, missing-return-annotation, asyncio-timeout | directory listing                                                                  |
-| `src/python_setup_lint/checkers/stub/`        | Stub fidelity/coverage/docstring checkers and annotation normalizer                                                                                                                                                                                                                     | `checker.py`, `coverage.py`, `docstring_checker.py`, `normalizer.py`, `fidelity/*` |
-| `config/.pylintrc`                            | Source-code rcfile; enables custom rules and `max-module-lines=500`, `max-statements=65`, `max-branches=16`                                                                                                                                                                             | `:2`, `:17`, `:19`, `:22-23`                                                       |
-| `config/.pylintrc-pyi`                        | Stub-file rcfile                                                                                                                                                                                                                                                                        | `:12-13`                                                                           |
-| `config/.pylintrc-tests`                      | Test-file ruleset (production-only rules disabled; W9704/W9702 still enabled)                                                                                                                                                                                                           | `:20`, `:37`, `:39`, `:42-47`                                                      |
+| Path | Responsibility | Key lines |
+|---|---|---|
+| `src/python_setup_lint/checkers/conformance/` | Conformance checkers: beartype, no-try-import, tmp-path, structlog, suppression justification, bare-except, missing error-chain, silent-except, generic-key-dict, unnamed-tuple-dict, trivial-wrapper, redundant-type-guard, pyi-underscore, missing-return-annotation, asyncio-timeout | directory listing |
+| `src/python_setup_lint/checkers/stub/` | Stub fidelity/coverage/docstring checkers and annotation normalizer | `checker.py`, `coverage.py`, `docstring_checker.py`, `normalizer.py`, `fidelity/*` |
+| `config/.pylintrc` | Source-code rcfile; enables custom rules and `max-module-lines=500`, `max-statements=65`, `max-branches=16` | `:2`, `:17`, `:19`, `:22-23` |
+| `config/.pylintrc-pyi` | Stub-file rcfile | `:12-13` |
+| `config/.pylintrc-tests` | Test-file ruleset (production-only rules disabled; W9704/W9702 still enabled) | `:20`, `:37`, `:39`, `:42-47` |
 
 ### 1.3 Runner subsystem
 
-| Path                                                            | Responsibility                                                                | Key lines                                          |
-| --------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------- |
-| `src/python_setup_lint/runner/_tool_specs.py`                   | Single-source 14 built-in `ToolSpec` entries                                  | `:9-100`, `:102`                                   |
-| `src/python_setup_lint/runner/dispatch.py`                      | Tool strategy registry, command builders, autofix ordering, baseline fallback | `:62-359`, `:350-359`                              |
-| `src/python_setup_lint/runner/cli.py`                           | CLI, tool selection, skip reasons, serial pipeline, `run_lint`                | `:110-201`, `:204-...`, argument parser `:280-366` |
-| `src/python_setup_lint/runner/baseline.py`                      | Baseline diff/merge and fallback inspection                                   | module                                             |
-| `src/python_setup_lint/runner/parsers.py`, `_record_parsers.py` | Output parsers (JSON, regex, record parsers)                                  | modules                                            |
-| `src/python_setup_lint/runner/_autofix.py`                      | Autofix conflict detection and staged/unstaged handling                       | module                                             |
-| `src/python_setup_lint/runner/_config.py`, `cmd_build.py`       | Config discovery and command composition                                      | modules                                            |
-| `src/python_setup_lint/runner/types.py`                         | `ToolSpec`, `LintResult`, `RunnerConfig`, `ViolationCount`                    | `:12-22`, `:25-59`                                 |
+| Path | Responsibility | Key lines |
+|---|---|---|
+| `src/python_setup_lint/runner/_tool_specs.py` | Single-source 14 built-in `ToolSpec` entries | `:9-100`, `:102` |
+| `src/python_setup_lint/runner/dispatch.py` | Tool strategy registry, command builders, autofix ordering, baseline fallback | `:62-359`, `:350-359` |
+| `src/python_setup_lint/runner/cli.py` | CLI, tool selection, skip reasons, serial pipeline, `run_lint` | `:110-201`, `:204-...`, argument parser `:280-366` |
+| `src/python_setup_lint/runner/baseline.py` | Baseline diff/merge and fallback inspection | module |
+| `src/python_setup_lint/runner/parsers.py`, `_record_parsers.py` | Output parsers (JSON, regex, record parsers) | modules |
+| `src/python_setup_lint/runner/_autofix.py` | Autofix conflict detection and staged/unstaged handling | module |
+| `src/python_setup_lint/runner/_config.py`, `cmd_build.py` | Config discovery and command composition | modules |
+| `src/python_setup_lint/runner/types.py` | `ToolSpec`, `LintResult`, `RunnerConfig`, `ViolationCount` | `:12-22`, `:25-59` |
 
 ### 1.4 Setup / packaging / test helpers
 
-| Path                                        | Responsibility                                                                                        | Key lines                                    |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| `src/python_setup_lint/setup.py`            | `install()` / `main()`: dependency step, pylint plugin registration, config symlinks, state/checksums | `:41-56`, `:149-205`, `:223-290`, `:318-364` |
-| `src/python_setup_lint/_setup_pyproject.py` | TOML read/write, pylint load-plugins, dev-dependency detection (extras stripped)                      | `:19-97`                                     |
-| `src/python_setup_lint/_setup_precommit.py` | Pre-commit config and AGENTS snippet generation/atomic writes                                         | `:70-...`                                    |
-| `src/python_setup_lint/_setup_update.py`    | Drift detection + `uv add --refresh-package` update flow                                              | `:11-...`                                    |
-| `src/python_setup_lint/testing.py`          | Shared `_make_tc` / `_walk_and_release`, lint-runner fakes, consumer health checks                    | `:18-38`, `:44-103`, `:115-196`              |
-| `pyproject.toml`                            | Package metadata, empty `[semantic]` extra, pytest markers (`not slow` default)                       | `:1-4`, `:28-30`, `:47-54`                   |
-| `uv.lock`                                   | Locked dependencies; root provides `semantic` extra, currently empty                                  | `:573-623`                                   |
-| `.gitignore`                                | Generated consumer artifacts; legacy semantic model cache ignored                                     | `:222-244`                                   |
+| Path | Responsibility | Key lines |
+|---|---|---|
+| `src/python_setup_lint/setup.py` | `install()` / `main()`: dependency step, pylint plugin registration, config symlinks, state/checksums | `:41-56`, `:149-205`, `:223-290`, `:318-364` |
+| `src/python_setup_lint/_setup_pyproject.py` | TOML read/write, pylint load-plugins, dev-dependency detection (extras stripped) | `:19-97` |
+| `src/python_setup_lint/_setup_precommit.py` | Pre-commit config and AGENTS snippet generation/atomic writes | `:70-...` |
+| `src/python_setup_lint/_setup_update.py` | Drift detection + `uv add --refresh-package` update flow | `:11-...` |
+| `src/python_setup_lint/testing.py` | Shared `_make_tc` / `_walk_and_release`, lint-runner fakes, consumer health checks | `:18-38`, `:44-103`, `:115-196` |
+| `pyproject.toml` | Package metadata, empty `[semantic]` extra, pytest markers (`not slow` default) | `:1-4`, `:28-30`, `:47-54` |
+| `uv.lock` | Locked dependencies; root provides `semantic` extra, currently empty | `:573-623` |
+| `.gitignore` | Generated consumer artifacts; legacy semantic model cache ignored | `:222-244` |
 
 ### 1.5 Documentation / decision register
 
-| Path                                                        | Responsibility                                                                                               | Key lines / state                                                         |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| `CodingRules.md`                                            | Shipped coding rules: typing, `.pyi`, simplification, complexity, tests                                      | `:1-75`, `:90-159`, `:230-307`                                            |
-| `AGENTS.md`                                                 | Agent entry point: commands, tool scope, pipeline, test strategy                                             | `:5-14`, `:16-32`, `:79-93`                                               |
-| `docs/adr/README.md`                                        | ADR index — **omits ADR-013…ADR-016**                                                                        | `:16-31`                                                                  |
-| `docs/adr/ADR-009.md`                                       | Accepted no-go-gated deferral for the model                                                                  | `:1-48`                                                                   |
-| `docs/adr/ADR-010.md`                                       | Frozen backend + tracked-cache contracts                                                                     | `:1-52`                                                                   |
-| `docs/adr/ADR-014.md`                                       | Heuristic-first veto semantics (now implemented; text stale)                                                 | `:1-5`                                                                    |
-| `docs/adr/ADR-015.md`                                       | Pylint-pyi scope fix deferred to iteration 5                                                                 | `:1-3`                                                                    |
-| `docs/adr/ADR-016.md`                                       | Iteration-4 infrastructure-only scope — **claims no backend/cache/FakeBackend exists, contradicted by HEAD** | `:1-5`                                                                    |
-| `design/0001`, `design/0002`                                | Config composers; ty src-only exception                                                                      | files                                                                     |
-| `README.md`, `docs/tutorials.md`, `docs/troubleshooting.md` | Consumer docs; semantic sections stale                                                                       | `README.md:29,105`; `tutorials.md:12-16`; `troubleshooting.md:97-111,150` |
+| Path | Responsibility | Key lines / state |
+|---|---|---|
+| `CodingRules.md` | Shipped coding rules: typing, `.pyi`, simplification, complexity, tests | `:1-75`, `:90-159`, `:230-307` |
+| `AGENTS.md` | Agent entry point: commands, tool scope, pipeline, test strategy | `:5-14`, `:16-32`, `:79-93` |
+| `docs/adr/README.md` | ADR index — **omits ADR-013…ADR-016** | `:16-31` |
+| `docs/adr/ADR-009.md` | Accepted no-go-gated deferral for the model | `:1-48` |
+| `docs/adr/ADR-010.md` | Frozen backend + tracked-cache contracts | `:1-52` |
+| `docs/adr/ADR-014.md` | Heuristic-first veto semantics (now implemented; text stale) | `:1-5` |
+| `docs/adr/ADR-015.md` | Pylint-pyi scope fix deferred to iteration 5 | `:1-3` |
+| `docs/adr/ADR-016.md` | Iteration-4 infrastructure-only scope — **claims no backend/cache/FakeBackend exists, contradicted by HEAD** | `:1-5` |
+| `design/0001`, `design/0002` | Config composers; ty src-only exception | files |
+| `README.md`, `docs/tutorials.md`, `docs/troubleshooting.md` | Consumer docs; semantic sections stale | `README.md:29,105`; `tutorials.md:12-16`; `troubleshooting.md:97-111,150` |
 
 ### 1.6 Test subsystems
 
-| Path                                                     | Responsibility                                                                               | Key lines                                           |
-| -------------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| `tests/checkers/`                                        | Per-checker behavioral tests over real pylint `CheckerTestCase`; `_factories_*` data modules | 45 `.py` files incl. helpers                        |
-| `tests/runner/`                                          | Runner unit/integration tests, autofix, parsers, setup, benchmarks                           | 30 `.py` files                                      |
-| `tests/assumptions/`                                     | Third-party contract pins (astroid, beartype, pylint, pylint cache semantics)                | `test_pylint_cache_semantics.py:1-39`               |
-| `tests/_golden.py`                                       | Golden snapshot normalization/serialization/assertions + CI-guarded rewrite                  | `:1-11`, `:53-58`, `:374-392`                       |
-| `tests/test_golden.py`                                   | Synthetic unit tests for golden helpers                                                      | `:1-6`                                              |
-| `tests/integration.py`                                   | Fit-for-purpose end-to-end gate on planted sample project                                    | `:1-145`                                            |
-| `tests/data/minimal_sample_project/`                     | Planted-violation fixture project (W9704 brush-off vs carry-from)                            | `src/minimal_sample/mod.py:41-56`, `violations.txt` |
-| `tests/data/golden/minimal_sample_project_findings.json` | 158 normalized findings; 18 `unjustified-suppression`, 2 `bare-except-comment`               | golden file                                         |
+| Path | Responsibility | Key lines |
+|---|---|---|
+| `tests/checkers/` | Per-checker behavioral tests over real pylint `CheckerTestCase`; `_factories_*` data modules | 45 `.py` files incl. helpers |
+| `tests/runner/` | Runner unit/integration tests, autofix, parsers, setup, benchmarks | 30 `.py` files |
+| `tests/assumptions/` | Third-party contract pins (astroid, beartype, pylint, pylint cache semantics) | `test_pylint_cache_semantics.py:1-39` |
+| `tests/_golden.py` | Golden snapshot normalization/serialization/assertions + CI-guarded rewrite | `:1-11`, `:53-58`, `:374-392` |
+| `tests/test_golden.py` | Synthetic unit tests for golden helpers | `:1-6` |
+| `tests/integration.py` | Fit-for-purpose end-to-end gate on planted sample project | `:1-145` |
+| `tests/data/minimal_sample_project/` | Planted-violation fixture project (W9704 brush-off vs carry-from) | `src/minimal_sample/mod.py:41-56`, `violations.txt` |
+| `tests/data/golden/minimal_sample_project_findings.json` | 158 normalized findings; 18 `unjustified-suppression`, 2 `bare-except-comment` | golden file |
 
 ---
 
@@ -355,14 +353,14 @@ markers = [
 
 ### 4.2 Semantic/backend tests (current contract)
 
-| File                                                       | Coverage                                                                                                                                      | Key lines                                 |
-| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `tests/checkers/test_decision_backend.py`                  | Pinned constants, FakeBackend, loader gating, heuristic-first veto, normalization, packaging pins                                             | `:1-6`, `:83-165`, `:181-264`, `:320-337` |
-| `tests/checkers/test_semantic_check.py`                    | Adapter signature, empty-primary, `None` mapping, 0.5 threshold matrix, memo per unique pair/model, no `sentence_transformers`, no disk cache | `:47-133`                                 |
-| `tests/checkers/test_semantic_threshold.py`                | 115-row heuristic table, semantic disabled                                                                                                    | `:16-21`, `:147-164`                      |
-| `tests/assumptions/test_pylint_cache_semantics.py`         | Read-only behavior, in-process memo, path-free semantic API, `jobs=1` single-writer verdict, sequential pylint invocation                     | `:1-39`, `:94-181`, `:225-355`            |
-| `tests/checkers/test_suppression_justification_checker.py` | W9704 checker behavior; semantic disabled via fixture                                                                                         | `:19-30`, `:367-392`                      |
-| `tests/checkers/test_bare_except_comment_checker.py`       | W9738 checker behavior; semantic disabled via fixture                                                                                         | `:18-43`                                  |
+| File | Coverage | Key lines |
+|---|---|---|
+| `tests/checkers/test_decision_backend.py` | Pinned constants, FakeBackend, loader gating, heuristic-first veto, normalization, packaging pins | `:1-6`, `:83-165`, `:181-264`, `:320-337` |
+| `tests/checkers/test_semantic_check.py` | Adapter signature, empty-primary, `None` mapping, 0.5 threshold matrix, memo per unique pair/model, no `sentence_transformers`, no disk cache | `:47-133` |
+| `tests/checkers/test_semantic_threshold.py` | 115-row heuristic table, semantic disabled | `:16-21`, `:147-164` |
+| `tests/assumptions/test_pylint_cache_semantics.py` | Read-only behavior, in-process memo, path-free semantic API, `jobs=1` single-writer verdict, sequential pylint invocation | `:1-39`, `:94-181`, `:225-355` |
+| `tests/checkers/test_suppression_justification_checker.py` | W9704 checker behavior; semantic disabled via fixture | `:19-30`, `:367-392` |
+| `tests/checkers/test_bare_except_comment_checker.py` | W9738 checker behavior; semantic disabled via fixture | `:18-43` |
 
 Important: no test exercises a real model. Every backend is a test double (`test_decision_backend.py:1-6`). The current test suite actively pins the **absence** of a model dependency (`test_semantic_extra_is_empty`, `test_uv_lock_has_no_sentence_transformers_edge` at `:323-337`; `test_no_try_import_checker.py:27-35`; `_OPTIONAL_IMPORT_PATTERNS` empty at `no_try_import_checker.py:10-13`). Any model wiring must update these pins deliberately.
 
@@ -509,12 +507,11 @@ Suggested assumption/contract tests, following `tests/assumptions/` style:
 
 ## 6. High-signal summary for the architect
 
-1. The reranker removal is complete; the backend/cache _interfaces_ are half-delivered. The next iteration’s semantic work is: production backend wiring + an actual CPU model (or an explicit deferral) + the tracked decision cache with refresh/prune.
+1. The reranker removal is complete; the backend/cache *interfaces* are half-delivered. The next iteration’s semantic work is: production backend wiring + an actual CPU model (or an explicit deferral) + the tracked decision cache with refresh/prune.
 2. The biggest behavioral risk is enabling a model by default before semantic-on behavior is pinned; golden currently runs with semantic off.
 3. The biggest debloat wins are test-harness duplication (13 `_make_tc` copies, 10 `_walk_and_release` copies, 3 `_RecordingBackend` copies, 2 `_UvCallRecorder` copies, dead helpers, vestigial cache tests, redundant smoke test), not production code.
 4. Docs and ADRs are materially wrong about the semantic subsystem; ADR-016 actively contradicts HEAD and should be superseded/updated first.
 5. Any ADR-009 gate closure needs a corpus/license/CPU-benchmark decision that cannot be inferred from the repository today.`). Read code ONLY to verify a specific failure site or interface contract (few targeted reads, never broad scans). If root cause remains unknown, split the item, outline a spike, or escalate instead of investigating. Keep terse.
-
 - Decision options (yield `decision` matching `decisions.schema.json` with `context: "item"`):
   - `retry-with-guidance`: provide concrete technical steering for another developer attempt. Set `persist: true` if guidance applies to subsequent rounds.
   - `split`: decompose oversized or unfocused item into smaller, independent item outlines (respecting the configured split-depth limit).
@@ -524,19 +521,15 @@ Suggested assumption/contract tests, following `tests/assumptions/` style:
 - Grounded judgment: inspect prior attempts, failure output, reviewer feedback, and the current code diff to identify root cause before deciding.
 
 ## Item
-
 consolidate-integration-helpers-v2
 
 ## Assignment
-
 {"slug":"consolidate-integration-helpers-v2","kind":"test-only","title":"Single-source helpers; integration.py under 500 lines","assignment":"Replaces pending consolidate-integration-helpers blocked on superseded golden-findings-snapshot (rewired to golden-snapshot-wiring; identical scope). Extract into tests/_project_helpers.py: copy_sample_project, git_init_and_stage (init+config test/test@test + `git add .`), git_init_bare (init -q + Test/test@example.com, no add — identities NOT unified), stage_file, commit_all, shipped_config_paths, make_runner_config (package_name+rumdl override, preserving _make_config side-effect: idempotent overwrite, no-op when shipped rumdl missing), build_pylint_overlay_config(project, disable_rule)->Path, ensure_precommit_or_skip, install_twice_assert_idempotent. Delete duplicate defs in conftest.py and _autofix_helpers.py (import instead); integration.py imports only mapped subset; test_self_lint_clean.py and autofix tests switch imports. Per-consumer map: integration->{copy, git_init_and_stage, make_runner_config, build_overlay, ensure_precommit, install_twice}; conftest->{shipped_config_paths}; _autofix->{git_init_bare, stage_file, commit_all}. Line budget (remove >=127, target <=490): helpers ~58 + oracle ~8 + overlay ~21 + setup ~20 + precommit ~25 + M1 net ~5 + slice ~3 + trim ~4. Keep path/class/function names; golden+counts byte-identical; sole AGENTS.md counts owner (update incl. new assumption tests). Acceptance: integration, `pytest -q`, `lint` pass.","outlineRef":"consolidate-integration-helpers","milestone":"M2","wave":8,"deps":["golden-snapshot-wiring","third-party-assumption-tests"],"scenarioRefs":["M2: Shared helpers exist once","M2: Integration gate module within limits"],"citations":["tests/_project_helpers.py","tests/integration.py","tests/conftest.py","ADR-004","TD-3"]}
 
 ## Prior Attempts & Failures
-
 Merge path failed for consolidate-integration-helpers-v2 (attempt 2/2)
 
 ## Current Diff
-
 diff --git a/.factory/tasks/modernize/closeup-1.yaml b/.factory/tasks/modernize/closeup-1.yaml
 deleted file mode 100644
 index c92752a..0000000
@@ -546,368 +539,367 @@ index c92752a..0000000
 -iteration: 1
 -status: next-iteration
 -summary: "Iteration 1 partially delivered: M1 golden safety net confirmed
-
-- functional (golden+counts committed, oracle/tool coverage, drift/regen
-- helpers, 8 assumption tests pinned). M2 helper consolidation unmerged (no
-- tests/_project_helpers.py; integration.py 661 lines with suppression vs <=500)
-- and M3 audits lack committed evidence; these plus the audit-flagged M1
-- interface drift fixes carry to iteration 2. Semantic epic not started by
-- design (spawns on narrowed protocol once M2/M3 land). Task intent (rule
-- enforcement, debloat, model swap) remains future scope. No operator blocker:
-- remaining work is planned, sequenced, and resourced for next iteration."
-  diff --git a/.factory/tasks/modernize/closeup-2.yaml b/.factory/tasks/modernize/closeup-2.yaml
-  deleted file mode 100644
-  index 84c712d..0000000
-  --- a/.factory/tasks/modernize/closeup-2.yaml
-  +++ /dev/null
-  @@ -1,16 +0,0 @@
-  -iteration: 2
-  -status: next-iteration
-  -summary: "Iteration 2 delivered the verifiable repo scope: M1 green baseline +
-- 14-tool contract (check-only ruff format strategy, single-sourced registry,
-- 14-site docs migration, SIM102/R0914/C0208/W9704-tail fixes, baseline []) and
-- M2 test-infra consolidation + golden hardening (11 helpers single-sourced,
-- integration.py 498 lines, caller asserts, shared slicer, golden
-- byte-identical) — both verified at HEAD by the close-up audit. M3 partial:
-- model matrix + CPU eval (structural no-go with disclosed single-adjudicator
-- limits) + runtime-pinning no-go skip merged; test_pylint_cache_semantics.py
-- still missing (pylint-cache-assumptions running, cache-design-spike pending on
-- its verdict). M4: both audits merged per engine records; report completeness
-- validates at the iteration-3 replan via HEAD re-glob per ADR-008. Secrets
-- verdict is human-async and does not block dev acceptance. Task intent (rule
-- enforcement, debloat, semantic swap) remains iteration-3 scope per plan; no
-- operator blocker."
-  diff --git a/.factory/tasks/modernize/closeup-3.yaml b/.factory/tasks/modernize/closeup-3.yaml
-  deleted file mode 100644
-  index aa9b8eb..0000000
-  --- a/.factory/tasks/modernize/closeup-3.yaml
-  +++ /dev/null
-  @@ -1,19 +0,0 @@
-  -iteration: 3
-  -status: next-iteration
-  -summary: "Iteration 3 partially delivered: M1 repo scope VERIFIED
-- (.secrets.baseline:41-46 ^\\.factory/ filter, test_pylint_cache_semantics.py
-- 485 lines/19 tests writer-first verdict, 12 ADRs with 009-012 full +
-- 001/005/006 staleness + README cross-ref) but M1 gate NOT closed per engine
-- records (ownership-map-revalidation running, epic-kickoff-gate pending; 3
-- empty waves on the single-item bottleneck). M2 ZERO DELIVERY: runner
-- dispatch.py:1 still 542-line disable, baseline.py:23-42 shims retained,
-- _factories_extras.py:1,6 duplicate disables, hardcoded paths + self-lint tests
-- retained; checkers no _source_stream.py, _legacy_scan retained,
-- trivial_wrapper exemptions retained, mixin misc unattempted, _factories.py
-- 1393 unsplit, single-code rule args, no SEMANTIC=0 guards; semantic zero
-- DecisionBackend/cache/FakeBackend, _semantic.py still jina reranker +
-- ~/.cache, _base.py:238 exact-match, [semantic] still sentence-transformers. M3
-- FAILS: baseline [] holds and golden exists, but docs must-contain fails
-- everywhere and no shift/regen/gate-table evidence. Gates unverifiable under
-- read-only audit. Intent (rule enforcement, debloat, model swap) remains future
-- scope; no operator blocker."
-  diff --git a/.factory/tasks/modernize/closeup-4.yaml b/.factory/tasks/modernize/closeup-4.yaml
-  deleted file mode 100644
-  index 9afd9be..0000000
-  --- a/.factory/tasks/modernize/closeup-4.yaml
-  +++ /dev/null
-  @@ -1,18 +0,0 @@
-  -iteration: 4
-  -status: next-iteration
-  -summary: "Iteration 4 partially delivered: M1/M2 VERIFIED (secrets filter,
-- factories splits <=500, threshold deduped + SEMANTIC=0 guards, baseline
-- 2x<=500, portability grep-zero, prune 4/6 deleted + smoke kept, dispatch split
-- 449+102 with live registry). M3 PARTIAL: shim retained with debt note,
-- _source_stream.py missing (3x .stream() copies remain), legacy cleanup missing
-- (_legacy_scan, trivial _legacy_*, astroid 3.x branch, unscoped register). M4
-- PARTIAL: veto backend infra landed (_decision_backend, _semantic rewrite,
-- [semantic]=[], .pyi fix) but normalize diverges from ADR-014, NoBackend
-- absent, decisions/_decision_cache + --refresh-decisions + tach edge missing,
-- slow+with_real_api skeleton + cache round-trip/hypothesis missing, ADR-014/016
-- incomplete. M5 FAILS: baseline [] + golden unchanged but docs exact-strings
-- fail everywhere
-- (semantic-justification/custom-checks/troubleshooting/AGENTS/CHANGELOG/README\
-- /ty.toml/ADR-013..018 stubs). Gates unverifiable read-only. Intent model swap
-- - git cache remain open by design (ADR-016 infra-only); 2 items still running
-- (stream-helper, cache-impl), 3 pending (legacy, semantic-tests, docs)."
-  diff --git a/.factory/tasks/modernize/concerns/c-4743ca3658.yaml b/.factory/tasks/modernize/concerns/c-4743ca3658.yaml
-  deleted file mode 100644
-  index ef7a7cf..0000000
-  --- a/.factory/tasks/modernize/concerns/c-4743ca3658.yaml
-  +++ /dev/null
-  @@ -1,17 +0,0 @@
-  -id: c-4743ca3658
-  -kind: assumption
-  -summary: Index entries for the 13 conflicted paths remain unmerged because git
-- write commands are forbidden in this step
-  -detail: Working-tree contents are final, marker-free, formatted, and fully
-- verified; staging/committing the resolution is left to the engine as
-- specified.
-  -severity: low
-  -status: open
-  -source:
-- record: 004-integrate-r1-a1
-- agent: developer
-- step: integrate
-- item: consolidate-integration-helpers-v2
-- lastSeen: 2026-11-09T22:46:16.556Z
-  -createdAt: 2026-11-09T22:46:16.556Z
-  -updatedAt: 2026-11-09T22:46:16.556Z
-  diff --git a/.factory/tasks/modernize/concerns/c-55195ce9f3.yaml b/.factory/tasks/modernize/concerns/c-55195ce9f3.yaml
-  deleted file mode 100644
-  index 1fff689..0000000
-  --- a/.factory/tasks/modernize/concerns/c-55195ce9f3.yaml
-  +++ /dev/null
-  @@ -1,19 +0,0 @@
-  -id: c-55195ce9f3
-  -kind: blocker
-  -summary: docs-reconciliation blocked-by-failure with zero merges in Wave 6
-  -detail: Wave report lists no merged items and marks docs-reconciliation as
-- blocked-by-failure. No gate regression explains the block (all gates green or
-- improved), so the cause is item-level (dependency failure or retry
-- exhaustion), not tree or gate state.
-  -affects:
-- - docs-reconciliation
-    -severity: medium
-    -status: resolved
-    -source:
-- record: 149-wave-close-up-5-6-a1
-- agent: wave-close-up
-- step: wave-close-up-5-6
-- iteration: 5
-- lastSeen: 2026-11-09T22:19:17.543Z
-  -createdAt: 2026-11-09T22:19:17.543Z
-  -updatedAt: 2026-11-09T22:22:55.172Z
-  diff --git a/.factory/tasks/modernize/concerns/c-89f3cb5a77.yaml b/.factory/tasks/modernize/concerns/c-89f3cb5a77.yaml
-  deleted file mode 100644
-  index d00a5dd..0000000
-  --- a/.factory/tasks/modernize/concerns/c-89f3cb5a77.yaml
-  +++ /dev/null
-  @@ -1,17 +0,0 @@
-  -id: c-89f3cb5a77
-  -kind: risk
-  -summary: decision-cache-impl failed and was abandoned; needs replan
-  -detail: Item abandoned after consults exhausted per engine record; no code
-- merged for it in wave 4. Requires rescoping before retry.
-  -affects:
-- - decision-cache-impl
-    -severity: medium
-    -status: resolved
-    -source:
-- record: 138-wave-close-up-5-4-a1
-- agent: wave-close-up
-- step: wave-close-up-5-4
-- iteration: 5
-- lastSeen: 2026-11-09T21:50:23.652Z
-  -createdAt: 2026-11-09T21:50:23.652Z
-  -updatedAt: 2026-11-09T22:07:17.438Z
-  diff --git a/.factory/tasks/modernize/concerns/rm-0237e4a7c9.yaml b/.factory/tasks/modernize/concerns/rm-0237e4a7c9.yaml
-  deleted file mode 100644
-  index 080fa00..0000000
-  --- a/.factory/tasks/modernize/concerns/rm-0237e4a7c9.yaml
-  +++ /dev/null
-  @@ -1,19 +0,0 @@
-  -id: rm-0237e4a7c9
-  -chosen: Merged `_project_helpers.py` as the union of both sides and kept its
-- symlink-unlink guards
-  -alternatives:
-- - Keep only the parent version (drops item's consolidation/guard work)
-- - Keep only the item version (drops
-- collect_sample_findings/make_clean_consumer_project/write_project_file)
-  -why: The item's consolidation intent is a single owner for shared fixtures; the
-- parent independently added consumer-project/golden helpers. The symlink guards
-- prevent `install`-created symlinks from writing through to shipped configs.
-  -status: open
-  -source:
-- record: 004-integrate-r1-a1
-- agent: developer
-- step: integrate
-- item: consolidate-integration-helpers-v2
-- lastSeen: 2026-11-09T22:46:16.556Z
-  -createdAt: 2026-11-09T22:46:16.556Z
-  -updatedAt: 2026-11-09T22:46:16.556Z
-  diff --git a/.factory/tasks/modernize/concerns/rm-057ed6485e.yaml b/.factory/tasks/modernize/concerns/rm-057ed6485e.yaml
-  deleted file mode 100644
-  index 2110d7d..0000000
-  --- a/.factory/tasks/modernize/concerns/rm-057ed6485e.yaml
-  +++ /dev/null
-  @@ -1,17 +0,0 @@
-  -id: rm-057ed6485e
-  -chosen: Count lint and test as IMPROVED per Gate Diff table (baseline=fail,
-- now=pass) with no regressions
-  -alternatives:
-- - Treat lint/test now=pass as unrelated noise and keep baseline red
-- - Infer fixes from raw output text comparison
-    -why: Gate Diff is the authoritative signal; raw text differs run to run by
-- timing/ordering/truncation and must not be compared
-  -status: open
-  -source:
-- record: 149-wave-close-up-5-6-a1
-- agent: wave-close-up
-- step: wave-close-up-5-6
-- iteration: 5
-- lastSeen: 2026-11-09T22:19:17.543Z
-  -createdAt: 2026-11-09T22:19:17.543Z
-  -updatedAt: 2026-11-09T22:19:17.543Z
-  diff --git a/.factory/tasks/modernize/concerns/rm-1ded0c796b.yaml b/.factory/tasks/modernize/concerns/rm-1ded0c796b.yaml
-  deleted file mode 100644
-  index 86a7f0c..0000000
-  --- a/.factory/tasks/modernize/concerns/rm-1ded0c796b.yaml
-  +++ /dev/null
-  @@ -1,18 +0,0 @@
-  -id: rm-1ded0c796b
-  -chosen: Judged gates solely from Gate Diff table; lint and test count as fixed
-- (fail to pass), format and test-integration remain green
-  -alternatives:
-- - Treat red baseline as blocking
-- - Infer fixes from raw log text comparison
-    -why: Per close-up rules, raw output text differs run to run; only
-- baseline-vs-now verdicts are authoritative, and both red-baseline gates now
-- pass with no regressions
-  -status: open
-  -source:
-- record: 138-wave-close-up-5-4-a1
-- agent: wave-close-up
-- step: wave-close-up-5-4
-- iteration: 5
-- lastSeen: 2026-11-09T21:50:23.652Z
-  -createdAt: 2026-11-09T21:50:23.652Z
-  -updatedAt: 2026-11-09T21:50:23.652Z
-  diff --git a/.factory/tasks/modernize/concerns/rm-48c8d8400a.yaml b/.factory/tasks/modernize/concerns/rm-48c8d8400a.yaml
-  deleted file mode 100644
-  index 16656ca..0000000
-  --- a/.factory/tasks/modernize/concerns/rm-48c8d8400a.yaml
-  +++ /dev/null
-  @@ -1,17 +0,0 @@
-  -id: rm-48c8d8400a
-  -chosen: Prune 13 superseded I4 pendings and add 2 gap outlines (ruff check-only,
-- legacy-v2)
-  -alternatives:
-- - Continue with 52 items and obsolete audits/epics/docs
-- - End-iteration with 0 merges despite green gates
-    -why: Fits 50-item cap, unblocks wave gate without losing M3 legacy scope, keeps
-- v2 cache/model/pyi/docs chain intact while gates stay green
-  -status: open
-  -source:
-- record: 145-architect-wave-report-5-5-a1
-- agent: architect
-- step: architect-wave-report-5-5
-- iteration: 5
-- lastSeen: 2026-11-09T22:07:17.379Z
-  -createdAt: 2026-11-09T22:07:17.379Z
-  -updatedAt: 2026-11-09T22:07:17.379Z
-  diff --git a/.factory/tasks/modernize/concerns/rm-5bf2ade0ce.yaml b/.factory/tasks/modernize/concerns/rm-5bf2ade0ce.yaml
-  deleted file mode 100644
-  index 22d30fc..0000000
-  --- a/.factory/tasks/modernize/concerns/rm-5bf2ade0ce.yaml
-  +++ /dev/null
-  @@ -1,17 +0,0 @@
-  -id: rm-5bf2ade0ce
-  -chosen: Prune 13 superseded I4 pendings and add stream-helper-v2 deps legacy+doubles
-  -alternatives:
-- - Continue with overflow + obsolete audits/epics/docs
-- - End-iteration with 0 merges despite green gates
-    -why: Fits 50-item cap (prior 52/51 discards), unblocks wave gate, preserves M3
-- helper scope via fresh-HEAD v2, keeps v2 cache/model/pyi/docs chain intact
-- while gates green
-  -status: open
-  -source:
-- record: 150-architect-wave-report-5-6-a1
-- agent: architect
-- step: architect-wave-report-5-6
-- iteration: 5
-- lastSeen: 2026-11-09T22:22:55.095Z
-  -createdAt: 2026-11-09T22:22:55.095Z
-  -updatedAt: 2026-11-09T22:22:55.095Z
-  diff --git a/.factory/tasks/modernize/concerns/rm-717ccdc143.yaml b/.factory/tasks/modernize/concerns/rm-717ccdc143.yaml
-  deleted file mode 100644
-  index 822a967..0000000
-  --- a/.factory/tasks/modernize/concerns/rm-717ccdc143.yaml
-  +++ /dev/null
-  @@ -1,18 +0,0 @@
-  -id: rm-717ccdc143
-  -chosen: Tree now carries check-only ruff format ToolSpec
-- (_RuffFormatLintTool.build_command appends --check, _build adds --config) with
-- phase-1a-only mutation
-  -alternatives:
-- - Keep split format/lint gates permanently
-- - Drop ruff format from TOOLS
-    -why: Matches operator action request in infra notes; allows future gate
-- simplification while keeping current split gates green
-  -status: open
-  -source:
-- record: 129-wave-close-up-5-3-a1
-- agent: wave-close-up
-- step: wave-close-up-5-3
-- iteration: 5
-- lastSeen: 2026-11-09T21:35:07.950Z
-  -createdAt: 2026-11-09T21:35:07.950Z
-  -updatedAt: 2026-11-09T21:35:07.950Z
-  diff --git a/.factory/tasks/modernize/concerns/rm-963829d74d.yaml b/.factory/tasks/modernize/concerns/rm-963829d74d.yaml
-  deleted file mode 100644
-  index fc98547..0000000
-  --- a/.factory/tasks/modernize/concerns/rm-963829d74d.yaml
-  +++ /dev/null
-  @@ -1,17 +0,0 @@
-  -id: rm-963829d74d
-  -chosen: Deleted `tests/runner/test_self_lint_clean.py` (modify/delete conflict)
-  -alternatives:
-- - Keep the item's version with the updated `_project_helpers` import
-    -why: The parent tip intentionally removed it in the never-test-linting-prune
-- item; its own docstring (13 tools) was already stale. Preserving the parent's
-- deletion honors that policy decision; the item's only change to it was an
-- import path.
-  -status: open
-  -source:
-- record: 004-integrate-r1-a1
-- agent: developer
-- step: integrate
-- item: consolidate-integration-helpers-v2
-- lastSeen: 2026-11-09T22:46:16.556Z
-  -createdAt: 2026-11-09T22:46:16.556Z
-  -updatedAt: 2026-11-09T22:46:16.556Z
-  diff --git a/.factory/tasks/modernize/concerns/rm-9b3f69811e.yaml b/.factory/tasks/modernize/concerns/rm-9b3f69811e.yaml
-  deleted file mode 100644
-  index 84bd7b4..0000000
-  --- a/.factory/tasks/modernize/concerns/rm-9b3f69811e.yaml
-  +++ /dev/null
-  @@ -1,18 +0,0 @@
-  -id: rm-9b3f69811e
-  -chosen: Combined the item's `assert_golden_snapshot` with the parent's
-- fresh-copy byte-identical replay in test_setup_new_and_lint
-  -alternatives:
-- - Use only the parent's granular asserts
-- - Use only the item's aggregate snapshot helper
-    -why: "Both assertions cover complementary guarantees:
-- snapshot/oracle/tool-minimum conformance and determinism/ordering stability
-- across fresh runs."
-  -status: open
-  -source:
-- record: 004-integrate-r1-a1
-- agent: developer
-- step: integrate
-- item: consolidate-integration-helpers-v2
-- lastSeen: 2026-11-09T22:46:16.556Z
-  -createdAt: 2026-11-09T22:46:16.556Z
-  -updatedAt: 2026-11-09T22:46:16.556Z
-  diff --git a/.factory/tasks/modernize/context-pack.md b/.factory/tasks/modernize/context-pack.md
-  index bb5763d..6dae974 100644
-  --- a/.factory/tasks/modernize/context-pack.md
-  +++ b/.factory/tasks/modernize/context-pack.md
-  @@ -1,508 +1,391 @@
-  -# Context Pack — `modernize` (iteration 5 starting state)
-  +# Context Pack — `modernize`
-
+-  functional (golden+counts committed, oracle/tool coverage, drift/regen
+-  helpers, 8 assumption tests pinned). M2 helper consolidation unmerged (no
+-  tests/_project_helpers.py; integration.py 661 lines with suppression vs <=500)
+-  and M3 audits lack committed evidence; these plus the audit-flagged M1
+-  interface drift fixes carry to iteration 2. Semantic epic not started by
+-  design (spawns on narrowed protocol once M2/M3 land). Task intent (rule
+-  enforcement, debloat, model swap) remains future scope. No operator blocker:
+-  remaining work is planned, sequenced, and resourced for next iteration."
+diff --git a/.factory/tasks/modernize/closeup-2.yaml b/.factory/tasks/modernize/closeup-2.yaml
+deleted file mode 100644
+index 84c712d..0000000
+--- a/.factory/tasks/modernize/closeup-2.yaml
++++ /dev/null
+@@ -1,16 +0,0 @@
+-iteration: 2
+-status: next-iteration
+-summary: "Iteration 2 delivered the verifiable repo scope: M1 green baseline +
+-  14-tool contract (check-only ruff format strategy, single-sourced registry,
+-  14-site docs migration, SIM102/R0914/C0208/W9704-tail fixes, baseline []) and
+-  M2 test-infra consolidation + golden hardening (11 helpers single-sourced,
+-  integration.py 498 lines, caller asserts, shared slicer, golden
+-  byte-identical) — both verified at HEAD by the close-up audit. M3 partial:
+-  model matrix + CPU eval (structural no-go with disclosed single-adjudicator
+-  limits) + runtime-pinning no-go skip merged; test_pylint_cache_semantics.py
+-  still missing (pylint-cache-assumptions running, cache-design-spike pending on
+-  its verdict). M4: both audits merged per engine records; report completeness
+-  validates at the iteration-3 replan via HEAD re-glob per ADR-008. Secrets
+-  verdict is human-async and does not block dev acceptance. Task intent (rule
+-  enforcement, debloat, semantic swap) remains iteration-3 scope per plan; no
+-  operator blocker."
+diff --git a/.factory/tasks/modernize/closeup-3.yaml b/.factory/tasks/modernize/closeup-3.yaml
+deleted file mode 100644
+index aa9b8eb..0000000
+--- a/.factory/tasks/modernize/closeup-3.yaml
++++ /dev/null
+@@ -1,19 +0,0 @@
+-iteration: 3
+-status: next-iteration
+-summary: "Iteration 3 partially delivered: M1 repo scope VERIFIED
+-  (.secrets.baseline:41-46 ^\\.factory/ filter, test_pylint_cache_semantics.py
+-  485 lines/19 tests writer-first verdict, 12 ADRs with 009-012 full +
+-  001/005/006 staleness + README cross-ref) but M1 gate NOT closed per engine
+-  records (ownership-map-revalidation running, epic-kickoff-gate pending; 3
+-  empty waves on the single-item bottleneck). M2 ZERO DELIVERY: runner
+-  dispatch.py:1 still 542-line disable, baseline.py:23-42 shims retained,
+-  _factories_extras.py:1,6 duplicate disables, hardcoded paths + self-lint tests
+-  retained; checkers no _source_stream.py, _legacy_scan retained,
+-  trivial_wrapper exemptions retained, mixin misc unattempted, _factories.py
+-  1393 unsplit, single-code rule args, no SEMANTIC=0 guards; semantic zero
+-  DecisionBackend/cache/FakeBackend, _semantic.py still jina reranker +
+-  ~/.cache, _base.py:238 exact-match, [semantic] still sentence-transformers. M3
+-  FAILS: baseline [] holds and golden exists, but docs must-contain fails
+-  everywhere and no shift/regen/gate-table evidence. Gates unverifiable under
+-  read-only audit. Intent (rule enforcement, debloat, model swap) remains future
+-  scope; no operator blocker."
+diff --git a/.factory/tasks/modernize/closeup-4.yaml b/.factory/tasks/modernize/closeup-4.yaml
+deleted file mode 100644
+index 9afd9be..0000000
+--- a/.factory/tasks/modernize/closeup-4.yaml
++++ /dev/null
+@@ -1,18 +0,0 @@
+-iteration: 4
+-status: next-iteration
+-summary: "Iteration 4 partially delivered: M1/M2 VERIFIED (secrets filter,
+-  factories splits <=500, threshold deduped + SEMANTIC=0 guards, baseline
+-  2x<=500, portability grep-zero, prune 4/6 deleted + smoke kept, dispatch split
+-  449+102 with live registry). M3 PARTIAL: shim retained with debt note,
+-  _source_stream.py missing (3x .stream() copies remain), legacy cleanup missing
+-  (_legacy_scan, trivial _legacy_*, astroid 3.x branch, unscoped register). M4
+-  PARTIAL: veto backend infra landed (_decision_backend, _semantic rewrite,
+-  [semantic]=[], .pyi fix) but normalize diverges from ADR-014, NoBackend
+-  absent, decisions/_decision_cache + --refresh-decisions + tach edge missing,
+-  slow+with_real_api skeleton + cache round-trip/hypothesis missing, ADR-014/016
+-  incomplete. M5 FAILS: baseline [] + golden unchanged but docs exact-strings
+-  fail everywhere
+-  (semantic-justification/custom-checks/troubleshooting/AGENTS/CHANGELOG/README\
+-  /ty.toml/ADR-013..018 stubs). Gates unverifiable read-only. Intent model swap
+-  + git cache remain open by design (ADR-016 infra-only); 2 items still running
+-  (stream-helper, cache-impl), 3 pending (legacy, semantic-tests, docs)."
+diff --git a/.factory/tasks/modernize/concerns/c-4743ca3658.yaml b/.factory/tasks/modernize/concerns/c-4743ca3658.yaml
+deleted file mode 100644
+index ef7a7cf..0000000
+--- a/.factory/tasks/modernize/concerns/c-4743ca3658.yaml
++++ /dev/null
+@@ -1,17 +0,0 @@
+-id: c-4743ca3658
+-kind: assumption
+-summary: Index entries for the 13 conflicted paths remain unmerged because git
+-  write commands are forbidden in this step
+-detail: Working-tree contents are final, marker-free, formatted, and fully
+-  verified; staging/committing the resolution is left to the engine as
+-  specified.
+-severity: low
+-status: open
+-source:
+-  record: 004-integrate-r1-a1
+-  agent: developer
+-  step: integrate
+-  item: consolidate-integration-helpers-v2
+-  lastSeen: 2026-11-09T22:46:16.556Z
+-createdAt: 2026-11-09T22:46:16.556Z
+-updatedAt: 2026-11-09T22:46:16.556Z
+diff --git a/.factory/tasks/modernize/concerns/c-55195ce9f3.yaml b/.factory/tasks/modernize/concerns/c-55195ce9f3.yaml
+deleted file mode 100644
+index 1fff689..0000000
+--- a/.factory/tasks/modernize/concerns/c-55195ce9f3.yaml
++++ /dev/null
+@@ -1,19 +0,0 @@
+-id: c-55195ce9f3
+-kind: blocker
+-summary: docs-reconciliation blocked-by-failure with zero merges in Wave 6
+-detail: Wave report lists no merged items and marks docs-reconciliation as
+-  blocked-by-failure. No gate regression explains the block (all gates green or
+-  improved), so the cause is item-level (dependency failure or retry
+-  exhaustion), not tree or gate state.
+-affects:
+-  - docs-reconciliation
+-severity: medium
+-status: resolved
+-source:
+-  record: 149-wave-close-up-5-6-a1
+-  agent: wave-close-up
+-  step: wave-close-up-5-6
+-  iteration: 5
+-  lastSeen: 2026-11-09T22:19:17.543Z
+-createdAt: 2026-11-09T22:19:17.543Z
+-updatedAt: 2026-11-09T22:22:55.172Z
+diff --git a/.factory/tasks/modernize/concerns/c-89f3cb5a77.yaml b/.factory/tasks/modernize/concerns/c-89f3cb5a77.yaml
+deleted file mode 100644
+index d00a5dd..0000000
+--- a/.factory/tasks/modernize/concerns/c-89f3cb5a77.yaml
++++ /dev/null
+@@ -1,17 +0,0 @@
+-id: c-89f3cb5a77
+-kind: risk
+-summary: decision-cache-impl failed and was abandoned; needs replan
+-detail: Item abandoned after consults exhausted per engine record; no code
+-  merged for it in wave 4. Requires rescoping before retry.
+-affects:
+-  - decision-cache-impl
+-severity: medium
+-status: resolved
+-source:
+-  record: 138-wave-close-up-5-4-a1
+-  agent: wave-close-up
+-  step: wave-close-up-5-4
+-  iteration: 5
+-  lastSeen: 2026-11-09T21:50:23.652Z
+-createdAt: 2026-11-09T21:50:23.652Z
+-updatedAt: 2026-11-09T22:07:17.438Z
+diff --git a/.factory/tasks/modernize/concerns/rm-0237e4a7c9.yaml b/.factory/tasks/modernize/concerns/rm-0237e4a7c9.yaml
+deleted file mode 100644
+index 080fa00..0000000
+--- a/.factory/tasks/modernize/concerns/rm-0237e4a7c9.yaml
++++ /dev/null
+@@ -1,19 +0,0 @@
+-id: rm-0237e4a7c9
+-chosen: Merged `_project_helpers.py` as the union of both sides and kept its
+-  symlink-unlink guards
+-alternatives:
+-  - Keep only the parent version (drops item's consolidation/guard work)
+-  - Keep only the item version (drops
+-    collect_sample_findings/make_clean_consumer_project/write_project_file)
+-why: The item's consolidation intent is a single owner for shared fixtures; the
+-  parent independently added consumer-project/golden helpers. The symlink guards
+-  prevent `install`-created symlinks from writing through to shipped configs.
+-status: open
+-source:
+-  record: 004-integrate-r1-a1
+-  agent: developer
+-  step: integrate
+-  item: consolidate-integration-helpers-v2
+-  lastSeen: 2026-11-09T22:46:16.556Z
+-createdAt: 2026-11-09T22:46:16.556Z
+-updatedAt: 2026-11-09T22:46:16.556Z
+diff --git a/.factory/tasks/modernize/concerns/rm-057ed6485e.yaml b/.factory/tasks/modernize/concerns/rm-057ed6485e.yaml
+deleted file mode 100644
+index 2110d7d..0000000
+--- a/.factory/tasks/modernize/concerns/rm-057ed6485e.yaml
++++ /dev/null
+@@ -1,17 +0,0 @@
+-id: rm-057ed6485e
+-chosen: Count lint and test as IMPROVED per Gate Diff table (baseline=fail,
+-  now=pass) with no regressions
+-alternatives:
+-  - Treat lint/test now=pass as unrelated noise and keep baseline red
+-  - Infer fixes from raw output text comparison
+-why: Gate Diff is the authoritative signal; raw text differs run to run by
+-  timing/ordering/truncation and must not be compared
+-status: open
+-source:
+-  record: 149-wave-close-up-5-6-a1
+-  agent: wave-close-up
+-  step: wave-close-up-5-6
+-  iteration: 5
+-  lastSeen: 2026-11-09T22:19:17.543Z
+-createdAt: 2026-11-09T22:19:17.543Z
+-updatedAt: 2026-11-09T22:19:17.543Z
+diff --git a/.factory/tasks/modernize/concerns/rm-1ded0c796b.yaml b/.factory/tasks/modernize/concerns/rm-1ded0c796b.yaml
+deleted file mode 100644
+index 86a7f0c..0000000
+--- a/.factory/tasks/modernize/concerns/rm-1ded0c796b.yaml
++++ /dev/null
+@@ -1,18 +0,0 @@
+-id: rm-1ded0c796b
+-chosen: Judged gates solely from Gate Diff table; lint and test count as fixed
+-  (fail to pass), format and test-integration remain green
+-alternatives:
+-  - Treat red baseline as blocking
+-  - Infer fixes from raw log text comparison
+-why: Per close-up rules, raw output text differs run to run; only
+-  baseline-vs-now verdicts are authoritative, and both red-baseline gates now
+-  pass with no regressions
+-status: open
+-source:
+-  record: 138-wave-close-up-5-4-a1
+-  agent: wave-close-up
+-  step: wave-close-up-5-4
+-  iteration: 5
+-  lastSeen: 2026-11-09T21:50:23.652Z
+-createdAt: 2026-11-09T21:50:23.652Z
+-updatedAt: 2026-11-09T21:50:23.652Z
+diff --git a/.factory/tasks/modernize/concerns/rm-48c8d8400a.yaml b/.factory/tasks/modernize/concerns/rm-48c8d8400a.yaml
+deleted file mode 100644
+index 16656ca..0000000
+--- a/.factory/tasks/modernize/concerns/rm-48c8d8400a.yaml
++++ /dev/null
+@@ -1,17 +0,0 @@
+-id: rm-48c8d8400a
+-chosen: Prune 13 superseded I4 pendings and add 2 gap outlines (ruff check-only,
+-  legacy-v2)
+-alternatives:
+-  - Continue with 52 items and obsolete audits/epics/docs
+-  - End-iteration with 0 merges despite green gates
+-why: Fits 50-item cap, unblocks wave gate without losing M3 legacy scope, keeps
+-  v2 cache/model/pyi/docs chain intact while gates stay green
+-status: open
+-source:
+-  record: 145-architect-wave-report-5-5-a1
+-  agent: architect
+-  step: architect-wave-report-5-5
+-  iteration: 5
+-  lastSeen: 2026-11-09T22:07:17.379Z
+-createdAt: 2026-11-09T22:07:17.379Z
+-updatedAt: 2026-11-09T22:07:17.379Z
+diff --git a/.factory/tasks/modernize/concerns/rm-5bf2ade0ce.yaml b/.factory/tasks/modernize/concerns/rm-5bf2ade0ce.yaml
+deleted file mode 100644
+index 22d30fc..0000000
+--- a/.factory/tasks/modernize/concerns/rm-5bf2ade0ce.yaml
++++ /dev/null
+@@ -1,17 +0,0 @@
+-id: rm-5bf2ade0ce
+-chosen: Prune 13 superseded I4 pendings and add stream-helper-v2 deps legacy+doubles
+-alternatives:
+-  - Continue with overflow + obsolete audits/epics/docs
+-  - End-iteration with 0 merges despite green gates
+-why: Fits 50-item cap (prior 52/51 discards), unblocks wave gate, preserves M3
+-  helper scope via fresh-HEAD v2, keeps v2 cache/model/pyi/docs chain intact
+-  while gates green
+-status: open
+-source:
+-  record: 150-architect-wave-report-5-6-a1
+-  agent: architect
+-  step: architect-wave-report-5-6
+-  iteration: 5
+-  lastSeen: 2026-11-09T22:22:55.095Z
+-createdAt: 2026-11-09T22:22:55.095Z
+-updatedAt: 2026-11-09T22:22:55.095Z
+diff --git a/.factory/tasks/modernize/concerns/rm-717ccdc143.yaml b/.factory/tasks/modernize/concerns/rm-717ccdc143.yaml
+deleted file mode 100644
+index 822a967..0000000
+--- a/.factory/tasks/modernize/concerns/rm-717ccdc143.yaml
++++ /dev/null
+@@ -1,18 +0,0 @@
+-id: rm-717ccdc143
+-chosen: Tree now carries check-only ruff format ToolSpec
+-  (_RuffFormatLintTool.build_command appends --check, _build adds --config) with
+-  phase-1a-only mutation
+-alternatives:
+-  - Keep split format/lint gates permanently
+-  - Drop ruff format from TOOLS
+-why: Matches operator action request in infra notes; allows future gate
+-  simplification while keeping current split gates green
+-status: open
+-source:
+-  record: 129-wave-close-up-5-3-a1
+-  agent: wave-close-up
+-  step: wave-close-up-5-3
+-  iteration: 5
+-  lastSeen: 2026-11-09T21:35:07.950Z
+-createdAt: 2026-11-09T21:35:07.950Z
+-updatedAt: 2026-11-09T21:35:07.950Z
+diff --git a/.factory/tasks/modernize/concerns/rm-963829d74d.yaml b/.factory/tasks/modernize/concerns/rm-963829d74d.yaml
+deleted file mode 100644
+index fc98547..0000000
+--- a/.factory/tasks/modernize/concerns/rm-963829d74d.yaml
++++ /dev/null
+@@ -1,17 +0,0 @@
+-id: rm-963829d74d
+-chosen: Deleted `tests/runner/test_self_lint_clean.py` (modify/delete conflict)
+-alternatives:
+-  - Keep the item's version with the updated `_project_helpers` import
+-why: The parent tip intentionally removed it in the never-test-linting-prune
+-  item; its own docstring (13 tools) was already stale. Preserving the parent's
+-  deletion honors that policy decision; the item's only change to it was an
+-  import path.
+-status: open
+-source:
+-  record: 004-integrate-r1-a1
+-  agent: developer
+-  step: integrate
+-  item: consolidate-integration-helpers-v2
+-  lastSeen: 2026-11-09T22:46:16.556Z
+-createdAt: 2026-11-09T22:46:16.556Z
+-updatedAt: 2026-11-09T22:46:16.556Z
+diff --git a/.factory/tasks/modernize/concerns/rm-9b3f69811e.yaml b/.factory/tasks/modernize/concerns/rm-9b3f69811e.yaml
+deleted file mode 100644
+index 84bd7b4..0000000
+--- a/.factory/tasks/modernize/concerns/rm-9b3f69811e.yaml
++++ /dev/null
+@@ -1,18 +0,0 @@
+-id: rm-9b3f69811e
+-chosen: Combined the item's `assert_golden_snapshot` with the parent's
+-  fresh-copy byte-identical replay in test_setup_new_and_lint
+-alternatives:
+-  - Use only the parent's granular asserts
+-  - Use only the item's aggregate snapshot helper
+-why: "Both assertions cover complementary guarantees:
+-  snapshot/oracle/tool-minimum conformance and determinism/ordering stability
+-  across fresh runs."
+-status: open
+-source:
+-  record: 004-integrate-r1-a1
+-  agent: developer
+-  step: integrate
+-  item: consolidate-integration-helpers-v2
+-  lastSeen: 2026-11-09T22:46:16.556Z
+-createdAt: 2026-11-09T22:46:16.556Z
+-updatedAt: 2026-11-09T22:46:16.556Z
+diff --git a/.factory/tasks/modernize/context-pack.md b/.factory/tasks/modernize/context-pack.md
+index bb5763d..6dae974 100644
+--- a/.factory/tasks/modernize/context-pack.md
++++ b/.factory/tasks/modernize/context-pack.md
+@@ -1,508 +1,391 @@
+-# Context Pack — `modernize` (iteration 5 starting state)
++# Context Pack — `modernize`
+ 
 -**Repository**: `python-setup` v1.2.10 (`pyproject.toml:1-4`), Python `>=3.14`, MIT (`pyproject.toml:19-20`). Worktree `topic/modernize`, HEAD `0944670`.
 +> Repository: `python-setup` v1.2.10, `requires-python = ">=3.14"` (`pyproject.toml:4`), branch `topic/modernize`. All citations are `path:line` at HEAD. Line numbers verified 2026-11-07.
 +> Size: 8,890 LOC in `src/**/*.py`, 17,210 LOC in `tests/**/*.py` (28,612 incl. `.pyi`, 190 files). 1,310 tests collected, 18 deselected.
-
+ 
 -**Gates verified in this worktree on 2026-11-09** (read-only execution):
 +---
-
-| -                 | Gate                                    | Result                                        | Evidence                                                                                     |
-| ----------------- | --------------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| -                 | `uv run pytest -q`                      | 1357 passed, 7 deselected, 4 warnings, 26.6 s | default collection does **not** include `tests/integration.py` (filename is not `test_*.py`) |
-| -                 | `uv run pytest tests/integration.py -v` | 9 passed, 56.6 s                              | run explicitly per AGENTS/README                                                             |
-| -                 | `uv run lint`                           | exit 0, all 14 tools PASSED, 57.7 s           | `lint.baseline` is `[]` (`lint.baseline:1`)                                                  |
-| +## 1. Module Map |
-
+ 
+-| Gate | Result | Evidence |
+-|---|---|---|
+-| `uv run pytest -q` | 1357 passed, 7 deselected, 4 warnings, 26.6 s | default collection does **not** include `tests/integration.py` (filename is not `test_*.py`) |
+-| `uv run pytest tests/integration.py -v` | 9 passed, 56.6 s | run explicitly per AGENTS/README |
+-| `uv run lint` | exit 0, all 14 tools PASSED, 57.7 s | `lint.baseline` is `[]` (`lint.baseline:1`) |
++## 1. Module Map
+ 
 -**Intent status at a glance**
 +| Subsystem | Path | Size | Responsibility |
 +|---|---|---|---|
@@ -920,32 +912,33 @@ index c92752a..0000000
 +| Test support (shipped) | `src/python_setup_lint/testing.py` (196) + `.pyi` (156) | 2 files | `_make_tc`, `_walk_and_release`, `make_lint_result`, `FakeRunCmd`, `assert_precommit_*` |
 +| Shipped configs | `config/` | 10 files | `.pylintrc`, `.pylintrc-pyi`, `.pylintrc-tests`, `ruff.toml`, `mypy.ini`, `pyrightconfig.json`, `rumdl.toml`, `ty.toml`, `.yamllint`, `tach.toml` |
 +| Tests | `tests/checkers/` (24 files), `tests/runner/` (27 files), `tests/integration.py` (627), `tests/conftest.py` (178), `tests/data/minimal_sample_project/` | ~19.7k LOC | Unit + integration + gated self-lint |
-+| Docs | `docs/semantic-justification.md` (62), `docs/custom-checks.md` (104), `docs/overlays.md` (86), `docs/troubleshooting.md` (177), `docs/tutorials.md` (122), `AGENTS.md` (139), `CodingRules.md` (307), `design/0001`, `design/0002`, `docs/adr/ADR-001…004` | — | Contract documentation; ADR-001…004 already record modernization decisions (3-line stubs) | +
++| Docs | `docs/semantic-justification.md` (62), `docs/custom-checks.md` (104), `docs/overlays.md` (86), `docs/troubleshooting.md` (177), `docs/tutorials.md` (122), `AGENTS.md` (139), `CodingRules.md` (307), `design/0001`, `design/0002`, `docs/adr/ADR-001…004` | — | Contract documentation; ADR-001…004 already record modernization decisions (3-line stubs) |
++
 +Data flow (documented `AGENTS.md:57-73`, implemented in `runner/cli.py:190-260`):
-
-| -                                                                                                        | Intent clause                                                                         | State at HEAD                                                                                                                           | Primary evidence                                                                                                                                                                         |
-| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| -                                                                                                        | Enforce `CodingRules.md` / `AGENTS.md`                                                | Mostly done; lint gates green, but docs/ADR drift and some dead placeholders remain                                                     | `lint.baseline:1`; `AGENTS.md:9-11`, `AGENTS.md:79-85`; `docs/adr/ADR-016.md:1-5`                                                                                                        |
-| -                                                                                                        | Debloat code and tests; keep test intent                                              | Partially done (recent prune removed self-lint/config-consistency tests); concrete duplication and dead helpers remain                  | §4.4 below; `tests/checkers/test_tmp_path_checker.py:19-32`; `tests/runner/_factories.py:167,200`; `tests/runner/test_real_pipeline_smoke.py:1-42`                                       |
-| -                                                                                                        | Replace embedding/rerank justification check with a CPU-friendly small decision model | **Half done**: reranker is gone and the veto backend protocol exists, but no production model is wired and no optional dependency ships | `src/python_setup_lint/checkers/_semantic.py:1-65`; `src/python_setup_lint/checkers/_decision_backend.py:37-59`; `pyproject.toml:28-30`; `tests/checkers/test_semantic_check.py:119-123` |
-| -                                                                                                        | Keep a git-stored cache with cleanup                                                  | **Not implemented**: only a process-local memo exists; no `.python-setup-decisions.json`, refresh path, or pruning                      | `src/python_setup_lint/checkers/_semantic.py:15-25,47-64`; `tests/assumptions/test_pylint_cache_semantics.py:8-12`; `docs/adr/ADR-010.md:26-36`                                          |
-| -                                                                                                        | Preserve every material lint/check behavior                                           | Green at HEAD; golden pins 158 findings including 18 W9704, but semantic is disabled during golden capture                              | `tests/data/golden/minimal_sample_project_findings.json`; `tests/integration.py:110-129`; `tests/_golden.py:54`                                                                          |
-| +```                                                                                                     |
-| +pyproject.toml → ToolSpec[] → dispatch.run() → per-tool subprocess → parse → baseline diff → report     |
-| +suppressed violation → check_if_meaningful → _semantic.py (reranker) → score cached → reused on re-lint |
-| +```                                                                                                     |
-
----
-
+ 
+-| Intent clause | State at HEAD | Primary evidence |
+-|---|---|---|
+-| Enforce `CodingRules.md` / `AGENTS.md` | Mostly done; lint gates green, but docs/ADR drift and some dead placeholders remain | `lint.baseline:1`; `AGENTS.md:9-11`, `AGENTS.md:79-85`; `docs/adr/ADR-016.md:1-5` |
+-| Debloat code and tests; keep test intent | Partially done (recent prune removed self-lint/config-consistency tests); concrete duplication and dead helpers remain | §4.4 below; `tests/checkers/test_tmp_path_checker.py:19-32`; `tests/runner/_factories.py:167,200`; `tests/runner/test_real_pipeline_smoke.py:1-42` |
+-| Replace embedding/rerank justification check with a CPU-friendly small decision model | **Half done**: reranker is gone and the veto backend protocol exists, but no production model is wired and no optional dependency ships | `src/python_setup_lint/checkers/_semantic.py:1-65`; `src/python_setup_lint/checkers/_decision_backend.py:37-59`; `pyproject.toml:28-30`; `tests/checkers/test_semantic_check.py:119-123` |
+-| Keep a git-stored cache with cleanup | **Not implemented**: only a process-local memo exists; no `.python-setup-decisions.json`, refresh path, or pruning | `src/python_setup_lint/checkers/_semantic.py:15-25,47-64`; `tests/assumptions/test_pylint_cache_semantics.py:8-12`; `docs/adr/ADR-010.md:26-36` |
+-| Preserve every material lint/check behavior | Green at HEAD; golden pins 158 findings including 18 W9704, but semantic is disabled during golden capture | `tests/data/golden/minimal_sample_project_findings.json`; `tests/integration.py:110-129`; `tests/_golden.py:54` |
++```
++pyproject.toml → ToolSpec[] → dispatch.run() → per-tool subprocess → parse → baseline diff → report
++suppressed violation → check_if_meaningful → _semantic.py (reranker) → score cached → reused on re-lint
++```
+ 
+ ---
+ 
 -## 1. Module Map
 +## 2. Key Interfaces & Signatures
-
+ 
 -### 1.1 Semantic justification subsystem (primary intent area)
 +### Public/consumed API of the check pipeline
-
+ 
 -| Path | Responsibility | Key lines |
 +| Symbol | Location | Signature / contract |
-|---|---|---|
+ |---|---|---|
 -| `src/python_setup_lint/checkers/_decision_backend.py` | `DecisionBackend` protocol, `FakeBackend`, test-only dotted-path loader, `get_backend()`, pinned threshold/prompt constants, warn-once state | `:10-13`, `:16-30`, `:37-59` |
 -| `src/python_setup_lint/checkers/_decision_backend.pyi` | Public stub: `DECISION_THRESHOLD`, `PROMPT_VERSION`, protocol, `FakeBackend`, `get_backend` | `:1-20` |
 -| `src/python_setup_lint/checkers/_semantic.py` | Thin adapter: resolves backend, computes SHA-256 cache key, applies `>= DECISION_THRESHOLD`, owns in-memory memo | `:1-65` |
@@ -953,50 +946,45 @@ index c92752a..0000000
 -| `src/python_setup_lint/checkers/_base.py` | `normalize_suppressed_codes`, heuristic-first `check_if_meaningful`, env gate, lazy `_semantic` import | `:145-156`, `:159-252` |
 -| `src/python_setup_lint/checkers/conformance/suppression_justification_checker.py` | W9704 `unjustified-suppression`: scans suppression comments and `Any` annotations, calls `check_if_meaningful` | `:33-41`, `:63-91`, `:136-162`, `:330-388` |
 -| `src/python_setup_lint/checkers/conformance/bare_except_comment_checker.py` | W9738 `bare-except-comment`, second consumer of `check_if_meaningful` | `:14`, `:103-118` |
--| `docs/semantic-justification.md` | Current _stale_ narrative of the reranker pipeline and caches | `:1-62` |
+-| `docs/semantic-justification.md` | Current *stale* narrative of the reranker pipeline and caches | `:1-62` |
 -| `docs/custom-checks.md` | Checker-authoring guide; semantic helper description stale | `:97`, `:104` |
 -
-
 -### 1.2 Checker subsystem
 -
-
-| -   | Path                                          | Responsibility                                                                                                                                                                                                                                                                          | Key lines                                                                                     |
-| --- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| -   | `src/python_setup_lint/checkers/conformance/` | Conformance checkers: beartype, no-try-import, tmp-path, structlog, suppression justification, bare-except, missing error-chain, silent-except, generic-key-dict, unnamed-tuple-dict, trivial-wrapper, redundant-type-guard, pyi-underscore, missing-return-annotation, asyncio-timeout | directory listing                                                                             |
-| -   | `src/python_setup_lint/checkers/stub/`        | Stub fidelity/coverage/docstring checkers and annotation normalizer                                                                                                                                                                                                                     | `checker.py`, `coverage.py`, `docstring_checker.py`, `normalizer.py`, `fidelity/*`            |
-| -   | `config/.pylintrc`                            | Source-code rcfile; enables custom rules and `max-module-lines=500`, `max-statements=65`, `max-branches=16`                                                                                                                                                                             | `:2`, `:17`, `:19`, `:22-23`                                                                  |
-| -   | `config/.pylintrc-pyi`                        | Stub-file rcfile                                                                                                                                                                                                                                                                        | `:12-13`                                                                                      |
-| -   | `config/.pylintrc-tests`                      | Test-file ruleset (production-only rules disabled; W9704/W9702 still enabled)                                                                                                                                                                                                           | `:20`, `:37`, `:39`, `:42-47`                                                                 |
-| +   | `check_if_meaningful`                         | `checkers/_base.py:142-149` (stub `_base.pyi:69-96`)                                                                                                                                                                                                                                    | `(text: str, *, rule: str                                                                     | None = None, code_context: str                          | None = None, comment: str | None = None) -> bool`— **never returns`None`**; env gate `PYTHON_SETUP_LINT_SEMANTIC`(default`"1"`, `_base.py:151`) |
-| +   | `semantic_check_if_meaningful`                | `checkers/_semantic.py:125-132` (stub `_semantic.pyi:3-27`)                                                                                                                                                                                                                             | `(text, *, rule, code_context, comment) -> bool                                               | None`; `None` ⇒ “backend unavailable, keep heuristic”   |
-| +   | `_load_reranker`                              | `checkers/_semantic.py:93-122`                                                                                                                                                                                                                                                          | `() -> CrossEncoder                                                                           | None`, lazy singleton, `_RERANKER_UNAVAILABLE` sentinel |
-| +   | `_reset_cache`                                | `checkers/_semantic.py:81-90`                                                                                                                                                                                                                                                           | clears in-memory cache, resets sentinel, unlinks `results.json` (test helper)                 |
-| +   | `SuppressionJustificationChecker`             | `conformance/suppression_justification_checker.py:31-41`                                                                                                                                                                                                                                | W9704 `unjustified-suppression`; visits module + `AnnAssign` + function annotations           |
-| +   | `BareExceptCommentChecker`                    | `conformance/bare_except_comment_checker.py:21-124`                                                                                                                                                                                                                                     | W9738 `bare-except-comment`; second consumer of `check_if_meaningful`                         |
-| +   | `register(linter)`                            | 18 modules (`grep -c '^def register' src`)                                                                                                                                                                                                                                              | pylint entry point; all carry `# pylint: disable=missing-beartype` (26 occurrences repo-wide) |
-
+-| Path | Responsibility | Key lines |
+-|---|---|---|
+-| `src/python_setup_lint/checkers/conformance/` | Conformance checkers: beartype, no-try-import, tmp-path, structlog, suppression justification, bare-except, missing error-chain, silent-except, generic-key-dict, unnamed-tuple-dict, trivial-wrapper, redundant-type-guard, pyi-underscore, missing-return-annotation, asyncio-timeout | directory listing |
+-| `src/python_setup_lint/checkers/stub/` | Stub fidelity/coverage/docstring checkers and annotation normalizer | `checker.py`, `coverage.py`, `docstring_checker.py`, `normalizer.py`, `fidelity/*` |
+-| `config/.pylintrc` | Source-code rcfile; enables custom rules and `max-module-lines=500`, `max-statements=65`, `max-branches=16` | `:2`, `:17`, `:19`, `:22-23` |
+-| `config/.pylintrc-pyi` | Stub-file rcfile | `:12-13` |
+-| `config/.pylintrc-tests` | Test-file ruleset (production-only rules disabled; W9704/W9702 still enabled) | `:20`, `:37`, `:39`, `:42-47` |
++| `check_if_meaningful` | `checkers/_base.py:142-149` (stub `_base.pyi:69-96`) | `(text: str, *, rule: str | None = None, code_context: str | None = None, comment: str | None = None) -> bool` — **never returns `None`**; env gate `PYTHON_SETUP_LINT_SEMANTIC` (default `"1"`, `_base.py:151`) |
++| `semantic_check_if_meaningful` | `checkers/_semantic.py:125-132` (stub `_semantic.pyi:3-27`) | `(text, *, rule, code_context, comment) -> bool | None`; `None` ⇒ “backend unavailable, keep heuristic” |
++| `_load_reranker` | `checkers/_semantic.py:93-122` | `() -> CrossEncoder | None`, lazy singleton, `_RERANKER_UNAVAILABLE` sentinel |
++| `_reset_cache` | `checkers/_semantic.py:81-90` | clears in-memory cache, resets sentinel, unlinks `results.json` (test helper) |
++| `SuppressionJustificationChecker` | `conformance/suppression_justification_checker.py:31-41` | W9704 `unjustified-suppression`; visits module + `AnnAssign` + function annotations |
++| `BareExceptCommentChecker` | `conformance/bare_except_comment_checker.py:21-124` | W9738 `bare-except-comment`; second consumer of `check_if_meaningful` |
++| `register(linter)` | 18 modules (`grep -c '^def register' src`) | pylint entry point; all carry `# pylint: disable=missing-beartype` (26 occurrences repo-wide) |
+ 
 -### 1.3 Runner subsystem
 +### Runner/type surface (relevant if a new backend module is added)
-
-| -   | Path                                                            | Responsibility                                                                | Key lines                                          |
-| --- | --------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------- |
-| -   | `src/python_setup_lint/runner/_tool_specs.py`                   | Single-source 14 built-in `ToolSpec` entries                                  | `:9-100`, `:102`                                   |
-| -   | `src/python_setup_lint/runner/dispatch.py`                      | Tool strategy registry, command builders, autofix ordering, baseline fallback | `:62-359`, `:350-359`                              |
-| -   | `src/python_setup_lint/runner/cli.py`                           | CLI, tool selection, skip reasons, serial pipeline, `run_lint`                | `:110-201`, `:204-...`, argument parser `:280-366` |
-| -   | `src/python_setup_lint/runner/baseline.py`                      | Baseline diff/merge and fallback inspection                                   | module                                             |
-| -   | `src/python_setup_lint/runner/parsers.py`, `_record_parsers.py` | Output parsers (JSON, regex, record parsers)                                  | modules                                            |
-| -   | `src/python_setup_lint/runner/_autofix.py`                      | Autofix conflict detection and staged/unstaged handling                       | module                                             |
-| -   | `src/python_setup_lint/runner/_config.py`, `cmd_build.py`       | Config discovery and command composition                                      | modules                                            |
-| -   | `src/python_setup_lint/runner/types.py`                         | `ToolSpec`, `LintResult`, `RunnerConfig`, `ViolationCount`                    | `:12-22`, `:25-59`                                 |
-
+ 
+-| Path | Responsibility | Key lines |
+-|---|---|---|
+-| `src/python_setup_lint/runner/_tool_specs.py` | Single-source 14 built-in `ToolSpec` entries | `:9-100`, `:102` |
+-| `src/python_setup_lint/runner/dispatch.py` | Tool strategy registry, command builders, autofix ordering, baseline fallback | `:62-359`, `:350-359` |
+-| `src/python_setup_lint/runner/cli.py` | CLI, tool selection, skip reasons, serial pipeline, `run_lint` | `:110-201`, `:204-...`, argument parser `:280-366` |
+-| `src/python_setup_lint/runner/baseline.py` | Baseline diff/merge and fallback inspection | module |
+-| `src/python_setup_lint/runner/parsers.py`, `_record_parsers.py` | Output parsers (JSON, regex, record parsers) | modules |
+-| `src/python_setup_lint/runner/_autofix.py` | Autofix conflict detection and staged/unstaged handling | module |
+-| `src/python_setup_lint/runner/_config.py`, `cmd_build.py` | Config discovery and command composition | modules |
+-| `src/python_setup_lint/runner/types.py` | `ToolSpec`, `LintResult`, `RunnerConfig`, `ViolationCount` | `:12-22`, `:25-59` |
 -
-
 -### 1.4 Setup / packaging / test helpers
 -
-
 -| Path | Responsibility | Key lines |
 +| Symbol | Location | Notes |
-|---|---|---|
+ |---|---|---|
 -| `src/python_setup_lint/setup.py` | `install()` / `main()`: dependency step, pylint plugin registration, config symlinks, state/checksums | `:41-56`, `:149-205`, `:223-290`, `:318-364` |
 -| `src/python_setup_lint/_setup_pyproject.py` | TOML read/write, pylint load-plugins, dev-dependency detection (extras stripped) | `:19-97` |
 -| `src/python_setup_lint/_setup_precommit.py` | Pre-commit config and AGENTS snippet generation/atomic writes | `:70-...` |
@@ -1006,58 +994,49 @@ index c92752a..0000000
 -| `uv.lock` | Locked dependencies; root provides `semantic` extra, currently empty | `:573-623` |
 -| `.gitignore` | Generated consumer artifacts; legacy semantic model cache ignored | `:222-244` |
 -
-
 -### 1.5 Documentation / decision register
 -
-
-| -   | Path                                                        | Responsibility                                                                                               | Key lines / state                                                         |
-| --- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| -   | `CodingRules.md`                                            | Shipped coding rules: typing, `.pyi`, simplification, complexity, tests                                      | `:1-75`, `:90-159`, `:230-307`                                            |
-| -   | `AGENTS.md`                                                 | Agent entry point: commands, tool scope, pipeline, test strategy                                             | `:5-14`, `:16-32`, `:79-93`                                               |
-| -   | `docs/adr/README.md`                                        | ADR index — **omits ADR-013…ADR-016**                                                                        | `:16-31`                                                                  |
-| -   | `docs/adr/ADR-009.md`                                       | Accepted no-go-gated deferral for the model                                                                  | `:1-48`                                                                   |
-| -   | `docs/adr/ADR-010.md`                                       | Frozen backend + tracked-cache contracts                                                                     | `:1-52`                                                                   |
-| -   | `docs/adr/ADR-014.md`                                       | Heuristic-first veto semantics (now implemented; text stale)                                                 | `:1-5`                                                                    |
-| -   | `docs/adr/ADR-015.md`                                       | Pylint-pyi scope fix deferred to iteration 5                                                                 | `:1-3`                                                                    |
-| -   | `docs/adr/ADR-016.md`                                       | Iteration-4 infrastructure-only scope — **claims no backend/cache/FakeBackend exists, contradicted by HEAD** | `:1-5`                                                                    |
-| -   | `design/0001`, `design/0002`                                | Config composers; ty src-only exception                                                                      | files                                                                     |
-| -   | `README.md`, `docs/tutorials.md`, `docs/troubleshooting.md` | Consumer docs; semantic sections stale                                                                       | `README.md:29,105`; `tutorials.md:12-16`; `troubleshooting.md:97-111,150` |
-
+-| Path | Responsibility | Key lines / state |
+-|---|---|---|
+-| `CodingRules.md` | Shipped coding rules: typing, `.pyi`, simplification, complexity, tests | `:1-75`, `:90-159`, `:230-307` |
+-| `AGENTS.md` | Agent entry point: commands, tool scope, pipeline, test strategy | `:5-14`, `:16-32`, `:79-93` |
+-| `docs/adr/README.md` | ADR index — **omits ADR-013…ADR-016** | `:16-31` |
+-| `docs/adr/ADR-009.md` | Accepted no-go-gated deferral for the model | `:1-48` |
+-| `docs/adr/ADR-010.md` | Frozen backend + tracked-cache contracts | `:1-52` |
+-| `docs/adr/ADR-014.md` | Heuristic-first veto semantics (now implemented; text stale) | `:1-5` |
+-| `docs/adr/ADR-015.md` | Pylint-pyi scope fix deferred to iteration 5 | `:1-3` |
+-| `docs/adr/ADR-016.md` | Iteration-4 infrastructure-only scope — **claims no backend/cache/FakeBackend exists, contradicted by HEAD** | `:1-5` |
+-| `design/0001`, `design/0002` | Config composers; ty src-only exception | files |
+-| `README.md`, `docs/tutorials.md`, `docs/troubleshooting.md` | Consumer docs; semantic sections stale | `README.md:29,105`; `tutorials.md:12-16`; `troubleshooting.md:97-111,150` |
 -
-
 -### 1.6 Test subsystems
 -
-
-| -   | Path                                                     | Responsibility                                                                               | Key lines                                           |
-| --- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| -   | `tests/checkers/`                                        | Per-checker behavioral tests over real pylint `CheckerTestCase`; `_factories_*` data modules | 45 `.py` files incl. helpers                        |
-| -   | `tests/runner/`                                          | Runner unit/integration tests, autofix, parsers, setup, benchmarks                           | 30 `.py` files                                      |
-| -   | `tests/assumptions/`                                     | Third-party contract pins (astroid, beartype, pylint, pylint cache semantics)                | `test_pylint_cache_semantics.py:1-39`               |
-| -   | `tests/_golden.py`                                       | Golden snapshot normalization/serialization/assertions + CI-guarded rewrite                  | `:1-11`, `:53-58`, `:374-392`                       |
-| -   | `tests/test_golden.py`                                   | Synthetic unit tests for golden helpers                                                      | `:1-6`                                              |
-| -   | `tests/integration.py`                                   | Fit-for-purpose end-to-end gate on planted sample project                                    | `:1-145`                                            |
-| -   | `tests/data/minimal_sample_project/`                     | Planted-violation fixture project (W9704 brush-off vs carry-from)                            | `src/minimal_sample/mod.py:41-56`, `violations.txt` |
-| -   | `tests/data/golden/minimal_sample_project_findings.json` | 158 normalized findings; 18 `unjustified-suppression`, 2 `bare-except-comment`               | golden file                                         |
-
+-| Path | Responsibility | Key lines |
+-|---|---|---|
+-| `tests/checkers/` | Per-checker behavioral tests over real pylint `CheckerTestCase`; `_factories_*` data modules | 45 `.py` files incl. helpers |
+-| `tests/runner/` | Runner unit/integration tests, autofix, parsers, setup, benchmarks | 30 `.py` files |
+-| `tests/assumptions/` | Third-party contract pins (astroid, beartype, pylint, pylint cache semantics) | `test_pylint_cache_semantics.py:1-39` |
+-| `tests/_golden.py` | Golden snapshot normalization/serialization/assertions + CI-guarded rewrite | `:1-11`, `:53-58`, `:374-392` |
+-| `tests/test_golden.py` | Synthetic unit tests for golden helpers | `:1-6` |
+-| `tests/integration.py` | Fit-for-purpose end-to-end gate on planted sample project | `:1-145` |
+-| `tests/data/minimal_sample_project/` | Planted-violation fixture project (W9704 brush-off vs carry-from) | `src/minimal_sample/mod.py:41-56`, `violations.txt` |
+-| `tests/data/golden/minimal_sample_project_findings.json` | 158 normalized findings; 18 `unjustified-suppression`, 2 `bare-except-comment` | golden file |
 -
-
----
-
+----
 -
-
 -## 2. Key Interfaces & Signatures
 +| `TOOLS: list[ToolSpec]` | `runner/dispatch.py:38-129` | **14 entries** (see §4.4 drift note) |
 +| `LINT_TOOLS: list[ToolSpec]` | `runner/dispatch.py:435` | live registry; `TOOLS` is a “legacy-compat alias” |
 +| `ToolSpec` | `runner/types.py:1-65`, `dispatch.py:42-128` | `supports_fix`, `supports_path`, `fix_flags`, `memory_limit_mb`, `default_paths` |
 +| `RunnerConfig` | `runner/types.py`, `runner/_config.py:1-151` | `cwd`, `package_name`, `config_paths`, `tool_timeouts`, `tool_memory_limits` |
 +| `main` / `run_lint` | `runner/cli.py:1-379`, `runner/__init__.py:24-38` | CLI + programmatic entry |
-
+ 
 -### 2.1 Decision backend (`src/python_setup_lint/checkers/_decision_backend.py`)
 +### Shipped test helpers (`python_setup_lint.testing`)
-
+ 
 -```python
--DECISION_THRESHOLD: float = 0.5 # :10
--PROMPT_VERSION: str = "prompt-v1" # :11
+-DECISION_THRESHOLD: float = 0.5          # :10
+-PROMPT_VERSION: str = "prompt-v1"        # :11
 +| Symbol | Location | Purpose |
 +|---|---|---|
 +| `_make_tc(checker_class, /)` | `testing.py:18-22` | builds pylint `CheckerTestCase` |
@@ -1065,37 +1044,36 @@ index c92752a..0000000
 +| `make_lint_result(...)` | `testing.py:44-61` | `LintResult` factory |
 +| `FakeRunCmd` / `fake_run_cmd_factory` | `testing.py:64-103` | subprocess boundary fake |
 +| `assert_precommit_config_valid`, `assert_precommit_hooks_shape` | `testing.py:138-196` | consumer-agnostic health checks |
-
+ 
 -@runtime_checkable
--class DecisionBackend(Protocol): # :16-20
-
-- model_id: str
-- def decide(self, justification: str, rule: str | None, context: str | None) -> float: ...
-  +### Pytest markers (`pyproject.toml:48-55`)
-
--class FakeBackend: # :23-30
-
-- model_id: str = "fake-backend rev test prompt-v1"
-- def **init**(self, score: float = 1.0) -> None: ...
-- def decide(self, justification: str, rule: str | None, context: str | None) -> float: ... +`slow` (default-deselected via `addopts = "-m 'not slow'"`), `no_external_api`, `with_real_api`, `implementation_detail` (declared, **0 uses**).
-
--def get_backend() -> DecisionBackend | None: ... # :49-59
+-class DecisionBackend(Protocol):          # :16-20
+-    model_id: str
+-    def decide(self, justification: str, rule: str | None, context: str | None) -> float: ...
++### Pytest markers (`pyproject.toml:48-55`)
+ 
+-class FakeBackend:                        # :23-30
+-    model_id: str = "fake-backend rev test prompt-v1"
+-    def __init__(self, score: float = 1.0) -> None: ...
+-    def decide(self, justification: str, rule: str | None, context: str | None) -> float: ...
++`slow` (default-deselected via `addopts = "-m 'not slow'"`), `no_external_api`, `with_real_api`, `implementation_detail` (declared, **0 uses**).
+ 
+-def get_backend() -> DecisionBackend | None: ...   # :49-59
 -```
 +---
-
+ 
 -Behavior of `get_backend()` at HEAD:
 +## 3. Relevant Excerpts
-
+ 
 -- `PYTHON_SETUP_LINT_DECISION_BACKEND` is honored **only** when `PYTEST_CURRENT_TEST` is set, then imports an arbitrary `module:attribute` factory (`_decision_backend.py:37-46`).
 -- `PYTHON_SETUP_LINT_RERANKER_MODEL` emits a one-time deprecation warning (`:51-53`).
 -- `PYTHON_SETUP_LINT_DECISION_MODEL` is read but only emits a one-time `decision_model_unavailable` warning; it never constructs a backend (`:55-58`).
 -- Production default is therefore always `None` → heuristic-only behavior.
 +### 3.1 The pipeline being replaced — `checkers/_semantic.py`
-
+ 
 -### 2.2 Semantic adapter (`src/python_setup_lint/checkers/_semantic.py`)
 +Module header states the design and its fallback contract (`_semantic.py:1-12`): cross-encoder reranking of the justification against rule + code context, lazy load, `None` on `ImportError`/download failure.
-
-```python
+ 
+ ```python
 -_RESULT_CACHE: dict[int, bool] | None = None     # :16
 -
 -def _reset_cache() -> None: ...                  # :19-25 (test helper, not in .pyi)
@@ -1116,15 +1094,13 @@ index c92752a..0000000
 +_RESULT_CACHE_FILE = _CACHE_DIR / "results.json"
 +_RESULT_CACHE: dict[int, bool] | None = None
 +_RERANKER_MODEL = os.environ.get("PYTHON_SETUP_LINT_RERANKER_MODEL", "jina-reranker-v2-base-multilingual")
-```
-
+ ```
+ 
 -Contract: `primary = (comment or text).strip()`; empty → `False`; no backend → `None`; otherwise `decide(primary, rule, code_context) >= 0.5`; result memoized in `_RESULT_CACHE` keyed by the first 8 bytes of SHA-256 over `(primary, rule, code_context, model_id)` (`:37-64`).
 -
-
 -### 2.3 Heuristic-first gate (`src/python_setup_lint/checkers/_base.py`)
 -
-
-```python
+ ```python
 -def normalize_suppressed_codes(raw: str) -> str: ...   # :148-156
 -
 -def check_if_meaningful(                               # :159-252
@@ -1142,24 +1118,20 @@ index c92752a..0000000
 +cache_key_int = int.from_bytes(cache_key[:8], "big")     # 64-bit truncated key
 +if cache_key_int in _RESULT_CACHE:
 +    return _RESULT_CACHE[cache_key_int]
-```
-
+ ```
+ 
 -Order is strict:
 -
-
 -1. Normalize directive text and strip echoed codes (`:168`, `:145-156`).
 -2. Reject `<5` chars, boilerplate tokens, multi-word brush-offs, and rule-symbol-only reasons (`:169-246`).
 -3. If `PYTHON_SETUP_LINT_SEMANTIC != "1"` → return `True` (`:248-249`).
 -4. Lazily import `_semantic` and return `semantic_check_if_meaningful(...) is not False` (`:250-252`).
 -
-
 -Consequence: the backend can **only veto** a heuristic-meaningful justification; it can never resurrect a heuristic rejection. `None` (no backend) maps to `True`.
 -
-
 -### 2.4 W9704 consumer (`suppression_justification_checker.py`)
 -
-
-```python
+ ```python
 -msgs = _msgs(W9704=MessageDef(
 -    message="Suppression comment without technical justification: %s",
 -    symbol="unjustified-suppression", ...))              # :33-41
@@ -1185,37 +1157,31 @@ index c92752a..0000000
 +score = float(scores[0])
 +...
 +result = score >= 0.5
-```
-
+ ```
+ 
 -Both paths call `check_if_meaningful(reason, comment=reason, rule="unjustified-suppression", code_context=<code before #>)` (`:152-155`, `:372-375`, `:383-386`). The checker knows the file path via `node.root().file` (`_base.py:68-75`) but does not pass it to the semantic API.
 -
-
 -### 2.5 Runner / test helpers
 -
-
 -- `ToolSpec` and `RunnerConfig` (`runner/types.py:12-22`, `:49-59`); `TOOLS` list (`runner/_tool_specs.py:9-100`); `run_lint(...)` (`runner/cli.py:204-...`).
 -- `_make_tc(checker_class)` and `_walk_and_release(code, checker_class, *, file_path, module_name)` (`testing.py:18-38`) are the intended shared checker-test harness.
 -- Golden contract: `Finding = {tool,file,line,col,rule}`, multiset diff, `PYTHON_SETUP_LINT_UPDATE_GOLDEN=1` opt-in, refused under `CI`/`GITHUB_ACTIONS` (`tests/_golden.py:1-11`, `:53-58`, `:374-392`).
 -
-
----
-
+----
 -
-
 -## 3. Relevant Excerpts
 -
-
 -### 3.1 Full current semantic adapter
 +Behavioural facts the modernization must preserve or consciously change:
 +- Empty/whitespace primary ⇒ `False` **before** any model work (`_semantic.py:139-140`).
-+- Result cache is persisted on _every_ new entry (`_save_result_cache`, `_semantic.py:71-78,187-188`), little-endian-free 64-bit key ⇒ collision surface.
++- Result cache is persisted on *every* new entry (`_save_result_cache`, `_semantic.py:71-78,187-188`), little-endian-free 64-bit key ⇒ collision surface.
 +- Failure sentinel prevents retry storms (`_semantic.py:99-109`; CHANGELOG v0.11.0 fix at `CHANGELOG.md:113`).
 +- Model weights and results share one directory `~/.cache/python-setup/semantic` (`_semantic.py:38,112-117`), which is `.gitignore`d (`gitignore:243-244`).
-
+ 
 -`src/python_setup_lint/checkers/_semantic.py:15-65`:
 +### 3.2 The heuristic gate — `checkers/_base.py:142-238`
-
-```python
+ 
+ ```python
 -_RESULT_CACHE: dict[int, bool] | None = None
 -
 -def _reset_cache() -> None:
@@ -1250,25 +1216,23 @@ index c92752a..0000000
 +# Heuristic fallback.
 +primary = (comment or text).strip()
 +if not primary or len(primary) < 5: return False
-```
-
+ ```
+ 
 -Observations for the architect:
 +Heuristic vocabulary is two hard-coded sets: `boilerplate` (28 entries, `_base.py:165-209`) and `meaningless_phrases` (17 entries, `_base.py:213-234`), plus the rule-echo rejection at `_base.py:238`. **In the dev environment this heuristic decides every verdict**: `sentence_transformers` is absent from `.venv` (verified `ModuleNotFoundError`), `~/.cache/python-setup/semantic` does not exist, and `uv.lock` only records the optional extra (`uv.lock:1032`).
-
+ 
 -- The memo is process-local only; nothing is persisted.
 -- The key truncates SHA-256 to 64 bits (`:59`) — the same truncation ADR-003 criticized in the retired on-disk cache (`docs/adr/ADR-003.md:7`).
 -- `comment` is folded into `primary`, so the key does not separately include it; docs claim `(text, rule, code_context, comment, model)` (`docs/custom-checks.md:97`).
 -- `code_context` participates in the key, so any source-line edit invalidates an entry even if the justification is unchanged.
 -- `model_id` participates, so a model/prompt swap invalidates entries — but `PROMPT_VERSION` is not currently folded into `model_id` by production code.
 -
-
 -### 3.2 Heuristic gate and env behavior
 -
-
 -`src/python_setup_lint/checkers/_base.py:248-252`:
 +### 3.3 Consumers (exactly two)
-
-```python
+ 
+ ```python
 -if os.environ.get("PYTHON_SETUP_LINT_SEMANTIC", "1") != "1":
 -    return True
 -from python_setup_lint.checkers._semantic import semantic_check_if_meaningful as _semantic_check
@@ -1281,24 +1245,21 @@ index c92752a..0000000
 +    if check_if_meaningful(reason, comment=reason, rule="unjustified-suppression",
 +                           code_context=src_line.split("#", 1)[0].strip()):
 +        return
-```
-
+ ```
+ 
 -- Semantic is **on by default**; absence of a backend yields heuristic behavior because `_semantic` returns `None`.
 -- The lazy import means `_semantic` is never imported when `PYTHON_SETUP_LINT_SEMANTIC=0` (`docs/semantic-justification.md:18`, verified by tests).
 -- The same gate governs W9738 `bare-except-comment` (`bare_except_comment_checker.py:103-118`).
 -
-
 -### 3.3 W9704 justification resolution
 -
-
 -`suppression_justification_checker.py:350-388`:
 -
-
-```python
+ ```python
 -_suppression_patterns = (_PAT_PYLINT_DISABLE, _PAT_NOQA, _PAT_TYPE_IGNORE, _PAT_TY_IGNORE)
 +# conformance/suppression_justification_checker.py:356-386  (suppression-comment path)
-for pat in _suppression_patterns:
-    for m in pat.finditer(line):
+ for pat in _suppression_patterns:
+     for m in pat.finditer(line):
 -        after = line[m.end():]
 -        ...  # only search before the next suppression pattern
 -        tm = _PAT_TRAILING_REASON.search(search_after)
@@ -1312,8 +1273,8 @@ for pat in _suppression_patterns:
 +        if tm and check_if_meaningful(reason, comment=reason, rule="unjustified-suppression",
 +                                      code_context=line.split("#", 1)[0].strip()):
 +            return True
-if idx > 0:
-    pm = _PAT_PRECEDING_COMMENT.match(prev)
+ if idx > 0:
+     pm = _PAT_PRECEDING_COMMENT.match(prev)
 -    if pm:
 -        reason = pm.group(1)
 -        if check_if_meaningful(reason, comment=reason, rule="unjustified-suppression",
@@ -1322,75 +1283,67 @@ if idx > 0:
 -return False
 +    if pm and check_if_meaningful(reason, comment=reason, ...):
 +        return True
-```
-
+ ```
+ 
 -A tracked cache keyed by file path would need this caller to supply file identity; today it does not.
 +```python
 +# conformance/bare_except_comment_checker.py:98-124
 +line = lines[lineno - 1] if lineno <= len(lines) else ""
 +trailing_match = re.search(r"#\s+(.+)", line)
 +if trailing_match:
-
-- comment_text = trailing_match.group(1).strip()
-- if check_if_meaningful(text=comment_text, rule="bare-except-comment",
--                           code_context=line.strip(), comment=comment_test):
--        return True
-
++    comment_text = trailing_match.group(1).strip()
++    if check_if_meaningful(text=comment_text, rule="bare-except-comment",
++                           code_context=line.strip(), comment=comment_test):
++        return True
 +```
-
+ 
 -### 3.4 Packaging and pytest configuration
 +Both callers pass `rule=<own symbol>` and `code_context=<code line>`, so any new backend receives a (justification, rule, code-line) triple — the natural feature set for a small classifier.
-
+ 
 -`pyproject.toml:28-30`:
 +### 3.4 Packaging & config surfaces that must move together
-
-```toml
+ 
+ ```toml
 +# pyproject.toml:28-31
-[project.optional-dependencies]
+ [project.optional-dependencies]
 -# Empty placeholder: no model dependency ships in iteration 4 (ADR-016).
 -semantic = []
 +semantic = ["sentence-transformers>=3.0.0"]
-```
-
+ ```
+ 
 -`pyproject.toml:47-54`:
 +- Pylint plugin list: `config/.pylintrc:7` (`load-plugins=…`, 16 checkers).
 +- Optional-import allowlist: `conformance/no_try_import_checker.py:12` — `_OPTIONAL_IMPORT_PATTERNS = frozenset({"sentence_transformers"})`; a new runtime module must be added or `no-try-import` (W9001) will flag the guarded import.
 +- Doc surfaces naming the model/env var: `AGENTS.md:79-85`, `docs/semantic-justification.md:1-62`, `docs/troubleshooting.md:97-111`, `docs/tutorials.md:12-16`, `README.md:29,105`, `docs/custom-checks.md:104`.
 +- `tach.toml` declares only two module boundaries (`python_setup_lint/checkers`, `python_setup_lint/runner`, `config/tach.toml:15-21`), so new private modules under `checkers/` need no boundary change.
-
+ 
 -```toml
 -[tool.pytest.ini_options]
 -addopts = "-m 'not slow'"
 -markers = [
-
-- "slow: ...full pipeline runs...",
-- "no_external_api: ...",
-- "with_real_api: ...",
-- "implementation_detail: ...",
-  -]
-  +### 3.5 In-repo precedents for a _git-stored, self-cleaning_ cache
-
-*
-
-+`lint.baseline` is the closest analogue: a committed, JSON, sorted artefact whose shrink-path is auto-cleaned. +
+-  "slow: ...full pipeline runs...",
+-  "no_external_api: ...",
+-  "with_real_api: ...",
+-  "implementation_detail: ...",
+-]
++### 3.5 In-repo precedents for a *git-stored, self-cleaning* cache
++
++`lint.baseline` is the closest analogue: a committed, JSON, sorted artefact whose shrink-path is auto-cleaned.
++
 +```python
 +# runner/baseline.py:201-230 — atomic write, only when modified
 +if not baseline_modified:
-
-- return None
-  +tmp_path = tempfile.NamedTemporaryFile(dir=tempfile.gettempdir(), prefix="psl_baseline_",
--                                       suffix=".json", delete=False).name
-
++    return None
++tmp_path = tempfile.NamedTemporaryFile(dir=tempfile.gettempdir(), prefix="psl_baseline_",
++                                       suffix=".json", delete=False).name
 +try:
-
-- with open(tmp_path, "w") as f:
--        json.dump(violations, f, indent=2, sort_keys=True)
-- shutil.move(tmp_path, str(baseline_path))
-  +finally:
-- ...
-
-````
-
++    with open(tmp_path, "w") as f:
++        json.dump(violations, f, indent=2, sort_keys=True)
++    shutil.move(tmp_path, str(baseline_path))
++finally:
++    ...
+ ```
+ 
 -`uv.lock:623` likewise reports `provides-extras = ["semantic"]` with no dependencies.
 +```python
 +# runner/baseline.py:280-292 — removals silently shrink the stored baseline
@@ -1400,18 +1353,18 @@ if idx > 0:
 +    new_saved = [v for v in crashless_saved if _violation_tuple(v) not in removed_tuples]
 +    write_result = _write_baseline_if_modified(new_saved, baseline_path, True)
 +```
-
+ 
 -### 3.5 Cache-related ignore and secrets constraints
 +Other relevant precedents/constraints for a committed cache file:
 +- `.secrets.baseline` is a committed JSON artefact regenerated by `detect-secrets-hook` with `generated_at` stripped (`dispatch.py:216-232`); **detect-secrets scans `git ls-files`**, so a committed decision cache is scanned for high-entropy strings.
 +- `.gitignore:243-244` currently *excludes* the semantic cache; a git-stored cache reverses that decision and needs an ignore-rule for weights (never commit weights).
 +- `lint.baseline` is currently `[]` (2 bytes) — zero tolerated violations.
-
+ 
 -- `.gitignore:243-244` still names the retired machine cache: `# NLP semantic model cache (sentence-transformers)` / `.cache/python-setup/semantic/`.
 -- `.secrets.baseline` enables `HexHighEntropyString` with `limit: 3.0`, so a committed result cache must not contain raw long hex digests; ADR-010 already requires “no bare hex strings of length >= 20” (`docs/adr/ADR-010.md:26-28`).
 -- ADR-011 says the tracked decisions file is consumer-runtime data, is committed, and gets **no** hatch/wheel entry (`docs/adr/ADR-011.md:54-60`).
 +### 3.6 Tool registry (registry fact that already breaks tests)
-
+ 
 -### 3.6 ADR state (decisions vs implementation)
 +```python
 +# runner/dispatch.py:38-47
@@ -1422,7 +1375,7 @@ if idx > 0:
 +    ...
 +]
 +```
-
+ 
 -- `docs/adr/ADR-009.md:5` — accepted deferral; `:9-13` documents the 215-meaningful / 0-meaningless corpus no-go; `:23-27` requires a double-rated sample and a human Fastino license decision; `:35-37` requires a CPU benchmark and forbids claiming the swap complete.
 -- `docs/adr/ADR-009.md:29-33` claims iteration 3 delivers “Heuristic-first `DecisionBackend` plus tracked-cache infrastructure” — the backend half exists; the tracked-cache half does not.
 -- `docs/adr/ADR-010.md:23-36` freezes: backend protocol, `.python-setup-decisions.json` at the linted project root, sorted `indent=2`/`sort_keys` JSON array, no hex≥20, read-only lint with a hash-asserted zero-write check, explicit CI-guarded refresh (lockfile + merge + atomic replace), pruning of missing files/stale model IDs, and writer-first concurrency from the pylint verdict.
@@ -1432,11 +1385,11 @@ if idx > 0:
 -- `docs/adr/ADR-015.md:1-3` is an open iteration-5 deferral: `_PylintPyiLintTool` passes `.pyi` paths but pylint lints companion `.py` (42 of 43 `pylint-pyi` golden findings are on `.py` files); probe found 205 latent private stub symbols; fixing changes the golden.
 -- `docs/adr/README.md:18-31` indexes only ADR-001…ADR-012; ADR-013…ADR-016 are absent.
 +`len(TOOLS) == 14` (verified at runtime). `_build_command` appends **no `--check`** for `ruff format` (`runner/cmd_build.py:278-291`), so the lint-only pass rewrites formatting — see §4.4.
-
----
-
-## 4. Existing Tests & Conventions
-
+ 
+ ---
+ 
+ ## 4. Existing Tests & Conventions
+ 
 -### 4.1 Layout and style
 -
 -- Unit tests: `tests/checkers/`, `tests/runner/`, `tests/test_golden.py`, `tests/test_setup_*`; 85 test modules, 794 test functions before parametrization, 19,627 lines total (`tests/`).
@@ -1448,10 +1401,10 @@ if idx > 0:
 -
 -### 4.2 Semantic/backend tests (current contract)
 +### 4.1 Layout and helpers
-
+ 
 -| File | Coverage | Key lines |
 +| Layer | Location | Count |
-|---|---|---|
+ |---|---|---|
 -| `tests/checkers/test_decision_backend.py` | Pinned constants, FakeBackend, loader gating, heuristic-first veto, normalization, packaging pins | `:1-6`, `:83-165`, `:181-264`, `:320-337` |
 -| `tests/checkers/test_semantic_check.py` | Adapter signature, empty-primary, `None` mapping, 0.5 threshold matrix, memo per unique pair/model, no `sentence_transformers`, no disk cache | `:47-133` |
 -| `tests/checkers/test_semantic_threshold.py` | 115-row heuristic table, semantic disabled | `:16-21`, `:147-164` |
@@ -1466,17 +1419,17 @@ if idx > 0:
 +| Runner units | `tests/runner/test_*.py` | 27 modules; factories split across `_factories.py` (173), `_factories_baseline.py` (279), `_factories_extras.py` (502), `_factories_tables.py` (394), `_autofix_helpers.py` (135) |
 +| Integration | `tests/integration.py` (627, `too-many-lines` disabled) | 9 tests, `TestMinimalSampleProject` |
 +| Fixtures | `tests/conftest.py` only (no `tests/checkers/conftest.py`, no `tests/assumptions/`) | session `_ensure_venv_on_path` (`:30-36`), `configured_project` (`:62-89`), `isolated_runner_registries` (`:126-159`), `sample_project` (`:161-164`), `shipped_config_paths()` (`:170-178`) |
-
+ 
 -- Golden snapshot: 158 findings across all 14 tools; per-tool minimums; multiset comparison catches duplicates/moved lines/new false positives (`tests/_golden.py:1-11`; `tests/data/golden/minimal_sample_project_findings.json`).
 -- 18 `unjustified-suppression` findings (6 each for `pylint`, `pylint-pyi`, `pylint tests`) and 2 `bare-except-comment` findings.
 -- Golden capture runs with `PYTHON_SETUP_LINT_SEMANTIC=0` (`tests/integration.py:110-115`; `tests/_golden.py:54`), so semantic-enabled behavior is **not** covered by the golden.
 -- Integration also asserts brush-off W9704 at `mod.py:49` and no W9704 for carry-from at `mod.py:56` (`tests/integration.py:124-129`; fixture `tests/data/minimal_sample_project/src/minimal_sample/mod.py:49,56`).
 -- `lint.baseline` is empty, so self-lint fails on any new violation (`lint.baseline:1`).
 +Conventions enforced by `CodingRules.md:276-307`: test naming `test_<method>_given_<condition>_then_<expected>`, parametrisation over loops, `hypothesis` for parsers (`tests/runner/test_parsers_hypothesis.py`), factories for complex objects, no shared fixtures in test files.
-
+ 
 -### 4.4 Debloat evidence (measured at HEAD)
 +Checker test idiom (`docs/custom-checks.md:78-93`, used by 20 modules):
-
+ 
 -**Duplicated checker-test harness:**
 -
 -- `_make_tc` local wrapper exists in 13 test files; `_walk_and_release` in 10; `_msg_ids` in 8. The shared implementations already exist in `testing.py:18-38`.
@@ -1492,15 +1445,15 @@ if idx > 0:
 +msgs = _walk_and_release(code, SuppressionJustificationChecker, file_path="src/mod.py")
 +assert {m.msg_id for m in msgs} == {"unjustified-suppression"}
 +```
-
+ 
 -- `_UvCallRecorder` appears twice: `tests/runner/test_setup.py:39-60` and `tests/runner/test_setup_install.py:36-58`.
 -- `extra_block` appears twice: `tests/runner/_factories.py:174-176` and `tests/runner/_factories_extras.py:45-47`.
 -- `_semantic_disabled` fixture appears twice: `tests/checkers/test_bare_except_comment_checker.py:37-40` and `tests/checkers/test_suppression_justification_checker.py:23-26`.
 +### 4.2 Markers / selection
-
+ 
 -**Dead/vestigial test code:**
 +`addopts = "-m 'not slow'"` (`pyproject.toml:49`). 19 `@pytest.mark.slow` uses ⇒ 18 deselected. `with_real_api` is used **once** (`tests/runner/test_real_pipeline_smoke.py:15`) and is *not* deselected, so the real 14-tool pipeline runs in the default suite (2.6 s). `tests/runner/test_self_lint_clean.py:17` is `slow` ⇒ the self-lint gate is **not** in the default suite.
-
+ 
 -- `assert_violation_contains_any` (`tests/runner/_factories.py:167-171`), `assert_r4_reason` (`:200-206`), and `baseline_entry_for_tool` (`tests/runner/_factories_baseline.py:26-28`) have no call sites.
 -- `sample_project` fixture (`tests/conftest.py:166-169`) has no call sites.
 -- `test_check_writes_no_disk_cache` monkeypatches `_CACHE_DIR`/`_RESULT_CACHE_FILE`, attributes that no longer exist, with `raising=False` (`tests/checkers/test_semantic_check.py:126-133`).
@@ -1508,10 +1461,10 @@ if idx > 0:
 -- `tests/runner/test_real_pipeline_smoke.py:1-42` runs the full pipeline and asserts only an int return plus all 14 section markers; this overlaps `tests/integration.py:57-145` and the fake-driven all-tools assertion in `tests/runner/test_lint_runner_integration.py:230-248`.
 -- Recent prune precedent: commit `644774e` deleted `test_config_consistency.py`, `test_self_lint_clean.py`, `test_pyright_noise_filter.py`, `test_t9_7_compose_pyright_live.py` and trimmed `test_autofix_conflict_integration.py` — the “never test linting” direction is already established.
 +### 4.3 Integration gate (the only end-to-end behaviour contract today)
-
+ 
 -**Source-side dead/placeholder code:**
 +`tests/integration.py:36-102` copies `tests/data/minimal_sample_project`, `git init`s it (detect-secrets), builds `RunnerConfig` from `config/`, and asserts that **every rule name in `tests/data/minimal_sample_project/violations.txt` appears somewhere** in the output (`_read_violation_rules`, `:62-69`).
-
+ 
 -- `PROMPT_VERSION` (`_decision_backend.py:11`) is unused in production; only tests assert it (`test_decision_backend.py:87-88`).
 -- `PYTHON_SETUP_LINT_DECISION_MODEL` is read only to warn that no model exists (`_decision_backend.py:55-58`; test `:141-151`).
 -- `_semantic.py` needs two `global` statements and a nullable memo solely for lazy initialization (`:16,24,39-41`); a module-level dict + `.clear()` would remove both.
@@ -1528,13 +1481,13 @@ if idx > 0:
 +bare-except-comment, pyi-underscore-symbol, docstring-in-impl,
 +signature-mismatch, …, MD072, duplicate-code
 +```
-
+ 
 -### 4.5 Test-infrastructure conventions to extend first
 +Weakness relevant to “preserve every material behavior”: this asserts *presence only* — duplicate findings, moved lines, and new false positives are invisible. `docs/adr/ADR-001.md` already records the decision to add a normalized golden snapshot (`{tool,file,line,col,rule}`), which does not exist yet (`tests/data/golden/` absent).
-
+ 
 -The intent says “test infra/assumptions first.” The existing template is `tests/assumptions/`:
 +### 4.4 Measured gate state on this checkout (2026-11-07)
-
+ 
 -- Each module opens with the observed third-party version and the contract being pinned (`test_pylint_cache_semantics.py:1-39`, `test_astroid_contracts.py:1-7`, `test_beartype_contracts.py:1-11`, `test_pylint_contracts.py:1-6`).
 -- `pytestmark = pytest.mark.no_external_api` on every assumption module.
 -- Tests are behavioral and assert observed consequences, not implementation internals; failures are meant to trigger re-derivation before loosening.
@@ -1581,11 +1534,11 @@ if idx > 0:
 +- `config/.pylintrc:5` `source-roots=src` — the W9704 `Any`-annotation arm only fires under `src/` (`_skip_if_outside_source_roots`).
 +- `mypy.stubtest` + `pylint-pyi` + `pyright verify types` make every `.py`/`.pyi` pair a hard contract (`CodingRules.md:35-59`).
 +- `ruff format` is not idempotent-clean on this checkout (§4.4), so “run lint to verify” is currently unsafe.
-
----
-
-## 5. Open Questions & Uncertainties
-
+ 
+ ---
+ 
+ ## 5. Open Questions & Uncertainties
+ 
 -### Q1. Which model satisfies the intent, and can the ADR-009 gate be closed now?
 -
 -- The intent names `fastino/GLiDE-0.4B` or smaller. External facts: GLiDE-0.4B is a 0.40B-parameter encoder, 0.81 GB bf16 weights, tested on an RTX PRO 6000, requires `torch==2.14.0` (CUDA 13.0 wheels) and `transformers==5.17.0`; its `glide/` inference package lives in the HF repo, not as a normal PyPI dependency ([model card](https://huggingface.co/fastino/GLiDE-0.4B)).
@@ -1595,10 +1548,10 @@ if idx > 0:
 -- No CPU benchmark exists; ADR-016 explicitly lists “no CPU bench” as open (`docs/adr/ADR-016.md:3`).
 -- Decision framing: (a) spike GLiDE CPU latency and packaging, then implement an optional backend; (b) choose a smaller permissively licensed zero-shot/classifier model, which still needs evaluation data; or (c) keep heuristic-only behavior and record another explicit deferral. Option (c) conflicts with the literal intent unless the operator accepts the ADR-009 gate again.
 +### 5.1 Model choice — the intent's example does not meet the intent's constraints
-
+ 
 -### Q2. How should a production backend be wired, and should it be default-on?
 +Facts gathered from the model cards (see §6):
-
+ 
 -- `get_backend()` currently has no production model path; it returns a test-only dotted-path backend or `None` (`_decision_backend.py:37-59`). ADR-010 says a compliant model “plugs in through `get_backend()` plus `DECISION_MODEL` with no pipeline refactor” (`docs/adr/ADR-010.md:47-48`), but no loader code exists for that env var.
 -- `PYTHON_SETUP_LINT_DECISION_MODEL` is parsed but never used (`_decision_backend.py:55-58`), and `PROMPT_VERSION` is dead (`:11`).
 -- The present veto semantics mean a backend can only make lint stricter (`_base.py:248-252`; tests `test_decision_backend.py:181-229`). Default-on would change W9704/W9738 outcomes for every consumer that installs the extra; default-off would preserve behavior but make the feature opt-in.
@@ -1608,13 +1561,13 @@ if idx > 0:
 +| `fastino/GLiDE-0.4B` (intent's example) | 0.40B, **790 MB bf16 safetensors**, 812 MB repo | `glide` package vendored in the repo (**not on PyPI**), `torch==2.14.0` (CUDA 13 wheels), `transformers==5.17.0`, **tested on Python 3.12**, `GLIDE_DEVICE` defaults to `cuda` | **fastino-community** — restricts Commercial Use and “Production” deployment, forbids redistribution terms of MIT-style use | Poor: GPU-first latency numbers only (6.9 ms median on RTX PRO 6000), no CPU benchmarks, no PyPI package, Python 3.14 untested, non-OSI license conflicts with this repo's MIT license (`pyproject.toml:19-20`) |
 +| `minishlab/potion-base-8M` | 7.56M params, static embeddings (`model2vec`) | CPU-native, ONNX variant available, `pip install model2vec` | **MIT** | Good cost/profile, but it is an *embedding* model — needs a prototype/similarity or trained head to produce P(meaningful) |
 +| `cross-encoder/nli-deberta-v3-xsmall` | 70.8M params | sentence-transformers (`torch`) or ONNX export | **Apache-2.0** | Good accuracy/size trade-off, still a torch dependency unless ONNX-only path is chosen |
-
+ 
 -### Q3. Git-stored decision cache: schema, keying, and the path-free API tension
 +Open decisions for a spike: (a) license compatibility for a redistributable MIT package; (b) CPU-only latency/RSS budget per lint run (W9704 currently runs on every suppression line in `src/`, `tests/`); (c) Python 3.14 wheel availability (`requires-python = ">=3.14"`, `pyproject.toml:4`); (d) whether the backend is `transformers`, `onnxruntime`, `model2vec`, or a pure-numpy scorer; (e) pinned revision/digest + offline-first behaviour; (f) whether `PYTHON_SETUP_LINT_RERANKER_MODEL` survives as a deprecated alias (ADR-002 narrative in `docs/adr/ADR-002.md`).
-
+ 
 -ADR-010 freezes the contract (`docs/adr/ADR-010.md:26-36`) but the repository documents no schema or key encoding beyond “JSON array sorted, indent=2, sort_keys, no bare hex ≥20.” Open decisions:
 +### 5.2 Cache design (open)
-
+ 
 -- **File identity vs path-free API**: pruning requires file paths in cache entries (ADR-010:33), but `semantic_check_if_meaningful` is deliberately path-free (`tests/assumptions/test_pylint_cache_semantics.py:171-181`) and its callers (`suppression_justification_checker.py:152-155,372-386`; `bare_except_comment_checker.py:103-118`) do not pass a path. Options: extend the checker→semantic call with a file path, add a separate cache API at the checker layer, or key by content and prune by scanning the repo. Each has test/behavior implications.
 -- **Key composition**: current memo includes `(primary, rule, code_context, model_id)` and truncates to 64 bits (`_semantic.py:47-64`). A tracked cache should likely key on file path + normalized justification + rule + model/prompt version; whether `code_context` belongs in the key determines churn vs sensitivity.
 -- **Score vs verdict**: storing a boolean loses the ability to re-threshold; storing a float lets `DECISION_THRESHOLD` changes apply without re-running the model, but requires calibrating model output to `[0,1]` (the protocol promises this, but does not enforce it; `_decision_backend.py:16-20`).
@@ -1631,26 +1584,26 @@ if idx > 0:
 +- **Determinism across machines**: with a committed cache, verdicts become machine-independent — but only for cache hits; misses still diverge when the model is absent. Decide whether a miss with no model *rejects*, *accepts*, or *falls back to heuristic* (today: heuristic, `_base.py:156-158`).
 +- **detect-secrets**: `git ls-files` is scanned (`dispatch.py:216-232`) — a JSON cache of free-text justifications may trip entropy heuristics and must be either allowlisted or excluded.
 +- **Merge conflicts**: JSON object keyed by hash is conflict-prone; consider sorted list-of-records with a stable sort key.
-
+ 
 -### Q4. How is semantic behavior pinned if a model ships?
 +### 5.3 Behavior preservation boundaries
-
+ 
 -- Golden and integration capture with `PYTHON_SETUP_LINT_SEMANTIC=0` (`tests/integration.py:110-115`; `tests/_golden.py:54`), so no current test pins model-enabled W9704/W9738 outcomes.
 -- A model that changes verdicts could pass the entire suite while changing consumer lint behavior. Options: (a) add a deterministic fake-backend golden that exercises the full veto path with `PYTHON_SETUP_LINT_SEMANTIC=1`; (b) add an opt-in real-model golden/contract test marked `slow`/`with_real_api`; (c) keep the model opt-in and document that golden covers only heuristic behavior.
 +- Exact W9704/W9738 outcomes on `tests/data/minimal_sample_project` are the de-facto spec (`violations.txt`), but only presence is asserted.
 +- The heuristic is a **hard** pre-filter only if you decide so; today the semantic result *replaces* the heuristic when it returns a bool (`_base.py:156-158`). ADR-002 proposes heuristic-first gating (“its rejections never reach the model”), which is a deliberate behaviour change for the model-accepted-but-heuristic-rejected set (e.g. `"carried from library httpx for type compatibility"` is accepted today by heuristic; `"pre-existing"` is rejected by heuristic and would be guaranteed rejected).
 +- `bare_except_comment_checker` is a second consumer; any signature change must update both call sites (`:103,:116`) and `docs/custom-checks.md`.
 +- `_base.pyi` and `_semantic.pyi` are part of the shipped contract (`mypy.stubtest` gate); `check_if_meaningful` must keep its name, keyword-only params and `-> bool` return.
-
+ 
 -### Q5. Documentation and ADR reconciliation scope
 +### 5.4 Debloat boundaries
-
+ 
 -The following are definitively stale at HEAD and should be part of the modernize work:
 +- What counts as “redundant test”? Candidates: the duplicated heuristic tables (§4.5), the 6 tool-count assertions (all currently failing), `TestRerankerPairs` (never runs here), and `test_semantic_threshold.py` as a whole once merged.
 +- Structural suppressions (26 `missing-beartype` disables) need a rule-level fix (e.g. checker `register()` exemption in `beartype_checker.py`) rather than per-line disables — verify `CodingRules.md:106-107` (“remove checks redundant over type annotations”).
 +- `runner/baseline.py:20-38` compat stubs have live callers (`peek_fallback_tools` 9 hits incl. `runner/__init__.py:24,36` and its `.pyi`), so removal touches the public `__all__`.
 +- Any module split must keep every `.py`/`.pyi` pair and stay ≤500 lines (`CodingRules.md:139-159`).
-
+ 
 -- `docs/semantic-justification.md:1-62` — entire document describes cross-encoder/reranker, `sentence-transformers`, `PYTHON_SETUP_LINT_RERANKER_MODEL`, `~/.cache/.../results.json`.
 -- `docs/custom-checks.md:97` and `:104` — reranker-first description and invalid cache-key tuple.
 -- `README.md:29` — `python-setup[semantic]` described as “sentence-transformer-powered”.
@@ -1660,23 +1613,23 @@ if idx > 0:
 -- `docs/adr/ADR-016.md:1-5`, `ADR-014.md:1-5`, `ADR-009.md:29-33`, `ADR-002.md:3-6`, `ADR-011.md:44-49` — claims that no longer match HEAD (backend exists; tracked cache does not; `TestSuppressionRerankerPipeline` no longer exists).
 -- `docs/adr/README.md:18-31` — missing ADR-013…ADR-016 entries.
 +### 5.5 Gate drift to resolve before/while modernizing
-
+ 
 -### Q6. Debloat acceptance criteria and “never test linting”
 +- 14 tools vs. documented 13 vs. 6 failing test expectations (§4.4). Decide whether `ruff format` counts as a “tool” in docs/tests, or whether the tests should derive the set from `TOOLS`.
 +- Self-lint gate is not green and `ruff format` mutates the tree. Either baseline-format the repo once (105 files, reviewable diff) or add `--check` semantics for the format tool; both change the “preserve behavior” baseline.
 +- `AGENTS.md:92` claims the integration test validates “ALL 13 tools”; `tests/runner/test_real_pipeline_smoke.py:38-42` iterates `TOOLS` dynamically (correct), `tests/integration.py` asserts section headers from a static list.
-
+ 
 -- “Test infra/assumptions first” is already satisfied structurally by `tests/assumptions/`; continue that pattern for any new model/cache work.
 -- “Never test linting” is not defined in the repo. The closest precedent is the recent prune of `test_self_lint_clean.py`, `test_config_consistency.py`, `test_pyright_noise_filter.py`, `test_t9_7_compose_pyright_live.py` (commit `644774e`). Remaining candidates: `tests/runner/test_real_pipeline_smoke.py` (overlaps integration + fake orchestration), and checker-test helper wrappers that only re-test the harness.
 -- Test intent must be preserved: the 115-row heuristic table (`test_semantic_threshold.py:16-21,147-164`) and the W9704 checker behavior tests (`test_suppression_justification_checker.py:29-392`) are behavior contracts, not harness duplication. The duplicate `_RecordingBackend` / `_UvCallRecorder` / `_make_tc` layers are harness duplication.
 -- No acceptance metric exists for line-count reduction; the only enforced metrics are `C0302 ≤500`, `R0912 ≤16`, `R0915 ≤65` and the empty baseline (`CodingRules.md:139-159`; `lint.baseline:1`).
 +### 5.6 Unverified / needs probing
-
+ 
 -### Q7. Pylint-pyi scope (ADR-015)
 +- CPU latency and RSS of each candidate at representative W9704 volume (a full `uv run lint` invokes pylint over 67 modules; suppression density is 186 in `src`, 261 in `tests`).
 +- Whether `onnxruntime`-only inference avoids the `torch` dependency chain (currently `torch` is 532 MB per wheel in `uv.lock:1575`).
 +- Whether a git-stored cache is acceptable for `tests/data/minimal_sample_project` (which is committed and linted in integration).
-
+ 
 -- ADR-015 explicitly defers the fix to iteration 5 (`docs/adr/ADR-015.md:1-3`). If iteration 5 is this iteration, the architect must either include it or update the ADR with a later target.
 -- Current behavior: `_PylintPyiLintTool` discovers `.pyi` paths and passes them to pylint (`dispatch.py:249-277`); the golden contains 43 `pylint-pyi` findings, 42 on `.py` files (`tests/data/golden/minimal_sample_project_findings.json`). Changing this scope will change the golden and possibly `lint.baseline` behavior for consumers.
 -
@@ -1690,10 +1643,10 @@ if idx > 0:
 -
 -### Q9. Cache/model test infrastructure to add before implementation
 +---
-
+ 
 -Suggested assumption/contract tests, following `tests/assumptions/` style:
 +## 6. External references (fetched 2026-11-07)
-
+ 
 -1. Cache file round-trip: sorted `indent=2`/`sort_keys`, no hex ≥20, passes `detect-secrets` (ADR-010:26-28).
 -2. Read-only lint: byte-hash the cache before/after an ordinary `run_lint`; assert unchanged (ADR-010:29-30).
 -3. Refresh path: refused under `CI`/`GITHUB_ACTIONS`; atomic replace; single-writer behavior (reuse the golden guard pattern, `tests/_golden.py:374-392`).
@@ -1706,12 +1659,12 @@ if idx > 0:
 +- `https://huggingface.co/collections/fastino/glide` — 6-item family (0.4B/27B variants); 0.4B is the smallest documented.
 +- `https://huggingface.co/minishlab/potion-base-8M` — 7.56M params, MIT, Model2Vec static embeddings, ONNX-tagged, “orders of magnitude faster on CPU”.
 +- `https://huggingface.co/cross-encoder/nli-deberta-v3-xsmall` — 70.8M params, Apache-2.0, SNLI/MultiNLI 3-way cross-encoder, ONNX-tagged, 91.6% SNLI accuracy.
-
----
-
+ 
+ ---
+ 
 -## 6. High-signal summary for the architect
 +## 7. Suggested reading order for the architect
-
+ 
 -1. The reranker removal is complete; the backend/cache *interfaces* are half-delivered. The next iteration’s semantic work is: production backend wiring + an actual CPU model (or an explicit deferral) + the tracked decision cache with refresh/prune.
 -2. The biggest behavioral risk is enabling a model by default before semantic-on behavior is pinned; golden currently runs with semantic off.
 -3. The biggest debloat wins are test-harness duplication (13 `_make_tc` copies, 10 `_walk_and_release` copies, 3 `_RecordingBackend` copies, 2 `_UvCallRecorder` copies, dead helpers, vestigial cache tests, redundant smoke test), not production code.
@@ -7154,14 +7107,14 @@ index 3473134..d339026 100644
 --- a/.factory/tasks/modernize/state.yaml
 +++ b/.factory/tasks/modernize/state.yaml
 @@ -1,54 +1,9 @@
-task: modernize
-kind: saga
-status: active
+ task: modernize
+ kind: saga
+ status: active
 -iteration: 5
 -currentWave: 4
 +iteration: 1
 +currentWave: 7
-items:
+ items:
 -  adr-formalization:
 -    kind: no-behavior
 -    status: merged
@@ -7207,13 +7160,13 @@ items:
 -    spendUsd: 0.211512
 -    currentStep: review
 -    mergedAt: 2026-11-08T20:44:48-05:00
-  golden-determinism-probe:
-    kind: fact-finder
-    status: merged
+   golden-determinism-probe:
+     kind: fact-finder
+     status: merged
 @@ -58,67 +13,6 @@ items:
-    spendUsd: 0.16489800000000002
-    currentStep: review
-    mergedAt: 2026-11-07T20:57:23-05:00
+     spendUsd: 0.16489800000000002
+     currentStep: review
+     mergedAt: 2026-11-07T20:57:23-05:00
 -  model-candidate-matrix:
 -    kind: fact-finder
 -    status: merged
@@ -7275,13 +7228,13 @@ items:
 -    spendUsd: 0.032682
 -    currentStep: review
 -    mergedAt: 2026-11-08T20:41:29-05:00
-  third-party-assumption-tests:
-    kind: test-assumptions
-    status: merged
+   third-party-assumption-tests:
+     kind: test-assumptions
+     status: merged
 @@ -128,57 +22,6 @@ items:
-    spendUsd: 0.076988
-    currentStep: review
-    mergedAt: 2026-11-07T21:00:28-05:00
+     spendUsd: 0.076988
+     currentStep: review
+     mergedAt: 2026-11-07T21:00:28-05:00
 -  baseline-violations-fix:
 -    kind: no-behavior
 -    status: merged
@@ -7333,13 +7286,13 @@ items:
 -    spendUsd: 0.091885
 -    currentStep: review
 -    mergedAt: 2026-11-08T09:56:30-05:00
-  golden-findings-snapshot:
-    kind: dev
-    status: superseded
+   golden-findings-snapshot:
+     kind: dev
+     status: superseded
 @@ -187,115 +30,13 @@ items:
-    fixRounds: 1
-    spendUsd: 0.170578
-    currentStep: test-first
+     fixRounds: 1
+     spendUsd: 0.170578
+     currentStep: test-first
 -  model-eval-poc:
 -    kind: poc
 -    status: merged
@@ -7390,14 +7343,14 @@ items:
 -    spendUsd: 0.133783
 -    currentStep: review
 -    mergedAt: 2026-11-08T10:57:08-05:00
-  consolidate-integration-helpers:
-    kind: test-only
+   consolidate-integration-helpers:
+     kind: test-only
 -    status: superseded
 +    status: pending
-    branch: topic/modernize--consolidate-integration-helpers
-    attempts: 1
-    fixRounds: 1
-    spendUsd: 0
+     branch: topic/modernize--consolidate-integration-helpers
+     attempts: 1
+     fixRounds: 1
+     spendUsd: 0
 -  decision-runtime-pinning:
 -    kind: test-assumptions
 -    status: merged
@@ -7450,13 +7403,13 @@ items:
 -    spendUsd: 0.025615000000000002
 -    currentStep: review
 -    mergedAt: 2026-11-09T01:20:54-05:00
-  coding-rules-audit:
-    kind: fact-finder
-    status: pending
+   coding-rules-audit:
+     kind: fact-finder
+     status: pending
 @@ -303,53 +44,6 @@ items:
-    attempts: 1
-    fixRounds: 1
-    spendUsd: 0
+     attempts: 1
+     fixRounds: 1
+     spendUsd: 0
 -  decision-cache-impl:
 -    kind: dev
 -    status: failed
@@ -7504,13 +7457,13 @@ items:
 -    attempts: 1
 -    fixRounds: 1
 -    spendUsd: 0
-  test-debloat-audit:
-    kind: fact-finder
-    status: pending
+   test-debloat-audit:
+     kind: fact-finder
+     status: pending
 @@ -357,13 +51,6 @@ items:
-    attempts: 1
-    fixRounds: 1
-    spendUsd: 0
+     attempts: 1
+     fixRounds: 1
+     spendUsd: 0
 -  docs-reconciliation:
 -    kind: no-behavior
 -    status: blocked
@@ -7518,39 +7471,39 @@ items:
 -    attempts: 1
 -    fixRounds: 1
 -    spendUsd: 0
-  golden-helpers-unit:
-    kind: test-only
-    status: merged
+   golden-helpers-unit:
+     kind: test-only
+     status: merged
 @@ -375,21 +62,19 @@ items:
-    mergedAt: 2026-11-08T00:11:56-05:00
-  golden-snapshot-wiring:
-    kind: dev
+     mergedAt: 2026-11-08T00:11:56-05:00
+   golden-snapshot-wiring:
+     kind: dev
 -    status: merged
 +    status: ready
-    branch: topic/modernize--golden-snapshot-wiring
-    attempts: 2
-    fixRounds: 1
-    spendUsd: 0.13088
-    currentStep: qa
+     branch: topic/modernize--golden-snapshot-wiring
+     attempts: 2
+     fixRounds: 1
+     spendUsd: 0.13088
+     currentStep: qa
 -    mergedAt: 2026-11-08T00:54:17-05:00
-  consolidate-integration-helpers-v2:
-    kind: test-only
+   consolidate-integration-helpers-v2:
+     kind: test-only
 -    status: ready
 +    status: pending
-    branch: topic/modernize--consolidate-integration-helpers-v2
+     branch: topic/modernize--consolidate-integration-helpers-v2
 -    attempts: 2
 +    attempts: 1
-    fixRounds: 1
+     fixRounds: 1
 -    spendUsd: 0.19363600000000003
 -    currentStep: review
 +    spendUsd: 0
-  coding-rules-audit-v2:
-    kind: fact-finder
-    status: pending
+   coding-rules-audit-v2:
+     kind: fact-finder
+     status: pending
 @@ -404,48 +89,33 @@ items:
-    attempts: 1
-    fixRounds: 1
-    spendUsd: 0
+     attempts: 1
+     fixRounds: 1
+     spendUsd: 0
 -  consolidate-integration-helpers-v3:
 -    kind: test-only
 -    status: ready
@@ -7571,7 +7524,7 @@ items:
 -  dismissed: 0
 -  routed: 0
 -  resolved: 2
-debt:
+ debt:
 -  - No compliant model proven (215/0 unevaluable, single-author labels, Fastino
 -    review open, no CPU bench).
 -  - "I4 cache producer gap (awareness: refresh prune-only until producer;
@@ -7619,13 +7572,13 @@ debt:
 +    docs/adr."
 +  - Shipped rumdl.toml excludes tests/data, forcing the integration per-run
 +    rewrite to lint the sample AGENTS.md; affects golden determinism.
-  - "RED-TEST WAIVED (gate inapplicable by design): golden-snapshot-wiring is a
-    tests-only M1 contract item — probe verdict was test-side normalization
-    sufficient, so the bounded src allowance was correctly NOT used and the diff
+   - "RED-TEST WAIVED (gate inapplicable by design): golden-snapshot-wiring is a
+     tests-only M1 contract item — probe verdict was test-side normalization
+     sufficient, so the bounded src allowance was correctly NOT used and the diff
 @@ -458,32 +128,6 @@ debt:
-    determinism; oracle + per-tool coverage + tool-qualified brush-off/carry
-    lookups prove sensitivity. QA rejected 2/2 solely on red-test; all other
-    checks passed. No src follow-up required."
+     determinism; oracle + per-tool coverage + tool-qualified brush-off/carry
+     lookups prove sensitivity. QA rejected 2/2 solely on red-test; all other
+     checks passed. No src follow-up required."
 -  - "[adr-formalization] ADR-012 examples could include conformance/ path prefix"
 -  - "[adr-formalization] H1 heading prefix inconsistent between new and legacy
 -    ADRs"
@@ -7652,13 +7605,13 @@ debt:
 -    pinned schema"
 -  - "[decision-cache-design-spike] Committed 476K regenerable poc/tmp plus
 -    timing-churned proofs.json"
-  - "[golden-determinism-probe] Assert rumdl override fired instead of blind
-    string replace"
-  - "[golden-determinism-probe] Resolve symlinks and define outside-cwd
+   - "[golden-determinism-probe] Assert rumdl override fired instead of blind
+     string replace"
+   - "[golden-determinism-probe] Resolve symlinks and define outside-cwd
 @@ -502,160 +146,10 @@ debt:
-    post-git-add write; assert MD072 non-empty"
-  - "[golden-determinism-probe] First-run bootstrap vs rerun hook differ;
-    same-copy rerun may diverge"
+     post-git-add write; assert MD072 non-empty"
+   - "[golden-determinism-probe] First-run bootstrap vs rerun hook differ;
+     same-copy rerun may diverge"
 -  - "[model-candidate-matrix] Pinned-revision block joins ettin-encoder and
 -    MiniLM pins on one line"
 -  - "[model-candidate-matrix] GLiDE runtime-stack column omits triton /
@@ -7731,10 +7684,10 @@ debt:
 -    prefix bypasses (gate form verified, no action)"
 -  - "[semantic-threshold-consolidation] Header overlap arithmetic omits the
 -    30-row pack and misstates the dedup math"
-  - "[third-party-assumption-tests] Module-global _LIFECYCLE_EVENTS could use
-    fixture-scoped clearing"
-  - "[third-party-assumption-tests] Assert confidence is not None before reading
-    .name"
+   - "[third-party-assumption-tests] Module-global _LIFECYCLE_EVENTS could use
+     fixture-scoped clearing"
+   - "[third-party-assumption-tests] Assert confidence is not None before reading
+     .name"
 -  - "[checkers-factories-split] _factories_stub.py at 474/500 lines leaves 26
 -    lines of C0302 headroom"
 -  - "[checkers-stream-helper] Add why-comment for intentional code_context
@@ -7813,13 +7766,13 @@ debt:
 -    and conflates core"
 -  - "[test-debloat-audit-i2] Sources typo: baseline-diff-edge cited under
 -    tests/checkers/"
-  - "[golden-helpers-unit] tool_minimums imports TOOLS via package root, pulling
-    CLI structlog side effects"
-  - "[golden-helpers-unit] Public FindingKey alias missing from __all__"
+   - "[golden-helpers-unit] tool_minimums imports TOOLS via package root, pulling
+     CLI structlog side effects"
+   - "[golden-helpers-unit] Public FindingKey alias missing from __all__"
 @@ -663,38 +157,24 @@ debt:
-    drive-letter absolutes"
-  - "[golden-helpers-unit] Golden read silently drops extra keys and leaks raw
-    JSON errors"
+     drive-letter absolutes"
+   - "[golden-helpers-unit] Golden read silently drops extra keys and leaks raw
+     JSON errors"
 -  - "[consolidate-integration-helpers-v2] Four docstrings/comments still say 13
 -    tools after 14-tool reconciliation"
 -  - "[consolidate-integration-helpers-v2] Bare-comma except clause works but
@@ -7836,42 +7789,42 @@ debt:
 -    "consumer" dirname for hooks test'
 -budgetSpentUsd: 12.054405685999997
 +budgetSpentUsd: 3.7806290000000016
-spendByRole:
-  workhorse:
+ spendByRole:
+   workhorse:
 -    costUsd: 5.381501686000001
 -    inputTokens: 10609121
 -    outputTokens: 3905221
 +    costUsd: 0.6643789999999999
 +    inputTokens: 1170200
 +    outputTokens: 549074
-  alt-workhorse:
+   alt-workhorse:
 -    costUsd: 1.5347480000000002
 -    inputTokens: 7296285
 -    outputTokens: 2602638
 +    costUsd: 0.08050599999999998
 +    inputTokens: 335776
 +    outputTokens: 216855
-  architect:
+   architect:
 -    costUsd: 5.010672999999998
 -    inputTokens: 19766239
 -    outputTokens: 668919
 +    costUsd: 2.9995920000000003
 +    inputTokens: 1266245
 +    outputTokens: 140690
-  alt-architect:
+   alt-architect:
 -    costUsd: 0.127483
 -    inputTokens: 457640
 -    outputTokens: 377177
 +    costUsd: 0.036152
 +    inputTokens: 137287
 +    outputTokens: 101647
-spendByItem:
-  golden-determinism-probe:
-    costUsd: 0.16489800000000002
+ spendByItem:
+   golden-determinism-probe:
+     costUsd: 0.16489800000000002
 @@ -708,140 +188,16 @@ spendByItem:
-    costUsd: 0.170578
-    inputTokens: 226110
-    outputTokens: 148096
+     costUsd: 0.170578
+     inputTokens: 226110
+     outputTokens: 148096
 -  decision-cache-design-spike:
 -    costUsd: 0.211512
 -    inputTokens: 419522
@@ -7896,10 +7849,10 @@ spendByItem:
 -    costUsd: 0.053628
 -    inputTokens: 140260
 -    outputTokens: 60983
-  golden-helpers-unit:
-    costUsd: 0.057198
-    inputTokens: 138170
-    outputTokens: 64014
+   golden-helpers-unit:
+     costUsd: 0.057198
+     inputTokens: 138170
+     outputTokens: 64014
 -  adr-formalization:
 -    costUsd: 0.051655
 -    inputTokens: 168426
@@ -7956,10 +7909,10 @@ spendByItem:
 -    costUsd: 0.056304
 -    inputTokens: 156193
 -    outputTokens: 75024
-  golden-snapshot-wiring:
-    costUsd: 0.13088
-    inputTokens: 218824
-    outputTokens: 95126
+   golden-snapshot-wiring:
+     costUsd: 0.13088
+     inputTokens: 218824
+     outputTokens: 95126
 -  consolidate-integration-helpers-v3:
 -    costUsd: 0.19283999999999998
 -    inputTokens: 341355
@@ -7996,7 +7949,7 @@ spendByItem:
 -    costUsd: 0.38394500000000004
 -    inputTokens: 1215172
 -    outputTokens: 444746
-  (orchestration):
+   (orchestration):
 -    costUsd: 6.223278999999999
 -    inputTokens: 23641149
 -    outputTokens: 2183004
@@ -8167,12 +8120,12 @@ index 5e38feb..dc60cf3 100644
 --- a/.factory/tasks/modernize/steer/tousertoreview/awareness-plan-1-cache-file-needs-awareness.yaml
 +++ b/.factory/tasks/modernize/steer/tousertoreview/awareness-plan-1-cache-file-needs-awareness.yaml
 @@ -5,15 +5,5 @@ question: Committed file in every linted repo (incl. consumers) with reviewable
-  diffs and possible branch conflicts. Weights 0.03-0.8GB in model cache with
-  own licenses. Install docs must mention file. Architect decides now; operator
-  should be aware of footprint and license review.
+   diffs and possible branch conflicts. Weights 0.03-0.8GB in model cache with
+   own licenses. Install docs must mention file. Architect decides now; operator
+   should be aware of footprint and license review.
 -status: answered
 +status: open
-createdAt: 2026-11-08T00:51:56.276Z
+ createdAt: 2026-11-08T00:51:56.276Z
 -answer: >
 -  Operator acknowledges all plan-1 awareness items: (1) material definition and
 -  its SEMANTIC=0 findings scope: OK; tightened acceptance by the model is
@@ -8188,12 +8141,12 @@ index 68b67ff..4a3fcb6 100644
 --- a/.factory/tasks/modernize/steer/tousertoreview/awareness-plan-1-human-cache-location.yaml
 +++ b/.factory/tasks/modernize/steer/tousertoreview/awareness-plan-1-human-cache-location.yaml
 @@ -6,15 +6,5 @@ question: Assumption + ADR-003 place git-stored cache at linted root for
-  file per consumer, reviewable diffs, possible line-local merges, must pass
-  detect-secrets. Architect can proceed; operator should be aware before epic
-  implements.
+   file per consumer, reviewable diffs, possible line-local merges, must pass
+   detect-secrets. Architect can proceed; operator should be aware before epic
+   implements.
 -status: answered
 +status: open
-createdAt: 2026-11-08T01:06:40.589Z
+ createdAt: 2026-11-08T01:06:40.589Z
 -answer: >
 -  Operator acknowledges all plan-1 awareness items: (1) material definition and
 -  its SEMANTIC=0 findings scope: OK; tightened acceptance by the model is
@@ -8209,12 +8162,12 @@ index 77784e2..d6d2afe 100644
 --- a/.factory/tasks/modernize/steer/tousertoreview/awareness-plan-1-human-material-definition.yaml
 +++ b/.factory/tasks/modernize/steer/tousertoreview/awareness-plan-1-human-material-definition.yaml
 @@ -6,15 +6,5 @@ question: Assumption defines material as findings {tool,file,line,col,rule}
-  model accept/reject non-material, heuristic rejections material. Makes
-  preserve testable but narrows intent. Architect can proceed for iter1; record
-  for operator review.
+   model accept/reject non-material, heuristic rejections material. Makes
+   preserve testable but narrows intent. Architect can proceed for iter1; record
+   for operator review.
 -status: answered
 +status: open
-createdAt: 2026-11-08T01:06:40.587Z
+ createdAt: 2026-11-08T01:06:40.587Z
 -answer: >
 -  Operator acknowledges all plan-1 awareness items: (1) material definition and
 -  its SEMANTIC=0 findings scope: OK; tightened acceptance by the model is
@@ -8230,12 +8183,12 @@ index ffd7c18..e35fa23 100644
 --- a/.factory/tasks/modernize/steer/tousertoreview/awareness-plan-1-human-never-lint-broadening.yaml
 +++ b/.factory/tasks/modernize/steer/tousertoreview/awareness-plan-1-human-never-lint-broadening.yaml
 @@ -6,15 +6,5 @@ question: Assumption expands never-test-linting to ban subprocess re-lint,
-  test_self_lint_clean.py slow gate, guards, config re-checks). M3 lists for
-  removal, iter2 removes. Rationale (rot with rule churn) reasonable but deletes
-  coverage; operator visibility warranted.
+   test_self_lint_clean.py slow gate, guards, config re-checks). M3 lists for
+   removal, iter2 removes. Rationale (rot with rule churn) reasonable but deletes
+   coverage; operator visibility warranted.
 -status: answered
 +status: open
-createdAt: 2026-11-08T01:06:40.590Z
+ createdAt: 2026-11-08T01:06:40.590Z
 -answer: >
 -  Operator acknowledges all plan-1 awareness items: (1) material definition and
 -  its SEMANTIC=0 findings scope: OK; tightened acceptance by the model is
@@ -8251,12 +8204,12 @@ index b1ee1c1..3d8fff6 100644
 --- a/.factory/tasks/modernize/steer/tousertoreview/awareness-plan-1-material-definition-needs-awareness.yaml
 +++ b/.factory/tasks/modernize/steer/tousertoreview/awareness-plan-1-material-definition-needs-awareness.yaml
 @@ -5,15 +5,5 @@ question: Assumption defines 4 limbs; reranker decisions not material, heuristic
-  rejections material. Model 'only tightens acceptance' may add W9704 under
-  default SEMANTIC=1 vs today heuristic-only. Architect decides now; operator
-  should know tightening is intentional, not regression.
+   rejections material. Model 'only tightens acceptance' may add W9704 under
+   default SEMANTIC=1 vs today heuristic-only. Architect decides now; operator
+   should know tightening is intentional, not regression.
 -status: answered
 +status: open
-createdAt: 2026-11-08T00:51:56.275Z
+ createdAt: 2026-11-08T00:51:56.275Z
 -answer: >
 -  Operator acknowledges all plan-1 awareness items: (1) material definition and
 -  its SEMANTIC=0 findings scope: OK; tightened acceptance by the model is
@@ -8272,12 +8225,12 @@ index 556ddab..114db9d 100644
 --- a/.factory/tasks/modernize/steer/tousertoreview/awareness-plan-1-never-linting-policy-needs-awareness.yaml
 +++ b/.factory/tasks/modernize/steer/tousertoreview/awareness-plan-1-never-linting-policy-needs-awareness.yaml
 @@ -5,15 +5,5 @@ question: Policy 'pytest never asserts lint-clean; lint gate does' removes
-  self-lint guard running all 13 tools on repo. Trades pytest redundancy for
-  gate reliance. Architect decides now; operator should know pytest -q alone
-  will no longer catch self-lint regressions.
+   self-lint guard running all 13 tools on repo. Trades pytest redundancy for
+   gate reliance. Architect decides now; operator should know pytest -q alone
+   will no longer catch self-lint regressions.
 -status: answered
 +status: open
-createdAt: 2026-11-08T00:51:56.276Z
+ createdAt: 2026-11-08T00:51:56.276Z
 -answer: >
 -  Operator acknowledges all plan-1 awareness items: (1) material definition and
 -  its SEMANTIC=0 findings scope: OK; tightened acceptance by the model is
@@ -8925,152 +8878,140 @@ index 64f5f67..4684056 100644
 --- a/.secrets.baseline
 +++ b/.secrets.baseline
 @@ -37,12 +37,6 @@
-    },
-    {
-      "path": "detect_secrets.filters.heuristic.is_templated_secret"
+     },
+     {
+       "path": "detect_secrets.filters.heuristic.is_templated_secret"
 -    },
 -    {
 -      "path": "detect_secrets.filters.regex.should_exclude_file",
 -      "pattern": [
 -        "^\\.factory/"
 -      ]
-    }
-  ],
-  "plugins_used": [
+     }
+   ],
+   "plugins_used": [
 diff --git a/AGENTS.md b/AGENTS.md
 index 0256866..ae3db45 100644
 --- a/AGENTS.md
 +++ b/AGENTS.md
 @@ -6,7 +6,7 @@ This file is the entry point for all AI agents working on python-setup. Read thi
-
-| Command | What it does |
-|---------|-------------|
+ 
+ | Command | What it does |
+ |---------|-------------|
 - | `uv run lint` | Full 14-tool lint pipeline (baseline diffing, ~100s warm, 120s/tool cap) |
 + | `uv run lint` | Full 13-tool lint pipeline (baseline diffing, ~100s warm, 120s/tool cap) |
- | `uv run pytest -q` | Unit tests (1290 pass, 4 skip, 15 deselected, ~53s) |
- | `uv run pytest tests/integration.py -v` | Integration tests (7 pass, ~30s) |
-| `uv run lint --overwrite-baseline --baseline lint.baseline` | Regenerate `lint.baseline` after intentional rule changes |
+  | `uv run pytest -q` | Unit tests (1290 pass, 4 skip, 15 deselected, ~53s) |
+  | `uv run pytest tests/integration.py -v` | Integration tests (7 pass, ~30s) |
+ | `uv run lint --overwrite-baseline --baseline lint.baseline` | Regenerate `lint.baseline` after intentional rule changes |
 @@ -40,7 +40,7 @@ This file is the entry point for all AI agents working on python-setup. Read thi
-| `CodingRules.md` | Python coding conventions (shipped to consumers) |
-| `lint.baseline` | Frozen baseline of pre-existing violations |
-| `src/python_setup_lint/runner/cli.py` | Main entry point (`main`, `run_lint`) |
+ | `CodingRules.md` | Python coding conventions (shipped to consumers) |
+ | `lint.baseline` | Frozen baseline of pre-existing violations |
+ | `src/python_setup_lint/runner/cli.py` | Main entry point (`main`, `run_lint`) |
 -| `src/python_setup_lint/runner/dispatch.py` | Tool strategy registry (14 built-in tools) |
 +| `src/python_setup_lint/runner/dispatch.py` | Tool strategy registry (13 built-in tools) |
-| `src/python_setup_lint/checkers/_base.py` | Shared checker utilities |
-| `tests/conftest.py` | Shared pytest fixtures |
-| `tests/integration.py` | Fit-for-purpose integration test |
+ | `src/python_setup_lint/checkers/_base.py` | Shared checker utilities |
+ | `tests/conftest.py` | Shared pytest fixtures |
+ | `tests/integration.py` | Fit-for-purpose integration test |
 @@ -60,7 +60,7 @@ pyproject.toml → ToolSpec[] → dispatch.run() → per-tool subprocess → res
-Each tool is a `ToolSpec` with name, command, args, config path, and parse strategy. The runner:
-
-1. Loads `pyproject.toml` for extra tools and config overrides
+ Each tool is a `ToolSpec` with name, command, args, config path, and parse strategy. The runner:
+ 
+ 1. Loads `pyproject.toml` for extra tools and config overrides
 -2. Builds the tool list (14 built-in + any extras)
 +2. Builds the tool list (13 built-in + any extras)
-3. Runs each tool sequentially (some tools share resources)
-4. Parses output per-tool (regex, JSON, lines)
-5. Filters against `lint.baseline` (only new violations fail)
+ 3. Runs each tool sequentially (some tools share resources)
+ 4. Parses output per-tool (regex, JSON, lines)
+ 5. Filters against `lint.baseline` (only new violations fail)
 @@ -89,8 +89,8 @@ The semantic checker (W9704) detects `Any` in function signatures, unjustified s
-| Layer | Command | Scope |
-|-------|---------|-------|
-| Unit | `uv run pytest -q` | Individual checkers, runner logic, config parsing |
+ | Layer | Command | Scope |
+ |-------|---------|-------|
+ | Unit | `uv run pytest -q` | Individual checkers, runner logic, config parsing |
 -| Integration | `uv run pytest tests/integration.py -v` | End-to-end: install, lint, update on a sample project. Validates ALL 14 tools + custom checkers fire on planted violations; NOT marked slow; key fit-for-purpose gate. |
 -| Lint | `uv run lint` | Self-lint: all 14 tools on python-setup itself |
 +| Integration | `uv run pytest tests/integration.py -v` | End-to-end: install, lint, update on a sample project. Validates ALL 13 tools + custom checkers fire on planted violations; NOT marked slow; key fit-for-purpose gate. |
 +| Lint | `uv run lint` | Self-lint: all 13 tools on python-setup itself |
-
-## Common Patterns
-
+ 
+ ## Common Patterns
+ 
 diff --git a/README.md b/README.md
 index 48be719..a180b8a 100644
 --- a/README.md
 +++ b/README.md
 @@ -14,7 +14,7 @@ uv run lint
-
-A reusable Python project template that ships:
-
+ 
+ A reusable Python project template that ships:
+ 
 -- **14 lint tools** — tach, ruff format, ruff check, rumdl, mypy, yamllint, ty, mypy.stubtest, pyright (check + verify types), pylint, pylint-pyi, pylint tests, detect-secrets.
 +- **13 lint tools** — tach, ruff, rumdl, mypy, yamllint, ty, mypy.stubtest, pyright (check + verify types), pylint, pylint-pyi, pylint tests, detect-secrets.
-- **Shared config** — tool configs live in `python-setup/config/` and are inherited by consumer projects.
-- **Custom pylint checkers** — automatically registered; no manual plugin loading.
-- **Baseline diffing** — `lint.baseline` freezes pre-existing violations; CI only flags new ones.
+ - **Shared config** — tool configs live in `python-setup/config/` and are inherited by consumer projects.
+ - **Custom pylint checkers** — automatically registered; no manual plugin loading.
+ - **Baseline diffing** — `lint.baseline` freezes pre-existing violations; CI only flags new ones.
 @@ -55,7 +55,7 @@ Override any shared config via `pyproject.toml` `[tool.*]` sections. See [docs/o
-uv run lint
-````
-
+ uv run lint
+ ```
+ 
 -Runs all 14 lint tools sequentially with baseline diffing and statistics aggregation.
 +Runs all 13 lint tools sequentially with baseline diffing and statistics aggregation.
-
-### What you get
-
+ 
+ ### What you get
+ 
 diff --git a/docs/adr/ADR-001.md b/docs/adr/ADR-001.md
 index 615a546..e7d5514 100644
 --- a/docs/adr/ADR-001.md
 +++ b/docs/adr/ADR-001.md
 @@ -1,11 +1,3 @@
-
-# Golden findings snapshot as the behavior-preservation contract
-
+ # Golden findings snapshot as the behavior-preservation contract
+ 
 -## Status
 -
-
 -Stale as a problem statement — resolved at HEAD. The committed golden findings snapshot
 -(`tests/data/golden/minimal_sample_project_findings.json`) and its tool-count companion
 -now pin the normalized finding multiset, including duplicates, and are asserted by
-\-`tests/test_golden.py` and `tests/integration.py`. Retained for historical context; the
+-`tests/test_golden.py` and `tests/integration.py`. Retained for historical context; the
 -behavior-preservation contract is enforced by the golden snapshot tests.
 -
-
-The modernization enforces coding rules, debloats code and tests, removes tests and swaps the semantic model, and it must still preserve every material lint/check behavior. lint.baseline is empty. The integration test only checks that each planted rule name appears somewhere in the output, so duplicate findings, moved lines and new false positives all go undetected.
+ The modernization enforces coding rules, debloats code and tests, removes tests and swaps the semantic model, and it must still preserve every material lint/check behavior. lint.baseline is empty. The integration test only checks that each planted rule name appears somewhere in the output, so duplicate findings, moved lines and new false positives all go undetected.
 diff --git a/docs/adr/ADR-002.md b/docs/adr/ADR-002.md
 index 56b7882..3514470 100644
 --- a/docs/adr/ADR-002.md
 +++ b/docs/adr/ADR-002.md
 @@ -1,10 +1,3 @@
-
-# Heuristic-gated local decision model for justification checks
-
+ # Heuristic-gated local decision model for justification checks
+ 
 -## Status
 -
-
 -Superseded by ADR-009. The model swap is deferred through the no-go gate; iteration 3
 -ships the heuristic-first decision backend and tracked cache infrastructure instead, and
 -the reranker remains the production fallback. Retained as the problem statement that
 -motivated the deferral.
 -
-
-_semantic.py misuses a sentence-transformers cross-encoder (jina-reranker-v2) as a quality judge. It scores a self-pair, or a query of the form 'rule: unjustified-suppression | context', against a 0.5 threshold. The dependency is heavy, and because it is not installed in dev/CI the heuristic actually makes every decision today. The intent asks for a CPU-friendly small decision model (GLiDE-0.4B or smaller).
+ _semantic.py misuses a sentence-transformers cross-encoder (jina-reranker-v2) as a quality judge. It scores a self-pair, or a query of the form 'rule: unjustified-suppression | context', against a 0.5 threshold. The dependency is heavy, and because it is not installed in dev/CI the heuristic actually makes every decision today. The intent asks for a CPU-friendly small decision model (GLiDE-0.4B or smaller).
 diff --git a/docs/adr/ADR-003.md b/docs/adr/ADR-003.md
 index e26fa95..cbefb8d 100644
 --- a/docs/adr/ADR-003.md
 +++ b/docs/adr/ADR-003.md
 @@ -1,8 +1,3 @@
-
-# Git-stored, self-cleaning decision cache
-
+ # Git-stored, self-cleaning decision cache
+ 
 -## Status
 -
-
 -Superseded by ADR-010. The tracked cache schema, key encoding, prune policy, explicit
 -refresh command, and read-only lint contract are defined there.
 -
-
-Results are cached in ~/.cache/python-setup/semantic/results.json. That file is gitignored, per machine and unbounded, and it is keyed by a 64-bit truncated SHA-256 that includes code context. As a result, W9704 outcomes can differ between machines with and without the model, and stale entries are never removed. The intent requires a git-stored cache with cleanup.
+ Results are cached in ~/.cache/python-setup/semantic/results.json. That file is gitignored, per machine and unbounded, and it is keyed by a 64-bit truncated SHA-256 that includes code context. As a result, W9704 outcomes can differ between machines with and without the model, and stale entries are never removed. The intent requires a git-stored cache with cleanup.
 diff --git a/docs/adr/ADR-004.md b/docs/adr/ADR-004.md
 index 35b819b..9fe6a2a 100644
 --- a/docs/adr/ADR-004.md
 +++ b/docs/adr/ADR-004.md
 @@ -1,9 +1,3 @@
-
-# Progressive saga decomposition with disjoint file ownership
-
+ # Progressive saga decomposition with disjoint file ownership
+ 
 -## Status
 -
-
 -Superseded by ADR-011. The validated-map, one-wave decomposition replaces the progressive
 -saga split, and the audit-first requirement derived from ADR-008 is retained in the spawn
 -gate.
 -
-
-Three workstreams (coding-rules enforcement, code/test debloat, the semantic swap) span about 28.6k LOC across 184 files. Running them in parallel would mean conflicting edits to shared test infra. The intent also requires testing the infrastructure and assumptions before any debloat.
+ Three workstreams (coding-rules enforcement, code/test debloat, the semantic swap) span about 28.6k LOC across 184 files. Running them in parallel would mean conflicting edits to shared test infra. The intent also requires testing the infrastructure and assumptions before any debloat.
 diff --git a/docs/adr/ADR-005.md b/docs/adr/ADR-005.md
 deleted file mode 100644
 index 61ad36a..0000000
@@ -9079,18 +9020,15 @@ index 61ad36a..0000000
 @@ -1,12 +0,0 @@
 -# Ruff format check-only contract with shipped config
 -
-
 -## Status
 -
-
 -Stale as a problem statement — resolved at HEAD. `ruff format` now runs `--check` with the
 -shipped config on normal passes and mutates only through the fix-phase
-\-`build_format_command` (`src/python_setup_lint/runner/dispatch.py`). The registry is
+-`build_format_command` (`src/python_setup_lint/runner/dispatch.py`). The registry is
 -single-source with 14 `TOOLS` entries, and
-\-`tests/runner/test_runner_format_contract.py` pins the modes, config mapping, and golden
+-`tests/runner/test_runner_format_contract.py` pins the modes, config mapping, and golden
 -tool counts.
 -
-
 -`ruff format` ToolSpec runs plain `ruff format` without --check/--config, rewriting ~109 files with default line-length 88 instead of shipped 130, while TOOLS has 14 entries and 6 tests + docs assert 13.
 diff --git a/docs/adr/ADR-006.md b/docs/adr/ADR-006.md
 deleted file mode 100644
@@ -9100,19 +9038,16 @@ index d15a30e..0000000
 @@ -1,12 +0,0 @@
 -# Golden contract hardening on merged implementation
 -
-
 -## Status
 -
-
 -Stale as a problem statement — hardened at HEAD. The golden contract asserts a normalized
 -finding multiset (duplicates included), per-tool minimum counts for all 14 registered
 -tools, and oracle-rule coverage (`tests/_golden.py`, `tests/test_golden.py`,
-\-`tests/integration.py`). `slice_tool_section` is exercised by the golden and integration
+-`tests/integration.py`). `slice_tool_section` is exercised by the golden and integration
 -tests. `collect_findings` still runs the private pipeline with record parsers, now a
 -documented design that mirrors `run_lint` on a pristine copy (`tests/_golden.py:191-231`).
 -
-
--Merged collect_findings uses private pipeline + record parsers (not run_lint baseline capture), sorts only in serialize, never asserts len!=0 or zero **CRASH**, and slice_tool_section is unused.
+-Merged collect_findings uses private pipeline + record parsers (not run_lint baseline capture), sorts only in serialize, never asserts len!=0 or zero __CRASH__, and slice_tool_section is unused.
 diff --git a/docs/adr/ADR-007.md b/docs/adr/ADR-007.md
 deleted file mode 100644
 index 3c3f950..0000000
@@ -9121,14 +9056,11 @@ index 3c3f950..0000000
 @@ -1,8 +0,0 @@
 -# Read-only lint with explicit cache refresh
 -
-
 -## Status
 -
-
 -Superseded by ADR-010. Read-only lint with an explicit cache refresh is the adopted
 -contract: the tracked cache is never written by ordinary lint passes.
 -
-
 -Current cache is per-machine, gitignored, unbounded, 64-bit truncated keys, no cleanup. A git-tracked cache that lint writes on every run would make lint non-hermetic.
 diff --git a/docs/adr/ADR-008.md b/docs/adr/ADR-008.md
 deleted file mode 100644
@@ -9138,14 +9070,11 @@ index 1634b20..0000000
 @@ -1,8 +0,0 @@
 -# Progressive epic decomposition after audits
 -
-
 -## Status
 -
-
 -Current — retained, not stale. ADR-011 implements this audit-first decomposition rule and
 -re-validates the ownership map at iteration-3 start through a HEAD re-glob.
 -
-
 -Remaining scope spans runner, checkers, setup/testing plus the semantic swap. Audits must read final post-consolidation HEAD before epic decomposition.
 diff --git a/docs/adr/ADR-009.md b/docs/adr/ADR-009.md
 deleted file mode 100644
@@ -9155,316 +9084,252 @@ index 0721d93..0000000
 @@ -1,48 +0,0 @@
 -# ADR-009: No-go-gated semantic implementation with infrastructure-first delivery
 -
-
 -## Status
 -
-
 -Accepted — iteration 3 (2026-11-08). Deferral; operator approval required at close-up.
 -
-
 -## Context
 -
-
 -Iteration-2 evaluation returned a structural no-go: the contracted accepted stratum
 -contains 215 meaningful and 0 meaningless labels, which makes the required 95%
 -meaningless-precision metric unevaluable by construction. All 183 repository labels are
 -single-author with terse borderlines all marked `True`, so the corpus cannot validate a
 -model that claims to reject meaningless justifications.
 -
-
 -The candidate model, GLiDE-0.4B, also needs a Fastino license review, and no candidate is
 -proven compliant. The intent still asks for a CPU-friendly decision model that replaces
 -the cross-encoder reranker and a git-stored cache (see
-\-[`docs/semantic-justification.md`](../semantic-justification.md) and the `[semantic]`
+-[`docs/semantic-justification.md`](../semantic-justification.md) and the `[semantic]`
 -extra in `pyproject.toml`), so the capability cannot be silently dropped either.
 -
-
 -## Decision
 -
-
 -Defer model implementation to a follow-up contingent on both of the following gates:
 -
-
 -1. A double-rated, real brush-off sample resolves the corpus-construction defect
-
-- (independently rated meaningful/meaningless labels with negotiable borderlines).
-  -2. A human Fastino license decision, required if GLiDE is the recommended candidate.
+-   (independently rated meaningful/meaningless labels with negotiable borderlines).
+-2. A human Fastino license decision, required if GLiDE is the recommended candidate.
 -
-
 -Iteration 3 delivers everything that is model-independent:
 -
-
 -- Heuristic-first `DecisionBackend` plus tracked-cache infrastructure.
 -- Runner and checkers debloat work.
 -- Docs reconciliation, including this ADR and ADR-010.
 -
-
 -Follow-up triggers are recorded as the double-rated sample, the license decision, and a
 -CPU benchmark. The close-up report must not claim that the semantic model swap is
 -complete.
 -
-
 -## Consequences
 -
-
 -- No model ships in iteration 3; the intent's swap clause is explicitly deferred until a
-
-- compliant model is proven.
-  -- Epics build backend and cache infrastructure against `FakeBackend` and a tracked cache;
-- model wiring remains a bounded follow-up once the verdict lands.
-  -- Infrastructure-first sequencing pins the backend/cache contracts and exercises them
-- without taking on model risk or license risk.
-  -- The operator must approve an infrastructure-only close-up: "heuristic-first" remains the
-- production behavior, and the reranker/model replacement is documented as open work.
-  diff --git a/docs/adr/ADR-010.md b/docs/adr/ADR-010.md
-  deleted file mode 100644
-  index 8aa7c57..0000000
-  --- a/docs/adr/ADR-010.md
-  +++ /dev/null
-  @@ -1,52 +0,0 @@
-  -# ADR-010: Adopt iteration-2 semantic spike contracts as build baseline
+-  compliant model is proven.
+-- Epics build backend and cache infrastructure against `FakeBackend` and a tracked cache;
+-  model wiring remains a bounded follow-up once the verdict lands.
+-- Infrastructure-first sequencing pins the backend/cache contracts and exercises them
+-  without taking on model risk or license risk.
+-- The operator must approve an infrastructure-only close-up: "heuristic-first" remains the
+-  production behavior, and the reranker/model replacement is documented as open work.
+diff --git a/docs/adr/ADR-010.md b/docs/adr/ADR-010.md
+deleted file mode 100644
+index 8aa7c57..0000000
+--- a/docs/adr/ADR-010.md
++++ /dev/null
+@@ -1,52 +0,0 @@
+-# ADR-010: Adopt iteration-2 semantic spike contracts as build baseline
 -
-
 -## Status
 -
-
 -Accepted — iteration 3 (2026-11-08). Contracts frozen; writer verdict consumed first.
 -
-
 -## Context
 -
-
 -The cache schema, key encoding, prune policy, refresh command, writer identity and
 -timing, and `--path` scoping were designed by iteration-2 spikes. The pylint writer
 -verdict that is the cache-design-spike input is still pending (tracked as TD3-I1), so the
 -concurrency semantics must be consumed from that verdict rather than invented.
 -
-
 -Separately, the test-only dotted-path backend import would be an arbitrary-code-execution
 -surface if honored in production lint: an environment variable that names an arbitrary
-\-`module:attribute` could run application code under the lint process. The production
+-`module:attribute` could run application code under the lint process. The production
 -default must stay hermetic.
 -
-
 -## Decision
 -
-
 -Adopt the iteration-2 spike contracts as authoritative unless contradicted at HEAD:
 -
-
 -- **Backend protocol** — `DecisionBackend` Protocol with
-
-- `decide(justification, rule, context) -> float` in `[0.0, 1.0]` and a heuristic-first
-- hard gate.
-  -- **Tracked cache** — `.python-setup-decisions.json` at the linted project root, a JSON
-- array serialized sorted with `indent=2` and `sort_keys`, containing no bare hex strings
-- of length >= 20 and passing the secrets scan.
-  -- **Read-only lint** — normal lint runs are read-only with a hash-asserted zero-write
-- check; no cache mutation on ordinary passes.
-  -- **Explicit refresh** — cache updates happen only through an explicit CI-guarded refresh
-- path (lockfile + merge + atomic replace).
-  -- **Pruning** — prune entries for missing files and stale model identifiers.
-  -- **Writer-first concurrency** — take the single writer/timing verdict from the
-- `pylint-cache-assumptions` evidence first; merge the pending item before implementing
-- if it is still unmerged. Do not invent lock or merge semantics.
+-  `decide(justification, rule, context) -> float` in `[0.0, 1.0]` and a heuristic-first
+-  hard gate.
+-- **Tracked cache** — `.python-setup-decisions.json` at the linted project root, a JSON
+-  array serialized sorted with `indent=2` and `sort_keys`, containing no bare hex strings
+-  of length >= 20 and passing the secrets scan.
+-- **Read-only lint** — normal lint runs are read-only with a hash-asserted zero-write
+-  check; no cache mutation on ordinary passes.
+-- **Explicit refresh** — cache updates happen only through an explicit CI-guarded refresh
+-  path (lockfile + merge + atomic replace).
+-- **Pruning** — prune entries for missing files and stale model identifiers.
+-- **Writer-first concurrency** — take the single writer/timing verdict from the
+-  `pylint-cache-assumptions` evidence first; merge the pending item before implementing
+-  if it is still unmerged. Do not invent lock or merge semantics.
 -
-
 -`PYTHON_SETUP_LINT_DECISION_BACKEND` is honored **only** when `PYTEST_CURRENT_TEST` is
 -set, that is, for pytest-managed runs. Production lint ignores the variable. A loader
 -test pins both behaviors: the dotted path is honored under pytest, and it is ignored when
 -the `PYTEST_CURRENT_TEST` marker is removed.
 -
-
 -## Consequences
 -
-
 -- Backend and cache work proceeds against pinned contracts without waiting for the model
-
-- verdict; the borderline test-only import surface is settled independently.
-  -- A compliant model plugs in through `get_backend()` plus `DECISION_MODEL` with no
-- pipeline refactor.
-  -- The dotted-path surface is test-only by construction, verified by the loader test, so
-- production lint cannot be turned into an arbitrary-code-execution vector.
-  -- Lint remains hermetic: read-only on normal passes, with cache writes confined to the
-- explicit refresh path and concurrency semantics owned by the pylint verdict.
-  diff --git a/docs/adr/ADR-011.md b/docs/adr/ADR-011.md
-  deleted file mode 100644
-  index ddde877..0000000
-  --- a/docs/adr/ADR-011.md
-  +++ /dev/null
-  @@ -1,81 +0,0 @@
-  -# ADR-011: Validated-map epic decomposition with defined AGENTS split and shift handoff
+-  verdict; the borderline test-only import surface is settled independently.
+-- A compliant model plugs in through `get_backend()` plus `DECISION_MODEL` with no
+-  pipeline refactor.
+-- The dotted-path surface is test-only by construction, verified by the loader test, so
+-  production lint cannot be turned into an arbitrary-code-execution vector.
+-- Lint remains hermetic: read-only on normal passes, with cache writes confined to the
+-  explicit refresh path and concurrency semantics owned by the pylint verdict.
+diff --git a/docs/adr/ADR-011.md b/docs/adr/ADR-011.md
+deleted file mode 100644
+index ddde877..0000000
+--- a/docs/adr/ADR-011.md
++++ /dev/null
+@@ -1,81 +0,0 @@
+-# ADR-011: Validated-map epic decomposition with defined AGENTS split and shift handoff
 -
-
 -## Status
 -
-
 -Accepted — iteration 3 (2026-11-08). Spawn gate: validated map revision at HEAD.
 -
-
 -## Context
 -
-
 -M4 audits merged with the unified five-owner map (runner/checkers/setup-testing/semantic/
 -root, counts 67/83/15/4/15), but report completeness validates at the iteration-3 replan
 -through a HEAD re-glob per ADR-008. Several headline findings — the 542-line
-\-`dispatch.py` disable, baseline compatibility shims, and duplicated factory disables —
+-`dispatch.py` disable, baseline compatibility shims, and duplicated factory disables —
 -are already verified at HEAD.
 -
-
 -AGENTS.md section assignment, shared-file edits, packaging exceptions, and the
 -epic-to-root shift-report handoff need machine-checkable definitions: no cross-epic
 -dependency edges exist, and agents must never run git writes. Without explicit ownership,
 -parallel epics would edit the same shared files and produce unreviewable merges.
 -
-
 -## Decision
 -
-
 -Re-validate the unified map at iteration-3 start (counts 67/83/15/4/15, with a ±5 drift
 -budget per owner), then spawn the runner, checkers, and semantic epics in one wave.
 -Setup-testing files are assigned to `epic-runner-modernize` (runner/** plus
-\-`setup.py`/`_setup_*.py`/`testing.py` and the setup/install tests).
+-`setup.py`/`_setup_*.py`/`testing.py` and the setup/install tests).
 -
-
 -### AGENTS.md split
 -
-
 -The split names exact rows, with an engine-enforced wave order:
 -
-
 -- Runner-owned (if assigned at re-glob): `## Quick Commands` rows (`:9-11`) and the
-
-- `## Tool Scope` table (add the `ruff format` row).
-  -- Semantic-owned: the `### Semantic justification pipeline` subsection only.
-  -- Checkers never touches AGENTS.md.
-  -- The engine schedules the runner AGENTS.md item in an earlier wave than the semantic
-- pipeline item; the order is recorded at kickoff.
-  -- Semantic verifies read-only via `git merge-base` that its base contains the runner merge
-- when runner was assigned; otherwise it waits.
+-  `## Tool Scope` table (add the `ruff format` row).
+-- Semantic-owned: the `### Semantic justification pipeline` subsection only.
+-- Checkers never touches AGENTS.md.
+-- The engine schedules the runner AGENTS.md item in an earlier wave than the semantic
+-  pipeline item; the order is recorded at kickoff.
+-- Semantic verifies read-only via `git merge-base` that its base contains the runner merge
+-  when runner was assigned; otherwise it waits.
 -
-
 -### Shared-file single-writer table
 -
-
 -No concurrent edits; each row names exactly one writer:
 -
-
 -- `checkers/_base.py` — semantic only. Checkers puts its stream helper in the new
-
-- checkers-owned `_source_stream.py`, with zero `_base.py` diff.
-  -- `no_try_import_checker.py` `register()` disable line plus
-- `_OPTIONAL_IMPORT_PATTERNS` — semantic only; checkers skips that line.
-  -- The `test_suppression` file — checkers owns all lines except the
-- `TestSuppressionRerankerPipeline` class block (semantic).
-  -- `trivial_wrapper` exemption list — checkers, with the `peek_fallback_tools` line
-- preconditioned on reading the runner close-up (deleted iff runner confirms shim
-- deletion).
+-  checkers-owned `_source_stream.py`, with zero `_base.py` diff.
+-- `no_try_import_checker.py` `register()` disable line plus
+-  `_OPTIONAL_IMPORT_PATTERNS` — semantic only; checkers skips that line.
+-- The `test_suppression` file — checkers owns all lines except the
+-  `TestSuppressionRerankerPipeline` class block (semantic).
+-- `trivial_wrapper` exemption list — checkers, with the `peek_fallback_tools` line
+-  preconditioned on reading the runner close-up (deleted iff runner confirms shim
+-  deletion).
 -
-
 -### Packaging exception
 -
-
 -Semantic solely owns the `pyproject.toml` `[semantic]` extra block and `uv.lock`
 -regeneration — a single writer and an enumerated exception to root-owned repo-root files.
-\-`.gitignore` stays untouched (legacy `.cache` lines remain; the decisions file is
+-`.gitignore` stays untouched (legacy `.cache` lines remain; the decisions file is
 -committed). There is no hatch entry: the tracked cache is consumer-runtime data, not a
 -wheel payload.
 -
-
 -### Shift-report handoff
 -
-
 -Each epic emits a shift-report section or an explicit no-shift declaration in its
 -close-up report. The M2 `replanAfter: true` gate is enforceable: the engine schedules no
 -M3 item until the replan after the M2 epic close-ups. Root
-\-`epic-shift-report-collection` is the first post-replan item, stays pending unless all
+-`epic-shift-report-collection` is the first post-replan item, stays pending unless all
 -three close-ups exist, and consolidates the handoff record that `golden-regen-hatch`
 -consumes.
 -
-
 -## Consequences
 -
-
 -- Subsystem epics start with dispute-free ownership; the kickoff gate resolves disputes
-
-- before epic waves scale.
-  -- No concurrent shared-file edits occur, because the single-writer table assigns every
-- contested line to exactly one epic.
-  -- AGENTS.md conflicts are avoided by the heading split plus the engine wave order, and
-- the merge-base check proves the ordering instead of assuming it.
-  -- M3 close-out consumes a single handoff record gated by the M2 replan, so a missing
-- close-up fails open (the item stays pending) rather than silently shipping an
-- incomplete handoff.
-  diff --git a/docs/adr/ADR-012.md b/docs/adr/ADR-012.md
-  deleted file mode 100644
-  index c1940a2..0000000
-  --- a/docs/adr/ADR-012.md
-  +++ /dev/null
-  @@ -1,41 +0,0 @@
-  -# ADR-012: register() missing-beartype exemption for PyLinter circular import
+-  before epic waves scale.
+-- No concurrent shared-file edits occur, because the single-writer table assigns every
+-  contested line to exactly one epic.
+-- AGENTS.md conflicts are avoided by the heading split plus the engine wave order, and
+-  the merge-base check proves the ordering instead of assuming it.
+-- M3 close-out consumes a single handoff record gated by the M2 replan, so a missing
+-  close-up fails open (the item stays pending) rather than silently shipping an
+-  incomplete handoff.
+diff --git a/docs/adr/ADR-012.md b/docs/adr/ADR-012.md
+deleted file mode 100644
+index c1940a2..0000000
+--- a/docs/adr/ADR-012.md
++++ /dev/null
+@@ -1,41 +0,0 @@
+-# ADR-012: register() missing-beartype exemption for PyLinter circular import
 -
-
 -## Status
 -
-
 -Accepted — iteration 3 (2026-11-08). Exemption plus attempt-with-fallback for mixins.
 -
-
 -## Context
 -
-
 -Every checker `register(linter: PyLinter)` omits `@beartype` with a `missing-beartype`
 -disable citing PyLinter runtime-unavailability or a circular import (for example
-\-`no_try_import_checker.py:80`). Two constraints collide:
+-`no_try_import_checker.py:80`). Two constraints collide:
 -
-
 -- Adding `@beartype` to `register()` breaks the import: `PyLinter` is a pylint internal
-
-- type that is not available at runtime when the beartype wrapper resolves annotations.
-  -- Dropping the disable retriggers the custom `missing-beartype` checker.
+-  type that is not available at runtime when the beartype wrapper resolves annotations.
+-- Dropping the disable retriggers the custom `missing-beartype` checker.
 -
-
 -Separately, four mixin checkers suppress a `SourceRootMixin.options` versus
-\-`BaseChecker.options` conflict (for example `beartype_checker.py:21`). Whether a shared
+-`BaseChecker.options` conflict (for example `beartype_checker.py:21`). Whether a shared
 -typed base can remove that suppression is unproven and may be blocked by pylint's own
 -typing.
 -
-
 -## Decision
 -
-
 -Retain the `missing-beartype` disable on all `register()` functions with a standardized
 -justification: PyLinter is a pylint internal type unavailable at runtime for beartype,
 -and importing it eagerly creates a circular import. The annotation stays `PyLinter` under
-\-`TYPE_CHECKING`. No `@beartype` is added to `register()`.
+-`TYPE_CHECKING`. No `@beartype` is added to `register()`.
 -
-
 -For the mixin `type: ignore[misc]` suppressions, attempt removal through a shared typed
 -base. This is attempt-with-fallback: if pylint typing blocks removal, retain the
 -suppression with the standardized justification and report the blocker. Both outcomes
 -satisfy the epic.
 -
-
 -## Consequences
 -
-
 -- `register()` disables remain as documented exemptions, counted as exempt in epic
-
-- acceptance rather than as violations.
-  -- Mixin `type: ignore[misc]` removal is attempt-with-fallback: either a clean removal or a
-- standardized retained justification, both verifiable from the epic report.
-  -- No runtime import cycle is introduced and no `missing-beartype` false-positive churn is
-- created by the checker registration path.
-  diff --git a/docs/adr/ADR-013.md b/docs/adr/ADR-013.md
-  deleted file mode 100644
-  index dc00efc..0000000
-  --- a/docs/adr/ADR-013.md
-  +++ /dev/null
-  @@ -1,3 +0,0 @@
-  -# Root-serialized delivery replaces epic decomposition for iteration 4
+-  acceptance rather than as violations.
+-- Mixin `type: ignore[misc]` removal is attempt-with-fallback: either a clean removal or a
+-  standardized retained justification, both verifiable from the epic report.
+-- No runtime import cycle is introduced and no `missing-beartype` false-positive churn is
+-  created by the checker registration path.
+diff --git a/docs/adr/ADR-013.md b/docs/adr/ADR-013.md
+deleted file mode 100644
+index dc00efc..0000000
+--- a/docs/adr/ADR-013.md
++++ /dev/null
+@@ -1,3 +0,0 @@
+-# Root-serialized delivery replaces epic decomposition for iteration 4
 -
-
 -I3 planned 3 epics behind ownership-map-revalidation + kickoff gate; map stalled (retry + 3 empty waves, Blocked none), kickoff pending, M2 zero delivery per closeup-3 audit. Map + kickoff reports live in orchestration records with high QA surface on report-only items, creating a single-item bottleneck.
 diff --git a/docs/adr/ADR-014.md b/docs/adr/ADR-014.md
 deleted file mode 100644
@@ -9474,7 +9339,6 @@ index 3af5ce1..0000000
 @@ -1,3 +0,0 @@
 -# Heuristic-first veto semantics for DecisionBackend
 -
-
 -ADR-010 says heuristic-first hard gate but current code is semantic-first with heuristic fallback (_base.py:150-158 vs _semantic.py:1-12). Open Q1 asks whether gate means must-pass-before-model or fallback-only, float vs bool, None mapping.
 diff --git a/docs/adr/ADR-015.md b/docs/adr/ADR-015.md
 deleted file mode 100644
@@ -9484,7 +9348,6 @@ index f49ef2c..0000000
 @@ -1,3 +0,0 @@
 -# Pylint-pyi scope decided by spike, fix deferred to iteration 5
 -
-
 -_PylintPyiLintTool passes .pyi paths but pylint skips companion stubs (even broken) and lints orphan only; golden 42/43 pyi findings on .py; probe finds 205 latent private stub symbols; fixing changes golden + exposes large cleanup, conflicting with preservation unless staged.
 diff --git a/docs/adr/ADR-016.md b/docs/adr/ADR-016.md
 deleted file mode 100644
@@ -9494,7 +9357,6 @@ index fe58d8d..0000000
 @@ -1,3 +0,0 @@
 -# Iteration-4 semantic scope remains infrastructure-only
 -
-
 -ADR-009 deferred model on 215/0 structural no-go + single-adjudicator limits + Fastino review + no CPU bench. At HEAD no DecisionBackend/cache/FakeBackend exists, [semantic] still sentence-transformers, tests still reranker-coupled. Double-rated corpus + license + CPU bench still open.
 diff --git a/docs/adr/ADR-019.md b/docs/adr/ADR-019.md
 deleted file mode 100644
@@ -9504,7 +9366,6 @@ index ea221a9..0000000
 @@ -1,3 +0,0 @@
 -# Tracked-cache keying, file identity, and refresh contract (I5)
 -
-
 -ADR-010 freezes backend + tracked-cache contracts but leaves file-identity vs path-free API, key composition, score vs verdict, refresh shape, CI direction, isolation scope, sort key, prune policy, --path scoping, jobs>1 behavior unspecified (I5 pack Q3). semantic_check is deliberately path-free (test_pylint_cache_semantics.py:171-181) and callers pass no paths; memo key includes code_context + 64-bit truncation; no CLI surface exists; secrets baseline enables HexHighEntropyString; writer-first verdict pins jobs=1 sequential. I4 ADR-017/018 planned lint-flag refresh + decisions-module placement but never merged (files missing at HEAD).
 diff --git a/docs/adr/ADR-020.md b/docs/adr/ADR-020.md
 deleted file mode 100644
@@ -9514,7 +9375,6 @@ index 5501bbe..0000000
 @@ -1,3 +0,0 @@
 -# Model gating and default-off wiring for I5
 -
-
 -Intent names GLiDE-0.4B or smaller; GLiDE is 0.4B/0.81GB bf16/CUDA-tested/torch 2.14/transformers 5.17/glide-vendored/Fastino Community License (commercial revenue gate + attribution + copyleft derivatives) vs MIT project; smallest-in-family so 'or smaller' needs a different family; ADR-009 corpus gate untouched (215/0 single-author, no corpus artifacts, no CPU bench); get_backend has no production path (DECISION_MODEL warn-only, PROMPT_VERSION dead); veto semantics mean default-on tightens W9704/W9738 for every consumer installing the extra.
 diff --git a/docs/adr/ADR-021.md b/docs/adr/ADR-021.md
 deleted file mode 100644
@@ -9524,7 +9384,6 @@ index eb6e270..0000000
 @@ -1,3 +0,0 @@
 -# Semantic-on behavior pinning
 -
-
 -Golden + integration capture with SEMANTIC=0 (tests/integration.py:110-115; tests/_golden.py:54), so model-enabled W9704/W9738 outcomes unpinned; a model could pass the suite while changing consumer behavior; veto extremes (Fake 1.0 preserves, 0.0 vetoes) deterministic without network.
 diff --git a/docs/adr/ADR-022.md b/docs/adr/ADR-022.md
 deleted file mode 100644
@@ -9534,7 +9393,6 @@ index 1577963..0000000
 @@ -1,3 +0,0 @@
 -# Test-harness single-sourcing and debloat acceptance
 -
-
 -Measured duplication at HEAD (13 _make_tc, 10 _walk_and_release, 8 _msg_ids with open()/module_name variance; 3 _RecordingBackend; 2 _UvCallRecorder; 2 extra_block; 2 _semantic_disabled; dead helpers; vestigial raising=False cache tests; smoke overlapping integration + fake orchestration) vs behavior contracts (115-row heuristic table, W9704/W9738 checker tests, golden 158). 'Never test linting' defined only by 644774e prune precedent. No line-reduction metric beyond C0302/R0912/R0915 + empty baseline.
 diff --git a/docs/adr/ADR-023.md b/docs/adr/ADR-023.md
 deleted file mode 100644
@@ -9544,7 +9402,6 @@ index da8a675..0000000
 @@ -1,3 +0,0 @@
 -# Root-serialized delivery continued for I5
 -
-
 -I3 epic gate stalled (retry + 3 empty waves, Blocked none, M2 zero delivery per closeup-3); I4 ADR-013 abandoned epics for root items with file-level single-writer + dep serialization, unblocking M2 verified + M3/M4 partials; I4 closeup shows 2 running + 3 pending carried by file ownership, not epic close-ups; review requires file-level proof for parallel items.
 diff --git a/docs/adr/ADR-024.md b/docs/adr/ADR-024.md
 deleted file mode 100644
@@ -9554,7 +9411,6 @@ index ffbb6b5..0000000
 @@ -1,3 +0,0 @@
 -# Pylint-pyi scope resolution process
 -
-
 -ADR-015 defers fix to I5; _PylintPyiLintTool passes .pyi paths but pylint lints companion .py (42/43 golden on .py per old probe); 205 latent private stub symbols; fixing changes golden + exposes cleanup, conflicting with preservation unless staged via hatch; strategy fix vs scope note still unknown at plan time.
 diff --git a/docs/adr/README.md b/docs/adr/README.md
 deleted file mode 100644
@@ -9564,135 +9420,123 @@ index 0dd088b..0000000
 @@ -1,40 +0,0 @@
 -# Architecture Decision Records
 -
-
 -This directory is the modernization decision register for python-setup. Every file is a
 -single-topic ADR. The active records use `## Context`, `## Decision`, and `## Consequences`;
 -legacy problem statements carry a `## Status` note recording whether they are stale,
 -superseded, or still current.
 -
-
 -## Locations
 -
-
 -Per [`CodingRules.md`](../../CodingRules.md) (Project Documentation Layout → Contributor /
 -Agent), ongoing architecture decisions, data flow, and design notes belong in
-\-[`../../design/`](../../design/) as one-topic-per-file ADRs. This directory holds the
+-[`../../design/`](../../design/) as one-topic-per-file ADRs. This directory holds the
 -decision register created during the modernization epic; both locations use the same ADR
 -format, and new contributor or agent architecture notes should be added under `design/`.
 -
-
 -## Index
 -
-
-| -   | ADR                   | Title                                                                        | Status                   |
-| --- | --------------------- | ---------------------------------------------------------------------------- | ------------------------ |
-| -   | [ADR-001](ADR-001.md) | Golden findings snapshot as the behavior-preservation contract               | Stale — resolved at HEAD |
-| -   | [ADR-002](ADR-002.md) | Heuristic-gated local decision model for justification checks                | Superseded by ADR-009    |
-| -   | [ADR-003](ADR-003.md) | Git-stored, self-cleaning decision cache                                     | Superseded by ADR-010    |
-| -   | [ADR-004](ADR-004.md) | Progressive saga decomposition with disjoint file ownership                  | Superseded by ADR-011    |
-| -   | [ADR-005](ADR-005.md) | Ruff format check-only contract with shipped config                          | Stale — resolved at HEAD |
-| -   | [ADR-006](ADR-006.md) | Golden contract hardening on merged implementation                           | Stale — hardened at HEAD |
-| -   | [ADR-007](ADR-007.md) | Read-only lint with explicit cache refresh                                   | Superseded by ADR-010    |
-| -   | [ADR-008](ADR-008.md) | Progressive epic decomposition after audits                                  | Current                  |
-| -   | [ADR-009](ADR-009.md) | No-go-gated semantic implementation with infrastructure-first delivery       | Accepted                 |
-| -   | [ADR-010](ADR-010.md) | Adopt iteration-2 semantic spike contracts as build baseline                 | Accepted                 |
-| -   | [ADR-011](ADR-011.md) | Validated-map epic decomposition with defined AGENTS split and shift handoff | Accepted                 |
-| -   | [ADR-012](ADR-012.md) | register() missing-beartype exemption for PyLinter circular import           | Accepted                 |
-
+-| ADR | Title | Status |
+-|---|---|---|
+-| [ADR-001](ADR-001.md) | Golden findings snapshot as the behavior-preservation contract | Stale — resolved at HEAD |
+-| [ADR-002](ADR-002.md) | Heuristic-gated local decision model for justification checks | Superseded by ADR-009 |
+-| [ADR-003](ADR-003.md) | Git-stored, self-cleaning decision cache | Superseded by ADR-010 |
+-| [ADR-004](ADR-004.md) | Progressive saga decomposition with disjoint file ownership | Superseded by ADR-011 |
+-| [ADR-005](ADR-005.md) | Ruff format check-only contract with shipped config | Stale — resolved at HEAD |
+-| [ADR-006](ADR-006.md) | Golden contract hardening on merged implementation | Stale — hardened at HEAD |
+-| [ADR-007](ADR-007.md) | Read-only lint with explicit cache refresh | Superseded by ADR-010 |
+-| [ADR-008](ADR-008.md) | Progressive epic decomposition after audits | Current |
+-| [ADR-009](ADR-009.md) | No-go-gated semantic implementation with infrastructure-first delivery | Accepted |
+-| [ADR-010](ADR-010.md) | Adopt iteration-2 semantic spike contracts as build baseline | Accepted |
+-| [ADR-011](ADR-011.md) | Validated-map epic decomposition with defined AGENTS split and shift handoff | Accepted |
+-| [ADR-012](ADR-012.md) | register() missing-beartype exemption for PyLinter circular import | Accepted |
 -
-
 -## Design notes
 -
-
 -Contributor- and agent-facing architecture notes live under `design/`:
 -
-
-| -                                                | Design note                                          | Title                                                             |
-| ------------------------------------------------ | ---------------------------------------------------- | ----------------------------------------------------------------- |
-| -                                                | [0001](../../design/0001-compose-config-temp-dir.md) | Config composers — pyright writes to cwd, ruff writes to temp-dir |
-| -                                                | [0002](../../design/0002-ty-src-only-exception.md)   | ty src-only exception                                             |
-| diff --git a/docs/overlays.md b/docs/overlays.md |
-| index fb33411..c985e01 100644                    |
-| --- a/docs/overlays.md                           |
-| +++ b/docs/overlays.md                           |
-| @@ -1,6 +1,6 @@                                  |
-
-# Rule Overlay Configuration
-
+-| Design note | Title |
+-|---|---|
+-| [0001](../../design/0001-compose-config-temp-dir.md) | Config composers — pyright writes to cwd, ruff writes to temp-dir |
+-| [0002](../../design/0002-ty-src-only-exception.md) | ty src-only exception |
+diff --git a/docs/overlays.md b/docs/overlays.md
+index fb33411..c985e01 100644
+--- a/docs/overlays.md
++++ b/docs/overlays.md
+@@ -1,6 +1,6 @@
+ # Rule Overlay Configuration
+ 
 -Consumer projects can overlay their own rules on the shared base config. Each tool has its own mechanism — this document covers all 14 shipped tools.
 +Consumer projects can overlay their own rules on the shared base config. Each tool has its own mechanism — this document covers all 13 shipped tools.
-
-## Per-tool overlay reference
-
+ 
+ ## Per-tool overlay reference
+ 
 diff --git a/docs/troubleshooting.md b/docs/troubleshooting.md
 index 7d4049f..3456dd6 100644
 --- a/docs/troubleshooting.md
 +++ b/docs/troubleshooting.md
 @@ -152,7 +152,7 @@ uv run pytest tests/integration.py -v
-
-**What it covers:**
-
+ 
+ **What it covers:**
+ 
 -- All 14 lint tools fire on planted violations
 +- All 13 lint tools fire on planted violations
-
-- Config overlays work
-- Setup is idempotent
-- Pre-commit hooks validate
-  diff --git a/docs/tutorials.md b/docs/tutorials.md
-  index b21b17f..536e65c 100644
-  --- a/docs/tutorials.md
-  +++ b/docs/tutorials.md
-  @@ -23,7 +23,7 @@ See [troubleshooting.md](troubleshooting.md) if `uv run python-setup install` fa
-  uv run lint
-
-````
-
+ - Config overlays work
+ - Setup is idempotent
+ - Pre-commit hooks validate
+diff --git a/docs/tutorials.md b/docs/tutorials.md
+index b21b17f..536e65c 100644
+--- a/docs/tutorials.md
++++ b/docs/tutorials.md
+@@ -23,7 +23,7 @@ See [troubleshooting.md](troubleshooting.md) if `uv run python-setup install` fa
+ uv run lint
+ ```
+ 
 -Runs all 14 lint tools sequentially. On a fresh project the first run may produce violations — that's expected.
 +Runs all 13 lint tools sequentially. On a fresh project the first run may produce violations — that's expected.
-
-## 3. Read output
-
+ 
+ ## 3. Read output
+ 
 diff --git a/pyproject.toml b/pyproject.toml
 index c0a8ca6..858424a 100644
 --- a/pyproject.toml
 +++ b/pyproject.toml
 @@ -26,8 +26,9 @@ python-setup-test-checked = "python_setup_lint.testing:test_checked_main"
-python-setup = "python_setup_lint.setup:main"
-
-[project.optional-dependencies]
+ python-setup = "python_setup_lint.setup:main"
+ 
+ [project.optional-dependencies]
 -# Empty placeholder: no model dependency ships in iteration 4 (ADR-016).
 -semantic = []
 +semantic = [
 +    "sentence-transformers>=3.0.0",
 +]
-
-[build-system]
-requires = [
+ 
+ [build-system]
+ requires = [
 diff --git a/src/python_setup_lint/checkers/_base.py b/src/python_setup_lint/checkers/_base.py
 index 0d8ac7e..f004538 100644
 --- a/src/python_setup_lint/checkers/_base.py
 +++ b/src/python_setup_lint/checkers/_base.py
 @@ -3,7 +3,6 @@ from __future__ import annotations
-import fnmatch
-import logging
-import os
+ import fnmatch
+ import logging
+ import os
 -import re
-from pathlib import Path
-from typing import TYPE_CHECKING, NamedTuple
-
+ from pathlib import Path
+ from typing import TYPE_CHECKING, NamedTuple
+ 
 @@ -12,8 +11,6 @@ from astroid import nodes  # astroid is a pylint dependency, only used for type
-from beartype import beartype
-from pylint.typing import MessageDefinitionTuple
-
+ from beartype import beartype
+ from pylint.typing import MessageDefinitionTuple
+ 
 -from python_setup_lint.checkers._decision_backend import DecisionBackend
 -
-# Configure structlog at import time to suppress debug/info noise from all checkers.
-# This runs when pylint loads the first checker plugin (pylint subprocess).
-# The wrapper_class filters at the bound-logger level, before events reach
+ # Configure structlog at import time to suppress debug/info noise from all checkers.
+ # This runs when pylint loads the first checker plugin (pylint subprocess).
+ # The wrapper_class filters at the bound-logger level, before events reach
 @@ -142,20 +139,6 @@ class FunctionVisitMixin(SourceRootMixin):
-        self._check_function(node)  # type: ignore[reportAttributeAccessIssue]  # mixin: _check_function defined in subclass
-
-
+         self._check_function(node)  # type: ignore[reportAttributeAccessIssue]  # mixin: _check_function defined in subclass
+ 
+ 
 -_DIRECTIVE_PREFIX = re.compile(r"^\s*(?:(?:type|ty)\s*:\s*ignore|noqa|pylint\s*:\s*disable)\b")
 -
 -
@@ -9707,15 +9551,15 @@ from pylint.typing import MessageDefinitionTuple
 -    return raw.strip() if not reason_tokens else "" if reason_tokens <= tokens else reason.strip()
 -
 -
-@beartype
-def check_if_meaningful(
-    text: str,
+ @beartype
+ def check_if_meaningful(
+     text: str,
 @@ -163,9 +146,19 @@ def check_if_meaningful(
-    rule: str | None = None,
-    code_context: str | None = None,
-    comment: str | None = None,
+     rule: str | None = None,
+     code_context: str | None = None,
+     comment: str | None = None,
 -    backend: DecisionBackend | None = None,
-) -> bool:
+ ) -> bool:
 -    primary = normalize_suppressed_codes(comment or text).strip()
 +    # Try the semantic NLP pipeline when enabled.
 +    if os.environ.get("PYTHON_SETUP_LINT_SEMANTIC", "1") == "1":
@@ -9729,13 +9573,13 @@ def check_if_meaningful(
 +
 +    # Heuristic fallback.
 +    primary = (comment or text).strip()
-    if not primary or len(primary) < 5:
-        return False
-    primary_lower = primary.lower()
+     if not primary or len(primary) < 5:
+         return False
+     primary_lower = primary.lower()
 @@ -242,11 +235,4 @@ def check_if_meaningful(
-    if primary_lower in meaningless_phrases:
-        return False
-    # Reject justification that is just the rule symbol itself.
+     if primary_lower in meaningless_phrases:
+         return False
+     # Reject justification that is just the rule symbol itself.
 -    if rule and primary_lower in {code.strip().lower() for code in normalize_suppressed_codes(rule).split(",")}:
 -        return False
 -
@@ -9750,52 +9594,52 @@ index b76093c..f3b40b5 100644
 --- a/src/python_setup_lint/checkers/_base.pyi
 +++ b/src/python_setup_lint/checkers/_base.pyi
 @@ -13,8 +13,6 @@ from astroid import nodes
-from pylint.lint import PyLinter
-from pylint.typing import MessageDefinitionTuple
-
+ from pylint.lint import PyLinter
+ from pylint.typing import MessageDefinitionTuple
+ 
 -from python_setup_lint.checkers._decision_backend import DecisionBackend
 -
-def _msgs(**definitions: MessageDef) -> dict[str, MessageDefinitionTuple]:
-    """Build a checker msgs dict with domain-typed keys."""
-
+ def _msgs(**definitions: MessageDef) -> dict[str, MessageDefinitionTuple]:
+     """Build a checker msgs dict with domain-typed keys."""
+ 
 @@ -68,31 +66,30 @@ class FunctionVisitMixin(SourceRootMixin):
-    def visit_functiondef(self, node: nodes.FunctionDef) -> None: ...
-    def visit_asyncfunctiondef(self, node: nodes.AsyncFunctionDef) -> None: ...
-
+     def visit_functiondef(self, node: nodes.FunctionDef) -> None: ...
+     def visit_asyncfunctiondef(self, node: nodes.AsyncFunctionDef) -> None: ...
+ 
 -def normalize_suppressed_codes(raw: str) -> str:  # pylint: disable=generic-return-requires-returns  # the one-line doc states the return
 -    """Return the technical reason; raw comment when none is given, ``""`` when it echoes codes."""
 -
-def check_if_meaningful(
-    text: str,
-    *,
-    rule: str | None = None,
-    code_context: str | None = None,
-    comment: str | None = None,
+ def check_if_meaningful(
+     text: str,
+     *,
+     rule: str | None = None,
+     code_context: str | None = None,
+     comment: str | None = None,
 -    backend: DecisionBackend | None = None,
-) -> bool:
-    """Check if a suppression justification is meaningful.
-
+ ) -> bool:
+     """Check if a suppression justification is meaningful.
+ 
 -    The heuristic gate runs first; a backend may only veto, never resurrect.
 +    Uses the NLP semantic pipeline (``_semantic.semantic_check_if_meaningful``)
 +    when enabled and available, falling back to a heuristic check.
 +
 +    The semantic pipeline is enabled by default (``PYTHON_SETUP_LINT_SEMANTIC=1``)
 +    and requires the ``[semantic]`` extra (``sentence-transformers``).
-
-    Heuristic: non-empty, non-boilerplate, not equal to the rule symbol.
-    Uses *comment* as the primary text if provided; falls back to *text*.
+ 
+     Heuristic: non-empty, non-boilerplate, not equal to the rule symbol.
+     Uses *comment* as the primary text if provided; falls back to *text*.
 -    *rule* and *code_context* are the backend query when one is configured.
 +    *rule* and *code_context* are reserved for future semantic analysis.
-
-    Args:
-        text: The raw justification text.
-        rule: The lint rule identifier being suppressed.
-        code_context: Surrounding source code lines.
-        comment: The justification comment text (preferred over *text*).
+ 
+     Args:
+         text: The raw justification text.
+         rule: The lint rule identifier being suppressed.
+         code_context: Surrounding source code lines.
+         comment: The justification comment text (preferred over *text*).
 -        backend: A decision backend; ``None`` resolves the registered backend.
-
-    Returns:
-        True if the justification is meaningful, False otherwise.
+ 
+     Returns:
+         True if the justification is meaningful, False otherwise.
 diff --git a/src/python_setup_lint/checkers/_decision_backend.py b/src/python_setup_lint/checkers/_decision_backend.py
 deleted file mode 100644
 index 9c37de3..0000000
@@ -9901,28 +9745,28 @@ index bf1934a..e3d9119 100644
 +# failure, ``semantic_check_if_meaningful`` returns None, signalling the
 +# caller to fall back to the heuristic check.
 +
-from __future__ import annotations
-
+ from __future__ import annotations
+ 
 +import contextlib
-import hashlib
+ import hashlib
 +import json
 +import os
 +from pathlib import Path
 +from typing import TYPE_CHECKING
-
+ 
 +import structlog
-from beartype import beartype
-
+ from beartype import beartype
+ 
 -from python_setup_lint.checkers import _decision_backend
 -from python_setup_lint.checkers._decision_backend import DecisionBackend
 -
-__all__ = [
+ __all__ = [
 +    "_RERANKER_UNAVAILABLE",
 +    "_load_reranker",
-    "_reset_cache",
-    "semantic_check_if_meaningful",
-]
-
+     "_reset_cache",
+     "semantic_check_if_meaningful",
+ ]
+ 
 +_LOG = structlog.get_logger(__name__)
 +if TYPE_CHECKING:
 +    from sentence_transformers import CrossEncoder  # type: ignore[import-not-found]  # optional semantic extra
@@ -9936,9 +9780,9 @@ __all__ = [
 +
 +# Persisted result cache file.
 +_RESULT_CACHE_FILE = _CACHE_DIR / "results.json"
-# Lazy-loaded on first call to semantic_check_if_meaningful.
-_RESULT_CACHE: dict[int, bool] | None = None
-
+ # Lazy-loaded on first call to semantic_check_if_meaningful.
+ _RESULT_CACHE: dict[int, bool] | None = None
+ 
 +_RERANKER_MODEL = os.environ.get(
 +    "PYTHON_SETUP_LINT_RERANKER_MODEL",
 +    "jina-reranker-v2-base-multilingual",
@@ -9970,16 +9814,16 @@ _RESULT_CACHE: dict[int, bool] | None = None
 +    except OSError:
 +        _LOG.warning("Failed to save result cache", exc_info=True)
 +
-
-def _reset_cache() -> None:
-    """Reset the result cache (test helper).
-
+ 
+ def _reset_cache() -> None:
+     """Reset the result cache (test helper).
+ 
 -    Clears the in-process memo.
 +    Clears the in-memory cache and removes the persisted cache file.
-    """
+     """
 -    global _RESULT_CACHE  # pylint: disable=global-statement  # memo reset requires global
 +    global _RESULT_CACHE, _RERANKER_UNAVAILABLE  # pylint: disable=global-statement  # module-level cache reset requires global
-    _RESULT_CACHE = None
+     _RESULT_CACHE = None
 +    _RERANKER_UNAVAILABLE = False
 +    with contextlib.suppress(OSError):
 +        _RESULT_CACHE_FILE.unlink(missing_ok=True)
@@ -10015,48 +9859,48 @@ def _reset_cache() -> None:
 +        _RERANKER_UNAVAILABLE = True
 +        _LOG.warning("Failed to load reranker model", exc_info=True)
 +        return None
-
-
-@beartype
+ 
+ 
+ @beartype
 @@ -32,27 +129,26 @@ def semantic_check_if_meaningful(
-    rule: str | None = None,
-    code_context: str | None = None,
-    comment: str | None = None,
+     rule: str | None = None,
+     code_context: str | None = None,
+     comment: str | None = None,
 -    backend: DecisionBackend | None = None,
-) -> bool | None:
-    # Use comment as primary text, fall back to raw text.
-    primary = (comment or text).strip()
+ ) -> bool | None:
+     # Use comment as primary text, fall back to raw text.
+     primary = (comment or text).strip()
 -    global _RESULT_CACHE  # pylint: disable=global-statement  # lazy-init memo requires global
 +    # Lazy-init the result cache on first call.
 +    global _RESULT_CACHE  # pylint: disable=global-statement  # lazy-init result cache requires global
-    if _RESULT_CACHE is None:
+     if _RESULT_CACHE is None:
 -        _RESULT_CACHE = {}
 +        _RESULT_CACHE = _load_result_cache()
-    if not primary:
-        return False
+     if not primary:
+         return False
 -    resolved = backend if backend is not None else _decision_backend.get_backend()
 -    if resolved is None:
 -        return None
 +
-    # Compute cache key from all inputs + model identifier.
-    cache_key = hashlib.sha256(
-        "|".join(
-            str(x)
-            for x in (
+     # Compute cache key from all inputs + model identifier.
+     cache_key = hashlib.sha256(
+         "|".join(
+             str(x)
+             for x in (
 -                primary,
 +                text,
-                rule,
-                code_context,
+                 rule,
+                 code_context,
 -                resolved.model_id,
 +                comment,
 +                _RERANKER_MODEL,
-            )
-        ).encode()
-    ).digest()
+             )
+         ).encode()
+     ).digest()
 @@ -60,6 +156,34 @@ def semantic_check_if_meaningful(
-    if cache_key_int in _RESULT_CACHE:
-        return _RESULT_CACHE[cache_key_int]
-
+     if cache_key_int in _RESULT_CACHE:
+         return _RESULT_CACHE[cache_key_int]
+ 
 -    result = resolved.decide(primary, rule, code_context) >= _decision_backend.DECISION_THRESHOLD
 +    # --- Cross-encoder reranking ---
 +    reranker = _load_reranker()
@@ -10086,9 +9930,9 @@ def _reset_cache() -> None:
 +        return None
 +
 +    result = score >= 0.5
-    _RESULT_CACHE[cache_key_int] = result
+     _RESULT_CACHE[cache_key_int] = result
 +    _save_result_cache()
-    return result
+     return result
 diff --git a/src/python_setup_lint/checkers/_semantic.pyi b/src/python_setup_lint/checkers/_semantic.pyi
 index a21ffff..6f765ea 100644
 --- a/src/python_setup_lint/checkers/_semantic.pyi
@@ -10098,181 +9942,181 @@ index a21ffff..6f765ea 100644
 -
 -from python_setup_lint.checkers._decision_backend import DecisionBackend
 +"""Semantic justification checker using sentence-transformers (Track B)."""
-
-def semantic_check_if_meaningful(
-    text: str,
+ 
+ def semantic_check_if_meaningful(
+     text: str,
 @@ -8,18 +6,22 @@ def semantic_check_if_meaningful(
-    rule: str | None = None,
-    code_context: str | None = None,
-    comment: str | None = None,
+     rule: str | None = None,
+     code_context: str | None = None,
+     comment: str | None = None,
 -    backend: DecisionBackend | None = None,
-) -> bool | None:
-    """Check if a suppression justification is semantically meaningful.
-
+ ) -> bool | None:
+     """Check if a suppression justification is semantically meaningful.
+ 
 +    Single-stage NLP pipeline using a cross-encoder reranker:
 +
 +    1. Re-score the justification against the rule and code context.
 +
-    Args:
-        text: The raw justification text (used as fallback when *comment*
-            is not provided).
-        rule: The lint rule identifier being suppressed (e.g. ``"E501"``).
-        code_context: Surrounding source code lines.
-        comment: The justification comment text (preferred over *text*).
+     Args:
+         text: The raw justification text (used as fallback when *comment*
+             is not provided).
+         rule: The lint rule identifier being suppressed (e.g. ``"E501"``).
+         code_context: Surrounding source code lines.
+         comment: The justification comment text (preferred over *text*).
 -        backend: A decision backend; ``None`` resolves the registered backend.
-
-    Returns:
+ 
+     Returns:
 -        The backend verdict, or ``None`` when no backend is available.
 +        ``True`` if the justification is semantically meaningful,
 +        ``False`` otherwise, or ``None`` if the NLP pipeline is unavailable
 +        (sentence-transformers not installed or model download failed).
-    """
+     """
 diff --git a/src/python_setup_lint/checkers/conformance/generic_key_dict_checker.py b/src/python_setup_lint/checkers/conformance/generic_key_dict_checker.py
 index 0f89294..9cdb635 100644
 --- a/src/python_setup_lint/checkers/conformance/generic_key_dict_checker.py
 +++ b/src/python_setup_lint/checkers/conformance/generic_key_dict_checker.py
 @@ -35,7 +35,7 @@ class GenericKeyDictChecker(BaseChecker):
-            "Use 'allow-string-keys-for' config to suppress for legitimate categories.",
-        ),
-    )
+             "Use 'allow-string-keys-for' config to suppress for legitimate categories.",
+         ),
+     )
 -    options: tuple[tuple[str, dict[str, Any]], ...] = (  # pylint option values are heterogeneous; Any matches the API contract
 +    options: tuple[tuple[str, dict[str, Any]], ...] = (  # pylint option dict values are Any by API contract
-        (
-            "allow-string-keys-for",
-            {
+         (
+             "allow-string-keys-for",
+             {
 diff --git a/src/python_setup_lint/checkers/conformance/generic_key_dict_checker.pyi b/src/python_setup_lint/checkers/conformance/generic_key_dict_checker.pyi
 index 355e89d..2f14501 100644
 --- a/src/python_setup_lint/checkers/conformance/generic_key_dict_checker.pyi
 +++ b/src/python_setup_lint/checkers/conformance/generic_key_dict_checker.pyi
 @@ -10,7 +10,7 @@ from pylint.typing import MessageDefinitionTuple
-class GenericKeyDictChecker(BaseChecker):
-    name: str = "generic-key-dict"
-    msgs: dict[str, MessageDefinitionTuple]
+ class GenericKeyDictChecker(BaseChecker):
+     name: str = "generic-key-dict"
+     msgs: dict[str, MessageDefinitionTuple]
 -    options: tuple[tuple[str, dict[str, Any]], ...]  # pylint option values are heterogeneous; Any matches the API contract
 +    options: tuple[tuple[str, dict[str, Any]], ...]  # pylint option dict values are Any by API contract
-
-    def __init__(self, linter: PyLinter) -> None: ...
-    def open(self) -> None: ...
+ 
+     def __init__(self, linter: PyLinter) -> None: ...
+     def open(self) -> None: ...
 diff --git a/src/python_setup_lint/checkers/conformance/no_try_import_checker.py b/src/python_setup_lint/checkers/conformance/no_try_import_checker.py
 index 3aeac9a..791aae6 100644
 --- a/src/python_setup_lint/checkers/conformance/no_try_import_checker.py
 +++ b/src/python_setup_lint/checkers/conformance/no_try_import_checker.py
 @@ -9,8 +9,7 @@ from python_setup_lint.checkers._base import MessageDef, _msgs
-
-# Optional dependency import patterns — try/except ImportError is allowed
-# for imports from these modules (declared in [project.optional-dependencies]).
+ 
+ # Optional dependency import patterns — try/except ImportError is allowed
+ # for imports from these modules (declared in [project.optional-dependencies]).
 -# The [semantic] extra is an empty placeholder, so no import is optional today.
 -_OPTIONAL_IMPORT_PATTERNS: frozenset[str] = frozenset()
 +_OPTIONAL_IMPORT_PATTERNS: frozenset[str] = frozenset({"sentence_transformers"})
-
-
-def _all_imports_optional(stmts: list[nodes.NodeNG]) -> bool:
+ 
+ 
+ def _all_imports_optional(stmts: list[nodes.NodeNG]) -> bool:
 diff --git a/src/python_setup_lint/checkers/stub/coverage.py b/src/python_setup_lint/checkers/stub/coverage.py
 index 0e5103f..7d7ea1a 100644
 --- a/src/python_setup_lint/checkers/stub/coverage.py
 +++ b/src/python_setup_lint/checkers/stub/coverage.py
 @@ -193,8 +193,9 @@ def _add_declaration(child: nodes.NodeNG, declarations: set[str]) -> None:
-    elif isinstance(child, (nodes.ImportFrom, nodes.Import)):
-        for name, _ in child.names:
-            declarations.add(name)
+     elif isinstance(child, (nodes.ImportFrom, nodes.Import)):
+         for name, _ in child.names:
+             declarations.add(name)
 -    elif isinstance(child, nodes.TypeAlias) and isinstance(child.name, nodes.AssignName):
 -        declarations.add(child.name.name)
 +    elif isinstance(child, nodes.TypeAlias):
 +        if isinstance(child.name, nodes.AssignName):
 +            declarations.add(child.name.name)
-
-
-def _index_stub_declarations(checker: StubChecker, module_name: str, stub_path: Path) -> None:
+ 
+ 
+ def _index_stub_declarations(checker: StubChecker, module_name: str, stub_path: Path) -> None:
 diff --git a/src/python_setup_lint/runner/__init__.py b/src/python_setup_lint/runner/__init__.py
 index d7eb25a..35ae08a 100644
 --- a/src/python_setup_lint/runner/__init__.py
 +++ b/src/python_setup_lint/runner/__init__.py
 @@ -1,6 +1,6 @@
-"""Python CLI runner for the python-setup lint pipeline.
-
+ """Python CLI runner for the python-setup lint pipeline.
+ 
 -Replaces ``scripts/lint.sh``.  Runs all 14 lint steps sequentially with
 +Replaces ``scripts/lint.sh``.  Runs all 13 lint steps sequentially with
-optional path scoping, fix mode, baseline diffing, flexible failure
-handling, statistics aggregation, declarative extra-tools (T11 v1), and
-autofix (T4).  See ``AGENTS.md`` for the full architecture.
+ optional path scoping, fix mode, baseline diffing, flexible failure
+ handling, statistics aggregation, declarative extra-tools (T11 v1), and
+ autofix (T4).  See ``AGENTS.md`` for the full architecture.
 @@ -22,12 +22,7 @@ from __future__ import annotations
-from .baseline import peek_fallback_tools
-from .cli import main, run_lint
-from .dispatch import (
+ from .baseline import peek_fallback_tools
+ from .cli import main, run_lint
+ from .dispatch import (
 -    EXPECTED_TOOL_NAMES,
 -    FORMATTER_ONLY,
-    LINT_TOOLS,
+     LINT_TOOLS,
 -    RECORD_PARSER_TOOLS,
 -    RECORDLESS_TOOLS,
 -    STATISTICS_PARSER_TOOLS,
-    STRATEGIES,
-    TOOLS,
-    TOOLS_BY_NAME,
+     STRATEGIES,
+     TOOLS,
+     TOOLS_BY_NAME,
 @@ -40,13 +35,8 @@ from .parsers import PARSE_STRATEGIES, Record
-from .types import LintResult, RunnerConfig, ToolSpec, ViolationCount
-
-__all__ = [
+ from .types import LintResult, RunnerConfig, ToolSpec, ViolationCount
+ 
+ __all__ = [
 -    "EXPECTED_TOOL_NAMES",
 -    "FORMATTER_ONLY",
-    "LINT_TOOLS",
-    "PARSE_STRATEGIES",
+     "LINT_TOOLS",
+     "PARSE_STRATEGIES",
 -    "RECORDLESS_TOOLS",
 -    "RECORD_PARSER_TOOLS",
 -    "STATISTICS_PARSER_TOOLS",
-    "STRATEGIES",
-    "TOOLS",
-    "TOOLS_BY_NAME",
+     "STRATEGIES",
+     "TOOLS",
+     "TOOLS_BY_NAME",
 diff --git a/src/python_setup_lint/runner/__init__.pyi b/src/python_setup_lint/runner/__init__.pyi
 index 9d782c9..20a5008 100644
 --- a/src/python_setup_lint/runner/__init__.pyi
 +++ b/src/python_setup_lint/runner/__init__.pyi
 @@ -1,6 +1,6 @@
-"""Python CLI runner for the python-setup lint pipeline.
-
+ """Python CLI runner for the python-setup lint pipeline.
+ 
 -Replaces ``scripts/lint.sh``.  Runs all 14 lint steps sequentially with
 +Replaces ``scripts/lint.sh``.  Runs all 13 lint steps sequentially with
-optional path scoping, fix mode, baseline diffing, flexible failure
-handling, statistics aggregation, declarative extra-tools (T11 v1), and
-autofix (T4).  See ``AGENTS.md`` for the full architecture.
+ optional path scoping, fix mode, baseline diffing, flexible failure
+ handling, statistics aggregation, declarative extra-tools (T11 v1), and
+ autofix (T4).  See ``AGENTS.md`` for the full architecture.
 @@ -20,12 +20,7 @@ Public surface
-from .baseline import peek_fallback_tools
-from .cli import main, run_lint
-from .dispatch import (
+ from .baseline import peek_fallback_tools
+ from .cli import main, run_lint
+ from .dispatch import (
 -    EXPECTED_TOOL_NAMES,
 -    FORMATTER_ONLY,
-    LINT_TOOLS,
+     LINT_TOOLS,
 -    RECORD_PARSER_TOOLS,
 -    RECORDLESS_TOOLS,
 -    STATISTICS_PARSER_TOOLS,
-    STRATEGIES,
-    TOOLS,
-    TOOLS_BY_NAME,
+     STRATEGIES,
+     TOOLS,
+     TOOLS_BY_NAME,
 @@ -38,13 +33,8 @@ from .parsers import PARSE_STRATEGIES, Record
-from .types import LintResult, RunnerConfig, ToolSpec, ViolationCount
-
-__all__ = [
+ from .types import LintResult, RunnerConfig, ToolSpec, ViolationCount
+ 
+ __all__ = [
 -    "EXPECTED_TOOL_NAMES",
 -    "FORMATTER_ONLY",
-    "LINT_TOOLS",
-    "PARSE_STRATEGIES",
+     "LINT_TOOLS",
+     "PARSE_STRATEGIES",
 -    "RECORDLESS_TOOLS",
 -    "RECORD_PARSER_TOOLS",
 -    "STATISTICS_PARSER_TOOLS",
-    "STRATEGIES",
-    "TOOLS",
-    "TOOLS_BY_NAME",
+     "STRATEGIES",
+     "TOOLS",
+     "TOOLS_BY_NAME",
 diff --git a/src/python_setup_lint/runner/_config.py b/src/python_setup_lint/runner/_config.py
 index 2382050..6493b31 100644
 --- a/src/python_setup_lint/runner/_config.py
 +++ b/src/python_setup_lint/runner/_config.py
 @@ -7,7 +7,6 @@ from pathlib import Path
-# Each key is the canonical tool label used in ``_config_flag_for``.
-_SHIPPED_CONFIG_FILES: dict[str, str] = {
-    "ruff check": "ruff.toml",
+ # Each key is the canonical tool label used in ``_config_flag_for``.
+ _SHIPPED_CONFIG_FILES: dict[str, str] = {
+     "ruff check": "ruff.toml",
 -    "ruff format": "ruff.toml",
-    "mypy": "mypy.ini",
-    "pylint": ".pylintrc",
-    "pylint tests": ".pylintrc-tests",
+     "mypy": "mypy.ini",
+     "pylint": ".pylintrc",
+     "pylint tests": ".pylintrc-tests",
 diff --git a/src/python_setup_lint/runner/_tool_specs.py b/src/python_setup_lint/runner/_tool_specs.py
 deleted file mode 100644
 index aa87371..0000000
@@ -10405,16 +10249,16 @@ index 803d1ce..a1094ef 100644
 --- a/src/python_setup_lint/runner/baseline.py
 +++ b/src/python_setup_lint/runner/baseline.py
 @@ -10,16 +10,17 @@ from pathlib import Path
-
-import beartype
-
+ 
+ import beartype
+ 
 +from ._record_types import Record
-from .parsers import _RECORD_PARSERS
-from .types import LintResult
-
-__all__ = ["_capture_baseline", "_diff_baseline"]
-
-
+ from .parsers import _RECORD_PARSERS
+ from .types import LintResult
+ 
+ __all__ = ["_capture_baseline", "_diff_baseline"]
+ 
+ 
 -# ── Retained package-export shim (debt: owned by dispatch-split) ──
 -# ``runner/__init__.py`` and its stub still re-export ``peek_fallback_tools``;
 -# this trivial stub keeps that forbidden-to-edit consumer importable and is
@@ -10423,13 +10267,13 @@ __all__ = ["_capture_baseline", "_diff_baseline"]
 +
 +
 +_FALLBACK_TOOLS: set[str] = set()
-
-
-@beartype.beartype
+ 
+ 
+ @beartype.beartype
 @@ -27,6 +28,20 @@ def peek_fallback_tools() -> frozenset[str]:
-    return frozenset()
-
-
+     return frozenset()
+ 
+ 
 +def _compare_sorted(a: list[Record], b: list[Record]) -> tuple[list[Record], list[Record]]:
 +    """Re-export of :func:`_baseline_helpers._compare_sorted` for backwards compat.
 +
@@ -10444,24 +10288,24 @@ __all__ = ["_capture_baseline", "_diff_baseline"]
 +    return _cs(a, b)
 +
 +
-# ── Core helpers ──────────────────────────────────────────────────
-
-
+ # ── Core helpers ──────────────────────────────────────────────────
+ 
+ 
 diff --git a/src/python_setup_lint/runner/baseline.pyi b/src/python_setup_lint/runner/baseline.pyi
 index c8fc44c..ca5b55f 100644
 --- a/src/python_setup_lint/runner/baseline.pyi
 +++ b/src/python_setup_lint/runner/baseline.pyi
 @@ -5,10 +5,21 @@ Violations-only baseline: flat records sorted by (tool, file, line, col).
-
-from pathlib import Path
-
+ 
+ from pathlib import Path
+ 
 +from .parsers import Record
-from .types import LintResult
-
+ from .types import LintResult
+ 
 +_FALLBACK_TOOLS: set[str]
 +"""Legacy stub: always empty. The new format has no fallback path."""
 +
-def peek_fallback_tools() -> frozenset[str]:
+ def peek_fallback_tools() -> frozenset[str]:
 -    """Package-export shim, deleted with ``runner/__init__``'s re-export."""
 +    """Legacy stub: returns empty frozenset."""
 +
@@ -10471,25 +10315,25 @@ def peek_fallback_tools() -> frozenset[str]:
 +    Returns:
 +        A tuple ``(added, removed)``.
 +    """
-
-def _capture_baseline(results: list[LintResult], *, cwd: Path | None = None) -> list[dict[str, object]]:
-    """All violations as a flat list sorted by (tool, file, line, col, rule).
+ 
+ def _capture_baseline(results: list[LintResult], *, cwd: Path | None = None) -> list[dict[str, object]]:
+     """All violations as a flat list sorted by (tool, file, line, col, rule).
 diff --git a/src/python_setup_lint/runner/cli.py b/src/python_setup_lint/runner/cli.py
 index 184f78b..3528e47 100644
 --- a/src/python_setup_lint/runner/cli.py
 +++ b/src/python_setup_lint/runner/cli.py
 @@ -25,7 +25,6 @@ from ._cli_complexity import (
-)
-from ._cli_helpers import _handle_baseline, _print_tool_notes
-from .dispatch import (
+ )
+ from ._cli_helpers import _handle_baseline, _print_tool_notes
+ from .dispatch import (
 -    FORMATTER_ONLY,
-    _strategy_for,  # type: ignore[attr-defined]  # private symbol removed from .pyi per M3(b); runtime import still works
-)
-from .extra_tools import (
+     _strategy_for,  # type: ignore[attr-defined]  # private symbol removed from .pyi per M3(b); runtime import still works
+ )
+ from .extra_tools import (
 @@ -48,81 +47,6 @@ __all__ = [
-]
-
-
+ ]
+ 
+ 
 -_PACKAGE_REQUIRED_TOOLS = frozenset({"mypy.stubtest", "pyright verify types"})
 -
 -
@@ -10565,13 +10409,13 @@ from .extra_tools import (
 -    ]
 -
 -
-def _run_tool_pipeline(
-    selected: list[ToolSpec],
-    *,
+ def _run_tool_pipeline(
+     selected: list[ToolSpec],
+     *,
 @@ -145,17 +69,59 @@ def _run_tool_pipeline(
-    # every tool — and thus the baseline — observe the same post-fix file
-    # state, eliminating the pre-fix-vs-post-fix mismatch that produced
-    # non-deterministic baselines.  Without --fix, a single lint pass runs.
+     # every tool — and thus the baseline — observe the same post-fix file
+     # state, eliminating the pre-fix-vs-post-fix mismatch that produced
+     # non-deterministic baselines.  Without --fix, a single lint pass runs.
 -    run_fix_passes = fix and not statistics
 -    lint_fix = False if run_fix_passes else fix
 -    if run_fix_passes:
@@ -10624,102 +10468,102 @@ def _run_tool_pipeline(
 +    for spec in selected:
 +        if spec.name in ("mypy.stubtest", "pyright verify types") and config.package_name is None:
 +            print(f"  [{spec.name}] SKIPPED: --package-name not set", file=sys.stderr)
-            continue
-
-        _print_tool_notes(spec, fix=fix, path=path, exclude=exclude)
+             continue
+ 
+         _print_tool_notes(spec, fix=fix, path=path, exclude=exclude)
 +
 +        timeouts = config.tool_timeouts or {}
 +        mem_limits = config.tool_memory_limits or {}
 +        effective_timeout = timeouts.get(spec.name, spec.timeout)
 +        effective_mem = mem_limits.get(spec.name, spec.memory_limit_mb)
 +
-        strategy = _strategy_for(spec.name, spec)
-        cmd = strategy.build_command(config=config, _fix=lint_fix, _path=path, _exclude=exclude)
-        if statistics:
+         strategy = _strategy_for(spec.name, spec)
+         cmd = strategy.build_command(config=config, _fix=lint_fix, _path=path, _exclude=exclude)
+         if statistics:
 @@ -164,8 +130,8 @@ def _run_tool_pipeline(
-            cmd,
-            cwd=cwd,
-            label=spec.name,
+             cmd,
+             cwd=cwd,
+             label=spec.name,
 -            timeout=(config.tool_timeouts or {}).get(spec.name, spec.timeout),
 -            memory_limit_mb=(config.tool_memory_limits or {}).get(spec.name, spec.memory_limit_mb),
 +            timeout=effective_timeout,
 +            memory_limit_mb=effective_mem,
-        )
-        results.append(result)
-        if not statistics:
+         )
+         results.append(result)
+         if not statistics:
 @@ -345,7 +311,7 @@ def main(argv: list[str] | None = None, *, config: RunnerConfig | None = None) -
-    parser.add_argument(
-        "--tools",
-        metavar="LIST",
+     parser.add_argument(
+         "--tools",
+         metavar="LIST",
 -        help="Comma-separated tool names to run (default: all 14 tools)",
 +        help="Comma-separated tool names to run (default: all 13 tools)",
-    )
-    parser.add_argument(
-        "--default-py-dirs",
+     )
+     parser.add_argument(
+         "--default-py-dirs",
 diff --git a/src/python_setup_lint/runner/cmd_build.py b/src/python_setup_lint/runner/cmd_build.py
 index 7d9030e..f043726 100644
 --- a/src/python_setup_lint/runner/cmd_build.py
 +++ b/src/python_setup_lint/runner/cmd_build.py
 @@ -12,7 +12,6 @@ if TYPE_CHECKING:
-
-__all__ = [
-    "_build_command",
+ 
+ __all__ = [
+     "_build_command",
 -    "_build_path_and_exclude_args",
-    "_build_statistics_flags",
-    "_compose_pyright_config",
-    "_compose_ruff_config",
+     "_build_statistics_flags",
+     "_compose_pyright_config",
+     "_compose_ruff_config",
 @@ -110,7 +109,6 @@ def _config_flag_for(spec_name: str, config_path: Path | None) -> list[str]:
-        return []
-    flags: dict[str, list[str]] = {
-        "ruff check": ["--config", str(config_path)],
+         return []
+     flags: dict[str, list[str]] = {
+         "ruff check": ["--config", str(config_path)],
 -        "ruff format": ["--config", str(config_path)],
-        "mypy": ["--config-file", str(config_path)],
-        "pylint": ["--rcfile", str(config_path)],
-        "pyright check": ["--project", str(config_path)],
+         "mypy": ["--config-file", str(config_path)],
+         "pylint": ["--rcfile", str(config_path)],
+         "pyright check": ["--project", str(config_path)],
 diff --git a/src/python_setup_lint/runner/dispatch.py b/src/python_setup_lint/runner/dispatch.py
 index f95e02a..428076a 100644
 --- a/src/python_setup_lint/runner/dispatch.py
 +++ b/src/python_setup_lint/runner/dispatch.py
 @@ -6,26 +6,19 @@ from collections.abc import Callable
-from beartype import beartype
-
-from ._config import _default_config_paths
+ from beartype import beartype
+ 
+ from ._config import _default_config_paths
 -from ._tool_specs import TOOLS, TOOLS_BY_NAME
-from .cmd_build import (
-    _build_command,
+ from .cmd_build import (
+     _build_command,
 -    _build_path_and_exclude_args,
-    _build_statistics_flags,
-    _config_flag_for,
-    _find_py_files,
-    _find_pyi_files,
-    _resolve_pylintrc,
-)
+     _build_statistics_flags,
+     _config_flag_for,
+     _find_py_files,
+     _find_pyi_files,
+     _resolve_pylintrc,
+ )
 -from .parsers import _RECORD_PARSERS, _STATISTICS_PARSERS
 +from .parsers import _STATISTICS_PARSERS
-from .types import RunnerConfig, ToolSpec
-
-__all__ = [
+ from .types import RunnerConfig, ToolSpec
+ 
+ __all__ = [
 -    "EXPECTED_TOOL_NAMES",
 -    "FORMATTER_ONLY",
-    "LINT_TOOLS",
+     "LINT_TOOLS",
 -    "RECORDLESS_TOOLS",
 -    "RECORD_PARSER_TOOLS",
 -    "STATISTICS_PARSER_TOOLS",
-    "STRATEGIES",
-    "TOOLS",
-    "TOOLS_BY_NAME",
+     "STRATEGIES",
+     "TOOLS",
+     "TOOLS_BY_NAME",
 @@ -33,7 +26,6 @@ __all__ = [
-    "LintTool",
-    "_DetectSecretsLintTool",
-    "_PylintLintTool",
+     "LintTool",
+     "_DetectSecretsLintTool",
+     "_PylintLintTool",
 -    "_RuffFormatLintTool",
-    "_StubtestLintTool",
-    "_VerifyTypesLintTool",
-    "_strategy_for",
+     "_StubtestLintTool",
+     "_VerifyTypesLintTool",
+     "_strategy_for",
 @@ -42,21 +34,101 @@ __all__ = [
-
-
-# ── Tool definitions ────────────────────────────────────────────────
+ 
+ 
+ # ── Tool definitions ────────────────────────────────────────────────
 -# The 14 built-in specs live in :mod:`._tool_specs` (single source);
 -# they are re-exported here as ``dispatch.TOOLS`` / ``dispatch.TOOLS_BY_NAME``.
 -
@@ -10830,13 +10674,13 @@ __all__ = [
 +]
 +
 +TOOLS_BY_NAME: dict[str, ToolSpec] = {t.name: t for t in TOOLS}
-
-
-class LintTool:
+ 
+ 
+ class LintTool:
 @@ -81,16 +153,6 @@ class LintTool:
-    ) -> list[str]:
-        return _build_command(self.spec, config=config, fix=_fix, path=_path, exclude=_exclude)
-
+     ) -> list[str]:
+         return _build_command(self.spec, config=config, fix=_fix, path=_path, exclude=_exclude)
+ 
 -    @beartype
 -    def build_format_command(
 -        self,
@@ -10847,22 +10691,22 @@ class LintTool:
 -    ) -> list[str]:
 -        return self.build_command(config=config, _fix=True, _path=_path, _exclude=_exclude)
 -
-    @beartype
-    def statistics_flags(self) -> list[str]:
-        return _build_statistics_flags(self.spec)
+     @beartype
+     def statistics_flags(self) -> list[str]:
+         return _build_statistics_flags(self.spec)
 @@ -104,7 +166,7 @@ class LintTool:
-
-
-# ── Per-tool strategy subclasses ─────────────────────────────────
+ 
+ 
+ # ── Per-tool strategy subclasses ─────────────────────────────────
 -# Seven built-ins have fundamentally different command shapes that
 +# Six built-ins have fundamentally different command shapes that
-# cannot be expressed via ToolSpec declarative fields alone.  Each
-# overrides ``build_command`` with tool-specific logic, eliminating
-# ``if spec.name ==`` branches from ``_build_command``.
+ # cannot be expressed via ToolSpec declarative fields alone.  Each
+ # overrides ``build_command`` with tool-specific logic, eliminating
+ # ``if spec.name ==`` branches from ``_build_command``.
 @@ -309,46 +371,8 @@ class _PylintTestsLintTool(LintTool):
-        return cmd
-
-
+         return cmd
+ 
+ 
 -class _RuffFormatLintTool(LintTool):
 -    # ``ruff format`` is check-only on normal passes; only phase 1a mutates.
 -
@@ -10900,39 +10744,39 @@ class LintTool:
 -        return self._build(mode=None, config=config, path=_path, exclude=_exclude)
 -
 -
-# Populate the strategy registry from the 14 built-ins.
-_STRATEGY_CLASSES: dict[str, type[LintTool]] = {
+ # Populate the strategy registry from the 14 built-ins.
+ _STRATEGY_CLASSES: dict[str, type[LintTool]] = {
 -    "ruff format": _RuffFormatLintTool,
-    "mypy.stubtest": _StubtestLintTool,
-    "pyright verify types": _VerifyTypesLintTool,
-    "detect-secrets": _DetectSecretsLintTool,
+     "mypy.stubtest": _StubtestLintTool,
+     "pyright verify types": _VerifyTypesLintTool,
+     "detect-secrets": _DetectSecretsLintTool,
 diff --git a/src/python_setup_lint/runner/dispatch.pyi b/src/python_setup_lint/runner/dispatch.pyi
 index 6fe65bb..7c312ba 100644
 --- a/src/python_setup_lint/runner/dispatch.pyi
 +++ b/src/python_setup_lint/runner/dispatch.pyi
 @@ -1,34 +1,20 @@
-"""Stub for :mod:`python_setup_lint.runner.dispatch`.
-
+ """Stub for :mod:`python_setup_lint.runner.dispatch`.
+ 
 -Seven built-ins override ``build_command`` for tool-specific command shapes
 -(``ruff format``, ``mypy.stubtest``, ``pyright verify types``,
 -``detect-secrets``, ``pylint``); the rest inherit the default delegation to
 +Six built-ins override ``build_command`` for tool-specific command shapes
 +(``mypy.stubtest``, ``pyright verify types``, ``detect-secrets``, ``pylint``);
 +the rest inherit the default delegation to
-:mod:`python_setup_lint.runner.cmd_build`.
-"""
-
-from collections.abc import Callable
-
+ :mod:`python_setup_lint.runner.cmd_build`.
+ """
+ 
+ from collections.abc import Callable
+ 
 -from ._tool_specs import TOOLS as TOOLS
 -from ._tool_specs import TOOLS_BY_NAME as TOOLS_BY_NAME
-from .types import RunnerConfig, ToolSpec
-
+ from .types import RunnerConfig, ToolSpec
+ 
 -EXPECTED_TOOL_NAMES: frozenset[str]
 -"""Names of all 14 built-in tools, derived from :data:`TOOLS`."""
 +TOOLS: list[ToolSpec]
 +"""All 14 tool specifications in execution order (built-ins)."""
-
+ 
 -FORMATTER_ONLY: frozenset[str]
 -"""Built-ins that only format (``ruff format``); exempt from parser coverage."""
 -
@@ -10949,13 +10793,13 @@ from .types import RunnerConfig, ToolSpec
 -``pyright verify types``, ``detect-secrets``, and ``ruff format``."""
 +TOOLS_BY_NAME: dict[str, ToolSpec]
 +"""Tool specs keyed by name for fast lookup (built-ins only)."""
-
-LINT_TOOLS: list[ToolSpec]
-"""Live registry of declared ``ToolSpec`` instances — built-ins plus any
+ 
+ LINT_TOOLS: list[ToolSpec]
+ """Live registry of declared ``ToolSpec`` instances — built-ins plus any
 @@ -73,14 +59,6 @@ class LintTool:
-        _path: str | None = None,
-        _exclude: str | None = None,
-    ) -> list[str]: ...
+         _path: str | None = None,
+         _exclude: str | None = None,
+     ) -> list[str]: ...
 -    def build_format_command(
 -        self,
 -        *,
@@ -10964,17 +10808,17 @@ LINT_TOOLS: list[ToolSpec]
 -        _exclude: str | None = None,
 -    ) -> list[str]:
 -        """Mutating command used only by the ``--fix`` phase-1a format pass."""
-    def statistics_flags(self) -> list[str]: ...
-    def parse_statistics(self, stdout: str, stderr: str) -> list[tuple[str, int]]: ...
-
+     def statistics_flags(self) -> list[str]: ...
+     def parse_statistics(self, stdout: str, stderr: str) -> list[tuple[str, int]]: ...
+ 
 diff --git a/src/python_setup_lint/runner/parsers.py b/src/python_setup_lint/runner/parsers.py
 index 82a62e0..6d7b67d 100644
 --- a/src/python_setup_lint/runner/parsers.py
 +++ b/src/python_setup_lint/runner/parsers.py
 @@ -4,16 +4,31 @@ import json
-import re
-from typing import TYPE_CHECKING, Any
-
+ import re
+ from typing import TYPE_CHECKING, Any
+ 
 +from ._record_parsers import (  # re-exported for backward compat; pylint: disable=useless-import-alias  # as-alias needed for mypy strict re-export
 +    _parse_mypy_records as _parse_mypy_records,
 +)
@@ -10996,7 +10840,7 @@ from typing import TYPE_CHECKING, Any
 +from ._record_parsers import (
 +    _parse_ty_records as _parse_ty_records,
 +)
-from ._record_parsers import (
+ from ._record_parsers import (
 -    _parse_mypy_records,
 -    _parse_pylint_records,
 -    _parse_pyright_check_records,
@@ -11005,85 +10849,85 @@ from ._record_parsers import (
 -    _parse_ty_records,
 -    _parse_yamllint_records,
 +    _parse_yamllint_records as _parse_yamllint_records,
-)
+ )
 -from ._record_types import Record  # re-exported via __all__ for the package surface
 +from ._record_types import Record  # re-exported for backward compat
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
+ 
+ if TYPE_CHECKING:
+     from collections.abc import Callable
 diff --git a/src/python_setup_lint/runner/types.pyi b/src/python_setup_lint/runner/types.pyi
 index b39c89d..5eaf4a5 100644
 --- a/src/python_setup_lint/runner/types.pyi
 +++ b/src/python_setup_lint/runner/types.pyi
 @@ -80,7 +80,7 @@ class RunnerConfig:
-        default_py_dirs: Default directories for pylint ``_find_py_files``
-            discovery when no ``--path`` is given.
-        tools_override: Optional list of tool names to run.  ``None``
+         default_py_dirs: Default directories for pylint ``_find_py_files``
+             discovery when no ``--path`` is given.
+         tools_override: Optional list of tool names to run.  ``None``
 -            runs all 14 default tools.  Unknown names raise
 +            runs all 13 default tools.  Unknown names raise
-            :class:`python_setup_lint.runner.extra_tools.ExtraToolsConfigError`
-            (T8 fail-fast) rather than silently running a subset.
-        tool_timeouts: Per-tool timeout overrides (seconds). Tool name → int.
+             :class:`python_setup_lint.runner.extra_tools.ExtraToolsConfigError`
+             (T8 fail-fast) rather than silently running a subset.
+         tool_timeouts: Per-tool timeout overrides (seconds). Tool name → int.
 diff --git a/src/python_setup_lint/testing.py b/src/python_setup_lint/testing.py
 index 4f5065c..3dd2295 100644
 --- a/src/python_setup_lint/testing.py
 +++ b/src/python_setup_lint/testing.py
 @@ -29,7 +29,7 @@ def _walk_and_release(
-    *,
-    file_path: str | None = None,
-    module_name: str = "",
+     *,
+     file_path: str | None = None,
+     module_name: str = "",
 -) -> list[Any]:  # release_messages() builds dynamic MessageTest objects; runtime-only .msg_id/.args require Any
 +) -> list[Any]:  # released pylint messages are dynamically typed; Any is the accurate contract
-    tc = _make_tc(checker_class)
-    module = astroid.parse(code, module_name=module_name)
-    if file_path is not None:
+     tc = _make_tc(checker_class)
+     module = astroid.parse(code, module_name=module_name)
+     if file_path is not None:
 diff --git a/src/python_setup_lint/testing.pyi b/src/python_setup_lint/testing.pyi
 index 0b2003c..1e4b022 100644
 --- a/src/python_setup_lint/testing.pyi
 +++ b/src/python_setup_lint/testing.pyi
 @@ -39,7 +39,7 @@ def _walk_and_release(
-    *,
-    file_path: str | None = None,
-    module_name: str = "",
+     *,
+     file_path: str | None = None,
+     module_name: str = "",
 -) -> list[Any]:  # release_messages() builds dynamic MessageTest objects; runtime-only .msg_id/.args require Any
 +) -> list[Any]:  # released pylint messages are dynamically typed; Any is the accurate contract
-    """Parse *code*, walk *checker_class* over it, return released messages.
-
-    Optionally set *file_path* for path-dependent logic (source-roots,
+     """Parse *code*, walk *checker_class* over it, return released messages.
+ 
+     Optionally set *file_path* for path-dependent logic (source-roots,
 diff --git a/tests/_golden.py b/tests/_golden.py
 index 1cf7e5d..387b4ac 100644
 --- a/tests/_golden.py
 +++ b/tests/_golden.py
 @@ -14,7 +14,6 @@ together so the two artifacts can never disagree.
-from __future__ import annotations
-
-import contextlib
+ from __future__ import annotations
+ 
+ import contextlib
 -import hashlib
-import io
-import json
-import os
+ import io
+ import json
+ import os
 @@ -33,7 +32,7 @@ __all__ = [
-    "SEMANTIC_ENV",
-    "UPDATE_ENV",
-    "Finding",
+     "SEMANTIC_ENV",
+     "UPDATE_ENV",
+     "Finding",
 -    "assert_golden_byte_identical",
 +    "assert_golden_snapshot",
-    "assert_matches_golden",
-    "assert_oracle_coverage",
-    "assert_tool_coverage",
+     "assert_matches_golden",
+     "assert_oracle_coverage",
+     "assert_tool_coverage",
 @@ -188,7 +187,7 @@ def tool_minimums(findings: Iterable[Finding]) -> dict[str, int]:
-    return {name: counts.get(name, 0) for name in sorted(names)}
-
-
+     return {name: counts.get(name, 0) for name in sorted(names)}
+ 
+ 
 -def collect_findings(project: Path, config: RunnerConfig) -> list[Finding]:
 +def collect_findings(project: Path, *, config: RunnerConfig) -> list[Finding]:
-    """Run the finding-producing lint tools on *project* and return normalized findings.
-
-    Mirrors ``run_lint`` (config overrides included) on the caller-owned copy,
+     """Run the finding-producing lint tools on *project* and return normalized findings.
+ 
+     Mirrors ``run_lint`` (config overrides included) on the caller-owned copy,
 @@ -389,27 +388,6 @@ def assert_matches_golden(findings: Sequence[Finding], *, golden_path: Path) ->
-        pytest.fail(_format_drift(added, removed, golden_path))
-
-
+         pytest.fail(_format_drift(added, removed, golden_path))
+ 
+ 
 -def assert_golden_byte_identical(golden_path: Path, *runs: Sequence[Finding]) -> None:
 -    """Assert every collected run serializes byte-identically to the committed golden.
 -
@@ -11105,13 +10949,13 @@ import os
 -    )
 -
 -
-def read_oracle_rules() -> list[str]:
-    """Read planted violation rule names from the retained ``violations.txt`` oracle.
-
+ def read_oracle_rules() -> list[str]:
+     """Read planted violation rule names from the retained ``violations.txt`` oracle.
+ 
 @@ -444,3 +422,16 @@ def assert_tool_coverage(findings: Iterable[Finding], minimums: Mapping[str, int
-    counts = Counter(finding["tool"] for finding in findings)
-    below = [(tool, minimums[tool], counts.get(tool, 0)) for tool in sorted(minimums) if counts.get(tool, 0) < minimums[tool]]
-    assert not below, f"tool finding counts below minimum: {below}"
+     counts = Counter(finding["tool"] for finding in findings)
+     below = [(tool, minimums[tool], counts.get(tool, 0)) for tool in sorted(minimums) if counts.get(tool, 0) < minimums[tool]]
+     assert not below, f"tool finding counts below minimum: {below}"
 +
 +
 +def assert_golden_snapshot(findings: Sequence[Finding], *, golden_path: Path) -> dict[str, int]:
@@ -11132,7 +10976,7 @@ index ae585fb..8ca0822 100644
 @@ -1,9 +1,8 @@
 -"""Single-source helpers for building and inspecting test projects.
 +"""Single-source project scaffolding shared by integration and runner tests.
-
+ 
 -Shared by the integration pipeline tests, the autofix conflict tests, and the
 -self-lint guards.  This module may import stdlib, ``python_setup_lint`` and
 -``tests._golden`` only — never ``tests.conftest`` or ``tests.integration`` — to
@@ -11140,25 +10984,25 @@ index ae585fb..8ca0822 100644
 +Each helper here used to be duplicated across ``tests/integration.py``,
 +``tests/conftest.py`` and ``tests/runner/_autofix_helpers.py``.  The copies
 +drifted (notably the git identities), so this module is the sole owner.
-"""
-
-from __future__ import annotations
+ """
+ 
+ from __future__ import annotations
 @@ -12,7 +11,6 @@ import logging
-import re
-import shutil
-import subprocess
+ import re
+ import shutil
+ import subprocess
 -import textwrap
-from pathlib import Path
-
-import pytest
+ from pathlib import Path
+ 
+ import pytest
 @@ -20,82 +18,25 @@ import pytest
-from python_setup_lint.runner import RunnerConfig
-from python_setup_lint.runner._config import _SHIPPED_CONFIG_FILES
-from python_setup_lint.setup import install
+ from python_setup_lint.runner import RunnerConfig
+ from python_setup_lint.runner._config import _SHIPPED_CONFIG_FILES
+ from python_setup_lint.setup import install
 -from tests._golden import Finding, collect_findings
-
+ 
 -SAMPLE_PROJECT = Path("tests/data/minimal_sample_project")
-
+ 
 -
 -def copy_sample_project(dest_parent: Path) -> Path:
 -    """Copy the minimal sample project to ``dest_parent/project`` and return it."""
@@ -11169,13 +11013,13 @@ from python_setup_lint.setup import install
 +    """Copy the minimal sample project under *tmp_path* and return its path."""
 +    dest = tmp_path / "project"
 +    shutil.copytree(Path("tests/data/minimal_sample_project"), dest)
-    return dest
-
-
-def git_init_and_stage(project: Path) -> None:
+     return dest
+ 
+ 
+ def git_init_and_stage(project: Path) -> None:
 -    """Initialise a git repo in *project* and stage every file (detect-secrets needs it)."""
 +    """Initialise a git repo in *project* with the detect-secrets identity and stage everything."""
-    subprocess.run(["git", "init"], cwd=project, capture_output=True, check=True)
+     subprocess.run(["git", "init"], cwd=project, capture_output=True, check=True)
 -    subprocess.run(
 -        ["git", "config", "user.email", "test@test"],
 -        cwd=project,
@@ -11190,9 +11034,9 @@ def git_init_and_stage(project: Path) -> None:
 -    )
 +    for key, value in (("user.email", "test@test"), ("user.name", "test")):
 +        subprocess.run(["git", "config", key, value], cwd=project, capture_output=True, check=True)
-    subprocess.run(["git", "add", "."], cwd=project, capture_output=True, check=True)
-
-
+     subprocess.run(["git", "add", "."], cwd=project, capture_output=True, check=True)
+ 
+ 
 -def shipped_config_paths() -> dict[str, Path]:
 -    """Build config_paths dict from the python-setup project root config/ dir."""
 -    config_root = Path("config")
@@ -11236,16 +11080,16 @@ def git_init_and_stage(project: Path) -> None:
 -    return collect_findings(project, make_runner_config(project))
 -
 -
-def git_init_bare(cwd: Path) -> None:
+ def git_init_bare(cwd: Path) -> None:
 -    """Initialise a git repo in *cwd* without staging anything."""
 +    """Initialise a quiet git repo with the autofix-test identity; nothing is staged."""
-    subprocess.run(["git", "init", "-q"], cwd=cwd, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@example.com"],
+     subprocess.run(["git", "init", "-q"], cwd=cwd, check=True, capture_output=True)
+     subprocess.run(
+         ["git", "config", "user.email", "test@example.com"],
 @@ -103,87 +44,74 @@ def git_init_bare(cwd: Path) -> None:
-        check=True,
-        capture_output=True,
-    )
+         check=True,
+         capture_output=True,
+     )
 -    subprocess.run(
 -        ["git", "config", "user.name", "Test"],
 -        cwd=cwd,
@@ -11261,18 +11105,18 @@ def git_init_bare(cwd: Path) -> None:
 -    p.write_text(content, encoding="utf-8")
 -    return p
 +    subprocess.run(["git", "config", "user.name", "Test"], cwd=cwd, check=True, capture_output=True)
-
-
-def stage_file(cwd: Path, rel: str) -> None:
+ 
+ 
+ def stage_file(cwd: Path, rel: str) -> None:
 -    """Stage a single file in *cwd*'s git index."""
 +    """Stage the single repo-relative path *rel* in the git repo at *cwd*."""
-    subprocess.run(["git", "add", rel], cwd=cwd, check=True, capture_output=True)
-
-
-def commit_all(cwd: Path, msg: str = "init") -> None:
+     subprocess.run(["git", "add", rel], cwd=cwd, check=True, capture_output=True)
+ 
+ 
+ def commit_all(cwd: Path, msg: str = "init") -> None:
 -    """Stage everything in *cwd* and commit it with *msg*."""
 +    """Stage every file in *cwd* and commit it with *msg*."""
-    subprocess.run(["git", "add", "."], cwd=cwd, check=True, capture_output=True)
+     subprocess.run(["git", "add", "."], cwd=cwd, check=True, capture_output=True)
 -    subprocess.run(
 -        ["git", "commit", "-q", "-m", msg],
 -        cwd=cwd,
@@ -11280,8 +11124,8 @@ def commit_all(cwd: Path, msg: str = "init") -> None:
 -        capture_output=True,
 -    )
 +    subprocess.run(["git", "commit", "-q", "-m", msg], cwd=cwd, check=True, capture_output=True)
-
-
+ 
+ 
 -_CONSUMER_PYPROJECT = textwrap.dedent("""\
 -    [project]
 -    name = "consumer"
@@ -11298,12 +11142,12 @@ def commit_all(cwd: Path, msg: str = "init") -> None:
 +        if candidate.is_file():
 +            paths[tool_label] = candidate.resolve()
 +    return paths
-
+ 
 -_SECRETS_BASELINE = '{"version":"1.0","plugins_used":[],"filters_used":[],"results":{},"generated_at":"2025-01-01T00:00:00Z"}\n'
-
+ 
 +def make_runner_config(project: Path) -> RunnerConfig:
 +    """Build a ``RunnerConfig`` for the sample project with shipped config paths.
-
+ 
 -def make_clean_consumer_project(project: Path) -> Path:
 -    """Create a minimal clean consumer project with a git repo at *project*."""
 -    project.mkdir()
@@ -11332,60 +11176,60 @@ def commit_all(cwd: Path, msg: str = "init") -> None:
 +        local_rumdl.write_text(shipped_rumdl.read_text().replace('"tests/data", ', ""))
 +        config_paths["rumdl check"] = local_rumdl
 +    return RunnerConfig(cwd=project, package_name="minimal_sample", config_paths=config_paths)
-
-
-def build_pylint_overlay_config(project: Path, disable_rule: str) -> Path:
+ 
+ 
+ def build_pylint_overlay_config(project: Path, disable_rule: str) -> Path:
 -    """Create a project-local ``.pylintrc`` disabling *disable_rule*; return its path.
 +    """Write a project-local ``.pylintrc`` disabling *disable_rule*; return its path.
-
+ 
 -    The rule is added to the shipped config's ``disable=`` list and removed
 -    from its ``enable=`` whitelist so the disable actually takes effect.
 +    The rule is added to ``disable=`` and removed from the shipped ``enable=``
 +    whitelist so the overlay bites regardless of enable-list churn.
-    """
+     """
 -    shipped_pylintrc = Path("config") / ".pylintrc"
 +    shipped_pylintrc = Path("config/.pylintrc")
-    assert shipped_pylintrc.is_file(), "Shipped pylintrc not found"
+     assert shipped_pylintrc.is_file(), "Shipped pylintrc not found"
 -    pylintrc_content = shipped_pylintrc.read_text()
 -
 -    pylintrc_content = pylintrc_content.replace("disable=", f"disable={disable_rule},")
 -    enable_match = re.search(r"^enable=(.+)", pylintrc_content, re.MULTILINE)
 +    content = shipped_pylintrc.read_text().replace("disable=", f"disable={disable_rule},")
 +    enable_match = re.search(r"^enable=(.+)", content, re.MULTILINE)
-    assert enable_match, "Could not find enable= line in pylintrc"
+     assert enable_match, "Could not find enable= line in pylintrc"
 -    enable_items = enable_match.group(1).split(",")
 -    new_enable = "enable=" + ",".join(item for item in enable_items if item != disable_rule)
 -    pylintrc_content = pylintrc_content[: enable_match.start()] + new_enable + pylintrc_content[enable_match.end() :]
 -
 +    filtered = [item for item in enable_match.group(1).split(",") if item != disable_rule]
 +    content = content[: enable_match.start()] + "enable=" + ",".join(filtered) + content[enable_match.end() :]
-    local_pylintrc = project / ".pylintrc"
+     local_pylintrc = project / ".pylintrc"
 -    local_pylintrc.write_text(pylintrc_content)
 +    if local_pylintrc.is_symlink():
 +        local_pylintrc.unlink()
 +    local_pylintrc.write_text(content)
-    return local_pylintrc
-
-
-def ensure_precommit_or_skip() -> None:
+     return local_pylintrc
+ 
+ 
+ def ensure_precommit_or_skip() -> None:
 -    """Skip the current test when the ``pre-commit`` binary is unavailable."""
 +    """Skip the calling test when the ``pre-commit`` binary is unavailable."""
-    try:
-        subprocess.run(["pre-commit", "--version"], capture_output=True, check=True)
-    except FileNotFoundError, subprocess.CalledProcessError:
+     try:
+         subprocess.run(["pre-commit", "--version"], capture_output=True, check=True)
+     except FileNotFoundError, subprocess.CalledProcessError:
 @@ -192,13 +120,19 @@ def ensure_precommit_or_skip() -> None:
-
-
-def install_twice_assert_idempotent(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+ 
+ 
+ def install_twice_assert_idempotent(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 -    """Run ``install`` twice with ``uv`` mocked; assert both runs succeed."""
 +    """Run ``install`` twice with network-free ``_run_uv``; assert both runs succeed."""
 +    import python_setup_lint.setup as _setup_mod
 +
 +    original_run_uv = _setup_mod._run_uv
-
-    def fake_run_uv(args: list[str], *, cwd: str | Path) -> tuple[int, str, str]:
-        return 0, "", ""
-
+ 
+     def fake_run_uv(args: list[str], *, cwd: str | Path) -> tuple[int, str, str]:
+         return 0, "", ""
+ 
 -    monkeypatch.setattr("python_setup_lint.setup._run_uv", fake_run_uv)
 -    rc1 = install(project)
 -    assert rc1 == 0, f"First install failed with exit code {rc1}"
@@ -11795,11 +11639,11 @@ index e64883c..ab45b20 100644
 +Tables here are pure data (no side effects, no `tmp_path`); row data is
 +free LOC and does NOT count against the per-file LOC gate. Helpers that
 +build astroid modules from source / assert message ids live here too.
-"""
+ """
 +# pylint: disable=too-many-lines  # data tables are free LOC per file docstring; parametrize rows don't count against per-file LOC gate
-
-from __future__ import annotations
-
+ 
+ from __future__ import annotations
+ 
 -from typing import TYPE_CHECKING
 +import inspect
 +from pathlib import Path
@@ -11811,8 +11655,8 @@ from __future__ import annotations
 +from pylint.testutils import CheckerTestCase
 +
 +from python_setup_lint.testing import _make_tc as _make_tc_factory
-
-if TYPE_CHECKING:
+ 
+ if TYPE_CHECKING:
 -    from pathlib import Path
 +    from pylint.checkers import BaseChecker
 +
@@ -12992,13 +12836,13 @@ if TYPE_CHECKING:
 +    else:
 +        tc.checker._coverage.stub_missing = {stub_missing_module}
 +    return tc, mock_node
-
-
-# ── shared subprocess-integration helpers ──
+ 
+ 
+ # ── shared subprocess-integration helpers ──
 @@ -73,3 +1256,138 @@ source-roots = ["{src}"]
-        check=False,
-    )
-    return result.stdout + result.stderr
+         check=False,
+     )
+     return result.stdout + result.stderr
 +
 +
 +# ── class-fidelity end-to-end rows ──
@@ -14625,18 +14469,18 @@ index bd72716..b2d01e0 100644
 --- a/tests/checkers/test_bare_except_comment_checker.py
 +++ b/tests/checkers/test_bare_except_comment_checker.py
 @@ -7,8 +7,6 @@ from __future__ import annotations
-
-from typing import Any
-
+ 
+ from typing import Any
+ 
 -import pytest
 -
-from python_setup_lint.checkers.conformance.bare_except_comment_checker import (
-    BareExceptCommentChecker,
-)
+ from python_setup_lint.checkers.conformance.bare_except_comment_checker import (
+     BareExceptCommentChecker,
+ )
 @@ -34,13 +32,6 @@ def _msg_ids(msgs: list[Any]) -> set[str]:
-    return {m.msg_id for m in msgs}
-
-
+     return {m.msg_id for m in msgs}
+ 
+ 
 -@pytest.fixture
 -def _semantic_disabled(monkeypatch: pytest.MonkeyPatch) -> None:  # pylint: disable=W9728  # test fixture: single place pinning SEMANTIC=0 across heuristic tests
 -    """Pin heuristic tests to the deterministic heuristic path (no NLP reranker)."""
@@ -14644,57 +14488,57 @@ from python_setup_lint.checkers.conformance.bare_except_comment_checker import (
 -
 -
 -@pytest.mark.usefixtures("_semantic_disabled")
-class TestDetectsBareExceptWithoutComment:
-    """Checker must emit W9738 for bare except without justification."""
-
+ class TestDetectsBareExceptWithoutComment:
+     """Checker must emit W9738 for bare except without justification."""
+ 
 @@ -81,7 +72,6 @@ except:
-        assert msgs[0].msg_id == "bare-except-comment"
-
-
+         assert msgs[0].msg_id == "bare-except-comment"
+ 
+ 
 -@pytest.mark.usefixtures("_semantic_disabled")
-class TestSkipsBareExceptWithComment:
-    """Checker must NOT flag bare except with justifying comment."""
-
+ class TestSkipsBareExceptWithComment:
+     """Checker must NOT flag bare except with justifying comment."""
+ 
 @@ -120,7 +110,6 @@ except Exception:  # expected during shutdown
-        assert len(msgs) == 0
-
-
+         assert len(msgs) == 0
+ 
+ 
 -@pytest.mark.usefixtures("_semantic_disabled")
-class TestSkipsBareExceptWithReraise:
-    """Checker must NOT flag bare except that re-raises."""
-
+ class TestSkipsBareExceptWithReraise:
+     """Checker must NOT flag bare except that re-raises."""
+ 
 @@ -160,7 +149,6 @@ except:
-        assert len(msgs) == 0
-
-
+         assert len(msgs) == 0
+ 
+ 
 -@pytest.mark.usefixtures("_semantic_disabled")
-class TestSkipsNamedExcept:
-    """Checker must NOT flag named except handlers (not bare)."""
-
+ class TestSkipsNamedExcept:
+     """Checker must NOT flag named except handlers (not bare)."""
+ 
 diff --git a/tests/checkers/test_beartype_checker.py b/tests/checkers/test_beartype_checker.py
 index 4f0c319..a2930f7 100644
 --- a/tests/checkers/test_beartype_checker.py
 +++ b/tests/checkers/test_beartype_checker.py
 @@ -1,8 +1,8 @@
-"""Unit tests for python_setup_lint.checkers.beartype_checker.
-
-Uses synthetic code strings parsed via astroid, walked over
+ """Unit tests for python_setup_lint.checkers.beartype_checker.
+ 
+ Uses synthetic code strings parsed via astroid, walked over
 -``BeartypeCoverageChecker``. Parametrize rows (src strings, file paths)
 -live in ``tests/checkers/_factories_beartype.py``.
 +``BeartypeCoverageChecker``.  Fixture src / file-path rows live in
 +``tests/checkers/_factories.py`` (free LOC, not counted against the gate).
-"""
-
-from __future__ import annotations
+ """
+ 
+ from __future__ import annotations
 @@ -15,7 +15,7 @@ from pylint.testutils import CheckerTestCase
-
-from python_setup_lint.checkers.conformance.beartype_checker import BeartypeCoverageChecker
-from python_setup_lint.testing import _make_tc as _make_tc_factory
+ 
+ from python_setup_lint.checkers.conformance.beartype_checker import BeartypeCoverageChecker
+ from python_setup_lint.testing import _make_tc as _make_tc_factory
 -from tests.checkers._factories_beartype import (
 +from tests.checkers._factories import (
-    _BEARTYPE_MISS_CASES,
-    _BEARTYPE_SKIP_CASES,
-    _BEARTYPE_SOURCE_ROOT_CASES,
+     _BEARTYPE_MISS_CASES,
+     _BEARTYPE_SKIP_CASES,
+     _BEARTYPE_SOURCE_ROOT_CASES,
 diff --git a/tests/checkers/test_decision_backend.py b/tests/checkers/test_decision_backend.py
 deleted file mode 100644
 index 464d2f1..0000000
@@ -15043,34 +14887,34 @@ index ded154c..dbe74d7 100644
 --- a/tests/checkers/test_no_try_import_checker.py
 +++ b/tests/checkers/test_no_try_import_checker.py
 @@ -1,8 +1,8 @@
-"""Unit tests for python_setup_lint.checkers.no_try_import_checker.
-
-Verifies the AST checker detects (and does not detect) the correct
+ """Unit tests for python_setup_lint.checkers.no_try_import_checker.
+ 
+ Verifies the AST checker detects (and does not detect) the correct
 -try/except+import patterns. Parametrize rows (src strings) live in
 -``tests/checkers/_factories_no_try_import.py``.
 +try/except+import patterns. All fixture src strings live in
 +``tests/checkers/_factories.py`` (free LOC, not counted against the gate).
-"""
-
-from __future__ import annotations
+ """
+ 
+ from __future__ import annotations
 @@ -11,12 +11,11 @@ from typing import Any
-
-import pytest
-
+ 
+ import pytest
+ 
 -from python_setup_lint.checkers.conformance import no_try_import_checker
-from python_setup_lint.checkers.conformance.no_try_import_checker import (
-    NoTryImportChecker,
-)
-from python_setup_lint.testing import _walk_and_release
+ from python_setup_lint.checkers.conformance.no_try_import_checker import (
+     NoTryImportChecker,
+ )
+ from python_setup_lint.testing import _walk_and_release
 -from tests.checkers._factories_no_try_import import (
 +from tests.checkers._factories import (
-    _NO_TRY_DETECT_CASES,
-    _NO_TRY_DO_NOT_DETECT_CASES,
-)
+     _NO_TRY_DETECT_CASES,
+     _NO_TRY_DO_NOT_DETECT_CASES,
+ )
 @@ -24,22 +23,6 @@ from tests.checkers._factories_no_try_import import (
-pytestmark = pytest.mark.no_external_api
-
-
+ pytestmark = pytest.mark.no_external_api
+ 
+ 
 -def test_sentence_transformers_is_no_longer_an_optional_import_pattern() -> None:
 -    """The reranker dependency was removed from the shipped package."""
 -    patterns: frozenset[str] = getattr(no_try_import_checker, "_OPTIONAL_IMPORT_PATTERNS", frozenset())
@@ -15087,9 +14931,9 @@ pytestmark = pytest.mark.no_external_api
 -    assert msgs[0].msg_id == "no-try-import"
 -
 -
-@pytest.mark.parametrize(
-    ("code", "expected_count", "expected_args"),
-    _NO_TRY_DETECT_CASES,
+ @pytest.mark.parametrize(
+     ("code", "expected_count", "expected_args"),
+     _NO_TRY_DETECT_CASES,
 diff --git a/tests/checkers/test_semantic_check.py b/tests/checkers/test_semantic_check.py
 index dbf3b14..8ac01a4 100644
 --- a/tests/checkers/test_semantic_check.py
@@ -15098,7 +14942,7 @@ index dbf3b14..8ac01a4 100644
 -"""Unit tests for ``python_setup_lint.checkers._semantic``.
 +# pylint: disable=too-many-lines  # 504 lines — test module for semantic NLP pipeline; splitting would lose shared fixture context
 +"""Unit tests for python_setup_lint.checkers._semantic.
-
+ 
 -The semantic pipeline is now a thin backend adapter: it resolves an optional
 -``DecisionBackend`` (or uses the injected one), maps its score through the
 -pinned ``0.5`` threshold, and memoizes one call per unique input/model pair.
@@ -15107,19 +14951,19 @@ index dbf3b14..8ac01a4 100644
 +
 +Tests that require network access (model download) are marked ``@pytest.mark.slow``.
 +Tests that hit the local model cache are **not** marked slow.
-"""
-
-from __future__ import annotations
-
+ """
+ 
+ from __future__ import annotations
+ 
 -import inspect
 -from collections.abc import Iterator
 -from pathlib import Path
 -from typing import Any
 +from collections.abc import Callable
 +from unittest.mock import patch
-
-import pytest
-
+ 
+ import pytest
+ 
 -from python_setup_lint.checkers import _decision_backend, _semantic
 -from python_setup_lint.checkers._semantic import (  # type: ignore[attr-defined]  # private test helper omitted from .pyi
 -    _reset_cache,
@@ -15148,13 +14992,13 @@ import pytest
 -    yield
 -    _reset_cache()
 +from python_setup_lint.checkers._base import check_if_meaningful
-
-
+ 
+ 
 -def test_signature_exposes_backend_keyword_defaulting_to_none() -> None:
 -    parameter = inspect.signature(semantic_check_if_meaningful).parameters.get("backend")
 +class TestImportErrorFallback:
 +    """When sentence_transformers is not installed, ImportError propagates."""
-
+ 
 -    assert parameter is not None
 -    assert parameter.default is None
 -    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
@@ -15166,31 +15010,31 @@ import pytest
 +        ):
 +            with pytest.raises(ImportError, match="No module named _semantic"):
 +                check_if_meaningful("circular import — PyLinter not available")
-
+ 
 +    @staticmethod
 +    def _make_blocking_import() -> Callable[..., object]:
 +        """Return a side-effect function that blocks _semantic imports."""
 +        original_import = __builtins__["__import__"]  # type: ignore[index]  # __builtins__ is a Module
-
+ 
 -def test_empty_primary_returns_false_without_calling_backend() -> None:
 -    backend = _RecordingBackend()
 +        def _mock_import(name: str, *args: object, **kwargs: object) -> object:
 +            if name == "python_setup_lint.checkers._semantic":
 +                raise ImportError("No module named _semantic")
 +            return original_import(name, *args, **kwargs)
-
+ 
 -    assert semantic_check_if_meaningful("", backend=backend) is False
 -    assert semantic_check_if_meaningful("   ", backend=backend) is False
 -    assert backend.calls == []
 +        return _mock_import
-
-
+ 
+ 
 -def test_loader_none_maps_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
 -    monkeypatch.setattr(_decision_backend, "get_backend", lambda: None)
 +# ── Default-user fallback (semantic returns None → heuristic) ────────
-
+ 
 -    assert semantic_check_if_meaningful("guarded by a lock", comment="guarded by a lock") is None
-
+ 
 +class TestDefaultUserFallback:
 +    """Default-user path: semantic returns None → heuristic fallback executes."""
 +
@@ -15207,7 +15051,7 @@ import pytest
 +        ):
 +            result = check_if_meaningful("circular import — PyLinter not available at runtime")
 +        assert result is True
-
+ 
 -@pytest.mark.parametrize(("score", "expected"), [(0.0, False), (0.499, False), (0.5, True), (1.0, True)])
 -def test_backend_score_maps_at_pinned_threshold(score: float, expected: bool) -> None:
 -    backend = _RecordingBackend(score=score)
@@ -15216,7 +15060,7 @@ import pytest
 +        from python_setup_lint.checkers._semantic import (  # type: ignore[attr-defined]  # private symbol removed from .pyi per M3(b); runtime import still works
 +            _reset_cache,
 +        )
-
+ 
 -    result = semantic_check_if_meaningful(
 -        "guarded by a lock",
 -        rule="W9704",
@@ -15356,7 +15200,7 @@ import pytest
 +            "fix later",
 +            "preexisting issue",
 +        ],
-    )
+     )
 -
 -    assert result is expected
 -
@@ -15718,9 +15562,9 @@ index a6f96c8..b3e21dd 100644
 --- a/tests/checkers/test_semantic_threshold.py
 +++ b/tests/checkers/test_semantic_threshold.py
 @@ -13,152 +13,123 @@ import pytest
-
-from python_setup_lint.checkers._base import check_if_meaningful
-
+ 
+ from python_setup_lint.checkers._base import check_if_meaningful
+ 
 -# ── Single deduped heuristic table ───────────────────────────────────
 -#
 -# ``(comment, expected)`` pairs merged from the former per-file packs:
@@ -15851,17 +15695,17 @@ from python_setup_lint.checkers._base import check_if_meaningful
 -    ("preexisting issue", False),
 -)
 +# ── Threshold test: 50+ calls ────────────────────────────────────────
-
-
-class TestSemanticThreshold:
+ 
+ 
+ class TestSemanticThreshold:
 -    """Exercises ``check_if_meaningful`` across the deduped heuristic table.
 +    """Exercises ``check_if_meaningful`` with >50 realistic comments.
-
-    The semantic NLP pipeline is disabled via environment variable so
-    the heuristic fallback is always used — no model download, no cache,
-    no ``@pytest.mark.slow`` marker needed.
-    """
-
+ 
+     The semantic NLP pipeline is disabled via environment variable so
+     the heuristic fallback is always used — no model download, no cache,
+     no ``@pytest.mark.slow`` marker needed.
+     """
+ 
 +    # ── Meaningful comments (should return True) ──────────────────────
 +
 +    @pytest.mark.parametrize(
@@ -15908,7 +15752,7 @@ class TestSemanticThreshold:
 +
 +    # ── Meaningless comments (should return False) ────────────────────
 +
-    @pytest.mark.parametrize(
+     @pytest.mark.parametrize(
 -        ("comment", "expected"),
 -        _HEURISTIC_CASES,
 -        ids=[comment for comment, _ in _HEURISTIC_CASES],
@@ -15968,13 +15812,13 @@ class TestSemanticThreshold:
 +            "temp",
 +            "tmp",
 +        ],
-    )
+     )
 -    def test_heuristic_outcome(self, comment: str, expected: bool) -> None:
 -        """The heuristic must reproduce each pinned outcome."""
 +    def test_meaningless_comment(self, comment: str) -> None:
 +        """A meaningless justification should fail."""
-        with patch.dict("os.environ", {"PYTHON_SETUP_LINT_SEMANTIC": "0"}):
-            result = check_if_meaningful(comment)
+         with patch.dict("os.environ", {"PYTHON_SETUP_LINT_SEMANTIC": "0"}):
+             result = check_if_meaningful(comment)
 -        assert result is expected, f"Expected {expected} for comment: {comment!r}"
 +        assert result is False, f"Expected False for meaningless comment: {comment!r}"
 diff --git a/tests/checkers/test_stub_checker.py b/tests/checkers/test_stub_checker.py
@@ -15982,166 +15826,166 @@ index f7a834a..2e73e18 100644
 --- a/tests/checkers/test_stub_checker.py
 +++ b/tests/checkers/test_stub_checker.py
 @@ -5,7 +5,7 @@ Invariant 3 (variable fidelity). Includes T1-pyi-exemption behavior
-preservation tests (init/main/conftest/trivial-data early returns —
-proven invariants per ``/memories/repo/T1-pyi-exemptions.md``).
-
+ preservation tests (init/main/conftest/trivial-data early returns —
+ proven invariants per ``/memories/repo/T1-pyi-exemptions.md``).
+ 
 -Parametrize rows live in ``tests/checkers/_factories_stub.py``.
 +Fixture-row data lives in ``tests/checkers/_factories.py`` (free LOC).
-"""
-
-from __future__ import annotations
+ """
+ 
+ from __future__ import annotations
 @@ -53,7 +53,7 @@ from python_setup_lint.checkers.stub.normalizer import (  # pylint: disable=wron
-from python_setup_lint.testing import (  # pylint: disable=wrong-import-position  # conditional import after module-level check
-    _make_tc as _make_tc_factory,
-)
+ from python_setup_lint.testing import (  # pylint: disable=wrong-import-position  # conditional import after module-level check
+     _make_tc as _make_tc_factory,
+ )
 -from tests.checkers._factories_stub import (  # pylint: disable=wrong-import-position  # conditional import after module-level check
 +from tests.checkers._factories import (  # pylint: disable=wrong-import-position  # conditional import after module-level check
-    _IMPORT_CONTRACT_CASES,
-    _IMPORT_USAGE_FIELD_CASES,
-    _IN_TYPE_CHECKING_BLOCK_NEGATIVE_CASES,
+     _IMPORT_CONTRACT_CASES,
+     _IMPORT_USAGE_FIELD_CASES,
+     _IN_TYPE_CHECKING_BLOCK_NEGATIVE_CASES,
 @@ -366,7 +366,7 @@ def test_emit_import_contract_violations(  # pylint: disable=too-many-positional
-    expected_msg_id: str | None,
-    expected_count: int,
-) -> None:
+     expected_msg_id: str | None,
+     expected_count: int,
+ ) -> None:
 -    from tests.checkers._factories_stub import setup_and_emit_import_contract
 +    from tests.checkers._factories import setup_and_emit_import_contract
-
-    _tc, msgs = setup_and_emit_import_contract(
-        target_module=target_module,
+ 
+     _tc, msgs = setup_and_emit_import_contract(
+         target_module=target_module,
 @@ -389,7 +389,7 @@ def test_emit_import_contract_violations(  # pylint: disable=too-many-positional
-
-@pytest.mark.parametrize(("star_policy", "expected_e97a3_count"), _STAR_POLICY_CASES)
-def test_star_import_policy_given_policy_then_expected_count(star_policy: str, expected_e97a3_count: int) -> None:
+ 
+ @pytest.mark.parametrize(("star_policy", "expected_e97a3_count"), _STAR_POLICY_CASES)
+ def test_star_import_policy_given_policy_then_expected_count(star_policy: str, expected_e97a3_count: int) -> None:
 -    from tests.checkers._factories_stub import (
 +    from tests.checkers._factories import (
-        _build_star_import_policy_state,
-        _star_usage_factory,
-    )
+         _build_star_import_policy_state,
+         _star_usage_factory,
+     )
 diff --git a/tests/checkers/test_stub_checker_callable.py b/tests/checkers/test_stub_checker_callable.py
 index 577761f..80dd9f2 100644
 --- a/tests/checkers/test_stub_checker_callable.py
 +++ b/tests/checkers/test_stub_checker_callable.py
 @@ -3,7 +3,7 @@
-Tests parameter descriptor extraction, callable comparison, and end-to-end
-pylint runs for signature mismatch detection.
-
+ Tests parameter descriptor extraction, callable comparison, and end-to-end
+ pylint runs for signature mismatch detection.
+ 
 -Parametrize rows live in ``tests/checkers/_factories_stub_callable.py``.
 +Fixture-row data lives in ``tests/checkers/_factories.py`` (free LOC).
-"""
-
-from __future__ import annotations
+ """
+ 
+ from __future__ import annotations
 @@ -23,8 +23,7 @@ from python_setup_lint.checkers.stub.fidelity import (  # type: ignore[attr-defi
-    _compare_return_annotations,
-    _extract_param_descriptors,
-)
+     _compare_return_annotations,
+     _extract_param_descriptors,
+ )
 -from tests.checkers._factories import _run_pylint
 -from tests.checkers._factories_stub_callable import (
 +from tests.checkers._factories import (
-    _CALLABLE_FIDELITY_INTEGRATION_CASES,
-    _COMPARE_ANNOTATION_CASES,
-    _COMPARE_DESCRIPTOR_CASES,
+     _CALLABLE_FIDELITY_INTEGRATION_CASES,
+     _COMPARE_ANNOTATION_CASES,
+     _COMPARE_DESCRIPTOR_CASES,
 @@ -33,6 +32,7 @@ from tests.checkers._factories_stub_callable import (
-    _EXTRACT_DEFAULT_CASES,
-    _EXTRACT_PARAM_CASES,
-    _EXTRACT_STRIP_SELF_CASES,
+     _EXTRACT_DEFAULT_CASES,
+     _EXTRACT_PARAM_CASES,
+     _EXTRACT_STRIP_SELF_CASES,
 +    _run_pylint,
-)
-
-pytestmark = pytest.mark.no_external_api
+ )
+ 
+ pytestmark = pytest.mark.no_external_api
 diff --git a/tests/checkers/test_stub_checker_class.py b/tests/checkers/test_stub_checker_class.py
 index 16c948d..fba07ae 100644
 --- a/tests/checkers/test_stub_checker_class.py
 +++ b/tests/checkers/test_stub_checker_class.py
 @@ -4,7 +4,7 @@ Tests class base comparison, public method delegation, class attribute
-comparison, ClassVar skip in class bodies, E97B1 (stub symbol missing from
-impl), and E97B2 (kind mismatch).
-
+ comparison, ClassVar skip in class bodies, E97B1 (stub symbol missing from
+ impl), and E97B2 (kind mismatch).
+ 
 -Parametrize rows live in ``tests/checkers/_factories_stub_class.py``.
 +Fixture-row data lives in ``tests/checkers/_factories.py`` (free LOC).
-"""
-
-from __future__ import annotations
+ """
+ 
+ from __future__ import annotations
 @@ -22,13 +22,13 @@ from python_setup_lint.checkers.stub.fidelity import (  # type: ignore[attr-defi
-    _normalize_bases,
-)
-from python_setup_lint.testing import _make_tc as _make_tc_factory
+     _normalize_bases,
+ )
+ from python_setup_lint.testing import _make_tc as _make_tc_factory
 -from tests.checkers._factories import _run_pylint
 -from tests.checkers._factories_stub_class import (
 +from tests.checkers._factories import (
-    _CLASS_FIDELITY_INTEGRATION_CASES,
-    _IS_PUBLIC_METHOD_CASES,
-    _KIND_MISMATCH_CASES,
-    _NORMALIZE_BASES_CASES,
-    _STUB_SYMBOL_MISSING_CASES,
+     _CLASS_FIDELITY_INTEGRATION_CASES,
+     _IS_PUBLIC_METHOD_CASES,
+     _KIND_MISMATCH_CASES,
+     _NORMALIZE_BASES_CASES,
+     _STUB_SYMBOL_MISSING_CASES,
 +    _run_pylint,
-    walk_stub_checker_with_pair,
-)
-
+     walk_stub_checker_with_pair,
+ )
+ 
 diff --git a/tests/checkers/test_stub_coverage.py b/tests/checkers/test_stub_coverage.py
 index 6c8703a..40ad4ce 100644
 --- a/tests/checkers/test_stub_coverage.py
 +++ b/tests/checkers/test_stub_coverage.py
 @@ -5,7 +5,7 @@ Exercises the private helpers directly (private-complex-unit category):
-``_is_trivial_test_data``, ``_has_main_block``, ``_is_under_source_root``,
-``_resolve_stub``, ``_index_stub_declarations``, ``emit_coverage_violations``.
-
+ ``_is_trivial_test_data``, ``_has_main_block``, ``_is_under_source_root``,
+ ``_resolve_stub``, ``_index_stub_declarations``, ``emit_coverage_violations``.
+ 
 -Parametrize rows live in ``tests/checkers/_factories_stub_coverage.py``.
 +Fixture-row data lives in ``tests/checkers/_factories.py`` (free LOC).
-"""
-
-from __future__ import annotations
+ """
+ 
+ from __future__ import annotations
 @@ -28,7 +28,7 @@ from python_setup_lint.checkers.stub.coverage import (  # type: ignore[attr-defi
-    _resolve_stub,
-    emit_coverage_violations,
-)
+     _resolve_stub,
+     emit_coverage_violations,
+ )
 -from tests.checkers._factories_stub_coverage import (
 +from tests.checkers._factories import (
-    _EMIT_COVERAGE_CASES,
-    _HAS_MAIN_BLOCK_CASES,
-    _IS_INIT_EXEMPT_CASES,
+     _EMIT_COVERAGE_CASES,
+     _HAS_MAIN_BLOCK_CASES,
+     _IS_INIT_EXEMPT_CASES,
 diff --git a/tests/checkers/test_stub_docstring_checker.py b/tests/checkers/test_stub_docstring_checker.py
 index 2d368fa..ccdd3aa 100644
 --- a/tests/checkers/test_stub_docstring_checker.py
 +++ b/tests/checkers/test_stub_docstring_checker.py
 @@ -1,7 +1,7 @@
-"""Unit tests for python_setup_lint.checkers.stub_docstring_checker.
-
-Tests docstring detection logic and full pipeline with stub_checker.
+ """Unit tests for python_setup_lint.checkers.stub_docstring_checker.
+ 
+ Tests docstring detection logic and full pipeline with stub_checker.
 -Parametrize rows (src strings) live in ``tests/checkers/_factories_stub_docstring.py``.
 +Fixture src rows live in ``tests/checkers/_factories.py`` (free LOC).
-"""
-
-from __future__ import annotations
+ """
+ 
+ from __future__ import annotations
 @@ -14,7 +14,7 @@ import pytest
-
-from python_setup_lint.checkers.stub.docstring_checker import StubDocstringChecker
-from python_setup_lint.testing import _make_tc as _make_tc_factory
+ 
+ from python_setup_lint.checkers.stub.docstring_checker import StubDocstringChecker
+ from python_setup_lint.testing import _make_tc as _make_tc_factory
 -from tests.checkers._factories_stub_docstring import (
 +from tests.checkers._factories import (
-    _DOCSTRING_DETECT_CASES,
-    _DOCSTRING_DOES_NOT_DETECT_CASES,
-    _DOCSTRING_NO_COMPANION_CASES,
+     _DOCSTRING_DETECT_CASES,
+     _DOCSTRING_DOES_NOT_DETECT_CASES,
+     _DOCSTRING_NO_COMPANION_CASES,
 diff --git a/tests/checkers/test_stub_normalizer.py b/tests/checkers/test_stub_normalizer.py
 index 163d005..792c1d2 100644
 --- a/tests/checkers/test_stub_normalizer.py
 +++ b/tests/checkers/test_stub_normalizer.py
 @@ -12,7 +12,7 @@ import astroid
-import pytest
-
-from python_setup_lint.checkers.stub.normalizer import AnnotationNormalizer
+ import pytest
+ 
+ from python_setup_lint.checkers.stub.normalizer import AnnotationNormalizer
 -from tests.checkers._factories_stub_normalizer import (
 +from tests.checkers._factories import (
-    _APPLY_REWRITES_CASES,
-    _AST_STRING_CASES,
-    _NORMALIZER_INFER_CASES,
+     _APPLY_REWRITES_CASES,
+     _AST_STRING_CASES,
+     _NORMALIZER_INFER_CASES,
 diff --git a/tests/checkers/test_suppression_justification_checker.py b/tests/checkers/test_suppression_justification_checker.py
 index a1a0a8d..e6415bd 100644
 --- a/tests/checkers/test_suppression_justification_checker.py
 +++ b/tests/checkers/test_suppression_justification_checker.py
 @@ -20,13 +20,6 @@ def _msg_ids(msgs: list[Any]) -> set[str]:
-    return {m.msg_id for m in msgs}
-
-
+     return {m.msg_id for m in msgs}
+ 
+ 
 -@pytest.fixture
 -def _semantic_disabled(monkeypatch: pytest.MonkeyPatch) -> None:  # pylint: disable=W9728  # test fixture: single place pinning SEMANTIC=0 across heuristic tests
 -    """Pin heuristic tests to the deterministic heuristic path (no NLP reranker)."""
@@ -16149,44 +15993,44 @@ index a1a0a8d..e6415bd 100644
 -
 -
 -@pytest.mark.usefixtures("_semantic_disabled")
-class TestJustifiedSuppressions:
-    """Checker must NOT flag suppressions with a technical reason."""
-
+ class TestJustifiedSuppressions:
+     """Checker must NOT flag suppressions with a technical reason."""
+ 
 @@ -68,7 +61,6 @@ def foo() -> None:
-        assert len(msgs) == 0, f"Expected no messages, got {msgs}"
-
-
+         assert len(msgs) == 0, f"Expected no messages, got {msgs}"
+ 
+ 
 -@pytest.mark.usefixtures("_semantic_disabled")
-class TestUnjustifiedSuppressions:
-    """Checker MUST flag suppressions without a technical reason."""
-
+ class TestUnjustifiedSuppressions:
+     """Checker MUST flag suppressions without a technical reason."""
+ 
 @@ -134,7 +126,6 @@ x = 1  # noqa: E501  # ok
-        assert len(msgs) == 1, f"Expected 1 message for real # noqa, got {msgs}"
-
-
+         assert len(msgs) == 1, f"Expected 1 message for real # noqa, got {msgs}"
+ 
+ 
 -@pytest.mark.usefixtures("_semantic_disabled")
-class TestDataStrings:
-    """Checker must NOT flag suppression patterns inside string literals."""
-
+ class TestDataStrings:
+     """Checker must NOT flag suppression patterns inside string literals."""
+ 
 @@ -222,7 +213,6 @@ x = 1
-        assert len(msgs) == 0, f"Expected 0 messages, got {msgs}"
-
-
+         assert len(msgs) == 0, f"Expected 0 messages, got {msgs}"
+ 
+ 
 -@pytest.mark.usefixtures("_semantic_disabled")
-class TestFunctionParamReturnAny:
-    # Checker must flag Any in function params/returns without per-line
-    # justification, but only under source roots (src/).  Test files are
+ class TestFunctionParamReturnAny:
+     # Checker must flag Any in function params/returns without per-line
+     # justification, but only under source roots (src/).  Test files are
 @@ -363,30 +353,38 @@ class C:
-        assert len(msgs) == 0, f"Expected no messages, got {msgs}"
-
-
+         assert len(msgs) == 0, f"Expected no messages, got {msgs}"
+ 
+ 
 -@pytest.mark.usefixtures("_semantic_disabled")
 -class TestAnyElementCodeEcho:
 -    """A reason that merely echoes the suppressed codes is not a justification."""
 +@pytest.mark.slow  # requires sentence-transformers download
 +class TestSuppressionRerankerPipeline:
 +    """Full-pipeline integration test for reranker path.
-
+ 
 -    def test_code_echo_on_any_element_is_rejected(self) -> None:
 -        """A trailing reason equal to the suppressed code is not a justification."""
 -        code = "x: Any = 1  # type: ignore[assignment]  # assignment\n"
@@ -16218,7 +16062,7 @@ class TestFunctionParamReturnAny:
 +        _reset_cache()
 +
 +        code = "x: Any = 1  # type: ignore  # pre-existing\n"
-        msgs = _walk_and_release(code, SuppressionJustificationChecker, file_path="src/mod.py")
+         msgs = _walk_and_release(code, SuppressionJustificationChecker, file_path="src/mod.py")
 -        assert len(msgs) == 1, f"Expected exactly one W9704 for {code!r}, got {msgs}"
 +        assert len(msgs) >= 1, f"Expected at least 1 W9704 for brush-off, got {len(msgs)}"
 +        assert "unjustified-suppression" in _msg_ids(msgs), f"Expected unjustified-suppression in {_msg_ids(msgs)}"
@@ -16229,13 +16073,13 @@ class TestFunctionParamReturnAny:
 +        from python_setup_lint.checkers._semantic import (  # type: ignore[attr-defined]  # private symbol removed from .pyi per M3(b); runtime import still works
 +            _reset_cache,
 +        )
-
+ 
 -    def test_real_reason_after_directive_is_accepted(self) -> None:
 -        code = "x: Any = 1  # type: ignore[assignment]  # carried from library httpx for type compatibility\n"
 +        _reset_cache()
 +
 +        code = "x: Any = 1  # type: ignore  # carried from library httpx for type compatibility\n"
-        msgs = _walk_and_release(code, SuppressionJustificationChecker, file_path="src/mod.py")
+         msgs = _walk_and_release(code, SuppressionJustificationChecker, file_path="src/mod.py")
 -        assert len(msgs) == 0, f"Expected no messages, got {msgs}"
 +        assert len(msgs) == 0, f"Expected 0 messages for meaningful justification, got {len(msgs)}"
 diff --git a/tests/conftest.py b/tests/conftest.py
@@ -16243,17 +16087,17 @@ index 3dcef10..8810975 100644
 --- a/tests/conftest.py
 +++ b/tests/conftest.py
 @@ -24,6 +24,7 @@ import pytest
-
-from python_setup_lint.runner import LINT_TOOLS, STRATEGIES, RunnerConfig
-from python_setup_lint.runner.extra_tools import _reset_extra_tools_cache
+ 
+ from python_setup_lint.runner import LINT_TOOLS, STRATEGIES, RunnerConfig
+ from python_setup_lint.runner.extra_tools import _reset_extra_tools_cache
 +from tests._project_helpers import shipped_config_paths as shipped_config_paths
-
-
-@pytest.fixture(autouse=True, scope="session")
+ 
+ 
+ @pytest.fixture(autouse=True, scope="session")
 @@ -59,13 +60,7 @@ def empty_project(tmp_path: Path) -> Path:
-
-
-@pytest.fixture(scope="session")
+ 
+ 
+ @pytest.fixture(scope="session")
 -def python_setup_checkout() -> Path:
 -    """Return this repo's checkout root — the ``--dev-path`` target for install tests."""
 -    return Path(__file__).resolve().parents[1]
@@ -16262,22 +16106,22 @@ from python_setup_lint.runner.extra_tools import _reset_extra_tools_cache
 -@pytest.fixture(scope="session")
 -def configured_project(tmp_path_factory: pytest.TempPathFactory, python_setup_checkout: Path) -> Path:
 +def configured_project(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Run install once on a session-scoped temp dir, return the configured dir.
-
-    Session-scoped — install runs once per test session.
+     """Run install once on a session-scoped temp dir, return the configured dir.
+ 
+     Session-scoped — install runs once per test session.
 @@ -89,7 +84,7 @@ def configured_project(tmp_path_factory: pytest.TempPathFactory, python_setup_ch
-    agents = d / "AGENTS.md"
-    agents.write_text("# Test Project\n\nSome content.\n")
-
+     agents = d / "AGENTS.md"
+     agents.write_text("# Test Project\n\nSome content.\n")
+ 
 -    rc = install(d, dev_path=str(python_setup_checkout))
 +    rc = install(d, dev_path="/home/slava/aiexp/python-setup")
-    assert rc == 0
-    return d
-
+     assert rc == 0
+     return d
+ 
 @@ -167,3 +162,9 @@ def isolated_runner_registries() -> Iterable[None]:
-def sample_project() -> Path:  # pylint: disable=trivial-wrapper  # fixture returning a constant path; readability over DRY
-    """Path to the minimal sample project with planted violations."""
-    return Path("tests/data/minimal_sample_project")
+ def sample_project() -> Path:  # pylint: disable=trivial-wrapper  # fixture returning a constant path; readability over DRY
+     """Path to the minimal sample project with planted violations."""
+     return Path("tests/data/minimal_sample_project")
 +
 +
 +# ── Helpers ─────────────────────────────────────────────────────────
@@ -16289,36 +16133,36 @@ index 66be014..e3e022b 100644
 --- a/tests/integration.py
 +++ b/tests/integration.py
 @@ -31,29 +31,49 @@ from tests._golden import (
-    SEMANTIC_ENV,
-    UPDATE_ENV,
-    Finding,
+     SEMANTIC_ENV,
+     UPDATE_ENV,
+     Finding,
 -    assert_golden_byte_identical,
 +    assert_golden_snapshot,
-    assert_matches_golden,
+     assert_matches_golden,
 -    assert_oracle_coverage,
 -    assert_tool_coverage,
 +    collect_findings,
-    finding_key,
+     finding_key,
 -    read_oracle_rules,
-    slice_tool_section,
+     slice_tool_section,
 -    tool_counts_path,
-)
-from tests._project_helpers import (
-    build_pylint_overlay_config,
+ )
+ from tests._project_helpers import (
+     build_pylint_overlay_config,
 -    collect_sample_findings,
-    copy_sample_project,
-    ensure_precommit_or_skip,
-    git_init_and_stage,
-    install_twice_assert_idempotent,
+     copy_sample_project,
+     ensure_precommit_or_skip,
+     git_init_and_stage,
+     install_twice_assert_idempotent,
 -    make_clean_consumer_project,
-    make_runner_config,
-)
-
+     make_runner_config,
+ )
+ 
 +# ── Helpers ────────────────────────────────────────────────────────────
 +
-GOLDEN_FINDINGS = Path(__file__).resolve().parent / "data" / "golden" / "minimal_sample_project_findings.json"
-
-
+ GOLDEN_FINDINGS = Path(__file__).resolve().parent / "data" / "golden" / "minimal_sample_project_findings.json"
+ 
+ 
 +def _make_consumer_project(tmp_path: Path, name: str) -> Path:
 +    """Create a minimal consumer project with git and lint prerequisites."""
 +    d = tmp_path / name
@@ -16342,24 +16186,24 @@ GOLDEN_FINDINGS = Path(__file__).resolve().parent / "data" / "golden" / "minimal
 +# ── Tests ─────────────────────────────────────────────────────────────
 +
 +
-class TestMinimalSampleProject:
-    """Integration tests exercising the full lint pipeline on the sample project."""
-
+ class TestMinimalSampleProject:
+     """Integration tests exercising the full lint pipeline on the sample project."""
+ 
 @@ -95,8 +115,8 @@ class TestMinimalSampleProject:
-        # ── No tool crashed ────────────────────────────────────────────
-        assert "[CRASH]" not in output, f"Tool crash detected in lint output:\n{output}\nThis must be fixed before committing."
-        # ── All tools executed (no SKIPPED for non-package_name reasons) ──
+         # ── No tool crashed ────────────────────────────────────────────
+         assert "[CRASH]" not in output, f"Tool crash detected in lint output:\n{output}\nThis must be fixed before committing."
+         # ── All tools executed (no SKIPPED for non-package_name reasons) ──
 -        skipped_lines = [l for l in output.splitlines() if "SKIPPED:" in l]
 -        unexpected_skipped = [l for l in skipped_lines if "package_name" not in l]
 +        skipped_lines = [line for line in output.splitlines() if "SKIPPED:" in line]
 +        unexpected_skipped = [line for line in skipped_lines if "package_name" not in line]
-        assert not unexpected_skipped, (
-            "Expected no tools to be skipped for non-package_name reasons.\n"
-            "Unexpected SKIPPED lines:\n" + "\n".join(unexpected_skipped)
+         assert not unexpected_skipped, (
+             "Expected no tools to be skipped for non-package_name reasons.\n"
+             "Unexpected SKIPPED lines:\n" + "\n".join(unexpected_skipped)
 @@ -110,16 +130,12 @@ class TestMinimalSampleProject:
-        # The first run lets ``ruff format`` rewrite its copy; the snapshot
-        # must observe the committed source, so it captures its own copy.
-        monkeypatch.setenv(SEMANTIC_ENV, "0")
+         # The first run lets ``ruff format`` rewrite its copy; the snapshot
+         # must observe the committed source, so it captures its own copy.
+         monkeypatch.setenv(SEMANTIC_ENV, "0")
 -        findings = collect_sample_findings(tmp_path / "golden")
 -        assert findings, "collect_findings returned no findings for the planted-violation sample project"
 -        assert_matches_golden(findings, golden_path=GOLDEN_FINDINGS)
@@ -16369,21 +16213,21 @@ class TestMinimalSampleProject:
 +        pristine = copy_sample_project(tmp_path / "golden")
 +        git_init_and_stage(pristine)
 +        findings = collect_findings(pristine, config=make_runner_config(pristine))
-
+ 
 -        # ── Determinism: a fresh-copy replay serializes byte-identically ──
 -        replay = collect_sample_findings(tmp_path / "golden-replay")
 -        assert_golden_byte_identical(GOLDEN_FINDINGS, findings, replay)
 +        minimums = assert_golden_snapshot(findings, golden_path=GOLDEN_FINDINGS)
 +        assert set(minimums) == tool_names, f"tool counts missing registered tools: {tool_names - set(minimums)}"
-
-        # ── Brush-off is flagged, carry-from is not ───────────────────
-        mod_findings = [f for f in findings if f["tool"] == "pylint" and f["file"] == "src/minimal_sample/mod.py"]
+ 
+         # ── Brush-off is flagged, carry-from is not ───────────────────
+         mod_findings = [f for f in findings if f["tool"] == "pylint" and f["file"] == "src/minimal_sample/mod.py"]
 @@ -159,26 +175,20 @@ class TestMinimalSampleProject:
-        project = copy_sample_project(tmp_path)
-        git_init_and_stage(project)
-
+         project = copy_sample_project(tmp_path)
+         git_init_and_stage(project)
+ 
 -        # Build a project-local .pylintrc that disables use-structlog.
-        config = make_runner_config(project)
+         config = make_runner_config(project)
 -        config_paths = config.config_paths
 -        assert config_paths is not None
 -        config_paths["pylint"] = build_pylint_overlay_config(project, "use-structlog")
@@ -16391,9 +16235,9 @@ class TestMinimalSampleProject:
 +            **(config.config_paths or {}),
 +            "pylint": build_pylint_overlay_config(project, "use-structlog"),
 +        }
-        rc = run_lint(config=config)
-        assert isinstance(rc, int)
-
+         rc = run_lint(config=config)
+         assert isinstance(rc, int)
+ 
 -        captured = capsys.readouterr()
 -        output = captured.out + captured.err
 -
@@ -16402,154 +16246,154 @@ class TestMinimalSampleProject:
 -        pylint_output = slice_tool_section(output, "[pylint]", "[pylint-pyi]")
 +        output = "".join(capsys.readouterr())
 +        pylint_output = slice_tool_section(output, "[pylint] FAILED", "[pylint-pyi]")
-
-        assert "use-structlog" not in pylint_output, (
-            "Expected 'use-structlog' to be disabled by config overlay in pylint output, but it still appears."
-        )
+ 
+         assert "use-structlog" not in pylint_output, (
+             "Expected 'use-structlog' to be disabled by config overlay in pylint output, but it still appears."
+         )
 -
 -        # Other violations should still be present in pylint output.
-        assert "unnamed-tuple-dict-value" in pylint_output, "Expected other violations to remain after config overlay."
-
-    def test_resetup_idempotent(
+         assert "unnamed-tuple-dict-value" in pylint_output, "Expected other violations to remain after config overlay."
+ 
+     def test_resetup_idempotent(
 @@ -206,12 +216,10 @@ class TestMinimalSampleProject:
-        project = copy_sample_project(tmp_path)
-        git_init_and_stage(project)
-
+         project = copy_sample_project(tmp_path)
+         git_init_and_stage(project)
+ 
 -        # Create .pre-commit-config.yaml from the template with a known rev.
-        from python_setup_lint._setup_precommit import _PRECOMMIT_TEMPLATE
-
-        (project / ".pre-commit-config.yaml").write_text(_PRECOMMIT_TEMPLATE.format(ruff_rev="v0.15.17"))
-
+         from python_setup_lint._setup_precommit import _PRECOMMIT_TEMPLATE
+ 
+         (project / ".pre-commit-config.yaml").write_text(_PRECOMMIT_TEMPLATE.format(ruff_rev="v0.15.17"))
+ 
 -        # Run pre-commit validate-config.
-        subprocess.run(
-            ["pre-commit", "validate-config"],
-            cwd=project,
+         subprocess.run(
+             ["pre-commit", "validate-config"],
+             cwd=project,
 @@ -228,19 +236,16 @@ class TestMinimalSampleProject:
-
-        Verifies install artifacts are created and lint runs without crashing.
-        """
+ 
+         Verifies install artifacts are created and lint runs without crashing.
+         """
 -        d = tmp_path / "consumer"
 -        make_clean_consumer_project(d)
 -        # Install
 +        d = _make_consumer_project(tmp_path, "consumer")
 +
-        rc = install(d, dev_path=str(Path.cwd()))
-        assert rc == 0, f"install failed with exit code {rc}"
+         rc = install(d, dev_path=str(Path.cwd()))
+         assert rc == 0, f"install failed with exit code {rc}"
 -
 -        # Verify install artifacts
-        assert (d / ".pre-commit-config.yaml").exists()
-        assert (d / "CodingRules.md").exists()
-        assert "<!-- python-setup:pre-commit -->" in (d / "AGENTS.md").read_text()
-
+         assert (d / ".pre-commit-config.yaml").exists()
+         assert (d / "CodingRules.md").exists()
+         assert "<!-- python-setup:pre-commit -->" in (d / "AGENTS.md").read_text()
+ 
 -        # Run lint
 -        rc = run_lint(config=RunnerConfig(cwd=d, tools_override=["ruff check", "mypy", "pylint"]))
 +        config = RunnerConfig(cwd=d, tools_override=["ruff check", "mypy", "pylint"])
 +        rc = run_lint(config=config)
-        # Lint may find violations in the minimal consumer project;
-        # we only assert it ran without crashing (exit code 0 or 2
-        # for pylint-found issues, not a crash).
+         # Lint may find violations in the minimal consumer project;
+         # we only assert it ran without crashing (exit code 0 or 2
+         # for pylint-found issues, not a crash).
 @@ -255,18 +260,14 @@ class TestMinimalSampleProject:
-        Skips the test if ``pre-commit`` is not available.
-        """
-        ensure_precommit_or_skip()
+         Skips the test if ``pre-commit`` is not available.
+         """
+         ensure_precommit_or_skip()
 -        d = tmp_path / "hooks"
 -        make_clean_consumer_project(d)
 +        d = _make_consumer_project(tmp_path, "hooks")
-
+ 
 -        # Install
-        rc = install(d, dev_path=str(Path.cwd()))
-        assert rc == 0, f"install failed with exit code {rc}"
-
+         rc = install(d, dev_path=str(Path.cwd()))
+         assert rc == 0, f"install failed with exit code {rc}"
+ 
 -        # Validate pre-commit config shape
-        assert_precommit_config_valid(d)
-        assert_precommit_hooks_shape(d)
-
+         assert_precommit_config_valid(d)
+         assert_precommit_hooks_shape(d)
+ 
 -        # Dry-run: pre-commit run --all-files --show-diff-on-failure
-        result: subprocess.CompletedProcess[str] | subprocess.CalledProcessError
-        try:
-            result = subprocess.run(
+         result: subprocess.CompletedProcess[str] | subprocess.CalledProcessError
+         try:
+             result = subprocess.run(
 @@ -283,11 +284,10 @@ class TestMinimalSampleProject:
-                exc.returncode,
-            )
-            result = exc
+                 exc.returncode,
+             )
+             result = exc
 -        # Dry-run should succeed (exit 0) or report hooks would change files (exit 1)
-        assert result.returncode in (0, 1), (
-            f"pre-commit dry-run failed (exit {result.returncode}):\n{result.stdout}\n{result.stderr}"
-        )
+         assert result.returncode in (0, 1), (
+             f"pre-commit dry-run failed (exit {result.returncode}):\n{result.stdout}\n{result.stderr}"
+         )
 -        # Output should mention the hooks we expect
 +
-        assert "ruff-format" in result.stdout or "ruff" in result.stdout, (
-            f"Expected ruff hooks in dry-run output:\n{result.stdout}"
-        )
+         assert "ruff-format" in result.stdout or "ruff" in result.stdout, (
+             f"Expected ruff hooks in dry-run output:\n{result.stdout}"
+         )
 @@ -343,7 +343,6 @@ class TestMinimalSampleProject:
-        project = copy_sample_project(tmp_path)
-        git_init_and_stage(project)
-
+         project = copy_sample_project(tmp_path)
+         git_init_and_stage(project)
+ 
 -        # ── Run ruff through the runner ──────────────────────────────
-        config = make_runner_config(project)
-        config.tools_override = ["ruff check"]
-        rc = run_lint(config=config, path=".")
+         config = make_runner_config(project)
+         config.tools_override = ["ruff check"]
+         rc = run_lint(config=config, path=".")
 @@ -352,10 +351,8 @@ class TestMinimalSampleProject:
-        captured = capsys.readouterr()
-        runner_output = captured.out + captured.err
-
+         captured = capsys.readouterr()
+         runner_output = captured.out + captured.err
+ 
 -        # Extract rule symbols from ``file:line:col: CODE message`` lines.
-        runner_rules = set(re.findall(r"^.*?:\d+:\d+: (\w+)", runner_output, re.MULTILINE))
-
+         runner_rules = set(re.findall(r"^.*?:\d+:\d+: (\w+)", runner_output, re.MULTILINE))
+ 
 -        # ── Run ruff directly as a subprocess ───────────────────────
-        ruff_config = (Path("config") / "ruff.toml").resolve()
-        assert ruff_config.is_file(), f"Shipped ruff config not found: {ruff_config}"
-
+         ruff_config = (Path("config") / "ruff.toml").resolve()
+         assert ruff_config.is_file(), f"Shipped ruff config not found: {ruff_config}"
+ 
 @@ -378,7 +375,6 @@ class TestMinimalSampleProject:
-        direct_output = result.stdout + result.stderr
-        direct_rules = set(re.findall(r"^.*?:\d+:\d+: (\w+)", direct_output, re.MULTILINE))
-
+         direct_output = result.stdout + result.stderr
+         direct_rules = set(re.findall(r"^.*?:\d+:\d+: (\w+)", direct_output, re.MULTILINE))
+ 
 -        # ── Assert parity ───────────────────────────────────────────
-        assert runner_rules == direct_rules, (
-            f"Rule symbol mismatch between runner and direct ruff check.\n"
-            f"Runner only: {runner_rules - direct_rules}\n"
+         assert runner_rules == direct_rules, (
+             f"Rule symbol mismatch between runner and direct ruff check.\n"
+             f"Runner only: {runner_rules - direct_rules}\n"
 @@ -403,8 +399,6 @@ class TestMinimalSampleProject:
-        - A mutation (re-enabling MD040) causes the fixture to be modified —
-          confirms the guard actually bites.
-        """
+         - A mutation (re-enabling MD040) causes the fixture to be modified —
+           confirms the guard actually bites.
+         """
 -        # ── Fixture: lines that would trigger MD013 (line-length >80) and
 -        #    MD040 (bare fenced code block without language tag).
-        fixture_text = textwrap.dedent("""\
-        # Test
-
+         fixture_text = textwrap.dedent("""\
+         # Test
+ 
 @@ -417,7 +411,6 @@ class TestMinimalSampleProject:
-        config_path = Path("config/rumdl.toml").resolve()
-        assert config_path.is_file(), "Shipped rumdl.toml not found"
-
+         config_path = Path("config/rumdl.toml").resolve()
+         assert config_path.is_file(), "Shipped rumdl.toml not found"
+ 
 -        # ── Primary: rumdl check --fix with shipped config (runner path) ─────
-        md_file = tmp_path / "test.md"
-        md_file.write_text(fixture_text)
-
+         md_file = tmp_path / "test.md"
+         md_file.write_text(fixture_text)
+ 
 @@ -428,7 +421,6 @@ class TestMinimalSampleProject:
-            timeout=30,
-            check=False,
-        )
+             timeout=30,
+             check=False,
+         )
 -        # Exit 0 means no issues found — the disabled rules stay silent.
-        assert proc.returncode == 0, (
-            f"rumdl check --fix with shipped config exited {proc.returncode}:\nstdout:{proc.stdout}\nstderr:{proc.stderr}"
-        )
+         assert proc.returncode == 0, (
+             f"rumdl check --fix with shipped config exited {proc.returncode}:\nstdout:{proc.stdout}\nstderr:{proc.stderr}"
+         )
 @@ -473,8 +465,6 @@ class TestMinimalSampleProject:
-        )
-
-        # ── Optional: rumdl fmt standalone ──────────────────────────────────
+         )
+ 
+         # ── Optional: rumdl fmt standalone ──────────────────────────────────
 -        #    Document whether it also respects the config (it does, as of
 -        #    rumdl 0.2.28 — both paths honor the disable list).
-        md_file3 = tmp_path / "test_fmt.md"
-        md_file3.write_text(fixture_text)
-        proc3 = subprocess.run(
+         md_file3 = tmp_path / "test_fmt.md"
+         md_file3.write_text(fixture_text)
+         proc3 = subprocess.run(
 diff --git a/tests/runner/_autofix_helpers.py b/tests/runner/_autofix_helpers.py
 index f4c7e38..917721b 100644
 --- a/tests/runner/_autofix_helpers.py
 +++ b/tests/runner/_autofix_helpers.py
 @@ -8,6 +8,15 @@ from pathlib import Path
-from python_setup_lint.runner import LINT_TOOLS, LintResult, RunnerConfig, ToolSpec
-from python_setup_lint.runner._autofix import _apply_autofix_conflict_aware
-from python_setup_lint.testing import fake_run_cmd_factory, make_lint_result
+ from python_setup_lint.runner import LINT_TOOLS, LintResult, RunnerConfig, ToolSpec
+ from python_setup_lint.runner._autofix import _apply_autofix_conflict_aware
+ from python_setup_lint.testing import fake_run_cmd_factory, make_lint_result
 +from tests._project_helpers import (
 +    commit_all as commit_all,
 +)
@@ -16559,13 +16403,13 @@ from python_setup_lint.testing import fake_run_cmd_factory, make_lint_result
 +from tests._project_helpers import (
 +    stage_file as stage_file,
 +)
-from tests.runner._factories import canned_results_all_tools, tmp_config
-
-_CANARY_LABEL = "python-setup:autofix-canary"
+ from tests.runner._factories import canned_results_all_tools, tmp_config
+ 
+ _CANARY_LABEL = "python-setup:autofix-canary"
 @@ -17,6 +26,18 @@ _FIX_TOOL_NAMES: frozenset[str] = frozenset(t.name for t in LINT_TOOLS if t.supp
-assert {"ruff check", "rumdl check", "ty check"} == _FIX_TOOL_NAMES, f"Built-in supports_fix set drifted: {_FIX_TOOL_NAMES!r}"
-
-
+ assert {"ruff check", "rumdl check", "ty check"} == _FIX_TOOL_NAMES, f"Built-in supports_fix set drifted: {_FIX_TOOL_NAMES!r}"
+ 
+ 
 +# ── Git scaffolding ───────────────────────────────────────────────
 +# ``git_init_bare``, ``stage_file`` and ``commit_all`` are owned by
 +# ``tests._project_helpers`` and re-exported here for the autofix tests.
@@ -16578,24 +16422,24 @@ assert {"ruff check", "rumdl check", "ty check"} == _FIX_TOOL_NAMES, f"Built-in 
 +    return p
 +
 +
-def _make_canned_fix_results(
-    *,
-    canary_e999_files: tuple[str, ...] = (),
+ def _make_canned_fix_results(
+     *,
+     canary_e999_files: tuple[str, ...] = (),
 diff --git a/tests/runner/_factories.py b/tests/runner/_factories.py
 index 5fa26c8..87a1490 100644
 --- a/tests/runner/_factories.py
 +++ b/tests/runner/_factories.py
 @@ -31,48 +31,12 @@ if TYPE_CHECKING:
-InstallFakeFn = Callable[..., Any]
-
-
+ InstallFakeFn = Callable[..., Any]
+ 
+ 
 -# The 14 built-in tool names — used both for the canned-results factory
 +# The 13 built-in tool names — used both for the canned-results factory
-# (dict-mode ``FakeRunCmd``) and for the "every tool dispatched" assertion
-# in the orchestration tests.
-ALL_TOOL_NAMES: frozenset[str] = frozenset(t.name for t in TOOLS)
-
-
+ # (dict-mode ``FakeRunCmd``) and for the "every tool dispatched" assertion
+ # in the orchestration tests.
+ ALL_TOOL_NAMES: frozenset[str] = frozenset(t.name for t in TOOLS)
+ 
+ 
 -# Hardcoded 14-name oracle shared by test_lint_runner.py and
 -# test_runner_format_contract.py — the literal lives in exactly one
 -# place so drift-catching assertions don't trip pylint R0801.
@@ -16632,9 +16476,9 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset(t.name for t in TOOLS)
 -    return frozenset(value)
 -
 -
-def canned_results_all_tools(
-    *,
-    exit_code: int = 0,
+ def canned_results_all_tools(
+     *,
+     exit_code: int = 0,
 diff --git a/tests/runner/_factories_extras.py b/tests/runner/_factories_extras.py
 index 270e4eb..a1f4269 100644
 --- a/tests/runner/_factories_extras.py
@@ -16643,17 +16487,17 @@ index 270e4eb..a1f4269 100644
 -"""Extra-tools, dispatch, and integration test data for python-setup runner tests.
 +# pylint: disable=too-many-lines  # 502 lines — factory data for 14 tools; splitting would lose context
 +"""Extra-tools, dispatch, and small parametrize tables for python-setup runner tests.
-
-Moved from ``_factories.py`` to keep each file under 500 lines (pylint C0302).
-"""
+ 
+ Moved from ``_factories.py`` to keep each file under 500 lines (pylint C0302).
+ """
 +# pylint: disable=too-many-lines  # test factory module; parametrized cases need space
-
-from __future__ import annotations
-
+ 
+ from __future__ import annotations
+ 
 @@ -369,25 +371,16 @@ CALLS_CAPTURED_CASES: list[ParameterSet] = [
-]
-
-# Smoke-integration invariant table.
+ ]
+ 
+ # Smoke-integration invariant table.
 -
 -
 -def _expected_dispatched_tool_count(*, skipped: frozenset[str] = frozenset()) -> int:
@@ -16663,33 +16507,33 @@ from __future__ import annotations
 -    return len(runner_registry_constant("EXPECTED_TOOL_NAMES") - skipped)
 -
 -
-RUN_LINT_FAKE_INVARIANT_CASES: list[ParameterSet] = [
-    pytest.param(
-        {"path": "src/python_setup_lint/runner.py"},
+ RUN_LINT_FAKE_INVARIANT_CASES: list[ParameterSet] = [
+     pytest.param(
+         {"path": "src/python_setup_lint/runner.py"},
 -        lambda f: len(f.calls) == _expected_dispatched_tool_count() and all(len(c.cmd) > 0 and c.label for c in f.calls),
 +        lambda f: len(f.calls) == 14 and all(len(c.cmd) > 0 and c.label for c in f.calls),
-        id="all_14_tools_dispatched",
-    ),
-    pytest.param(
-        {"path": "src/python_setup_lint/runner.py", "fix": True},
-        lambda f: all(
+         id="all_14_tools_dispatched",
+     ),
+     pytest.param(
+         {"path": "src/python_setup_lint/runner.py", "fix": True},
+         lambda f: all(
 -            any("--fix" in c.cmd for c in f.calls if c.label == name) for name in ("ruff check", "rumdl check", "ty check")
 +            any("--fix" in c.cmd for c in f.calls if c.label == name) for name in {"ruff check", "rumdl check", "ty check"}
-        ),
-        id="fix_flag_propagates_to_supports_fix_labels",
-    ),
+         ),
+         id="fix_flag_propagates_to_supports_fix_labels",
+     ),
 @@ -403,10 +396,107 @@ RUN_LINT_FAKE_INVARIANT_CASES: list[ParameterSet] = [
-    pytest.param(
-        {"package_name": None, "path": "src/python_setup_lint/runner.py"},
-        lambda f: (
+     pytest.param(
+         {"package_name": None, "path": "src/python_setup_lint/runner.py"},
+         lambda f: (
 -            len(f.calls) == _expected_dispatched_tool_count(skipped=frozenset({"mypy.stubtest", "pyright verify types"}))
 +            len(f.calls) == 12
-            and "mypy.stubtest" not in {c.label for c in f.calls}
-            and "pyright verify types" not in {c.label for c in f.calls}
-        ),
-        id="package_name_none_skips_stubtest_verifytypes",
-    ),
-]
+             and "mypy.stubtest" not in {c.label for c in f.calls}
+             and "pyright verify types" not in {c.label for c in f.calls}
+         ),
+         id="package_name_none_skips_stubtest_verifytypes",
+     ),
+ ]
 +
 +# ── Small parametrize tables ──────────────────────────────────────
 +
@@ -16910,241 +16754,241 @@ index 67a0aac..ce87004 100644
 --- a/tests/runner/test_autofix_conflict.py
 +++ b/tests/runner/test_autofix_conflict.py
 @@ -50,17 +50,15 @@ from python_setup_lint.runner._autofix import (
-    _ruff_parseability_errors,
-)
-from python_setup_lint.testing import fake_run_cmd_factory, make_lint_result
+     _ruff_parseability_errors,
+ )
+ from python_setup_lint.testing import fake_run_cmd_factory, make_lint_result
 -from tests._project_helpers import (
 -    commit_all,
 -    git_init_bare,
 -    stage_file,
 -    write_project_file,
 -)
-from tests.runner._autofix_helpers import (
-    _CANARY_LABEL,
-    _FIX_TOOL_NAMES,
-    _make_canned_fix_results,
-    _PostFixFakeRunCmd,
+ from tests.runner._autofix_helpers import (
+     _CANARY_LABEL,
+     _FIX_TOOL_NAMES,
+     _make_canned_fix_results,
+     _PostFixFakeRunCmd,
 +    _write_file,
 +    commit_all,
 +    git_init_bare,
 +    stage_file,
-)
-from tests.runner._factories import (
-    canned_results_all_tools,
+ )
+ from tests.runner._factories import (
+     canned_results_all_tools,
 @@ -85,14 +83,14 @@ class TestGitChangedFiles:
-        created (untracked) files do NOT appear in ``git diff --name-only``.
-        """
-        git_init_bare(tmp_path)
+         created (untracked) files do NOT appear in ``git diff --name-only``.
+         """
+         git_init_bare(tmp_path)
 -        write_project_file(tmp_path, "staged.py", "x = 1\n")
 -        write_project_file(tmp_path, "unstaged.py", "x = 1\n")
 +        _write_file(tmp_path, "staged.py", "x = 1\n")
 +        _write_file(tmp_path, "unstaged.py", "x = 1\n")
-        commit_all(tmp_path)
-        # Staged: edit + stage (without committing).
+         commit_all(tmp_path)
+         # Staged: edit + stage (without committing).
 -        write_project_file(tmp_path, "staged.py", "y = 2\n")
 +        _write_file(tmp_path, "staged.py", "y = 2\n")
-        stage_file(tmp_path, "staged.py")
-        # Unstaged: edit tracked file (no ``git add``).
+         stage_file(tmp_path, "staged.py")
+         # Unstaged: edit tracked file (no ``git add``).
 -        write_project_file(tmp_path, "unstaged.py", "z = 3\n")
 +        _write_file(tmp_path, "unstaged.py", "z = 3\n")
-        assert "staged.py" in _git_changed_files(tmp_path, staged=True)
-        assert "unstaged.py" not in _git_changed_files(tmp_path, staged=True)
-        assert "unstaged.py" in _git_changed_files(tmp_path, staged=False)
+         assert "staged.py" in _git_changed_files(tmp_path, staged=True)
+         assert "unstaged.py" not in _git_changed_files(tmp_path, staged=True)
+         assert "unstaged.py" in _git_changed_files(tmp_path, staged=False)
 @@ -105,12 +103,12 @@ class TestGitChangedFiles:
-    ) -> None:
-        """A file with staged AND unstaged changes appears in BOTH sets."""
-        git_init_bare(tmp_path)
+     ) -> None:
+         """A file with staged AND unstaged changes appears in BOTH sets."""
+         git_init_bare(tmp_path)
 -        write_project_file(tmp_path, "f.py", "v1\n")
 +        _write_file(tmp_path, "f.py", "v1\n")
-        commit_all(tmp_path)
-        # Edit + stage; then edit again without staging → in BOTH sets.
+         commit_all(tmp_path)
+         # Edit + stage; then edit again without staging → in BOTH sets.
 -        write_project_file(tmp_path, "f.py", "v2\n")
 +        _write_file(tmp_path, "f.py", "v2\n")
-        stage_file(tmp_path, "f.py")
+         stage_file(tmp_path, "f.py")
 -        write_project_file(tmp_path, "f.py", "v3\n")
 +        _write_file(tmp_path, "f.py", "v3\n")
-        staged = _git_changed_files(tmp_path, staged=True)
-        unstaged = _git_changed_files(tmp_path, staged=False)
-        assert "f.py" in staged
+         staged = _git_changed_files(tmp_path, staged=True)
+         unstaged = _git_changed_files(tmp_path, staged=False)
+         assert "f.py" in staged
 @@ -189,7 +187,7 @@ class TestAutofixTargetPaths:
-
-    def test_autofix_target_paths_given_explicit_path_then_overrides_default(self, tmp_path: Path) -> None:
-        """When ``--path`` is given and the spec supports_path, that path is it."""
+ 
+     def test_autofix_target_paths_given_explicit_path_then_overrides_default(self, tmp_path: Path) -> None:
+         """When ``--path`` is given and the spec supports_path, that path is it."""
 -        write_project_file(tmp_path, "src/main.py", "x = 1\n")
 +        _write_file(tmp_path, "src/main.py", "x = 1\n")
-        spec = ToolSpec(
-            "ruff check",
-            ["ruff", "check"],
+         spec = ToolSpec(
+             "ruff check",
+             ["ruff", "check"],
 @@ -200,8 +198,8 @@ class TestAutofixTargetPaths:
-
-    def test_autofix_target_paths_given_no_path_then_uses_default(self, tmp_path: Path) -> None:
-        """No ``--path`` → ``spec.default_paths`` is the seed."""
+ 
+     def test_autofix_target_paths_given_no_path_then_uses_default(self, tmp_path: Path) -> None:
+         """No ``--path`` → ``spec.default_paths`` is the seed."""
 -        write_project_file(tmp_path, "src/a.py", "x = 1\n")
 -        write_project_file(tmp_path, "src/b.py", "y = 2\n")
 +        _write_file(tmp_path, "src/a.py", "x = 1\n")
 +        _write_file(tmp_path, "src/b.py", "y = 2\n")
-        spec = ToolSpec("ruff check", ["ruff", "check"], supports_path=True, default_paths=["src/"])
-        result = _autofix_target_paths(spec, config=tmp_config(tmp_path), path=None)
-        assert set(result) >= {"src/a.py", "src/b.py"}
+         spec = ToolSpec("ruff check", ["ruff", "check"], supports_path=True, default_paths=["src/"])
+         result = _autofix_target_paths(spec, config=tmp_config(tmp_path), path=None)
+         assert set(result) >= {"src/a.py", "src/b.py"}
 @@ -213,8 +211,8 @@ class TestAutofixTargetPaths:
-
-    def test_autofix_target_paths_given_glob_then_expands(self, tmp_path: Path) -> None:
-        """``config/*.py`` glob expands to all matching python files."""
+ 
+     def test_autofix_target_paths_given_glob_then_expands(self, tmp_path: Path) -> None:
+         """``config/*.py`` glob expands to all matching python files."""
 -        write_project_file(tmp_path, "config/a.py", "")
 -        write_project_file(tmp_path, "config/b.py", "")
 +        _write_file(tmp_path, "config/a.py", "")
 +        _write_file(tmp_path, "config/b.py", "")
-        spec = ToolSpec("test", ["t"], supports_path=True, default_paths=["config/*.py"])
-        result = _autofix_target_paths(spec, config=tmp_config(tmp_path), path=None)
-        assert sorted(result) == ["config/a.py", "config/b.py"]
+         spec = ToolSpec("test", ["t"], supports_path=True, default_paths=["config/*.py"])
+         result = _autofix_target_paths(spec, config=tmp_config(tmp_path), path=None)
+         assert sorted(result) == ["config/a.py", "config/b.py"]
 @@ -308,11 +306,11 @@ class TestAutofixObservability:
-    ) -> None:
-        """Stderr skip line: ``[<tool>] autofix skipped for <file>: staged+unstaged conflict``."""
-        git_init_bare(tmp_path)
+     ) -> None:
+         """Stderr skip line: ``[<tool>] autofix skipped for <file>: staged+unstaged conflict``."""
+         git_init_bare(tmp_path)
 -        write_project_file(tmp_path, "f.py", "x = 1\n")
 +        _write_file(tmp_path, "f.py", "x = 1\n")
-        commit_all(tmp_path)
+         commit_all(tmp_path)
 -        write_project_file(tmp_path, "f.py", "y = 2\n")
 +        _write_file(tmp_path, "f.py", "y = 2\n")
-        stage_file(tmp_path, "f.py")
+         stage_file(tmp_path, "f.py")
 -        write_project_file(tmp_path, "f.py", "z = 3\n")
 +        _write_file(tmp_path, "f.py", "z = 3\n")
-        canned = _make_canned_fix_results()
-        fake = fake_run_cmd_factory(canned)
-        _apply_autofix_conflict_aware(
+         canned = _make_canned_fix_results()
+         fake = fake_run_cmd_factory(canned)
+         _apply_autofix_conflict_aware(
 @@ -331,7 +329,7 @@ class TestAutofixObservability:
-        """Stderr revert line: ``[<tool>] autofix reverted <file>: E999 after fix``."""
-        original = "x = 1\n"
-        post_fix = "x = 2 broken"
+         """Stderr revert line: ``[<tool>] autofix reverted <file>: E999 after fix``."""
+         original = "x = 1\n"
+         post_fix = "x = 2 broken"
 -        target = write_project_file(tmp_path, "src/main.py", original)
 +        target = _write_file(tmp_path, "src/main.py", original)
-        canned = _make_canned_fix_results(canary_e999_files=("src/main.py",))
-        wrapped = _PostFixFakeRunCmd(
-            fake_run_cmd_factory(canned),
+         canned = _make_canned_fix_results(canary_e999_files=("src/main.py",))
+         wrapped = _PostFixFakeRunCmd(
+             fake_run_cmd_factory(canned),
 diff --git a/tests/runner/test_autofix_conflict_apply.py b/tests/runner/test_autofix_conflict_apply.py
 index 35c9d41..a2e95bd 100644
 --- a/tests/runner/test_autofix_conflict_apply.py
 +++ b/tests/runner/test_autofix_conflict_apply.py
 @@ -9,17 +9,15 @@ import pytest
-from python_setup_lint.runner import LINT_TOOLS, ToolSpec
-from python_setup_lint.runner._autofix import _apply_autofix_conflict_aware
-from python_setup_lint.testing import fake_run_cmd_factory
+ from python_setup_lint.runner import LINT_TOOLS, ToolSpec
+ from python_setup_lint.runner._autofix import _apply_autofix_conflict_aware
+ from python_setup_lint.testing import fake_run_cmd_factory
 -from tests._project_helpers import (
 -    commit_all,
 -    git_init_bare,
 -    stage_file,
 -    write_project_file,
 -)
-from tests.runner._autofix_helpers import (
-    _CANARY_LABEL,
-    _make_canned_fix_results,
-    _PostFixFakeRunCmd,
-    _setup_e999_canary_revert,
+ from tests.runner._autofix_helpers import (
+     _CANARY_LABEL,
+     _make_canned_fix_results,
+     _PostFixFakeRunCmd,
+     _setup_e999_canary_revert,
 +    _write_file,
 +    commit_all,
 +    git_init_bare,
 +    stage_file,
-)
-from tests.runner._factories import tmp_config
-
+ )
+ from tests.runner._factories import tmp_config
+ 
 @@ -49,7 +47,7 @@ class TestApplyAutofixConflictAware:
-        pass), AND (b) the canary fired once with the canary label (proves
-        the parseability-canary seam ran end-to-end).
-        """
+         pass), AND (b) the canary fired once with the canary label (proves
+         the parseability-canary seam ran end-to-end).
+         """
 -        write_project_file(tmp_path, "src/main.py", "import os\n")
 +        _write_file(tmp_path, "src/main.py", "import os\n")
-        # No git repo → both diff sets empty → no skip, no revert.
-        # The fake is dict-mode so unknown labels (the canary label) also
-        # return a zero-exit empty result by default — that's correct for
+         # No git repo → both diff sets empty → no skip, no revert.
+         # The fake is dict-mode so unknown labels (the canary label) also
+         # return a zero-exit empty result by default — that's correct for
 @@ -81,9 +79,9 @@ class TestApplyAutofixConflictAware:
-    ) -> None:
-        """File staged only → autofix applies; no skip line; no revert."""
-        git_init_bare(tmp_path)
+     ) -> None:
+         """File staged only → autofix applies; no skip line; no revert."""
+         git_init_bare(tmp_path)
 -        write_project_file(tmp_path, "committed.py", "x = 1\n")
 +        _write_file(tmp_path, "committed.py", "x = 1\n")
-        commit_all(tmp_path)
+         commit_all(tmp_path)
 -        write_project_file(tmp_path, "staged.py", "y = 2\n")
 +        _write_file(tmp_path, "staged.py", "y = 2\n")
-        stage_file(tmp_path, "staged.py")
-        fake = fake_run_cmd_factory(_make_canned_fix_results())
-        _apply_autofix_conflict_aware(
+         stage_file(tmp_path, "staged.py")
+         fake = fake_run_cmd_factory(_make_canned_fix_results())
+         _apply_autofix_conflict_aware(
 @@ -103,9 +101,9 @@ class TestApplyAutofixConflictAware:
-    ) -> None:
-        """File unstaged only → autofix applies; no skip line; no revert."""
-        git_init_bare(tmp_path)
+     ) -> None:
+         """File unstaged only → autofix applies; no skip line; no revert."""
+         git_init_bare(tmp_path)
 -        write_project_file(tmp_path, "committed.py", "x = 1\n")
 +        _write_file(tmp_path, "committed.py", "x = 1\n")
-        commit_all(tmp_path)
+         commit_all(tmp_path)
 -        write_project_file(tmp_path, "unstaged.py", "y = 2\n")  # no git add
 +        _write_file(tmp_path, "unstaged.py", "y = 2\n")  # no git add
-        fake = fake_run_cmd_factory(_make_canned_fix_results())
-        _apply_autofix_conflict_aware(
-            self._make_spec(),
+         fake = fake_run_cmd_factory(_make_canned_fix_results())
+         _apply_autofix_conflict_aware(
+             self._make_spec(),
 @@ -124,11 +122,11 @@ class TestApplyAutofixConflictAware:
-    ) -> None:
-        """File in BOTH staged and unstaged → autofix skipped with stderr line."""
-        git_init_bare(tmp_path)
+     ) -> None:
+         """File in BOTH staged and unstaged → autofix skipped with stderr line."""
+         git_init_bare(tmp_path)
 -        write_project_file(tmp_path, "f.py", "x = 1\n")
 +        _write_file(tmp_path, "f.py", "x = 1\n")
-        commit_all(tmp_path)
+         commit_all(tmp_path)
 -        write_project_file(tmp_path, "f.py", "y = 2\n")
 +        _write_file(tmp_path, "f.py", "y = 2\n")
-        stage_file(tmp_path, "f.py")
+         stage_file(tmp_path, "f.py")
 -        write_project_file(tmp_path, "f.py", "z = 3\n")  # unstaged overlay on the staged state
 +        _write_file(tmp_path, "f.py", "z = 3\n")  # unstaged overlay on the staged state
-        fake = fake_run_cmd_factory(_make_canned_fix_results())
-        # The conflict detection happens BEFORE the fix tool runs — but the
-        # helper still calls run_cmd (the tool's pass on the safe-to-fix
+         fake = fake_run_cmd_factory(_make_canned_fix_results())
+         # The conflict detection happens BEFORE the fix tool runs — but the
+         # helper still calls run_cmd (the tool's pass on the safe-to-fix
 @@ -169,7 +167,7 @@ class TestApplyAutofixConflictAware:
-        """
-        original = "x = 1  # original\n"
-        post_fix = "x = 2  # fixed-broken\n"
+         """
+         original = "x = 1  # original\n"
+         post_fix = "x = 2  # fixed-broken\n"
 -        target = write_project_file(tmp_path, "src/main.py", original)
 +        target = _write_file(tmp_path, "src/main.py", original)
-        canned = _make_canned_fix_results(canary_e999_files=("src/main.py",))
-        wrapped = _setup_e999_canary_revert(
-            tmp_path,
+         canned = _make_canned_fix_results(canary_e999_files=("src/main.py",))
+         wrapped = _setup_e999_canary_revert(
+             tmp_path,
 @@ -221,7 +219,7 @@ class TestApplyAutofixConflictAware:
-        """
-        original = "x = 1\n"
-        post_fix = "x = 1  # ruff-fix\n"  # benign — no E999 from canary
+         """
+         original = "x = 1\n"
+         post_fix = "x = 1  # ruff-fix\n"  # benign — no E999 from canary
 -        target = write_project_file(tmp_path, "src/main.py", original)
 +        target = _write_file(tmp_path, "src/main.py", original)
-        canned = _make_canned_fix_results()  # no E999 in canary
-        wrapped = _PostFixFakeRunCmd(
-            fake_run_cmd_factory(canned),
+         canned = _make_canned_fix_results()  # no E999 in canary
+         wrapped = _PostFixFakeRunCmd(
+             fake_run_cmd_factory(canned),
 @@ -264,7 +262,7 @@ class TestApplyAutofixConflictAware:
-        the loop fires when the fix DID modify the file.
-        """
-        original = "x = 1\n"
+         the loop fires when the fix DID modify the file.
+         """
+         original = "x = 1\n"
 -        target = write_project_file(tmp_path, "src/main.py", original)
 +        target = _write_file(tmp_path, "src/main.py", original)
-        canned = _make_canned_fix_results(canary_e999_files=("src/main.py",))
-        # NO _PostFixFakeRunCmd wrap — the fix pass does not write.
-        fake = fake_run_cmd_factory(canned)
+         canned = _make_canned_fix_results(canary_e999_files=("src/main.py",))
+         # NO _PostFixFakeRunCmd wrap — the fix pass does not write.
+         fake = fake_run_cmd_factory(canned)
 @@ -297,7 +295,7 @@ class TestApplyAutofixConflictAware:
-        git_init_bare(tmp_path)
-        original = "x = 1  # original\n"
-        post_fix = "x = 2  # broken-syntax"
+         git_init_bare(tmp_path)
+         original = "x = 1  # original\n"
+         post_fix = "x = 2  # broken-syntax"
 -        target = write_project_file(tmp_path, "untracked.py", original)
 +        target = _write_file(tmp_path, "untracked.py", original)
-        canned = _make_canned_fix_results(canary_e999_files=("untracked.py",))
-        wrapped = _PostFixFakeRunCmd(
-            fake_run_cmd_factory(canned),
+         canned = _make_canned_fix_results(canary_e999_files=("untracked.py",))
+         wrapped = _PostFixFakeRunCmd(
+             fake_run_cmd_factory(canned),
 diff --git a/tests/runner/test_autofix_conflict_integration.py b/tests/runner/test_autofix_conflict_integration.py
 index 22bcaaa..af030eb 100644
 --- a/tests/runner/test_autofix_conflict_integration.py
 +++ b/tests/runner/test_autofix_conflict_integration.py
 @@ -2,39 +2,174 @@
-
-from __future__ import annotations
-
+ 
+ from __future__ import annotations
+ 
 +import textwrap
-from pathlib import Path
-
-import pytest
-
-import python_setup_lint.runner.output as _output_module
+ from pathlib import Path
+ 
+ import pytest
+ 
+ import python_setup_lint.runner.output as _output_module
 -from python_setup_lint.runner import (
 -    LINT_TOOLS,
 -    LintResult,
@@ -17157,29 +17001,29 @@ import python_setup_lint.runner.output as _output_module
 -)
 +from python_setup_lint.runner import LINT_TOOLS, LintResult, RunnerConfig, ToolSpec, run_lint
 +from python_setup_lint.runner._autofix import _AUTOFIX_ENV_VAR, _apply_autofix_conflict_aware
-from python_setup_lint.testing import fake_run_cmd_factory, make_lint_result
+ from python_setup_lint.testing import fake_run_cmd_factory, make_lint_result
 -from tests._project_helpers import (
 -    commit_all,
 -    git_init_bare,
 -    stage_file,
 -    write_project_file,
 -)
-from tests.runner._autofix_helpers import (
-    _CANARY_LABEL,
+ from tests.runner._autofix_helpers import (
+     _CANARY_LABEL,
 +    _FIX_TOOL_NAMES,
-    _make_canned_fix_results,
-    _PostFixFakeRunCmd,
-    _setup_e999_canary_revert,
+     _make_canned_fix_results,
+     _PostFixFakeRunCmd,
+     _setup_e999_canary_revert,
 +    _write_file,
 +    commit_all,
 +    git_init_bare,
 +    stage_file,
-)
-from tests.runner._factories import (
-    canned_results_all_tools,
-    tmp_config,
-)
-
+ )
+ from tests.runner._factories import (
+     canned_results_all_tools,
+     tmp_config,
+ )
+ 
 +# ── Downstream integration: run_lint --fix on real python-setup repo ─
 +
 +
@@ -17323,66 +17167,66 @@ from tests.runner._factories import (
 +        assert "lint --fix --baseline lint.baseline" in precommit
 +
 +
-# ── Surface-unit: env-var opt-out is honoured before the loop ────
-
-
+ # ── Surface-unit: env-var opt-out is honoured before the loop ────
+ 
+ 
 @@ -68,8 +203,8 @@ class TestRunLintFixDispatch:
-        # Create source files under ruff's default_paths so the canary has
-        # something to enumerate (otherwise canary_targets is empty and the
-        # canary short-circuits without calling run_cmd).
+         # Create source files under ruff's default_paths so the canary has
+         # something to enumerate (otherwise canary_targets is empty and the
+         # canary short-circuits without calling run_cmd).
 -        write_project_file(tmp_path, "src/main.py", "x = 1\n")
 -        write_project_file(tmp_path, "tests/test_main.py", "y = 1\n")
 +        _write_file(tmp_path, "src/main.py", "x = 1\n")
 +        _write_file(tmp_path, "tests/test_main.py", "y = 1\n")
-        run_lint(config=tmp_config(tmp_path), fix=True)
-        labels = [c.label for c in fake.calls]
-        # ruff has default_paths=["src/", "tests/"] → canary fires once.
+         run_lint(config=tmp_config(tmp_path), fix=True)
+         labels = [c.label for c in fake.calls]
+         # ruff has default_paths=["src/", "tests/"] → canary fires once.
 @@ -90,7 +225,7 @@ class TestRunLintFixDispatch:
-        canned = _make_canned_fix_results()
-        fake = fake_run_cmd_factory(canned)
-        monkeypatch.setattr(_output_module, "_run_cmd", fake)
+         canned = _make_canned_fix_results()
+         fake = fake_run_cmd_factory(canned)
+         monkeypatch.setattr(_output_module, "_run_cmd", fake)
 -        target = write_project_file(tmp_path, "src/main.py", "x = 1\n")
 +        target = _write_file(tmp_path, "src/main.py", "x = 1\n")
-        run_lint(
-            config=tmp_config(tmp_path),
-            path=str(target.relative_to(tmp_path)),
+         run_lint(
+             config=tmp_config(tmp_path),
+             path=str(target.relative_to(tmp_path)),
 @@ -147,12 +282,12 @@ class TestAutofixRealGitIntegration:
-    ) -> None:
-        """File with staged AND unstaged changes is skipped; staged blob untouched."""
-        git_init_bare(tmp_path)
+     ) -> None:
+         """File with staged AND unstaged changes is skipped; staged blob untouched."""
+         git_init_bare(tmp_path)
 -        write_project_file(tmp_path, "f.py", "x = 1\n")
 +        _write_file(tmp_path, "f.py", "x = 1\n")
-        commit_all(tmp_path)
-        # Stage a change, then overlay an unstaged change on the same file.
+         commit_all(tmp_path)
+         # Stage a change, then overlay an unstaged change on the same file.
 -        write_project_file(tmp_path, "f.py", "y = 2\n")
 +        _write_file(tmp_path, "f.py", "y = 2\n")
-        stage_file(tmp_path, "f.py")
+         stage_file(tmp_path, "f.py")
 -        write_project_file(tmp_path, "f.py", "z = 3\n")
 +        _write_file(tmp_path, "f.py", "z = 3\n")
-        import subprocess
-
-        staged_blob = subprocess.run(
+         import subprocess
+ 
+         staged_blob = subprocess.run(
 @@ -193,9 +328,9 @@ class TestAutofixRealGitIntegration:
-    ) -> None:
-        """File staged only (no unstaged changes) → autofix applies."""
-        git_init_bare(tmp_path)
+     ) -> None:
+         """File staged only (no unstaged changes) → autofix applies."""
+         git_init_bare(tmp_path)
 -        write_project_file(tmp_path, "f.py", "x = 1\n")
 +        _write_file(tmp_path, "f.py", "x = 1\n")
-        commit_all(tmp_path)
+         commit_all(tmp_path)
 -        write_project_file(tmp_path, "f.py", "y = 2\n")
 +        _write_file(tmp_path, "f.py", "y = 2\n")
-        stage_file(tmp_path, "f.py")
-        # The file is staged-only — no unstaged overlay → safe to fix.
-        # The fake fix writes "y = 2  # fixed\n" to simulate ruff --fix.
+         stage_file(tmp_path, "f.py")
+         # The file is staged-only — no unstaged overlay → safe to fix.
+         # The fake fix writes "y = 2  # fixed\n" to simulate ruff --fix.
 @@ -228,7 +363,7 @@ class TestAutofixRealGitIntegration:
-    ) -> None:
-        """A fix that breaks parseability triggers E999-canary revert; file restored."""
-        git_init_bare(tmp_path)
+     ) -> None:
+         """A fix that breaks parseability triggers E999-canary revert; file restored."""
+         git_init_bare(tmp_path)
 -        write_project_file(tmp_path, "src/main.py", "x = 1  # original\n")
 +        _write_file(tmp_path, "src/main.py", "x = 1  # original\n")
-        commit_all(tmp_path)
-        original = "x = 1  # original\n"
-        post_fix = "x = 2  # broken-syntax\n"
+         commit_all(tmp_path)
+         original = "x = 1  # original\n"
+         post_fix = "x = 2  # broken-syntax\n"
 diff --git a/tests/runner/test_baseline_diff.py b/tests/runner/test_baseline_diff.py
 index 6598594..e15ee5f 100644
 --- a/tests/runner/test_baseline_diff.py
@@ -17390,30 +17234,30 @@ index 6598594..e15ee5f 100644
 @@ -1,18 +1,17 @@
 -"""Drift-resistant baseline diff tests: _compare_sorted and _diff_baseline semantics."""
 +"""T2 — drift-resistant baseline diff tests."""
-
-from __future__ import annotations
-
+ 
+ from __future__ import annotations
+ 
 -import json
 -import time
-from pathlib import Path
-from typing import Any
-
-import pytest
-
-from python_setup_lint.runner import Record
+ from pathlib import Path
+ from typing import Any
+ 
+ import pytest
+ 
+ from python_setup_lint.runner import Record
 -from python_setup_lint.runner._baseline_helpers import _compare_sorted  # private import for white-box testing
-from python_setup_lint.runner._record_types import _compare_records_key
+ from python_setup_lint.runner._record_types import _compare_records_key
 -from python_setup_lint.runner.baseline import _diff_baseline  # private import for white-box testing
 +from python_setup_lint.runner.baseline import (
 +    _compare_sorted,  # private import for white-box testing
 +)
-from python_setup_lint.testing import make_lint_result
-from tests.runner._factories import diff_baseline_with
-
+ from python_setup_lint.testing import make_lint_result
+ from tests.runner._factories import diff_baseline_with
+ 
 @@ -23,10 +22,9 @@ def _sorted(records: list[Record]) -> list[Record]:  # pylint: disable=trivial-w
-    return sorted(records, key=_compare_records_key)
-
-
+     return sorted(records, key=_compare_records_key)
+ 
+ 
 -# ── Surface unit: _compare_sorted pure-fn (merged survivor class) ──
 -# Merged from test_baseline_diff_parsers.py::TestCompareSortedEdgeCases (class removed).
 -# Survivor: test_compare_sorted_given_current_and_saved_then_expected_additions_and_removals;
@@ -17421,13 +17265,13 @@ from tests.runner._factories import diff_baseline_with
 +# ── Surface unit: _compare_sorted pure-fn ────────────────────────
 +
 +
-class TestCompareSorted:
-    @pytest.mark.parametrize(
-        ("current", "saved", "exp_additions", "exp_removals"),
+ class TestCompareSorted:
+     @pytest.mark.parametrize(
+         ("current", "saved", "exp_additions", "exp_removals"),
 @@ -105,36 +103,6 @@ class TestCompareSorted:
-                0,
-                id="block_insertion_plus_later_reorder_no_spurious_diff",
-            ),
+                 0,
+                 id="block_insertion_plus_later_reorder_no_spurious_diff",
+             ),
 -            # Survivors merged from parsers.py::TestCompareSortedEdgeCases (class removed).
 -            pytest.param([], [], 0, 0, id="both_empty"),
 -            pytest.param(
@@ -17458,13 +17302,13 @@ class TestCompareSorted:
 -                0,
 -                id="none_file_added",
 -            ),
-        ],
-    )
-    def test_compare_sorted_given_current_and_saved_then_expected_additions_and_removals(
+         ],
+     )
+     def test_compare_sorted_given_current_and_saved_then_expected_additions_and_removals(
 @@ -161,48 +129,6 @@ class TestCompareSorted:
-        assert recs[2].file == "z.py"
-
-
+         assert recs[2].file == "z.py"
+ 
+ 
 -# ── Performance benchmark: 50k-line baseline ────────────────────
 -# Moved from deleted test_baseline_diff_edge.py::TestPerfBenchmark, renamed per given/then:
 -#   test_50k_line_baseline_compares_under_200ms -> test_compare_sorted_given_50k_line_baseline_then_under_200ms
@@ -17507,13 +17351,13 @@ class TestCompareSorted:
 -        assert elapsed_ms < 1000.0, f"_diff_baseline 50k took {elapsed_ms:.1f}ms (>1s ceiling)"
 -
 -
-# ── Downstream integration: drift-resistant diff semantics ────────
-
-
+ # ── Downstream integration: drift-resistant diff semantics ────────
+ 
+ 
 @@ -321,164 +247,3 @@ class TestDriftResistantDiff:
-            assert violations == []
-        if check_reloaded:
-            assert check_reloaded(reloaded)
+             assert violations == []
+         if check_reloaded:
+             assert check_reloaded(reloaded)
 -
 -
 -# ── Error-path coverage: _diff_baseline failure modes ────────────
@@ -17996,13 +17840,13 @@ index 4bd870b..7ee1f38 100644
 @@ -1,4 +1,4 @@
 -"""Parser, capture, and baseline schema-load tests for baseline diff."""
 +"""Parser and capture unit tests for baseline diff."""
-
-from __future__ import annotations
-
+ 
+ from __future__ import annotations
+ 
 @@ -9,7 +9,13 @@ from typing import Any
-import pytest
-
-from python_setup_lint.runner import Record
+ import pytest
+ 
+ from python_setup_lint.runner import Record
 -from python_setup_lint.runner._record_parsers import (  # private import for white-box testing
 +from python_setup_lint.runner._record_types import _compare_records_key
 +from python_setup_lint.runner.baseline import (  # private import for white-box testing
@@ -18011,34 +17855,34 @@ from python_setup_lint.runner import Record
 +    _diff_baseline,
 +)
 +from python_setup_lint.runner.parsers import (  # type: ignore[attr-defined]  # private import for white-box testing
-    _parse_mypy_records,
-    _parse_pylint_records,
-    _parse_pyright_records,
+     _parse_mypy_records,
+     _parse_pylint_records,
+     _parse_pyright_records,
 @@ -18,16 +24,15 @@ from python_setup_lint.runner._record_parsers import (  # private import for whi
-    _parse_ty_records,
-    _parse_yamllint_records,
-)
+     _parse_ty_records,
+     _parse_yamllint_records,
+ )
 -from python_setup_lint.runner.baseline import (  # private import for white-box testing
 -    _capture_baseline,
 -    _diff_baseline,
 -)
-from python_setup_lint.testing import make_lint_result
+ from python_setup_lint.testing import make_lint_result
 -from tests.runner._factories import diff_baseline_with
-
-pytestmark = pytest.mark.no_external_api
-
-
+ 
+ pytestmark = pytest.mark.no_external_api
+ 
+ 
 +def _sorted(records: list[Record]) -> list[Record]:  # pylint: disable=trivial-wrapper  # test helper; readability over DRY
 +    return sorted(records, key=_compare_records_key)
 +
 +
-# ── Private-complex unit: per-tool record parsers ────────────────
-
-
+ # ── Private-complex unit: per-tool record parsers ────────────────
+ 
+ 
 @@ -261,38 +266,6 @@ class TestCaptureSchemaV2:
-        assert check(cap)
-
-
+         assert check(cap)
+ 
+ 
 -# ── _capture_baseline persistence (merged from deleted edge module) ──
 -# Survivor: TestCaptureBaselineOnDisk; both persistence cases moved verbatim.
 -
@@ -18071,13 +17915,13 @@ pytestmark = pytest.mark.no_external_api
 -        assert violations == []
 -
 -
-# ── _capture_one edge cases ──────────────────────────────────────
-
-
+ # ── _capture_one edge cases ──────────────────────────────────────
+ 
+ 
 @@ -320,8 +293,24 @@ class TestCaptureOneEdgeCases:
-                lambda cap: cap == [],
-                id="rumdl_json_captured_as_diagnostics",
-            ),
+                 lambda cap: cap == [],
+                 id="rumdl_json_captured_as_diagnostics",
+             ),
 -            # Survivor: rumdl_timing_normalised_in_output; merged duplicate:
 -            # rumdl_text_captured_as_records (same record, no footer).
 +            pytest.param(
@@ -18098,18 +17942,18 @@ pytestmark = pytest.mark.no_external_api
 +                ),
 +                id="rumdl_text_captured_as_records",
 +            ),
-            pytest.param(
-                "rumdl check",
-                "No issues found (42ms)\n",
+             pytest.param(
+                 "rumdl check",
+                 "No issues found (42ms)\n",
 @@ -368,42 +357,54 @@ class TestCaptureOneEdgeCases:
-        assert violations == []
-
-
+         assert violations == []
+ 
+ 
 -# ── Baseline schema load ─────────────────────────────────────────
 -# Legacy pylint round-trip merged into test_baseline_diff.py::TestFlatRecordRoundTrip.
 -
 +# ── _compare_sorted edge cases ───────────────────────────────────
-
+ 
 -class TestMixedSchemaLoad:
 -    def test_mixed_schema_given_unknown_tool_then_baseline_shrinks(self, tmp_path: Path) -> None:
 -        saved = [
@@ -18119,7 +17963,7 @@ pytestmark = pytest.mark.no_external_api
 -        violations, reloaded = diff_baseline_with(tmp_path, saved, current)
 -        assert violations == []
 -        assert reloaded == []
-
+ 
 -    def test_mixed_schema_given_empty_baseline_then_ok_for_all_tools(self, tmp_path: Path) -> None:
 -        tool_names = [
 -            "tach check",
@@ -18187,31 +18031,31 @@ pytestmark = pytest.mark.no_external_api
 +        added, removed = _compare_sorted(current, saved)
 +        assert len(added) == exp_additions
 +        assert len(removed) == exp_removals
-
-
-# ── Parser edge cases ────────────────────────────────────────────
+ 
+ 
+ # ── Parser edge cases ────────────────────────────────────────────
 diff --git a/tests/runner/test_bench_runner_overhead.py b/tests/runner/test_bench_runner_overhead.py
 index 7054376..20fe6d3 100644
 --- a/tests/runner/test_bench_runner_overhead.py
 +++ b/tests/runner/test_bench_runner_overhead.py
 @@ -2,7 +2,7 @@
-"""Benchmark: per-tool time/memory + runner overhead measurement.
-
-``@pytest.mark.slow`` — excluded from ``-m "not slow"`` runs.  Spawns real
+ """Benchmark: per-tool time/memory + runner overhead measurement.
+ 
+ ``@pytest.mark.slow`` — excluded from ``-m "not slow"`` runs.  Spawns real
 -subprocesses for all 14 lint tools (pylint ×3 configurations) on a minimal
 +subprocesses for all 13 lint tools (pylint ×3 configurations) on a minimal
-synthetic project.  Writes ``tmp_path/bench-runner-overhead.md`` with the
-per-tool time/memory table and the runner-overhead before/after numbers.
-
+ synthetic project.  Writes ``tmp_path/bench-runner-overhead.md`` with the
+ per-tool time/memory table and the runner-overhead before/after numbers.
+ 
 @@ -221,7 +221,7 @@ def test_bench_runner_overhead_given_tmp_path_then_within_threshold(tmp_path: Pa
-            "`extra_tools.py:348-360`) so that repeated `run_lint` invocations "
-            "in the same process reuse the cached parse. Overhead was already "
-            "negligible before any memoisation (T11 PoW baseline 0.001s) and "
+             "`extra_tools.py:348-360`) so that repeated `run_lint` invocations "
+             "in the same process reuse the cached parse. Overhead was already "
+             "negligible before any memoisation (T11 PoW baseline 0.001s) and "
 -            "remains negligible because per-process tool-dispatch is N=14 tool "
 +            "remains negligible because per-process tool-dispatch is N=13 tool "
-            "spec entries already in memory.",
-            "",
-            "## Verification Gate",
+             "spec entries already in memory.",
+             "",
+             "## Verification Gate",
 diff --git a/tests/runner/test_config_consistency.py b/tests/runner/test_config_consistency.py
 new file mode 100644
 index 0000000..59ad2c4
@@ -18309,53 +18153,53 @@ index a464512..db01450 100644
 --- a/tests/runner/test_extra_tools.py
 +++ b/tests/runner/test_extra_tools.py
 @@ -234,7 +234,7 @@ class TestExtraToolsMerge:
-        _register_extra_tools([_X1, _X2])
-        names = {t.name for t in LINT_TOOLS}
-        assert {"x1", "x2"} <= names
+         _register_extra_tools([_X1, _X2])
+         names = {t.name for t in LINT_TOOLS}
+         assert {"x1", "x2"} <= names
 -        assert set(TOOLS_BY_NAME) <= names  # all 14 built-ins remain post-merge
 +        assert set(TOOLS_BY_NAME) <= names  # all 13 built-ins remain post-merge
-
-    def test_extra_tools_merge_given_builtin_name_collision_then_rejects(self) -> None:
-        collision = _ExtraToolRegistration(
+ 
+     def test_extra_tools_merge_given_builtin_name_collision_then_rejects(self) -> None:
+         collision = _ExtraToolRegistration(
 diff --git a/tests/runner/test_lint_runner.py b/tests/runner/test_lint_runner.py
 index 65a1721..be8620d 100644
 --- a/tests/runner/test_lint_runner.py
 +++ b/tests/runner/test_lint_runner.py
 @@ -4,6 +4,7 @@ Per-tool / per-flag rows are parametrised via shared tables in
-``tests/runner/_factories.py`` (T12 consolidation).
-"""
-
+ ``tests/runner/_factories.py`` (T12 consolidation).
+ """
+ 
 +# pylint: disable=too-many-lines  # test file with many parametrised classes; splitting would hurt readability
-from __future__ import annotations
-
-from pathlib import Path
+ from __future__ import annotations
+ 
+ from pathlib import Path
 @@ -13,7 +14,6 @@ import pytest
-
-import python_setup_lint.runner.output as _output_module
-from python_setup_lint.runner import (
+ 
+ import python_setup_lint.runner.output as _output_module
+ from python_setup_lint.runner import (
 -    EXPECTED_TOOL_NAMES,
-    STRATEGIES,
-    TOOLS,
-    TOOLS_BY_NAME,
+     STRATEGIES,
+     TOOLS,
+     TOOLS_BY_NAME,
 @@ -29,8 +29,8 @@ from python_setup_lint.runner.cmd_build import (
-)
-from python_setup_lint.runner.output import _print_result
-from python_setup_lint.testing import fake_run_cmd_factory, make_lint_result
+ )
+ from python_setup_lint.runner.output import _print_result
+ from python_setup_lint.testing import fake_run_cmd_factory, make_lint_result
 -from tests.runner._factories import EXPECTED_BUILTIN_TOOL_NAMES, canned_results_all_tools
 -from tests.runner._factories_extras_small import (
 +from tests.runner._factories import canned_results_all_tools
 +from tests.runner._factories_extras import (
-    EXPAND_GLOBS_CASES,
-    FIND_PY_FILES_BOUNDARY_CASES,
-    PRINT_FORMAT_CASES,
+     EXPAND_GLOBS_CASES,
+     FIND_PY_FILES_BOUNDARY_CASES,
+     PRINT_FORMAT_CASES,
 @@ -47,10 +47,25 @@ _CONFIG = RunnerConfig(cwd=Path.cwd())
-
-
-class TestToolSpec:
+ 
+ 
+ class TestToolSpec:
 -    """The built-in tool table invariant (names pinned by the oracle above)."""
 +    """The static 14-tool table invariant."""
-
-    def test_tool_spec_given_known_tools_then_present(self) -> None:
+ 
+     def test_tool_spec_given_known_tools_then_present(self) -> None:
 -        assert frozenset(t.name for t in TOOLS) == EXPECTED_BUILTIN_TOOL_NAMES
 +        assert {t.name for t in TOOLS} == {
 +            "tach check",
@@ -18373,19 +18217,19 @@ class TestToolSpec:
 +            "pylint tests",
 +            "detect-secrets",
 +        }
-
-    def test_tool_spec_given_tools_then_autofix_and_no_duplicates(self) -> None:
-        assert {t.name for t in TOOLS if t.supports_fix} == {
+ 
+     def test_tool_spec_given_tools_then_autofix_and_no_duplicates(self) -> None:
+         assert {t.name for t in TOOLS if t.supports_fix} == {
 @@ -59,8 +74,7 @@ class TestToolSpec:
-            "ty check",
-        }
-        assert all(t.name for t in TOOLS)
+             "ty check",
+         }
+         assert all(t.name for t in TOOLS)
 -        assert frozenset(t.name for t in TOOLS) == EXPECTED_TOOL_NAMES
 -        assert len({t.name for t in TOOLS}) == len(TOOLS) == len(EXPECTED_TOOL_NAMES)
 +        assert len({t.name for t in TOOLS}) == len(TOOLS) == 14
-
-    def test_tool_spec_given_yamllint_then_default_paths_is_dot(self) -> None:
-        """yamllint default_paths changed from config/*.yaml to . (T5 fix)."""
+ 
+     def test_tool_spec_given_yamllint_then_default_paths_is_dot(self) -> None:
+         """yamllint default_paths changed from config/*.yaml to . (T5 fix)."""
 diff --git a/tests/runner/test_lint_runner_integration.py b/tests/runner/test_lint_runner_integration.py
 index 8273f8b..d76cbe7 100644
 --- a/tests/runner/test_lint_runner_integration.py
@@ -18397,43 +18241,43 @@ index 8273f8b..d76cbe7 100644
 +
 +Splitting would lose context.
 +"""
-
-# pylint: disable=too-many-positional-arguments  # parametrized test with 6 args; pylint default is 5
-from __future__ import annotations
+ 
+ # pylint: disable=too-many-positional-arguments  # parametrized test with 6 args; pylint default is 5
+ from __future__ import annotations
 @@ -34,7 +38,7 @@ from tests.runner._factories_baseline import (
-    build_current_results,
-    diff_violation_kind,
-)
+     build_current_results,
+     diff_violation_kind,
+ )
 -from tests.runner._factories_extras_small import (
 +from tests.runner._factories_extras import (
-    MAIN_EXIT_CODE_CASES,
-    PACKAGE_NAME_STUBTEST_CASES,
-    RUFF_BASELINE_FIX_CASES,
+     MAIN_EXIT_CODE_CASES,
+     PACKAGE_NAME_STUBTEST_CASES,
+     RUFF_BASELINE_FIX_CASES,
 diff --git a/tests/runner/test_lint_runner_stats.py b/tests/runner/test_lint_runner_stats.py
 index f4fc3ea..20317f3 100644
 --- a/tests/runner/test_lint_runner_stats.py
 +++ b/tests/runner/test_lint_runner_stats.py
 @@ -28,14 +28,12 @@ from python_setup_lint.runner._config import _SUPPORTED_CONFIG_KEYS
-from python_setup_lint.runner.cmd_build import _build_command, _build_statistics_flags
-from python_setup_lint.runner.output import _print_statistics_grouped, _sort_counts
-from python_setup_lint.runner.parsers import _STATISTICS_PARSERS
+ from python_setup_lint.runner.cmd_build import _build_command, _build_statistics_flags
+ from python_setup_lint.runner.output import _print_statistics_grouped, _sort_counts
+ from python_setup_lint.runner.parsers import _STATISTICS_PARSERS
 -from tests.runner._factories import install_fake_runner, lint_config, runner_registry_constant, write_pyproject
 +from tests.runner._factories import install_fake_runner, lint_config, write_pyproject
-from tests.runner._factories_extras import (
-    CLEAN_EXTRAS_PYPROJECT_BODY,
-    GROUPED_OUTPUT_CASES,
+ from tests.runner._factories_extras import (
+     CLEAN_EXTRAS_PYPROJECT_BODY,
+     GROUPED_OUTPUT_CASES,
 -    MALFORMATION_CASES,
 -)
 -from tests.runner._factories_extras_small import (
-    GROUPED_SORT_BY_RULE_COUNTS,
+     GROUPED_SORT_BY_RULE_COUNTS,
 +    MALFORMATION_CASES,
-    SORT_BY_RULE_COUNTS,
-    SORT_DEFAULT_COUNTS,
-)
+     SORT_BY_RULE_COUNTS,
+     SORT_DEFAULT_COUNTS,
+ )
 @@ -72,10 +70,9 @@ def test_statistics_parser(tool_name: str, stdout: str, stderr: str, expected: l
-
-
-def test_statistics_parsers_given_all_tools_then_covered() -> None:
+ 
+ 
+ def test_statistics_parsers_given_all_tools_then_covered() -> None:
 -    formatter_only = runner_registry_constant("FORMATTER_ONLY")
 -    statistics_tools = runner_registry_constant("STATISTICS_PARSER_TOOLS")
 -    assert statistics_tools == frozenset(_STATISTICS_PARSERS)
@@ -18441,18 +18285,18 @@ def test_statistics_parsers_given_all_tools_then_covered() -> None:
 +    # ``ruff format`` is a fix-phase-only formatter: it emits no violation
 +    # records, so it intentionally has no statistics parser.
 +    assert {t.name for t in TOOLS if t.name != "ruff format"} <= set(_STATISTICS_PARSERS)
-
-
-def test_parse_strategies_given_stats_then_includes_all_keys() -> None:
+ 
+ 
+ def test_parse_strategies_given_stats_then_includes_all_keys() -> None:
 @@ -223,7 +220,7 @@ class TestT8FailFastConfig:
-
-
-class TestLintToolRegistry:
+ 
+ 
+ class TestLintToolRegistry:
 -    """STRATEGIES/LINT_TOOLS mirror the 14 built-ins AND strategies are LintTool instances."""
 +    """STRATEGIES/LINT_TOOLS mirror the 13 built-ins AND strategies are LintTool instances."""
-
-    @pytest.mark.parametrize(
-        "registry",
+ 
+     @pytest.mark.parametrize(
+         "registry",
 diff --git a/tests/runner/test_pyright_noise_filter.py b/tests/runner/test_pyright_noise_filter.py
 new file mode 100644
 index 0000000..fef2fdc
@@ -18577,14 +18421,14 @@ index 671821a..7ad46d9 100644
 --- a/tests/runner/test_real_pipeline_smoke.py
 +++ b/tests/runner/test_real_pipeline_smoke.py
 @@ -21,7 +21,7 @@ def test_consolidated_real_pipeline_smoke(
-
-    Asserts:
-    - ``isinstance(rc, int)`` — the pipeline ran to completion.
+ 
+     Asserts:
+     - ``isinstance(rc, int)`` — the pipeline ran to completion.
 -    - All 14 tools appear in the printed output (captured via capsys).
 +    - All 13 tools appear in the printed output (captured via capsys).
-    """
-    src = tmp_path / "src"
-    src.mkdir()
+     """
+     src = tmp_path / "src"
+     src.mkdir()
 diff --git a/tests/runner/test_runner_format_contract.py b/tests/runner/test_runner_format_contract.py
 deleted file mode 100644
 index aa783aa..0000000
@@ -18755,23 +18599,23 @@ index d415417..d1841da 100644
 @@ -1,20 +1,95 @@
 -"""Guard test: runner package surface exposes no private symbols.
 +"""Guard test: no ``_``-prefixed symbols imported through runner package surface.
-
+ 
 -The lint gate owns static import-hygiene checks (source scans, AST rules);
 -this asserts the runtime public surface only — ``runner.__all__`` must not
 -contain names starting with ``_``.
 +Ensures that ``python_setup_lint.runner`` does not re-export any private
 +symbols (names starting with ``_``) in its ``__all__`` or module-level
 +namespace accessible via ``from python_setup_lint.runner import ...``.
-"""
-
-from __future__ import annotations
-
+ """
+ 
+ from __future__ import annotations
+ 
 +from pathlib import Path
 +from typing import Any
 +
-import pytest
-
-pytestmark = pytest.mark.no_external_api
+ import pytest
+ 
+ pytestmark = pytest.mark.no_external_api
 +_RUNNER_PKG = "python_setup_lint.runner"
 +
 +
@@ -18780,17 +18624,17 @@ pytestmark = pytest.mark.no_external_api
 +    if hasattr(module, "__all__"):
 +        return set(module.__all__)
 +    return {n for n in dir(module) if not n.startswith("_")}
-
-
-def test_runner_imports_given_runner_all_then_no_private_symbols() -> None:
-    """``python_setup_lint.runner.__all__`` MUST NOT contain ``_``-prefixed names."""
-    import python_setup_lint.runner as runner_pkg
-
+ 
+ 
+ def test_runner_imports_given_runner_all_then_no_private_symbols() -> None:
+     """``python_setup_lint.runner.__all__`` MUST NOT contain ``_``-prefixed names."""
+     import python_setup_lint.runner as runner_pkg
+ 
 +    if not hasattr(runner_pkg, "__all__"):
 +        pytest.skip("runner package has no __all__")
 +
-    private_in_all = [n for n in runner_pkg.__all__ if n.startswith("_")]
-    assert not private_in_all, f"runner.__all__ contains private symbol(s): {private_in_all}"
+     private_in_all = [n for n in runner_pkg.__all__ if n.startswith("_")]
+     assert not private_in_all, f"runner.__all__ contains private symbol(s): {private_in_all}"
 +
 +
 +def test_runner_imports_given_runner_namespace_then_no_private_symbols() -> None:
@@ -18922,122 +18766,122 @@ index fd369b5..a727d05 100644
 --- a/tests/runner/test_setup.py
 +++ b/tests/runner/test_setup.py
 @@ -241,7 +241,7 @@ class TestUpdate:
-
-
-class TestMainCLI:
+ 
+ 
+ class TestMainCLI:
 -    def test_main_cli_given_install_then_installs(self, empty_project: Path, python_setup_checkout: Path) -> None:
 +    def test_main_cli_given_install_then_installs(self, empty_project: Path) -> None:
-        assert (
-            main(
-                [
+         assert (
+             main(
+                 [
 @@ -249,14 +249,14 @@ class TestMainCLI:
-                    "--path",
-                    str(empty_project),
-                    "--dev-path",
+                     "--path",
+                     str(empty_project),
+                     "--dev-path",
 -                    str(python_setup_checkout),
 +                    "/home/slava/aiexp/python-setup",
-                ]
-            )
-            == 0
-        )
-        assert (empty_project / ".pre-commit-config.yaml").exists()
-
+                 ]
+             )
+             == 0
+         )
+         assert (empty_project / ".pre-commit-config.yaml").exists()
+ 
 -    def test_main_cli_given_install_default_cwd_then_installs(self, tmp_path: Path, python_setup_checkout: Path) -> None:
 +    def test_main_cli_given_install_default_cwd_then_installs(self, tmp_path: Path) -> None:
-        (tmp_path / "pyproject.toml").write_text(
-            textwrap.dedent("""\
-            [project]
+         (tmp_path / "pyproject.toml").write_text(
+             textwrap.dedent("""\
+             [project]
 @@ -274,7 +274,7 @@ class TestMainCLI:
-                    "--path",
-                    str(tmp_path),
-                    "--dev-path",
+                     "--path",
+                     str(tmp_path),
+                     "--dev-path",
 -                    str(python_setup_checkout),
 +                    "/home/slava/aiexp/python-setup",
-                ]
-            )
-            == 0
+                 ]
+             )
+             == 0
 diff --git a/tests/runner/test_setup_install.py b/tests/runner/test_setup_install.py
 index 64779ac..73d3ddd 100644
 --- a/tests/runner/test_setup_install.py
 +++ b/tests/runner/test_setup_install.py
 @@ -261,33 +261,31 @@ class TestInstall:
-    """Fresh install tests."""
-
-    @pytest.mark.parametrize("check_fn", INSTALL_ARTIFACT_CASES)
+     """Fresh install tests."""
+ 
+     @pytest.mark.parametrize("check_fn", INSTALL_ARTIFACT_CASES)
 -    def test_install_given_fresh_project_then_creates_artifacts(
 -        self, empty_project: Path, python_setup_checkout: Path, check_fn: object
 -    ) -> None:
 -        assert install(empty_project, dev_path=str(python_setup_checkout)) == 0
 +    def test_install_given_fresh_project_then_creates_artifacts(self, empty_project: Path, check_fn: object) -> None:
 +        assert install(empty_project, dev_path="/home/slava/aiexp/python-setup") == 0
-        check_fn(empty_project)  # type: ignore[operator]  # parametrized callable; type varies by fixture
-
-
-class TestInstallEdgeCases:
-    """Install edge cases: idempotency, existing files, missing pyproject."""
-
+         check_fn(empty_project)  # type: ignore[operator]  # parametrized callable; type varies by fixture
+ 
+ 
+ class TestInstallEdgeCases:
+     """Install edge cases: idempotency, existing files, missing pyproject."""
+ 
 -    def test_second_install_skips_dep(self, configured_project: Path, python_setup_checkout: Path) -> None:
 +    def test_second_install_skips_dep(self, configured_project: Path) -> None:
-        deps_before = _get_dev_deps(_read_pyproject_toml(configured_project))  # type: ignore[arg-type]  # _read_pyproject_toml returns dict|None; fixture ensures valid project
+         deps_before = _get_dev_deps(_read_pyproject_toml(configured_project))  # type: ignore[arg-type]  # _read_pyproject_toml returns dict|None; fixture ensures valid project
 -        assert install(configured_project, dev_path=str(python_setup_checkout)) == 0
 +        assert install(configured_project, dev_path="/home/slava/aiexp/python-setup") == 0
-        assert _get_dev_deps(_read_pyproject_toml(configured_project)) == deps_before  # type: ignore[arg-type]  # _read_pyproject_toml returns dict|None; fixture ensures valid project
-
-    def test_install_given_second_install_then_no_dup(self, configured_project: Path) -> None:
-        assert (configured_project / "AGENTS.md").read_text().count(_AGENTS_SENTINEL) == 1
-
+         assert _get_dev_deps(_read_pyproject_toml(configured_project)) == deps_before  # type: ignore[arg-type]  # _read_pyproject_toml returns dict|None; fixture ensures valid project
+ 
+     def test_install_given_second_install_then_no_dup(self, configured_project: Path) -> None:
+         assert (configured_project / "AGENTS.md").read_text().count(_AGENTS_SENTINEL) == 1
+ 
 -    def test_install_given_existing_precommit_then_skips(self, empty_project: Path, python_setup_checkout: Path) -> None:
 +    def test_install_given_existing_precommit_then_skips(self, empty_project: Path) -> None:
-        p = empty_project / ".pre-commit-config.yaml"
-        p.write_text("# e")
-        m = p.stat().st_mtime
+         p = empty_project / ".pre-commit-config.yaml"
+         p.write_text("# e")
+         m = p.stat().st_mtime
 -        assert install(empty_project, dev_path=str(python_setup_checkout)) == 0
 +        assert install(empty_project, dev_path="/home/slava/aiexp/python-setup") == 0
-        assert p.stat().st_mtime == m and p.read_text() == "# e"
-
+         assert p.stat().st_mtime == m and p.read_text() == "# e"
+ 
 -    def test_install_given_missing_pyproject_then_returns_error(self, tmp_path: Path, python_setup_checkout: Path) -> None:
 -        assert install(tmp_path, dev_path=str(python_setup_checkout)) == 1
 +    def test_install_given_missing_pyproject_then_returns_error(self, tmp_path: Path) -> None:
 +        assert install(tmp_path, dev_path="/home/slava/aiexp/python-setup") == 1
-
-
-class TestStepErrorPaths:
+ 
+ 
+ class TestStepErrorPaths:
 @@ -313,7 +311,7 @@ class TestDownstreamIntegration:
-    """End-to-end install-then-lint integration test."""
-
-    @pytest.mark.slow
+     """End-to-end install-then-lint integration test."""
+ 
+     @pytest.mark.slow
 -    def test_downstream_integration_given_install_then_lint(self, python_setup_checkout: Path) -> None:
 +    def test_downstream_integration_given_install_then_lint(self) -> None:
-        import shutil
-        import subprocess
-
+         import shutil
+         import subprocess
+ 
 @@ -349,7 +347,7 @@ class TestDownstreamIntegration:
-            '{"version":"1.0","plugins_used":[],"filters_used":[],"results":{},"generated_at":"2025-01-01T00:00:00Z"}\n'
-        )
-        (c / "tach.toml").write_text('[[modules]]\npath = "src/consumer"\ndepends_on = []\n')
+             '{"version":"1.0","plugins_used":[],"filters_used":[],"results":{},"generated_at":"2025-01-01T00:00:00Z"}\n'
+         )
+         (c / "tach.toml").write_text('[[modules]]\npath = "src/consumer"\ndepends_on = []\n')
 -        assert install(c, dev_path=str(python_setup_checkout)) == 0
 +        assert install(c, dev_path="/home/slava/aiexp/python-setup") == 0
-        assert (c / ".pre-commit-config.yaml").exists()
-        assert (c / "CodingRules.md").exists()
-        assert "<!-- python-setup:pre-commit -->" in (c / "AGENTS.md").read_text()
+         assert (c / ".pre-commit-config.yaml").exists()
+         assert (c / "CodingRules.md").exists()
+         assert "<!-- python-setup:pre-commit -->" in (c / "AGENTS.md").read_text()
 diff --git a/tests/runner/test_t3_coverage.py b/tests/runner/test_t3_coverage.py
 index 043fb49..429c1dd 100644
 --- a/tests/runner/test_t3_coverage.py
 +++ b/tests/runner/test_t3_coverage.py
 @@ -21,37 +21,57 @@ from python_setup_lint.runner.parsers import (
-    _parse_yamllint_parsable,
-)
-from python_setup_lint.testing import fake_run_cmd_factory, make_lint_result
+     _parse_yamllint_parsable,
+ )
+ from python_setup_lint.testing import fake_run_cmd_factory, make_lint_result
 -from tests.runner._factories import runner_registry_constant
-
-if TYPE_CHECKING:
-    import pytest
-
+ 
+ if TYPE_CHECKING:
+     import pytest
+ 
 -# ── All non-formatter tools must have a registered parser ──────────
 +# ── All TOOLS must have a registered parser ────────────────────────
-
-
-class TestParserCompleteness:
+ 
+ 
+ class TestParserCompleteness:
 -    """Every non-formatter tool in TOOLS must have a corresponding statistics parser."""
 +    """Every tool in TOOLS must have a corresponding statistics parser."""
 +
@@ -19058,40 +18902,40 @@ class TestParserCompleteness:
 +        "mypy.stubtest",
 +        "detect-secrets",
 +    }
-
-    def test_parser_completeness_given_all_tools_then_have_parser(self) -> None:
+ 
+     def test_parser_completeness_given_all_tools_then_have_parser(self) -> None:
 -        """Every TOOLS entry has a statistics parser registered."""
 +        """Every violation-producing TOOLS entry has a statistics parser registered."""
-        tool_names = {t.name for t in TOOLS}
+         tool_names = {t.name for t in TOOLS}
 -        missing = tool_names - runner_registry_constant("FORMATTER_ONLY") - runner_registry_constant("STATISTICS_PARSER_TOOLS")
 +        # ``ruff format`` is a fix-phase-only formatter; it emits no violations.
 +        missing = tool_names - self.EXPECTED_PARSER_TOOLS - {"ruff format"}
-        assert not missing, f"TOOLS missing statistics parsers: {missing}"
-
-    def test_parser_completeness_given_all_parsers_then_correspond_to_tools(self) -> None:
-        """Every registered parser tool name exists in TOOLS."""
-        tool_names = {t.name for t in TOOLS}
+         assert not missing, f"TOOLS missing statistics parsers: {missing}"
+ 
+     def test_parser_completeness_given_all_parsers_then_correspond_to_tools(self) -> None:
+         """Every registered parser tool name exists in TOOLS."""
+         tool_names = {t.name for t in TOOLS}
 -        extra = runner_registry_constant("STATISTICS_PARSER_TOOLS") - tool_names
 +        extra = self.EXPECTED_PARSER_TOOLS - tool_names
-        assert not extra, f"Parsers exist for unknown tools: {extra}"
-
-    def test_parser_completeness_given_statistics_flags_then_align_with_parsers(self) -> None:
-        """Tools with a statistics parser also have non-empty flags."""
+         assert not extra, f"Parsers exist for unknown tools: {extra}"
+ 
+     def test_parser_completeness_given_statistics_flags_then_align_with_parsers(self) -> None:
+         """Tools with a statistics parser also have non-empty flags."""
 -        has_flags = {spec.name for spec in TOOLS if _build_statistics_flags(spec)}
 +        has_flags = set()
 +        for spec in TOOLS:
 +            if _build_statistics_flags(spec):
 +                has_flags.add(spec.name)
-        # pyright verify types, mypy.stubtest, detect-secrets have no extra flags
-        # but still have parsers
+         # pyright verify types, mypy.stubtest, detect-secrets have no extra flags
+         # but still have parsers
 -        statistics_tools = runner_registry_constant("STATISTICS_PARSER_TOOLS")
 -        assert has_flags <= statistics_tools
 -        no_flag_but_parser = statistics_tools - has_flags
 +        assert has_flags <= self.EXPECTED_PARSER_TOOLS
 +        no_flag_but_parser = self.EXPECTED_PARSER_TOOLS - has_flags
-        assert no_flag_but_parser <= {
-            "pyright verify types",
-            "mypy.stubtest",
+         assert no_flag_but_parser <= {
+             "pyright verify types",
+             "mypy.stubtest",
 diff --git a/tests/runner/test_t9_7_compose_pyright_live.py b/tests/runner/test_t9_7_compose_pyright_live.py
 new file mode 100644
 index 0000000..b59f6b9
@@ -19300,42 +19144,42 @@ index 54a41ba..b148b84 100644
 --- a/tests/runner/test_testing_fakes.py
 +++ b/tests/runner/test_testing_fakes.py
 @@ -162,7 +162,7 @@ def test_run_lint_with_fake_dispatch_invariants(
-    predicate: Callable[[FakeRunCmd], bool],
-    isolated_runner_registries: None,
-) -> None:
+     predicate: Callable[[FakeRunCmd], bool],
+     isolated_runner_registries: None,
+ ) -> None:
 -    """One ``run_lint(...)`` + 14-tool fake; the row's predicate asserts the invariant."""
 +    """One ``run_lint(...)`` + 13-tool fake; the row's predicate asserts the invariant."""
-    fake = _install_fake_and_run(monkeypatch, **run_lint_kwargs)
-    assert predicate(fake), f"Invariant failed; calls={[c.label for c in fake.calls]}"
-
+     fake = _install_fake_and_run(monkeypatch, **run_lint_kwargs)
+     assert predicate(fake), f"Invariant failed; calls={[c.label for c in fake.calls]}"
+ 
 diff --git a/tests/test_golden.py b/tests/test_golden.py
 index b1343ae..a6c067f 100644
 --- a/tests/test_golden.py
 +++ b/tests/test_golden.py
 @@ -11,8 +11,6 @@ from pathlib import Path
-
-import pytest
-
+ 
+ import pytest
+ 
 -from python_setup_lint.runner import TOOLS, LintResult, RunnerConfig, ToolSpec
 -from python_setup_lint.runner._record_types import Record
-from tests._golden import (
-    SEMANTIC_ENV,
-    UPDATE_ENV,
+ from tests._golden import (
+     SEMANTIC_ENV,
+     UPDATE_ENV,
 @@ -20,10 +18,8 @@ from tests._golden import (
-    assert_matches_golden,
-    assert_oracle_coverage,
-    assert_tool_coverage,
+     assert_matches_golden,
+     assert_oracle_coverage,
+     assert_tool_coverage,
 -    collect_findings,
-    finding_key,
-    normalize_record,
+     finding_key,
+     normalize_record,
 -    read_golden,
-    read_oracle_rules,
-    serialize_findings,
-    serialize_tool_minimums,
+     read_oracle_rules,
+     serialize_findings,
+     serialize_tool_minimums,
 @@ -180,61 +176,6 @@ def test_serialize_tool_minimums_given_mapping_then_sorted_canonical_json() -> N
-    assert text.index('"mypy"') < text.index('"ruff check"')
-
-
+     assert text.index('"mypy"') < text.index('"ruff check"')
+ 
+ 
 -def test_serialize_findings_given_empty_input_then_empty_canonical_arrays() -> None:
 -    assert serialize_findings([]) == "[]\n"
 -    assert serialize_tool_minimums({}) == "{}\n"
@@ -19391,13 +19235,13 @@ from tests._golden import (
 -    assert collect_findings(tmp_path, RunnerConfig(cwd=tmp_path)) == []
 -
 -
-def test_tool_counts_path_given_findings_name_then_sibling_tool_counts() -> None:
-    assert tool_counts_path(Path("/x/minimal_sample_project_findings.json")) == Path("/x/minimal_sample_project_tool_counts.json")
-    assert tool_counts_path(Path("/x/snapshot.json")) == Path("/x/snapshot_tool_counts.json")
+ def test_tool_counts_path_given_findings_name_then_sibling_tool_counts() -> None:
+     assert tool_counts_path(Path("/x/minimal_sample_project_findings.json")) == Path("/x/minimal_sample_project_tool_counts.json")
+     assert tool_counts_path(Path("/x/snapshot.json")) == Path("/x/snapshot_tool_counts.json")
 @@ -298,20 +239,6 @@ def test_assert_matches_golden_given_duplicate_golden_entry_then_reports_one_rem
-    assert message.count(repr(finding_key(duplicate))) == 1
-
-
+     assert message.count(repr(finding_key(duplicate))) == 1
+ 
+ 
 -def test_diff_keys_given_duplicate_multisets_then_counts_duplicates_once() -> None:
 -    from tests._golden import _diff_keys  # testing the Counter internals directly
 -
@@ -19412,17 +19256,17 @@ def test_tool_counts_path_given_findings_name_then_sibling_tool_counts() -> None
 -    assert _diff_keys([duplicate], [duplicate]) == ([], [])
 -
 -
-@pytest.mark.parametrize("ci_var", ["CI", "GITHUB_ACTIONS"])
-def test_assert_matches_golden_given_update_under_ci_then_refuses_and_keeps_golden(
-    tmp_path: Path,
+ @pytest.mark.parametrize("ci_var", ["CI", "GITHUB_ACTIONS"])
+ def test_assert_matches_golden_given_update_under_ci_then_refuses_and_keeps_golden(
+     tmp_path: Path,
 diff --git a/uv.lock b/uv.lock
 index 3ca3386..50ec06d 100644
 --- a/uv.lock
 +++ b/uv.lock
 @@ -6,6 +6,27 @@ resolution-markers = [
-    "python_full_version < '3.15'",
-]
-
+     "python_full_version < '3.15'",
+ ]
+ 
 +[[package]]
 +name = "annotated-doc"
 +version = "0.0.4"
@@ -19444,13 +19288,13 @@ index 3ca3386..50ec06d 100644
 +    { url = "https://files.pythonhosted.org/packages/b0/7b/90df4a0a816d98d6ea26f559d87836d494a2cf1fcf063be67df50a7bcc30/anyio-4.14.1-py3-none-any.whl", hash = "sha256:4e5533c5b8ff0a24f5d7a176cbe6877129cd183893f66b537f8f227d10527d72", size = 124875, upload-time = "2026-06-24T20:56:04.413Z" },
 +]
 +
-[[package]]
-name = "ast-serialize"
-version = "0.5.0"
+ [[package]]
+ name = "ast-serialize"
+ version = "0.5.0"
 @@ -132,6 +153,18 @@ wheels = [
-    { url = "https://files.pythonhosted.org/packages/db/8f/61959034484a4a7c527811f4721e75d02d653a35afb0b6054474d8185d4c/charset_normalizer-3.4.7-py3-none-any.whl", hash = "sha256:3dce51d0f5e7951f8bb4900c257dad282f49190fdbebecd4ba99bcc41fef404d", size = 61958, upload-time = "2026-04-02T09:28:37.794Z" },
-]
-
+     { url = "https://files.pythonhosted.org/packages/db/8f/61959034484a4a7c527811f4721e75d02d653a35afb0b6054474d8185d4c/charset_normalizer-3.4.7-py3-none-any.whl", hash = "sha256:3dce51d0f5e7951f8bb4900c257dad282f49190fdbebecd4ba99bcc41fef404d", size = 61958, upload-time = "2026-04-02T09:28:37.794Z" },
+ ]
+ 
 +[[package]]
 +name = "click"
 +version = "8.4.2"
@@ -19463,13 +19307,13 @@ version = "0.5.0"
 +    { url = "https://files.pythonhosted.org/packages/fb/e2/79c688af8b210d232694e31e59da9f6ec747bae31c3f5946e4e9b98860d5/click-8.4.2-py3-none-any.whl", hash = "sha256:e6f9f66136c816745b9d65817da91d61d957fb16e02e4dcd0552553c5a197b76", size = 119243, upload-time = "2026-06-24T17:45:13.73Z" },
 +]
 +
-[[package]]
-name = "colorama"
-version = "0.4.6"
+ [[package]]
+ name = "colorama"
+ version = "0.4.6"
 @@ -141,6 +174,68 @@ wheels = [
-    { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335, upload-time = "2022-10-25T02:36:20.889Z" },
-]
-
+     { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335, upload-time = "2022-10-25T02:36:20.889Z" },
+ ]
+ 
 +[[package]]
 +name = "cuda-bindings"
 +version = "13.3.1"
@@ -19532,13 +19376,13 @@ version = "0.4.6"
 +    { name = "nvidia-nvtx", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 +]
 +
-[[package]]
-name = "detect-secrets"
-version = "1.5.0"
+ [[package]]
+ name = "detect-secrets"
+ version = "1.5.0"
 @@ -181,6 +276,15 @@ wheels = [
-    { url = "https://files.pythonhosted.org/packages/13/37/a065dc3bd6e49423a6532c642ca7378d3f467b1ef44c2800c937af7f9739/filelock-3.29.4-py3-none-any.whl", hash = "sha256:dac1648087d5115554850d113e7dd8c83ab2d38e3435dde2d4f163847e57b767", size = 42757, upload-time = "2026-06-13T16:11:59.582Z" },
-]
-
+     { url = "https://files.pythonhosted.org/packages/13/37/a065dc3bd6e49423a6532c642ca7378d3f467b1ef44c2800c937af7f9739/filelock-3.29.4-py3-none-any.whl", hash = "sha256:dac1648087d5115554850d113e7dd8c83ab2d38e3435dde2d4f163847e57b767", size = 42757, upload-time = "2026-06-13T16:11:59.582Z" },
+ ]
+ 
 +[[package]]
 +name = "fsspec"
 +version = "2026.6.0"
@@ -19548,13 +19392,13 @@ version = "1.5.0"
 +    { url = "https://files.pythonhosted.org/packages/e5/22/4222d7ddf3da30f363edaa98e329c2bce6c65497c9cb2810931c8b2c0fbc/fsspec-2026.6.0-py3-none-any.whl", hash = "sha256:02e0b71817df9b2169dc30a16832045764def1191b43dcff5bb85bdee212d2a1", size = 203949, upload-time = "2026-06-16T01:57:26.358Z" },
 +]
 +
-[[package]]
-name = "gitdb"
-version = "4.0.12"
+ [[package]]
+ name = "gitdb"
+ version = "4.0.12"
 @@ -205,6 +309,88 @@ wheels = [
-    { url = "https://files.pythonhosted.org/packages/20/7a/1c6e3562dfd8950adbb11ffbc65d21e7c89d01a6e4f137fa981056de25c5/gitpython-3.1.50-py3-none-any.whl", hash = "sha256:d352abe2908d07355014abdd21ddf798c2a961469239afec4962e9da884858f9", size = 212507, upload-time = "2026-05-06T04:01:23.799Z" },
-]
-
+     { url = "https://files.pythonhosted.org/packages/20/7a/1c6e3562dfd8950adbb11ffbc65d21e7c89d01a6e4f137fa981056de25c5/gitpython-3.1.50-py3-none-any.whl", hash = "sha256:d352abe2908d07355014abdd21ddf798c2a961469239afec4962e9da884858f9", size = 212507, upload-time = "2026-05-06T04:01:23.799Z" },
+ ]
+ 
 +[[package]]
 +name = "h11"
 +version = "0.16.0"
@@ -19637,13 +19481,13 @@ version = "4.0.12"
 +    { url = "https://files.pythonhosted.org/packages/4f/85/b505a99a133d9f99d21af182af416e9baef70bdeef019983479651e494c2/huggingface_hub-1.21.0-py3-none-any.whl", hash = "sha256:eadaa3678c512c82aea69e8675d90a184861e68de32f1105668628b4dce0e7cd", size = 721078, upload-time = "2026-06-25T13:09:24.402Z" },
 +]
 +
-[[package]]
-name = "hypothesis"
-version = "6.155.7"
+ [[package]]
+ name = "hypothesis"
+ version = "6.155.7"
 @@ -253,6 +439,27 @@ wheels = [
-    { url = "https://files.pythonhosted.org/packages/3e/95/c7c34aa53c16353c56d0b802fba48d5f5caa2cdee7958acbcb795c830416/isort-8.0.1-py3-none-any.whl", hash = "sha256:28b89bc70f751b559aeca209e6120393d43fbe2490de0559662be7a9787e3d75", size = 89733, upload-time = "2026-02-28T10:08:19.466Z" },
-]
-
+     { url = "https://files.pythonhosted.org/packages/3e/95/c7c34aa53c16353c56d0b802fba48d5f5caa2cdee7958acbcb795c830416/isort-8.0.1-py3-none-any.whl", hash = "sha256:28b89bc70f751b559aeca209e6120393d43fbe2490de0559662be7a9787e3d75", size = 89733, upload-time = "2026-02-28T10:08:19.466Z" },
+ ]
+ 
 +[[package]]
 +name = "jinja2"
 +version = "3.1.6"
@@ -19665,13 +19509,13 @@ version = "6.155.7"
 +    { url = "https://files.pythonhosted.org/packages/7b/91/984aca2ec129e2757d1e4e3c81c3fcda9d0f85b74670a094cc443d9ee949/joblib-1.5.3-py3-none-any.whl", hash = "sha256:5fc3c5039fc5ca8c0276333a188bbd59d6b7ab37fe6632daa76bc7f9ec18e713", size = 309071, upload-time = "2025-12-15T08:41:44.973Z" },
 +]
 +
-[[package]]
-name = "librt"
-version = "0.11.0"
+ [[package]]
+ name = "librt"
+ version = "0.11.0"
 @@ -299,6 +506,36 @@ wheels = [
-    { url = "https://files.pythonhosted.org/packages/b3/81/4da04ced5a082363ecfa159c010d200ecbd959ae410c10c0264a38cac0f5/markdown_it_py-4.2.0-py3-none-any.whl", hash = "sha256:9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a", size = 91687, upload-time = "2026-05-07T12:08:27.182Z" },
-]
-
+     { url = "https://files.pythonhosted.org/packages/b3/81/4da04ced5a082363ecfa159c010d200ecbd959ae410c10c0264a38cac0f5/markdown_it_py-4.2.0-py3-none-any.whl", hash = "sha256:9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a", size = 91687, upload-time = "2026-05-07T12:08:27.182Z" },
+ ]
+ 
 +[[package]]
 +name = "markupsafe"
 +version = "3.0.3"
@@ -19702,13 +19546,13 @@ version = "0.11.0"
 +    { url = "https://files.pythonhosted.org/packages/70/bc/6f1c2f612465f5fa89b95bead1f44dcb607670fd42891d8fdcd5d039f4f4/markupsafe-3.0.3-cp314-cp314t-win_arm64.whl", hash = "sha256:32001d6a8fc98c8cb5c947787c5d08b0a50663d139f1305bac5885d98d9b40fa", size = 14146, upload-time = "2025-09-27T18:37:28.327Z" },
 +]
 +
-[[package]]
-name = "mccabe"
-version = "0.7.0"
+ [[package]]
+ name = "mccabe"
+ version = "0.7.0"
 @@ -317,6 +554,15 @@ wheels = [
-    { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
-]
-
+     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
+ ]
+ 
 +[[package]]
 +name = "mpmath"
 +version = "1.3.0"
@@ -19718,13 +19562,13 @@ version = "0.7.0"
 +    { url = "https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl", hash = "sha256:a0b2b9fe80bbcd81a6647ff13108738cfb482d481d826cc0e02f5b35e5c88d2c", size = 536198, upload-time = "2023-03-07T16:47:09.197Z" },
 +]
 +
-[[package]]
-name = "mypy"
-version = "2.1.0"
+ [[package]]
+ name = "mypy"
+ version = "2.1.0"
 @@ -356,6 +602,15 @@ wheels = [
-    { url = "https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl", hash = "sha256:1be4cccdb0f2482337c4743e60421de3a356cd97508abadd57d47403e94f5505", size = 4963, upload-time = "2025-04-22T14:54:22.983Z" },
-]
-
+     { url = "https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl", hash = "sha256:1be4cccdb0f2482337c4743e60421de3a356cd97508abadd57d47403e94f5505", size = 4963, upload-time = "2025-04-22T14:54:22.983Z" },
+ ]
+ 
 +[[package]]
 +name = "narwhals"
 +version = "2.22.1"
@@ -19734,13 +19578,13 @@ version = "2.1.0"
 +    { url = "https://files.pythonhosted.org/packages/48/ca/36339329c4604adbcc99c899b7eb1ce1a555c499b6a6860757dc9bfed36d/narwhals-2.22.1-py3-none-any.whl", hash = "sha256:60567d774edf77db53906f89d9fbd164e66e56d66d388e1e6990f17ac33cfb53", size = 454815, upload-time = "2026-06-05T12:34:32.289Z" },
 +]
 +
-[[package]]
-name = "networkx"
-version = "3.6.1"
+ [[package]]
+ name = "networkx"
+ version = "3.6.1"
 @@ -403,6 +658,158 @@ wheels = [
-    { url = "https://files.pythonhosted.org/packages/43/bb/e1c71a4295b1b1d1393d50dbb4f2a36283c6859d9d3892e84f00ec5a91d5/numpy-2.4.6-cp314-cp314t-win_arm64.whl", hash = "sha256:0c9136e14ed34a9e343a31c533d78a9813a69a3148332bce5e9821cb2f996e66", size = 10565867, upload-time = "2026-05-18T23:36:47.114Z" },
-]
-
+     { url = "https://files.pythonhosted.org/packages/43/bb/e1c71a4295b1b1d1393d50dbb4f2a36283c6859d9d3892e84f00ec5a91d5/numpy-2.4.6-cp314-cp314t-win_arm64.whl", hash = "sha256:0c9136e14ed34a9e343a31c533d78a9813a69a3148332bce5e9821cb2f996e66", size = 10565867, upload-time = "2026-05-18T23:36:47.114Z" },
+ ]
+ 
 +[[package]]
 +name = "nvidia-cublas"
 +version = "13.1.1.3"
@@ -19893,33 +19737,33 @@ version = "3.6.1"
 +    { url = "https://files.pythonhosted.org/packages/a8/64/3708a90d1ebe202ffdeb7185f878a3c84d15c2b2c31858da2ce0583e2def/nvidia_nvtx-13.0.85-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:cb7780edb6b14107373c835bf8b72e7a178bac7367e23da7acb108f973f157a6", size = 148878, upload-time = "2025-09-04T08:28:53.627Z" },
 +]
 +
-[[package]]
-name = "packaging"
-version = "26.2"
+ [[package]]
+ name = "packaging"
+ version = "26.2"
 @@ -582,6 +989,11 @@ dependencies = [
-    { name = "tomli-w" },
-]
-
+     { name = "tomli-w" },
+ ]
+ 
 +[package.optional-dependencies]
 +semantic = [
 +    { name = "sentence-transformers" },
 +]
 +
-[package.dev-dependencies]
-dev = [
-    { name = "detect-secrets" },
+ [package.dev-dependencies]
+ dev = [
+     { name = "detect-secrets" },
 @@ -617,6 +1029,7 @@ requires-dist = [
-    { name = "beartype", specifier = ">=0.22.9" },
-    { name = "pylint", specifier = ">=4.0.6" },
-    { name = "pytest", specifier = ">=9.1.0" },
+     { name = "beartype", specifier = ">=0.22.9" },
+     { name = "pylint", specifier = ">=4.0.6" },
+     { name = "pytest", specifier = ">=9.1.0" },
 +    { name = "sentence-transformers", marker = "extra == 'semantic'", specifier = ">=3.0.0" },
-    { name = "structlog", specifier = ">=26.1.0" },
-    { name = "tomli-w", specifier = ">=1.0" },
-]
+     { name = "structlog", specifier = ">=26.1.0" },
+     { name = "tomli-w", specifier = ">=1.0" },
+ ]
 @@ -690,6 +1103,46 @@ wheels = [
-    { url = "https://files.pythonhosted.org/packages/2c/58/ca301544e1fa93ed4f80d724bf5b194f6e4b945841c5bfd555878eea9fcb/referencing-0.37.0-py3-none-any.whl", hash = "sha256:381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231", size = 26766, upload-time = "2025-10-13T15:30:47.625Z" },
-]
-
+     { url = "https://files.pythonhosted.org/packages/2c/58/ca301544e1fa93ed4f80d724bf5b194f6e4b945841c5bfd555878eea9fcb/referencing-0.37.0-py3-none-any.whl", hash = "sha256:381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231", size = 26766, upload-time = "2025-10-13T15:30:47.625Z" },
+ ]
+ 
 +[[package]]
 +name = "regex"
 +version = "2026.5.9"
@@ -19960,13 +19804,13 @@ dev = [
 +    { url = "https://files.pythonhosted.org/packages/da/80/35b4c33c804a165a7f55289afda3ea9e3eb6d15800341a2d66455c0f1f30/regex-2026.5.9-cp314-cp314t-win_arm64.whl", hash = "sha256:5e41809d2683fcde7d5a8c87a6567ba1fb1ce0de9f31bff578de00a4b2d76daa", size = 275713, upload-time = "2026-05-09T23:15:16.98Z" },
 +]
 +
-[[package]]
-name = "requests"
-version = "2.34.2"
+ [[package]]
+ name = "requests"
+ version = "2.34.2"
 @@ -824,6 +1277,125 @@ wheels = [
-    { url = "https://files.pythonhosted.org/packages/a3/ec/571fb815e9f06e5b2d3d7d84caaaf39aa3841ea0d30c9f85fad6b1515e3f/rumdl-0.2.16-py3-none-win_amd64.whl", hash = "sha256:cc2b1408ac98dbea6681507da4552cc2237d82b705ac48f89b57aaa632c9ed62", size = 5873130, upload-time = "2026-06-13T10:05:58.676Z" },
-]
-
+     { url = "https://files.pythonhosted.org/packages/a3/ec/571fb815e9f06e5b2d3d7d84caaaf39aa3841ea0d30c9f85fad6b1515e3f/rumdl-0.2.16-py3-none-win_amd64.whl", hash = "sha256:cc2b1408ac98dbea6681507da4552cc2237d82b705ac48f89b57aaa632c9ed62", size = 5873130, upload-time = "2026-06-13T10:05:58.676Z" },
+ ]
+ 
 +[[package]]
 +name = "safetensors"
 +version = "0.8.0"
@@ -20086,13 +19930,13 @@ version = "2.34.2"
 +    { url = "https://files.pythonhosted.org/packages/e0/f9/0595336914c5619e5f28a1fb793285925a8cd4b432c9da0a987836c7f822/shellingham-1.5.4-py2.py3-none-any.whl", hash = "sha256:7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686", size = 9755, upload-time = "2023-10-24T04:13:38.866Z" },
 +]
 +
-[[package]]
-name = "smmap"
-version = "5.0.3"
+ [[package]]
+ name = "smmap"
+ version = "5.0.3"
 @@ -851,6 +1423,18 @@ wheels = [
-    { url = "https://files.pythonhosted.org/packages/a9/18/489c97b834dfff9cf2fc2507cede4bcd4b11e67f84bc462acd1992496f86/structlog-26.1.0-py3-none-any.whl", hash = "sha256:e081a26d6c373e6d201eca24eede26d8ffab07f88f477822e679183428d3d91e", size = 73764, upload-time = "2026-06-06T07:33:38.046Z" },
-]
-
+     { url = "https://files.pythonhosted.org/packages/a9/18/489c97b834dfff9cf2fc2507cede4bcd4b11e67f84bc462acd1992496f86/structlog-26.1.0-py3-none-any.whl", hash = "sha256:e081a26d6c373e6d201eca24eede26d8ffab07f88f477822e679183428d3d91e", size = 73764, upload-time = "2026-06-06T07:33:38.046Z" },
+ ]
+ 
 +[[package]]
 +name = "sympy"
 +version = "1.14.0"
@@ -20105,13 +19949,13 @@ version = "5.0.3"
 +    { url = "https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl", hash = "sha256:e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5", size = 6299353, upload-time = "2025-04-27T18:04:59.103Z" },
 +]
 +
-[[package]]
-name = "tach"
-version = "0.35.0"
+ [[package]]
+ name = "tach"
+ version = "0.35.0"
 @@ -884,6 +1468,41 @@ wheels = [
-    { url = "https://files.pythonhosted.org/packages/4b/1d/5dddf88fa9433bf4fcc76afad18e49d8e50e24f1f40c981c286edccd6c2d/tach-0.35.0-cp37-abi3-win_amd64.whl", hash = "sha256:746271a5313c348e00c1b85927260e3e1a75351d86b2da1746e85c5dd77051e6", size = 3671788, upload-time = "2026-05-12T12:48:59.619Z" },
-]
-
+     { url = "https://files.pythonhosted.org/packages/4b/1d/5dddf88fa9433bf4fcc76afad18e49d8e50e24f1f40c981c286edccd6c2d/tach-0.35.0-cp37-abi3-win_amd64.whl", hash = "sha256:746271a5313c348e00c1b85927260e3e1a75351d86b2da1746e85c5dd77051e6", size = 3671788, upload-time = "2026-05-12T12:48:59.619Z" },
+ ]
+ 
 +[[package]]
 +name = "threadpoolctl"
 +version = "3.6.0"
@@ -20147,13 +19991,13 @@ version = "0.35.0"
 +    { url = "https://files.pythonhosted.org/packages/72/f4/0de46cfa12cdcbcd464cc59fde36912af405696f687e53a091fb432f694c/tokenizers-0.22.2-cp39-abi3-win_arm64.whl", hash = "sha256:9ce725d22864a1e965217204946f830c37876eee3b2ba6fc6255e8e903d5fcbc", size = 2612133, upload-time = "2026-01-05T10:45:17.232Z" },
 +]
 +
-[[package]]
-name = "tomli"
-version = "2.4.1"
+ [[package]]
+ name = "tomli"
+ version = "2.4.1"
 @@ -929,6 +1548,81 @@ wheels = [
-    { url = "https://files.pythonhosted.org/packages/6a/43/8bd850ee71a191bf072e31302c73a66be413fecdd98fdcd111ecbcce13ca/tomlkit-0.15.0-py3-none-any.whl", hash = "sha256:4dbc8f0fc024412b57ced8757ac7461305126a648ff8c2c807fcb8e133a78738", size = 41328, upload-time = "2026-05-10T07:38:23.517Z" },
-]
-
+     { url = "https://files.pythonhosted.org/packages/6a/43/8bd850ee71a191bf072e31302c73a66be413fecdd98fdcd111ecbcce13ca/tomlkit-0.15.0-py3-none-any.whl", hash = "sha256:4dbc8f0fc024412b57ced8757ac7461305126a648ff8c2c807fcb8e133a78738", size = 41328, upload-time = "2026-05-10T07:38:23.517Z" },
+ ]
+ 
 +[[package]]
 +name = "torch"
 +version = "2.12.1"
@@ -20229,13 +20073,13 @@ version = "2.4.1"
 +    { url = "https://files.pythonhosted.org/packages/f0/ac/229b7d4589d2e5937310e72c6d46e89599d16a4a12b479ffa1499fee8eb8/triton-3.7.1-cp314-cp314t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:10ba85fa2cca4a2fbdeb36bf1cb082f2c252bda55bf9fccd74f65ec5bc647e68", size = 197824404, upload-time = "2026-06-17T19:53:42.772Z" },
 +]
 +
-[[package]]
-name = "ty"
-version = "0.0.49"
+ [[package]]
+ name = "ty"
+ version = "0.0.49"
 @@ -966,6 +1660,21 @@ wheels = [
-    { url = "https://files.pythonhosted.org/packages/5b/29/74eeb4d3f3ae61ca096b018ad486b3b3c74b17bec09ab4edab721cbefec3/typeguard-4.5.2-py3-none-any.whl", hash = "sha256:fcf9de18bd945cdb4c7b996e12b4c51ce83f92f191314a6d7cf1739586ec98cf", size = 36748, upload-time = "2026-05-14T12:59:39.473Z" },
-]
-
+     { url = "https://files.pythonhosted.org/packages/5b/29/74eeb4d3f3ae61ca096b018ad486b3b3c74b17bec09ab4edab721cbefec3/typeguard-4.5.2-py3-none-any.whl", hash = "sha256:fcf9de18bd945cdb4c7b996e12b4c51ce83f92f191314a6d7cf1739586ec98cf", size = 36748, upload-time = "2026-05-14T12:59:39.473Z" },
+ ]
+ 
 +[[package]]
 +name = "typer"
 +version = "0.25.1"
@@ -20251,9 +20095,9 @@ version = "0.0.49"
 +    { url = "https://files.pythonhosted.org/packages/3f/f9/2b3ff4e56e5fa7debfaf9eb135d0da96f3e9a1d5b27222223c7296336e5f/typer-0.25.1-py3-none-any.whl", hash = "sha256:75caa44ed46a03fb2dab8808753ffacdbfea88495e74c85a28c5eefcf5f39c89", size = 58409, upload-time = "2026-04-30T19:32:18.271Z" },
 +]
 +
-[[package]]
-name = "types-defusedxml"
-version = "0.7.0.20260504"
+ [[package]]
+ name = "types-defusedxml"
+ version = "0.7.0.20260504"
 
 ## Review Feedback
 Cannot conclude merge: conflict markers or unmerged files remain in tests/runner/test_self_lint_clean.py
@@ -20375,16 +20219,16 @@ PROMPT_VERSION: str = "prompt-v1"        # :11
 
 @runtime_checkable
 class DecisionBackend(Protocol):          # :16-20
-   model_id: str
-   def decide(self, justification: str, rule: str | None, context: str | None) -> float: ...
+    model_id: str
+    def decide(self, justification: str, rule: str | None, context: str | None) -> float: ...
 
 class FakeBackend:                        # :23-30
-   model_id: str = "fake-backend rev test prompt-v1"
-   def __init__(self, score: float = 1.0) -> None: ...
-   def decide(self, justification: str, rule: str | None, context: str | None) -> float: ...
+    model_id: str = "fake-backend rev test prompt-v1"
+    def __init__(self, score: float = 1.0) -> None: ...
+    def decide(self, justification: str, rule: str | None, context: str | None) -> float: ...
 
 def get_backend() -> DecisionBackend | None: ...   # :49-59
-````
+```
 
 Behavior of `get_backend()` at HEAD:
 
@@ -20608,14 +20452,14 @@ markers = [
 
 ### 4.2 Semantic/backend tests (current contract)
 
-| File                                                       | Coverage                                                                                                                                      | Key lines                                 |
-| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `tests/checkers/test_decision_backend.py`                  | Pinned constants, FakeBackend, loader gating, heuristic-first veto, normalization, packaging pins                                             | `:1-6`, `:83-165`, `:181-264`, `:320-337` |
-| `tests/checkers/test_semantic_check.py`                    | Adapter signature, empty-primary, `None` mapping, 0.5 threshold matrix, memo per unique pair/model, no `sentence_transformers`, no disk cache | `:47-133`                                 |
-| `tests/checkers/test_semantic_threshold.py`                | 115-row heuristic table, semantic disabled                                                                                                    | `:16-21`, `:147-164`                      |
-| `tests/assumptions/test_pylint_cache_semantics.py`         | Read-only behavior, in-process memo, path-free semantic API, `jobs=1` single-writer verdict, sequential pylint invocation                     | `:1-39`, `:94-181`, `:225-355`            |
-| `tests/checkers/test_suppression_justification_checker.py` | W9704 checker behavior; semantic disabled via fixture                                                                                         | `:19-30`, `:367-392`                      |
-| `tests/checkers/test_bare_except_comment_checker.py`       | W9738 checker behavior; semantic disabled via fixture                                                                                         | `:18-43`                                  |
+| File | Coverage | Key lines |
+|---|---|---|
+| `tests/checkers/test_decision_backend.py` | Pinned constants, FakeBackend, loader gating, heuristic-first veto, normalization, packaging pins | `:1-6`, `:83-165`, `:181-264`, `:320-337` |
+| `tests/checkers/test_semantic_check.py` | Adapter signature, empty-primary, `None` mapping, 0.5 threshold matrix, memo per unique pair/model, no `sentence_transformers`, no disk cache | `:47-133` |
+| `tests/checkers/test_semantic_threshold.py` | 115-row heuristic table, semantic disabled | `:16-21`, `:147-164` |
+| `tests/assumptions/test_pylint_cache_semantics.py` | Read-only behavior, in-process memo, path-free semantic API, `jobs=1` single-writer verdict, sequential pylint invocation | `:1-39`, `:94-181`, `:225-355` |
+| `tests/checkers/test_suppression_justification_checker.py` | W9704 checker behavior; semantic disabled via fixture | `:19-30`, `:367-392` |
+| `tests/checkers/test_bare_except_comment_checker.py` | W9738 checker behavior; semantic disabled via fixture | `:18-43` |
 
 Important: no test exercises a real model. Every backend is a test double (`test_decision_backend.py:1-6`). The current test suite actively pins the **absence** of a model dependency (`test_semantic_extra_is_empty`, `test_uv_lock_has_no_sentence_transformers_edge` at `:323-337`; `test_no_try_import_checker.py:27-35`; `_OPTIONAL_IMPORT_PATTERNS` empty at `no_try_import_checker.py:10-13`). Any model wiring must update these pins deliberately.
 
@@ -20762,14 +20606,13 @@ Suggested assumption/contract tests, following `tests/assumptions/` style:
 
 ## 6. High-signal summary for the architect
 
-1. The reranker removal is complete; the backend/cache _interfaces_ are half-delivered. The next iteration’s semantic work is: production backend wiring + an actual CPU model (or an explicit deferral) + the tracked decision cache with refresh/prune.
+1. The reranker removal is complete; the backend/cache *interfaces* are half-delivered. The next iteration’s semantic work is: production backend wiring + an actual CPU model (or an explicit deferral) + the tracked decision cache with refresh/prune.
 2. The biggest behavioral risk is enabling a model by default before semantic-on behavior is pinned; golden currently runs with semantic off.
 3. The biggest debloat wins are test-harness duplication (13 `_make_tc` copies, 10 `_walk_and_release` copies, 3 `_RecordingBackend` copies, 2 `_UvCallRecorder` copies, dead helpers, vestigial cache tests, redundant smoke test), not production code.
 4. Docs and ADRs are materially wrong about the semantic subsystem; ADR-016 actively contradicts HEAD and should be superseded/updated first.
 5. Any ADR-009 gate closure needs a corpus/license/CPU-benchmark decision that cannot be inferred from the repository today.
 
 ## Human involvement
-
 # Human involvement criteria
 
 Mode selects which ADR and concern decisions need a human decision. Everything
@@ -20778,11 +20621,11 @@ remarkable.
 
 ## Blocking table (ADRs and concerns)
 
-| Mode       | Blocking (needs human decision)                                 | Remarkable (digest only) |
-| ---------- | --------------------------------------------------------------- | ------------------------ |
-| autonomous | high-severity ADRs/concerns still blocking after unblocked work | everything else          |
-| principal  | stack/layer, external interfaces, config shapes                 | internal choices         |
-| detailed   | external-interface changes and major internal interfaces        | minor internals          |
+| Mode | Blocking (needs human decision) | Remarkable (digest only) |
+| --- | --- | --- |
+| autonomous | high-severity ADRs/concerns still blocking after unblocked work | everything else |
+| principal | stack/layer, external interfaces, config shapes | internal choices |
+| detailed | external-interface changes and major internal interfaces | minor internals |
 
 ## autonomous
 
@@ -20790,7 +20633,6 @@ Block only explicit high-severity ADRs/concerns that remain after all unblocked
 work is finished. Do not stop for internal choices; record them as remarkable.
 
 ## Open Concerns
-
 - id: c-4743ca3658
   kind: assumption
   severity: low
@@ -20799,12 +20641,12 @@ work is finished. Do not stop for internal choices; record them as remarkable.
   kind: remarkable
   summary: Tree now carries check-only ruff format ToolSpec (_RuffFormatLintTool.build_command appends --check, _build adds --config) with phase-1a-only mutation
 
+
 - Raise concerns with evidence; condense stale detail instead of repeating it.
 
 ## Output
 
 Yield a structured JSON object matching this schema:
-
 - id (string, optional): Unique identifier for this decision (assigned by engine if omitted)
 - context (string, optional, enum: ["item","non-item","wave","plan-closeup"]): Decision context scope (item, non-item, wave, plan-closeup)
 - decision (string, required, enum: ["retry-with-guidance","split","escalate","accept-with-debt","abandon","fix-item","human-async","abort","continue","amend","end-iteration","complete","next-iteration","blocked"]): Architect decision verdict

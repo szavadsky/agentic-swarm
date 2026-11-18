@@ -1,7 +1,9 @@
 [
   {
     "decision": true,
-    "files": ["src/a.py"],
+    "files": [
+      "src/a.py"
+    ],
     "justification": "a justification",
     "key": "dk1.fdg35o6q.jytuoa34.3tqmg5cu.oayjlpzv.hcupq3n3.6pne5rki.arzq",
     "last_seen": "2026-11-08",
@@ -12,7 +14,9 @@
   },
   {
     "decision": false,
-    "files": ["src/b.py"],
+    "files": [
+      "src/b.py"
+    ],
     "justification": "b justification",
     "key": "dk1.4obofpp4.mvq6ecbz.cds5jpix.dgindxmh.ucfzqlku.kxpiixik.kewq",
     "last_seen": "2026-11-08",
@@ -23,7 +27,9 @@
   },
   {
     "decision": true,
-    "files": ["src/z.py"],
+    "files": [
+      "src/z.py"
+    ],
     "justification": "z justification",
     "key": "dk1.f2kdtwnp.nvzqyvsh.bw6yfvyi.hqzu4ut5.p46w4rq5.di7mgkio.pzpq",
     "last_seen": "2026-11-08",

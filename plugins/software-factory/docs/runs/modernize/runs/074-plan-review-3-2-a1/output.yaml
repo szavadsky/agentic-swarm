@@ -6,8 +6,7 @@ suggestions:
   - id: setup-testing-owner-orphaned
     disposition: fix
     summary: 5-owner enum leaves setup-testing (15 files) with no epic
-    detail:
-      M1 interface defines {runner,checkers,setup-testing,semantic,root} with
+    detail: M1 interface defines {runner,checkers,setup-testing,semantic,root} with
       67/83/15/4/15, but only runner/checkers/semantic epics exist; runner
       intent claims runner/** only. setup.py, _setup_*.py, testing.py and setup
       tests orphaned or ambiguously merged. Assign explicitly to runner epic or
@@ -18,8 +17,7 @@ suggestions:
   - id: m3-fanin-missing-machine-edge
     disposition: fix
     summary: M3 fan-in depends only on kickoff gate, can run before epics
-    detail:
-      epic-shift-report-collection deps=[epic-kickoff-gate]; M2 has zero root
+    detail: epic-shift-report-collection deps=[epic-kickoff-gate]; M2 has zero root
       items; plan claims 'milestone ordering is the fan-in mechanism'. No
       enforceable edge from epic close-ups; collection->hatch->final can run
       early and the 'wait, do not fabricate' has no wait mechanism. Add
@@ -41,8 +39,7 @@ suggestions:
   - id: joined-rule-extraction-contradiction
     disposition: architect
     summary: Joined-code extraction cannot live in body if callers stay single-symbol
-    detail:
-      Checkers keeps single-symbol passthrough (rule='unjustified-suppression'
+    detail: Checkers keeps single-symbol passthrough (rule='unjustified-suppression'
       at :152, rule='bare-except-comment'); semantic claims joined extraction +
       any-element match both owned in check_if_meaningful body. Body only sees
       already-passed rule; extraction must happen at caller. Either semantic
@@ -54,8 +51,7 @@ suggestions:
   - id: semantic-edits-root-owned-files
     disposition: fix
     summary: Semantic epic claims pyproject/uv.lock/.gitignore owned by root
-    detail:
-      Universe = src/scripts/tests excl tests/data; root group = tests/data,
+    detail: Universe = src/scripts/tests excl tests/data; root group = tests/data,
       config, docs, repo-root files. Semantic intent takes pyproject [semantic]
       extra + uv.lock + .gitignore + hatch inclusion. No kickoff exception
       covers packaging files. Move to root follow-up items or extend assignment
@@ -98,8 +94,7 @@ suggestions:
   - id: typed-base-misc-unproven
     disposition: fix
     summary: Shared typed base for type-ignore[misc] guessed without spike
-    detail:
-      4 checkers (e.g. beartype_checker :21) suppress SourceRootMixin.options
+    detail: 4 checkers (e.g. beartype_checker :21) suppress SourceRootMixin.options
       vs BaseChecker.options conflict. Removal via shared base asserted as
       certain dev work; may be impossible without changing pylint typing.
       Isolate into test-assumptions spike or qualify as attempt-with-fallback
@@ -132,8 +127,7 @@ suggestions:
   - id: adr-lifecycle-unowned
     disposition: fix
     summary: ADR-009/010/011 reuse stubs; ADR-012 + reconciliation unassigned
-    detail:
-      docs/adr already has 009/010/011 stubs with overlapping but differing
+    detail: docs/adr already has 009/010/011 stubs with overlapping but differing
       titles; plan does not state formalize-vs-overwrite. ADR-012 creation has
       no owner. TD3-A1 routes reconciliation via final-gate follow-up but
       final-gate-validation is report-only zero-writes. Assign formalization +
@@ -154,8 +148,7 @@ suggestions:
   - id: epic-budget-model-unverified
     disposition: architect
     summary: Epics-as-child-tasks outside 50-item cap needs engine confirmation
-    detail:
-      Assumption invents child-task budgets (12/12/10 outside cap, root 7) +
+    detail: Assumption invents child-task budgets (12/12/10 outside cap, root 7) +
       replanAfter fan-in; limits define only maxItemsPerPlan 50 with no
       child-task concept. If unsupported, M2 with zero root items is
       unexecutable. Confirm model or decompose epics into root items with real

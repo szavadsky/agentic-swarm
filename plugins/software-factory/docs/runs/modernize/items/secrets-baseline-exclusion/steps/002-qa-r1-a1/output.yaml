@@ -2,8 +2,7 @@ status: approved
 summary: "approved: no-behavior exclusion verified, zero test diff, full scan
   exit 0, controls replicate"
 suggestions:
-  - detail:
-      Developer's notes pin HEAD b4f45b2 for M1 citation, but that commit's
+  - detail: Developer's notes pin HEAD b4f45b2 for M1 citation, but that commit's
       .secrets.baseline lacks the should_exclude_file entry (verified via git
       show) and it is not an ancestor of HEAD (sibling of landed 882fac0 under
       parent 3f2f546). M1 acceptance (mechanism + pinned HEAD) should cite

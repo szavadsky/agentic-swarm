@@ -195,16 +195,14 @@ uncertainties:
       - "spike-omp-isolation (fact-finder, iteration 1, M1): throwaway
         profile+repos probe matrix + decision record; blocks M3/M4/M6 design"
   - id: u-mock-provider-seam
-    description:
-      How to register a scripted provider for real omp (extension API vs
+    description: How to register a scripted provider for real omp (extension API vs
       local endpoint), catalog listing with --config/-e, streaming NDJSON
       contract, scenario format.
     spikeOutlines:
       - "spike-mock-provider (fact-finder, iteration 1, M1): seam probe +
         scenario-format proposal; poc + runner deferred to M8"
   - id: u-cache-keying
-    description:
-      Whether omp prompt cache keys on content or transport path (prompt
+    description: Whether omp prompt cache keys on content or transport path (prompt
       filename, overlay regen); which compaction/warming knobs affect
       one-process-per-turn factory sessions; cold-resume detection signals.
     spikeOutlines:
@@ -237,8 +235,7 @@ itemOutlines:
     title: "Spike: omp isolation mechanics + backend decision"
     milestoneId: m1-omp-de-risk
     prodBudgetHint: 0
-    description:
-      "Probe installed omp (throwaway --profile, temp repos): enumerate
+    description: "Probe installed omp (throwaway --profile, temp repos): enumerate
       isolation.backend values; compare isolated-task vs omp worktree add +
       --cwd retention on failing/aborted turns; determine the root-process
       workspace mapping; evaluate task.isolation apply/merge/commits vs engine
@@ -251,8 +248,7 @@ itemOutlines:
     title: "Spike: scripted mock provider seam for real omp"
     milestoneId: m1-omp-de-risk
     prodBudgetHint: 0
-    description:
-      Probe the omp extension API + model listing (-e/--config) and any
+    description: Probe the omp extension API + model listing (-e/--config) and any
       custom-provider/endpoint registration; capture the streaming NDJSON
       contract; propose a canned scenario format (turn-by-turn
       text/tool-calls/yield) and prove a minimal real-omp turn against a
@@ -263,8 +259,7 @@ itemOutlines:
     title: "Spike: prompt-cache keying + compaction/warming audit"
     milestoneId: m1-omp-de-risk
     prodBudgetHint: 0
-    description:
-      Diff transport bytes/argv across identical renders (system prompt,
+    description: Diff transport bytes/argv across identical renders (system prompt,
       overlay, prompt path); run live resume probes (same vs changed prompt
       path, model switch, TTL) with cache-miss markers; audit which compaction.*
       / providers.cache* knobs affect one-process-per-turn factory sessions;
@@ -309,22 +304,18 @@ assumptions:
       (proposed: workspaces-lifecycle, commits-merge, saga-launches,
       cache-policy, e2e-docs-hydration) are defined in iteration 2 with
       spike-informed intents."
-    why:
-      All major subsystems build on spike decisions; epic children launched now
+    why: All major subsystems build on spike decisions; epic children launched now
       could not see later-merged findings. Progressive planning defers epic
       definition to the next architect turn via replanAfter milestones.
-  - assumption:
-      Installed omp 18.18.5 is representative; spikes probe it directly
+  - assumption: Installed omp 18.18.5 is representative; spikes probe it directly
       and preflight will pin a minimum version.
     why: Context-pack probes already ran against this binary; findings must be
       validated against the real harness, not docs.
   - assumption: "Current engine worktree behavior is preserved behind isolation:
       engine without regression."
-    why:
-      Spec keeps engine worktrees as a config option; M3 must not change engine
+    why: Spec keeps engine worktrees as a config option; M3 must not change engine
       semantics until the omp backend is proven.
-  - assumption:
-      The single red baseline test (disk-space threshold, env-sensitive)
+  - assumption: The single red baseline test (disk-space threshold, env-sensitive)
       is accepted as-is; iteration gates pass if no NEW failures appear.
     why: Clean-checkout rule forbids investigating env-sensitive baseline reds;
       ratchet on new failures instead.
@@ -339,8 +330,7 @@ assumptions:
       not to spike probes.
 techDebt:
   - id: td-baseline-disk
-    description:
-      "Baseline red: test/disk-space.test.ts:57 expects 1 failing path,
+    description: "Baseline red: test/disk-space.test.ts:57 expects 1 failing path,
       gets 2 (env-sensitive duplicate low-space paths)."
     category: adjacent
     resolution: Accepted as-is; iteration gates ratchet on new failures only.
@@ -359,17 +349,14 @@ techDebt:
     resolution: Resolved this iteration by usage-cache-tokens (M2); M7 defaults
       depend on it.
   - id: td-prompt-path
-    description:
-      Per-turn prompt transport path embeds timestamp+randomness; overlay
+    description: Per-turn prompt transport path embeds timestamp+randomness; overlay
       regenerated per turn; no byte-stability tests.
     category: impacting
-    resolution:
-      Characterize this iteration via transport-byte-stability (M2, tests
+    resolution: Characterize this iteration via transport-byte-stability (M2, tests
       only); stabilize in M7 after spike-cache-key decides content-vs-path
       keying.
   - id: td-runtime-growth
-    description:
-      Runtime dirs sessions/prompts/system-prompts grow without cleanup
+    description: Runtime dirs sessions/prompts/system-prompts grow without cleanup
       (only tmp/ purged); omp-owned orphans unclassified.
     category: impacting
     resolution: M4 gc semantics cover runtime files + omp-owned orphans; M8 e2e
@@ -388,19 +375,16 @@ adrs:
   - id: adr-whole-tree-index
     title: Whole-tree status/cleanup/gc derive on demand from records + git; no
       persistent registry
-    context:
-      19.3 requires idempotent tracking derived from records+git; a registry
+    context: 19.3 requires idempotent tracking derived from records+git; a registry
       file risks drift from worktree/branch reality; parseWorktreeList plus
       INTENT/journal/task dirs already provide the sources.
-    decision:
-      M4 implements deriveWholeTree over orchestration dirs, journals, and
+    decision: M4 implements deriveWholeTree over orchestration dirs, journals, and
       git worktree/branch state on every invocation; cleanup/gc compute
       candidate sets from the same derivation and refuse while any run lock is
       live.
   - id: adr-cache-fields-additive
     title: Cache-token usage fields are additive and optional end to end
-    context:
-      M2 must capture cacheRead/cacheWrite/totalTokens plus cost breakdown
+    context: M2 must capture cacheRead/cacheWrite/totalTokens plus cost breakdown
       without invalidating historical records or forcing a migration.
     decision: All new Usage/StepUsage/record/budget fields are optional with
       zero-default aggregation; the parser tolerates absent keys; schemas gain
@@ -408,8 +392,7 @@ adrs:
   - id: adr-real-binary-e2e
     title: No-model e2e drives the real omp binary with a scripted provider;
       FakeHarness retained for engine tests
-    context:
-      19.8 requires end-to-end through the real omp harness with a scripted
+    context: 19.8 requires end-to-end through the real omp harness with a scripted
       mock provider and zero paid calls; existing engine coverage relies on
       FakeHarness-by-label and mock-binary harness tests, neither of which
       exercises real omp.
@@ -419,8 +402,7 @@ adrs:
       tests.
 concerns:
   - kind: risk
-    summary:
-      19.1 'omp isolation by default' may reduce to omp-managed worktrees +
+    summary: 19.1 'omp isolation by default' may reduce to omp-managed worktrees +
       --cwd if task isolation proves unsuitable for root processes
     detail: Prior research shows isolated:true targets subagents, hardcodes
       branches, and discards failure commits; factory agents are root processes
@@ -433,8 +415,7 @@ concerns:
     affects:
       - "19.1"
   - kind: question
-    summary:
-      Epic INTENT resolution for independent saga launches needs a new run
+    summary: Epic INTENT resolution for independent saga launches needs a new run
       contract
     detail: Epic INTENTs live under the parent task dir on the parent branch,
       unresolvable by factory run from main; per-epic workspaces need an
@@ -452,8 +433,7 @@ remarkable:
         on unknowns or block on missing records)"
       - "Spikes only with no foundation items (rejected: cache-token plumbing is
         spike-independent and M7 decisions need data early)"
-    why:
-      Every major subsystem depends on spike decisions, and concurrently launched
+    why: Every major subsystem depends on spike decisions, and concurrently launched
       epic children could not see spike findings merged after their branch
       point; spikes-first is the only sequencing honoring
       never-build-on-unvalidated-foundations while keeping iteration 1 to two
@@ -472,8 +452,7 @@ remarkable:
         history, risks invalidating committed records)"
       - "Sidecar cache-usage log (rejected: splits usage truth across two
         stores)"
-    why:
-      Preserves validity of all historical records and keeps M2 shippable without
+    why: Preserves validity of all historical records and keeps M2 shippable without
       migration; missing data degrades to zero/unknown.
   - chosen: Real-binary scripted-provider e2e; FakeHarness retained
     alternatives:

@@ -119,8 +119,7 @@ uncertainties:
         runtime through the `semantic` extra on Python 3.14 and pin its
         loader/inference API behavior in tests/assumptions/"
   - id: U2
-    description:
-      "How a git-stored cache behaves under concurrency and cleanup when
+    description: "How a git-stored cache behaves under concurrency and cleanup when
       it is written from inside pylint is unknown. Open questions: pylint `jobs`
       under the runner and pre-commit, when checker open()/close() hooks run,
       partial-path and staged-file runs, and three pylint invocations (pylint,
@@ -222,8 +221,7 @@ itemOutlines:
     milestoneId: M2
   - slug: consolidate-integration-helpers
     kind: story
-    title:
-      Single-source shared test helpers; bring tests/integration.py under 500
+    title: Single-source shared test helpers; bring tests/integration.py under 500
       lines
     description: >-
       Extract the helper functions in tests/integration.py (_copy_sample,
@@ -349,8 +347,7 @@ assumptions:
     why: The intent replaces the model and also demands behavior preservation.
       Drawing this boundary makes 'preserve' mechanically testable.
     disposition: confirm with human
-  - assumption:
-      The git-stored decision cache belongs to the repository being linted
+  - assumption: The git-stored decision cache belongs to the repository being linted
       (python-setup itself and consumer projects alike), not to the installed
       package. Model weights are never committed; only decisions are.
     why: Decisions depend on project content and must be reproducible in that
@@ -361,21 +358,18 @@ assumptions:
       sentence-transformers is absent from .venv today. All gates therefore run
       the heuristic path plus cache hits, and real-model tests are marked slow +
       with_real_api.
-    why:
-      Matches the current .venv contents and keeps the gates offline, fast and
+    why: Matches the current .venv contents and keeps the gates offline, fast and
       deterministic.
   - assumption: "tests/integration.py, `uv run pytest -q`, `uv run pytest
       tests/integration.py` and `uv run lint` are gate contracts: their paths
       and commands do not change during the modernization."
-    why:
-      The infra gates and AGENTS.md reference them, so renaming any of them would
+    why: The infra gates and AGENTS.md reference them, so renaming any of them would
       silently break gating.
   - assumption: "'Never test linting' means pytest must not assert that this
       repository is lint-clean or re-run lint tools on it. The `uv run lint`
       gate and pre-commit enforce that. Tests exercise checker and runner logic
       on synthetic inputs and on the sample project."
-    why:
-      This removes slow, duplicate coverage such as test_self_lint_clean.py and
+    why: This removes slow, duplicate coverage such as test_self_lint_clean.py and
       keeps tests focused on behavior.
     disposition: confirm with human
   - assumption: Only the semantic-decision-model epic starts now. The runner,
@@ -384,13 +378,11 @@ assumptions:
     why: Debloat must follow the safety net and the assumption tests ('test
       infra/assumptions first'). Starting the subsystem epics now would mean
       concurrent edits to shared test infra and conflicting merges.
-  - assumption:
-      At least one model among GLiDE-0.4B and the smaller Decision-Index
+  - assumption: At least one model among GLiDE-0.4B and the smaller Decision-Index
       models has a compatible license, Python 3.14 CPU wheels and a pinnable
       revision. If none qualifies, the semantic epic escalates instead of
       shipping a non-compliant model.
-    why:
-      GLiDE-0.4B uses a custom community license and was tested on Python 3.12.
+    why: GLiDE-0.4B uses a custom community license and was tested on Python 3.12.
       Several smaller candidates are non-commercial or require remote code.
     disposition: verify via semantic-decision-model spikes
 epics:
@@ -531,27 +523,23 @@ epics:
       `uv run lint` all pass with an empty lint.baseline.
 techDebt:
   - id: TD-1
-    description:
-      The suppression-justification and bare-except checkers pass their
+    description: The suppression-justification and bare-except checkers pass their
       own symbol ('unjustified-suppression' / 'bare-except-comment') as `rule`
       to check_if_meaningful. As a result, the documented rule-echo heuristic
       and the semantic model never see the rule that is actually being
       suppressed.
     category: impacting
-    resolution:
-      "Resolved by semantic-decision-model requirement 5: extract the real
+    resolution: "Resolved by semantic-decision-model requirement 5: extract the real
       suppressed codes and pass them. Any golden diff this causes must be
       reviewed, regenerated in the same change, and recorded in CHANGELOG."
   - id: TD-2
-    description:
-      "Semantic tests mock first-party code: they patch module globals
+    description: "Semantic tests mock first-party code: they patch module globals
       (_RERANKER_UNAVAILABLE, _RESULT_CACHE), patch builtins.__import__, and
       import private symbols under type: ignore. Several assertions are vacuous
       (`result is None or isinstance(result, bool)`). This breaks the
       CodingRules mocking strategy and protects nothing."
     category: impacting
-    resolution:
-      "Resolved by semantic-decision-model requirement 6: inject a fake at
+    resolution: "Resolved by semantic-decision-model requirement 6: inject a fake at
       the DecisionBackend Protocol boundary and delete the vacuous tests."
   - id: TD-3
     description: tests/integration.py is 627 lines with a too-many-lines
@@ -563,16 +551,14 @@ techDebt:
       consolidate-integration-helpers single-sources the helpers and brings the
       module to <= 500 lines without the suppression.
   - id: TD-4
-    description:
-      tests/checkers/test_semantic_check.py is 506 lines and suppresses
+    description: tests/checkers/test_semantic_check.py is 506 lines and suppresses
       too-many-lines. Its heuristic tables duplicate
       tests/checkers/test_semantic_threshold.py.
     category: impacting
     resolution: "Resolved by semantic-decision-model requirement 6: one merged
       parametrized table, and modules under 500 lines."
   - id: TD-5
-    description:
-      "The same structural suppressions repeat across about 15 checkers:
+    description: "The same structural suppressions repeat across about 15 checkers:
       missing-beartype on every register(linter), type: ignore[misc] on every
       SourceRootMixin/FunctionVisitMixin checker class, and copied
       stream-read/decode blocks. These are design smells, not one-off
@@ -589,26 +575,21 @@ techDebt:
       astroid>=4.0.4 is declared. CodingRules says to remove fallbacks for
       hard-declared dependencies."
     category: adjacent
-    resolution:
-      To be removed by the iteration-2 runner and checkers epics, guarded
+    resolution: To be removed by the iteration-2 runner and checkers epics, guarded
       by the golden snapshot.
   - id: TD-7
-    description:
-      "runner/dispatch.py carries a rationale comment of more than 500
+    description: "runner/dispatch.py carries a rationale comment of more than 500
       characters that ends in `# pylint: disable=unjustified-suppression`, which
       suppresses the justification checker itself."
     category: adjacent
-    resolution:
-      "Iteration-2 runner epic: move the rationale to design/0002 (already
+    resolution: "Iteration-2 runner epic: move the rationale to design/0002 (already
       referenced) and leave a short, justified comment."
   - id: TD-8
-    description:
-      tests/checkers/_factories.py is about 1400 lines. It types around
+    description: tests/checkers/_factories.py is about 1400 lines. It types around
       40 pytest.param tables as list[Any] with copy-pasted justification
       comments, and keeps cases far from the tests that use them.
     category: adjacent
-    resolution:
-      "Iteration-2 checkers epic, following test-debloat-audit: type the
+    resolution: "Iteration-2 checkers epic, following test-debloat-audit: type the
       tables as ParameterSet, move cases next to their tests, and split per
       checker."
   - id: TD-9
@@ -617,16 +598,14 @@ techDebt:
       behavior. Some tests lint this repository: test_self_lint_clean.py and the
       source-scanning guards in test_runner_private_imports.py."
     category: adjacent
-    resolution:
-      "Iteration-2 runner and setup epics, following test-debloat-audit:
+    resolution: "Iteration-2 runner and setup epics, following test-debloat-audit:
       rename modules by behavior and remove lint-the-repo tests, which the `uv
       run lint` gate already covers."
   - id: TD-10
     description: "ADR locations disagree: CodingRules.md requires design/ (ADR
       format), but factory ADRs are written to docs/adr."
     category: adjacent
-    resolution:
-      At the iteration-2 replan, add a cross-reference (design/README or
+    resolution: At the iteration-2 replan, add a cross-reference (design/README or
       the AGENTS.md index) so both locations are discoverable. Engine
       configuration is not changed.
 adrs:
@@ -638,8 +617,7 @@ adrs:
       integration test only checks that each planted rule name appears somewhere
       in the output, so duplicate findings, moved lines and new false positives
       all go undetected.
-    decision:
-      Commit a normalized snapshot of every finding, {tool, file, line, col,
+    decision: Commit a normalized snapshot of every finding, {tool, file, line, col,
       rule}, for tests/data/minimal_sample_project. Store it at
       tests/data/golden/minimal_sample_project_findings.json, outside the linted
       project. Produce it through the runner's baseline capture with
@@ -648,8 +626,7 @@ adrs:
       as the behavior change, with the diff reviewed. Every modernization item
       must leave it unchanged unless the item explicitly declares a behavior
       change.
-    consequences:
-      Regression detection across all 13 tools and every custom checker
+    consequences: Regression detection across all 13 tools and every custom checker
       becomes exact and cheap, and golden updates become explicit review points.
       Message text is not snapshotted, so changes in message wording are not
       guarded. Tool upgrades via uv.lock may require a reviewed regeneration.
@@ -673,16 +650,14 @@ adrs:
       PYTHON_SETUP_LINT_DECISION_MODEL. PYTHON_SETUP_LINT_RERANKER_MODEL is
       deprecated. When the backend is unavailable it returns None and the
       heuristic result stands."
-    consequences:
-      Brush-off rejections are guaranteed regardless of the model, which
+    consequences: Brush-off rejections are guaranteed regardless of the model, which
       can only tighten acceptance. sentence-transformers is dropped.
       no-try-import's optional patterns must list the new runtime. Real-model
       coverage moves to one slow + with_real_api test. Users who set the old env
       var get a deprecation warning, documented in CHANGELOG.
   - id: ADR-003
     title: Git-stored, self-cleaning decision cache
-    context:
-      Results are cached in ~/.cache/python-setup/semantic/results.json. That
+    context: Results are cached in ~/.cache/python-setup/semantic/results.json. That
       file is gitignored, per machine and unbounded, and it is keyed by a 64-bit
       truncated SHA-256 that includes code context. As a result, W9704 outcomes
       can differ between machines with and without the model, and stale entries
@@ -732,8 +707,7 @@ adrs:
       the audits and with semantic-owned files excluded. Policy: pytest never
       asserts that this repository passes lint; the `uv run lint` gate does
       that."
-    consequences:
-      Shared test infra is never edited concurrently, and debloat always
+    consequences: Shared test infra is never edited concurrently, and debloat always
       runs behind the golden snapshot and the assumption tests. Changes to
       source and its tests stay together within each subsystem. The subsystem
       epics start one iteration later, but they are scoped from evidence rather

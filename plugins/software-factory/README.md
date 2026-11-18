@@ -59,16 +59,10 @@ flows:
   implement-review:
     steps:
       - { id: implement, prompt: implementer, alias: implementer }
-      - {
-          id: review,
-          prompt: reviewer,
-          alias: reviewer,
-          review: true,
-          changeRequests: 2,
-        }
+      - { id: review, prompt: reviewer, alias: reviewer, review: true, changeRequests: 2 }
 taskTypes:
   development: { flow: implement-review, kind: development, schema: outcome }
-boundary: # the kernel turns outside any task flow
+boundary:                       # the kernel turns outside any task flow
   architect: { prompt: architect, alias: architect }
   digest: { prompt: digest, alias: digest }
   front: { prompt: front, alias: pm }
@@ -82,29 +76,20 @@ boundary: # the kernel turns outside any task flow
 
 ```yaml
 aliases:
-  architect:
-    {
-      harness: opencode,
-      model: opencode/minimax-m3.1-flash-free,
-      effort: highest,
-    }
+  architect: { harness: opencode, model: opencode/minimax-m3.1-flash-free, effort: highest }
   implementer: { harness: opencode, model: opencode/deepseek-v4.1-flash-free }
 prices:
-  opencode/minimax-m3.1-flash-free:
-    { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
-  opencode/deepseek-v4.1-flash-free:
-    { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
-  opencode-go/deepseek-v4.1-flash:
-    { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
+  opencode/minimax-m3.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
+  opencode/deepseek-v4.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
+  opencode-go/deepseek-v4.1-flash: { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
 limits:
   concurrency: { overall: 3, perSubscription: { opencode-go: 2 }, perModel: {} }
   iterations: 1
   iterationUsd: 5
-sessions:
-  { dir: ~/.local/share/factory/sessions, keepRuns: 5, retention: short }
+sessions: { dir: ~/.local/share/factory/sessions, keepRuns: 5, retention: short }
 worktreeRoot: ~/.local/share/factory/worktrees
-lsp: true # artifact LSP on omp
-scouts: { model: opencode-go/deepseek-v4.1-flash } # omp architect subagents
+lsp: true                                             # artifact LSP on omp
+scouts: { model: opencode-go/deepseek-v4.1-flash }   # omp architect subagents
 ```
 
 `lsp: true` enables artifact diagnostics where the harness supports them. At
@@ -212,7 +197,6 @@ flag shown as `[urgent]`. The frontmatter block is not part of the steer text.
 ---
 urgent: true
 ---
-
 Stop the rollout and consult me.
 ```
 
