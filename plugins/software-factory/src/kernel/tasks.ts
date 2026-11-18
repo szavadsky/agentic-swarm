@@ -1,53 +1,73 @@
 import { createHash } from "node:crypto";
-import { z } from "zod";
+import { z, type ZodIssue } from "zod";
 import yaml from "yaml";
-import type { FlowDefinition, TaskFile, TaskKind } from "./types.js";
+import type { FlowDefinition, TaskFile } from "./types.js";
 
 /** The flow a task file gets when its frontmatter names none. */
 export const DEFAULT_FLOW = "implement-review";
 
 /**
- * Task frontmatter shape. The prompt skeleton renders from this; `parseTaskFile`
- * stays the validator (file-name authority, custom messages).
+ * Task frontmatter shape: the one schema that validates task files and
+ * renders the prompt skeleton. Unknown keys are refused, so an undeclared
+ * alias such as the old `after` is a finding, never a silent override.
  * Field descriptions are the prompt-facing wording, as on `outcomeSchema`.
  */
-export const taskFrontmatterSchema = z.object({
-  slug: z
-    .string()
-    .min(1)
-    .describe("namespaced kebab-case, matches the file name"),
-  title: z.string().min(1).describe("one line"),
-  kind: z
-    .enum(["task", "spike"])
-    .describe("task merges, spike finishes with findings"),
-  flow: z.string().min(1).describe("one of the configured flows"),
-  deps: z
-    .array(z.string().describe("a slug that must merge first"))
-    .default([]),
-  scope: z.array(z.string().describe("a predicted area")),
-  tier: z.string().min(1).optional().describe("default, or a run-config alias"),
-  revision: z
-    .number()
-    .int()
-    .nonnegative()
-    .optional()
-    .describe("one more than the parked revision when amending under its slug"),
-  base: z.string().min(1).optional().describe("the parked slug this continues"),
-  source: z
-    .string()
-    .describe("plan heading, front, steer, stall or plan-check turn"),
-  repairTurns: z
-    .number()
-    .int()
-    .nonnegative()
-    .optional()
-    .describe("outcome-repair turns for this task's turns"),
-  turnMinutes: z
-    .number()
-    .positive()
-    .optional()
-    .describe("per-turn wall bound in minutes"),
-});
+export const taskFrontmatterSchema = z
+  .object({
+    slug: z
+      .string()
+      .min(1)
+      .describe("namespaced kebab-case, matches the file name"),
+    title: z.string().trim().min(1).describe("one line"),
+    kind: z
+      .enum(["task", "spike"])
+      .default("task")
+      .describe("task merges, spike finishes with findings"),
+    flow: z
+      .string()
+      .min(1)
+      .default(DEFAULT_FLOW)
+      .describe("one of the configured flows"),
+    deps: z
+      .array(z.string().describe("a slug that must merge first"))
+      .default([]),
+    scope: z.array(z.string().describe("a predicted area")).default([]),
+    tier: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("default, or a run-config alias"),
+    revision: z
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .describe(
+        "one more than the parked revision when amending under its slug",
+      ),
+    base: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("the parked slug this continues"),
+    source: z
+      .string()
+      .default("")
+      .describe("plan heading, front, steer, stall or plan-check turn"),
+    repairTurns: z
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .describe("outcome-repair turns for this task's turns"),
+    turnMinutes: z
+      .number()
+      .finite()
+      .positive()
+      .optional()
+      .describe("per-turn wall bound in minutes"),
+  })
+  .strict();
 
 export class TaskFileError extends Error {
   constructor(message: string) {
@@ -65,97 +85,96 @@ export function isValidTaskSlug(slug: string): boolean {
   );
 }
 
-function stringList(value: unknown, field: string): string[] {
-  if (value === undefined || value === null) return [];
-  if (!Array.isArray(value) || value.some((v) => typeof v !== "string")) {
-    throw new TaskFileError(`frontmatter "${field}" must be a list of strings`);
+/**
+ * One schema issue as the operator-facing sentence. Field-specific wording
+ * stays stable for the artifact gate and existing repairs; an undeclared
+ * `after` names the declared field that replaced it.
+ */
+function frontmatterIssue(
+  issue: ZodIssue,
+  fileSlug: string,
+  meta: Record<string, unknown>,
+): string {
+  if (issue.code === "unrecognized_keys") {
+    const others = issue.keys.filter((key) => key !== "after");
+    if (issue.keys.includes("after")) {
+      const also =
+        others.length > 0
+          ? `; also undeclared: ${others.map((key) => `"${key}"`).join(", ")}`
+          : "";
+      return `frontmatter "after" is not accepted: use "deps"${also}`;
+    }
+    const accepted = Object.keys(taskFrontmatterSchema.shape).join(", ");
+    return `frontmatter has undeclared key(s) ${issue.keys.map((key) => `"${key}"`).join(", ")}: accepted keys are ${accepted}`;
   }
-  return value as string[];
+  const field = String(issue.path[0] ?? "");
+  if (field === "kind") {
+    return `task "${fileSlug}" has kind "${String(meta.kind)}": expected "task" or "spike"`;
+  }
+  if (field === "title") {
+    return typeof meta.title === "string"
+      ? `task "${fileSlug}" has no title`
+      : `frontmatter "title" must be a string`;
+  }
+  const expected: Record<string, string> = {
+    slug: "a non-empty string",
+    flow: "a non-empty string",
+    deps: "a list of strings",
+    scope: "a list of strings",
+    tier: "a non-empty string",
+    revision: "a non-negative integer",
+    base: "a non-empty string",
+    source: "a string",
+    repairTurns: "a non-negative integer",
+    turnMinutes: "a positive number",
+  };
+  return expected[field]
+    ? `frontmatter "${field}" must be ${expected[field]}`
+    : `frontmatter "${field || "(root)"}": ${issue.message}`;
 }
 
 /**
- * Parses one task file. The file name is authoritative for the slug: a
- * frontmatter slug that disagrees with it is a validation finding, not a
- * silent rename.
+ * Parses one task file through `taskFrontmatterSchema`. The file name is
+ * authoritative for the slug: a frontmatter slug that disagrees with it is a
+ * validation finding, not a silent rename.
  */
 export function parseTaskFile(text: string, fileSlug: string): TaskFile {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text);
   if (!match) {
     throw new TaskFileError(`task "${fileSlug}" has no --- frontmatter ---`);
   }
-  let meta: Record<string, unknown>;
+  let raw: unknown;
   try {
-    meta = (yaml.parse(match[1] ?? "") as Record<string, unknown>) ?? {};
+    raw = yaml.parse(match[1] ?? "") ?? {};
   } catch (err) {
     throw new TaskFileError(
       `task "${fileSlug}" frontmatter is not valid YAML: ${(err as Error).message}`,
     );
   }
-  const slug = typeof meta.slug === "string" ? meta.slug : fileSlug;
-  if (slug !== fileSlug) {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new TaskFileError(`task "${fileSlug}" frontmatter is not a mapping`);
+  }
+  const meta = raw as Record<string, unknown>;
+  const result = taskFrontmatterSchema.safeParse({
+    ...meta,
+    slug: meta.slug ?? fileSlug,
+  });
+  if (!result.success) {
     throw new TaskFileError(
-      `task file "${fileSlug}" declares slug "${slug}": slugs are immutable and file names authoritative`,
+      result.error.issues
+        .map((issue) => frontmatterIssue(issue, fileSlug, meta))
+        .join("; "),
     );
   }
-  const rawKind = meta.kind;
-  if (rawKind !== undefined && rawKind !== "task" && rawKind !== "spike") {
+  if (result.data.slug !== fileSlug) {
     throw new TaskFileError(
-      `task "${slug}" has kind "${String(rawKind)}": expected "task" or "spike"`,
+      `task file "${fileSlug}" declares slug "${result.data.slug}": slugs are immutable and file names authoritative`,
     );
   }
-  const kind: TaskKind = rawKind === "spike" ? "spike" : "task";
-  const title = typeof meta.title === "string" ? meta.title.trim() : "";
-  if (!title) throw new TaskFileError(`task "${slug}" has no title`);
-  const repairTurns =
-    meta.repairTurns === undefined
-      ? undefined
-      : typeof meta.repairTurns === "number" &&
-          Number.isInteger(meta.repairTurns) &&
-          meta.repairTurns >= 0
-        ? meta.repairTurns
-        : null;
-  if (repairTurns === null)
-    throw new TaskFileError(
-      `task "${slug}" frontmatter "repairTurns" must be a non-negative integer`,
-    );
-  const turnMinutes =
-    meta.turnMinutes === undefined
-      ? undefined
-      : typeof meta.turnMinutes === "number" &&
-          Number.isFinite(meta.turnMinutes) &&
-          meta.turnMinutes > 0
-        ? meta.turnMinutes
-        : null;
-  if (turnMinutes === null)
-    throw new TaskFileError(
-      `task "${slug}" frontmatter "turnMinutes" must be a positive number`,
-    );
-  const revision =
-    meta.revision === undefined
-      ? 0
-      : typeof meta.revision === "number" &&
-          Number.isInteger(meta.revision) &&
-          meta.revision >= 0
-        ? meta.revision
-        : null;
-  if (revision === null)
-    throw new TaskFileError(
-      `task "${slug}" frontmatter "revision" must be a non-negative integer`,
-    );
   return {
-    slug,
-    title,
-    kind,
-    flow: typeof meta.flow === "string" && meta.flow ? meta.flow : DEFAULT_FLOW,
-    deps: stringList(meta.deps ?? meta.after, "deps"),
-    scope: stringList(meta.scope, "scope"),
-    tier: typeof meta.tier === "string" ? meta.tier : undefined,
-    revision,
-    base: typeof meta.base === "string" && meta.base ? meta.base : undefined,
-    source: typeof meta.source === "string" ? meta.source : "",
+    ...result.data,
+    revision: result.data.revision ?? 0,
     body: (match[2] ?? "").trim(),
-    ...(repairTurns !== undefined ? { repairTurns } : {}),
-    ...(turnMinutes !== undefined ? { turnMinutes } : {}),
   };
 }
 

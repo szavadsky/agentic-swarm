@@ -9,6 +9,7 @@ import {
 } from "./kernel/config.js";
 import { parseTaskFile, validateTaskGraph } from "./kernel/tasks.js";
 import { parseOutcome } from "./kernel/outcome.js";
+import { holdFileSchema } from "./kernel/mailbox.js";
 import { classSchema } from "./kernel/flow-context.js";
 
 let failed = false;
@@ -129,6 +130,17 @@ if (fs.existsSync(artifactFactoryDir)) {
       const findings = validateTaskGraph(tasks);
       for (const finding of findings) report(dir, finding);
     }
+  }
+
+  // Pending-steer holds: one YAML per steer, written by the PM's steer turn.
+  // Dotfiles are the writer's temp siblings, not holds `readHolds` would read.
+  for (const file of walk(
+    artifactFactoryDir,
+    (f) =>
+      /\/mailbox\/holds\/[^/]+\.ya?ml$/.test(f) &&
+      !path.basename(f).startsWith("."),
+  )) {
+    validateYamlFile(file, holdFileSchema);
   }
 
   // Class files.

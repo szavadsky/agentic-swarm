@@ -14,6 +14,7 @@ bun bin/factory.ts status --repo <path> --goal <name>
 bun bin/factory.ts benchmark --repo <path> --goal <name>
 bun bin/factory.ts steer  --repo <path> --goal <name> <file | ->
 bun bin/factory.ts validate [--step <id>] <file>
+bun bin/factory.ts schemas --out <dir>
 ```
 
 `init` writes `.factory/repo.yaml` if missing, creates the goal directory and
@@ -25,7 +26,9 @@ schema-enforced file with the gate's validators (tasks/*.md with its
 directory's dependency graph and flow existence against the merged process
 config, class.yaml, outcome.yaml keyed by the step in the sibling
 started.yaml or `--step`, mailbox/holds/*.yaml, repo.yaml, run.yaml,
-process.yaml); exit 0 valid, 1 invalid or unknown kind.
+process.yaml); exit 0 valid, 1 invalid or unknown kind. `schemas` writes every
+kernel file schema as JSON Schema (`task`, `outcome`, `hold`, `class`, `repo`,
+`run`, `process`) into `--out` for editors and the artifact LSP.
 
 Exit codes for `run`: `0` goal done, `1` failure, `2` blocked, `3` iteration
 limit, `130`/`143` interrupted by SIGINT/SIGTERM. The first signal drains (no

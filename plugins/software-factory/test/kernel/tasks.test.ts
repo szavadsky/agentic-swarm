@@ -134,6 +134,35 @@ describe("task files", () => {
     }
   });
 
+  it("refuses the undeclared after alias", () => {
+    const legacy = TEXT.replace(
+      "deps: [auth.session-store]",
+      "after: [auth.session-store]",
+    );
+    expect(() => parseTaskFile(legacy, "auth.token-refresh")).toThrow(
+      '"after" is not accepted: use "deps"',
+    );
+  });
+
+  it("defaults the fields the schema allows to be absent", () => {
+    const minimal = `---
+slug: auth.token-refresh
+title: Refresh tokens
+---
+
+Done when: refresh rotates the token.
+`;
+    const parsed = parseTaskFile(minimal, "auth.token-refresh");
+    expect(parsed.kind).toBe("task");
+    expect(parsed.flow).toBe("implement-review");
+    expect(parsed.deps).toEqual([]);
+    expect(parsed.scope).toEqual([]);
+    expect(parsed.source).toBe("");
+    expect(parsed.revision).toBe(0);
+    expect(parsed.tier).toBeUndefined();
+    expect(parsed.base).toBeUndefined();
+  });
+
   it("hashes the revision, so an amend is material", () => {
     const base = parseTaskFile(TEXT, "auth.token-refresh");
     expect(materialHash({ ...base, revision: 1 })).not.toBe(materialHash(base));

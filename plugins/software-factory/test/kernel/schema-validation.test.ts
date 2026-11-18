@@ -63,6 +63,7 @@ done when: the demo works
 `;
 
 const VALID_OUTCOME = "status: done\nsummary: landed\n";
+const VALID_HOLD = "slugs: [demo.task]\ngoal: false\n";
 
 beforeAll(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "schema-validation-"));
@@ -71,6 +72,7 @@ beforeAll(() => {
   write("bootstrap/run/self.yaml", "aliases: {}\n");
   write(".factory/artifacts/demo/tasks/demo.task.md", VALID_TASK);
   write(".factory/artifacts/demo/class.yaml", "class: task\nslug: demo.task\n");
+  write(".factory/artifacts/demo/mailbox/holds/steer-1.yaml", VALID_HOLD);
   write(
     ".factory/artifacts/demo/records/00001-i1-demo.task-implement-r1/outcome.yaml",
     VALID_OUTCOME,
@@ -89,6 +91,7 @@ function freshCase(mutate?: () => void): void {
   write("bootstrap/run/self.yaml", "aliases: {}\n");
   write(".factory/artifacts/demo/tasks/demo.task.md", VALID_TASK);
   write(".factory/artifacts/demo/class.yaml", "class: task\nslug: demo.task\n");
+  write(".factory/artifacts/demo/mailbox/holds/steer-1.yaml", VALID_HOLD);
   write(
     ".factory/artifacts/demo/records/00001-i1-demo.task-implement-r1/outcome.yaml",
     VALID_OUTCOME,
@@ -111,10 +114,10 @@ describe("schema validation", () => {
     freshCase();
     const result = validRun();
     expect(result.code).toBe(0);
-    // Seven files: package process.yaml, repo/run config, bootstrap run
-    // layer, task, class and outcome. The count proves the class path ran;
-    // noteChecked increments only after classSchema accepts the file.
-    expect(result.output).toContain("7 schema-enforced file(s) valid");
+    // Eight files: package process.yaml, repo/run config, bootstrap run
+    // layer, task, class, hold and outcome. The count proves each path ran;
+    // noteChecked increments only after the schema accepts the file.
+    expect(result.output).toContain("8 schema-enforced file(s) valid");
   });
 
   it("fails on an invalid repo config and names the file", () => {
@@ -204,6 +207,20 @@ describe("schema validation", () => {
       factory(
         "artifacts/demo/records/00001-i1-demo.task-implement-r1/outcome.yaml",
       ),
+    );
+  });
+
+  it("fails on an invalid hold file and names it", () => {
+    freshCase(() =>
+      write(
+        ".factory/artifacts/demo/mailbox/holds/steer-1.yaml",
+        "slugs: demo.task\ngoal: false\n",
+      ),
+    );
+    const result = validRun();
+    expect(result.code).toBe(1);
+    expect(result.output).toContain(
+      factory("artifacts/demo/mailbox/holds/steer-1.yaml"),
     );
   });
 

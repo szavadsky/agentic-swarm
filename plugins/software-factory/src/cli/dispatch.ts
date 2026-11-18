@@ -8,6 +8,7 @@ import {
 } from "../kernel/launch.js";
 import type { ModelCatalog } from "../kernel/preflight.js";
 import type { PriceSource } from "../kernel/openrouter.js";
+import { writeKernelSchemas } from "../kernel/schemas.js";
 import type { DrainController } from "../kernel/signals.js";
 import { benchmarkGoal, formatBenchmark } from "./benchmark.js";
 import {
@@ -32,6 +33,8 @@ export interface ParsedArgs {
   intent?: string;
   file?: string;
   step?: string;
+  /** Output directory for `factory schemas`. */
+  out?: string;
   help: boolean;
   version: boolean;
 }
@@ -57,10 +60,12 @@ Commands:
   benchmark                Print the benchmark rows for one goal's artifacts
   steer                    Drop a steering file into the goal inbox
   validate                 Validate one schema-enforced file with the gate's validators
+  schemas                  Write every kernel schema as JSON Schema
 
 Options:
   --repo <path>            Repository root (defaults to the current directory)
   --goal <name>            Goal directory name under the repo's artifact root
+  --out <dir>              Output directory for \`schemas\`
   --help, -h               Show this help message
   --version, -v            Show version
 `;
@@ -118,6 +123,15 @@ started.yaml; a standalone outcome without either gets step-independent checks
 only. Exit: 0 valid, 1 invalid or unknown kind.
 `;
 
+const SCHEMAS_USAGE = `
+factory schemas --out <dir>
+
+Writes every kernel file schema as JSON Schema, one <name>.schema.json per
+artifact: task, outcome, hold, class, repo, run and process. Creates the
+directory. Editors and the artifact LSP consume these files. Exit: 0 written,
+1 error.
+`;
+
 function usageFor(command: string | undefined): string {
   if (command === "init") return INIT_USAGE;
   if (command === "run") return RUN_USAGE;
@@ -125,6 +139,7 @@ function usageFor(command: string | undefined): string {
   if (command === "benchmark") return BENCHMARK_USAGE;
   if (command === "steer") return STEER_USAGE;
   if (command === "validate") return VALIDATE_USAGE;
+  if (command === "schemas") return SCHEMAS_USAGE;
   return ROOT_USAGE;
 }
 
@@ -192,6 +207,11 @@ export function parseCliArgs(args: string[]): ParsedArgs {
       result.step = parsed.value;
       i = parsed.next;
       if (!result.step) throw new Error("--step requires a step id");
+    } else if (arg === "--out" || arg.startsWith("--out=")) {
+      const parsed = flagValue(arg, "--out", args, i);
+      result.out = parsed.value;
+      i = parsed.next;
+      if (!result.out) throw new Error("--out requires a directory");
     } else if (arg === "-" || !arg.startsWith("-")) {
       positional.push(arg);
     }
@@ -284,7 +304,15 @@ export async function dispatch(
   }
 
   if (parsed.help) {
-    const known = ["init", "run", "status", "benchmark", "steer", "validate"];
+    const known = [
+      "init",
+      "run",
+      "status",
+      "benchmark",
+      "steer",
+      "validate",
+      "schemas",
+    ];
     if (!parsed.command || known.includes(parsed.command)) {
       console.log(usageFor(parsed.command));
       return 0;
@@ -354,6 +382,15 @@ export async function dispatch(
           `${parsed.file}: no --step and no started.yaml: step-independent checks only`,
         );
       console.log(`${parsed.file}: valid`);
+      return 0;
+    }
+    if (parsed.command === "schemas") {
+      if (!parsed.out) throw new Error("schemas requires --out <dir>");
+      const written = writeKernelSchemas(parsed.out);
+      for (const file of written) console.log(file);
+      console.log(
+        `schemas: ${written.length} kernel schema(s) written to ${path.resolve(parsed.out)}`,
+      );
       return 0;
     }
     console.error(`Error: unknown command "${parsed.command}"`);

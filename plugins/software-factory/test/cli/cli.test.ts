@@ -80,6 +80,9 @@ describe("CLI dispatch", () => {
     });
     expect(parseCliArgs(["--help"]).help).toBe(true);
     expect(parseCliArgs(["-v"]).version).toBe(true);
+    expect(parseCliArgs(["schemas", "--out=/tmp/editor"]).out).toBe(
+      "/tmp/editor",
+    );
   });
 
   it("documents the run command in help", async () => {
