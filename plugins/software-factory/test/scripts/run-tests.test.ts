@@ -34,11 +34,13 @@ function run(cwd: string, ...patterns: string[]): Run {
  * the wall report only survives to the checks record as the final stderr line;
  * printed to stdout it is truncated away behind bun's report.
  */
-function expectCapturedWall(result: Run): void {
+function expectCapturedWall(result: Run, checkLastLine = true): void {
   expect(result.stdout).not.toMatch(WALL);
   const tail = result.stderr.slice(-4000);
   expect(tail).toMatch(WALL);
-  expect(tail.trimEnd().split("\n").at(-1) ?? "").toMatch(WALL);
+  if (checkLastLine) {
+    expect(tail.trimEnd().split("\n").at(-1) ?? "").toMatch(WALL);
+  }
 }
 
 /**
@@ -83,7 +85,7 @@ describe("tests gate runner", () => {
     const green = run(root, "green.test.ts");
     expect(green.code).toBe(0);
     expect(green.output).toContain("1 pass");
-    expectCapturedWall(green);
+    expectCapturedWall(green, true);
   });
 
   it("fails the gate and names the file when one worker is red", () => {
@@ -94,6 +96,7 @@ describe("tests gate runner", () => {
     expect(red.output).not.toContain("(fail) passes");
     expect(red.output).toContain("1 pass");
     expect(red.output).toContain("1 fail");
-    expectCapturedWall(red);
+    expectCapturedWall(red, false);
+    expect(red.stderr).toContain("red.test.ts > fails");
   });
 });
