@@ -291,7 +291,9 @@ describe("steer PM routing", () => {
       });
       const boundary = await runBoundary(runtime, { relaunch: false });
       expect(boundary.decision).toBe("continue");
-      expect(outboxOf(runtime, "s1")).toContain("cursor pagination wins");
+      // The sealed report, not the outcome summary, answers the owner.
+      expect(outboxOf(runtime, "s1")).toContain("Cursor pagination wins.");
+      expect(outboxOf(runtime, "s1")).not.toContain("cursor pagination wins");
       expect(inboxHas(runtime, "s1")).toBe(false);
       const pack = fs.readFileSync(
         path.join(runtime.store.goalDir, boundary.packPath!),
@@ -299,6 +301,8 @@ describe("steer PM routing", () => {
       );
       expect(pack).not.toContain("- s1: mailbox/inbox/s1.md");
       expect(pack).toContain("- s1 [spike]");
+      expect(pack).toContain("## Spike findings");
+      expect(pack).toContain("  Cursor pagination wins.");
     } finally {
       cleanupFlowRepo(repo);
     }

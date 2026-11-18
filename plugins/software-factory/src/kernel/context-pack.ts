@@ -35,6 +35,12 @@ export interface PlanReviewPack {
   summary: string;
 }
 
+/** A spike's finding: its sealed report, or the outcome summary for a legacy spike. */
+export interface SpikeFinding {
+  slug: string;
+  finding: string;
+}
+
 export interface ContextPackInput {
   goal: string;
   iteration: number;
@@ -49,6 +55,8 @@ export interface ContextPackInput {
   digestPath?: string;
   tasks: TaskFile[];
   state: State;
+  /** Findings of spikes that produced one; the architect plans from them. */
+  spikeFindings?: SpikeFinding[];
   running?: string[];
   /** Shallow directory index of the goal checkout, already grouped. */
   codeMap?: string[];
@@ -255,6 +263,15 @@ export function renderContextPack(input: ContextPackInput): string {
       ? input.pmAnswers.join("\n")
       : "- none",
   );
+
+  if (input.spikeFindings && input.spikeFindings.length > 0) {
+    lines.push("", "## Spike findings");
+    for (const { slug, finding } of [...input.spikeFindings].sort((a, b) =>
+      a.slug.localeCompare(b.slug),
+    )) {
+      lines.push(`- ${slug}:`, ...finding.split("\n").map((l) => `  ${l}`));
+    }
+  }
 
   lines.push("", "## Task files");
   for (const task of [...input.tasks].sort((a, b) =>

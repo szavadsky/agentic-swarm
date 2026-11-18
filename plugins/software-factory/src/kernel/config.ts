@@ -274,6 +274,7 @@ const limitsSchema = z
     iterationUsd: z.number().positive().optional(),
     turnMinutes: z.number().positive().optional(),
     iterationMinutes: z.number().positive().optional(),
+    minTmpFreeBytes: z.number().int().nonnegative().optional(),
   })
   .strict()
   .default(() => ({
@@ -679,6 +680,9 @@ export function toLimits(configs: ConfigBundle): Limits {
       : {}),
     ...(runLimits.iterationMinutes !== undefined
       ? { iterationMinutes: runLimits.iterationMinutes }
+      : {}),
+    ...(runLimits.minTmpFreeBytes !== undefined
+      ? { minTmpFreeBytes: runLimits.minTmpFreeBytes }
       : {}),
   };
 }

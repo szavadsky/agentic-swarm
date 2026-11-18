@@ -213,4 +213,29 @@ describe("context pack", () => {
       "src/kernel/ — 2 files",
     ]);
   });
+
+  it("renders each spike finding under its slug, indenting a multi-line report", () => {
+    const spikes = [task("probe", { kind: "spike", flow: "spike" })];
+    const pack = renderContextPack({
+      goal: "demo",
+      iteration: 2,
+      intentPath: "/goal/intent.md",
+      planPath: "/goal/plan.md",
+      checkout: "/wt/demo",
+      integrationBranch: "factory/demo",
+      headHash: "abcdef1234567890",
+      recordsDir: "/goal/records",
+      tasksDir: "/goal/tasks",
+      tasks: spikes,
+      state: derive(spikes, []),
+      spikeFindings: [{ slug: "probe", finding: "# Finding\nCursor wins." }],
+      steers: [],
+      setup: [],
+      gates: [],
+      forwarded: [],
+    });
+    expect(pack).toContain(
+      "## Spike findings\n- probe:\n  # Finding\n  Cursor wins.\n",
+    );
+  });
 });

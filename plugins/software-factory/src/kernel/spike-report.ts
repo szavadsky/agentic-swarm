@@ -1,7 +1,7 @@
 import type { CheckResult } from "../core/checks/types.js";
 import { fingerprintText } from "../core/fingerprint.js";
 import { GitError, git } from "../core/git/exec.js";
-import type { ArtifactStore } from "./types.js";
+import type { ArtifactStore, StepRecord } from "./types.js";
 import path from "node:path";
 import fs from "node:fs";
 
@@ -29,6 +29,26 @@ export async function spikeReport(
     }
     throw err;
   }
+}
+
+/**
+ * A spike's finding: its sealed report, else the implement outcome's summary
+ * for a legacy spike that sealed none; undefined when neither exists.
+ */
+export async function spikeFinding(
+  store: ArtifactStore,
+  records: StepRecord[],
+  slug: string,
+): Promise<string | undefined> {
+  const report = await spikeReport(store, slug);
+  if (report !== null) return report.trim();
+  const own = records
+    .filter((record) => record.slug === slug && record.outcome)
+    .sort((a, b) => b.seq - a.seq);
+  const outcome =
+    own.find((record) => record.step === "implement")?.outcome ??
+    own[0]?.outcome;
+  return outcome?.summary || undefined;
 }
 
 /** What `git show <commit>:<path>` prints when the path is not in the commit's tree. */

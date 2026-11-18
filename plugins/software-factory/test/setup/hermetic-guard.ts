@@ -37,6 +37,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import tls from "node:tls";
+import { removeAtFileEnd } from "./tmp-cleanup.js";
 
 export class HermeticViolation extends Error {
   override readonly name = "HermeticViolation";
@@ -442,6 +443,7 @@ function redirectPriceCache(): void {
   const dir = fs.mkdtempSync(
     path.join(os.tmpdir(), "factory-hermetic-no-prices-"),
   );
+  removeAtFileEnd(() => fs.rmSync(dir, { recursive: true, force: true }));
   process.env.FACTORY_PRICE_CACHE = path.join(dir, "openrouter-models.json");
 }
 

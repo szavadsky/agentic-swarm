@@ -369,6 +369,8 @@ export interface Limits {
   planCheckRounds: number;
   /** Resume attempts limit; default 2. */
   resumeAttempts?: number;
+  /** Minimum free bytes in the temporary directory. */
+  minTmpFreeBytes?: number;
 }
 
 export type StepActor = "agent" | "script";
@@ -662,6 +664,8 @@ export interface RunConfig {
     turnMinutes?: number;
     /** Per-iteration wall bound in minutes; folds into `iterationWallMs`. */
     iterationMinutes?: number;
+    /** Minimum free bytes in the temporary directory. */
+    minTmpFreeBytes?: number;
   };
   sessions: { dir: string; keepRuns: number; retention: "short" | "long" };
   worktreeRoot?: string;
