@@ -65,7 +65,7 @@ describe("resume iteration — SIGINT and hard death", () => {
           },
         );
 
-        const store1 = createFolderStore(goalDir);
+        const store1 = createFolderStore(goalDir, undefined, {});
         const state1 = derive(
           await store1.listTasks(),
           await store1.listRecords(),
@@ -106,7 +106,7 @@ describe("resume iteration — SIGINT and hard death", () => {
           },
         );
 
-        const store2 = createFolderStore(goalDir);
+        const store2 = createFolderStore(goalDir, undefined, {});
         const records2 = await store2.listRecords();
         const state2 = derive(await store2.listTasks(), records2);
         expect(state2.goal).toBe("done");
@@ -170,7 +170,7 @@ describe("resume iteration — SIGINT and hard death", () => {
 
         // A hard death mid-iteration: beta's turn started but the process died
         // before it finished, leaving an orphan with no end record.
-        const store1 = createFolderStore(goalDir);
+        const store1 = createFolderStore(goalDir, undefined, {});
         await store1.startRecord({
           iteration: 1,
           slug: "beta",
@@ -222,7 +222,7 @@ describe("resume iteration — SIGINT and hard death", () => {
           { harnesses: { fake: second } },
         );
 
-        const store2 = createFolderStore(goalDir);
+        const store2 = createFolderStore(goalDir, undefined, {});
         const records2 = await store2.listRecords();
         const state2 = derive(await store2.listTasks(), records2);
         expect(state2.goal).toBe("done");
@@ -325,7 +325,7 @@ describe("resume iteration — SIGINT and hard death", () => {
 
         // Dropped after the dying pass boundary read it: never claimed by the
         // architect, never given a PM steer turn.
-        const inbox = createFolderStore(goalDir);
+        const inbox = createFolderStore(goalDir, undefined, {});
         await postSteer(inbox, "s1", "Please note beta for later.");
         const pmBefore = (await inbox.listRecords()).filter(
           (r) => r.actor === "agent" && r.step === "pm" && r.iteration === 1,
@@ -363,7 +363,7 @@ describe("resume iteration — SIGINT and hard death", () => {
           { harnesses: { fake: second } },
         );
 
-        const store2 = createFolderStore(goalDir);
+        const store2 = createFolderStore(goalDir, undefined, {});
         const records2 = await store2.listRecords();
         const state2 = derive(await store2.listTasks(), records2);
         expect(state2.tasks.beta!.status).toBe("merged");

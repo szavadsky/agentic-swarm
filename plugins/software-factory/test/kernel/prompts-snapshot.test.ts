@@ -170,7 +170,7 @@ function library() {
 }
 
 function processConfig(): ProcessConfig {
-  return { flows: {}, boundary: TEST_BOUNDARY, reminders: 1 };
+  return { taskTypes: {}, flows: {}, boundary: TEST_BOUNDARY, reminders: 1 };
 }
 
 describe("role prompts", () => {
@@ -449,6 +449,7 @@ describe("preset snapshots", () => {
     for (const role of ["architect", "pm"]) {
       it(`renders ${role} with ${preset} preset`, () => {
         const process: ProcessConfig = {
+          taskTypes: {},
           flows: {},
           boundary: TEST_BOUNDARY,
           reminders: 1,

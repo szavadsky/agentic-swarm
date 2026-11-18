@@ -150,7 +150,7 @@ describe("iteration metrics", () => {
         },
       );
 
-      const store = createFolderStore(goalDir);
+      const store = createFolderStore(goalDir, undefined, {});
       const records = await store.listRecords();
       const turns = records.filter(
         (r) => r.iteration === 1 && r.endedAt && r.actor === "agent",
@@ -233,7 +233,7 @@ describe("iteration metrics", () => {
     const repo = createTmpRepo();
     try {
       const digit = path.join(repo.dir, "goals", "demo");
-      const store = createFolderStore(digit);
+      const store = createFolderStore(digit, undefined, {});
       await store.ensureLayout();
       const records = [
         rec(1, { step: "architect", usage: usage(0.02, 20, 2) }),
@@ -295,7 +295,11 @@ describe("iteration metrics", () => {
   it("lists quarantined task files per iteration and in totals", async () => {
     const repo = createTmpRepo();
     try {
-      const store = createFolderStore(path.join(repo.dir, "goals", "demo"));
+      const store = createFolderStore(
+        path.join(repo.dir, "goals", "demo"),
+        undefined,
+        {},
+      );
       await store.ensureLayout();
       const records = [
         script(1, {
@@ -408,7 +412,7 @@ describe("record cost truth", () => {
 
   it("aggregates per-model cost, work, gate time and operator acts", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-models-"));
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const check = (name: string) => ({
@@ -527,7 +531,7 @@ describe("record cost truth", () => {
 
   it("splits an alias turn's spend by the models it served", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-served-"));
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const ernie = "openrouter/baidu/ernie-5.5-flash-preview:free";
@@ -603,7 +607,7 @@ describe("record cost truth", () => {
 
   it("stamps gate wall time around the run", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-gate-"));
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const gate = await startChecks(store, {
@@ -635,6 +639,7 @@ describe("record cost truth", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-priced-"));
     const fake = new FakeHarness({ id: "fake" });
     const process: ProcessConfig = {
+      taskTypes: {},
       flows: {},
       boundary: TEST_BOUNDARY,
       reminders: 1,
@@ -666,7 +671,7 @@ describe("record cost truth", () => {
       },
       configs: { repo, process, run },
       repo: new Repo({ mainRoot: root, worktreeRoot: root }),
-      store: createFolderStore(path.join(root, "goal")),
+      store: createFolderStore(path.join(root, "goal"), undefined, {}),
       harnesses: new Map([["fake", fake]]),
       prompts: loadPrompts(process, root, {}),
       limits: {

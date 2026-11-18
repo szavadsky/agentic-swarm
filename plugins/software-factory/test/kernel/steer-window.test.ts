@@ -29,7 +29,7 @@ describe("steer dropped between the boundary read and dispatch start", () => {
     try {
       const harness = new FakeHarness({ id: "fake" });
       const steer = "Keep alpha unmerged until I answer.";
-      const store = createFolderStore(goal.goalDir);
+      const store = createFolderStore(goal.goalDir, undefined, {});
 
       harness.script(async (req, ctx) => {
         writePlan(goal.goalDir, PLAN);
@@ -80,7 +80,7 @@ describe("steer read by the boundary", () => {
     try {
       const harness = new FakeHarness({ id: "fake" });
       const steer = "Keep alpha unmerged until I answer.";
-      const store = createFolderStore(goal.goalDir);
+      const store = createFolderStore(goal.goalDir, undefined, {});
       await store.ensureLayout();
       await postSteer(store, "s1", steer);
 

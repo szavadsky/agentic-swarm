@@ -268,7 +268,7 @@ describe("served model split", () => {
 describe("priced metrics and summary", () => {
   it("prices per-role cost and counts unpriced turns in metrics", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-pricing-"));
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const records = [
@@ -342,7 +342,7 @@ describe("priced metrics and summary", () => {
 
   it("counts a harness zero on an absent model and a usage-less record as unpriced", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-pricing-"));
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const records = [
@@ -426,7 +426,7 @@ describe("priced metrics and summary", () => {
 
   it("shows per-role priced cost and unknown with an unpriced count in the summary", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-pricing-"));
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const records = [
@@ -471,7 +471,7 @@ describe("priced metrics and summary", () => {
 
   it("says unknown rather than $0 when every turn is unpriced", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-pricing-"));
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const records = [
@@ -520,7 +520,7 @@ describe("priced metrics and summary", () => {
 
   it("prices every reported attempt once and keeps a partially priced turn partial", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-pricing-"));
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const records = [
@@ -603,7 +603,7 @@ describe("priced metrics and summary", () => {
 
   it("falls back to the record's own usage when its attempts report nothing", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-pricing-"));
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const records = [
@@ -642,7 +642,7 @@ describe("priced metrics and summary", () => {
 
   it("prices all-zero usage as an unpriced turn in metrics and summary", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-pricing-"));
-    const store = createFolderStore(path.join(root, "goal"));
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       const records = [
@@ -773,7 +773,7 @@ describe("pricing in a launch", () => {
         },
       );
 
-      const store = createFolderStore(goalDir);
+      const store = createFolderStore(goalDir, undefined, {});
       const metrics = yaml.parse(
         (await store.readFile("metrics.yaml"))!,
       ) as GoalMetrics;

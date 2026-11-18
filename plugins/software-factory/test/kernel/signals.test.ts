@@ -137,7 +137,7 @@ describe("signal policy", () => {
       );
       expect(workCalls(harness)).toHaveLength(2);
 
-      const store = createFolderStore(s.goalDir);
+      const store = createFolderStore(s.goalDir, undefined, {});
       const metrics = yaml.parse((await store.readFile("metrics.yaml"))!) as {
         iterations: Array<{ status: string }>;
       };
@@ -176,7 +176,7 @@ describe("signal policy", () => {
         },
       );
 
-      const store = createFolderStore(s.goalDir);
+      const store = createFolderStore(s.goalDir, undefined, {});
       const records = await store.listRecords();
       const interrupted = records.find((r) => r.step === "architect");
       expect(interrupted?.stop?.kind).toBe("cancelled");

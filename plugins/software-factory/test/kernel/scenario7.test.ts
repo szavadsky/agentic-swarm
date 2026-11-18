@@ -181,7 +181,7 @@ describe("KERNEL0 scenario 7 — plan edit between iterations", () => {
         fs.readFileSync(path.join(goal.goalDir, "tasks/alpha.md"), "utf8"),
       ).toBe(ALPHA);
 
-      const store = createFolderStore(goal.goalDir);
+      const store = createFolderStore(goal.goalDir, undefined, {});
       const records = await store.listRecords();
       const cancel = records.find(
         (r) => r.step === "cancel" && r.slug === "gamma",

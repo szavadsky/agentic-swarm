@@ -10,7 +10,7 @@ describe("KERNEL0 scenario 6 — steer reaches the architect and is answered", (
   it("puts the steer in the pack and prompt, then processed + outbox", async () => {
     const goal = makeGoal();
     try {
-      const store = createFolderStore(goal.goalDir);
+      const store = createFolderStore(goal.goalDir, undefined, {});
       await store.ensureLayout();
       await postSteer(
         store,
@@ -65,7 +65,7 @@ describe("KERNEL0 scenario 6 — steer reaches the architect and is answered", (
   it("leaves an unanswered steer in the inbox and reports it to the owner", async () => {
     const goal = makeGoal();
     try {
-      const store = createFolderStore(goal.goalDir);
+      const store = createFolderStore(goal.goalDir, undefined, {});
       await store.ensureLayout();
       await postSteer(store, "s2", "Do not touch the billing module.");
 

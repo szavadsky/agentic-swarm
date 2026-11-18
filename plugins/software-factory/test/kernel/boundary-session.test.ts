@@ -46,7 +46,7 @@ describe("architect session continuity", () => {
       });
 
       await expectLaunch(3, goal.repo, first);
-      const store = createFolderStore(goal.goalDir);
+      const store = createFolderStore(goal.goalDir, undefined, {});
       const records = await store.listRecords();
       const architect = records.find((r) => r.step === "architect");
       expect(architect?.session?.compacted).toBe(true);
@@ -152,7 +152,11 @@ describe("delivery guard", () => {
       );
       expect(summary).toContain("status: blocked-by-user");
       expect(summary).toContain("plan.md does not exist");
-      const records = await createFolderStore(goal.goalDir).listRecords();
+      const records = await createFolderStore(
+        goal.goalDir,
+        undefined,
+        {},
+      ).listRecords();
       expect(records.some((r) => r.step === "pm")).toBe(false);
     } finally {
       cleanup(goal);
@@ -187,7 +191,11 @@ describe("delivery guard", () => {
       );
       expect(summary).toContain("status: blocked-by-user");
       expect(summary).toContain("is unchanged since the turn started");
-      const records = await createFolderStore(goal.goalDir).listRecords();
+      const records = await createFolderStore(
+        goal.goalDir,
+        undefined,
+        {},
+      ).listRecords();
       expect(records.some((r) => r.step === "pm")).toBe(false);
     } finally {
       cleanup(goal);
@@ -206,7 +214,11 @@ describe("delivery guard", () => {
       expect(harness.calls[1]!.prompt).toContain(
         "You are the front. Your turn did not deliver its class, task, and pack.",
       );
-      const records = await createFolderStore(goal.goalDir).listRecords();
+      const records = await createFolderStore(
+        goal.goalDir,
+        undefined,
+        {},
+      ).listRecords();
       expect(records.filter((r) => r.step === "architect")).toEqual([]);
       const summary = fs.readFileSync(
         path.join(goal.goalDir, "iterations/1/summary.md"),

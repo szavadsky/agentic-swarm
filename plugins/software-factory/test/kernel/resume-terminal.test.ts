@@ -38,7 +38,7 @@ describe("resume guards — front-stop, holds and terminal", () => {
         { harnesses: { fake: second } },
       );
 
-      const store = createFolderStore(goalDir);
+      const store = createFolderStore(goalDir, undefined, {});
       const records = await store.listRecords();
       const state = derive(await store.listTasks(), records);
       expect(state.tasks.beta!.status).toBe("merged");
@@ -82,7 +82,11 @@ describe("resume guards — front-stop, holds and terminal", () => {
         { harnesses: { fake: second } },
       );
 
-      const records = await createFolderStore(goalDir).listRecords();
+      const records = await createFolderStore(
+        goalDir,
+        undefined,
+        {},
+      ).listRecords();
       expect(
         records.filter(
           (r) =>
@@ -138,7 +142,7 @@ describe("resume guards — front-stop, holds and terminal", () => {
         { harnesses: { fake: first } },
       );
 
-      const mid = createFolderStore(s.goalDir);
+      const mid = createFolderStore(s.goalDir, undefined, {});
       const midState = derive(await mid.listTasks(), await mid.listRecords());
       expect(midState.goal).toBe("active");
       expect(midState.tasks.alpha!.status).toBe("merged");
@@ -156,7 +160,7 @@ describe("resume guards — front-stop, holds and terminal", () => {
         { harnesses: { fake: second } },
       );
 
-      const store = createFolderStore(s.goalDir);
+      const store = createFolderStore(s.goalDir, undefined, {});
       const records = await store.listRecords();
       const state = derive(await store.listTasks(), records);
       expect(state.goal).toBe("done");

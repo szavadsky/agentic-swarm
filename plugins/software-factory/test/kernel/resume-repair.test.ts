@@ -122,8 +122,8 @@ Create delta.txt.
           },
         );
         const state = derive(
-          await createFolderStore(s.goalDir).listTasks(),
-          await createFolderStore(s.goalDir).listRecords(),
+          await createFolderStore(s.goalDir, undefined, {}).listTasks(),
+          await createFolderStore(s.goalDir, undefined, {}).listRecords(),
         );
         expect(state.tasks.alpha!.status).toBe("merged");
         expect(state.tasks.beta!.status).toBe("ready");
@@ -249,7 +249,7 @@ Create delta.txt.
           { harnesses: { fake: second } },
         );
 
-        const store = createFolderStore(goalDir);
+        const store = createFolderStore(goalDir, undefined, {});
         const records = await store.listRecords();
         const state = derive(await store.listTasks(), records);
 
@@ -305,7 +305,7 @@ Create delta.txt.
       try {
         // beta's branch is gone: its merge fails and parks it, leaving gamma's
         // dep unsatisfied and nothing dispatchable.
-        await createFolderStore(goalDir).appendRecord(
+        await createFolderStore(goalDir, undefined, {}).appendRecord(
           {
             iteration: 1,
             slug: "beta",
@@ -336,7 +336,7 @@ Create delta.txt.
           { harnesses: { fake: second } },
         );
 
-        const store = createFolderStore(goalDir);
+        const store = createFolderStore(goalDir, undefined, {});
         const records = await store.listRecords();
         const state = derive(await store.listTasks(), records);
         expect(state.tasks.beta!.status).toBe("parked");

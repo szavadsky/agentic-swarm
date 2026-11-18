@@ -70,10 +70,11 @@ export async function initGoal(opts: {
 
   const configs = loadConfigs(repoRoot);
   const paths = resolveGoalPaths(configs, repoRoot, opts.goal);
+  const taskTypes = configs.process.taskTypes;
   const store = createFolderStore(
     paths.goalDir,
     path.dirname(paths.goalDir),
-    configs.process.taskTypes,
+    taskTypes,
   );
   await store.ensureLayout();
 
@@ -124,10 +125,11 @@ export async function statusGoal(
   const paths = resolveGoalPaths(configs, repoRoot, goal);
   if (!fs.existsSync(paths.goalDir))
     throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
+  const taskTypes = configs.process.taskTypes;
   const store = createFolderStore(
     paths.goalDir,
     path.dirname(paths.goalDir),
-    configs.process.taskTypes,
+    taskTypes,
   );
   const state = derive(
     await store.listTasks(),
@@ -172,10 +174,11 @@ export async function steerGoal(
   const paths = resolveGoalPaths(configs, repoRoot, goal);
   if (!fs.existsSync(paths.goalDir))
     throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
+  const taskTypes = configs.process.taskTypes;
   const store = createFolderStore(
     paths.goalDir,
     path.dirname(paths.goalDir),
-    configs.process.taskTypes,
+    taskTypes,
   );
   await store.ensureLayout();
 

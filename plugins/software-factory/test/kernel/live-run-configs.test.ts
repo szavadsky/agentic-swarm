@@ -91,7 +91,7 @@ describe.skipIf(!LIVE)("bootstrap run configs against the real CLIs", () => {
           "# Goal\n\nLive pre-flight probe.\n",
           "utf8",
         );
-        const store = createFolderStore(paths.goalDir);
+        const store = createFolderStore(paths.goalDir, undefined, {});
         await store.ensureLayout();
 
         const binaries = resolveHarnessBinaries(configs.run.harnesses);

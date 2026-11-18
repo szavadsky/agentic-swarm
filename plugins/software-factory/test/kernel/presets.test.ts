@@ -7,6 +7,7 @@ import { TEST_BOUNDARY } from "./helpers.js";
 describe("presets", () => {
   it("uses the preset calibration when defined", () => {
     const process: ProcessConfig = {
+      taskTypes: {},
       flows: {},
       boundary: TEST_BOUNDARY,
       reminders: 1,
@@ -28,6 +29,7 @@ describe("presets", () => {
 
   it("uses the default calibration when preset is not defined", () => {
     const process: ProcessConfig = {
+      taskTypes: {},
       flows: {},
       boundary: TEST_BOUNDARY,
       reminders: 1,
@@ -49,6 +51,7 @@ describe("presets", () => {
 
   it("uses the preset calibration for each shipped preset", () => {
     const process: ProcessConfig = {
+      taskTypes: {},
       flows: {},
       boundary: TEST_BOUNDARY,
       reminders: 1,
@@ -78,6 +81,7 @@ describe("presets", () => {
 
   it("behaves correctly when presets are undefined or empty", () => {
     const processNoPresets: ProcessConfig = {
+      taskTypes: {},
       flows: {},
       boundary: TEST_BOUNDARY,
       reminders: 1,

@@ -46,9 +46,9 @@ describe("E13: a half-written task file does not wedge the launch", () => {
           "utf8",
         ),
       ).toContain("half-written");
-      const report = (await createFolderStore(goal.goalDir).listRecords()).find(
-        (record) => record.step === "task-quarantine",
-      );
+      const report = (
+        await createFolderStore(goal.goalDir, undefined, {}).listRecords()
+      ).find((record) => record.step === "task-quarantine");
       expect(report?.ok).toBe(false);
       expect(report?.cause).toContain('task file "broken.md" quarantined at');
       // The next launch must find no unreadable file left to wedge it.
