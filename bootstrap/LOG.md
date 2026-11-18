@@ -738,3 +738,9 @@ Verbatim, newest last; each with what it changed.
 - Legs: architect opus 1t unpriced clean (10th clean shaping); implementer 18t gemini $9.95; ESCALATION 2 turns sonnet $1.60; plancheck $0.17; planreview $0.06; pm/reviewer/digest $0 hy4. Cost ~$10.18 partial.
 - Friction: no-outcome DOWN to 2 (from 9); 5 failure + 4 change-request launchKinds; 1705 pre-existing lint warnings (recurring debt note); prompt-snapshot pre-existing infra failures.
 - Goal NOT complete — resume-gate remains. No stop pressure.
+
+### 2026-11-18 — repair-i4 landed: 1 merge; ENOSPC infra (operator purged /tmp)
+- Exit 3 (iteration-limit), 32min wall, status in-progress. factory/repair +1: dispatch-pass-signals-2. 3 NEW parks (5 total): resume-gate (FAILED gates-tests ENOSPC — the crux, infra-blocked), spike-report-contracts-2 (FAILED ENOSPC), test-tmp-hygiene (FAILED ENOSPC — the hygiene task itself died on the full disk). Pending 0, debt 1 (plancheck r1, superseded). Inbox empty.
+- ROOT CAUSE: /tmp tmpfs 96% full (9.4G/9.8G, 68k leaked factory-hermetic/acpx-stub/factory-test-repo dirs + 38 stale 225M factory-gates copies) — every gates.sh run copies the package into /tmp, so all gates red as infra. Architect explicitly asked OPERATOR to purge before next launch. Operator purged (96%→15%, 8.4G free); node-compile-cache + small tool dirs left alone.
+- Legs: architect opus unpriced clean (11th shaping); implementer agy/gemini $1.71; plancheck $0.04; planreview $0.02; pm/reviewer/digest $0 hy4/free. Cost $1.77 partial ($1.77/merge). No no-outcome spike noted.
+- Goal NOT complete — resume-gate must re-drive after /tmp purge. No stop pressure (merge resets counter).
