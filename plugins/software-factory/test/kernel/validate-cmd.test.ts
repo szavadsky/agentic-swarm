@@ -52,6 +52,7 @@ const ROLES: Record<string, Record<string, string>> = {
   },
   implementer: {
     task_path: "/goal/tasks/alpha.md",
+    report_path: "",
     front_pack: "/goal/iterations/3/context-pack.md",
     worktree: "/worktrees/demo-tasks/alpha",
     setup_command: "bun install",
