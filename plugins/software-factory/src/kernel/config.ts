@@ -8,6 +8,7 @@ import { z } from "zod";
 import { acpxConfigSchema } from "../harness/acpx/config.js";
 import { type Finding, formatFindings } from "./findings.js";
 import type {
+  BoundaryStep,
   ConfigBundle,
   ConfigFiles,
   GoalPaths,
@@ -16,7 +17,7 @@ import type {
   RepoConfig,
   RunConfig,
 } from "./types.js";
-import { DEFAULT_TIMEOUTS } from "./types.js";
+import { BOUNDARY_STEPS, DEFAULT_TIMEOUTS } from "./types.js";
 
 const packageRoot = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -52,6 +53,11 @@ export const repoConfigSchema = z
   })
   .strict();
 
+/** One step's prompt template and run-config alias. */
+export const turnSchema = z
+  .object({ prompt: z.string().min(1), alias: z.string().min(1) })
+  .strict();
+
 /** One flow step; `review` marks the step that consumes a review round. */
 export const flowStepSchema = z
   .object({
@@ -62,25 +68,39 @@ export const flowStepSchema = z
         /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/,
         "step id must be a simple name (no path separators)",
       ),
-    role: z.string().min(1).optional(),
+    prompt: z.string().min(1).optional(),
+    alias: z.string().min(1).optional(),
     review: z.boolean().default(false),
     /** Review and checks steps: change requests honored before the last call. */
     changeRequests: z.number().int().nonnegative().optional(),
   })
   .strict()
-  .refine((step) => step.id === "checks" || step.role !== undefined, {
-    message: "role is required on flow steps other than checks",
-    path: ["role"],
-  });
+  .refine(
+    (step) =>
+      step.id === "checks" ||
+      (step.prompt !== undefined && step.alias !== undefined),
+    {
+      message: "a step other than checks needs a prompt and an alias",
+      path: ["prompt"],
+    },
+  );
 
 export const followUpSchema = z
   .object({
     mode: z
       .enum(["same-session", "de-novo", "different-model"])
       .default("same-session"),
-    role: z.string().min(1).optional(),
+    alias: z.string().min(1).optional(),
   })
-  .default({ mode: "same-session" });
+  .strict()
+  .default({ mode: "same-session" })
+  .refine(
+    (followUp) => followUp.mode !== "different-model" || !!followUp.alias,
+    {
+      message: "follow-up mode different-model needs an alias",
+      path: ["alias"],
+    },
+  );
 
 export const flowSchema = z
   .object({
@@ -89,39 +109,89 @@ export const flowSchema = z
   })
   .strict();
 
+/**
+ * One task type: the flow a task runs, whether it is a spike or development
+ * work, and the kernel output schema its turns deliver. The type owns all
+ * three so a task file cannot pair a spike kind with a review-only flow.
+ */
+export const taskTypeSchema = z
+  .object({
+    flow: z.string().min(1),
+    kind: z.enum(["spike", "development"]),
+    schema: z.string().min(1),
+  })
+  .strict();
+
+/** Every boundary step names its prompt and alias; unknown steps are refused. */
+export const boundarySchema = z
+  .object(
+    Object.fromEntries(
+      BOUNDARY_STEPS.map((step) => [step, turnSchema]),
+    ) as Record<BoundaryStep, typeof turnSchema>,
+  )
+  .strict();
+
+/** A repo override may retarget one boundary step without restating the rest. */
+export const boundaryOverrideSchema = z
+  .object(
+    Object.fromEntries(
+      BOUNDARY_STEPS.map((step) => [step, turnSchema.optional()]),
+    ) as Record<BoundaryStep, z.ZodOptional<typeof turnSchema>>,
+  )
+  .strict();
+
 /** Process layer: package default deep-merged with an optional repo override. */
 export const processConfigSchema = z
   .object({
     flows: z.record(z.string(), flowSchema).default({}),
-    roles: z
+    taskTypes: z.record(z.string(), taskTypeSchema).default({}),
+    boundary: boundarySchema,
+    reminders: z.number().int().nonnegative().default(1),
+    calibration: z.string().optional(),
+    promptsDir: z.string().min(1).optional(),
+    presets: z
       .record(
         z.string(),
         z
           .object({
-            prompt: z.string().min(1),
-            alias: z.string().min(1).optional(),
+            calibration: z.string().min(1),
           })
           .strict(),
       )
-      .default({}),
-    reminders: z.number().int().nonnegative().default(1),
-    calibration: z.string().optional(),
-    promptsDir: z.string().min(1).optional(),
+      .optional(),
   })
   .strict();
 
+/**
+ * A repo process override on its own: every top-level block the package
+ * default already supplies is optional here, and boundary entries merge one by
+ * one. The merged layer parses with `processConfigSchema`, so an override that
+ * leaves a boundary step out still resolves the package default.
+ */
+export const processOverrideSchema = processConfigSchema.extend({
+  boundary: boundaryOverrideSchema.optional(),
+});
+
 /** Run layer: not tracked; aliases, price ids, limits, session store, scout pin. */
-export const fallbackSchema = z
-  .object({
-    /** Harness id; defaults to the alias's harness. */
-    harness: z.string().min(1).optional(),
-    model: z.string().min(1),
-    /** Effort level; defaults to the alias's resolved effort. */
-    effort: z.string().min(1).optional(),
-    /** Quota pool this tier draws on; defaults to the alias's subscription. */
-    subscription: z.string().min(1).optional(),
-  })
-  .strict();
+export const fallbackSchema = z.union([
+  z
+    .object({
+      /** Run-config alias whose whole ladder this tier reuses. */
+      alias: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      /** Harness id; defaults to the alias's harness. */
+      harness: z.string().min(1).optional(),
+      model: z.string().min(1),
+      /** Effort level; defaults to the alias's resolved effort. */
+      effort: z.string().min(1).optional(),
+      /** Quota pool this tier draws on; defaults to the alias's subscription. */
+      subscription: z.string().min(1).optional(),
+    })
+    .strict(),
+]);
 
 /** One rotation entry: replaces the alias primary on the iterations that select it. */
 export const aliasEntrySchema = z
@@ -234,6 +304,13 @@ export const runConfigSchema = z
       .strict()
       .default(() => ({ dir: "", keepRuns: 5, retention: "short" as const })),
     worktreeRoot: z.string().min(1).optional(),
+    /**
+     * Enable artifact LSP where the harness supports it. omp runs without
+     * `--no-lsp` and installs the artifact config into each turn's cwd;
+     * harnesses without an LSP surface ignore it and keep the validation
+     * command.
+     */
+    lsp: z.boolean().default(false),
     scouts: z
       .object({
         model: z.string().min(1),
@@ -241,6 +318,7 @@ export const runConfigSchema = z
       })
       .strict()
       .optional(),
+    preset: z.string().min(1).optional(),
   })
   .strict();
 
@@ -373,9 +451,39 @@ function processFileFor(
 }
 
 /**
+ * The process layer alone: package default deep-merged with the repo override.
+ * Exported for callers that read process vocabulary without validating a
+ * repo/run config they do not own.
+ */
+export function loadProcessConfig(repoRoot: string): ProcessConfig {
+  const files = configFilePaths(repoRoot);
+  const findings: Finding[] = [];
+  const process = processLayer(files, findings);
+  if (findings.length > 0) throw new ConfigError(findings);
+  return process as ProcessConfig;
+}
+
+function processLayer(
+  files: ConfigFiles,
+  findings: Finding[],
+): ProcessConfig | undefined {
+  const baseLayer = readLayer(files.processDefault);
+  const overrideLayer = readLayer(files.processOverride);
+  findings.push(...baseLayer.findings, ...overrideLayer.findings);
+  const processData = parseLayer(
+    processConfigSchema,
+    deepMerge(baseLayer.data ?? {}, overrideLayer.data),
+    (issue) => processFileFor(overrideLayer.data, issue, files),
+    findings,
+  );
+  if (!processData) return undefined;
+  return processData as ProcessConfig;
+}
+
+/**
  * Loads the three layers into one report. Missing files take schema defaults;
- * a missing run config leaves aliases empty so pre-flight names the roles
- * instead of inventing a harness.
+ * a missing run config leaves aliases empty so pre-flight names the aliases
+ * the process config requires instead of inventing a harness.
  */
 export function loadConfigs(
   repoRoot: string,
@@ -384,15 +492,8 @@ export function loadConfigs(
   const files = configFilePaths(repoRoot, opts);
   const findings: Finding[] = [];
   const repoLayer = readLayer(files.repo);
-  const baseLayer = readLayer(files.processDefault);
-  const overrideLayer = readLayer(files.processOverride);
   const runLayer = readLayer(files.run);
-  findings.push(
-    ...repoLayer.findings,
-    ...baseLayer.findings,
-    ...overrideLayer.findings,
-    ...runLayer.findings,
-  );
+  findings.push(...repoLayer.findings, ...runLayer.findings);
 
   const repo = parseLayer(
     repoConfigSchema,
@@ -400,27 +501,18 @@ export function loadConfigs(
     files.repo,
     findings,
   );
-  const processMerged = deepMerge(baseLayer.data ?? {}, overrideLayer.data);
-  const processData = parseLayer(
-    processConfigSchema,
-    processMerged,
-    (issue) => processFileFor(overrideLayer.data, issue, files),
-    findings,
-  );
+  const processData = processLayer(files, findings);
   const run = parseLayer(runConfigSchema, runLayer.data, files.run, findings);
-  if (processData) {
-    for (const [name, flow] of Object.entries(processData.flows)) {
-      if (flow.followUp?.mode === "different-model" && !flow.followUp.role) {
-        findings.push({
-          file: processFileFor(
-            overrideLayer.data,
-            { path: ["flows", name] },
-            files,
-          ),
-          key: `flows.${name}.followUp.role`,
-          message: "follow-up mode different-model needs a role",
-        });
-      }
+  if (processData && run?.preset && processData.presets) {
+    if (
+      Object.keys(processData.presets).length > 0 &&
+      !(run.preset in processData.presets)
+    ) {
+      findings.push({
+        file: files.run,
+        key: "preset",
+        message: `preset "${run.preset}" is not defined in process config`,
+      });
     }
   }
   if (findings.length > 0) throw new ConfigError(findings);

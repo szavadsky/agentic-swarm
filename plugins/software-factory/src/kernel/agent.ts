@@ -1,7 +1,8 @@
 import fs from "node:fs";
+import type { z } from "zod";
 import {
-  portable,
   type ModelRef,
+  portable,
   type ServedUsage,
   type SessionRef,
   type Stop,
@@ -10,11 +11,11 @@ import {
   type Usage,
 } from "../harness/types.js";
 import { addUsage, reportsUsage, zeroUsage } from "../harness/usage.js";
-import { loadPriceTable } from "./openrouter.js";
-import { pricedServed, pricedUsage } from "./pricing.js";
 import { missingPlanFinding, snapshotPlan } from "./architect-session.js";
 import { contextPackRelPath } from "./context-pack.js";
-import { type RoleTarget, tierPoolKey } from "./flow-context.js";
+import { type TurnTarget, tierPoolKey } from "./flow-context.js";
+import { hasFallbackHop } from "./metrics.js";
+import { loadPriceTable } from "./openrouter.js";
 import {
   failedOutcome,
   type OutcomeExpectation,
@@ -22,15 +23,15 @@ import {
   readDeliveredOutcome,
   validateExpectation,
 } from "./outcome.js";
-import { renderRolePrompt } from "./prompts.js";
+import { pricedServed, pricedUsage } from "./pricing.js";
 import { outcomeRepairSchemaVar } from "./prompt-schema.js";
-import { hasFallbackHop } from "./metrics.js";
 import { appendPark } from "./record.js";
 import {
   DEFAULT_TIMEOUTS,
   type KernelRuntime,
   type LaunchKind,
   type Outcome,
+  outcomeSchema,
   type RecordEnd,
   type RecordStart,
   type StepRecord,
@@ -39,12 +40,17 @@ import {
 export { DEFAULT_TIMEOUTS } from "./types.js";
 
 export interface AgentTurnSpec {
-  target: RoleTarget;
+  target: TurnTarget;
   cwd: string;
   /** iteration/slug/step/round/taskHash/base; actor, alias, model come from the target. */
   meta: Omit<RecordStart, "actor" | "alias" | "model">;
   vars: Record<string, string>;
   expectation: OutcomeExpectation;
+  /**
+   * The task type's output schema; defaults to the kernel outcome schema for
+   * kernel turns and legacy tasks.
+   */
+  outcomeSchema?: z.ZodType<Outcome>;
   /** Review steps only: the last call refuses a `changes` verdict. */
   lastCall?: boolean;
   session?: SessionRef;
@@ -70,8 +76,8 @@ export interface AgentTurnResult {
   text: string;
 }
 
-/** Roles that run the boundary consult; only they see the iteration's pack. */
-const PACK_ROLES = new Set(["architect", "pm"]);
+/** Boundary steps that run on the iteration's pack; only they measure it. */
+const PACK_STEPS = new Set(["architect", "pm"]);
 
 /**
  * The pack is the boundary consult's shared context: the architect reads it,
@@ -82,7 +88,7 @@ async function measurePack(
   runtime: KernelRuntime,
   spec: AgentTurnSpec,
 ): Promise<{ bytes: number } | undefined> {
-  if (!PACK_ROLES.has(spec.target.role)) return undefined;
+  if (!PACK_STEPS.has(spec.meta.step)) return undefined;
   const pack = await runtime.store.readFile(
     contextPackRelPath(spec.meta.iteration),
   );
@@ -98,28 +104,26 @@ function overflowed(stop: Stop): boolean {
 }
 
 /**
- * The product each role's turn must deliver, named in the repair ask and the
- * failure cause. The PM ladder and the front post-checks own file validity;
- * the guard names their deliverable when the outcome itself goes missing.
+ * The product each turn must deliver, named in the repair ask and the failure
+ * cause. The PM ladder and the front post-checks own file validity; the guard
+ * names their deliverable when the outcome itself goes missing.
  */
-function deliverableFor(role: string): string {
-  switch (role) {
+function deliverableFor(step: string, expectation: OutcomeExpectation): string {
+  switch (step) {
     case "architect":
       return "plan edit or stop decision";
-    case "reviewer":
-      return "verdict";
     case "pm":
       return "task files";
     case "front":
       return "class, task, and pack";
     case "steward":
       return "merge resolution";
-    case "plan-checker":
+    case "plancheck":
       return "plan verdict";
-    case "plan-reviewer":
+    case "planreview":
       return "numbered plan-review findings";
     default:
-      return "outcome";
+      return expectation === "review" ? "verdict" : "outcome";
   }
 }
 
@@ -213,16 +217,11 @@ export async function runAgentTurn(
     model,
   });
   const outcomePath = started.outcomePath;
-  const prompt = renderRolePrompt(
-    runtime.prompts,
-    runtime.configs.process,
-    spec.target.role,
-    {
-      ...spec.vars,
-      outcome_path: outcomePath,
-    },
-  );
-  // The rendered role prompt is the cost driver; a repair ask is small and
+  const prompt = runtime.prompts.render(spec.target.prompt, {
+    ...spec.vars,
+    outcome_path: outcomePath,
+  });
+  // The rendered step prompt is the cost driver; a repair ask is small and
   // replaces it in the same session, so the record carries the first ask.
   const promptBytes = Buffer.byteLength(prompt, "utf8");
   const pack = await measurePack(runtime, spec);
@@ -305,7 +304,7 @@ export async function runAgentTurn(
   // The plan snapshot is taken once before the first attempt, so the repair
   // turn compares against the pre-turn plan, not the first attempt's.
   const planBefore =
-    spec.target.role === "architect" ? snapshotPlan(spec.vars.plan_path) : null;
+    spec.expectation === "architect" ? snapshotPlan(spec.vars.plan_path) : null;
   const first = await callChain(0, prompt, spec.session);
   let lastResult = first.result;
   let attempts = first.attempts;
@@ -346,13 +345,17 @@ export async function runAgentTurn(
     tierIndex = retry.endIndex;
   }
 
-  const deliverable = deliverableFor(spec.target.role);
+  const deliverable = deliverableFor(spec.meta.step, spec.expectation);
 
   const assess = (afterRepair: boolean): void => {
     outcome = null;
     findings = [];
     try {
-      const delivered = readDeliveredOutcome(outcomePath, text);
+      const delivered = readDeliveredOutcome(
+        outcomePath,
+        text,
+        spec.outcomeSchema ?? outcomeSchema,
+      );
       if (delivered) {
         outcome = delivered.outcome;
         findings = validateExpectation(outcome, spec.expectation, {
@@ -370,7 +373,7 @@ export async function runAgentTurn(
     if (findings.length === 0 && !outcome && !halted) {
       findings = [missingOutcomeFinding(deliverable, afterRepair)];
     }
-    if (!halted && spec.target.role === "architect") {
+    if (!halted && spec.expectation === "architect") {
       const planFinding = missingPlanFinding(
         spec.vars.plan_path,
         outcome?.decision,
@@ -400,7 +403,7 @@ export async function runAgentTurn(
     const repair = await callChain(
       tierIndex,
       runtime.prompts.render("delivery-repair", {
-        role: spec.target.role,
+        role: spec.target.prompt,
         deliverable,
         done_allowed: spec.expectation === "any" ? "true" : "false",
         findings: findings.map((f) => `- ${f}`).join("\n"),
@@ -408,8 +411,9 @@ export async function runAgentTurn(
         // The repair shows only the fields this turn can deliver, so a bare
         // done is never asked for a verdict or decision.
         outcome_schema: outcomeRepairSchemaVar(
-          spec.target.role,
+          spec.target.prompt,
           spec.expectation,
+          spec.outcomeSchema ?? outcomeSchema,
         ),
       }),
       session,

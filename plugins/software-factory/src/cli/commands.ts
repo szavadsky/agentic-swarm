@@ -1,14 +1,15 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { ZodType } from "zod";
 import yaml from "yaml";
+import type { ZodType } from "zod";
 import { git } from "../core/git/exec.js";
 import { writeTextAtomic } from "../core/records/io.js";
 import {
   configFilePaths,
   loadConfigs,
   processConfigSchema,
+  processOverrideSchema,
   repoConfigSchema,
   resolveGoalPaths,
   runConfigSchema,
@@ -30,7 +31,7 @@ import {
   validateTaskFlows,
   validateTaskGraph,
 } from "../kernel/tasks.js";
-import type { FlowDefinition, State } from "../kernel/types.js";
+import type { ProcessConfig, State } from "../kernel/types.js";
 
 export interface InitResult {
   goalDir: string;
@@ -69,7 +70,11 @@ export async function initGoal(opts: {
 
   const configs = loadConfigs(repoRoot);
   const paths = resolveGoalPaths(configs, repoRoot, opts.goal);
-  const store = createFolderStore(paths.goalDir, path.dirname(paths.goalDir));
+  const store = createFolderStore(
+    paths.goalDir,
+    path.dirname(paths.goalDir),
+    configs.process.taskTypes,
+  );
   await store.ensureLayout();
 
   const intentPath = path.join(paths.goalDir, "intent.md");
@@ -119,7 +124,11 @@ export async function statusGoal(
   const paths = resolveGoalPaths(configs, repoRoot, goal);
   if (!fs.existsSync(paths.goalDir))
     throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
-  const store = createFolderStore(paths.goalDir, path.dirname(paths.goalDir));
+  const store = createFolderStore(
+    paths.goalDir,
+    path.dirname(paths.goalDir),
+    configs.process.taskTypes,
+  );
   const state = derive(
     await store.listTasks(),
     await store.listRecords(),
@@ -163,7 +172,11 @@ export async function steerGoal(
   const paths = resolveGoalPaths(configs, repoRoot, goal);
   if (!fs.existsSync(paths.goalDir))
     throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
-  const store = createFolderStore(paths.goalDir, path.dirname(paths.goalDir));
+  const store = createFolderStore(
+    paths.goalDir,
+    path.dirname(paths.goalDir),
+    configs.process.taskTypes,
+  );
   await store.ensureLayout();
 
   const hash = crypto
@@ -266,18 +279,19 @@ function findRepoRoot(fromDir: string): string | null {
 }
 
 /**
- * Merged process flows for validation: the repo owning the file wins and the
+ * Merged process config for validation: the repo owning the file wins and the
  * `--repo` fallback covers scratch files. `loadConfigs` merges the package
- * defaults, so the built-in flows still apply; an invalid config throws.
+ * defaults, so the built-in flows and task types still apply; an invalid
+ * config throws.
  */
-function flowsForValidation(
+function processForValidation(
   startDir: string,
   repoFallback?: string,
-): Record<string, FlowDefinition> {
+): ProcessConfig {
   const root =
     findRepoRoot(startDir) ??
     (repoFallback ? path.resolve(repoFallback) : process.cwd());
-  return loadConfigs(root).process.flows;
+  return loadConfigs(root).process;
 }
 
 /**
@@ -336,7 +350,7 @@ function outcomeResult(
     const started = startedMeta(abs);
     const step = opts.step ?? started?.step;
     if (!step) return { findings: [], stepIndependent: true };
-    const flows = flowsForValidation(path.dirname(abs), opts.repo);
+    const flows = processForValidation(path.dirname(abs), opts.repo).flows;
     const expectation = expectationForStep(step, flows);
     const review = flowStepFor(step, flows);
     const lastCall =
@@ -367,6 +381,7 @@ async function taskFindings(
     .sort();
   const tasks: Parameters<typeof validateTaskGraph>[0] = [];
   const findings: string[] = [];
+  const processConfig = processForValidation(dir, opts.repo);
   for (const name of names) {
     const file = path.join(dir, name);
     try {
@@ -374,6 +389,7 @@ async function taskFindings(
         parseTaskFile(
           await fs.promises.readFile(file, "utf8"),
           path.basename(name, ".md"),
+          processConfig.taskTypes,
         ),
       );
     } catch (err) {
@@ -383,10 +399,7 @@ async function taskFindings(
   for (const finding of validateTaskGraph(tasks)) {
     findings.push(`${dir}: ${finding}`);
   }
-  for (const finding of validateTaskFlows(
-    tasks,
-    flowsForValidation(dir, opts.repo),
-  )) {
+  for (const finding of validateTaskFlows(tasks, processConfig.flows)) {
     findings.push(`${dir}: ${finding}`);
   }
   return findings;
@@ -426,6 +439,6 @@ export async function validateFile(
     case "run":
       return { findings: zodFindings(text, abs, runConfigSchema) };
     case "process":
-      return { findings: zodFindings(text, abs, processConfigSchema) };
+      return { findings: zodFindings(text, abs, processOverrideSchema) };
   }
 }

@@ -25,23 +25,23 @@ function step(
 
 describe("no-progress fingerprints", () => {
   it("distinguishes the outcomes and trees of a round and matches a repeated step", () => {
-    const a1 = stepFingerprint("task", step(1, "tree-a"), undefined);
-    const b1 = stepFingerprint("task", step(2, "tree-b"), undefined);
-    const a2 = stepFingerprint("task", step(3, "tree-a"), undefined);
-    const b2 = stepFingerprint("task", step(4, "tree-b"), undefined);
+    const a1 = stepFingerprint("development", step(1, "tree-a"), undefined);
+    const b1 = stepFingerprint("development", step(2, "tree-b"), undefined);
+    const a2 = stepFingerprint("development", step(3, "tree-a"), undefined);
+    const b2 = stepFingerprint("development", step(4, "tree-b"), undefined);
     expect(a1).toBe(a2);
     expect(b1).toBe(b2);
     expect(a1).not.toBe(b1);
 
     const changedVerdict = stepFingerprint(
-      "task",
+      "development",
       step(5, "tree-a", 1, "changes"),
       undefined,
     );
     expect(changedVerdict).not.toBe(a1);
 
     const failed = stepFingerprint(
-      "task",
+      "development",
       {
         ...step(6, "tree-a"),
         outcome: {

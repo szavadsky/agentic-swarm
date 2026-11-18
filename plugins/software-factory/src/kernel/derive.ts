@@ -219,7 +219,7 @@ export function derive(
     const standin: TaskFile = {
       slug,
       title: slug,
-      kind: "task",
+      kind: "development",
       flow: "implement-review",
       deps: [],
       scope: [],
@@ -280,7 +280,7 @@ export function derive(
       cause: terminal.cause,
       turns: reduction.turns,
       round: reduction.round,
-      kind: "task",
+      kind: "development",
       flow: "implement-review",
       phase: "done",
       commit: terminal.commit,

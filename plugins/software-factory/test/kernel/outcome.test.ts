@@ -3,9 +3,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  KERNEL_TURN_STEPS,
   expectationForStep,
   fencedOutcome,
+  KERNEL_TURN_STEPS,
   parseOutcome,
   readDeliveredOutcome,
   validateExpectation,
@@ -115,8 +115,14 @@ describe("outcome delivery", () => {
     const flows = {
       "implement-review": {
         steps: [
-          { id: "implement", role: "implementer" },
-          { id: "review", role: "reviewer", review: true, changeRequests: 2 },
+          { id: "implement", prompt: "implementer", alias: "implementer" },
+          {
+            id: "review",
+            prompt: "reviewer",
+            alias: "reviewer",
+            review: true,
+            changeRequests: 2,
+          },
         ],
       },
     };

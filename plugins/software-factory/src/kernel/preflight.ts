@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { resolveAcpxCommand } from "../harness/acpx/command.js";
+import { OMP_ID } from "../harness/omp/types.js";
 import type { Harness } from "../harness/types.js";
+import { YAML_LSP_BINARY, yamlLspBinary } from "./artifact-lsp.js";
 import {
   type BaselineResult,
   checkBase,
@@ -9,18 +11,20 @@ import {
 } from "./baseline.js";
 import { configFilePaths } from "./config.js";
 import { type Finding, formatFindings } from "./findings.js";
+import { outcomeSchemaFor, outcomeSchemaNames } from "./outcome-schemas.js";
 import {
   type AliasContext,
   checkAlias,
   checkScouts,
   type ModelCatalog,
 } from "./preflight-aliases.js";
-import type {
-  AliasConfig,
-  ArtifactStore,
-  ConfigBundle,
-  GoalPaths,
-  ProcessConfig,
+import {
+  type AliasConfig,
+  type ArtifactStore,
+  BOUNDARY_STEPS,
+  type ConfigBundle,
+  type GoalPaths,
+  type ProcessConfig,
 } from "./types.js";
 
 export type { ModelCatalog } from "./preflight-aliases.js";
@@ -56,11 +60,6 @@ export class PreflightError extends Error {
     this.findings = findings;
     this.report = report;
   }
-}
-
-function roleAlias(process: ProcessConfig, role: string): string | undefined {
-  const config = process.roles[role];
-  return config ? (config.alias ?? role) : undefined;
 }
 
 /**
@@ -109,25 +108,69 @@ function escalationFindings(
 }
 
 /**
- * Roles the kernel calls on every goal generation: architect, PM, steward and
- * both plan roles, plus every configured flow step.
+ * A fallback may name another alias, so its ladder is that alias's chain. A
+ * missing name or a cycle would only fail while resolving a turn, after the
+ * plan spent, so pre-flight refuses either here.
  */
-function requiredRoles(process: ProcessConfig): Set<string> {
-  const roles = new Set([
-    "architect",
-    "pm",
-    "steward",
-    "plan-checker",
-    "plan-reviewer",
-  ]);
-  for (const flow of Object.values(process.flows)) {
-    for (const step of flow.steps) {
-      if (step.role) roles.add(step.role);
+function fallbackAliasFindings(
+  aliases: Record<string, AliasConfig>,
+  file: string,
+): Finding[] {
+  const findings: Finding[] = [];
+  const walk = (name: string, path: readonly string[]): void => {
+    for (const [index, fallback] of (
+      aliases[name]!.fallbacks ?? []
+    ).entries()) {
+      if (!("alias" in fallback)) continue;
+      const target = fallback.alias;
+      const key = `aliases.${name}.fallbacks.${index}.alias`;
+      if (!aliases[target]) {
+        findings.push({
+          file,
+          key,
+          message: `fallback alias "${target}" names no run-config alias`,
+        });
+        continue;
+      }
+      const at = path.indexOf(target);
+      if (at !== -1) {
+        findings.push({
+          file,
+          key,
+          message: `fallback alias chain forms a cycle: ${[...path.slice(at), target].join(" -> ")}`,
+        });
+        continue;
+      }
+      walk(target, [...path, target]);
     }
-    if (flow.followUp?.mode === "different-model" && flow.followUp.role)
-      roles.add(flow.followUp.role);
+  };
+  for (const name of Object.keys(aliases)) walk(name, [name]);
+  return findings;
+}
+
+/**
+ * Exactly the aliases process config names, each with the step that names it:
+ * every boundary step, every flow step and every different-model follow-up.
+ * Nothing is derived from a role name, so a renamed alias is the only
+ * requirement.
+ */
+function requiredAliases(process: ProcessConfig): Map<string, string> {
+  const refs = new Map<string, string>();
+  const note = (alias: string, ref: string): void => {
+    if (!refs.has(alias)) refs.set(alias, ref);
+  };
+  for (const step of BOUNDARY_STEPS) {
+    note(process.boundary[step].alias, `boundary step "${step}"`);
   }
-  return roles;
+  for (const [name, flow] of Object.entries(process.flows)) {
+    for (const step of flow.steps) {
+      if (step.alias) note(step.alias, `flow "${name}" step "${step.id}"`);
+    }
+    if (flow.followUp?.mode === "different-model" && flow.followUp.alias) {
+      note(flow.followUp.alias, `flow "${name}" follow-up`);
+    }
+  }
+  return refs;
 }
 
 function inside(child: string, parent: string): boolean {
@@ -223,29 +266,43 @@ export async function preflight(
   const files = configs.files ?? configFilePaths(paths.repoRoot);
   const findings: Finding[] = [];
 
-  const required = requiredRoles(configs.process);
-  for (const role of required) {
-    if (!configs.process.roles[role]) {
-      findings.push({
-        file: fs.existsSync(files.processOverride)
-          ? files.processOverride
-          : files.processDefault,
-        key: `roles.${role}`,
-        message: `required role "${role}" is not configured`,
-      });
-      continue;
-    }
-    const aliasName = roleAlias(configs.process, role)!;
-    if (!configs.run.aliases[aliasName]) {
+  for (const [alias, ref] of requiredAliases(configs.process)) {
+    if (!configs.run.aliases[alias]) {
       findings.push({
         file: files.run,
-        key: `aliases.${aliasName}`,
-        message: `required by role "${role}" but missing`,
+        key: `aliases.${alias}`,
+        message: `required by ${ref} but missing`,
       });
     }
   }
 
   findings.push(...escalationFindings(configs.run.aliases, files.run));
+  findings.push(...fallbackAliasFindings(configs.run.aliases, files.run));
+
+  // A task type owns its flow and output schema. A type naming either one
+  // wrongly would quarantine every task of that type or fail mid-turn, after
+  // the plan spent, so pre-flight refuses the config instead.
+  const taskTypeFile = fs.existsSync(files.processOverride)
+    ? files.processOverride
+    : files.processDefault;
+  for (const [name, definition] of Object.entries(
+    configs.process.taskTypes ?? {},
+  )) {
+    if (!Object.hasOwn(configs.process.flows, definition.flow)) {
+      findings.push({
+        file: taskTypeFile,
+        key: `taskTypes.${name}.flow`,
+        message: `flow "${definition.flow}" is not configured`,
+      });
+    }
+    if (!outcomeSchemaFor(definition.schema)) {
+      findings.push({
+        file: taskTypeFile,
+        key: `taskTypes.${name}.schema`,
+        message: `schema "${definition.schema}" is not a kernel outcome schema (${outcomeSchemaNames()})`,
+      });
+    }
+  }
 
   // A task tier names a run-config alias directly; an escalated task that names
   // one the run config lacks would fail only mid-turn, after the plan spent.
@@ -264,7 +321,8 @@ export async function preflight(
     usedHarnesses.add(alias.harness);
     for (const entry of alias.rotate ?? []) usedHarnesses.add(entry.harness);
     for (const fallback of alias.fallbacks ?? []) {
-      if (fallback.harness) usedHarnesses.add(fallback.harness);
+      if ("model" in fallback && fallback.harness)
+        usedHarnesses.add(fallback.harness);
     }
   }
   const unavailable = new Set<string>();
@@ -300,6 +358,20 @@ export async function preflight(
         `harnesses.${harness}.binary`,
         unavailable,
       );
+    }
+    // omp's built-in yamlls entry needs the server binary; it does not ship
+    // one. Only a real launch checks executables (`binaries` omitted means an
+    // injected harness and no executable surface).
+    if (
+      configs.run.lsp &&
+      usedHarnesses.has(OMP_ID) &&
+      !executable(yamlLspBinary())
+    ) {
+      findings.push({
+        file: files.run,
+        key: "lsp",
+        message: `lsp is enabled but "${YAML_LSP_BINARY}" is not on PATH: omp does not ship the YAML language server`,
+      });
     }
   }
 

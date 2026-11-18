@@ -7,7 +7,7 @@ import {
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
-import { resolveRole } from "../../src/kernel/flow-context.js";
+import { resolveTurn } from "../../src/kernel/flow-context.js";
 import type { KernelRuntime } from "../../src/kernel/types.js";
 import { task } from "./helpers.js";
 import {
@@ -20,9 +20,13 @@ import {
 } from "./s2-helpers.js";
 
 function tiers(runtime: KernelRuntime, iteration?: number) {
-  return resolveRole(runtime, "implementer", undefined, iteration).tiers.map(
-    (tier) => [tier.harness.id, tier.model.id, tier.effort],
-  );
+  return resolveTurn(
+    runtime,
+    "implementer",
+    "implementer",
+    undefined,
+    iteration,
+  ).tiers.map((tier) => [tier.harness.id, tier.model.id, tier.effort]);
 }
 
 describe("alias rotation", () => {

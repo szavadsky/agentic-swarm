@@ -24,22 +24,29 @@ import type {
 export const DEFAULT_FLOWS: Record<string, FlowDefinition> = {
   "implement-review": {
     steps: [
-      { id: "implement", role: "implementer" },
+      { id: "implement", prompt: "implementer", alias: "implementer" },
       {
         id: "review",
-        role: "reviewer",
+        prompt: "reviewer",
+        alias: "reviewer",
         review: true,
         changeRequests: DEFAULT_CHANGE_REQUESTS,
       },
     ],
   },
   "just-implement": {
-    steps: [{ id: "implement", role: "implementer" }],
+    steps: [{ id: "implement", prompt: "implementer", alias: "implementer" }],
   },
   spike: {
     steps: [
-      { id: "implement", role: "implementer" },
-      { id: "review", role: "reviewer", review: true, changeRequests: 0 },
+      { id: "implement", prompt: "implementer", alias: "implementer" },
+      {
+        id: "review",
+        prompt: "reviewer",
+        alias: "reviewer",
+        review: true,
+        changeRequests: 0,
+      },
     ],
   },
 };
@@ -80,14 +87,14 @@ interface PendingChecks {
  * terminal rules: `reduceTask` and the store's unreadable-file check both
  * read through here, so a change to what counts as terminal lands once.
  * Records are filtered by slug; callers may pass the whole store.
- * An unreadable file cannot supply `kind`, so the default is `task`:
+ * An unreadable file cannot supply `kind`, so the default is `development`:
  * a spike merge then reads as `merged`, but spike flows finish rather than
  * merge, so the default holds in practice.
  */
 export function terminalFactFromRecords(
   records: StepRecord[],
   slug: string,
-  kind: TaskKind = "task",
+  kind: TaskKind = "development",
 ): TerminalFact | null {
   let out: TerminalFact | null = null;
   for (const rec of records) {

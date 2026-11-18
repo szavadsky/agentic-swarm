@@ -5,7 +5,6 @@
 import { z } from "zod";
 import type { CheckResult } from "../core/checks/types.js";
 import type { Repo } from "../core/git/repo.js";
-import type { PromptLibrary } from "./prompts.js";
 import type {
   Harness,
   ModelRef,
@@ -16,6 +15,7 @@ import type {
   Usage,
 } from "../harness/types.js";
 import type { PriceSource } from "./openrouter.js";
+import type { PromptLibrary } from "./prompts.js";
 
 export const concernSchema = z.object({
   kind: z.enum(["debt", "risk", "uncertainty", "choice"]),
@@ -176,12 +176,25 @@ export type Concern = z.infer<typeof concernSchema>;
 export type Outcome = z.infer<typeof outcomeSchema>;
 export type ReviewVerdict = NonNullable<Outcome["verdict"]>;
 export type GoalDecision = NonNullable<Outcome["decision"]>;
-export type TaskKind = "task" | "spike";
+/** Spike finishes with findings; development merges its branch. */
+export type TaskKind = "development" | "spike";
+
+/** One configured task type: the flow it runs, its kind and its output schema. */
+export interface TaskTypeDefinition {
+  flow: string;
+  kind: TaskKind;
+  /** A kernel outcome schema name; a task type never supplies its own. */
+  schema: string;
+}
 
 export interface TaskFile {
   slug: string;
   title: string;
+  /** The configured type this file named; absent on a legacy file. */
+  type?: string;
+  /** Resolved from `type`; a legacy file declares it directly. */
   kind: TaskKind;
+  /** Resolved from `type`; a legacy file declares it directly. */
   flow: string;
   deps: string[];
   scope: string[];
@@ -273,9 +286,34 @@ export type Action =
   | { kind: "boundary" }
   | { kind: "exit"; reason: string };
 
+/** A step's prompt template and the run-config alias its turns run on. */
+export interface TurnSpec {
+  /** Prompt template name under `prompts/`. */
+  prompt: string;
+  /** Run-config alias; pre-flight requires every named alias. */
+  alias: string;
+}
+
+/**
+ * The kernel turns that run outside a configured flow. Their names are the
+ * record step vocabulary; process config names a prompt and alias for each.
+ */
+export const BOUNDARY_STEPS = [
+  "architect",
+  "digest",
+  "front",
+  "plancheck",
+  "planreview",
+  "pm",
+  "steward",
+] as const;
+export type BoundaryStep = (typeof BOUNDARY_STEPS)[number];
+
 export interface FlowStep {
   id: string;
-  role?: string;
+  /** Non-script steps name their prompt and alias; script steps (`checks`) name neither. */
+  prompt?: string;
+  alias?: string;
   /** Review steps carry the verdict contract and consume a review round. */
   review?: boolean;
   /**
@@ -288,8 +326,11 @@ export interface FlowStep {
 /** How a fix turn follows the turn it repairs. */
 export interface FollowUp {
   mode: "same-session" | "de-novo" | "different-model";
-  /** Role (and therefore alias/prompt) used when mode is `different-model`. */
-  role?: string;
+  /**
+   * Run-config alias the fix turn runs on when mode is `different-model`; the
+   * prompt stays the step's, so a retry changes the model, not the role.
+   */
+  alias?: string;
 }
 
 export interface FlowDefinition {
@@ -515,24 +556,33 @@ export interface RepoConfig {
   }[];
 }
 
-export interface RoleConfig {
-  /** Prompt template name under `prompts/`. */
-  prompt: string;
-  /** Run-config alias; defaults to the role name. */
-  alias?: string;
-}
-
 export interface ProcessConfig {
   flows: Record<string, FlowDefinition>;
-  roles: Record<string, RoleConfig>;
+  /**
+   * Task type name -> what a task file naming it runs. The type owns the
+   * flow, kind and output schema; a task file names only the type.
+   */
+  taskTypes?: Record<string, TaskTypeDefinition>;
+  /** Each kernel boundary step's prompt and alias; pre-flight requires these aliases. */
+  boundary: Record<BoundaryStep, TurnSpec>;
   /** Outcome reminders after the first attempt; a task file's `repairTurns` overrides it for that task's turns only. */
   reminders: number;
   calibration?: string;
   promptsDir?: string;
+  presets?: Record<string, { calibration: string }>;
 }
 
-/** One fallback tier: a model on the alias's harness or another, with its own effort. */
-export interface FallbackConfig {
+/** One fallback tier: another alias's whole ladder, or a model with its own effort. */
+export type FallbackConfig = FallbackAliasConfig | FallbackModelConfig;
+
+/** A fallback that reuses another alias's ladder, primary first. */
+export interface FallbackAliasConfig {
+  /** Run-config alias whose primary and fallback tiers this entry contributes. */
+  alias: string;
+}
+
+/** A fallback that names a model on the alias's harness or another, with its own effort. */
+export interface FallbackModelConfig {
   /** Harness id; defaults to the alias's harness. */
   harness?: string;
   model: string;
@@ -601,8 +651,11 @@ export interface RunConfig {
   };
   sessions: { dir: string; keepRuns: number; retention: "short" | "long" };
   worktreeRoot?: string;
+  /** Enable artifact LSP where the harness supports it. */
+  lsp?: boolean;
   /** Cheap model pinned for architect subagents. */
   scouts?: { model: string; effort?: string };
+  preset?: string;
 }
 
 /** Absolute paths of the three layers, for findings that must name the file. */

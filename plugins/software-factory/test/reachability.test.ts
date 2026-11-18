@@ -19,6 +19,8 @@ const ALLOWLIST: Record<string, string> = {
     "no production caller until M11 wires the architect register",
   "src/schema-check.ts":
     "standalone schema-validation entrypoint invoked by bun, not imported by production",
+  "src/harness/lsp/frontmatter.ts":
+    "standalone LSP entrypoint omp spawns by path, not imported by production",
 };
 
 /** Matches `import … from "x"`, `export … from "x"`, including `import type`. */

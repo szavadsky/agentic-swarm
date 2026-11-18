@@ -10,6 +10,7 @@ import {
   validateCmd,
 } from "../../src/kernel/prompts.js";
 import type { ProcessConfig } from "../../src/kernel/types.js";
+import { TEST_BOUNDARY } from "./helpers.js";
 
 // The vars each production render site supplies (boundary, front, pm, digest,
 // promptVars): none passes validate_cmd, and none passes the reviewer's author;
@@ -82,8 +83,9 @@ const ROLES: Record<string, Record<string, string>> = {
 
 function library() {
   return loadPrompts(
-    { flows: {}, roles: {}, reminders: 1 } as ProcessConfig,
+    { flows: {}, boundary: TEST_BOUNDARY, reminders: 1 } as ProcessConfig,
     os.tmpdir(),
+    {},
   );
 }
 

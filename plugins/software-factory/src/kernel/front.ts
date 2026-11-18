@@ -11,7 +11,12 @@ import {
 import { scanInbox } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { parseTaskFile, TaskFileError, validateTaskGraph } from "./tasks.js";
-import type { KernelRuntime, StepRecord, TaskFile } from "./types.js";
+import type {
+  KernelRuntime,
+  StepRecord,
+  TaskFile,
+  TaskTypeDefinition,
+} from "./types.js";
 
 /** What the launch does after the front turn (or after reading an existing class). */
 type FrontAction = "boundary" | "dispatch" | "blocked" | "infra";
@@ -33,17 +38,26 @@ const CLASS_FILE = "class.yaml";
 
 /**
  * The flow each front class writes, enforced by `validateFrontTasks` and
- * rendered into the front prompt as `class_flows` from this same mapping.
+ * rendered into the front prompt as `class_types`: the configured task type
+ * whose flow matches, so the front names a type instead of pairing flow/kind.
  */
 export const FRONT_CLASS_FLOWS = {
   trivial: "just-implement",
   task: "implement-review",
 } as const;
 
-/** The `class_flows` prompt variable: the class-to-flow mapping, in class order. */
-export function frontClassFlowsVar(): string {
+/** The `class_types` prompt variable: the task type each class writes. */
+export function frontClassTypesVar(
+  taskTypes: Record<string, TaskTypeDefinition> | undefined,
+): string {
   return Object.entries(FRONT_CLASS_FLOWS)
-    .map(([cls, flow]) => `\`${flow}\` for ${cls}`)
+    .map(([cls, flow]) => {
+      const type = Object.entries(taskTypes ?? {}).find(
+        ([, definition]) =>
+          definition.kind === "development" && definition.flow === flow,
+      )?.[0];
+      return type ? `\`${type}\` for ${cls}` : `none for ${cls}`;
+    })
     .join(", ");
 }
 
@@ -71,7 +85,7 @@ function readTasks(runtime: KernelRuntime): TaskFile[] {
       "utf8",
     );
     try {
-      tasks.push(parseTaskFile(text, slug));
+      tasks.push(parseTaskFile(text, slug, runtime.configs.process.taskTypes));
     } catch (err) {
       throw new FrontError(
         err instanceof TaskFileError
@@ -111,9 +125,9 @@ function validateFrontTasks(runtime: KernelRuntime, cls: FrontClass): void {
     cls.class === "trivial"
       ? FRONT_CLASS_FLOWS.trivial
       : FRONT_CLASS_FLOWS.task;
-  if (task.kind !== "task") {
+  if (task.kind !== "development") {
     throw new FrontError(
-      `front task "${task.slug}" has kind "${task.kind}"; the front writes a task`,
+      `front task "${task.slug}" has kind "${task.kind}"; the front writes a development task`,
     );
   }
   if (task.flow !== expectedFlow) {
@@ -215,7 +229,7 @@ export async function runFront(
         checkout: runtime.paths.goalCheckout,
         setup_command: runtime.configs.repo.setup.join(" && ") || "none",
         gate_commands: gateCommands(runtime),
-        class_flows: frontClassFlowsVar(),
+        class_types: frontClassTypesVar(runtime.configs.process.taskTypes),
       },
       expectation: KERNEL_TURN_STEPS.front,
     });

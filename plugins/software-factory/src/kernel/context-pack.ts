@@ -239,7 +239,9 @@ export function renderContextPack(input: ContextPackInput): string {
       (input.holds ?? []).map((hold) => [hold.steer, hold]),
     );
     for (const steer of input.steers) {
-      lines.push(`- ${steer.id}: ${steer.relPath}`);
+      lines.push(
+        `- ${steer.id}: ${steer.relPath}${steer.urgent ? " (urgent)" : ""}`,
+      );
       const hold = heldBySteer.get(steer.id);
       if (hold?.goal) lines.push(`  - holds: goal`);
       else if (hold && hold.slugs.length > 0)

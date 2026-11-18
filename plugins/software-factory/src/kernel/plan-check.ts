@@ -1,7 +1,7 @@
 import path from "node:path";
 import { runAgentTurn } from "./agent.js";
 import type { PlanCheckPack } from "./context-pack.js";
-import { resolveRole } from "./flow-context.js";
+import { boundaryTarget } from "./flow-context.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { existingTasks, restoreTurn, snapshotTurn } from "./pm.js";
 import { scriptMeta } from "./record.js";
@@ -63,7 +63,7 @@ export async function runPlanCheck(
   const snapshot = await snapshotTurn(runtime, planPath);
   const tasks = await runtime.store.listTasks();
   const result = await runAgentTurn(runtime, {
-    target: resolveRole(runtime, "plan-checker", undefined, opts.iteration),
+    target: boundaryTarget(runtime, "plancheck", opts.iteration),
     cwd: runtime.paths.goalCheckout,
     meta: {
       iteration: opts.iteration,

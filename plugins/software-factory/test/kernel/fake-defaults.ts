@@ -12,14 +12,14 @@ const EMPTY = {
   concerns: [],
   forward: [],
 };
-const PLAN_STEPS = new Set([PLAN_CHECK_STEP, PLAN_REVIEW_STEP]);
+const BACKGROUND_STEPS = new Set([PLAN_CHECK_STEP, PLAN_REVIEW_STEP, "digest"]);
 
 /**
- * Every run config now requires both plan roles. Tests focused on other turns
- * still execute them; bind neutral outcomes so the mandatory calls do not
+ * Every run config requires the full boundary vocabulary. Tests focused on
+ * other turns still execute those calls; bind neutral outcomes so they do not
  * consume another step's scripted turn.
  */
-export function scriptPlanRoleFallbacks(harness: FakeHarness): void {
+export function scriptKernelRoleFallbacks(harness: FakeHarness): void {
   harness.script(
     (req, ctx) => {
       ctx.writeOutcome({
@@ -43,17 +43,27 @@ export function scriptPlanRoleFallbacks(harness: FakeHarness): void {
       fallback: true,
     },
   );
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome({ ...EMPTY, summary: "digest scout done" });
+      return fakeTurnResult(req);
+    },
+    {
+      when: (req) => fakeTurnIdentity(req).step === "digest",
+      fallback: true,
+    },
+  );
 }
 
-/** Register the mandatory plan-role fallbacks and return the harness inline. */
-export function withPlanRoleFallbacks<T extends FakeHarness>(harness: T): T {
-  scriptPlanRoleFallbacks(harness);
+/** Register the mandatory boundary fallbacks and return the harness inline. */
+export function withKernelRoleFallbacks<T extends FakeHarness>(harness: T): T {
+  scriptKernelRoleFallbacks(harness);
   return harness;
 }
 
-/** The harness calls that did work other than the two mandatory plan roles. */
+/** The harness calls that did work other than the mandatory background turns. */
 export function workCalls(harness: FakeHarness) {
   return harness.calls.filter(
-    (call) => !PLAN_STEPS.has(fakeTurnIdentity(call).step ?? ""),
+    (call) => !BACKGROUND_STEPS.has(fakeTurnIdentity(call).step ?? ""),
   );
 }

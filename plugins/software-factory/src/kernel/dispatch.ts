@@ -284,11 +284,21 @@ export async function runDispatch(
   const pollSteers = async (
     state: State,
     tasks: TaskFile[],
-  ): Promise<{ hold: ActiveHolds; steerTurn: boolean; holdError?: string }> => {
+  ): Promise<{
+    hold: ActiveHolds;
+    steerTurn: boolean;
+    holdError?: string;
+    urgent?: string;
+  }> => {
     const steers = await scanInbox(runtime.store, { settleMs: 0 });
     const pending = new Set(steers.map((steer) => steer.id));
+    const urgent = steers.find((steer) => steer.urgent)?.id;
     if (cancelled)
-      return { hold: activeHolds(holds, pending), steerTurn: false };
+      return { hold: activeHolds(holds, pending), steerTurn: false, urgent };
+    // Urgency is the owner's exception: no PM turn, no claim. The steer stays
+    // pending for the consult the next iteration opens, and the caller drains.
+    if (urgent !== undefined)
+      return { hold: activeHolds(holds, pending), steerTurn: false, urgent };
 
     const claim: Steer[] = [];
     const firstSight = steers.filter(
@@ -417,7 +427,11 @@ export async function runDispatch(
     const elapsedMs = Date.now() - iterationStart(records, iteration);
     const iterationWallMs = runtime.limits.iterationWallMs;
     if (!drain && !cancelled) {
-      if (hold.goal !== undefined) {
+      if (polled.urgent !== undefined) {
+        // An urgent steer ends the iteration early: started work runs to the
+        // end, nothing new starts, and the next consult sees the steer.
+        drain = `steer: ${polled.urgent} marked urgent`;
+      } else if (hold.goal !== undefined) {
         // A goal hold is a drain with a name: started tasks run their flow to
         // the end, nothing new starts, and the architect sees the remainder.
         // Parks happen only through the existing park causes, never from a hold.

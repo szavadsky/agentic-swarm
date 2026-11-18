@@ -22,8 +22,8 @@ import {
   cleanupFlowRepo,
   makeRuntime,
   outcome,
-  setupFlowRepo,
   scriptStallLeave,
+  setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -560,13 +560,7 @@ describe("review session resume", () => {
       process: {
         flows: {
           "implement-review": {
-            followUp: { mode: "different-model", role: "implementer-strong" },
-          },
-        },
-        roles: {
-          "implementer-strong": {
-            prompt: "implementer",
-            alias: "implementer-strong",
+            followUp: { mode: "different-model", alias: "implementer-strong" },
           },
         },
       },
@@ -649,7 +643,7 @@ describe("review session resume", () => {
         runtime,
         taskFile,
         {
-          role: "reviewer",
+          prompt: "reviewer",
           alias: "reviewer",
           harness: fake,
           model: { id: "fake-review" },
@@ -711,7 +705,7 @@ describe("review session resume", () => {
           runtime,
           taskFile,
           {
-            role: "reviewer",
+            prompt: "reviewer",
             alias: "implementer",
             harness: fake,
             model: { id: "fake-review" },
@@ -728,7 +722,7 @@ describe("review session resume", () => {
           runtime,
           taskFile,
           {
-            role: "reviewer",
+            prompt: "reviewer",
             alias: "reviewer",
             harness: fake,
             model: { id: "fake-review" },

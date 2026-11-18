@@ -112,6 +112,7 @@ describe("context pack", () => {
           relPath: "mailbox/inbox/steer-i20-wiring-gap.md",
           text: "name the run config",
           hash: "abc123",
+          urgent: false,
         },
       ],
       setup: ["bun install"],

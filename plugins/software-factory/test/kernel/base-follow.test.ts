@@ -16,7 +16,7 @@ import {
   makeRuntime,
   setupFlowRepo,
 } from "./s2-helpers.js";
-import { withPlanRoleFallbacks } from "./fake-defaults.js";
+import { withKernelRoleFallbacks } from "./fake-defaults.js";
 
 function head(repo: TmpRepo, dir: string): string {
   return repo.git(["rev-parse", "HEAD"], { cwd: dir }).stdout;
@@ -294,7 +294,7 @@ describe("launch follows base advances into the integration branch", () => {
           repo: repo.dir,
           goal,
           harnesses: {
-            fake: withPlanRoleFallbacks(new FakeHarness({ id: "fake" })),
+            fake: withKernelRoleFallbacks(new FakeHarness({ id: "fake" })),
           },
           baseGates: false,
           priceSource: testPriceSource(repo.dir),

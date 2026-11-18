@@ -6,7 +6,7 @@ import { runGoal } from "../../src/kernel/launch.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { cleanup, makeGoal, outcome, writePlan } from "./e2e-helpers.js";
 import { testPriceSource } from "../helpers/price-source.js";
-import { withPlanRoleFallbacks } from "./fake-defaults.js";
+import { withKernelRoleFallbacks } from "./fake-defaults.js";
 
 describe("E13: a half-written task file does not wedge the launch", () => {
   it("quarantines the file, records the report, and runs the iteration", async () => {
@@ -19,7 +19,7 @@ describe("E13: a half-written task file does not wedge the launch", () => {
         "half-written task body with no frontmatter\n",
         "utf8",
       );
-      const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
+      const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
       harness.script((req, ctx) => {
         ctx.writeOutcome(
           outcome({

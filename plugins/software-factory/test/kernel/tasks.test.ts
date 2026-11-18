@@ -30,6 +30,26 @@ Why: rotate without a re-login.
 Done when: refresh rotates the token.
 `;
 
+const TYPES = {
+  development: {
+    flow: "implement-review",
+    kind: "development" as const,
+    schema: "outcome",
+  },
+  spike: { flow: "spike", kind: "spike" as const, schema: "outcome" },
+};
+
+const TYPED = `---
+slug: auth.probe
+title: Probe the token store
+type: spike
+deps: []
+scope: [auth]
+---
+
+Done when: the finding names the store.
+`;
+
 describe("task files", () => {
   it("parses and renders the frontmatter plus brief", () => {
     const parsed = parseTaskFile(TEXT, "auth.token-refresh");
@@ -39,6 +59,61 @@ describe("task files", () => {
     expect(doneWhen(parsed.body)).toBe("Done when: refresh rotates the token.");
     const round = parseTaskFile(renderTaskFile(parsed), parsed.slug);
     expect(round).toEqual(parsed);
+  });
+
+  it("resolves a task type into its flow and kind and renders only the type", () => {
+    const parsed = parseTaskFile(TYPED, "auth.probe", TYPES);
+    expect(parsed.type).toBe("spike");
+    expect(parsed.kind).toBe("spike");
+    expect(parsed.flow).toBe("spike");
+    const rendered = renderTaskFile(parsed);
+    expect(rendered).toContain("type: spike");
+    expect(rendered).not.toContain("kind:");
+    expect(rendered).not.toContain("flow:");
+    expect(parseTaskFile(rendered, "auth.probe", TYPES)).toEqual(parsed);
+  });
+
+  it("refuses a type the process config does not define", () => {
+    expect(() => parseTaskFile(TYPED, "auth.probe")).toThrow(
+      'task "auth.probe" has type "spike": type "spike" is not configured',
+    );
+    expect(() => parseTaskFile(TYPED, "auth.probe", TYPES)).not.toThrow();
+  });
+
+  it("refuses a type named after an inherited object key", () => {
+    for (const type of ["constructor", "toString", "__proto__"]) {
+      const text = TYPED.replace("type: spike", `type: ${type}`);
+      expect(() => parseTaskFile(text, "auth.probe", TYPES)).toThrow(
+        `task "auth.probe" has type "${type}": type "${type}" is not configured`,
+      );
+    }
+  });
+
+  it("refuses a file that names a type and a legacy field", () => {
+    const mixed = TYPED.replace("type: spike", "type: spike\nkind: spike");
+    expect(() => parseTaskFile(mixed, "auth.probe", TYPES)).toThrow(
+      'task "auth.probe" names type "spike" and legacy kind: the type supplies flow and kind',
+    );
+  });
+
+  it("reads a legacy kind as development or spike", () => {
+    expect(parseTaskFile(TEXT, "auth.token-refresh").kind).toBe("development");
+    const spike = TEXT.replace("kind: task", "kind: spike").replace(
+      "flow: implement-review",
+      "flow: spike",
+    );
+    expect(parseTaskFile(spike, "auth.token-refresh").kind).toBe("spike");
+  });
+
+  it("hashes the task type, so a retype is material", () => {
+    const legacy = parseTaskFile(TEXT, "auth.token-refresh");
+    const typed = parseTaskFile(
+      TEXT.replace("kind: task\nflow: implement-review", "type: development"),
+      "auth.token-refresh",
+      TYPES,
+    );
+    expect(typed.kind).toBe("development");
+    expect(materialHash(typed)).not.toBe(materialHash(legacy));
   });
 
   it("rejects a file whose declared slug disagrees with its name", () => {
@@ -134,6 +209,35 @@ describe("task files", () => {
     }
   });
 
+  it("refuses the undeclared after alias", () => {
+    const legacy = TEXT.replace(
+      "deps: [auth.session-store]",
+      "after: [auth.session-store]",
+    );
+    expect(() => parseTaskFile(legacy, "auth.token-refresh")).toThrow(
+      '"after" is not accepted: use "deps"',
+    );
+  });
+
+  it("defaults the fields the schema allows to be absent", () => {
+    const minimal = `---
+slug: auth.token-refresh
+title: Refresh tokens
+---
+
+Done when: refresh rotates the token.
+`;
+    const parsed = parseTaskFile(minimal, "auth.token-refresh");
+    expect(parsed.kind).toBe("development");
+    expect(parsed.flow).toBe("implement-review");
+    expect(parsed.deps).toEqual([]);
+    expect(parsed.scope).toEqual([]);
+    expect(parsed.source).toBe("");
+    expect(parsed.revision).toBe(0);
+    expect(parsed.tier).toBeUndefined();
+    expect(parsed.base).toBeUndefined();
+  });
+
   it("hashes the revision, so an amend is material", () => {
     const base = parseTaskFile(TEXT, "auth.token-refresh");
     expect(materialHash({ ...base, revision: 1 })).not.toBe(materialHash(base));
@@ -200,14 +304,16 @@ describe("task files", () => {
   it("rejects an unknown kind with the kernel finding", () => {
     const bad = TEXT.replace("kind: task", "kind: banana");
     expect(() => parseTaskFile(bad, "auth.token-refresh")).toThrow(
-      'task "auth.token-refresh" has kind "banana": expected "task" or "spike"',
+      'task "auth.token-refresh" has kind "banana": expected "development" or "spike" (legacy "task" reads as development)',
     );
   });
 
   it("rejects an unknown flow with the dispatcher text", () => {
     const flows = {
       "implement-review": {
-        steps: [{ id: "implement", role: "implementer" }],
+        steps: [
+          { id: "implement", prompt: "implementer", alias: "implementer" },
+        ],
       },
     };
     expect(validateTaskFlows([task("a", { scope: ["x"] })], flows)).toEqual([]);
@@ -218,6 +324,14 @@ describe("task files", () => {
       ),
     ).toEqual([
       'task "a" uses flow "no-such-flow": flow "no-such-flow" is not configured',
+    ]);
+    expect(
+      validateTaskFlows(
+        [task("a", { scope: ["x"], flow: "constructor" })],
+        flows,
+      ),
+    ).toEqual([
+      'task "a" uses flow "constructor": flow "constructor" is not configured',
     ]);
   });
 });

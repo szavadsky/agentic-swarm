@@ -1,33 +1,54 @@
 # Package-default process config. A repo may override any key in .factory/process.yaml.
+#
+# Every step names the prompt it renders and the run-config alias it runs on.
+# The same prompt may run on another alias without declaring a new role: the
+# prompt is the role, the alias is the model choice.
 flows:
   implement-review:
     steps:
       - id: implement
-        role: implementer
+        prompt: implementer
+        alias: implementer
       - id: review
-        role: reviewer
+        prompt: reviewer
+        alias: reviewer
         review: true
         changeRequests: 2
   just-implement:
     steps:
       - id: implement
-        role: implementer
+        prompt: implementer
+        alias: implementer
   spike:
     steps:
       - id: implement
-        role: implementer
+        prompt: implementer
+        alias: implementer
       - id: review
-        role: reviewer
+        prompt: reviewer
+        alias: reviewer
         review: true
         changeRequests: 0
-roles:
-  architect: { prompt: architect }
-  front: { prompt: front }
-  pm: { prompt: pm }
-  implementer: { prompt: implementer }
-  reviewer: { prompt: reviewer }
-  digest: { prompt: digest }
-  steward: { prompt: steward }
-  plan-checker: { prompt: plan-checker }
-  plan-reviewer: { prompt: reviewer }
+# The kernel turns outside any task flow. Each names its prompt and the alias
+# pre-flight requires; `front` runs on the PM alias, as before, and plan review
+# shares the reviewer prompt on its own alias.
+boundary:
+  architect: { prompt: architect, alias: architect }
+  digest: { prompt: digest, alias: digest }
+  front: { prompt: front, alias: pm }
+  plancheck: { prompt: plan-checker, alias: plan-checker }
+  planreview: { prompt: reviewer, alias: plan-reviewer }
+  pm: { prompt: pm, alias: pm }
+  steward: { prompt: steward, alias: steward }
+# A task file names one type; the type owns its flow, kind and output schema.
+# `development` merges, `spike` finishes with findings, `trivial` runs the
+# front's single-step path.
+taskTypes:
+  development: { flow: implement-review, kind: development, schema: outcome }
+  spike: { flow: spike, kind: spike, schema: outcome }
+  trivial: { flow: just-implement, kind: development, schema: outcome }
 reminders: 1
+presets:
+  autonomous: { calibration: "You are an autonomous agent with high agency." }
+  principal: { calibration: "You are a principal engineer, focused on clarity and robustness." }
+  detailed: { calibration: "You provide highly detailed, step-by-step explanations." }
