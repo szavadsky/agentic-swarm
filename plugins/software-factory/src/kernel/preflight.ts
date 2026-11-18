@@ -285,9 +285,7 @@ export async function preflight(
   const taskTypeFile = fs.existsSync(files.processOverride)
     ? files.processOverride
     : files.processDefault;
-  for (const [name, definition] of Object.entries(
-    configs.process.taskTypes ?? {},
-  )) {
+  for (const [name, definition] of Object.entries(configs.process.taskTypes)) {
     if (!Object.hasOwn(configs.process.flows, definition.flow)) {
       findings.push({
         file: taskTypeFile,

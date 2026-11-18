@@ -500,6 +500,7 @@ planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark pe
 - task: \`/goal/tasks/alpha.md\`
 - front pack: \`/goal/iterations/3/context-pack.md\` — read before the task when not empty
 - worktree: \`/worktrees/demo-tasks/alpha\`
+- spike report: \`.factory/spikes/alpha.md\` — a spike commits its finding here; the spike-report check is red until the commit carries it non-empty. Empty on any other task
 - setup command: \`bun install\`
 - gate commands: \`- test: bun test
 - typecheck: bun run typecheck\`

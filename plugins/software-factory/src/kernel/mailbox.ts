@@ -37,11 +37,9 @@ export interface Hold {
   slugs: string[];
   goal: boolean;
 }
-/** Options for reading hold files: explicit iteration and known task slugs. */
+/** Options for reading hold files. */
 export interface ReadHoldsOptions {
-  /** Iteration the caller runs in; quarantine records land here, not on the max record. */
-  iteration?: number;
-  /** Task slugs the caller knows; a hold naming anything else is quarantined. */
+  /** Task slugs the caller knows; a hold naming anything else is a finding. */
   knownSlugs?: ReadonlySet<string> | readonly string[];
 }
 
@@ -308,24 +306,109 @@ export function quarantineDir(store: ArtifactStore): string {
   return path.join(store.mailboxDir, "quarantine");
 }
 
-/** The iteration the store is in: malformed files are found while it runs. */
-async function currentIteration(store: ArtifactStore): Promise<number> {
-  const records = await store.listRecords();
-  return records.reduce((max, record) => Math.max(max, record.iteration), 1);
+/** A hold file that decides nothing; `sweepHolds` parks it, a read only reports it. */
+export interface HoldFinding {
+  /** Goal-relative path of the hold file. */
+  file: string;
+  kind: "malformed" | "unknown-slug";
+  reason: string;
+}
+
+async function listHoldNames(store: ArtifactStore): Promise<string[]> {
+  try {
+    return (await fs.promises.readdir(holdsDir(store))).sort();
+  } catch (err) {
+    if (isENOENT(err)) return [];
+    throw err;
+  }
 }
 
 /**
- * Moves an unreadable hold out of the holds directory and records why. A hold
- * that cannot be read decides nothing; leaving it in place would stop every
- * launch, so the record is the report and dispatch continues.
+ * Reads the PM's hold decisions without touching the mailbox. A malformed hold
+ * and a hold naming a slug outside `knownSlugs` (when given) decide nothing:
+ * each is returned as a finding while the valid holds beside it still apply.
+ * Parking those files is `sweepHolds`'s job. Holds for steers the architect
+ * already processed are the caller's to ignore.
+ */
+export async function readHolds(
+  store: ArtifactStore,
+  opts: ReadHoldsOptions = {},
+): Promise<{ holds: Hold[]; findings: HoldFinding[] }> {
+  const known =
+    opts.knownSlugs === undefined ? undefined : new Set(opts.knownSlugs);
+  const holds: Hold[] = [];
+  const findings: HoldFinding[] = [];
+  for (const name of await listHoldNames(store)) {
+    if (name.startsWith(".") || !YAML_HOLD.test(name)) continue;
+    const file = path.join("mailbox", "holds", name);
+    let text: string;
+    try {
+      text = await fs.promises.readFile(
+        path.join(holdsDir(store), name),
+        "utf8",
+      );
+    } catch (err) {
+      if (isENOENT(err)) continue;
+      throw err;
+    }
+    let parsed: Hold | undefined;
+    try {
+      const valid = holdFileSchema.safeParse(yaml.parse(text));
+      if (valid.success) {
+        parsed = {
+          steer: path.basename(name, path.extname(name)),
+          ...valid.data,
+        };
+      } else {
+        findings.push({
+          file,
+          kind: "malformed",
+          reason: "must be { slugs: string[], goal: boolean }",
+        });
+      }
+    } catch (err) {
+      findings.push({
+        file,
+        kind: "malformed",
+        reason: `not valid YAML: ${(err as Error).message}`,
+      });
+    }
+    if (!parsed) continue;
+    const unknown =
+      known === undefined
+        ? []
+        : parsed.slugs.filter((slug) => !known.has(slug));
+    if (unknown.length > 0) {
+      findings.push({
+        file,
+        kind: "unknown-slug",
+        reason: `unknown slug(s): ${unknown.join(", ")}`,
+      });
+      continue;
+    }
+    holds.push(parsed);
+  }
+  return { holds, findings };
+}
+
+/**
+ * Moves a hold that decides nothing out of the holds directory and records
+ * why. Leaving it in place would re-report it on every read, so the record is
+ * the report and the file is kept under `mailbox/quarantine/` for the operator.
  */
 async function quarantineHold(
   store: ArtifactStore,
-  name: string,
-  text: string,
-  problem: string,
+  finding: HoldFinding,
   iteration: number,
 ): Promise<void> {
+  const name = path.basename(finding.file);
+  let text: string;
+  try {
+    text = await fs.promises.readFile(path.join(holdsDir(store), name), "utf8");
+  } catch (err) {
+    if (isENOENT(err)) return;
+    throw err;
+  }
   const dir = quarantineDir(store);
   await fs.promises.mkdir(dir, { recursive: true });
   const preferred = path.join(dir, name);
@@ -341,78 +424,36 @@ async function quarantineHold(
   const rel = path.relative(store.goalDir, target);
   await store.appendRecord(scriptMeta(iteration, "hold-quarantine"), {
     ok: false,
-    cause: `malformed hold "${name}" moved to ${rel}: ${problem}`,
+    cause: `${finding.kind} hold "${name}" moved to ${rel}: ${finding.reason}`,
   });
 }
 
 /**
- * Reads the PM's hold decisions. A malformed hold is quarantined with a record
- * instead of wedging every launch, and the valid holds beside it still apply.
- * A hold naming an unknown slug is quarantined the same way when the caller
- * passes its task slugs. Holds for steers the architect already processed are
- * the caller's to ignore.
+ * The launch's one hold quarantine, run under the run lock: parks every
+ * malformed or unknown-slug hold with a record. A slug whose task file the
+ * scan reports as an unconfigured type is not unknown: pre-flight refuses that
+ * launch, and the hold stays for when the type is configured. A holds path
+ * that is not a directory has nothing to park; dispatch reports it as infra.
  */
-export async function readHolds(
+export async function sweepHolds(
   store: ArtifactStore,
-  opts: ReadHoldsOptions = {},
-): Promise<Hold[]> {
-  const dir = holdsDir(store);
-  let names: string[];
+  iteration: number,
+  knownSlugs: ReadonlySet<string> | readonly string[],
+): Promise<void> {
+  const known = new Set(knownSlugs);
+  for (const finding of await store.scanTaskFindings()) {
+    if (finding.kind === "unconfigured-type") known.add(finding.slug);
+  }
+  let findings: HoldFinding[];
   try {
-    names = await fs.promises.readdir(dir);
+    ({ findings } = await readHolds(store, { knownSlugs: known }));
   } catch (err) {
-    if (isENOENT(err)) return [];
+    if ((err as NodeJS.ErrnoException).code === "ENOTDIR") return;
     throw err;
   }
-  const iteration = opts.iteration ?? (await currentIteration(store));
-  const known =
-    opts.knownSlugs === undefined ? undefined : new Set(opts.knownSlugs);
-  const holds: Hold[] = [];
-  for (const name of names.sort()) {
-    if (name.startsWith(".") || !YAML_HOLD.test(name)) continue;
-    const file = path.join(dir, name);
-    let text: string;
-    try {
-      text = await fs.promises.readFile(file, "utf8");
-    } catch (err) {
-      if (isENOENT(err)) continue;
-      throw err;
-    }
-    let parsed: Hold | undefined;
-    let problem: string | undefined;
-    try {
-      const valid = holdFileSchema.safeParse(yaml.parse(text));
-      if (valid.success) {
-        parsed = {
-          steer: path.basename(name, path.extname(name)),
-          ...valid.data,
-        };
-      } else {
-        problem = "must be { slugs: string[], goal: boolean }";
-      }
-    } catch (err) {
-      problem = `not valid YAML: ${(err as Error).message}`;
-    }
-    if (parsed) {
-      if (known !== undefined) {
-        const unknown = parsed.slugs.filter((slug) => !known.has(slug));
-        if (unknown.length > 0) {
-          await quarantineHold(
-            store,
-            name,
-            text,
-            `unknown slug(s): ${unknown.join(", ")}`,
-            iteration,
-          );
-          continue;
-        }
-      }
-      holds.push(parsed);
-      continue;
-    }
-    await quarantineHold(store, name, text, problem ?? "unreadable", iteration);
+  for (const finding of findings) {
+    await quarantineHold(store, finding, iteration);
   }
-  return holds;
 }
 
 /**

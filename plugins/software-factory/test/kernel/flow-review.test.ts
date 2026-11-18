@@ -9,6 +9,7 @@ import {
 } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
+import { spikeReportPath } from "../../src/kernel/spike-report.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -137,7 +138,7 @@ describe("empty diff", () => {
     }
   }, 60_000);
 
-  it("treats an empty diff in a spike as a normal finish", async () => {
+  it("does not empty-diff park a spike turn; the missing report earns a gate fix", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -145,6 +146,18 @@ describe("empty diff", () => {
         ctx.writeOutcome(
           outcome({ summary: "the cache approach holds; no artifact needed" }),
         );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        fs.mkdirSync(path.join(req.cwd!, ".factory/spikes"), {
+          recursive: true,
+        });
+        fs.writeFileSync(
+          path.join(req.cwd!, spikeReportPath("probe")),
+          "# Finding\n\nThe cache approach holds.\n",
+          "utf8",
+        );
+        ctx.writeOutcome(outcome({ summary: "report committed" }));
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
@@ -170,7 +183,7 @@ describe("empty diff", () => {
       );
       expect(state.tasks.probe!.status).toBe("finished");
       expect(state.tasks.probe!.cause).toBeUndefined();
-      expect(harness.calls.length).toBe(2);
+      expect(harness.calls.length).toBe(3);
       expect(
         records.filter((r) => r.slug === "probe" && r.step === "park"),
       ).toEqual([]);
@@ -515,6 +528,14 @@ describe("review last call", () => {
           "# Finding\n\nUse the cache.\n",
           "utf8",
         );
+        fs.mkdirSync(path.join(req.cwd!, ".factory/spikes"), {
+          recursive: true,
+        });
+        fs.writeFileSync(
+          path.join(req.cwd!, spikeReportPath("probe")),
+          "# Finding\n\nUse the cache.\n",
+          "utf8",
+        );
         ctx.writeOutcome(outcome({ summary: "finding written" }));
         return fakeTurnResult(req);
       });
@@ -636,6 +657,14 @@ describe("spikes", () => {
       harness.script((req, ctx) => {
         fs.writeFileSync(
           path.join(req.cwd!, "finding.md"),
+          "# Finding\n\nUse the cache.\n",
+          "utf8",
+        );
+        fs.mkdirSync(path.join(req.cwd!, ".factory/spikes"), {
+          recursive: true,
+        });
+        fs.writeFileSync(
+          path.join(req.cwd!, spikeReportPath("probe")),
           "# Finding\n\nUse the cache.\n",
           "utf8",
         );

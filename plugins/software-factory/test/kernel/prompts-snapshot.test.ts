@@ -106,6 +106,7 @@ const ROLES: Record<string, Record<string, string>> = {
     front_pack: "/goal/iterations/3/context-pack.md",
     worktree: "/worktrees/demo-tasks/alpha",
     resume_note: "",
+    report_path: ".factory/spikes/alpha.md",
     setup_command: "bun install",
     gate_commands: "- test: bun test\n- typecheck: bun run typecheck",
     baseline_checks: "- test: 2 failing",

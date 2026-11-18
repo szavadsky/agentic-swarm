@@ -709,6 +709,7 @@ describe("record cost truth", () => {
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: {
           task_path: "tasks/a.md",
+          report_path: "",
           front_pack: "none",
           worktree: root,
           resume_note: "",

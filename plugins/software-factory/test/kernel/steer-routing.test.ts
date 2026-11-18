@@ -10,6 +10,7 @@ import { runBoundary } from "../../src/kernel/boundary.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { holdsDir, postSteer } from "../../src/kernel/mailbox.js";
 import { appendPark } from "../../src/kernel/record.js";
+import { spikeReportPath } from "../../src/kernel/spike-report.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -251,6 +252,13 @@ describe("steer PM routing", () => {
       harness.script(approver("alpha is correct"));
       harness.script((req, ctx) => {
         fs.writeFileSync(path.join(req.cwd!, "probe.txt"), "finding\n", "utf8");
+        const report = path.join(req.cwd!, spikeReportPath("probe-page"));
+        fs.mkdirSync(path.dirname(report), { recursive: true });
+        fs.writeFileSync(
+          report,
+          "# Finding\n\nCursor pagination wins.\n",
+          "utf8",
+        );
         ctx.writeOutcome(outcome({ summary: "cursor pagination wins" }));
         return fakeTurnResult(req);
       });

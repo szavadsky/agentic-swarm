@@ -1055,6 +1055,7 @@ const pmVars = {
 
 const implementerVars = {
   task_path: "/g/tasks/a.md",
+  report_path: "",
   front_pack: "",
   worktree: "/wt/a",
   resume_note: "",
