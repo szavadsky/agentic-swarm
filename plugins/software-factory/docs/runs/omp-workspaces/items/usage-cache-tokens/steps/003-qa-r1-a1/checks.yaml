@@ -1,7 +1,8 @@
 checks:
   - id: red-test
     status: pass
-    message: "red-test passed: all 11 tests fail when prod changes are restored to
+    message:
+      "red-test passed: all 11 tests fail when prod changes are restored to
       test-first commit"
     details:
       command: bun --cwd=plugins/software-factory test

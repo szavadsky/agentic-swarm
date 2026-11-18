@@ -16,7 +16,8 @@ suggestions:
   - id: thirteen-enumeration-incomplete
     disposition: fix
     summary: 13-site enumeration misses hits and overclaims no-13-remains
-    detail: Plan lists AGENTS+README:58+overlays+tutorials+init+cli:314 but misses
+    detail:
+      Plan lists AGENTS+README:58+overlays+tutorials+init+cli:314 but misses
       README:17, troubleshooting:155, CHANGELOG:104, _factories.py:34/46/50,
       _factories_extras.py:1, test_extra_tools.py:237,
       test_self_lint_clean.py:3, test_bench_runner_overhead.py:5/224,
@@ -29,7 +30,8 @@ suggestions:
   - id: cli-concurrent-edit-conflict
     disposition: fix
     summary: Two M1 items edit cli.py in parallel with deps []
-    detail: runner-format-contract rewrites phase-1a to call build_format_command;
+    detail:
+      runner-format-contract rewrites phase-1a to call build_format_command;
       baseline-violations-fix extracts _run_tool_pipeline locals at :50. Same
       file, no dep, parallel race. Serialize via dep or split file ownership.
     location:
@@ -100,7 +102,8 @@ suggestions:
   - id: golden-regen-contradiction
     disposition: fix
     summary: Regen-twice-byte-identical contradicts no-blind-regen
-    detail: M2 scenario requires regen twice byte-identical but item forbids blind
+    detail:
+      M2 scenario requires regen twice byte-identical but item forbids blind
       regen and asserts golden+counts byte-identical to committed.
       UPDATE_GOLDEN=1 rewrites committed files. Specify temp-copy regen
       procedure with hash comparison, never committed-file mutation.
@@ -120,7 +123,8 @@ suggestions:
   - id: eval-stratification-missing
     disposition: fix
     summary: Eval corpus double-counts and lacks heuristic stratum
-    detail: Corpus threshold 30+50 plus brush-off/meaningful tables overlaps same
+    detail:
+      Corpus threshold 30+50 plus brush-off/meaningful tables overlaps same
       strings; heuristic-easy rejects inflate 90/95/85 bars. Require dedup and
       per-stratum report with bars on heuristic-accepted subset where model
       actually decides.
@@ -140,7 +144,8 @@ suggestions:
   - id: epic-head-dependency-typo
     disposition: fix
     summary: Epic AGENTS scope cites wrong HEAD dependency
-    detail: Semantic epic says AGENTS pipeline section only on HEAD containing M2
+    detail:
+      Semantic epic says AGENTS pipeline section only on HEAD containing M2
       merge, never count lines. Counts fixed in M1, M2 tests-only. Correct to M1
       HEAD and define pipeline-section-only edit boundary vs counts lines
       :9/43/63/92/93.
@@ -170,7 +175,8 @@ suggestions:
   - id: material-tightening-visibility
     disposition: human-awareness
     summary: Model may add new W9704 vs heuristic-only by design
-    detail: Assumption allows tightening (accepted+miss+absent True, hit False) as
+    detail:
+      Assumption allows tightening (accepted+miss+absent True, hit False) as
       intentional, not regression. Operator should be aware SEMANTIC=1 golden
       will shift; shift report+CHANGELOG+root regen protocol must be visible
       before iteration-3.
@@ -180,7 +186,8 @@ suggestions:
   - id: nested-copy-parent-missing
     disposition: optional
     summary: New copy helper should mkdir parents for nested tmp_path
-    detail: pristine=_copy_sample(tmp_path/golden) nests project under non-existent
+    detail:
+      pristine=_copy_sample(tmp_path/golden) nests project under non-existent
       dir; copytree requires parent. Pin copy_sample_project to mkdir parents.
     location:
       file: tests/integration.py

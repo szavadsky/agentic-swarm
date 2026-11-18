@@ -43,7 +43,8 @@ items:
     slug: semantic-threshold-consolidation
     title: Consolidate semantic heuristic tables
     wave: 1
-  - assignment: "Prototype on tmp copies only; zero committed files. Validate the
+  - assignment:
+      "Prototype on tmp copies only; zero committed files. Validate the
       ADR-017 pinned contract (do not invent alternative): project-root =
       config.cwd with traversal guard; schema + array sort (rule, justification,
       model) + non-hex encoding (no bare hex>=20, detect-secrets clean,
@@ -94,7 +95,8 @@ items:
     slug: checkers-semantic-guards
     title: Guard heuristic checker tests with SEMANTIC=0
     wave: 1
-  - assignment: "Owns runner/baseline.py/.pyi + runner/parsers.py re-export lines +
+  - assignment:
+      "Owns runner/baseline.py/.pyi + runner/parsers.py re-export lines +
       shim-asserting lines in the merged baseline-diff tests ONLY (applied onto
       merged shape from baseline-diff-merge); FORBIDDEN dispatch*/__init__
       (dispatch-split), types.py/cli-threading (cache-impl), tests/data,
@@ -118,7 +120,8 @@ items:
     slug: runner-compat-shim-removal
     title: Remove runner compat shims
     wave: 2
-  - assignment: "Sole writer: NEW checkers/_decision_backend.py/.pyi + _base.py/.pyi
+  - assignment:
+      "Sole writer: NEW checkers/_decision_backend.py/.pyi + _base.py/.pyi
       (veto + injection + normalize_suppressed_codes + on-any-element +
       stale-doc fix) + _semantic.py/.pyi (rewrite, no sentence-transformers) +
       no_try_import _OPTIONAL_IMPORT_PATTERNS + register line + pyproject
@@ -158,7 +161,8 @@ items:
     slug: decision-backend-impl
     title: Implement veto DecisionBackend with FakeBackend
     wave: 2
-  - assignment: "Owns NEW checkers/_source_stream.py/.pyi + stream read/decode call
+  - assignment:
+      "Owns NEW checkers/_source_stream.py/.pyi + stream read/decode call
       sites in conformance/stub checkers ONLY; FORBIDDEN _base.py/.pyi (zero
       diff, semantic-owned), no_try_import register line/patterns (semantic),
       tests/data, baseline. API (all in _source_stream, @beartype,
@@ -188,7 +192,8 @@ items:
     slug: checkers-stream-helper
     title: Single-source stream read/decode helper
     wave: 2
-  - assignment: "Tests-only (tests/checkers/_factories*.py + importer modules ONLY;
+  - assignment:
+      "Tests-only (tests/checkers/_factories*.py + importer modules ONLY;
       FORBIDDEN src, baseline, docs, tests/data). Red-test-exempt. Recount
       importers at HEAD via grep (from tests.checkers._factories import|from
       ._factories import; reviewer names 8 families: beartype, no_try_import,
@@ -251,7 +256,8 @@ items:
     slug: runner-dispatch-split
     title: Split dispatch registry below limits
     wave: 3
-  - assignment: "Owns conformance/*.py (suppression, trivial_wrapper, bare_except,
+  - assignment:
+      "Owns conformance/*.py (suppression, trivial_wrapper, bare_except,
       mixins) + stub fidelity rows ONLY; FORBIDDEN _base.py/.pyi incl stale doc
       (zero diff; backend-impl fixes _base.pyi), no_try_import register
       line/patterns, tests/data. Depends on decision-backend-impl for the joiner
@@ -390,7 +396,8 @@ items:
     slug: never-test-linting-prune
     title: Prune gate-duplicating tests with survivors
     wave: 4
-  - assignment: "Second writer (after M2 handoffs): threshold 2 files (preserve M2
+  - assignment:
+      "Second writer (after M2 handoffs): threshold 2 files (preserve M2
       deduped table; rewrite reranker classes only) + suppression-file pipeline
       block (after guards) + tests/assumptions runtime/decision/cache modules
       (append-only; deliberate cache-semantics rewrite, not loosened; never

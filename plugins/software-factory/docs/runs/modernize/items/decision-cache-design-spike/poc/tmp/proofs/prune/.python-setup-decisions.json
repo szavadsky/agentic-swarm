@@ -1,9 +1,7 @@
 [
   {
     "decision": true,
-    "files": [
-      "src/a.py"
-    ],
+    "files": ["src/a.py"],
     "justification": "a specific technical reason",
     "key": "dk1.krhts6fg.xkldl7nf.47rj3zrw.wkddixu3.o2g4o4qx.gqwfmec6.teqa",
     "last_seen": "2026-11-08",
@@ -14,9 +12,7 @@
   },
   {
     "decision": true,
-    "files": [
-      "src/b.py"
-    ],
+    "files": ["src/b.py"],
     "justification": "b specific technical reason",
     "key": "dk1.avv5lkvs.si7ncdgm.4piv3qse.olyg2e4r.4uksmiwa.chpi3vp3.wlza",
     "last_seen": "2026-11-08",
@@ -27,9 +23,7 @@
   },
   {
     "decision": true,
-    "files": [
-      "src/gone.py"
-    ],
+    "files": ["src/gone.py"],
     "justification": "gone specific technical reason",
     "key": "dk1.tpafdl2i.liuuy4kj.gvyzgcek.g7wwhmd2.3bnlmgif.3wwrtxrj.hcuq",
     "last_seen": "2026-11-08",

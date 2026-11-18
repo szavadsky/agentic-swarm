@@ -41,7 +41,8 @@ concerns:
   - affects:
       - m1-omp-de-risk
       - m7-cache-policy
-    detail: "Disclosed in doc and state.yaml debt, accepted by review: (1) long/none
+    detail:
+      "Disclosed in doc and state.yaml debt, accepted by review: (1) long/none
       retention probes saved only YAML results, no NDJSON/transcript archived
       (omp-5-cache-keys.md:308); (2) transport audit ran against
       steps/architect-resume flagged dead in IMPLEMENTATION.md (omp-5:21,
@@ -57,12 +58,14 @@ concerns:
       file: plugins/software-factory/docs/spikes/omp-5-cache-keys.md
       line: 308
     severity: low
-    summary: "Cache-key spike has disclosed provenance gaps: dead-fragment audit,
+    summary:
+      "Cache-key spike has disclosed provenance gaps: dead-fragment audit,
       YAML-only long/none probes, overstated docstring"
   - affects:
       - m1-omp-de-risk
       - m8-e2e-docs
-    detail: omp-4-mock-provider.md:61 states error turns optional, not probed; no
+    detail:
+      omp-4-mock-provider.md:61 states error turns optional, not probed; no
       raw NDJSON transcript excerpt persisted (RECOVERY.md:86 discloses both as
       limitations, not re-probed). M8 must verify error-turn variant before
       relying on it. Mock seam itself is proven with zero paid calls (P3 catalog
@@ -77,7 +80,8 @@ concerns:
   - affects:
       - m1-omp-de-risk
       - m8-e2e-docs
-    detail: "omp-6-repo-rules.md:19-21 verdict 1.4 verified by docs, not live: task
+    detail:
+      "omp-6-repo-rules.md:19-21 verdict 1.4 verified by docs, not live: task
       subagents drop AGENTS.md by basename but keep RULES.md/contextFiles.extra.
       Decision 001 keeps scout live probe open until re-probed via mock
       provider. Roots verified exactly-once injected; M8 must run the
@@ -87,7 +91,8 @@ concerns:
       file: plugins/software-factory/docs/spikes/omp-6-repo-rules.md
       line: 19
     severity: low
-    summary: Scout AGENTS.md-drop premise is docs-only; live scout probe still open
+    summary:
+      Scout AGENTS.md-drop premise is docs-only; live scout probe still open
       for M8
   - affects:
       - m4-lifecycle
@@ -104,11 +109,13 @@ concerns:
       file: plugins/software-factory/src/cli/preflight.ts
       line: 369
     severity: medium
-    summary: Preflight overlay validation still a no-op and hardcodes omp fallback
+    summary:
+      Preflight overlay validation still a no-op and hardcodes omp fallback
       path (M4 must replace)
   - affects:
       - m1-omp-de-risk
-    detail: "src/core/checks/runner.ts:666-735 implements baseline ratchet only when
+    detail:
+      "src/core/checks/runner.ts:666-735 implements baseline ratchet only when
       ratchetEligible (baseline entry + isTestRunnerGate + junitArg). Non-JUnit
       gate targets stay strict-fail on red baseline (fail-closed), unlike
       runGates coarse-pass. Verified in code and
@@ -121,11 +128,13 @@ concerns:
       file: plugins/software-factory/src/core/checks/runner.ts
       line: 670
     severity: low
-    summary: Target-green ratchet applies only to JUnit-capable test-runner gates;
+    summary:
+      Target-green ratchet applies only to JUnit-capable test-runner gates;
       non-JUnit stays strict
   - affects:
       - m1-omp-de-risk
-    detail: src/core/flows/merge-path.ts:149-172 runMergeSetup duplicates runner.ts
+    detail:
+      src/core/flows/merge-path.ts:149-172 runMergeSetup duplicates runner.ts
       setup semantics (stop-on-first-failure, timeout, command+output evidence)
       without shared helper; no test for sequential stop-on-first-failure
       ordering or timeout path (tests cover before-gates visibility,
@@ -189,7 +198,8 @@ remarkable:
       - Leave transport uncharacterized until M7
     chosen: M2 characterizes transport byte-stability with tests only, pinning
       prompt-filename instability as documented behavior
-    why: Spike-cache-key verdict (content-keyed, path-safe) was not yet merged when
+    why:
+      Spike-cache-key verdict (content-keyed, path-safe) was not yet merged when
       M2 ran; tests-only characterization (tests-only check passed, no prod
       change) locks in byte-identical system-prompt/overlay/prompt-content plus
       argv-differs-only-at-prompt-filename, so M7 stabilization has a
@@ -197,9 +207,11 @@ remarkable:
   - alternatives:
       - Run infra.setup after gate snapshots (count setup artifacts as mutations)
       - Require every item branch to commit node_modules
-    chosen: merge-path runs infra.setup in childWt before any gate/target snapshot,
+    chosen:
+      merge-path runs infra.setup in childWt before any gate/target snapshot,
       with gate-shaped failure evidence
-    why: Mirrors temp-worktree runner.ts semantics; setup-created untracked files
+    why:
+      Mirrors temp-worktree runner.ts semantics; setup-created untracked files
       (node_modules) become snapshot baseline rather than gate mutations
       (asserted by zero worktree_mutation_detected events); failure fails merge
       with id infra.setup + command + exit + output tail, same evidence shape as

@@ -91,5 +91,6 @@ remarkable:
         cycle)"
     chosen: "amend: add merge-setup engine fix + spike-findings recovery, keep
       wave-2 M2 items scheduled"
-    why: Minimal delta that unblocks all future merges, salvages approved research
+    why:
+      Minimal delta that unblocks all future merges, salvages approved research
       onto the parent branch, and keeps runnable measurement work flowing.

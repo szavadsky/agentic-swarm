@@ -20,7 +20,8 @@ suggestions:
   - id: golden-sort-none-unsafe
     disposition: fix
     summary: Sort/Counter on nullable Finding will TypeError without None-safe key
-    detail: Finding has file/line/col nullable for __CRASH__. Interface says sort by
+    detail:
+      Finding has file/line/col nullable for __CRASH__. Interface says sort by
       5-tuple and sorted added/removed, but naive sorted() on None vs str/int
       raises. Baseline already solves via _violation_sort_key mapping None
       file->('',) line/col->(-1,) (baseline.py:55-57). Specify None-safe key
@@ -58,7 +59,8 @@ suggestions:
     disposition: fix
     summary: make_runner_config/_make_config side effect and collect_findings
       signature underspecified
-    detail: M1 scenario cites make_runner_config semantics but M1 uses _make_config
+    detail:
+      M1 scenario cites make_runner_config semantics but M1 uses _make_config
       (M2 extracts). _make_config writes project/rumdl.toml via brittle
       content.replace('"tests/data", ','') (integration.py:90-97),
       idempotency/overwrite/failure unspecified. collect_findings(project,tmp)
@@ -98,7 +100,8 @@ suggestions:
       line: 50
   - id: m2-helpers-scenario-overconstrained
     disposition: fix
-    summary: Shared-helpers scenario requires impossible imports and races AGENTS.md
+    summary:
+      Shared-helpers scenario requires impossible imports and races AGENTS.md
       counts
     detail: Scenario requires each of 7 helpers imported by integration.py,
       conftest.py and _autofix_helpers.py, but conftest only needs
@@ -115,7 +118,8 @@ suggestions:
     disposition: fix
     summary: Audits emit no durable artifact, race semantic epic, exclusions
       inconsistent
-    detail: Row schemas as item-report tables (no committed file) rot when semantic
+    detail:
+      Row schemas as item-report tables (no committed file) rot when semantic
       epic concurrently creates backend/cache modules and rewrites
       test_semantic_check.py (506 lines + suppression),
       test_semantic_threshold.py, tests/checkers/conftest.py (absent per glob),
@@ -129,7 +133,8 @@ suggestions:
       line: 1
   - id: golden-serialization-determinism
     disposition: fix
-    summary: Golden JSON format, POSIX steps, drift injection, and tool-qualified
+    summary:
+      Golden JSON format, POSIX steps, drift injection, and tool-qualified
       lookups missing
     detail: Interface says sorted JSON array but omits indent/sort_keys/newline
       (baseline writer uses indent=2 sort_keys=True), POSIX steps (strip ./,
@@ -156,7 +161,8 @@ suggestions:
   - id: oracle-coverage-weak
     disposition: fix
     summary: violations.txt oracle pins only subset; other tools unguarded on regen
-    detail: violations.txt holds pylint custom + MD072 + duplicate-code only, not
+    detail:
+      violations.txt holds pylint custom + MD072 + duplicate-code only, not
       ruff/mypy/pyright/ty/yamllint/tach/detect-secrets.
       Every-oracle-rule-in-golden does not prevent silent drop of other tools on
       blind regen. Root M1 regen warns only (no diff-review requirement unlike

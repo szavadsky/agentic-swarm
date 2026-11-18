@@ -17,7 +17,8 @@ suggestions:
   - id: findingkey-export-consistency
     disposition: optional
     summary: Public FindingKey alias missing from __all__
-    detail: FindingKey is a public name but not listed in __all__ while all other
+    detail:
+      FindingKey is a public name but not listed in __all__ while all other
       public helpers are. Either export it or rename to _FindingKey for
       consistency with private helpers.
     location:
@@ -37,7 +38,8 @@ suggestions:
   - id: golden-read-strictness
     disposition: optional
     summary: Golden read silently drops extra keys and leaks raw JSON errors
-    detail: _coerce_finding ignores unknown keys (a golden with stale 'msg'/extra
+    detail:
+      _coerce_finding ignores unknown keys (a golden with stale 'msg'/extra
       fields would still pass) and read_golden lets JSONDecodeError propagate
       unwrapped instead of pytest.fail. Consider failing on unexpected keys and
       wrapping decode errors for precise drift reporting.

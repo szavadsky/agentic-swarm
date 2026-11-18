@@ -42,7 +42,8 @@ concerns:
   - kind: risk
     summary: stranded-wave test has a 5s timeout that flakes under full-suite
       parallel load
-    detail: test/engine/stranded-wave.test.ts:255 second-consult test timed out at
+    detail:
+      test/engine/stranded-wave.test.ts:255 second-consult test timed out at
       5057ms in the full-suite gate run but passes in 7.2s file-time when
       isolated. Under 102-file parallel load the per-test 5s budget is too
       tight; gate failures from this test are likely load artifacts rather than
@@ -57,7 +58,8 @@ concerns:
       - wave-merge
 remarkable:
   - chosen: Diagnose first and make no production changes on retry
-    why: Review feedback directed isolating the failing file before touching code;
+    why:
+      Review feedback directed isolating the failing file before touching code;
       the isolated pass (4/4) plus a clean full-suite re-run (only accepted
       baseline disk-space failure) proves the failure was load contention in the
       harness, not merge-path behavior.

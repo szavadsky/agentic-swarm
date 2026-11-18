@@ -1,6 +1,7 @@
 iteration: 5
 items:
-  - assignment: 'Owns NEW checkers/_source_stream.py/.pyi + stream sites ONLY (12
+  - assignment:
+      'Owns NEW checkers/_source_stream.py/.pyi + stream sites ONLY (12
       paths: 8 prod NEW _source_stream.py/.pyi, bare_except_comment_checker.py,
       suppression_justification_checker.py/.pyi, stub/checker.py,
       stub/coverage.py/.pyi; 4 tests NEW test_source_stream.py, astroid call,

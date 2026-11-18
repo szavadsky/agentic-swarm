@@ -1,6 +1,6 @@
 iteration: 5
 items:
-  - assignment: "M3 split 1/2 — storage + refresh core. Consumes
+  - assignment: 'M3 split 1/2 — storage + refresh core. Consumes
       cache-contract-assumptions (do not loosen sorted
       (rule,justification,model) indent=2/sort_keys, double-write
       byte-identical, last-seen change-only, schema-never-hex>=20). OWNS ONLY:
@@ -15,8 +15,8 @@ items:
       (cli.py/types.py/_cli_complexity), checker observation lines, tests/data,
       baseline, docs, .gitignore/hatch/.secrets.baseline. IMPLEMENT ADR-019
       storage: array sorted (rule,justification,model) indent=2 sort_keys; entry
-      {justification normalized, rule joined codes, model '<id> rev <short12>
-      prompt-vN', score float [0,1]+decision bool, files sorted unique POSIX} +
+      {justification normalized, rule joined codes, model ''<id> rev <short12>
+      prompt-vN'', score float [0,1]+decision bool, files sorted unique POSIX} +
       {version, prompt hash hexdigest[:12], last-seen ISO date updated ONLY on
       score/decision/files change}; key (justification,rule,model);
       secrets-clean schema (schema fields hex-free; verbatim SHA in
@@ -30,13 +30,13 @@ items:
       EXPORT-CONSISTENCY PROTOCOL (I4 ImportError fix): refresh_blockers exact
       spelling in .py+.pyi, grep both trees, python -c import, stubtest clean,
       clear __pycache__, prove red/green locally (prod aside fails red, restored
-      passes). DECLARE TARGET {\"command\":\"uv run pytest
-      -q\",\"customTarget\":true} NEVER {\"gate\":\"tests\"}. VERIFY: tmp
+      passes). DECLARE TARGET {"command":"uv run pytest
+      -q","customTarget":true} NEVER {"gate":"tests"}. VERIFY: tmp
       round-trip double-run byte-identical + last-seen stable; prune granularity
       (missing/stale/file-removal/drop-empty, --path retains unscanned);
       CI/jobs/isolation guards; tach + detect-secrets clean; pytest +
       integration no new failures vs I5 HEAD recount; golden hash-equal. REPORT:
-      files, TOML diff, red/green proof, no-shift/shift declaration for hatch."
+      files, TOML diff, red/green proof, no-shift/shift declaration for hatch.'
     citations:
       - tests/assumptions/test_decision_cache_contracts.py
       - python_setup_lint/decisions/_decision_cache.py
@@ -236,7 +236,8 @@ items:
     slug: docs-adr-reconciliation-v2
     title: Reconcile docs, ADRs, and version pins (v2 rewired)
     wave: 17
-  - assignment: "M5 sole tests/data/golden writer. FORBIDDEN all other paths. ONLY
+  - assignment:
+      "M5 sole tests/data/golden writer. FORBIDDEN all other paths. ONLY
       on reviewed shift report (justification-class + added/removed keys +
       CHANGELOG snippet + file:line) from behavior items (refresh-wiring-v2,
       backend-wiring-v2, pyi-scope-fix; source-simplifications + semantic-pin-v2
@@ -266,7 +267,8 @@ items:
     slug: golden-regen-hatch-v2
     title: Conditional golden regen on shift reports (v2 rewired)
     wave: 17
-  - assignment: "M5 report-only final gate, zero writes. Record gate table at HEAD:
+  - assignment:
+      "M5 report-only final gate, zero writes. Record gate table at HEAD:
       format exit 0; lint 14/14 per-tool (exit + per-tool + duration); pytest -q
       counts; integration 9-collected-0-failed (9 passed with pre-commit, else 7
       passed + 2 skipped with env + skip reasons — collected==9 failed==0 is

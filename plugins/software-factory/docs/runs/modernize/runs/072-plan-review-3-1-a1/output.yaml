@@ -6,7 +6,8 @@ suggestions:
   - id: missing-epic-deps
     disposition: fix
     summary: M3 items lack epic completion deps and shift-report handoff contract
-    detail: golden-regen-hatch (M3) deps only [epic-kickoff-gate] but runs ONLY on
+    detail:
+      golden-regen-hatch (M3) deps only [epic-kickoff-gate] but runs ONLY on
       reviewed epic shift report; final-gate-validation deps only
       [golden-regen-hatch] but Given all epic merges. Epics not in item graph;
       milestone ordering alone does not define shift-report artifact
@@ -43,9 +44,11 @@ suggestions:
       line: 80
   - id: rule-echo-owner-gap
     disposition: fix
-    summary: Joined-rule rule-echo on-any-element has no owner; lives in excluded
+    summary:
+      Joined-rule rule-echo on-any-element has no owner; lives in excluded
       check_if_meaningful
-    detail: _base.py:238 implements rule-echo as exact match primary==rule. Checkers
+    detail:
+      _base.py:238 implements rule-echo as exact match primary==rule. Checkers
       epic requires joined sorted rule strings with rule-echo rejects on any
       element but forbids editing check_if_meaningful (semantic-owned). Semantic
       epic allows heuristic-first gate + backend injection ONLY in that symbol,
@@ -69,7 +72,8 @@ suggestions:
   - id: m2-scenarios-vague
     disposition: fix
     summary: M2 scenarios use vague predicates and or-shift-reported disjunctions
-    detail: "Runner: which suppression IDs/files, which gates/counts, who reviews
+    detail:
+      "Runner: which suppression IDs/files, which gates/counts, who reviews
       shift where. Checkers: which duplicated blocks eliminated (stream helper
       coverage), semantic symbols zero-diff list, which corpora pinned (40 W9704
       + 11 W9738) vs shift. Semantic: which contracts/tests prove
@@ -119,7 +123,8 @@ suggestions:
   - id: docs-debt-owner-vague
     disposition: optional
     summary: TD3-A1 punts docs owner to re-glob without decision rule
-    detail: Assigned at re-glob (runner epic or root) leaves AGENTS.md counts/scope,
+    detail:
+      Assigned at re-glob (runner epic or root) leaves AGENTS.md counts/scope,
       CHANGELOG v1.2.9 vs pyproject 1.2.10, README v1.2.5 pin, ADR staleness
       without plan-time owner; kickoff gate duties do not list docs assignment.
       Add rule (gate assigns from drift list) or fix owner to root.

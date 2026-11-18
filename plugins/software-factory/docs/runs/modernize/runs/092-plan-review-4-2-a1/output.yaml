@@ -8,7 +8,8 @@ suggestions:
   - id: dispatch-alias-misidentification
     disposition: fix
     summary: Dispatch split misidentifies LINT_TOOLS as removable TOOLS alias
-    detail: "Plan orders removal of 'TOOLS legacy alias (dispatch.py:503-507)', but
+    detail:
+      "Plan orders removal of 'TOOLS legacy alias (dispatch.py:503-507)', but
       those lines define LINT_TOOLS=list(TOOLS) (live registry); TOOLS itself is
       the frozen built-ins at :46. LINT_TOOLS is consumed by _select_tools
       (_cli_complexity.py:44), _config.py:127, cli.py, extra_tools — deleting it
@@ -35,7 +36,8 @@ suggestions:
   - id: joiner-ownership-dep-gap
     disposition: fix
     summary: Joined-rule logic split across legacy and backend with no dep edge
-    detail: "Legacy-cleanup 'emit joined codes (strip/dedupe/ASCII-sort/join)' and
+    detail:
+      "Legacy-cleanup 'emit joined codes (strip/dedupe/ASCII-sort/join)' and
       backend-impl 'joiner/sort/match' both own join logic; legacy notes
       'matching implemented by backend-impl' but its deps (stream-helper,
       shim-removal) exclude backend-impl. Result is either duplicated joiners or
@@ -49,7 +51,8 @@ suggestions:
     disposition: fix
     summary: Refresh flag cannot be implemented in cli.py alone;
       RunnerConfig/parsing unowned
-    detail: "Cache-impl owns NEW _decision_cache + flag 'in runner cli ONLY', but
+    detail:
+      "Cache-impl owns NEW _decision_cache + flag 'in runner cli ONLY', but
       --refresh-decisions/--path needs a RunnerConfig field (types.py), arg
       parsing/building
       (_cli_complexity._parse_config_args/_build_runner_config), help/output.
@@ -75,7 +78,8 @@ suggestions:
   - id: absolute-green-vs-red-baseline
     disposition: fix
     summary: Milestone scenarios demand absolute green while M1 tolerates red
-    detail: "M1 records red-as-red non-gating and items verify 'no new failures',
+    detail:
+      "M1 records red-as-red non-gating and items verify 'no new failures',
       but M2/M3/M4 scenarios assert 'pytest + integration green'/'gates green'.
       If HEAD is red (TD4-B2: I3 gate unclosed; baseline [] fails on any
       violation), absolute-green scenarios are unsatisfiable mid-iteration and
@@ -88,7 +92,8 @@ suggestions:
   - id: cache-sort-key-undefined
     disposition: fix
     summary: Tracked-cache array sort order undefined; determinism unprovable
-    detail: "Contract says 'sorted array, indent=2, sort_keys' but sort_keys orders
+    detail:
+      "Contract says 'sorted array, indent=2, sort_keys' but sort_keys orders
       object keys, not array elements. Entry sort key (justification? rule?
       model? tuple?) is unspecified in ADR-017/ADR-010, so refreshes may
       serialize different orders (hash flakiness). Spike tmp proofs cannot
@@ -113,7 +118,8 @@ suggestions:
   - id: corpus-rater-resourcing
     disposition: fix
     summary: Double-rated corpus spike names no second rater; bias-repair unfalsifiable
-    detail: "Spike requires N>=100 post-dedup, both strata, rubric, adjudication +
+    detail:
+      "Spike requires N>=100 post-dedup, both strata, rubric, adjudication +
       inter-rater agreement, terse borderlines re-rated, 'repairing
       single-author bias' — but a single fact-finder turn is one rater; no
       second rater/adjudicator resourced. Single-agent double-pass does not
@@ -126,7 +132,8 @@ suggestions:
   - id: decision-model-naming
     disposition: fix
     summary: Decision-model env var named inconsistently (DECISION_MODEL vs full name)
-    detail: "M4 interface says 'DECISION_MODEL parses but loader None' while M5 docs
+    detail:
+      "M4 interface says 'DECISION_MODEL parses but loader None' while M5 docs
       checklist requires 'PYTHON_SETUP_LINT_DECISION_MODEL' in
       troubleshooting.md; loader behavior (parse + None + exactly-one warning)
       needs the exact variable, parallel to PYTHON_SETUP_LINT_RERANKER_MODEL.
@@ -138,7 +145,8 @@ suggestions:
   - id: tach-cache-placement
     disposition: architect
     summary: Decision-cache placement contradicts tach (both modules depend on nothing)
-    detail: "tach gives checkers and runner empty depends_on, but the cache needs
+    detail:
+      "tach gives checkers and runner empty depends_on, but the cache needs
       cross-module use: runner CLI (refresh write path) and checkers _base (read
       path) in either placement direction — unless duplicated or put in a third
       module (also forbidden without a tach update). No item owns tach.toml
@@ -150,7 +158,8 @@ suggestions:
       line: 15
   - id: infra-only-closeup-awareness
     disposition: human-awareness
-    summary: I4 ships infra-only while intent demands model swap; operator approval
+    summary:
+      I4 ships infra-only while intent demands model swap; operator approval
       needed
     detail: Intent requires replacing the reranker with a CPU-friendly decision
       model; plan defers all model wiring to I5 on corpus+license+CPU gates,
@@ -165,7 +174,8 @@ suggestions:
     disposition: optional
     summary: Backend/cache hints (150/120) look low for veto+loader+pyi /
       refresh+lockfile scope
-    detail: "Advisory only per review rules (never blocking): decision-backend-impl
+    detail:
+      "Advisory only per review rules (never blocking): decision-backend-impl
       150 covers NEW backend+pyi, _base/_semantic rewrite, Fake/NoBackend,
       loader+sentinel warnings, [semantic]+uv.lock; decision-cache-impl 120
       covers NEW cache+pyi, refresh flag, lockfile+merge+atomic, prune, --path
@@ -199,7 +209,8 @@ suggestions:
   - id: unpinned-alternatives
     disposition: optional
     summary: Several 'A or B' acceptances unpinned; define selection rule per case
-    detail: "Examples: 4 pair tests 'slow or deleted', final detect-secrets 'lint
+    detail:
+      "Examples: 4 pair tests 'slow or deleted', final detect-secrets 'lint
       --tools on pinned paths, or full 14-tool lint on scoped tree', prune
       'test_real_pipeline_smoke.py kept, or a named survivor'. Each branch is
       individually falsifiable via the report citation, but pinning one (or

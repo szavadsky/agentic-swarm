@@ -56,7 +56,8 @@ remarkable:
       - continue with no new work (no pending waves; identical to end-iteration
         but without closing the known gap)
     chosen: amend with recovery-v2 + target-green ratchet fix in wave 3
-    why: Minimal delta that lands M1 evidence on the parent branch for iteration-2
+    why:
+      Minimal delta that lands M1 evidence on the parent branch for iteration-2
       planning and closes the engine gap that caused the wave-2 failure, while
       M2 stays merged and green.
 text: "Wave-3 execution notes: (1) recovery-v2 MUST NOT record a gate target —

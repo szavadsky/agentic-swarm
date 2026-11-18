@@ -119,7 +119,8 @@ citations:
       - Saga (NOT IMPLEMENTED as launches)
       - no saga launcher/loop exists
       - defers this to the `omp-workspaces` fire-test goal
-    summary: "Explicit implementation gap: saga launches do not exist; triage can
+    summary:
+      "Explicit implementation gap: saga launches do not exist; triage can
       classify saga but engine.ts only has runTaskChild for epics, and this work
       is deferred to the omp-workspaces goal."
   - file: plugins/software-factory/docs/spikes/omp-1-topology.md
@@ -140,7 +141,8 @@ citations:
       - Ensures the root task worktree exists.
       - "Idempotent: Subsequent calls reuse the existing worktree"
       - Ensures a child worktree exists
-    summary: "Current engine-managed worktree implementation that must become the
+    summary:
+      "Current engine-managed worktree implementation that must become the
       isolation: engine backend: idempotent root task worktree creation (branch
       from HEAD, INTENT commit, stale registration pruning) and child worktree
       creation for epics/items."
@@ -161,7 +163,8 @@ citations:
       - mergeParentInto
       - 'role: "workhorse"'
       - conflictResolved
-    summary: "Existing item-level merge path under a per-parent merge lock: merge
+    summary:
+      "Existing item-level merge path under a per-parent merge lock: merge
       parent into child, workhorse conflict-resolution agent on conflict,
       conclude merge, gates/verify, then merge child into parent; this is the
       baseline to generalize into wave-end merges with deterministic gates and
@@ -173,7 +176,8 @@ citations:
       - case "preflight"
       - case "status"
       - case "run"
-    summary: CLI currently exposes only init/preflight/status/steer/run; the spec's
+    summary:
+      CLI currently exposes only init/preflight/status/steer/run; the spec's
       idempotent whole-tree status plus cleanup and dry-run-by-default gc
       launchers are absent.
   - file: plugins/software-factory/src/cli/status.ts
@@ -190,7 +194,8 @@ citations:
       - const ompBinary =
       - execFileSync(ompBinary, ["--version"]
       - OMP binary validation failed
-    summary: Preflight already validates the omp binary version and config overlay;
+    summary:
+      Preflight already validates the omp binary version and config overlay;
       spec item 19 additionally requires a real throwaway isolation round-trip,
       model/role resolvability, and repo state consistency with records.
   - file: plugins/software-factory/docs/OMP_ADAPTER.md

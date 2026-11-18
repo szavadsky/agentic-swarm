@@ -87,7 +87,8 @@ items:
     slug: pylint-cache-semantics-closure
     title: Land or verify pylint writer/timing verdict
     wave: 1
-  - assignment: "Root-owned ADR lifecycle, docs only (no-behavior: tests materially
+  - assignment:
+      "Root-owned ADR lifecycle, docs only (no-behavior: tests materially
       identical; QA verifies test-diff contains no semantic assertion weakens;
       peer review; engine commits, agent zero git writes). Overwrite
       docs/adr/ADR-009/010/011 problem-statement stubs with full
@@ -154,7 +155,8 @@ items:
     slug: epic-kickoff-gate
     title: Epic kickoff and ownership-dispute gate
     wave: 2
-  - assignment: "Root-owned fan-in (fact-finder, read-only; findings.md + structured
+  - assignment:
+      "Root-owned fan-in (fact-finder, read-only; findings.md + structured
       findings; review checks validity; zero repo writes). M2 replanAfter:true
       is enforceable gate: engine schedules only in post-replan wave after M2
       epic close-ups exist. Read three epic close-up reports; extract each
@@ -207,7 +209,8 @@ items:
     slug: golden-regen-hatch
     title: Conditional golden regen on reviewed shift report
     wave: 4
-  - assignment: "Root-owned final validation (fact-finder, read-only; findings.md +
+  - assignment:
+      "Root-owned final validation (fact-finder, read-only; findings.md +
       structured findings; review checks validity; zero repo writes). Record
       final gate table: format exit 0; lint per-tool results on scoped clean
       checkout for detect-secrets MemoryError (cite mechanism + HEAD); pytest -q

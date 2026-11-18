@@ -2,7 +2,8 @@ status: approved
 summary: "Approved: read-only audit verified accurate at HEAD; 13 unrelated
   remarkable triaged optional; 2 cosmetic findings-text nits optional."
 suggestions:
-  - detail: Merge/integration tradeoff from consolidate-integration-helpers scope.
+  - detail:
+      Merge/integration tradeoff from consolidate-integration-helpers scope.
       Valid record; no bearing on audit rows. Retained as digest.
     disposition: optional
     id: rm-0237e4a7c9
@@ -13,17 +14,20 @@ suggestions:
     disposition: optional
     id: rm-963829d74d
     summary: Consistent premise for audit §6; no action
-  - detail: Integration-helper merge decision; does not affect audit inventory or
+  - detail:
+      Integration-helper merge decision; does not affect audit inventory or
       pinning limbs. Retained as digest.
     disposition: optional
     id: rm-9b3f69811e
     summary: Unrelated merge tradeoff; retain as digest
-  - detail: Iteration-management decision; orthogonal to audit substance. Retained
+  - detail:
+      Iteration-management decision; orthogonal to audit substance. Retained
       as digest.
     disposition: optional
     id: rm-6396a0993e
     summary: Unrelated iteration decision; retain as digest
-  - detail: Cache-design-spike key-derivation decision. Audit SKIPs cache-semantics
+  - detail:
+      Cache-design-spike key-derivation decision. Audit SKIPs cache-semantics
       modules, so no interaction with audit rows. Retained as digest.
     disposition: optional
     id: rm-00a177b6ba
@@ -41,12 +45,14 @@ suggestions:
     disposition: optional
     id: rm-d1f2b9dda9
     summary: Unrelated cache decision; retain as digest
-  - detail: Config-layer resolution decision from another item; no bearing on test
+  - detail:
+      Config-layer resolution decision from another item; no bearing on test
       inventory. Retained as digest.
     disposition: optional
     id: rm-49477e3be0
     summary: Unrelated item decision; retain as digest
-  - detail: Coding-rules-audit reporting decision; audit's stub-family rows stand on
+  - detail:
+      Coding-rules-audit reporting decision; audit's stub-family rows stand on
       their own measurements (verified exact). No conflict.
     disposition: optional
     id: rm-8744aaa293
@@ -56,7 +62,8 @@ suggestions:
     disposition: optional
     id: rm-bc510f4b77
     summary: Unrelated gate decision; no interaction
-  - detail: Merge-conflict resolution from integration-helpers scope; tests/ content
+  - detail:
+      Merge-conflict resolution from integration-helpers scope; tests/ content
       verified unchanged vs audit base. Retained as digest.
     disposition: optional
     id: rm-5f84f18bbd
@@ -66,7 +73,8 @@ suggestions:
     disposition: optional
     id: rm-6e63c3be9e
     summary: Consistent with conftest row; no action
-  - detail: TestImportVariants is at :154-171, not :169-186, so the 'keep :1-160'
+  - detail:
+      TestImportVariants is at :154-171, not :169-186, so the 'keep :1-160'
       range splits the class mid-body. In test_stub_fidelity_invariants.py the
       drop range :385-427 endpoint bleeds past TestCtxConstruction (:385-414)
       into TestEmitFidelityViolationsOrchestrator (:415-428), which has no

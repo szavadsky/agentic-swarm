@@ -31,7 +31,8 @@ suggestions:
   - id: agents-test-counts-stale
     disposition: optional
     summary: AGENTS.md pytest/integration counts stale (1290/7 vs 1352/9)
-    detail: Lines 10-11 still say 1290 pass, 15 deselected, ~53s and 7 integration
+    detail:
+      Lines 10-11 still say 1290 pass, 15 deselected, ~53s and 7 integration
       pass, ~30s; current gates are 1352 passed, 4 skipped, 18 deselected (~56s)
       and 9 integration passed (~87s). If the assignment's 'counts table 10-11'
       meant the tool_counts golden rows, those are verified (14 keys; ruff check
@@ -55,7 +56,8 @@ suggestions:
   - id: ruff-format-ignores-ruff-config-override
     disposition: optional
     summary: "`--config ruff=...` applies to ruff check but not ruff format"
-    detail: "`_RuffFormatLintTool._build` reads `config_paths['ruff format']` then
+    detail:
+      "`_RuffFormatLintTool._build` reads `config_paths['ruff format']` then
       falls back to the shipped `_default_config_paths`; the CLI alias `--config
       ruff=...` sets only `config_paths['ruff check']` and
       `_SUPPORTED_CONFIG_KEYS` has no 'ruff format'. A consumer overriding the

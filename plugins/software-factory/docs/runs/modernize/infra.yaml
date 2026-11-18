@@ -4,7 +4,8 @@ gates:
   - id: format
     command: uv run ruff format --check --config config/ruff.toml src tests
   - id: lint
-    command: uv run lint --tools 'tach check,ruff check,rumdl check,mypy,yamllint,ty
+    command:
+      uv run lint --tools 'tach check,ruff check,rumdl check,mypy,yamllint,ty
       check,mypy.stubtest,pyright check,pyright verify
       types,pylint,pylint-pyi,pylint tests,detect-secrets'
   - id: test

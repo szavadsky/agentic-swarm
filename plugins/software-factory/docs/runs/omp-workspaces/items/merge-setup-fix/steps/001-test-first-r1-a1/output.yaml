@@ -43,9 +43,11 @@ evidence:
     plugins/software-factory/test/engine/merge-setup.test.ts`; `git diff --stat
     -- plugins/software-factory/src` is empty, so no prod file was modified."
 remarkable:
-  - chosen: Deliver a test-only diff and defer the merge-path.ts implementation to
+  - chosen:
+      Deliver a test-only diff and defer the merge-path.ts implementation to
       the follow-up develop step.
-    why: The story.dev flow runs test-first-scope (rejects any modified prod file)
+    why:
+      The story.dev flow runs test-first-scope (rejects any modified prod file)
       and target-red (declared tests must currently fail) in this step; shipping
       the implementation here would fail both mechanical checks.
     alternatives:

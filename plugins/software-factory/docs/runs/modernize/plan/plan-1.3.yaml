@@ -24,12 +24,12 @@ milestones:
         slice_tool_section(output, start, end)->str;
         assert_oracle_coverage(findings, rules)->None;
         assert_tool_coverage(findings, minimums)->None."
-      - "Config side-effect contract: _make_config (M1) / make_runner_config
+      - 'Config side-effect contract: _make_config (M1) / make_runner_config
         (M2, identical) writes/overwrites <project>/rumdl.toml derived from
-        config/rumdl.toml with '\"tests/data\", ' removed; idempotent (same
+        config/rumdl.toml with ''"tests/data", '' removed; idempotent (same
         bytes on repeat); no-op when shipped rumdl.toml missing; OSError
         propagates. Caller (test) owns tmp dir, copy_sample, git-init, config
-        build, monkeypatched PYTHON_SETUP_LINT_SEMANTIC=0."
+        build, monkeypatched PYTHON_SETUP_LINT_SEMANTIC=0.'
       - "First run in test_setup_new_and_lint (no baseline, rc!=0) is untouched
         AND retains tool-section/SKIPPED/[CRASH]/W9705 assertions:
         __CRASH__/exit<0 records must be zero in golden; positive-exit tool
@@ -159,7 +159,8 @@ uncertainties:
         meaningless-precision, >=85% meaningful-recall)"
       - "semantic epic test-assumptions: install chosen runtime via `semantic`
         extra on 3.14, pin loader/inference API in tests/assumptions/"
-  - description: "Git-stored cache behavior under concurrency/cleanup from inside
+  - description:
+      "Git-stored cache behavior under concurrency/cleanup from inside
       pylint unknown: jobs, open()/close() timing, partial/staged runs, 3 pylint
       invocations sharing one project."
     id: U2
@@ -180,7 +181,8 @@ uncertainties:
         <=40 lines, determinism-only) applies ONLY if the probe proves test-side
         insufficient. Excluding any field that drops a planted oracle rule is
         forbidden without an ADR.
-  - description: Size/shape of coding-rules debt in src/ and redundant/lint-testing
+  - description:
+      Size/shape of coding-rules debt in src/ and redundant/lint-testing
       tests in tests/ (~28.6k LOC) unknown; subsystem epics cannot be scoped
       yet.
     id: U4
@@ -188,7 +190,8 @@ uncertainties:
       - coding-rules-audit (fact-finder)
       - test-debloat-audit (fact-finder)
 itemOutlines:
-  - description: "Probe golden determinism BEFORE the snapshot story (resolves U3).
+  - description:
+      "Probe golden determinism BEFORE the snapshot story (resolves U3).
       On two fresh temp copies (copy+git-init+_make_config, monkeypatched
       PYTHON_SETUP_LINT_SEMANTIC=0) run run_lint capture twice; diff raw
       captures field-by-field. Report: unstable fields (ordering, absolute
@@ -201,7 +204,8 @@ itemOutlines:
     milestoneId: M1
     slug: golden-determinism-probe
     title: Probe capture determinism on temp copies
-  - description: "Make the integration gate pin exact behavior per the probe report.
+  - description:
+      "Make the integration gate pin exact behavior per the probe report.
       Dedicated capture run separate from the rc!=0 first run: caller owns tmp
       dir, copy_sample, git-init, _make_config (package_name + rumdl override),
       monkeypatched PYTHON_SETUP_LINT_SEMANTIC=0; tests/_golden.py owns Finding,
@@ -288,7 +292,8 @@ itemOutlines:
       - golden-snapshot-wiring
       - third-party-assumption-tests
       - consolidate-integration-helpers
-    description: "Read-only audit of src/** and scripts/** vs CodingRules/AGENTS.
+    description:
+      "Read-only audit of src/** and scripts/** vs CodingRules/AGENTS.
       Semantic exclusions are symbol/file-level (mark skipped, audit rest
       normally): checkers/_semantic.py+.pyi, new
       _decision_backend/_decision_cache modules (+.pyi),
@@ -313,7 +318,8 @@ itemOutlines:
       - third-party-assumption-tests
       - consolidate-integration-helpers
       - coding-rules-audit
-    description: "Read-only audit of tests/**. Semantic exclusions (mark skipped):
+    description:
+      "Read-only audit of tests/**. Semantic exclusions (mark skipped):
       tests/checkers/test_semantic_check.py, test_semantic_threshold.py,
       TestSuppressionRerankerPipeline class, tests/checkers/conftest.py
       (epic-created), tests/assumptions runtime/decision/cache modules
@@ -335,7 +341,8 @@ itemOutlines:
     title: Inventory redundant and lint-testing tests
   - deps:
       - golden-determinism-probe
-    description: "Create tests/_golden.py as SOLE golden owner (no pipeline run in
+    description:
+      "Create tests/_golden.py as SOLE golden owner (no pipeline run in
       this item): UPDATE_ENV=PYTHON_SETUP_LINT_UPDATE_GOLDEN,
       SEMANTIC_ENV=PYTHON_SETUP_LINT_SEMANTIC; Finding TypedDict
       {tool,file|None,line|None,col|None,rule}; finding_key(f) None-safe (tool,
@@ -403,7 +410,8 @@ itemOutlines:
     slug: docs-counts-sync
     title: Sync AGENTS.md counts and cli help to 14-tool world
 assumptions:
-  - assumption: "'Material lint/check behavior' = findings {tool,file,line,col,rule}
+  - assumption:
+      "'Material lint/check behavior' = findings {tool,file,line,col,rule}
       pinned by golden (PYTHON_SETUP_LINT_SEMANTIC=0) + checker unit tests; CLI
       flags/exit codes; baseline/autofix semantics; shipped configs/scopes.
       Other three limbs are pinned by surviving tests inventoried in M3 (CLI:
@@ -420,7 +428,8 @@ assumptions:
       next to lint.baseline. Only decisions committed; weights (0.03-0.8 GB, own
       licenses) stay in the user model cache.
     disposition: confirm with human
-    why: Decisions depend on project content and must reproduce in that project's CI
+    why:
+      Decisions depend on project content and must reproduce in that project's CI
       without the model.
   - assumption: Dev and CI do not install the `semantic` extra;
       sentence-transformers absent from .venv today. Gates run heuristic + cache
@@ -430,27 +439,31 @@ assumptions:
       tests/integration.py` and `uv run lint` are gate contracts: paths and
       commands do not change."
     why: Infra gates and AGENTS.md reference them; renaming silently breaks gating.
-  - assumption: "'Never test linting' means pytest must not assert this repository
+  - assumption:
+      "'Never test linting' means pytest must not assert this repository
       passes its own lint gates — whether by re-running tools in subprocess, by
       AST/source scanning that re-implements a gate, or by config-consistency
       checks that re-lint the repo. `uv run lint` and pre-commit enforce that.
       Tests exercise logic on synthetic inputs and the sample project."
     disposition: confirm with human
-    why: AST guards and config re-checks duplicate the gate and rot with rule churn;
+    why:
+      AST guards and config re-checks duplicate the gate and rot with rule churn;
       broadening the definition removes them with rationale.
   - assumption: "Only semantic-decision-model starts now;
       runner/checkers/setup-testing-scripts spawn at iteration-2 replan from M3
       audits. Root/epic sharing is narrowed: epic never writes tests/data (regen
       is a root iteration-2 item), AGENTS.md is split by section with a rebase
       prerequisite, tests/assumptions is append-only."
-    why: No cross-epic machine edges exist; narrowing removes the write/write races
+    why:
+      No cross-epic machine edges exist; narrowing removes the write/write races
       by construction.
   - assumption: At least one model among GLiDE-0.4B and smaller Decision-Index
       models has compatible license, Python 3.14 CPU wheels and pinnable
       revision. Else the semantic epic escalates instead of shipping
       non-compliant.
     disposition: verify via semantic-decision-model spikes
-    why: GLiDE uses a custom community license, tested on 3.12; smaller candidates
+    why:
+      GLiDE uses a custom community license, tested on 3.12; smaller candidates
       vary.
 epics:
   - intent: >-
@@ -576,14 +589,17 @@ epics:
     slug: semantic-decision-model
 techDebt:
   - category: impacting
-    description: Suppression/bare-except checkers pass their own symbol as `rule`;
+    description:
+      Suppression/bare-except checkers pass their own symbol as `rule`;
       the rule-echo heuristic and model never see the actually-suppressed codes.
     id: TD-1
-    resolution: "Semantic req5: extract all codes, pass comma-joined sorted string;
+    resolution:
+      "Semantic req5: extract all codes, pass comma-joined sorted string;
       echo matches any element; epic emits shift report + CHANGELOG behavior
       description, root iteration-2 item regenerates golden."
   - category: impacting
-    description: Semantic tests patch module globals and builtins.__import__, import
+    description:
+      Semantic tests patch module globals and builtins.__import__, import
       privates under type:ignore; several assertions vacuous (`is None or ...`).
     id: TD-2
     resolution: "Semantic req6: FakeBackend via public Protocol (direct kwarg +
@@ -597,12 +613,14 @@ techDebt:
       single-sources 10 helpers, moves overlay/setup/precommit scaffolding per
       budget, reaches <=500 without suppression.
   - category: impacting
-    description: test_semantic_check.py 506 lines + suppression; heuristic tables
+    description:
+      test_semantic_check.py 506 lines + suppression; heuristic tables
       duplicate test_semantic_threshold.py.
     id: TD-4
     resolution: "Semantic req6: one merged parametrized table; modules <=500."
   - category: adjacent
-    description: ~15 checkers repeat structural suppressions (missing-beartype on
+    description:
+      ~15 checkers repeat structural suppressions (missing-beartype on
       register(), type:ignore[misc] on mixin classes) + copied stream
       read/decode.
     id: TD-5
@@ -619,16 +637,19 @@ techDebt:
       disable=unjustified-suppression` suppresses the justification checker
       itself."
     id: TD-7
-    resolution: "Iteration-2 runner epic: move rationale to design/0002, leave short
+    resolution:
+      "Iteration-2 runner epic: move rationale to design/0002, leave short
       justified comment."
   - category: adjacent
-    description: tests/checkers/_factories.py ~1400 lines; ~40 pytest.param tables
+    description:
+      tests/checkers/_factories.py ~1400 lines; ~40 pytest.param tables
       typed list[Any] with pasted justifications; cases far from tests.
     id: TD-8
     resolution: "Iteration-2 checkers epic per test-debloat-audit: ParameterSet
       typing, cases next to tests, split per checker."
   - category: adjacent
-    description: Task-ID test names (test_t5_*, test_t9_7_*, test_t11_*, test_t1b_*,
+    description:
+      Task-ID test names (test_t5_*, test_t9_7_*, test_t11_*, test_t1b_*,
       test_t3_*); repo-self-lint tests (test_self_lint_clean.py,
       AST/source-scanning guards, config re-checks) duplicate the `uv run lint`
       gate.
@@ -636,7 +657,8 @@ techDebt:
     resolution: "Iteration-2 epics per test-debloat-audit: rename by behavior;
       remove self-lint tests (broadened never-linting definition)."
   - category: adjacent
-    description: "ADR locations disagree: CodingRules requires design/, factory ADRs
+    description:
+      "ADR locations disagree: CodingRules requires design/, factory ADRs
       go to docs/adr."
     id: TD-10
     resolution: "Iteration-2 replan: cross-reference (design/README or AGENTS.md
@@ -645,14 +667,16 @@ techDebt:
     description: Shipped rumdl.toml excludes tests/data, forcing the integration
       per-run rewrite to lint the sample AGENTS.md; affects golden determinism.
     id: TD-11
-    resolution: coding-rules-audit inventories; iteration-2 runner epic fixes (e.g.
+    resolution:
+      coding-rules-audit inventories; iteration-2 runner epic fixes (e.g.
       narrow exclude); M1/M2 retain the override.
 adrs:
   - consequences: Exact cheap regression detection; golden updates are explicit
       reviewed diffs. Message text not snapshotted. Tool upgrades may require
       reviewed regen. CI cannot silently rewrite. Positive-exit tool failures
       still surface via retained section/SKIPPED assertions, not via golden.
-    context: Modernization enforces rules, debloats, swaps the semantic model while
+    context:
+      Modernization enforces rules, debloats, swaps the semantic model while
       preserving material behavior. lint.baseline is empty; integration only
       checks planted rule-name presence, missing duplicates, moves, new false
       positives. violations.txt covers only pylint-custom + MD + duplicate-code
@@ -684,11 +708,13 @@ adrs:
       patterns list the new runtime. Real-model coverage is one slow +
       with_real_api test. Old env var warns via CHANGELOG-documented
       deprecation.
-    context: _semantic.py misuses a sentence-transformers cross-encoder as a quality
+    context:
+      _semantic.py misuses a sentence-transformers cross-encoder as a quality
       judge. The dependency is heavy and absent in dev/CI, so the heuristic
       decides everything today. The intent asks for a CPU-friendly small
       decision model.
-    decision: "Keep check_if_meaningful signature and PYTHON_SETUP_LINT_SEMANTIC.
+    decision:
+      "Keep check_if_meaningful signature and PYTHON_SETUP_LINT_SEMANTIC.
       Heuristic runs first as a hard gate; rejections never reach the model.
       Accepted text goes to cache, then to a local decision model behind a
       public DecisionBackend Protocol decide(justification, rule, context) ->
@@ -730,13 +756,15 @@ adrs:
       stay in user model cache."
     id: ADR-003
     title: Git-stored, self-cleaning decision cache
-  - consequences: Shared test infra never edited concurrently; debloat runs behind
+  - consequences:
+      Shared test infra never edited concurrently; debloat runs behind
       golden + assumptions. No machine-checkable cross-epic edges exist, so
       epic/root sharing is narrowed to non-write or prerequisite form; residual
       AGENTS.md/_base.py concurrent-edit risk is accepted with rebase
       discipline. Subsystem epics start one iteration later but scoped from
       evidence.
-    context: Three workstreams span ~28.6k LOC. Parallel edits to shared test infra
+    context:
+      Three workstreams span ~28.6k LOC. Parallel edits to shared test infra
       would conflict. Intent requires test infra/assumptions before debloat. The
       semantic epic shares surfaces with root (AGENTS.md, _base.py symbols,
       tests/assumptions, golden dir) but the engine has no cross-epic dependency

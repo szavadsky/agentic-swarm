@@ -14,12 +14,14 @@ concerns:
       file: plugins/software-factory/src/core/flows/merge-path.ts
       line: 321
     severity: high
-    summary: Merge-path gates run without infra.setup in the child worktree; missing
+    summary:
+      Merge-path gates run without infra.setup in the child worktree; missing
       node_modules fails typecheck
   - affects:
       - "19.1"
       - "19.2"
-    detail: "Spike accepted with its five optional polish notes as iteration-2 debt:
+    detail:
+      "Spike accepted with its five optional polish notes as iteration-2 debt:
       soften probe 26 (in-base explicit paths ARE listed when OMP_WORKTREE_DIR
       aligned), soften probe 18 (coercion unproven via config get), add exact
       preflight round-trip command, archive retention-overturn transcripts,

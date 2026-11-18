@@ -30,10 +30,10 @@ target:
     - tests/checkers/test_suppression_justification_checker.py::TestAnyElementCodeEcho::test_code_echo_on_any_element_is_rejected
     - tests/assumptions/test_pylint_cache_semantics.py::TestSemanticInProcessMemo::test_given_new_verdicts_then_backend_calls_once_each_and_writes_nothing
 evidence:
-  - "`uv run pytest
-    \"tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint\"
+  - '`uv run pytest
+    "tests/integration.py::TestMinimalSampleProject::test_setup_new_and_lint"
     -q` -> 1 passed in 36.61s; golden findings hash-equal (the 3 added line-42
-    'unjustified-suppression' records are gone, line 41 record retained)."
+    ''unjustified-suppression'' records are gone, line 41 record retained).'
   - "`uv run pytest -q` -> 1377 passed, 13 deselected, 0 failed (35.17s) — no
     new failures vs M1 table."
   - "Target selectors: `uv run pytest tests/checkers/test_decision_backend.py

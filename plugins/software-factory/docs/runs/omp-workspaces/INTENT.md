@@ -2,6 +2,7 @@
 
 Implement spec items 19 and 20 of `docs/factory.v2.md` in `plugins/software-factory`
 (read both in full; they are the acceptance definition):
+
 - workspace isolation via omp's configurable isolation backend by default; engine-managed git worktrees kept
   as `isolation: engine` option; start with a fact-finder spike on omp isolation mechanics
   (prior research: `plugins/software-factory/docs/spikes/`);
@@ -17,4 +18,4 @@ Implement spec items 19 and 20 of `docs/factory.v2.md` in `plugins/software-fact
 - docs per use case (single task, story waves, epic, saga with parallel epics, conflict/escalation paths,
   status/cleanup/gc);
 - "no models" end-to-end tests through the real omp harness with a scripted mock model provider.
-Expected to be split into epics by the architect where complexity warrants; behavior tests only; terse prompts.
+  Expected to be split into epics by the architect where complexity warrants; behavior tests only; terse prompts.

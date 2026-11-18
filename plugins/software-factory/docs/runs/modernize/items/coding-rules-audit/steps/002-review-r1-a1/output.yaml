@@ -46,7 +46,8 @@ suggestions:
       file: src/python_setup_lint/checkers/conformance/pyi_underscore_checker.py
       line: 40
     summary: W9707 blind; 203 private stubs unguarded
-  - detail: Parent-tip never-test-linting prune wins over item-side import retarget;
+  - detail:
+      Parent-tip never-test-linting prune wins over item-side import retarget;
       drops pytest -m slow noise/self-lint guards; test-consolidation scope, not
       coding-rules-audit rework.
     disposition: optional
@@ -55,7 +56,8 @@ suggestions:
       file: tests/runner/test_pyright_noise_filter.py
       line: 1
     summary: Accepted deletion of two slow self-lint guard tests
-  - detail: Helper consolidation superset already on parent via i2/golden-hardening;
+  - detail:
+      Helper consolidation superset already on parent via i2/golden-hardening;
       T4 moves and integration rewiring redundant in merged tree;
       integration-helpers merge record, not audit scope.
     disposition: optional
@@ -64,7 +66,8 @@ suggestions:
       file: tests/_project_helpers.py
       line: 1
     summary: Merge byte-identical to parent tip, no item deltas
-  - detail: Docstring names pruned self-lint guards; AGENTS 1290/4/15 and 7-pass vs
+  - detail:
+      Docstring names pruned self-lint guards; AGENTS 1290/4/15 and 7-pass vs
       measured 1357/0/7 and 9-collected; overlaps audit DOC-1; root docs update
       after final merge.
     disposition: optional
@@ -73,7 +76,8 @@ suggestions:
       file: tests/_project_helpers.py
       line: 4
     summary: Stale helpers docstring plus AGENTS counts
-  - detail: PYI-1 fix says '(see IMP-1)' but no IMP-1 row exists; 127-import data
+  - detail:
+      PYI-1 fix says '(see IMP-1)' but no IMP-1 row exists; 127-import data
       lives in handoff notes section 12; retarget ref to section 12 or add IMP-1
       row if fix round occurs; no information loss.
     disposition: optional

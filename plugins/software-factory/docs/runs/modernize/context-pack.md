@@ -4,21 +4,21 @@
 
 **Gates verified in this worktree on 2026-11-09** (read-only execution):
 
-| Gate | Result | Evidence |
-|---|---|---|
-| `uv run pytest -q` | 1357 passed, 7 deselected, 4 warnings, 26.6 s | default collection does **not** include `tests/integration.py` (filename is not `test_*.py`) |
-| `uv run pytest tests/integration.py -v` | 9 passed, 56.6 s | run explicitly per AGENTS/README |
-| `uv run lint` | exit 0, all 14 tools PASSED, 57.7 s | `lint.baseline` is `[]` (`lint.baseline:1`) |
+| Gate                                    | Result                                        | Evidence                                                                                     |
+| --------------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `uv run pytest -q`                      | 1357 passed, 7 deselected, 4 warnings, 26.6 s | default collection does **not** include `tests/integration.py` (filename is not `test_*.py`) |
+| `uv run pytest tests/integration.py -v` | 9 passed, 56.6 s                              | run explicitly per AGENTS/README                                                             |
+| `uv run lint`                           | exit 0, all 14 tools PASSED, 57.7 s           | `lint.baseline` is `[]` (`lint.baseline:1`)                                                  |
 
 **Intent status at a glance**
 
-| Intent clause | State at HEAD | Primary evidence |
-|---|---|---|
-| Enforce `CodingRules.md` / `AGENTS.md` | Mostly done; lint gates green, but docs/ADR drift and some dead placeholders remain | `lint.baseline:1`; `AGENTS.md:9-11`, `AGENTS.md:79-85`; `docs/adr/ADR-016.md:1-5` |
-| Debloat code and tests; keep test intent | Partially done (recent prune removed self-lint/config-consistency tests); concrete duplication and dead helpers remain | §4.4 below; `tests/checkers/test_tmp_path_checker.py:19-32`; `tests/runner/_factories.py:167,200`; `tests/runner/test_real_pipeline_smoke.py:1-42` |
+| Intent clause                                                                         | State at HEAD                                                                                                                           | Primary evidence                                                                                                                                                                         |
+| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Enforce `CodingRules.md` / `AGENTS.md`                                                | Mostly done; lint gates green, but docs/ADR drift and some dead placeholders remain                                                     | `lint.baseline:1`; `AGENTS.md:9-11`, `AGENTS.md:79-85`; `docs/adr/ADR-016.md:1-5`                                                                                                        |
+| Debloat code and tests; keep test intent                                              | Partially done (recent prune removed self-lint/config-consistency tests); concrete duplication and dead helpers remain                  | §4.4 below; `tests/checkers/test_tmp_path_checker.py:19-32`; `tests/runner/_factories.py:167,200`; `tests/runner/test_real_pipeline_smoke.py:1-42`                                       |
 | Replace embedding/rerank justification check with a CPU-friendly small decision model | **Half done**: reranker is gone and the veto backend protocol exists, but no production model is wired and no optional dependency ships | `src/python_setup_lint/checkers/_semantic.py:1-65`; `src/python_setup_lint/checkers/_decision_backend.py:37-59`; `pyproject.toml:28-30`; `tests/checkers/test_semantic_check.py:119-123` |
-| Keep a git-stored cache with cleanup | **Not implemented**: only a process-local memo exists; no `.python-setup-decisions.json`, refresh path, or pruning | `src/python_setup_lint/checkers/_semantic.py:15-25,47-64`; `tests/assumptions/test_pylint_cache_semantics.py:8-12`; `docs/adr/ADR-010.md:26-36` |
-| Preserve every material lint/check behavior | Green at HEAD; golden pins 158 findings including 18 W9704, but semantic is disabled during golden capture | `tests/data/golden/minimal_sample_project_findings.json`; `tests/integration.py:110-129`; `tests/_golden.py:54` |
+| Keep a git-stored cache with cleanup                                                  | **Not implemented**: only a process-local memo exists; no `.python-setup-decisions.json`, refresh path, or pruning                      | `src/python_setup_lint/checkers/_semantic.py:15-25,47-64`; `tests/assumptions/test_pylint_cache_semantics.py:8-12`; `docs/adr/ADR-010.md:26-36`                                          |
+| Preserve every material lint/check behavior                                           | Green at HEAD; golden pins 158 findings including 18 W9704, but semantic is disabled during golden capture                              | `tests/data/golden/minimal_sample_project_findings.json`; `tests/integration.py:110-129`; `tests/_golden.py:54`                                                                          |
 
 ---
 
@@ -26,81 +26,81 @@
 
 ### 1.1 Semantic justification subsystem (primary intent area)
 
-| Path | Responsibility | Key lines |
-|---|---|---|
-| `src/python_setup_lint/checkers/_decision_backend.py` | `DecisionBackend` protocol, `FakeBackend`, test-only dotted-path loader, `get_backend()`, pinned threshold/prompt constants, warn-once state | `:10-13`, `:16-30`, `:37-59` |
-| `src/python_setup_lint/checkers/_decision_backend.pyi` | Public stub: `DECISION_THRESHOLD`, `PROMPT_VERSION`, protocol, `FakeBackend`, `get_backend` | `:1-20` |
-| `src/python_setup_lint/checkers/_semantic.py` | Thin adapter: resolves backend, computes SHA-256 cache key, applies `>= DECISION_THRESHOLD`, owns in-memory memo | `:1-65` |
-| `src/python_setup_lint/checkers/_semantic.pyi` | Stub documenting the adapter contract | `:1-23` |
-| `src/python_setup_lint/checkers/_base.py` | `normalize_suppressed_codes`, heuristic-first `check_if_meaningful`, env gate, lazy `_semantic` import | `:145-156`, `:159-252` |
-| `src/python_setup_lint/checkers/conformance/suppression_justification_checker.py` | W9704 `unjustified-suppression`: scans suppression comments and `Any` annotations, calls `check_if_meaningful` | `:33-41`, `:63-91`, `:136-162`, `:330-388` |
-| `src/python_setup_lint/checkers/conformance/bare_except_comment_checker.py` | W9738 `bare-except-comment`, second consumer of `check_if_meaningful` | `:14`, `:103-118` |
-| `docs/semantic-justification.md` | Current *stale* narrative of the reranker pipeline and caches | `:1-62` |
-| `docs/custom-checks.md` | Checker-authoring guide; semantic helper description stale | `:97`, `:104` |
+| Path                                                                              | Responsibility                                                                                                                               | Key lines                                  |
+| --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `src/python_setup_lint/checkers/_decision_backend.py`                             | `DecisionBackend` protocol, `FakeBackend`, test-only dotted-path loader, `get_backend()`, pinned threshold/prompt constants, warn-once state | `:10-13`, `:16-30`, `:37-59`               |
+| `src/python_setup_lint/checkers/_decision_backend.pyi`                            | Public stub: `DECISION_THRESHOLD`, `PROMPT_VERSION`, protocol, `FakeBackend`, `get_backend`                                                  | `:1-20`                                    |
+| `src/python_setup_lint/checkers/_semantic.py`                                     | Thin adapter: resolves backend, computes SHA-256 cache key, applies `>= DECISION_THRESHOLD`, owns in-memory memo                             | `:1-65`                                    |
+| `src/python_setup_lint/checkers/_semantic.pyi`                                    | Stub documenting the adapter contract                                                                                                        | `:1-23`                                    |
+| `src/python_setup_lint/checkers/_base.py`                                         | `normalize_suppressed_codes`, heuristic-first `check_if_meaningful`, env gate, lazy `_semantic` import                                       | `:145-156`, `:159-252`                     |
+| `src/python_setup_lint/checkers/conformance/suppression_justification_checker.py` | W9704 `unjustified-suppression`: scans suppression comments and `Any` annotations, calls `check_if_meaningful`                               | `:33-41`, `:63-91`, `:136-162`, `:330-388` |
+| `src/python_setup_lint/checkers/conformance/bare_except_comment_checker.py`       | W9738 `bare-except-comment`, second consumer of `check_if_meaningful`                                                                        | `:14`, `:103-118`                          |
+| `docs/semantic-justification.md`                                                  | Current _stale_ narrative of the reranker pipeline and caches                                                                                | `:1-62`                                    |
+| `docs/custom-checks.md`                                                           | Checker-authoring guide; semantic helper description stale                                                                                   | `:97`, `:104`                              |
 
 ### 1.2 Checker subsystem
 
-| Path | Responsibility | Key lines |
-|---|---|---|
-| `src/python_setup_lint/checkers/conformance/` | Conformance checkers: beartype, no-try-import, tmp-path, structlog, suppression justification, bare-except, missing error-chain, silent-except, generic-key-dict, unnamed-tuple-dict, trivial-wrapper, redundant-type-guard, pyi-underscore, missing-return-annotation, asyncio-timeout | directory listing |
-| `src/python_setup_lint/checkers/stub/` | Stub fidelity/coverage/docstring checkers and annotation normalizer | `checker.py`, `coverage.py`, `docstring_checker.py`, `normalizer.py`, `fidelity/*` |
-| `config/.pylintrc` | Source-code rcfile; enables custom rules and `max-module-lines=500`, `max-statements=65`, `max-branches=16` | `:2`, `:17`, `:19`, `:22-23` |
-| `config/.pylintrc-pyi` | Stub-file rcfile | `:12-13` |
-| `config/.pylintrc-tests` | Test-file ruleset (production-only rules disabled; W9704/W9702 still enabled) | `:20`, `:37`, `:39`, `:42-47` |
+| Path                                          | Responsibility                                                                                                                                                                                                                                                                          | Key lines                                                                          |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `src/python_setup_lint/checkers/conformance/` | Conformance checkers: beartype, no-try-import, tmp-path, structlog, suppression justification, bare-except, missing error-chain, silent-except, generic-key-dict, unnamed-tuple-dict, trivial-wrapper, redundant-type-guard, pyi-underscore, missing-return-annotation, asyncio-timeout | directory listing                                                                  |
+| `src/python_setup_lint/checkers/stub/`        | Stub fidelity/coverage/docstring checkers and annotation normalizer                                                                                                                                                                                                                     | `checker.py`, `coverage.py`, `docstring_checker.py`, `normalizer.py`, `fidelity/*` |
+| `config/.pylintrc`                            | Source-code rcfile; enables custom rules and `max-module-lines=500`, `max-statements=65`, `max-branches=16`                                                                                                                                                                             | `:2`, `:17`, `:19`, `:22-23`                                                       |
+| `config/.pylintrc-pyi`                        | Stub-file rcfile                                                                                                                                                                                                                                                                        | `:12-13`                                                                           |
+| `config/.pylintrc-tests`                      | Test-file ruleset (production-only rules disabled; W9704/W9702 still enabled)                                                                                                                                                                                                           | `:20`, `:37`, `:39`, `:42-47`                                                      |
 
 ### 1.3 Runner subsystem
 
-| Path | Responsibility | Key lines |
-|---|---|---|
-| `src/python_setup_lint/runner/_tool_specs.py` | Single-source 14 built-in `ToolSpec` entries | `:9-100`, `:102` |
-| `src/python_setup_lint/runner/dispatch.py` | Tool strategy registry, command builders, autofix ordering, baseline fallback | `:62-359`, `:350-359` |
-| `src/python_setup_lint/runner/cli.py` | CLI, tool selection, skip reasons, serial pipeline, `run_lint` | `:110-201`, `:204-...`, argument parser `:280-366` |
-| `src/python_setup_lint/runner/baseline.py` | Baseline diff/merge and fallback inspection | module |
-| `src/python_setup_lint/runner/parsers.py`, `_record_parsers.py` | Output parsers (JSON, regex, record parsers) | modules |
-| `src/python_setup_lint/runner/_autofix.py` | Autofix conflict detection and staged/unstaged handling | module |
-| `src/python_setup_lint/runner/_config.py`, `cmd_build.py` | Config discovery and command composition | modules |
-| `src/python_setup_lint/runner/types.py` | `ToolSpec`, `LintResult`, `RunnerConfig`, `ViolationCount` | `:12-22`, `:25-59` |
+| Path                                                            | Responsibility                                                                | Key lines                                          |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------- |
+| `src/python_setup_lint/runner/_tool_specs.py`                   | Single-source 14 built-in `ToolSpec` entries                                  | `:9-100`, `:102`                                   |
+| `src/python_setup_lint/runner/dispatch.py`                      | Tool strategy registry, command builders, autofix ordering, baseline fallback | `:62-359`, `:350-359`                              |
+| `src/python_setup_lint/runner/cli.py`                           | CLI, tool selection, skip reasons, serial pipeline, `run_lint`                | `:110-201`, `:204-...`, argument parser `:280-366` |
+| `src/python_setup_lint/runner/baseline.py`                      | Baseline diff/merge and fallback inspection                                   | module                                             |
+| `src/python_setup_lint/runner/parsers.py`, `_record_parsers.py` | Output parsers (JSON, regex, record parsers)                                  | modules                                            |
+| `src/python_setup_lint/runner/_autofix.py`                      | Autofix conflict detection and staged/unstaged handling                       | module                                             |
+| `src/python_setup_lint/runner/_config.py`, `cmd_build.py`       | Config discovery and command composition                                      | modules                                            |
+| `src/python_setup_lint/runner/types.py`                         | `ToolSpec`, `LintResult`, `RunnerConfig`, `ViolationCount`                    | `:12-22`, `:25-59`                                 |
 
 ### 1.4 Setup / packaging / test helpers
 
-| Path | Responsibility | Key lines |
-|---|---|---|
-| `src/python_setup_lint/setup.py` | `install()` / `main()`: dependency step, pylint plugin registration, config symlinks, state/checksums | `:41-56`, `:149-205`, `:223-290`, `:318-364` |
-| `src/python_setup_lint/_setup_pyproject.py` | TOML read/write, pylint load-plugins, dev-dependency detection (extras stripped) | `:19-97` |
-| `src/python_setup_lint/_setup_precommit.py` | Pre-commit config and AGENTS snippet generation/atomic writes | `:70-...` |
-| `src/python_setup_lint/_setup_update.py` | Drift detection + `uv add --refresh-package` update flow | `:11-...` |
-| `src/python_setup_lint/testing.py` | Shared `_make_tc` / `_walk_and_release`, lint-runner fakes, consumer health checks | `:18-38`, `:44-103`, `:115-196` |
-| `pyproject.toml` | Package metadata, empty `[semantic]` extra, pytest markers (`not slow` default) | `:1-4`, `:28-30`, `:47-54` |
-| `uv.lock` | Locked dependencies; root provides `semantic` extra, currently empty | `:573-623` |
-| `.gitignore` | Generated consumer artifacts; legacy semantic model cache ignored | `:222-244` |
+| Path                                        | Responsibility                                                                                        | Key lines                                    |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `src/python_setup_lint/setup.py`            | `install()` / `main()`: dependency step, pylint plugin registration, config symlinks, state/checksums | `:41-56`, `:149-205`, `:223-290`, `:318-364` |
+| `src/python_setup_lint/_setup_pyproject.py` | TOML read/write, pylint load-plugins, dev-dependency detection (extras stripped)                      | `:19-97`                                     |
+| `src/python_setup_lint/_setup_precommit.py` | Pre-commit config and AGENTS snippet generation/atomic writes                                         | `:70-...`                                    |
+| `src/python_setup_lint/_setup_update.py`    | Drift detection + `uv add --refresh-package` update flow                                              | `:11-...`                                    |
+| `src/python_setup_lint/testing.py`          | Shared `_make_tc` / `_walk_and_release`, lint-runner fakes, consumer health checks                    | `:18-38`, `:44-103`, `:115-196`              |
+| `pyproject.toml`                            | Package metadata, empty `[semantic]` extra, pytest markers (`not slow` default)                       | `:1-4`, `:28-30`, `:47-54`                   |
+| `uv.lock`                                   | Locked dependencies; root provides `semantic` extra, currently empty                                  | `:573-623`                                   |
+| `.gitignore`                                | Generated consumer artifacts; legacy semantic model cache ignored                                     | `:222-244`                                   |
 
 ### 1.5 Documentation / decision register
 
-| Path | Responsibility | Key lines / state |
-|---|---|---|
-| `CodingRules.md` | Shipped coding rules: typing, `.pyi`, simplification, complexity, tests | `:1-75`, `:90-159`, `:230-307` |
-| `AGENTS.md` | Agent entry point: commands, tool scope, pipeline, test strategy | `:5-14`, `:16-32`, `:79-93` |
-| `docs/adr/README.md` | ADR index — **omits ADR-013…ADR-016** | `:16-31` |
-| `docs/adr/ADR-009.md` | Accepted no-go-gated deferral for the model | `:1-48` |
-| `docs/adr/ADR-010.md` | Frozen backend + tracked-cache contracts | `:1-52` |
-| `docs/adr/ADR-014.md` | Heuristic-first veto semantics (now implemented; text stale) | `:1-5` |
-| `docs/adr/ADR-015.md` | Pylint-pyi scope fix deferred to iteration 5 | `:1-3` |
-| `docs/adr/ADR-016.md` | Iteration-4 infrastructure-only scope — **claims no backend/cache/FakeBackend exists, contradicted by HEAD** | `:1-5` |
-| `design/0001`, `design/0002` | Config composers; ty src-only exception | files |
-| `README.md`, `docs/tutorials.md`, `docs/troubleshooting.md` | Consumer docs; semantic sections stale | `README.md:29,105`; `tutorials.md:12-16`; `troubleshooting.md:97-111,150` |
+| Path                                                        | Responsibility                                                                                               | Key lines / state                                                         |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `CodingRules.md`                                            | Shipped coding rules: typing, `.pyi`, simplification, complexity, tests                                      | `:1-75`, `:90-159`, `:230-307`                                            |
+| `AGENTS.md`                                                 | Agent entry point: commands, tool scope, pipeline, test strategy                                             | `:5-14`, `:16-32`, `:79-93`                                               |
+| `docs/adr/README.md`                                        | ADR index — **omits ADR-013…ADR-016**                                                                        | `:16-31`                                                                  |
+| `docs/adr/ADR-009.md`                                       | Accepted no-go-gated deferral for the model                                                                  | `:1-48`                                                                   |
+| `docs/adr/ADR-010.md`                                       | Frozen backend + tracked-cache contracts                                                                     | `:1-52`                                                                   |
+| `docs/adr/ADR-014.md`                                       | Heuristic-first veto semantics (now implemented; text stale)                                                 | `:1-5`                                                                    |
+| `docs/adr/ADR-015.md`                                       | Pylint-pyi scope fix deferred to iteration 5                                                                 | `:1-3`                                                                    |
+| `docs/adr/ADR-016.md`                                       | Iteration-4 infrastructure-only scope — **claims no backend/cache/FakeBackend exists, contradicted by HEAD** | `:1-5`                                                                    |
+| `design/0001`, `design/0002`                                | Config composers; ty src-only exception                                                                      | files                                                                     |
+| `README.md`, `docs/tutorials.md`, `docs/troubleshooting.md` | Consumer docs; semantic sections stale                                                                       | `README.md:29,105`; `tutorials.md:12-16`; `troubleshooting.md:97-111,150` |
 
 ### 1.6 Test subsystems
 
-| Path | Responsibility | Key lines |
-|---|---|---|
-| `tests/checkers/` | Per-checker behavioral tests over real pylint `CheckerTestCase`; `_factories_*` data modules | 45 `.py` files incl. helpers |
-| `tests/runner/` | Runner unit/integration tests, autofix, parsers, setup, benchmarks | 30 `.py` files |
-| `tests/assumptions/` | Third-party contract pins (astroid, beartype, pylint, pylint cache semantics) | `test_pylint_cache_semantics.py:1-39` |
-| `tests/_golden.py` | Golden snapshot normalization/serialization/assertions + CI-guarded rewrite | `:1-11`, `:53-58`, `:374-392` |
-| `tests/test_golden.py` | Synthetic unit tests for golden helpers | `:1-6` |
-| `tests/integration.py` | Fit-for-purpose end-to-end gate on planted sample project | `:1-145` |
-| `tests/data/minimal_sample_project/` | Planted-violation fixture project (W9704 brush-off vs carry-from) | `src/minimal_sample/mod.py:41-56`, `violations.txt` |
-| `tests/data/golden/minimal_sample_project_findings.json` | 158 normalized findings; 18 `unjustified-suppression`, 2 `bare-except-comment` | golden file |
+| Path                                                     | Responsibility                                                                               | Key lines                                           |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `tests/checkers/`                                        | Per-checker behavioral tests over real pylint `CheckerTestCase`; `_factories_*` data modules | 45 `.py` files incl. helpers                        |
+| `tests/runner/`                                          | Runner unit/integration tests, autofix, parsers, setup, benchmarks                           | 30 `.py` files                                      |
+| `tests/assumptions/`                                     | Third-party contract pins (astroid, beartype, pylint, pylint cache semantics)                | `test_pylint_cache_semantics.py:1-39`               |
+| `tests/_golden.py`                                       | Golden snapshot normalization/serialization/assertions + CI-guarded rewrite                  | `:1-11`, `:53-58`, `:374-392`                       |
+| `tests/test_golden.py`                                   | Synthetic unit tests for golden helpers                                                      | `:1-6`                                              |
+| `tests/integration.py`                                   | Fit-for-purpose end-to-end gate on planted sample project                                    | `:1-145`                                            |
+| `tests/data/minimal_sample_project/`                     | Planted-violation fixture project (W9704 brush-off vs carry-from)                            | `src/minimal_sample/mod.py:41-56`, `violations.txt` |
+| `tests/data/golden/minimal_sample_project_findings.json` | 158 normalized findings; 18 `unjustified-suppression`, 2 `bare-except-comment`               | golden file                                         |
 
 ---
 
@@ -347,14 +347,14 @@ markers = [
 
 ### 4.2 Semantic/backend tests (current contract)
 
-| File | Coverage | Key lines |
-|---|---|---|
-| `tests/checkers/test_decision_backend.py` | Pinned constants, FakeBackend, loader gating, heuristic-first veto, normalization, packaging pins | `:1-6`, `:83-165`, `:181-264`, `:320-337` |
-| `tests/checkers/test_semantic_check.py` | Adapter signature, empty-primary, `None` mapping, 0.5 threshold matrix, memo per unique pair/model, no `sentence_transformers`, no disk cache | `:47-133` |
-| `tests/checkers/test_semantic_threshold.py` | 115-row heuristic table, semantic disabled | `:16-21`, `:147-164` |
-| `tests/assumptions/test_pylint_cache_semantics.py` | Read-only behavior, in-process memo, path-free semantic API, `jobs=1` single-writer verdict, sequential pylint invocation | `:1-39`, `:94-181`, `:225-355` |
-| `tests/checkers/test_suppression_justification_checker.py` | W9704 checker behavior; semantic disabled via fixture | `:19-30`, `:367-392` |
-| `tests/checkers/test_bare_except_comment_checker.py` | W9738 checker behavior; semantic disabled via fixture | `:18-43` |
+| File                                                       | Coverage                                                                                                                                      | Key lines                                 |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `tests/checkers/test_decision_backend.py`                  | Pinned constants, FakeBackend, loader gating, heuristic-first veto, normalization, packaging pins                                             | `:1-6`, `:83-165`, `:181-264`, `:320-337` |
+| `tests/checkers/test_semantic_check.py`                    | Adapter signature, empty-primary, `None` mapping, 0.5 threshold matrix, memo per unique pair/model, no `sentence_transformers`, no disk cache | `:47-133`                                 |
+| `tests/checkers/test_semantic_threshold.py`                | 115-row heuristic table, semantic disabled                                                                                                    | `:16-21`, `:147-164`                      |
+| `tests/assumptions/test_pylint_cache_semantics.py`         | Read-only behavior, in-process memo, path-free semantic API, `jobs=1` single-writer verdict, sequential pylint invocation                     | `:1-39`, `:94-181`, `:225-355`            |
+| `tests/checkers/test_suppression_justification_checker.py` | W9704 checker behavior; semantic disabled via fixture                                                                                         | `:19-30`, `:367-392`                      |
+| `tests/checkers/test_bare_except_comment_checker.py`       | W9738 checker behavior; semantic disabled via fixture                                                                                         | `:18-43`                                  |
 
 Important: no test exercises a real model. Every backend is a test double (`test_decision_backend.py:1-6`). The current test suite actively pins the **absence** of a model dependency (`test_semantic_extra_is_empty`, `test_uv_lock_has_no_sentence_transformers_edge` at `:323-337`; `test_no_try_import_checker.py:27-35`; `_OPTIONAL_IMPORT_PATTERNS` empty at `no_try_import_checker.py:10-13`). Any model wiring must update these pins deliberately.
 
@@ -501,7 +501,7 @@ Suggested assumption/contract tests, following `tests/assumptions/` style:
 
 ## 6. High-signal summary for the architect
 
-1. The reranker removal is complete; the backend/cache *interfaces* are half-delivered. The next iteration’s semantic work is: production backend wiring + an actual CPU model (or an explicit deferral) + the tracked decision cache with refresh/prune.
+1. The reranker removal is complete; the backend/cache _interfaces_ are half-delivered. The next iteration’s semantic work is: production backend wiring + an actual CPU model (or an explicit deferral) + the tracked decision cache with refresh/prune.
 2. The biggest behavioral risk is enabling a model by default before semantic-on behavior is pinned; golden currently runs with semantic off.
 3. The biggest debloat wins are test-harness duplication (13 `_make_tc` copies, 10 `_walk_and_release` copies, 3 `_RecordingBackend` copies, 2 `_UvCallRecorder` copies, dead helpers, vestigial cache tests, redundant smoke test), not production code.
 4. Docs and ADRs are materially wrong about the semantic subsystem; ADR-016 actively contradicts HEAD and should be superseded/updated first.

@@ -5,7 +5,8 @@ summary: "Test-only transport characterization verified green: 2 new files, no
   polish optionals."
 suggestions:
   - id: c-0647070832
-    detail: "Self-declared duplicate: the concern's own detail text states 'This is
+    detail:
+      "Self-declared duplicate: the concern's own detail text states 'This is
       the pre-existing open concern c-552344216d (missing infra.setup in
       merge-child worktrees), not introduced by this step'. Same root cause (bun
       install absent in fresh worktree), same affects. Keep c-552344216d as
@@ -24,7 +25,8 @@ suggestions:
       line: 198
     summary: Pin regex {3,4} narrower than slice(2,6) generator output
   - id: resolution-comment-omits-hardcoded-fallback
-    detail: Comment claims to mirror preflight's resolution order but preflight has
+    detail:
+      Comment claims to mirror preflight's resolution order but preflight has
       4 levels (opts.ompBinary ?? OMP_PATH ?? Bun.which ?? hardcoded
       '/home/slava/.bun/bin/omp' at preflight.ts:366-369); the test mirrors 2,
       deliberately omitting the hardcoded path (correct choice for a
@@ -39,7 +41,8 @@ remarkable:
   - chosen: Characterize transport via mock omp binary snapshotting argv + file
       bytes, with only the real-binary --config --version acceptance check
       behind describe.skipIf.
-    why: Captures exact harness-to-omp bytes/argv without provider contact (no paid
+    why:
+      Captures exact harness-to-omp bytes/argv without provider contact (no paid
       turns) or requiring omp on clean checkout, while still validating overlay
       acceptance with the real binary when present using preflight's own
       non-paid validation.
