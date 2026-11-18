@@ -45,6 +45,7 @@ setup: [bun install]
 gates:
   - id: typecheck
     command: bun run typecheck
+    format: { junit: junit.xml }
 ```
 
 **Process** — package `config/process.yaml`, optionally overridden by

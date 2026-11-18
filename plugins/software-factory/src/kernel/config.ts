@@ -24,7 +24,20 @@ const identitySchema = z
   .object({ name: z.string().min(1), email: z.string().min(1) })
   .strict();
 const gateSchema = z
-  .object({ id: z.string().min(1), command: z.string().min(1) })
+  .object({
+    id: z.string().min(1),
+    command: z.string().min(1),
+    format: z
+      .object({
+        junit: z.string().min(1).optional(),
+        pattern: z.enum(["pytest", "jest", "cargo"]).optional(),
+      })
+      .strict()
+      .refine((val) => val.junit !== undefined || val.pattern !== undefined, {
+        message: "format must contain junit or pattern",
+      })
+      .optional(),
+  })
   .strict();
 
 /** `.factory/repo.yaml` — the tracked layer: branches, paths, gates. */
