@@ -763,3 +763,8 @@ Verbatim, newest last; each with what it changed.
 - Explicitly NOT built (owner-attention, architect's scope call): (a) pre-existing-red-claim-must-cite-base-gate rule (agy/gemini false-claimed 4x + 18 no-outcome repairs i6); (b) outcome-protocol reminder — offered as follow-up goal; delta resumes as-is.
 - Remarkable: delta may resume (quarantine-restore + trap covered; delta must run under process config with taskTypes.spike — package default does).
 - Incidents i7: 2 infra retries, 1 fallback hop, 0 outcome-repairs. Inbox empty. Gates skipped (tree unchanged). DONE CLAUSE SATISFIED.
+
+### 2026-11-18 — delta post-repair: M2 WORKS (true i2), then crash on ancient line
+- Exit 1 (TypeError), 393s wall, pin 5c446e69. M2 VERIFIED ON REAL STATE: 00395 resume-REFUSED → advanced to TRUE i2 (00396 merge attempt ok:false conflict types.ts, 00397 digest). Then i2's first boundary crashed at context-pack.ts:378 `for (const forwarded of rec.outcome.forward)` — `forward` undefined. ANCIENT unguarded line (kernel-0 skeleton), NOT new repair code. Trigger: 2 schemaless old outcomes (00107 gate-names review-r2: concerns but no forward; 00156 omp-zero-glitch implement-r1: status+summary+concerns only). WHY NOW: i2's first boundary scans ALL 397 records (delta-i1 boundary ran at ~3 records; repair/self young).
+- Delta state INTACT: no new merges, records complete, tasks 62 files, holds 5, inbox 9→6 (3 steers+3 holds consumed pre-crash). 0 merges (1st post-repair 0-merge, no stop). Legs/cost minimal (~6min, digest+boundary-prep).
+- FIX PATH: harden forwardedConcerns (`?? []` on forward + concerns) + regression test with schemaless old record; relaunch repair goal with crash steer.
