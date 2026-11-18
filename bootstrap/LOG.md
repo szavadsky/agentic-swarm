@@ -732,3 +732,9 @@ Verbatim, newest last; each with what it changed.
 - Legs: architect opus 1 turn unpriced clean (9th clean shaping); implementer gemini $8.91; plancheck $0.11; planreview $0.06; pm/reviewer/digest $0 (hy4/free, ernie untouched). Cost $9.07 partial ($9.07/merge).
 - Friction: no-outcome PERSISTS (9 i2 repairFindings same signature + 1 plancheck evidence-schema); 3 gate flakes (task-read-pure x2, hold-read-pure x1); task-read-pure merged WITH 6 debt items (type-mismatch call sites, lint violations, ?? {} remnants x2, test-coverage gap, uncommitted-test-fix, readHolds still mutates). Assumptions sound (spike path reversible const; holds-out-of-derive resumeVerdict; unconfigured=refusal).
 - Goal NOT complete — M1 hold-side rework + M2 (resume-gate) + M3 (spike-report) remain. No stop pressure (merge resets counter).
+
+### 2026-11-18 — repair-i3 landed: 4 merges (M1 complete, M3 check+seal); resume-gate remains
+- Exit 3 (iteration-limit), 2h16m wall, status in-progress. factory/repair +4: task-read-residue, spike-report-check, hold-read-pure-2, spike-report-seal. 2 parks (dispatch-pass-signals gates format/tests/typecheck, spike-report-contracts gates-tests). 3 cancelled (hold-read-pure, spike-report-gate, store-read-pure). M1 read-pure task+hold+residue LANDS; M3 spike-report check+seal land, contracts parked on prompt-snapshot infra. Pending 1: resume-gate (M2, the crux). Inbox empty.
+- Legs: architect opus 1t unpriced clean (10th clean shaping); implementer 18t gemini $9.95; ESCALATION 2 turns sonnet $1.60; plancheck $0.17; planreview $0.06; pm/reviewer/digest $0 hy4. Cost ~$10.18 partial.
+- Friction: no-outcome DOWN to 2 (from 9); 5 failure + 4 change-request launchKinds; 1705 pre-existing lint warnings (recurring debt note); prompt-snapshot pre-existing infra failures.
+- Goal NOT complete — resume-gate remains. No stop pressure.
