@@ -1,5 +1,6 @@
 import { exitDetails, stopDetails, withDetails } from "../details.js";
-import type { Stop } from "../types.js";
+import type { Stop, Usage } from "../types.js";
+import { reportsUsage } from "../usage.js";
 
 /** Error object omp attaches to `prompt_result.status === "error"`. */
 export interface OmpPromptError {
@@ -103,6 +104,8 @@ export interface OmpTurnOutcomeInput {
   failure?: OmpTurnFailure;
   promptResult?: any;
   lastStopReason?: string;
+  usage?: Usage;
+  text?: string;
 }
 
 /** Final stop for one omp RPC process, from the frames the adapter collected. */
@@ -115,7 +118,15 @@ export function classifyOmpTurn(input: OmpTurnOutcomeInput): Stop {
   }
   if (input.promptResult?.status === "aborted") return { kind: "cancelled" };
   if (input.promptResult?.status === "completed") {
-    return classifyOmpStopReason(input.lastStopReason) ?? { kind: "done" };
+    const stop = classifyOmpStopReason(input.lastStopReason);
+    if (stop) return stop;
+    if (input.usage && !reportsUsage(input.usage) && !input.text) {
+      return withDetails(
+        { kind: "infra", cause: "glitch" },
+        "zero-usage, no-output",
+      );
+    }
+    return { kind: "done" };
   }
   if (
     input.failure?.signal === "SIGTERM" ||

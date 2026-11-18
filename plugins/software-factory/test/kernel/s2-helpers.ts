@@ -27,7 +27,11 @@ import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { scriptPlanRoleFallbacks } from "./fake-defaults.js";
 
 export interface FlowRepoOptions {
-  gates?: { id: string; command: string }[];
+  gates?: {
+    id: string;
+    command: string;
+    format?: { junit?: string; pattern?: "pytest" | "jest" | "cargo" };
+  }[];
   setup?: string[];
   /** Raw `.factory/process.yaml` override. */
   process?: Record<string, unknown>;
@@ -110,7 +114,11 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
       baseBranch: "main",
       artifactRoot: ".factory/artifacts",
       setup: opts.setup ?? [],
-      gates,
+      gates: gates.map((g) => ({
+        id: g.id,
+        command: g.command,
+        ...(g.format ? { format: g.format } : {}),
+      })),
       ...(opts.identity ? { identity: opts.identity } : {}),
     }),
   );

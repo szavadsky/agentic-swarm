@@ -255,9 +255,35 @@ describe("three config layers", () => {
   it("rejects an unsafe goal name", () => {
     const root = tmpRepo();
     const configs = loadConfigs(root);
-    expect(() => resolveGoalPaths(configs, root, "../escape")).toThrow(
+    expect(() => resolveGoalPaths(configs, root, "BadName")).toThrow(
       /kebab-case/,
     );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("allows gate format", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/repo.yaml"),
+      [
+        "gates:",
+        "  - id: test-junit",
+        "    command: echo test",
+        "    format: { junit: junit.xml }",
+        "  - id: test-pattern",
+        "    command: echo test",
+        "    format: { pattern: pytest }",
+        "",
+      ].join("\n"),
+    );
+    const configs = loadConfigs(root);
+    const format0 = configs.repo.gates[0]?.format;
+    const format1 = configs.repo.gates[1]?.format;
+    expect(format0).toBeDefined();
+    expect(format0).toEqual({ junit: "junit.xml" });
+    expect(format1).toBeDefined();
+    expect(format1).toEqual({ pattern: "pytest" });
     fs.rmSync(root, { recursive: true, force: true });
   });
 

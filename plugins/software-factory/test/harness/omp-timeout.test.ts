@@ -9,20 +9,17 @@ const fs = require("node:fs");
 const readline = require("node:readline");
 if (process.env.FAKE_OMP_PID_FILE) fs.writeFileSync(process.env.FAKE_OMP_PID_FILE, String(process.pid));
 process.stdout.write(JSON.stringify({ type: "ready", protocolVersion: 1 }) + "\\n");
+let stats = { tokens: { input: 0, output: 0 }, cost: 0 };
 readline.createInterface({ input: process.stdin }).on("line", (line) => {
   let frame;
   try { frame = JSON.parse(line); } catch { return; }
   if (frame.type === "prompt") {
     process.stdout.write(JSON.stringify({
       type: "message_end",
-      message: {
-        role: "assistant",
-        usage: { input: 10, output: 5, cacheRead: 2, cacheWrite: 0, reasoningTokens: 2,
-                 cost: { total: 0.01 } },
-        stopReason: "stop",
-      },
+      message: { role: "assistant", usage: { input: 10, output: 5, cacheRead: 2, cacheWrite: 0, reasoningTokens: 2, cost: { total: 0.01 } }, stopReason: "stop" }
     }) + "\\n");
     if (frame.message === "quick") {
+      stats = { tokens: { input: 1, output: 1 }, cost: 0.001 };
       process.stdout.write(JSON.stringify({
         type: "prompt_result", id: frame.id, agentInvoked: true,
         status: "completed", sessionSettled: true,
@@ -31,10 +28,17 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
   } else if (frame.type === "abort") {
     process.exit(0);
   } else {
-    const respond = () => process.stdout.write(JSON.stringify({
-      id: frame.id, type: "response", command: frame.type, success: true,
-      data: { tokens: { input: 0, output: 0 }, cost: 0 },
-    }) + "\\n");
+    const respond = () => {
+      const data = frame.type === "get_last_assistant_text"
+        ? { text: "done" }
+        : frame.type === "get_session_stats"
+          ? stats
+          : { tokens: { input: 0, output: 0 }, cost: 0 };
+      process.stdout.write(JSON.stringify({
+        id: frame.id, type: "response", command: frame.type, success: true,
+        data,
+      }) + "\\n");
+    };
     if (process.env.FAKE_OMP_SLOW_STATS) setTimeout(respond, 500);
     else respond();
   }

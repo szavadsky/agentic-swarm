@@ -52,7 +52,14 @@ export type Stop =
    */
   | {
       kind: "infra";
-      cause: "quota" | "rate" | "auth" | "crash" | "overflow" | "timeout";
+      cause:
+        | "quota"
+        | "rate"
+        | "auth"
+        | "crash"
+        | "overflow"
+        | "timeout"
+        | "glitch";
       details?: string;
     };
 
