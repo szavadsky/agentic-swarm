@@ -41,8 +41,15 @@
     "bekko-17m is scored but excluded from all recommendations: the weights carry no declared license.",
     "GLiDE-0.4B is explicitly excluded from the compliance matrix: the full canonical run did not complete within the PoC CPU budget (0.4B params, ~0.8-1.1 s/item; 6-item smoke only). It is the largest candidate (395M params) and cannot be the smallest compliant option; the model loads and scores on CPU, so the exclusion is a compute-budget exclusion, not a feasibility failure."
   ],
-  "thresholds": [0.5, 0.6, 0.7],
-  "modes": ["veto", "replace"],
+  "thresholds": [
+    0.5,
+    0.6,
+    0.7
+  ],
+  "modes": [
+    "veto",
+    "replace"
+  ],
   "bars": {
     "accuracy": 0.9,
     "meaningless_precision": 0.95,

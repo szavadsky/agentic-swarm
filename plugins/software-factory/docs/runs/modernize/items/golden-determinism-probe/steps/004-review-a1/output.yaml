@@ -15,8 +15,7 @@ suggestions:
       file: src/python_setup_lint/runner/_record_parsers.py
       line: 66
     summary: R0801 rule string embeds file spans, bypasses file relativization
-  - detail:
-      "_RECORD_PARSERS covers 9 tools; tach check, ruff format, mypy.stubtest,
+  - detail: "_RECORD_PARSERS covers 9 tools; tach check, ruff format, mypy.stubtest,
       pyright verify types, detect-secrets have no entry, so _capture_one
       returns [] for them regardless of tool output. A snapshot pinning
       _capture_baseline alone pins 9/14 tools and gives false confidence for the
@@ -56,8 +55,7 @@ suggestions:
       line: 176
     summary: _relativize_file uses unresolved relative_to and no ./ or separator
       normalization
-  - detail:
-      Sort keys exclude msg but equality tuples include it, so msg-distinct
+  - detail: Sort keys exclude msg but equality tuples include it, so msg-distinct
       duplicates are sort-equal and their order is tool-output order (stable
       sort). If that order flips between runs, the two-pointer diff misaligns
       identical multisets into added+removed false positives. Dropping msg per
@@ -82,11 +80,9 @@ suggestions:
     location:
       file: tests/integration.py
       line: 95
-    summary:
-      Rumdl override uses brittle str.replace and post-git-add write; assert
+    summary: Rumdl override uses brittle str.replace and post-git-add write; assert
       MD072 non-empty
-  - detail:
-      "Detect-secrets branches on baseline existence: fresh copy bootstraps
+  - detail: "Detect-secrets branches on baseline existence: fresh copy bootstraps
       via scan, rerun uses git ls-files hook path with generated_at stripped.
       Same-copy second run exercises a different code path than cross-copy
       single runs. Probe must state which it did (same-copy rerun, cross-copy,

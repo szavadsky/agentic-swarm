@@ -165,8 +165,7 @@ concerns:
       - release owner
       - ADR owner
   - kind: risk
-    summary:
-      detect-secrets relies on the baseline `^\.factory/` filter for 1.84GB
+    summary: detect-secrets relies on the baseline `^\.factory/` filter for 1.84GB
       of tracked safetensors
     detail: 9 tracked safetensors total 1,844,653,898 B (largest 789,581,344 B).
       HEAD scan exits 0 only because .secrets.baseline:41-46 excludes them; the
@@ -184,8 +183,7 @@ concerns:
       - CI
       - consumer repos
   - kind: risk
-    summary:
-      detect-secrets scan --baseline rewrites the tracked baseline in place
+    summary: detect-secrets scan --baseline rewrites the tracked baseline in place
       during lint
     detail: dispatch.py:181-189 runs `detect-secrets scan --baseline
       .secrets.baseline`; the tool updates that file (adds generated_at,
@@ -202,8 +200,7 @@ concerns:
       - read-only lint contract
       - pre-commit staging
   - kind: tech-debt
-    summary:
-      ADR-016 and ADR-009 contain HEAD-contradicted claims without staleness
+    summary: ADR-016 and ADR-009 contain HEAD-contradicted claims without staleness
       notes
     detail: ADR-016:3 says no DecisionBackend/cache/FakeBackend exists and
       [semantic] is sentence-transformers; DecisionBackend/FakeBackend are
@@ -234,8 +231,7 @@ concerns:
       - CI environments
   - kind: tech-debt
     summary: AGENTS.md unit-test counts are stale in addition to the integration row
-    detail:
-      AGENTS.md:10 says 1290 pass / 4 skip / 15 deselected; the observed run
+    detail: AGENTS.md:10 says 1290 pass / 4 skip / 15 deselected; the observed run
       is 1357 passed / 0 skipped / 7 deselected. The assignment only names the
       9-collected contract, but both Quick Commands rows will mislead after the
       docs pass.
@@ -255,8 +251,7 @@ remarkable:
       - Regenerate golden with a reviewed diff
       - Treat the missing hatch report as a blocker
   - chosen: Validate lint as a 13-tool pass plus a HEAD-baseline detect-secrets run
-    why:
-      The live full lint transiently rewrites the tracked .secrets.baseline and
+    why: The live full lint transiently rewrites the tracked .secrets.baseline and
       the repository carries 1.84GB of tracked model artifacts; the scoped run
       proves every tool green while avoiding both hazards.
     alternatives:

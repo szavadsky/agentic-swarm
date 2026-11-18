@@ -1,7 +1,6 @@
 iteration: 5
 items:
-  - assignment:
-      "Rename legacy scan and remove dead compat with W9704 byte-identical
+  - assignment: "Rename legacy scan and remove dead compat with W9704 byte-identical
       under SEMANTIC 0. Owns
       src/python_setup_lint/checkers/conformance/suppression_justification_chec\
       ker.py _legacy_scan rename plus trivial _legacy_* plus astroid 3.x branch

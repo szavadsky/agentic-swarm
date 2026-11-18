@@ -118,8 +118,7 @@ items:
     slug: source-simplifications
     title: Simplify semantic memo, heuristic sets, rcfile paths
     wave: 1
-  - assignment:
-      "Prototype on tmp/venv only; zero committed files; network inside
+  - assignment: "Prototype on tmp/venv only; zero committed files; network inside
       spike only. Consumes matrix + corpus reports (never invents
       candidates/labels). FIRST re-validate corpus: parse JSON handoff,
       re-normalize + re-dedup, assert counts match ±0 and both strata non-empty
@@ -208,8 +207,7 @@ items:
     slug: decision-cache-impl
     title: Implement tracked decision cache and refresh
     wave: 2
-  - assignment:
-      "Owns src/python_setup_lint/testing.py + testing.pyi (atomic sync;
+  - assignment: "Owns src/python_setup_lint/testing.py + testing.pyi (atomic sync;
       stubtest must pass) — _make_tc/_walk_and_release options +
       _msg_ids/_msg_ids_sorted ONLY — + tests/checkers/test_*.py local wrappers
       ONLY (enumerate via grep at HEAD: ~13/10/8 per pack, verify actual; report
@@ -239,8 +237,7 @@ items:
     slug: checker-harness-dedup
     title: Single-source checker-test harness
     wave: 2
-  - assignment:
-      "Tests-only, NEW tests/assumptions/test_decision_loader_contracts.py
+  - assignment: "Tests-only, NEW tests/assumptions/test_decision_loader_contracts.py
       ONLY (same forbiddens as cache-contracts: no root __init__, no
       astroid/beartype/pylint contracts, no test_pylint_cache_semantics, no
       src/docs/tests/data/baseline). DELTA ONLY — honors/ignores/warn-once
@@ -455,8 +452,7 @@ items:
     slug: pyi-scope-fix
     title: Fix or scope pylint-pyi companion stubs
     wave: 4
-  - assignment:
-      "Tests-only. Owns tests/runner/_factories.py + _factories_extras.py
+  - assignment: "Tests-only. Owns tests/runner/_factories.py + _factories_extras.py
       + _factories_baseline.py + test_setup.py + test_setup_install.py +
       test_real_pipeline_smoke.py + tests/conftest.py (sample_project fixture
       lines only) ONLY. FORBIDDEN src, docs, baseline, tests/data, checker
@@ -484,8 +480,7 @@ items:
     slug: runner-test-helpers-dedup
     title: Single-source runner/setup helpers and prune dead tests
     wave: 4
-  - assignment:
-      "Docs-only, sole writer in I5. Owns docs/semantic-justification.md
+  - assignment: "Docs-only, sole writer in I5. Owns docs/semantic-justification.md
       (full rewrite, grep-zero 'reranker' case-insensitive) +
       docs/custom-checks.md (semantic bullets) + docs/troubleshooting.md
       (semantic section incl deprecated RERANKER_MODEL note + counts + pyi
@@ -532,8 +527,7 @@ items:
     slug: docs-adr-reconciliation
     title: Reconcile docs, ADRs, and version pins
     wave: 5
-  - assignment:
-      "Sole tests/data/golden writer; FORBIDDEN all other paths. ONLY on
+  - assignment: "Sole tests/data/golden writer; FORBIDDEN all other paths. ONLY on
       reviewed shift report (justification-class + added/removed keys +
       CHANGELOG snippet + file:line) from behavior items (cache-impl,
       backend-wiring, pyi-fix; source-simplifications + golden-pin declare
@@ -563,8 +557,7 @@ items:
     slug: golden-regen-hatch
     title: Conditional golden regen on shift reports
     wave: 5
-  - assignment:
-      "Report-only, zero writes. Record final gate table at HEAD: format
+  - assignment: "Report-only, zero writes. Record final gate table at HEAD: format
       exit 0; lint 14/14 per-tool (cite exit + per-tool + duration); pytest -q
       counts (cite); integration 9-collected-0-failed (9 passed with pre-commit
       installed, else 7 passed + 2 skipped with env + skip reasons cited —

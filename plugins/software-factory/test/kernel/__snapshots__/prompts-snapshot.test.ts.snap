@@ -164,8 +164,8 @@ When in doubt, choose \`bigger\`. A class changes only by escalation.
 1. \`class.yaml\` beside the plan:
 
    \`\`\`yaml
-   class: trivial # or: task | bigger
-   slug: the task slug # trivial and task only
+   class: trivial        # or: task | bigger
+   slug: the task slug   # trivial and task only
    \`\`\`
 
 2. For \`trivial\` or \`task\`, one task file in the tasks directory.

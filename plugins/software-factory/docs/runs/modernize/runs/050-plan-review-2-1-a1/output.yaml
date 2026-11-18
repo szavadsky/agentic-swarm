@@ -4,8 +4,7 @@ summary: Bounds pass (4/8 milestones, 10/50 items, unique slugs, acyclic); 13
 suggestions:
   - id: m1-format-check-indistinguishable
     disposition: fix
-    summary:
-      Phase-1a mutating format vs normal-pass --check both use _fix=False,
+    summary: Phase-1a mutating format vs normal-pass --check both use _fix=False,
       contract cannot distinguish
     detail: "cli.py:79 phase-1a builds ruff-format with _fix=False; cli.py:109
       normal pass also uses lint_fix=False. Generic _build_command appending
@@ -19,11 +18,9 @@ suggestions:
       line: 79
   - id: m1-registry-parsers-conflated
     disposition: fix
-    summary:
-      Registry invariant conflates record vs statistics parsers and leaves
+    summary: Registry invariant conflates record vs statistics parsers and leaves
       EXPECTED_TOOLS owner undefined
-    detail:
-      "_RECORD_PARSERS covers 9 tools, _STATISTICS_PARSERS covers 13 missing
+    detail: "_RECORD_PARSERS covers 9 tools, _STATISTICS_PARSERS covers 13 missing
       only ruff-format. Plan says RECORD subset + FORMATTER_ONLY exempt from
       statistics without defining record-subset members
       (tach/stubtest/verifytypes/detect-secrets intentionally lack record
@@ -93,8 +90,7 @@ suggestions:
     disposition: fix
     summary: Cache interface prescribes full digest before spike and contradicts
       epic no-hex>=20 secrets rule
-    detail:
-      "U2 lists full vs truncated as open but M3 interface + ADR-007 mandate
+    detail: "U2 lists full vs truncated as open but M3 interface + ADR-007 mandate
       full digest key. Full SHA-256 hex (64 chars) violates epic no bare hex>=20
       detect-secrets rule. M3 entry {version,model,hash,digest,files,last-seen}
       differs from epic {justification,rule,model-string,files} on key fields
@@ -106,11 +102,9 @@ suggestions:
       line: 155
   - id: m3-eval-scope-gaps
     disposition: fix
-    summary:
-      Eval scores subset of matrix, omits 90/95/85 bars, and demands model be
+    summary: Eval scores subset of matrix, omits 90/95/85 bars, and demands model be
       no-op
-    detail:
-      "Matrix lists GLiDE/decider-nano/bekko/ettin+MiniLM but scenario scores
+    detail: "Matrix lists GLiDE/decider-nano/bekko/ettin+MiniLM but scenario scores
       only decider-nano (+GLiDE if obtainable). Compliant undefined in M3; epic
       90% acc/95% meaningless-precision/85% meaningful-recall not cited. Corpus
       (threshold+brush-off tables+real suppressions) lacks size/label
@@ -124,8 +118,7 @@ suggestions:
     disposition: fix
     summary: Cache concurrency spike assumes contention that sequential runner
       without -j never creates
-    detail:
-      "Runner executes tools sequentially; pylint ToolSpecs pass no -j so 3
+    detail: "Runner executes tools sequentially; pylint ToolSpecs pass no -j so 3
       invocations are sequential subprocesses not concurrent writers. Spike asks
       jobs/process/open/close/partial-run without naming writer (checker
       open/close vs runner post-process) or write timing. If runner-side
@@ -151,11 +144,9 @@ suggestions:
       line: 142
   - id: plan-replan-coordination
     disposition: fix
-    summary:
-      Parallel M3/M4 replanAfter with cross-milestone deps risks premature or
+    summary: Parallel M3/M4 replanAfter with cross-milestone deps risks premature or
       deadlocked replan
-    detail:
-      "M3 and M4 both replanAfter with no ordering; M4 depends on M2 not M3 so
+    detail: "M3 and M4 both replanAfter with no ordering; M4 depends on M2 not M3 so
       M3 could replan while M4 running. Item-level replanAfter on both audits
       with coding->test dep risks first triggering replan before second runs.
       Spawn timing contradictory: semantic spawns now vs iteration-3 spawns all.
@@ -180,8 +171,7 @@ suggestions:
     disposition: fix
     summary: Blocking debt omits C0208/secrets and ADRs overclaim
       hermetic/check-only with factual errors
-    detail:
-      "TD2-B2 claims green after 6+2 fixes but omits C0208 set-iteration and
+    detail: "TD2-B2 claims green after 6+2 fixes but omits C0208 set-iteration and
       factory-journal secrets (punted to operator). ADR-005 check-only/hermetic
       false under --fix and with caches/subprocesses. ADR-006 avoids second run
       false: collect IS second pipeline run; invents __CRASH__. ADR-007
@@ -193,8 +183,7 @@ suggestions:
       line: 377
   - id: material-behavior-definition
     disposition: human-awareness
-    summary:
-      Reranker non-material carve-out redefines preservation guarantee needs
+    summary: Reranker non-material carve-out redefines preservation guarantee needs
       operator visibility
     detail: Assumption defines golden SEMANTIC=0 + unit/CLI/baseline/configs as
       material and reranker accept/reject as non-material, letting model swap
@@ -206,8 +195,7 @@ suggestions:
       line: 1
   - id: cache-location-choice
     disposition: human-awareness
-    summary:
-      Git-tracked decisions file at linted root is high-impact needs operator
+    summary: Git-tracked decisions file at linted root is high-impact needs operator
       visibility
     detail: Assumption places JSON cache at linted root next to baseline with
       weights in user cache, affecting gitignore/hatch inclusion/consumer
@@ -219,8 +207,7 @@ suggestions:
       line: 38
   - id: fastino-license-gating
     disposition: human-awareness
-    summary:
-      GLiDE Fastino license requires human review before any non-Apache model
+    summary: GLiDE Fastino license requires human review before any non-Apache model
       ships
     detail: "Assumption correctly blocks Fastino until review, prefers Apache
       candidates, excludes CC-BY-NC. If eval recommends GLiDE implementation
@@ -232,11 +219,9 @@ suggestions:
       line: 29
   - id: deps-over-serialized
     disposition: optional
-    summary:
-      M2 after M1 over-serializes tests-only refactor sharing no files with
+    summary: M2 after M1 over-serializes tests-only refactor sharing no files with
       prod fixes
-    detail:
-      consolidate helper is tests-only forbidden src/docs/baseline while M1
+    detail: consolidate helper is tests-only forbidden src/docs/baseline while M1
       touches src + 6 count tests + docs; sets disjoint
       (integration/conftest/autofix vs lint-runner/stats/t3/fakes). Forcing
       order wastes maxParallelItems 4. Keep consolidate->golden (both touch
@@ -247,8 +232,7 @@ suggestions:
   - id: sizing-hints-zero-stories
     disposition: optional
     summary: Zero prod hints on report/tests-only items are intentional no sizing breach
-    detail:
-      "M1 stories 50/30 within storyMax 300; 8 others carry 0 as tests-only
+    detail: "M1 stories 50/30 within storyMax 300; 8 others carry 0 as tests-only
       red-test-exempt or report-only fact-finder/poc/test-assumptions. No hint
       above kind reference, none missing. Advisory only: 0-hint stories are
       deliberate not missing estimates."

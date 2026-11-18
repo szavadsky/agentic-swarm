@@ -5,8 +5,7 @@ adrs:
     context: "`ruff format` ToolSpec runs plain `ruff format` without
       --check/--config, rewriting ~109 files with default line-length 88 instead
       of shipped 130, while TOOLS has 14 entries and 6 tests + docs assert 13."
-    decision:
-      Retain 14 tools. Map 'ruff format' to config/ruff.toml, pass --config,
+    decision: Retain 14 tools. Map 'ruff format' to config/ruff.toml, pass --config,
       append --check in the normal pass; mutate only in phase 1a under --fix.
       Single-source the 14-name registry invariant; formatter-only tools are
       explicitly exempt from statistics-parser coverage.
@@ -18,8 +17,7 @@ adrs:
     context: Merged collect_findings uses private pipeline + record parsers (not
       run_lint baseline capture), sorts only in serialize, never asserts len!=0
       or zero __CRASH__, and slice_tool_section is unused.
-    decision:
-      "Ratify private-pipeline collect as intentional (avoids second full
+    decision: "Ratify private-pipeline collect as intentional (avoids second full
       run and formatter pollution). Harden it: sort by finding_key in collect,
       assert len!=0 and zero __CRASH__, use slice_tool_section in the overlay
       test."
@@ -28,8 +26,7 @@ adrs:
   - consequences: Lint stays hermetic and deterministic with/without the model;
       cache updates are explicit, reviewable, CI-guarded. Iteration 3 implements
       the backend against this contract.
-    context:
-      Current cache is per-machine, gitignored, unbounded, 64-bit truncated
+    context: Current cache is per-machine, gitignored, unbounded, 64-bit truncated
       keys, no cleanup. A git-tracked cache that lint writes on every run would
       make lint non-hermetic.
     decision: Tracked cache is the source of truth; normal lint is read-only
@@ -41,8 +38,7 @@ adrs:
   - consequences: Subsystem epics start in iteration 3 scoped from evidence with
       disjoint ownership; semantic implementation follows spike verdicts. No
       concurrent edits to shared test infra.
-    context:
-      Remaining scope spans runner, checkers, setup/testing plus the semantic
+    context: Remaining scope spans runner, checkers, setup/testing plus the semantic
       swap. Audits must read final post-consolidation HEAD before epic
       decomposition.
     decision: Iteration 2 delivers green baseline, test-infra completion,
@@ -63,18 +59,14 @@ assumptions:
       .python-setup-decisions.json next to lint.baseline); weights stay in the
       user model cache, never in git.
     disposition: confirm with human
-    why:
-      Decisions must reproduce in CI without the model; weights are 0.03-0.8GB
+    why: Decisions must reproduce in CI without the model; weights are 0.03-0.8GB
       with their own licenses.
-  - assumption:
-      Dev/CI do not install the `semantic` extra; gates run heuristic +
+  - assumption: Dev/CI do not install the `semantic` extra; gates run heuristic +
       cache hits. Real-model tests are slow + with_real_api and never in the
       default suite.
-    why:
-      Matches current venv (no torch/transformers) and keeps gates offline, fast,
+    why: Matches current venv (no torch/transformers) and keeps gates offline, fast,
       deterministic.
-  - assumption:
-      "'Never test linting' bans pytest asserting this repo passes its own
+  - assumption: "'Never test linting' bans pytest asserting this repo passes its own
       gates (subprocess re-lint, AST re-implementation, config re-checks).
       Golden/integration behavior contracts are retained, not removed."
     disposition: confirm with human
@@ -93,12 +85,10 @@ assumptions:
       --overwrite-baseline; captures run on temp copies only.
     why: Bare lint mutates the worktree via ruff format; split gates are the
       check-only workaround until M1 merges.
-  - assumption:
-      Only semantic-decision-model spawns now (implementation in iteration
+  - assumption: Only semantic-decision-model spawns now (implementation in iteration
       3 after spikes); runner/checkers/setup epics spawn at the iteration-3
       replan from M4 audits.
-    why:
-      Debloat and model work must follow the green baseline, consolidated infra,
+    why: Debloat and model work must follow the green baseline, consolidated infra,
       and evidence-based ownership.
 epics:
   - intent: >-
@@ -212,8 +202,7 @@ itemOutlines:
     slug: runner-format-contract
     title: Ruff format check-only contract and 14-tool fix
   - deps: []
-    description:
-      "Fix the two masked violations with behavior-preserving refactors
+    description: "Fix the two masked violations with behavior-preserving refactors
       only: coverage.py:196-198 SIM102 nested-if -> single `if a and b`;
       cli.py:50 _run_tool_pipeline 23-><=20 locals by extracting phase/select
       helpers (no pipeline semantics change). Keep lint.baseline []. Verify:
@@ -227,8 +216,7 @@ itemOutlines:
   - deps:
       - runner-format-contract
       - baseline-violations-fix
-    description:
-      "Retry per consult guidance. Create tests/_project_helpers.py with
+    description: "Retry per consult guidance. Create tests/_project_helpers.py with
       the 10 helpers (copy, git_init_and_stage with test/test@test + add .,
       git_init_bare with Test/test@example.com -q no add, stage/commit,
       shipped_config_paths, make_runner_config preserving rumdl side-effect
@@ -270,8 +258,7 @@ itemOutlines:
     title: Decision-model candidate matrix
   - deps:
       - model-candidate-matrix
-    description:
-      "No committed code; report only (temp venv/copy permitted, network
+    description: "No committed code; report only (temp venv/copy permitted, network
       only inside spike). Assemble labelled corpus from
       test_semantic_threshold.py + test_semantic_check.py patterns + real repo
       suppressions. Score decider-nano on CPU (+GLiDE-0.4B if obtainable) at
@@ -286,8 +273,7 @@ itemOutlines:
     title: CPU accuracy/latency evaluation
   - deps:
       - model-candidate-matrix
-    description:
-      Prototype on temp copies only; no committed files. Design tracked
+    description: Prototype on temp copies only; no committed files. Design tracked
       JSON schema (version, model id/revision, prompt hash, full digest key,
       boolean, last-seen), prune policy, refresh command/flag, CI guard,
       PYTHON_SETUP_LINT_DECISIONS_PATH isolation. Prove deterministic W9704 with
@@ -300,8 +286,7 @@ itemOutlines:
     slug: cache-design-spike
     title: Tracked cache schema and determinism prototype
   - deps: []
-    description:
-      "Pin pylint 4.x invocation semantics the cache design relies on:
+    description: "Pin pylint 4.x invocation semantics the cache design relies on:
       jobs/process count, checker open()/close() timing, partial-path and
       staged-file runs, 3 pylint invocations sharing one project. Add
       tests/assumptions/test_pylint_cache_semantics.py (no_external_api,
@@ -476,16 +461,14 @@ milestones:
     title: Debloat inventory and subsystem epic decomposition
 techDebt:
   - category: blocking
-    description:
-      "`ruff format` ToolSpec mutates the worktree (plain `ruff format`,
+    description: "`ruff format` ToolSpec mutates the worktree (plain `ruff format`,
       no --check/--config, default line-length 88 vs shipped 130); every `uv run
       lint` dirties ~109 files."
     id: TD2-B1
     resolution: "Resolved by runner-format-contract: shipped-config --check in
       normal pass, mutating format only in phase 1a under --fix."
   - category: blocking
-    description:
-      "Red baseline: 6 tests assert 13 tools vs 14-entry TOOLS; SIM102 at
+    description: "Red baseline: 6 tests assert 13 tools vs 14-entry TOOLS; SIM102 at
       stub/coverage.py:196; too-many-locals 23/20 at runner/cli.py:50. Empty
       lint.baseline masks real violations."
     id: TD2-B2
@@ -503,21 +486,17 @@ techDebt:
     id: TD2-I2
     resolution: Resolved by golden-contract-hardening (ratify + harden, no blind regen).
   - category: impacting
-    description:
-      Semantic tests patch module globals and builtins.__import__, import
+    description: Semantic tests patch module globals and builtins.__import__, import
       privates under type:ignore, carry vacuous `is None or ...` asserts;
       heuristic tables duplicated across two modules.
     id: TD2-I3
-    resolution:
-      Resolved by semantic epic implementation in iteration 3 (FakeBackend
+    resolution: Resolved by semantic epic implementation in iteration 3 (FakeBackend
       injection, merged table, modules <=500).
   - category: impacting
-    description:
-      W9704/W9738 pass their own symbol as `rule`; rule-echo heuristic
+    description: W9704/W9738 pass their own symbol as `rule`; rule-echo heuristic
       and future model never see the actually-suppressed codes.
     id: TD2-I4
-    resolution:
-      Resolved by semantic epic req5 (joined suppressed codes, echo on any
+    resolution: Resolved by semantic epic req5 (joined suppressed codes, echo on any
       element, shift report + root regen).
   - category: adjacent
     description: "Over-limit/duplicated test infrastructure: _factories.py 1393
@@ -525,8 +504,7 @@ techDebt:
       baseline-diff + 3 runner files overlapping, test_golden.py 341 lines of
       helper-unit tests."
     id: TD2-A1
-    resolution:
-      Inventoried by test-debloat-audit; iteration-3 checkers/runner epics
+    resolution: Inventoried by test-debloat-audit; iteration-3 checkers/runner epics
       merge/split per CodingRules.
   - category: adjacent
     description: "Legacy/compat and docs drift:
@@ -534,8 +512,7 @@ techDebt:
       500+ char rationale with self-suppression, rumdl tests/data-exclude hack,
       ADR design/ vs docs/adr split, factory-journal detect-secrets noise."
     id: TD2-A2
-    resolution:
-      Inventoried by audits; iteration-3 epics remove/fix; factory-journal
+    resolution: Inventoried by audits; iteration-3 epics remove/fix; factory-journal
       exclusion is operator/engine action if still flagged.
 uncertainties:
   - description: "Which decision model (if any) meets license + CPU + py3.14 +
@@ -552,8 +529,7 @@ uncertainties:
         model/prompt/threshold or no-go"
       - decision-runtime pinning (test-assumptions, inside eval report +
         pylint-cache-assumptions follow-up if chosen runtime needs API pinning)
-  - description:
-      "Git-stored cache location/schema/key/cleanup/update semantics and
+  - description: "Git-stored cache location/schema/key/cleanup/update semantics and
       pylint concurrency behavior are unknown. Open: full digest vs truncated,
       model-rev/prompt-hash in key, code_context inclusion, prune policy,
       refresh command, CI guard, jobs/open/close/partial-run coordination."

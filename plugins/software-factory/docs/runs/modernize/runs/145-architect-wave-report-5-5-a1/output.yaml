@@ -20,8 +20,7 @@ outlines:
   - slug: ruff-format-check-only-fix
     kind: story
     title: Make ruff format ToolSpec check-only
-    description:
-      "Owns runner/_tool_specs.py ruff-format entry + runner/dispatch.py
+    description: "Owns runner/_tool_specs.py ruff-format entry + runner/dispatch.py
       _RuffFormatLintTool.build_command/_build ONLY +
       tests/runner/test_lint_runner*.py command-shape test ONLY. FORBIDDEN docs,
       baseline, tests/data, other tools. Makes `uv run lint` check-only:
@@ -36,8 +35,7 @@ outlines:
   - slug: checkers-legacy-dead-cleanup-v2
     kind: story
     title: Rename legacy scan and remove dead compat (v2 rewired)
-    description:
-      "Owns conformance/suppression_justification_checker.py _legacy_scan
+    description: "Owns conformance/suppression_justification_checker.py _legacy_scan
       rename + trivial _legacy_* + astroid 3.x branch + unscoped register ONLY
       (+ .pyi rows + tests/checkers/test_suppression_justification_checker.py
       legacy block ONLY). FORBIDDEN _base/_semantic/_decision_backend,
@@ -83,9 +81,7 @@ remarkable:
   - alternatives:
       - Continue with 52 items and obsolete audits/epics/docs
       - End-iteration with 0 merges despite green gates
-    chosen:
-      Prune 13 superseded I4 pendings and add 2 gap outlines (ruff check-only,
+    chosen: Prune 13 superseded I4 pendings and add 2 gap outlines (ruff check-only,
       legacy-v2)
-    why:
-      Fits 50-item cap, unblocks wave gate without losing M3 legacy scope, keeps
+    why: Fits 50-item cap, unblocks wave gate without losing M3 legacy scope, keeps
       v2 cache/model/pyi/docs chain intact while gates stay green

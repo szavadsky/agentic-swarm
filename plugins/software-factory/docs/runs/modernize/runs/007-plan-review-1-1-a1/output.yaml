@@ -34,8 +34,7 @@ suggestions:
       file: tests/integration.py
       line: 100
     summary: M1 capture omits package_name and rumdl override, changing tool coverage
-  - detail:
-      _handle_baseline with overwrite_baseline=True always prints 'Baseline
+  - detail: _handle_baseline with overwrite_baseline=True always prints 'Baseline
       saved' and returns 0, masking violations. test_setup_new_and_lint asserts
       rc!=0 on the same run. Item says both 'Capture with
       run_lint(...,overwrite_baseline=True)' and 'Prefer extending the pipeline
@@ -49,8 +48,7 @@ suggestions:
       file: src/python_setup_lint/runner/_cli_helpers.py
       line: 64
     summary: overwrite_baseline forces rc=0, clashes with rc!=0 single-run reuse
-  - detail:
-      Today brush-off is 'pre-existing in output' and carry-from is absence of
+  - detail: Today brush-off is 'pre-existing in output' and carry-from is absence of
       '_carry_from_external+unjustified-suppression' on same line — both need
       msg/file context. Golden drops msg per ADR-001, leaving only
       {tool,file,line,col,rule}. Multiple unjustified-suppression rows become
@@ -79,8 +77,7 @@ suggestions:
       file: src/python_setup_lint/runner/baseline.py
       line: 182
     summary: Golden JSON dump/sort/diff/normalization underspecified
-  - detail:
-      integration._init_git does git init + config test@test + git add . (no
+  - detail: integration._init_git does git init + config test@test + git add . (no
       commit); runner._autofix_helpers._git_init does git init -q + config
       test@example.com with no add. Autofix conflict tests rely on
       staged-vs-unstaged states via _stage/_commit_all; switching them to
@@ -95,8 +92,7 @@ suggestions:
       file: tests/runner/_autofix_helpers.py
       line: 24
     summary: Merged git_init changes add/email semantics, risks autofix tests
-  - detail:
-      Item says extract _make_config (package_name + rumdl.toml copy stripping
+  - detail: Item says extract _make_config (package_name + rumdl.toml copy stripping
       tests/data) into tests/_project_helpers.py, but M2 directionalInterfaces
       list only copy_sample_project/git_init/shipped_config_paths. _make_config
       holds gate-critical behavior (package_name enables stubtest/verifytypes;
@@ -180,8 +176,7 @@ suggestions:
       file: CodingRules.md
       line: 90
     summary: Fact-finder report artifact and blocking handling undefined
-  - detail:
-      "Item says 'Delete violations.txt if nothing else references it' but M1
+  - detail: "Item says 'Delete violations.txt if nothing else references it' but M1
       scenario 'Plant­ed-rule coverage preserved: checked against the planted
       rule list' needs that list as oracle. After deletion, oracle vanishes
       (golden cannot self-validate planted coverage). Either retain
@@ -209,8 +204,7 @@ suggestions:
       file: src/python_setup_lint/checkers/_base.py
       line: 143
     summary: File-level exclusion clashes with partial semantic ownership
-  - detail:
-      M2 creates tests/assumptions/__init__.py + 3 contract modules; semantic
+  - detail: M2 creates tests/assumptions/__init__.py + 3 contract modules; semantic
       epic (starting now in parallel) will add runtime-assumption modules under
       same dir. Concurrent creation of __init__.py/dir risks merge conflicts,
       and epic cache tests may want new _project_helpers (git_init) before M2
@@ -224,8 +218,7 @@ suggestions:
       file: pyproject.toml
       line: 48
     summary: Parallel creation of tests/assumptions risks conflicts/stale counts
-  - detail:
-      Plan defines reranker accept/reject as non-material to make 'preserve +
+  - detail: Plan defines reranker accept/reject as non-material to make 'preserve +
       replace' testable, keeping only heuristic gate outcomes as material. True
       for dev/CI without the extra (heuristic fallback), but consumers with
       sentence-transformers installed today get reranker decisions that will

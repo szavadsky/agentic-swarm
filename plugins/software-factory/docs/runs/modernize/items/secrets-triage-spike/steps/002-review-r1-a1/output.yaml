@@ -50,8 +50,7 @@ suggestions:
       file: .factory/tasks/modernize/items/secrets-triage-spike/steps/001-research-r1-a1/output.yaml
   - id: factory-exclusion-residual-risk
     disposition: human-awareness
-    summary:
-      Excluding .factory/ blinds secret scanning on ~57% of tracked files;
+    summary: Excluding .factory/ blinds secret scanning on ~57% of tracked files;
       keep engine redaction plus periodic filter-free audits
     detail: "Finding count is HEAD-pinned, not stable: 8 at a7fad649, reviewer
       re-measured 19 Secret Type lines with exit 123 on the advanced HEAD —

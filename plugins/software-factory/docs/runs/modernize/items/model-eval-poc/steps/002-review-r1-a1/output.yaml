@@ -21,11 +21,9 @@ suggestions:
       line: 14
   - id: reranker-query-contract-deviation
     disposition: fix
-    summary:
-      Reranker query uses '(unknown)/(none)' placeholders where production
+    summary: Reranker query uses '(unknown)/(none)' placeholders where production
       uses self-pair
-    detail:
-      "Production _semantic.py:168-176 builds query from present fields only
+    detail: "Production _semantic.py:168-176 builds query from present fields only
       and falls back to self-pair (primary,primary) when rule and context are
       both absent. PoC render_query always emits 'rule: (unknown) | context:
       (none)' for the 114 synthetic rows with rule=None+context=None, and
@@ -38,11 +36,9 @@ suggestions:
       line: 35
   - id: repo-label-contradiction-c149-c165
     disposition: fix
-    summary:
-      Contradictory labels on identical preceding-line misattributions (c149
+    summary: Contradictory labels on identical preceding-line misattributions (c149
       true vs c165 false)
-    detail:
-      "c149 ('Extract the value type name', True) and c165 ('Count function
+    detail: "c149 ('Extract the value type name', True) and c165 ('Count function
       parameters (excluding self/cls)', False) are the same phenomenon: a
       preceding-line descriptive comment misattributed to a trailing ty:ignore
       on a multi-suppression line whose true same-line reason was already paired
@@ -57,11 +53,9 @@ suggestions:
       line: 149
   - id: hard-negatives-outside-contract
     disposition: fix
-    summary:
-      39 synthetic hard negatives (95% of accepted meaningless class) added
+    summary: 39 synthetic hard negatives (95% of accepted meaningless class) added
       outside contracted corpus
-    detail:
-      "_HARD_NEGATIVES defines 40 items (39 post-dedup; 'not my code' collides
+    detail: "_HARD_NEGATIVES defines 40 items (39 post-dedup; 'not my code' collides
       with the brushoff table) that become 39/41 heuristic-accepted meaningless
       items, so the 95% meaningless-precision bar is decided by author-written
       synthetic data, not the contracted sources (threshold +
@@ -98,8 +92,7 @@ suggestions:
   - id: dedup-losses-undisclosed
     disposition: optional
     summary: Per-source breakdown must disclose dedup collapse (meaningful_table 33->3)
-    detail:
-      First-wins dedup by normalized justification shrinks meaningful_table
+    detail: First-wins dedup by normalized justification shrinks meaningful_table
       33->3 (30 overlap threshold_meaningful), brushoff 35->32,
       threshold_meaningless 50->49. The coming per-source breakdown must report
       raw vs post-dedup counts per source so near-empty sources are not misread.
@@ -109,8 +102,7 @@ suggestions:
   - id: hardcoded-model-stats
     disposition: optional
     summary: params/weights_bytes hardcoded in adapters without provenance
-    detail:
-      Lexicographic smallest-compliant comparison depends on these figures,
+    detail: Lexicographic smallest-compliant comparison depends on these figures,
       but they are hand-written constants (e.g. ettin weights as a 4-term sum)
       with no deriving script. Verify against safetensors headers in code or
       cite the measurement command in the report.

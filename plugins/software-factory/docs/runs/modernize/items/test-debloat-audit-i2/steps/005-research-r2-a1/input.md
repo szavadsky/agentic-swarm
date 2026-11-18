@@ -1,11 +1,9 @@
 # Step: Research
 
 ## Goal
-
 Conduct technical spike research to eliminate architecture unknowns, investigate library capabilities, or diagnose root causes.
 
 ## Rules
-
 - Investigative discipline: form multiple hypotheses; test using search, LSP, code inspection, and documentation queries.
 - Concrete references: ground every finding with repository paths, exact line ranges, or documentation URLs.
 - Deliverable: yield structured output matching `fact-finder-output.schema.json`. Do NOT write files; the engine writes `findings` to `items/{item}/findings.md`.
@@ -14,40 +12,37 @@ Conduct technical spike research to eliminate architecture unknowns, investigate
 - Tool-call budget: aim to finish within ~60 tool calls (probes that re-read files run 60-90 calls and diverge). Batch reads, prefer `grep`/`ast_grep` over re-reading, and stop once findings answer the assignment.
 
 ## Assignment
-
 {
-"slug": "test-debloat-audit-i2",
-"kind": "fact-finder",
-"title": "Inventory redundant tests and pinning limbs",
-"assignment": "GOAL: Inventory redundant tests and pinning limbs aligned to unified map (U3). Read-only; zero repo writes. STEPS: Audit tests minus tests/data root-owned. Output in item report: rows with module, behaviors, duplicate-of, keep or merge or rewrite or remove, surviving coverage, reason, owner plus LoC and runtime estimates plus per-limb pinning inventory for CLI and exit, baseline and autofix, configs and scopes (surviving test or blocking-debt flag) plus symbol exclusions (test_semantic_check.py, test_semantic_threshold.py, TestSuppressionRerankerPipeline) plus planned-path reservations for epic conftest and runtime modules. Align owner column to coding-rules-audit unified map via inter-dep; file ownership separate from symbol skips. Iteration-3 replan consumes both reports plus HEAD re-glob validation. VERIFY: Each module has disposition with surviving coverage, repo-self-lint tests listed for removal, each material limb names pinning test or blocking debt, owners match unified map.",
-"outlineRef": "test-debloat-audit",
-"milestone": "M4",
-"wave": 4,
-"deps": [
-"coding-rules-audit-i2",
-"consolidate-integration-helpers-i2",
-"golden-contract-hardening"
-],
-"scenarioRefs": [
-"M4-2",
-"M4-3"
-],
-"citations": [
-"CodingRules.md:230-306",
-"CodingRules.md:139-159",
-"AGENTS.md:87-93",
-"pyproject.toml:49-49",
-"tests/checkers/test_semantic_check.py:1-7",
-"tests/checkers/test_semantic_threshold.py:19-25"
-]
+  "slug": "test-debloat-audit-i2",
+  "kind": "fact-finder",
+  "title": "Inventory redundant tests and pinning limbs",
+  "assignment": "GOAL: Inventory redundant tests and pinning limbs aligned to unified map (U3). Read-only; zero repo writes. STEPS: Audit tests minus tests/data root-owned. Output in item report: rows with module, behaviors, duplicate-of, keep or merge or rewrite or remove, surviving coverage, reason, owner plus LoC and runtime estimates plus per-limb pinning inventory for CLI and exit, baseline and autofix, configs and scopes (surviving test or blocking-debt flag) plus symbol exclusions (test_semantic_check.py, test_semantic_threshold.py, TestSuppressionRerankerPipeline) plus planned-path reservations for epic conftest and runtime modules. Align owner column to coding-rules-audit unified map via inter-dep; file ownership separate from symbol skips. Iteration-3 replan consumes both reports plus HEAD re-glob validation. VERIFY: Each module has disposition with surviving coverage, repo-self-lint tests listed for removal, each material limb names pinning test or blocking debt, owners match unified map.",
+  "outlineRef": "test-debloat-audit",
+  "milestone": "M4",
+  "wave": 4,
+  "deps": [
+    "coding-rules-audit-i2",
+    "consolidate-integration-helpers-i2",
+    "golden-contract-hardening"
+  ],
+  "scenarioRefs": [
+    "M4-2",
+    "M4-3"
+  ],
+  "citations": [
+    "CodingRules.md:230-306",
+    "CodingRules.md:139-159",
+    "AGENTS.md:87-93",
+    "pyproject.toml:49-49",
+    "tests/checkers/test_semantic_check.py:1-7",
+    "tests/checkers/test_semantic_threshold.py:19-25"
+  ]
 }
 
 ## Task Intent
-
 # modernize
 
 Modernize the project while preserving every material lint/check behavior.
-
 - Enforce the project's coding rules (CodingRules.md, AGENTS.md) across the code base.
 - Debloat code and tests; keep test intent, never test linting, test infra/assumptions first.
 - Remove redundant tests.
@@ -56,19 +51,18 @@ Modernize the project while preserving every material lint/check behavior.
   e.g. https://huggingface.co/fastino/GLiDE-0.4B or smaller
   (https://huggingface.co/spaces/multimodalart/jev-decision-index); keep a git-stored cache with cleanup.
 
-## Context & Citations
 
+## Context & Citations
 [
-"CodingRules.md:230-306",
-"CodingRules.md:139-159",
-"AGENTS.md:87-93",
-"pyproject.toml:49-49",
-"tests/checkers/test_semantic_check.py:1-7",
-"tests/checkers/test_semantic_threshold.py:19-25"
+  "CodingRules.md:230-306",
+  "CodingRules.md:139-159",
+  "AGENTS.md:87-93",
+  "pyproject.toml:49-49",
+  "tests/checkers/test_semantic_check.py:1-7",
+  "tests/checkers/test_semantic_threshold.py:19-25"
 ]
 
 ## Review Feedback
-
 Retry granted. Rewrite the report (report-only, zero repo writes) fixing all 10 in this order: (1) Owners: restore the unified-map 5-owner scheme exactly (runner/checkers/setup-testing/semantic/root, counts 67/83/15/4/15) from coding-rules-audit-i2 output.yaml:82-88; delete the 10 invented tokens; test_suppression file stays checkers-file with TestSuppressionRerankerPipeline:357-390 as the semantic symbol skip. (2) N|S counts: re-derive EVERY row from per-file `pytest --collect-only` truth (default|slow), never def counts; fix the ~25 listed files (e.g. semantic-check 82|3, threshold 80, lint-runner 58, stats 87). (3) Pinning: restore all ~15 blocking-debt limbs from r1 (cli --force-fix+env, --format, --cwd, --config-status; 11-label vs 7-label config gap; mypy/rumdl/ty _config_flag_for branches; dispatch scopes ty-src/pylint-pyi-src/pylint-tests-tests/tach-whole-repo; pyright tests/** and rumdl tests/data exclusions) — grep-verify each has zero pins. (4) Self-lint removals: list all six groups (noise-filter, TestModuleSizeGates, private-imports AST scan, autofix-conflict slow, downstream-integration home-write, t9_7 hardcoded checkout) with surviving gates. (5) Reservations: restore epic verbatim (tests/checkers/conftest.py, tests/assumptions runtime/decision/cache, _decision_backend/_decision_cache); delete invented runner/runtime paths; tests/conftest.py is root-owned. (6) Symbols: restore _base.py:143-238 check_if_meaningful (+pyi) and no_try_import _OPTIONAL_IMPORT_PATTERNS exclusions. (7) Duplicates: restore duplicate-of for _make_tc x13, _walk_and_release x10, _msg_ids x8, t3-vs-stats parser-completeness exact dup, autofix fake-vs-git, setup 6x install, _UvCallRecorder x2 — or explicitly justify each drop. (8) Keep test_real_pipeline_smoke.py (sole default full-pipeline pin; integration.py is explicit-only) or name a default-collected survivor. (9) Slow budget: recompute from truth (baseline-edge 16|2 both in TestPerfBenchmark, suppression 40|2) — 18->13 not 14. (10) Runtime: restore integration 65-107s with conditions (WSL2/py3.14.4/warm-cache ±30%). Verify: owners match unified map exactly; every N|S matches --collect-only; every limb/gap above named.
 
 - [FIX] Owner column abandons unified map 5-owner scheme: Unified map (.factory/tasks/modernize/items/coding-rules-audit-i2/steps/001-research-r1-a1/output.yaml:82-88) defines exactly 5 owners: runner 67, checkers 83, setup-testing 15, semantic 4, root 15. r2 invents 10 tokens (tests-infra/baseline/autofix/configs/setup/golden/integration) and assigns e.g. test_suppression file to semantic. The inter-dep file EXISTS in-repo, so the uncertainty claim is false. Restore 5-owner column, 67/83/15/4/15 counts, and checkers-file/semantic-symbol split. (.factory/tasks/modernize/items/test-debloat-audit-i2/steps/003-research-r2-a1/output.yaml)
@@ -87,7 +81,6 @@ Retry granted. Rewrite the report (report-only, zero repo writes) fixing all 10 
 ## Output
 
 Yield a structured JSON object matching this schema:
-
 - status (string, required, enum: ["ok","inconclusive"])
 - summary (string, required)
 - findings (string, required)

@@ -3,8 +3,7 @@ decision: amend
 outlines:
   - deps:
       - baseline-violations-fix
-    description:
-      "Close the M1 green-baseline tail: wave-2 report lists lint still
+    description: "Close the M1 green-baseline tail: wave-2 report lists lint still
       red, and the two W9704 sites from infra notes
       (src/python_setup_lint/checkers/conformance/generic_key_dict_checker.py
       options-Any site, src/python_setup_lint/testing.py list[Any]/type-ignore

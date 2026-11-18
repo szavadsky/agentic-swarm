@@ -1,7 +1,6 @@
 amendmentIndex: 2
 items:
-  - assignment:
-      "Create tests/_golden.py as SOLE golden owner (no pipeline run in
+  - assignment: "Create tests/_golden.py as SOLE golden owner (no pipeline run in
       this item). Implement: UPDATE_ENV='PYTHON_SETUP_LINT_UPDATE_GOLDEN',
       SEMANTIC_ENV='PYTHON_SETUP_LINT_SEMANTIC'; Finding TypedDict {tool:str,
       file:str|None, line:int|None, col:int|None, rule:str}; finding_key(f)
@@ -36,8 +35,7 @@ items:
     slug: golden-helpers-unit
     title: Golden helpers module with synthetic unit tests
     wave: 6
-  - assignment:
-      "Using tests/_golden.py from golden-helpers-unit and probe verdict.
+  - assignment: "Using tests/_golden.py from golden-helpers-unit and probe verdict.
       (1) Commit tests/data/golden/minimal_sample_project_findings.json +
       ..._tool_counts.json via helper serialization, outside sample dir, never
       copied/linted; violations.txt RETAINED as oracle. (2) Edit
@@ -117,8 +115,7 @@ items:
     slug: consolidate-integration-helpers-v2
     title: Single-source helpers; integration.py under 500 lines
     wave: 8
-  - assignment:
-      "Replaces pending coding-rules-audit blocked on superseded (rewired
+  - assignment: "Replaces pending coding-rules-audit blocked on superseded (rewired
       to golden-snapshot-wiring; identical scope). Read-only audit of src/** and
       scripts/** vs CodingRules/AGENTS — no committed files, output is
       structured item-report tables. Semantic exclusions (mark skipped, audit
@@ -154,8 +151,7 @@ items:
     slug: coding-rules-audit-v2
     title: Inventory CodingRules violations
     wave: 9
-  - assignment:
-      "Replaces pending test-debloat-audit blocked on superseded (rewired
+  - assignment: "Replaces pending test-debloat-audit blocked on superseded (rewired
       to golden-snapshot-wiring; identical scope). Read-only audit of tests/** —
       no committed files, output is structured item-report tables. Semantic
       exclusions (mark skipped): test_semantic_check.py,

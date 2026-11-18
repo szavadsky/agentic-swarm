@@ -2,8 +2,7 @@ status: approved
 summary: "Docs-only recovery approved: 4 spike docs + RECOVERY.md faithful to
   approved sources; zero prod lines; no checkout or forbidden writes"
 suggestions:
-  - detail:
-      Line 21 reads `oMP task subagents...`; verbatim from the approved source
+  - detail: Line 21 reads `oMP task subagents...`; verbatim from the approved source
       draft so fidelity is intact, but `omp` capitalization matches repo idiom.
       Non-blocking polish only.
     disposition: optional

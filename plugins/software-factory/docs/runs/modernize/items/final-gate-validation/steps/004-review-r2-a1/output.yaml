@@ -35,8 +35,7 @@ suggestions:
       file: .secrets.baseline
       line: 44
     summary: 1.84GB safetensors rely on prefix filter; HEAD green
-  - detail:
-      "Verified: AGENTS.md:10 says 1290/4/15 vs R2 observed 1357/0/7; :11 says
+  - detail: "Verified: AGENTS.md:10 says 1290/4/15 vs R2 observed 1357/0/7; :11 says
       7-pass vs 9-collected. Overlaps blocker routing; runner-owned AGENTS
       counts fix downstream."
     disposition: optional
