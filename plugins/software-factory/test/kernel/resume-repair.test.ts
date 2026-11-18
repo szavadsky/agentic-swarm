@@ -329,6 +329,32 @@ Create delta.txt.
           when: whenTurn({ step: "plancheck" }),
         });
         queueTask(second, "delta", "delta.txt");
+        // The architect-summoning resume does not consume the pass budget: the
+        // boundary runs at iteration 2 in the same launch.
+        second.script(
+          (req, ctx) => {
+            fs.appendFileSync(
+              path.join(goalDir, "plan.md"),
+              "\n## architect edit after the stuck resume\n",
+              "utf8",
+            );
+            ctx.writeOutcome(
+              outcome({ summary: "still stuck", decision: "continue" }),
+            );
+            return fakeTurnResult(req);
+          },
+          { when: whenTurn({ step: "architect" }) },
+        );
+        second.script(
+          (req, ctx) => {
+            ctx.writeOutcome(outcome({ summary: "nothing to file" }));
+            return fakeTurnResult(req);
+          },
+          { when: whenTurn({ step: "pm" }) },
+        );
+        second.script(checkerTurn("architect"), {
+          when: whenTurn({ step: "plancheck" }),
+        });
 
         await expectDispatch(
           3,
@@ -371,7 +397,15 @@ Create delta.txt.
           ),
         ).toBe(true);
         // The iteration ends at the boundary with the stuck state recorded, and
-        // the digest steer waits for the next boundary's architect.
+        // the digest steer stays in the inbox, unanswered by iteration 2's architect.
+        expect(
+          records.filter(
+            (r) =>
+              r.actor === "agent" &&
+              r.step === "architect" &&
+              r.iteration === 2,
+          ),
+        ).toHaveLength(1);
         expect(await store.readFile("iterations/1/summary.md")).toContain(
           "nothing dispatchable, non-terminal work remains: gamma pending",
         );

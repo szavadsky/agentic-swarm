@@ -32,6 +32,7 @@ import { type ModelCatalog, preflight } from "./preflight.js";
 import { loadPrompts } from "./prompts.js";
 import { scriptMeta } from "./record.js";
 import { recoverLaunch } from "./recovery.js";
+import { RESUME_REFUSED_STEP, RESUME_STEP, resumeVerdict } from "./resume.js";
 import { createLaunchSessions } from "./sessions.js";
 import {
   createDrainController,
@@ -45,6 +46,7 @@ import type {
   HarnessConfig,
   KernelRuntime,
   State,
+  StepRecord,
 } from "./types.js";
 import { BaseFollowConflictError } from "./worktree.js";
 
@@ -104,6 +106,78 @@ export interface LaunchResult {
   cause?: string;
   interruptedBy?: DrainSignal;
   recoveredRecords: number;
+}
+
+/**
+ * Why a relaunch into an interrupted iteration must not resume it, or
+ * undefined when it may. Hold reads that fail refuse resume: the holds
+ * decide which ready work is runnable. Brakes follow the drain that stopped
+ * the previous run; the boundary is their only resolver.
+ */
+async function resumeGate(
+  runtime: KernelRuntime,
+  before: State,
+  records: StepRecord[],
+): Promise<{ holds: Hold[]; refusal?: string }> {
+  const { store, limits } = runtime;
+  let holds: Hold[];
+  try {
+    const read = await readHolds(store, {
+      knownSlugs: Object.keys(before.tasks),
+    });
+    holds = read.holds;
+    const malformed = read.findings.filter((f) => f.kind === "malformed");
+    if (malformed.length > 0) {
+      return {
+        holds,
+        refusal: `unreadable hold file: ${malformed.map((f) => `${f.file} (${f.reason})`).join("; ")}`,
+      };
+    }
+  } catch (err) {
+    return {
+      holds: [],
+      refusal: `holds could not be read: ${(err as Error).message}`,
+    };
+  }
+  const pendingSteers = new Set((await scanInbox(store)).map((s) => s.id));
+  const verdict = resumeVerdict(before, records, holds, pendingSteers, limits);
+  if (!verdict.resume) return { holds, refusal: verdict.cause };
+  if (holds.some((h) => h.goal === true && pendingSteers.has(h.steer))) {
+    return { holds, refusal: "a pending steer holds the goal" };
+  }
+  if (limits.iterationTurns !== undefined) {
+    const used = settledTurns(records, before.iteration);
+    if (used >= limits.iterationTurns) {
+      return {
+        holds,
+        refusal: `iteration turn budget spent (${used} of ${limits.iterationTurns})`,
+      };
+    }
+  }
+  if (limits.iterationUsd !== undefined) {
+    const spent = iterationSpend(
+      records,
+      before.iteration,
+      await loadPriceTable(runtime.priceSource),
+      runtime.configs.run.priceIds,
+    );
+    if (spent >= limits.iterationUsd) {
+      return {
+        holds,
+        refusal: `iteration USD budget spent (${spent} of ${limits.iterationUsd})`,
+      };
+    }
+  }
+  if (limits.iterationWallMs !== undefined) {
+    const elapsed = Date.now() - iterationStart(records, before.iteration);
+    if (elapsed >= limits.iterationWallMs) {
+      return {
+        holds,
+        refusal: `iteration wall budget spent (${elapsed}ms of ${limits.iterationWallMs}ms)`,
+      };
+    }
+  }
+  return { holds };
 }
 
 async function processedSteers(store: KernelRuntime["store"]): Promise<number> {
@@ -374,6 +448,8 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
       (r) => r.iteration > 0 && r.step !== "task-quarantine",
     );
     let iterations = 0;
+    // Set once a resumed pass made no progress: the boundary must run next.
+    let resumeForcedOff = false;
     let lastSummary: string | undefined;
     let ended: "infra" | "cancelled" | undefined;
     let stopCause: string | undefined;
@@ -398,51 +474,36 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
       // hold, exhausted turn/budget/wall budget) has the boundary as its only
       // resolver, so resuming would dispatch nothing and loop forever.
       const recordsBefore = await store.listRecords();
-      let resume = before.interrupted && i === 0;
+      let resume = before.interrupted && i === 0 && !resumeForcedOff;
       let resumeHolds: Hold[] = [];
+
       if (resume) {
-        try {
-          const read = await readHolds(store, {
-            knownSlugs: Object.keys(before.tasks),
-          });
-          resumeHolds = read.holds;
-          // A malformed hold may have been meant to gate work; the sweep below
-          // parks it, but this launch must not resume as if it were absent.
-          if (read.findings.some((f) => f.kind === "malformed")) resume = false;
-        } catch {
-          // A hold file that cannot be read decides what may run, so the
-          // boundary (and dispatch's infra stop) owns it — never a silent resume.
+        const gate = await resumeGate(runtime, before, recordsBefore);
+        resumeHolds = gate.holds;
+        if (gate.refusal !== undefined) {
           resume = false;
-        }
-      }
-      if (resume) {
-        const pendingSteers = new Set(
-          (await scanInbox(store)).map((s) => s.id),
-        );
-        const goalHoldActive = resumeHolds.some(
-          (h) => h.goal === true && pendingSteers.has(h.steer),
-        );
-        if (goalHoldActive) resume = false;
-        if (runtime.limits.iterationTurns !== undefined) {
-          const used = settledTurns(recordsBefore, before.iteration);
-          if (used >= runtime.limits.iterationTurns) resume = false;
-        }
-        if (runtime.limits.iterationUsd !== undefined) {
-          const spent = iterationSpend(
-            recordsBefore,
-            before.iteration,
-            await loadPriceTable(runtime.priceSource),
-            runtime.configs.run.priceIds,
+          await store.appendRecord(
+            scriptMeta(before.iteration, RESUME_REFUSED_STEP),
+            { ok: false, cause: gate.refusal },
           );
-          if (spent >= runtime.limits.iterationUsd) resume = false;
-        }
-        if (runtime.limits.iterationWallMs !== undefined) {
-          const elapsed =
-            Date.now() - iterationStart(recordsBefore, before.iteration);
-          if (elapsed >= runtime.limits.iterationWallMs) resume = false;
         }
       }
       let iteration = resume ? before.iteration : before.iteration + 1;
+      if (resume) {
+        const attempt =
+          recordsBefore.filter(
+            (r) => r.iteration === iteration && r.step === RESUME_STEP,
+          ).length + 1;
+        await store.appendRecord(scriptMeta(iteration, RESUME_STEP), {
+          ok: true,
+          outcome: {
+            status: "done",
+            summary: `resume attempt ${attempt} of iteration ${iteration}`,
+            concerns: [],
+            forward: [],
+          },
+        });
+      }
       await store.sweepTasks(iteration);
       await sweepHolds(store, iteration, Object.keys(before.tasks));
       let humanInterventions = 0;
@@ -539,7 +600,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         }
         if (front.action === "boundary") {
           boundary = await runBoundary(runtime, {
-            relaunch: relaunch && i === 0,
+            relaunch: relaunch && i === 0 && !resumeForcedOff,
             iteration,
             frontPack: front.packPath,
             runConfigPath: runtime.configs.files?.run,
@@ -648,6 +709,18 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         );
         if (decision !== "continue" || stopped || signals.shouldStop()) break;
         if (frontFinished) break;
+        if (
+          resume &&
+          dispatched !== undefined &&
+          (dispatched.taskTurnsStarted === 0 ||
+            dispatched.planCheck === "architect")
+        ) {
+          // An empty or architect-summoning resume is not a pass: give the
+          // budget back and go straight to the boundary at iteration+1.
+          resumeForcedOff = true;
+          iterations -= 1;
+          i -= 1;
+        }
       } catch (err) {
         await safeSummary(
           runtime,

@@ -266,6 +266,7 @@ const limitsSchema = z
     iterations: z.number().int().positive().default(1),
     /** Plan-checker re-runs per iteration; exhausted rounds consult the architect. */
     planCheckRounds: z.number().int().positive().default(2),
+    resumeAttempts: z.number().int().nonnegative().optional(),
     /** Optional drain limits for one iteration. */
     turns: z.number().int().positive().optional(),
     wallMinutes: z.number().positive().optional(),
@@ -664,6 +665,7 @@ export function toLimits(configs: ConfigBundle): Limits {
     iterations: runLimits.iterations,
     concurrency: runLimits.concurrency,
     planCheckRounds: runLimits.planCheckRounds,
+    resumeAttempts: runLimits.resumeAttempts ?? 2,
     iterationTurns: runLimits.turns,
     iterationWallMs:
       runLimits.iterationMinutes !== undefined

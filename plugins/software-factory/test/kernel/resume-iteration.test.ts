@@ -357,8 +357,18 @@ describe("resume iteration — SIGINT and hard death", () => {
           );
           return fakeTurnResult(req);
         });
+        // The resumed pass is not budgeted: the boundary closes the goal.
+        second.script(
+          (req, ctx) => {
+            ctx.writeOutcome(
+              outcome({ summary: "goal met", decision: "done" }),
+            );
+            return fakeTurnResult(req);
+          },
+          { when: whenTurn({ step: "architect" }) },
+        );
         await expectDispatch(
-          3,
+          0,
           ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
           { harnesses: { fake: second } },
         );
