@@ -4,18 +4,17 @@ import os from "node:os";
 import path from "node:path";
 import yaml from "yaml";
 import { Repo } from "../../src/core/git/repo.js";
-import { expectDispatch } from "./e2e-helpers.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import type { Usage } from "../../src/harness/types.js";
 import { runAgentTurn } from "../../src/kernel/agent.js";
-import { resolveRole } from "../../src/kernel/flow-context.js";
+import { resolveTurn } from "../../src/kernel/flow-context.js";
 import { type GoalMetrics, writeMetrics } from "../../src/kernel/metrics.js";
+import { writePriceCache } from "../../src/kernel/openrouter.js";
 import {
   type PriceTable,
-  priceTableOnly,
   pricedUsage,
+  priceTableOnly,
 } from "../../src/kernel/pricing.js";
-import { writePriceCache } from "../../src/kernel/openrouter.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import { finishChecks, startChecks } from "../../src/kernel/record.js";
 import { createFolderStore } from "../../src/kernel/store.js";
@@ -26,7 +25,8 @@ import type {
   RunConfig,
 } from "../../src/kernel/types.js";
 import { createTmpRepo } from "../helpers/tmp-repo.js";
-import { rec, script } from "./helpers.js";
+import { expectDispatch } from "./e2e-helpers.js";
+import { rec, script, TEST_BOUNDARY } from "./helpers.js";
 
 const PLAN = `# Milestone 1 — alpha
 
@@ -95,6 +95,7 @@ describe("iteration metrics", () => {
           "aliases:",
           "  architect: { harness: fake, model: fake-architect }",
           "  pm: { harness: fake, model: fake-pm }",
+          "  digest: { harness: fake, model: fake-digest }",
           "  implementer: { harness: fake, model: fake-impl }",
           "  reviewer: { harness: fake, model: fake-review }",
           "  steward: { harness: fake, model: fake-steward }",
@@ -635,7 +636,7 @@ describe("record cost truth", () => {
     const fake = new FakeHarness({ id: "fake" });
     const process: ProcessConfig = {
       flows: {},
-      roles: { implementer: { prompt: "implementer" } },
+      boundary: TEST_BOUNDARY,
       reminders: 1,
     };
     const repo: RepoConfig = {
@@ -698,7 +699,7 @@ describe("record cost truth", () => {
         });
       });
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: {

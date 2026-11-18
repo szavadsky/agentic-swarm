@@ -6,8 +6,9 @@ import type { SessionRef } from "../../src/harness/types.js";
 import { runAgentTurn } from "../../src/kernel/agent.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
-import { resolveRole } from "../../src/kernel/flow-context.js";
+import { resolveTurn } from "../../src/kernel/flow-context.js";
 import type { KernelRuntime } from "../../src/kernel/types.js";
+import type { TmpRepo } from "../helpers/tmp-repo.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -18,7 +19,6 @@ import {
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
-import type { TmpRepo } from "../helpers/tmp-repo.js";
 
 const implementerVars = {
   task_path: "/g/tasks/a.md",
@@ -91,7 +91,7 @@ describe("alias fallback tiers", () => {
       };
 
       const result = await runAgentTurn(t.runtime, {
-        target: resolveRole(t.runtime, "implementer"),
+        target: resolveTurn(t.runtime, "implementer", "implementer"),
         cwd: t.repo.dir,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: implementerVars,
@@ -139,7 +139,7 @@ describe("alias fallback tiers", () => {
         return fakeTurnResult(req);
       });
 
-      const target = resolveRole(t.runtime, "implementer");
+      const target = resolveTurn(t.runtime, "implementer", "implementer");
       expect(target.harness.id).toBe("b");
       expect(target.model).toEqual({ id: "mb" });
       expect(target.tierOffset).toBe(1);
@@ -175,7 +175,7 @@ describe("alias fallback tiers", () => {
       });
 
       const result = await runAgentTurn(t.runtime, {
-        target: resolveRole(t.runtime, "implementer"),
+        target: resolveTurn(t.runtime, "implementer", "implementer"),
         cwd: t.repo.dir,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: implementerVars,
@@ -208,7 +208,7 @@ describe("alias fallback tiers", () => {
       });
 
       await runAgentTurn(t.runtime, {
-        target: resolveRole(t.runtime, "implementer"),
+        target: resolveTurn(t.runtime, "implementer", "implementer"),
         cwd: t.repo.dir,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: implementerVars,
@@ -241,7 +241,7 @@ describe("alias fallback tiers", () => {
       t.b.scriptResult(timeoutStop);
 
       const spec = {
-        target: resolveRole(t.runtime, "implementer"),
+        target: resolveTurn(t.runtime, "implementer", "implementer"),
         cwd: t.repo.dir,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: implementerVars,
@@ -254,7 +254,7 @@ describe("alias fallback tiers", () => {
       // Transient timeout sticks to nothing: the next turn restarts at the primary.
       const second = await runAgentTurn(t.runtime, {
         ...spec,
-        target: resolveRole(t.runtime, "implementer"),
+        target: resolveTurn(t.runtime, "implementer", "implementer"),
       });
       expect(second.record.stop).toEqual({ kind: "infra", cause: "timeout" });
       expect(t.a.calls).toHaveLength(2);
@@ -279,7 +279,7 @@ describe("alias fallback tiers", () => {
         });
 
         const spec = {
-          target: resolveRole(t.runtime, "implementer"),
+          target: resolveTurn(t.runtime, "implementer", "implementer"),
           cwd: t.repo.dir,
           meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
           vars: implementerVars,
@@ -290,7 +290,7 @@ describe("alias fallback tiers", () => {
         expect(t.runtime.exhaustedPools.size).toBe(0);
 
         // Next turn must start at the primary harness/model
-        const targetNext = resolveRole(t.runtime, "implementer");
+        const targetNext = resolveTurn(t.runtime, "implementer", "implementer");
         expect(targetNext.harness.id).toBe("a");
         expect(targetNext.model).toEqual({ id: "ma" });
         expect(targetNext.tierOffset).toBe(0);
@@ -330,7 +330,7 @@ describe("alias fallback tiers", () => {
       });
 
       const spec = {
-        target: resolveRole(runtime, "implementer", "alias1"),
+        target: resolveTurn(runtime, "implementer", "implementer", "alias1"),
         cwd: repo.dir,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: implementerVars,
@@ -341,7 +341,12 @@ describe("alias fallback tiers", () => {
       expect(runtime.exhaustedPools.has("pool-shared")).toBe(true);
 
       // alias2 also draws on pool-shared, so it skips its primary and starts on fallback
-      const target2 = resolveRole(runtime, "implementer", "alias2");
+      const target2 = resolveTurn(
+        runtime,
+        "implementer",
+        "implementer",
+        "alias2",
+      );
       expect(target2.harness.id).toBe("b");
       expect(target2.model).toEqual({ id: "mb2" });
       expect(target2.tierOffset).toBe(1);
@@ -362,7 +367,7 @@ describe("alias fallback tiers", () => {
       t.b.scriptResult(quota());
 
       const spec = {
-        target: resolveRole(t.runtime, "implementer"),
+        target: resolveTurn(t.runtime, "implementer", "implementer"),
         cwd: t.repo.dir,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: implementerVars,
@@ -374,7 +379,7 @@ describe("alias fallback tiers", () => {
       expect(t.runtime.exhaustedPools.has("b+mb")).toBe(true);
 
       // Every tier is exhausted: still tries last tier (b), rather than failing without a call
-      const target = resolveRole(t.runtime, "implementer");
+      const target = resolveTurn(t.runtime, "implementer", "implementer");
       expect(target.harness.id).toBe("b");
       expect(target.tierOffset).toBe(1);
       expect(target.tiers).toHaveLength(1);
@@ -449,7 +454,9 @@ describe("alias fallback tiers", () => {
       // Alpha's implement fell back to b; beta's started there.
       expect(a.calls).toHaveLength(1);
       expect(b.calls).toHaveLength(4);
-      expect(resolveRole(runtime, "implementer").harness.id).toBe("b");
+      expect(
+        resolveTurn(runtime, "implementer", "implementer").harness.id,
+      ).toBe("b");
     } finally {
       cleanupFlowRepo(repo);
     }

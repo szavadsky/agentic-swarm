@@ -1,14 +1,15 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { ZodType } from "zod";
 import yaml from "yaml";
+import type { ZodType } from "zod";
 import { git } from "../core/git/exec.js";
 import { writeTextAtomic } from "../core/records/io.js";
 import {
   configFilePaths,
   loadConfigs,
   processConfigSchema,
+  processOverrideSchema,
   repoConfigSchema,
   resolveGoalPaths,
   runConfigSchema,
@@ -438,6 +439,6 @@ export async function validateFile(
     case "run":
       return { findings: zodFindings(text, abs, runConfigSchema) };
     case "process":
-      return { findings: zodFindings(text, abs, processConfigSchema) };
+      return { findings: zodFindings(text, abs, processOverrideSchema) };
   }
 }

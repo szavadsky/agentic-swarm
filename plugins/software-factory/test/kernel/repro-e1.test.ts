@@ -28,7 +28,7 @@ import {
 import type { TmpRepo } from "../helpers/tmp-repo.js";
 import { task } from "./helpers.js";
 import { setupFlowRepo } from "./s2-helpers.js";
-import { withPlanRoleFallbacks } from "./fake-defaults.js";
+import { withKernelRoleFallbacks } from "./fake-defaults.js";
 
 /** Same construction as s2-helpers.makeRuntime, without the checkout recovery. */
 async function runtimeFor(repo: TmpRepo, goal: string): Promise<KernelRuntime> {
@@ -57,7 +57,7 @@ function worktreeList(repo: TmpRepo): string {
 }
 
 function fake(): Record<string, Harness> {
-  return { fake: withPlanRoleFallbacks(new FakeHarness({ id: "fake" })) };
+  return { fake: withKernelRoleFallbacks(new FakeHarness({ id: "fake" })) };
 }
 
 function addIntent(repo: TmpRepo, goal: string): void {

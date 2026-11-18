@@ -1,7 +1,7 @@
 import path from "node:path";
 import { runAgentTurn } from "./agent.js";
 import type { PlanReviewPack } from "./context-pack.js";
-import { resolveRole } from "./flow-context.js";
+import { boundaryTarget } from "./flow-context.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { restoreTurn, snapshotTurn } from "./pm.js";
 import { scriptMeta } from "./record.js";
@@ -22,8 +22,8 @@ async function recordMissing(
 }
 
 /**
- * One plan-reviewer turn after the architect's plan edit: a fresh session,
- * task-tier by default (the role alias), read-only. The findings are advisory:
+ * One plan-review turn after the architect's plan edit: a fresh session on the
+ * configured boundary alias, read-only. The findings are advisory:
  * a failed turn is recorded and the iteration continues; the next pack carries
  * whatever the reviewer delivered. Writes outside the outcome are discarded and
  * recorded, so the reviewer can only advise.
@@ -35,7 +35,7 @@ export async function runPlanReview(
   const planPath = path.join(runtime.store.goalDir, "plan.md");
   const snapshot = await snapshotTurn(runtime, planPath);
   const result = await runAgentTurn(runtime, {
-    target: resolveRole(runtime, "plan-reviewer", undefined, opts.iteration),
+    target: boundaryTarget(runtime, "planreview", opts.iteration),
     cwd: runtime.paths.goalCheckout,
     meta: { iteration: opts.iteration, step: PLAN_REVIEW_STEP, round: 1 },
     vars: {

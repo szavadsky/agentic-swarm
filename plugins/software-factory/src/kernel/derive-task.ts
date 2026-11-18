@@ -24,22 +24,29 @@ import type {
 export const DEFAULT_FLOWS: Record<string, FlowDefinition> = {
   "implement-review": {
     steps: [
-      { id: "implement", role: "implementer" },
+      { id: "implement", prompt: "implementer", alias: "implementer" },
       {
         id: "review",
-        role: "reviewer",
+        prompt: "reviewer",
+        alias: "reviewer",
         review: true,
         changeRequests: DEFAULT_CHANGE_REQUESTS,
       },
     ],
   },
   "just-implement": {
-    steps: [{ id: "implement", role: "implementer" }],
+    steps: [{ id: "implement", prompt: "implementer", alias: "implementer" }],
   },
   spike: {
     steps: [
-      { id: "implement", role: "implementer" },
-      { id: "review", role: "reviewer", review: true, changeRequests: 0 },
+      { id: "implement", prompt: "implementer", alias: "implementer" },
+      {
+        id: "review",
+        prompt: "reviewer",
+        alias: "reviewer",
+        review: true,
+        changeRequests: 0,
+      },
     ],
   },
 };

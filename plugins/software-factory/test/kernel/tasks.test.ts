@@ -311,7 +311,9 @@ Done when: refresh rotates the token.
   it("rejects an unknown flow with the dispatcher text", () => {
     const flows = {
       "implement-review": {
-        steps: [{ id: "implement", role: "implementer" }],
+        steps: [
+          { id: "implement", prompt: "implementer", alias: "implementer" },
+        ],
       },
     };
     expect(validateTaskFlows([task("a", { scope: ["x"] })], flows)).toEqual([]);

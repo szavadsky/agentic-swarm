@@ -2,17 +2,17 @@
 
 Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable = render error; unknown filter = render error). `{{ name }}` interpolates one value; `{% include 'partial-name' %}` inlines `prompts/partial-name.md`. Every prompt is stable text up to its final `## This turn` block; all turn variables live there so providers can cache the prefix. Renderer defaults also appear above the block, so the prefix is stable only within one checkout and launch.
 
-| prompt        | partials                                                                                                                   |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| architect     | `architect-body`, `calibration`, `outcome`, `verdict`                                                                      |
-| front         | `calibration`, `outcome`, `task-frontmatter`                                                                               |
-| pm            | `calibration`, `outcome`, `task-frontmatter`                                                                               |
-| implementer   | `implementer-body`, `clean-code`, `scope`, `calibration`, `outcome`                                                        |
-| reviewer      | `<author>-body` (`implementer-body` by default), `review-<author>` duties, `review-<author>-turn` inputs, `verdict`        |
-| plan-reviewer | the `reviewer` template with `author: architect`: `architect-body`, `review-architect`, `review-architect-turn`, `verdict` |
-| digest        | `calibration`, `outcome`                                                                                                   |
-| steward       | `clean-code`, `calibration`, `outcome`                                                                                     |
-| plan-checker  | `calibration`, `outcome`                                                                                                   |
+| prompt                 | partials                                                                                                                   |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| architect              | `architect-body`, `calibration`, `outcome`, `verdict`                                                                      |
+| front                  | `calibration`, `outcome`, `task-frontmatter`                                                                               |
+| pm                     | `calibration`, `outcome`, `task-frontmatter`                                                                               |
+| implementer            | `implementer-body`, `clean-code`, `scope`, `calibration`, `outcome`                                                        |
+| reviewer               | `<author>-body` (`implementer-body` by default), `review-<author>` duties, `review-<author>-turn` inputs, `verdict`        |
+| reviewer (plan review) | the `reviewer` template with `author: architect`: `architect-body`, `review-architect`, `review-architect-turn`, `verdict` |
+| digest                 | `calibration`, `outcome`                                                                                                   |
+| steward                | `clean-code`, `calibration`, `outcome`                                                                                     |
+| plan-checker           | `calibration`, `outcome`                                                                                                   |
 
 The shared definitions exist once as partials: `scope` (the predicted-area rule: out-of-area judgement, upscope condition, plan read-only), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract, shape rendered from the kernel outcome schema), `task-frontmatter` (the task-file frontmatter shape rendered from the kernel task schema, plus the configured task types and tiers; included by the authoring roles), `clean-code` (the code standard), `remarkable` (the remarkable definition), `verdict` (which step each of `verdict` and `decision` belongs to, for review and architect steps) and the role bodies `implementer-body` and `architect-body` (everything before the role's turn block; a reviewer includes its author's body by role name, so the plan review reuses the reviewer template over `architect-body`).
 
@@ -100,7 +100,7 @@ Renderer defaults live outside any `This turn` block and the renderer supplies t
 
 `reviewer.md` is the shared reviewer composition: an author-neutral intro, the
 author's body, the duties partial named by `author`, the verdict sentence, and
-the turn block common to every review. The plan-reviewer role renders it with
+the turn block common to every review. The plan-review boundary step (`planreview`) renders it with
 `author: architect`, which selects `architect-body`, `review-architect` and
 `review-architect-turn`; the task reviewer renders it with `author: implementer`,
 which selects `implementer-body`, `review-implementer` and
@@ -202,11 +202,11 @@ The digest scout appends loops, failures and interventions; it does not restate 
 
 ## delivery-repair.md
 
-The one in-session repair ask, rendered by the kernel when a turn delivers no outcome, no verdict or decision, or (architect) no plan. A repo may shadow it like any template. It is not a role prompt: it is rendered directly, never included. It includes `outcome` for the contract and, unless a bare done delivers, `verdict` for the verdict/decision usage line. Its `outcome_schema` is narrowed to the fields that turn delivers — the base shape, the role's reporting fields, and the one field its expectation gates — so a bare done is never asked for a verdict.
+The one in-session repair ask, rendered by the kernel when a turn delivers no outcome, no verdict or decision, or (architect) no plan. A repo may shadow it like any template. It is not a role prompt: it is rendered directly, never included. It includes `outcome` for the contract and, unless a bare done delivers, `verdict` for the verdict/decision usage line. Its `outcome_schema` is narrowed to the fields that turn delivers — the base shape, the prompt's reporting fields, and the one field its expectation gates — so a bare done is never asked for a verdict.
 
 | variable         | meaning                                                                                                             |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `role`           | the role whose turn missed its deliverable                                                                          |
+| `role`           | the prompt (the role) whose turn missed its deliverable                                                             |
 | `deliverable`    | the product the turn must deliver: plan edit or stop decision, outcome, verdict, task files, class/task/pack        |
 | `done_allowed`   | `true` when a bare `status: done` delivers (no verdict or decision required), else `false`                          |
 | `findings`       | the missing or invalid findings as `- ` bullet lines                                                                |

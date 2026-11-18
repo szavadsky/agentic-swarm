@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { SessionRef } from "../harness/types.js";
-import { resolveRole } from "./flow-context.js";
+import { boundaryTarget } from "./flow-context.js";
 import type { KernelRuntime, Outcome, StepRecord } from "./types.js";
 
 /**
@@ -65,12 +65,7 @@ export async function resumableSession(
     .sort((a, b) => a.seq - b.seq)
     .at(-1);
   if (!last?.session) return undefined;
-  const { harness, model } = resolveRole(
-    runtime,
-    "architect",
-    undefined,
-    iteration,
-  );
+  const { harness, model } = boundaryTarget(runtime, "architect", iteration);
   let resume = false;
   try {
     resume = (await harness.caps(model)).resume;

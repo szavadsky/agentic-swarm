@@ -11,19 +11,20 @@ import {
 } from "./baseline.js";
 import { configFilePaths } from "./config.js";
 import { type Finding, formatFindings } from "./findings.js";
+import { outcomeSchemaFor, outcomeSchemaNames } from "./outcome-schemas.js";
 import {
   type AliasContext,
   checkAlias,
   checkScouts,
   type ModelCatalog,
 } from "./preflight-aliases.js";
-import { outcomeSchemaFor, outcomeSchemaNames } from "./outcome-schemas.js";
-import type {
-  AliasConfig,
-  ArtifactStore,
-  ConfigBundle,
-  GoalPaths,
-  ProcessConfig,
+import {
+  type AliasConfig,
+  type ArtifactStore,
+  BOUNDARY_STEPS,
+  type ConfigBundle,
+  type GoalPaths,
+  type ProcessConfig,
 } from "./types.js";
 
 export type { ModelCatalog } from "./preflight-aliases.js";
@@ -59,11 +60,6 @@ export class PreflightError extends Error {
     this.findings = findings;
     this.report = report;
   }
-}
-
-function roleAlias(process: ProcessConfig, role: string): string | undefined {
-  const config = process.roles[role];
-  return config ? (config.alias ?? role) : undefined;
 }
 
 /**
@@ -112,25 +108,28 @@ function escalationFindings(
 }
 
 /**
- * Roles the kernel calls on every goal generation: architect, PM, steward and
- * both plan roles, plus every configured flow step.
+ * Exactly the aliases process config names, each with the step that names it:
+ * every boundary step, every flow step and every different-model follow-up.
+ * Nothing is derived from a role name, so a renamed alias is the only
+ * requirement.
  */
-function requiredRoles(process: ProcessConfig): Set<string> {
-  const roles = new Set([
-    "architect",
-    "pm",
-    "steward",
-    "plan-checker",
-    "plan-reviewer",
-  ]);
-  for (const flow of Object.values(process.flows)) {
-    for (const step of flow.steps) {
-      if (step.role) roles.add(step.role);
-    }
-    if (flow.followUp?.mode === "different-model" && flow.followUp.role)
-      roles.add(flow.followUp.role);
+function requiredAliases(process: ProcessConfig): Map<string, string> {
+  const refs = new Map<string, string>();
+  const note = (alias: string, ref: string): void => {
+    if (!refs.has(alias)) refs.set(alias, ref);
+  };
+  for (const step of BOUNDARY_STEPS) {
+    note(process.boundary[step].alias, `boundary step "${step}"`);
   }
-  return roles;
+  for (const [name, flow] of Object.entries(process.flows)) {
+    for (const step of flow.steps) {
+      if (step.alias) note(step.alias, `flow "${name}" step "${step.id}"`);
+    }
+    if (flow.followUp?.mode === "different-model" && flow.followUp.alias) {
+      note(flow.followUp.alias, `flow "${name}" follow-up`);
+    }
+  }
+  return refs;
 }
 
 function inside(child: string, parent: string): boolean {
@@ -226,24 +225,12 @@ export async function preflight(
   const files = configs.files ?? configFilePaths(paths.repoRoot);
   const findings: Finding[] = [];
 
-  const required = requiredRoles(configs.process);
-  for (const role of required) {
-    if (!configs.process.roles[role]) {
-      findings.push({
-        file: fs.existsSync(files.processOverride)
-          ? files.processOverride
-          : files.processDefault,
-        key: `roles.${role}`,
-        message: `required role "${role}" is not configured`,
-      });
-      continue;
-    }
-    const aliasName = roleAlias(configs.process, role)!;
-    if (!configs.run.aliases[aliasName]) {
+  for (const [alias, ref] of requiredAliases(configs.process)) {
+    if (!configs.run.aliases[alias]) {
       findings.push({
         file: files.run,
-        key: `aliases.${aliasName}`,
-        message: `required by role "${role}" but missing`,
+        key: `aliases.${alias}`,
+        message: `required by ${ref} but missing`,
       });
     }
   }

@@ -2,20 +2,20 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
+import {
+  installLspConfig,
+  turnLspConfigPath,
+} from "../../src/harness/omp/lsp.js";
 import {
   artifactLspConfig,
   artifactLspConfigPath,
   writeArtifactLsp,
 } from "../../src/kernel/artifact-lsp.js";
-import {
-  installLspConfig,
-  turnLspConfigPath,
-} from "../../src/harness/omp/lsp.js";
-import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { runGoal } from "../../src/kernel/launch.js";
 import { testPriceSource } from "../helpers/price-source.js";
 import { cleanup, makeGoal } from "./e2e-helpers.js";
-import { withPlanRoleFallbacks } from "./fake-defaults.js";
+import { withKernelRoleFallbacks } from "./fake-defaults.js";
 
 let root: string;
 let goalDir: string;
@@ -180,6 +180,7 @@ describe("launch provisioning", () => {
         "aliases:",
         "  architect: { harness: fake, model: fake-architect }",
         "  pm: { harness: fake, model: fake-pm }",
+        "  digest: { harness: fake, model: fake-digest }",
         "  implementer: { harness: fake, model: fake-impl }",
         "  reviewer: { harness: fake, model: fake-review }",
         "  steward: { harness: fake, model: fake-steward }",
@@ -191,7 +192,7 @@ describe("launch provisioning", () => {
       ].join("\n"),
     });
     try {
-      const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
+      const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
       harness.script(
         (req) =>
           fakeTurnResult(req, { stop: { kind: "infra", cause: "auth" } }),

@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { runAgentTurn } from "./agent.js";
-import { type RoleTarget, resolveRole } from "./flow-context.js";
-import { type Steer, postSteer, scanInbox } from "./mailbox.js";
+import { boundaryTarget, type TurnTarget } from "./flow-context.js";
+import { postSteer, type Steer, scanInbox } from "./mailbox.js";
 import { costText, DEFAULT_ROLE_BY_STEP, rolesByStep } from "./metrics.js";
 import { loadPriceTable } from "./openrouter.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
@@ -163,12 +163,12 @@ export async function writeLaunchDigest(
   const previous = records.filter((r) => r.iteration < iteration);
   if (previous.length === 0) return null;
 
-  // The scout is observability: without a digest alias the derived table below
-  // is the whole digest, and the launch must not fail. Check by presence, not
-  // by throwing — pre-flight deliberately does not require a digest alias.
-  let scoutTarget: RoleTarget | undefined;
+  // The scout is observability: a runtime without the digest alias (a test
+  // fixture, or a hand-built runtime) keeps the derived table as the whole
+  // digest instead of failing the launch.
+  let scoutTarget: TurnTarget | undefined;
   try {
-    scoutTarget = resolveRole(runtime, "digest", undefined, iteration);
+    scoutTarget = boundaryTarget(runtime, "digest", iteration);
   } catch {
     scoutTarget = undefined;
   }

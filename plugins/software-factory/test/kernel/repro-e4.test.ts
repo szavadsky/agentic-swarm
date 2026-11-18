@@ -30,6 +30,7 @@ function setupRepo(): { repo: TmpRepo; goalDir: string; taskDir: string } {
       "aliases:",
       "  architect: { harness: fake, model: fake-architect }",
       "  pm: { harness: fake, model: fake-pm }",
+      "  digest: { harness: fake, model: fake-digest }",
       "  implementer: { harness: fake, model: fake-impl }",
       "  reviewer: { harness: fake, model: fake-review }",
       "  steward: { harness: fake, model: fake-steward }",

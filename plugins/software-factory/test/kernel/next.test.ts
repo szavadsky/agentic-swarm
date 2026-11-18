@@ -8,14 +8,26 @@ const limits: Limits = {
   flows: {
     "implement-review": {
       steps: [
-        { id: "implement", role: "implementer" },
-        { id: "review", role: "reviewer", review: true, changeRequests: 2 },
+        { id: "implement", prompt: "implementer", alias: "implementer" },
+        {
+          id: "review",
+          prompt: "reviewer",
+          alias: "reviewer",
+          review: true,
+          changeRequests: 2,
+        },
       ],
     },
     spike: {
       steps: [
-        { id: "implement", role: "implementer" },
-        { id: "review", role: "reviewer", review: true, changeRequests: 0 },
+        { id: "implement", prompt: "implementer", alias: "implementer" },
+        {
+          id: "review",
+          prompt: "reviewer",
+          alias: "reviewer",
+          review: true,
+          changeRequests: 0,
+        },
       ],
     },
   },

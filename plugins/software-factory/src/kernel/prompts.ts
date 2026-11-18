@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { Liquid, type FS } from "liquidjs";
+import { type FS, Liquid } from "liquidjs";
 import { packageRoot } from "./config.js";
 import {
   outcomeSchemaVar,
@@ -249,17 +249,6 @@ export function loadPrompts(
       tiers: tierNamesVar(aliases),
     },
   });
-}
-
-export function renderRolePrompt(
-  library: PromptLibrary,
-  process: ProcessConfig,
-  role: string,
-  vars: Record<string, string>,
-): string {
-  const config = process.roles[role];
-  if (!config) throw new Error(`process config has no role "${role}"`);
-  return library.render(config.prompt, vars);
 }
 
 /** Last-call instruction rendered on the checks step's final fix turn. */

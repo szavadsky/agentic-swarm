@@ -10,7 +10,7 @@ function taskFile(slug: string, deps: string[]): string {
 
 /** A repo flow whose review step id is not one of the package defaults. */
 const CUSTOM_FLOW =
-  "flows:\n  custom:\n    steps:\n      - id: build\n        role: implementer\n      - id: audit\n        role: reviewer\n        review: true\n        changeRequests: 2\n";
+  "flows:\n  custom:\n    steps:\n      - id: build\n        prompt: implementer\n        alias: implementer\n      - id: audit\n        prompt: reviewer\n        alias: reviewer\n        review: true\n        changeRequests: 2\n";
 
 /** The fields inference reads from a record directory's started.yaml. */
 const STARTED = (step: string, round = 1): string =>

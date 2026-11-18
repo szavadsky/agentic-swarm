@@ -15,6 +15,7 @@ import {
 } from "../src/kernel/prompt-schema.js";
 import { loadPromptLibrary, loadPrompts } from "../src/kernel/prompts.js";
 import { parseTaskFile, taskFrontmatterSchema } from "../src/kernel/tasks.js";
+import type { ProcessConfig, RunConfig } from "../src/kernel/types.js";
 import {
   concernSchema,
   outcomeSchema,
@@ -27,7 +28,7 @@ import {
   stallRouteEntrySchema,
   steerRouteEntrySchema,
 } from "../src/kernel/types.js";
-import type { ProcessConfig, RunConfig } from "../src/kernel/types.js";
+import { TEST_BOUNDARY } from "./kernel/helpers.js";
 
 describe("prompts: PromptLibrary", () => {
   let dir: string;
@@ -72,7 +73,7 @@ describe("prompts: PromptLibrary", () => {
   it("lets the process config replace the calibration partial", () => {
     const process = {
       flows: {},
-      roles: {},
+      boundary: TEST_BOUNDARY,
       reminders: 1,
       calibration: "CUSTOM CALIBRATION",
     } as ProcessConfig;
@@ -80,7 +81,7 @@ describe("prompts: PromptLibrary", () => {
     expect(lib.render("calibration", {})).toBe("CUSTOM CALIBRATION");
     // Built-ins still render when the process config sets no calibration.
     const builtin = loadPrompts(
-      { flows: {}, roles: {}, reminders: 1 } as ProcessConfig,
+      { flows: {}, boundary: TEST_BOUNDARY, reminders: 1 } as ProcessConfig,
       dir,
       { run: {} as RunConfig },
     );
@@ -457,7 +458,7 @@ describe("prompts: schema defaults", () => {
       {
         flows: {},
         taskTypes,
-        roles: {},
+        boundary: TEST_BOUNDARY,
         reminders: 1,
       } as ProcessConfig,
       os.tmpdir(),

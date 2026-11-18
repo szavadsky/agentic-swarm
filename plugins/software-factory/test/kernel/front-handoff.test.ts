@@ -54,7 +54,12 @@ describe("front prompt handoff", () => {
       "plan-checker": { harness: "fake", model: "fake-check" },
       "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
     };
-    const { repo, goalDir } = setupFlowRepo({ aliases });
+    const { repo, goalDir } = setupFlowRepo({
+      aliases,
+      process: {
+        boundary: { front: { prompt: "front", alias: "front" } },
+      },
+    });
     try {
       const runtime = await makeRuntime(repo, "demo", {
         fake: new FakeHarness({ id: "fake" }),
@@ -133,7 +138,12 @@ describe("trivial session resume", () => {
   }
 
   it("resumes a first turn on the front session and a fix turn on the last front-alias session", async () => {
-    const { repo, goalDir } = setupFlowRepo({ aliases });
+    const { repo, goalDir } = setupFlowRepo({
+      aliases,
+      process: {
+        boundary: { front: { prompt: "front", alias: "front" } },
+      },
+    });
     try {
       const runtime = await makeRuntime(repo, "demo", {
         fake: new FakeHarness({ id: "fake" }),
@@ -185,7 +195,12 @@ describe("trivial session resume", () => {
   }, 60_000);
 
   it("parks with a cause when the front session's harness no longer serves the front alias", async () => {
-    const { repo, goalDir } = setupFlowRepo({ aliases });
+    const { repo, goalDir } = setupFlowRepo({
+      aliases,
+      process: {
+        boundary: { front: { prompt: "front", alias: "front" } },
+      },
+    });
     try {
       const runtime = await makeRuntime(repo, "demo", {
         fake: new FakeHarness({ id: "fake" }),

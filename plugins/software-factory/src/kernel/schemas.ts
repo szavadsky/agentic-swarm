@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import {
-  processConfigSchema,
+  processOverrideSchema,
   repoConfigSchema,
   runConfigSchema,
 } from "./config.js";
@@ -23,7 +23,7 @@ const kernelSchemas = {
   class: classSchema,
   repo: repoConfigSchema,
   run: runConfigSchema,
-  process: processConfigSchema,
+  process: processOverrideSchema,
 } satisfies Record<string, z.ZodType>;
 
 /**

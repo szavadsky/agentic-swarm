@@ -176,10 +176,11 @@ describe("KERNEL0 scenario 4 — infra stops and item turns", () => {
         flows: {
           "implement-review": {
             steps: [
-              { id: "implement", role: "implementer" },
+              { id: "implement", prompt: "implementer", alias: "implementer" },
               {
                 id: "review",
-                role: "reviewer",
+                prompt: "reviewer",
+                alias: "reviewer",
                 review: true,
                 changeRequests: 3,
               },

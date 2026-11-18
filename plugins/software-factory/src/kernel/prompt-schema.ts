@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { type OutcomeExpectation, expectationField } from "./outcome.js";
+import { expectationField, type OutcomeExpectation } from "./outcome.js";
 import { taskFrontmatterSchema } from "./tasks.js";
 import {
   type Outcome,
@@ -139,12 +139,12 @@ export function outcomeSchemaVar(
 const BASE_OUTCOME_FIELDS = ["status", "summary", "concerns", "forward"];
 
 /**
- * Reporting fields a role's turns deliver beyond the base shape and the one
+ * Reporting fields a prompt's turns deliver beyond the base shape and the one
  * field its expectation gates: the PM routes steers, stalls and plan-check
  * follow-ups, the checker reports a plan check, a standalone review answers
  * the upscope ask.
  */
-const ROLE_OUTCOME_FIELDS: Record<string, string[]> = {
+const PROMPT_OUTCOME_FIELDS: Record<string, string[]> = {
   architect: ["planReviewMarks"],
   implementer: ["replies"],
   pm: ["steerRoutes", "stallRoutes", "planCheckRoutes"],
@@ -158,7 +158,7 @@ const ROLE_OUTCOME_FIELDS: Record<string, string[]> = {
  * repair keeps the verdict, an architect repair the decision.
  */
 export function outcomeRepairSchemaVar(
-  role: string,
+  prompt: string,
   expectation: OutcomeExpectation,
   schema: z.ZodType<Outcome> = outcomeSchema,
 ): string {
@@ -166,7 +166,7 @@ export function outcomeRepairSchemaVar(
   return outcomeSchemaVar(
     [
       ...BASE_OUTCOME_FIELDS,
-      ...(ROLE_OUTCOME_FIELDS[role] ?? []),
+      ...(PROMPT_OUTCOME_FIELDS[prompt] ?? []),
       ...(delivered ? [delivered] : []),
     ],
     schema,

@@ -18,7 +18,7 @@ import {
 } from "./context-pack.js";
 import { derive } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
-import { compactSession, resolveRole } from "./flow-context.js";
+import { boundaryTarget, compactSession } from "./flow-context.js";
 import { runKeptLand } from "./integrate.js";
 import {
   collectSteerRoutes,
@@ -27,11 +27,11 @@ import {
   formatSteers,
   markProcessed,
   readHolds,
+  type Steer,
   scanInbox,
   steerProvenance,
   steerResponses,
   writeOutbox,
-  type Steer,
 } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { latestPlanCheck } from "./plan-check.js";
@@ -312,7 +312,7 @@ export async function runBoundary(
 
   const architectTurn = (resume: SessionRef | undefined) =>
     runAgentTurn(runtime, {
-      target: resolveRole(runtime, "architect", undefined, iteration),
+      target: boundaryTarget(runtime, "architect", iteration),
       cwd: runtime.paths.goalCheckout,
       meta: { iteration, step: "architect", round: 1 },
       vars: {

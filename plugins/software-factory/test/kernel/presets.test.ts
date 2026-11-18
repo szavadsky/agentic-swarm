@@ -1,13 +1,14 @@
 import { describe, expect, it } from "bun:test";
+import os from "node:os";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import type { ProcessConfig, RunConfig } from "../../src/kernel/types.js";
-import os from "node:os";
+import { TEST_BOUNDARY } from "./helpers.js";
 
 describe("presets", () => {
   it("uses the preset calibration when defined", () => {
     const process: ProcessConfig = {
       flows: {},
-      roles: {},
+      boundary: TEST_BOUNDARY,
       reminders: 1,
       calibration: "DEFAULT",
       presets: {
@@ -28,7 +29,7 @@ describe("presets", () => {
   it("uses the default calibration when preset is not defined", () => {
     const process: ProcessConfig = {
       flows: {},
-      roles: {},
+      boundary: TEST_BOUNDARY,
       reminders: 1,
       calibration: "DEFAULT",
       presets: {
@@ -49,7 +50,7 @@ describe("presets", () => {
   it("uses the preset calibration for each shipped preset", () => {
     const process: ProcessConfig = {
       flows: {},
-      roles: {},
+      boundary: TEST_BOUNDARY,
       reminders: 1,
       calibration: "DEFAULT",
       presets: {
@@ -78,7 +79,7 @@ describe("presets", () => {
   it("behaves correctly when presets are undefined or empty", () => {
     const processNoPresets: ProcessConfig = {
       flows: {},
-      roles: {},
+      boundary: TEST_BOUNDARY,
       reminders: 1,
       calibration: "DEFAULT",
     };

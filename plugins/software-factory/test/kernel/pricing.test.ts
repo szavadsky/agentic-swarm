@@ -708,6 +708,7 @@ describe("pricing in a launch", () => {
           "aliases:",
           "  architect: { harness: fake, model: paid/one }",
           "  pm: { harness: fake, model: paid/one }",
+          "  digest: { harness: fake, model: paid/one }",
           "  implementer: { harness: fake, model: paid/one }",
           "  reviewer: { harness: fake, model: paid/one }",
           "  steward: { harness: fake, model: fake-steward }",

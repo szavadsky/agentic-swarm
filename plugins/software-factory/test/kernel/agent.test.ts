@@ -4,17 +4,17 @@ import os from "node:os";
 import path from "node:path";
 import { Repo } from "../../src/core/git/repo.js";
 import {
-  FakeHarness,
   emptyUsage,
+  FakeHarness,
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
 import type { SessionRef } from "../../src/harness/types.js";
 import { runAgentTurn } from "../../src/kernel/agent.js";
 import { renderContextPack } from "../../src/kernel/context-pack.js";
 import { derive } from "../../src/kernel/derive.js";
-import { countOutcomeRepairs } from "../../src/kernel/metrics.js";
-import { resolveRole } from "../../src/kernel/flow-context.js";
+import { boundaryTarget, resolveTurn } from "../../src/kernel/flow-context.js";
 import { frontClassTypesVar } from "../../src/kernel/front.js";
+import { countOutcomeRepairs } from "../../src/kernel/metrics.js";
 import { writePriceCache } from "../../src/kernel/openrouter.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import { appendPark, parkLaunchKind } from "../../src/kernel/record.js";
@@ -26,18 +26,12 @@ import type {
   RepoConfig,
   RunConfig,
 } from "../../src/kernel/types.js";
-import { task } from "./helpers.js";
+import { TEST_BOUNDARY, task } from "./helpers.js";
 
 function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
   const process: ProcessConfig = {
     flows: {},
-    roles: {
-      architect: { prompt: "architect" },
-      pm: { prompt: "pm" },
-      implementer: { prompt: "implementer" },
-      reviewer: { prompt: "reviewer" },
-      front: { prompt: "front" },
-    },
+    boundary: TEST_BOUNDARY,
     reminders: 1,
   };
   const repo: RepoConfig = {
@@ -133,7 +127,7 @@ describe("agent turn outcome delivery", () => {
     });
 
     const result = await runAgentTurn(runtime, {
-      target: resolveRole(runtime, "architect"),
+      target: boundaryTarget(runtime, "architect"),
       cwd: root,
       meta: { iteration: 1, step: "architect", round: 1 },
       vars: { ...vars, plan_path: planPath },
@@ -180,7 +174,7 @@ describe("agent turn outcome delivery", () => {
     });
 
     const result = await runAgentTurn(runtime, {
-      target: resolveRole(runtime, "architect"),
+      target: boundaryTarget(runtime, "architect"),
       cwd: root,
       meta: { iteration: 1, step: "architect", round: 1 },
       vars: { ...vars, plan_path: planPath },
@@ -210,7 +204,7 @@ describe("agent turn outcome delivery", () => {
     fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
 
     const result = await runAgentTurn(runtime, {
-      target: resolveRole(runtime, "architect"),
+      target: boundaryTarget(runtime, "architect"),
       cwd: root,
       meta: { iteration: 1, step: "architect", round: 1 },
       vars,
@@ -234,7 +228,7 @@ describe("agent turn outcome delivery", () => {
     );
 
     const result = await runAgentTurn(runtime, {
-      target: resolveRole(runtime, "architect"),
+      target: boundaryTarget(runtime, "architect"),
       cwd: root,
       meta: { iteration: 1, step: "architect", round: 1 },
       vars,
@@ -250,8 +244,14 @@ describe("agent turn outcome delivery", () => {
   describe("resumed overflow", () => {
     const flow: FlowDefinition = {
       steps: [
-        { id: "implement", role: "implementer" },
-        { id: "review", role: "reviewer", review: true, changeRequests: 2 },
+        { id: "implement", prompt: "implementer", alias: "implementer" },
+        {
+          id: "review",
+          prompt: "reviewer",
+          alias: "reviewer",
+          review: true,
+          changeRequests: 2,
+        },
       ],
     };
     const flows = { "implement-review": flow };
@@ -334,7 +334,7 @@ describe("agent turn outcome delivery", () => {
       });
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
         vars: implementerVars,
@@ -388,7 +388,7 @@ describe("agent turn outcome delivery", () => {
       });
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
         vars: implementerVars,
@@ -412,7 +412,7 @@ describe("agent turn outcome delivery", () => {
       );
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: implementerVars,
@@ -443,7 +443,7 @@ describe("agent turn outcome delivery", () => {
       );
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
         vars: implementerVars,
@@ -473,7 +473,7 @@ describe("agent turn outcome delivery", () => {
       );
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
         vars: implementerVars,
@@ -505,7 +505,7 @@ describe("agent turn outcome delivery", () => {
         return fakeTurnResult(req);
       });
       return runAgentTurn(runtime, {
-        target: resolveRole(runtime, "architect"),
+        target: boundaryTarget(runtime, "architect"),
         cwd: root,
         meta: { iteration: 1, step: "architect", round: 1 },
         vars,
@@ -597,7 +597,7 @@ describe("delivery guard", () => {
       });
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "reviewer"),
+        target: resolveTurn(runtime, "reviewer", "reviewer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "review", round: 1 },
         vars: reviewerVars,
@@ -634,7 +634,7 @@ describe("delivery guard", () => {
       }
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "reviewer"),
+        target: resolveTurn(runtime, "reviewer", "reviewer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "review", round: 3 },
         vars: {
@@ -674,7 +674,7 @@ describe("delivery guard", () => {
       });
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: implementerVars,
@@ -708,7 +708,7 @@ describe("delivery guard", () => {
       });
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "architect"),
+        target: boundaryTarget(runtime, "architect"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "architect", round: 1 },
         vars,
@@ -737,7 +737,7 @@ describe("delivery guard", () => {
       fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "pm"),
+        target: boundaryTarget(runtime, "pm"),
         cwd: root,
         meta: { iteration: 1, step: "pm", round: 1 },
         vars: pmVars,
@@ -767,7 +767,7 @@ describe("delivery guard", () => {
       fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "front"),
+        target: boundaryTarget(runtime, "front"),
         cwd: root,
         meta: { iteration: 1, step: "front", round: 1 },
         vars: frontVars,
@@ -794,7 +794,7 @@ describe("delivery guard", () => {
       const planPath = path.join(runtime.store.goalDir, "plan.md");
       const turn = () =>
         runAgentTurn(runtime, {
-          target: resolveRole(runtime, "architect"),
+          target: boundaryTarget(runtime, "architect"),
           cwd: root,
           meta: { iteration: 1, step: "architect", round: 1 },
           vars: { ...vars, plan_path: planPath },
@@ -855,7 +855,7 @@ describe("delivery guard", () => {
       fs.writeFileSync(planPath, "# Plan\n", "utf8");
       const turn = () =>
         runAgentTurn(runtime, {
-          target: resolveRole(runtime, "architect"),
+          target: boundaryTarget(runtime, "architect"),
           cwd: root,
           meta: { iteration: 1, step: "architect", round: 1 },
           vars: { ...vars, plan_path: planPath },
@@ -938,7 +938,7 @@ describe("delivery guard", () => {
       });
 
       const edited = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "architect"),
+        target: boundaryTarget(runtime, "architect"),
         cwd: root,
         meta: { iteration: 1, step: "architect", round: 1 },
         vars: { ...vars, plan_path: planPath },
@@ -947,7 +947,7 @@ describe("delivery guard", () => {
       expect(edited.outcome?.decision).toBe("continue");
       fs.rmSync(planPath);
       const created = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "architect"),
+        target: boundaryTarget(runtime, "architect"),
         cwd: root,
         meta: { iteration: 2, step: "architect", round: 1 },
         vars: { ...vars, plan_path: planPath },
@@ -983,7 +983,7 @@ describe("delivery guard", () => {
       });
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "architect"),
+        target: boundaryTarget(runtime, "architect"),
         cwd: root,
         meta: { iteration: 1, step: "architect", round: 1 },
         vars: { ...vars, plan_path: planPath },
@@ -1017,7 +1017,7 @@ describe("delivery guard", () => {
       });
 
       const doneTurn = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "architect"),
+        target: boundaryTarget(runtime, "architect"),
         cwd: root,
         meta: { iteration: 1, step: "architect", round: 1 },
         vars: { ...vars, plan_path: planPath },
@@ -1025,7 +1025,7 @@ describe("delivery guard", () => {
       });
       expect(doneTurn.outcome?.decision).toBe("done");
       const blockedTurn = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "architect"),
+        target: boundaryTarget(runtime, "architect"),
         cwd: root,
         meta: { iteration: 2, step: "architect", round: 1 },
         vars: { ...vars, plan_path: planPath },
@@ -1096,7 +1096,7 @@ describe("agent turn prompt size", () => {
     });
 
     const result = await runAgentTurn(runtime, {
-      target: resolveRole(runtime, "implementer"),
+      target: resolveTurn(runtime, "implementer", "implementer"),
       cwd: root,
       meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
       vars: implementerVars,
@@ -1128,7 +1128,7 @@ describe("agent turn prompt size", () => {
       return fakeTurnResult(req);
     });
     const architect = await runAgentTurn(runtime, {
-      target: resolveRole(runtime, "architect"),
+      target: boundaryTarget(runtime, "architect"),
       cwd: root,
       meta: { iteration: 1, step: "architect", round: 1 },
       vars,
@@ -1141,7 +1141,7 @@ describe("agent turn prompt size", () => {
       return fakeTurnResult(req);
     });
     const pm = await runAgentTurn(runtime, {
-      target: resolveRole(runtime, "pm"),
+      target: boundaryTarget(runtime, "pm"),
       cwd: root,
       meta: { iteration: 1, step: "pm", round: 1 },
       vars: pmVars,
@@ -1173,7 +1173,7 @@ describe("bounded repairs", () => {
       fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: implementerVars,
@@ -1199,7 +1199,7 @@ describe("bounded repairs", () => {
       });
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: implementerVars,
@@ -1229,7 +1229,7 @@ describe("bounded repairs", () => {
       });
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: implementerVars,
@@ -1256,7 +1256,7 @@ describe("bounded repairs", () => {
       });
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: implementerVars,
@@ -1290,7 +1290,7 @@ describe("bounded repairs", () => {
       });
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: implementerVars,
@@ -1317,7 +1317,7 @@ describe("bounded repairs", () => {
     try {
       fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
       const zero = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: implementerVars,
@@ -1330,7 +1330,7 @@ describe("bounded repairs", () => {
       fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
       fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
       const one = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "b", step: "implement", round: 1 },
         vars: implementerVars,
@@ -1351,7 +1351,7 @@ describe("bounded repairs", () => {
         fakeTurnResult(req, { stop: { kind: "refusal", details: "no" } }),
       );
       const refused = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: implementerVars,
@@ -1364,7 +1364,7 @@ describe("bounded repairs", () => {
         fakeTurnResult(req, { stop: { kind: "cancelled" } }),
       );
       const cancelled = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
         vars: implementerVars,
@@ -1386,7 +1386,7 @@ describe("bounded repairs", () => {
       );
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: implementerVars,
@@ -1433,7 +1433,7 @@ describe("bounded repairs", () => {
       });
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "architect"),
+        target: boundaryTarget(runtime, "architect"),
         cwd: root,
         meta: { iteration: 1, step: "architect", round: 1 },
         vars: { ...vars, plan_path: planPath },
@@ -1494,7 +1494,7 @@ describe("repair findings and launch kinds", () => {
       });
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: implementerVars,
@@ -1527,7 +1527,7 @@ describe("repair findings and launch kinds", () => {
       );
 
       const result = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: implementerVars,
@@ -1544,7 +1544,7 @@ describe("repair findings and launch kinds", () => {
   it("marks fallback hops as glitches", async () => {
     const { root, fake, runtime } = await setup();
     try {
-      const base = resolveRole(runtime, "implementer");
+      const base = resolveTurn(runtime, "implementer", "implementer");
       const target = {
         ...base,
         tiers: [
@@ -1580,7 +1580,7 @@ describe("repair findings and launch kinds", () => {
     for (const cause of ["timeout", "rate", "crash"] as const) {
       const { root, fake, runtime } = await setup();
       try {
-        const base = resolveRole(runtime, "implementer");
+        const base = resolveTurn(runtime, "implementer", "implementer");
         const target = {
           ...base,
           tiers: [
@@ -1623,7 +1623,7 @@ describe("repair findings and launch kinds", () => {
         return fakeTurnResult(req);
       });
       const changes = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "reviewer"),
+        target: resolveTurn(runtime, "reviewer", "reviewer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "review", round: 1 },
         vars: reviewerVars,
@@ -1636,7 +1636,7 @@ describe("repair findings and launch kinds", () => {
         return fakeTurnResult(req);
       });
       const failed = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
         vars: implementerVars,
@@ -1647,7 +1647,7 @@ describe("repair findings and launch kinds", () => {
       fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
       fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
       const exhausted = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "b", step: "implement", round: 1 },
         vars: implementerVars,
@@ -1666,7 +1666,7 @@ describe("repair findings and launch kinds", () => {
       runtime.configs.process.reminders = 0;
       fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
       const none = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
         vars: implementerVars,
@@ -1683,7 +1683,7 @@ describe("repair findings and launch kinds", () => {
         return fakeTurnResult(req);
       });
       const two = await runAgentTurn(runtime, {
-        target: resolveRole(runtime, "implementer"),
+        target: resolveTurn(runtime, "implementer", "implementer"),
         cwd: root,
         meta: { iteration: 1, slug: "b", step: "implement", round: 1 },
         vars: implementerVars,

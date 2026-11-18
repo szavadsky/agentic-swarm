@@ -185,7 +185,6 @@ Create delta.txt.
           "not a task file\n",
           "utf8",
         );
-        addAlias(repo, "digest", "fake-digest");
 
         const second = new FakeHarness({ id: "fake" });
         let pmSawDigest = false;
@@ -320,7 +319,6 @@ Create delta.txt.
               'merge failed: branch "factory-task/demo/beta" does not exist',
           },
         );
-        addAlias(repo, "digest", "fake-digest");
 
         const second = new FakeHarness({ id: "fake" });
         queueDigestSteer(second);

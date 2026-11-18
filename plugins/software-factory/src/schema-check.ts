@@ -1,17 +1,18 @@
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
-import { z } from "zod";
+import type { z } from "zod";
 import {
   loadProcessConfig,
   processConfigSchema,
+  processOverrideSchema,
   repoConfigSchema,
   runConfigSchema,
 } from "./kernel/config.js";
-import { parseTaskFile, validateTaskGraph } from "./kernel/tasks.js";
-import { parseOutcome } from "./kernel/outcome.js";
-import { holdFileSchema } from "./kernel/mailbox.js";
 import { classSchema } from "./kernel/flow-context.js";
+import { holdFileSchema } from "./kernel/mailbox.js";
+import { parseOutcome } from "./kernel/outcome.js";
+import { parseTaskFile, validateTaskGraph } from "./kernel/tasks.js";
 import type { TaskTypeDefinition } from "./kernel/types.js";
 
 let failed = false;
@@ -95,7 +96,7 @@ if (fs.existsSync(treeFactoryDir)) {
   else missing.push(treeFiles.run);
 
   if (fs.existsSync(treeFiles.processOverride))
-    validateYamlFile(treeFiles.processOverride, processConfigSchema);
+    validateYamlFile(treeFiles.processOverride, processOverrideSchema);
 } else {
   missing.push(`${treeFactoryDir} (tree-level: repo/run config)`);
 }

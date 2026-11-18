@@ -8,6 +8,7 @@ import { z } from "zod";
 import { acpxConfigSchema } from "../harness/acpx/config.js";
 import { type Finding, formatFindings } from "./findings.js";
 import type {
+  BoundaryStep,
   ConfigBundle,
   ConfigFiles,
   GoalPaths,
@@ -16,7 +17,7 @@ import type {
   RepoConfig,
   RunConfig,
 } from "./types.js";
-import { DEFAULT_TIMEOUTS } from "./types.js";
+import { BOUNDARY_STEPS, DEFAULT_TIMEOUTS } from "./types.js";
 
 const packageRoot = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -52,6 +53,11 @@ export const repoConfigSchema = z
   })
   .strict();
 
+/** One step's prompt template and run-config alias. */
+export const turnSchema = z
+  .object({ prompt: z.string().min(1), alias: z.string().min(1) })
+  .strict();
+
 /** One flow step; `review` marks the step that consumes a review round. */
 export const flowStepSchema = z
   .object({
@@ -62,25 +68,39 @@ export const flowStepSchema = z
         /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/,
         "step id must be a simple name (no path separators)",
       ),
-    role: z.string().min(1).optional(),
+    prompt: z.string().min(1).optional(),
+    alias: z.string().min(1).optional(),
     review: z.boolean().default(false),
     /** Review and checks steps: change requests honored before the last call. */
     changeRequests: z.number().int().nonnegative().optional(),
   })
   .strict()
-  .refine((step) => step.id === "checks" || step.role !== undefined, {
-    message: "role is required on flow steps other than checks",
-    path: ["role"],
-  });
+  .refine(
+    (step) =>
+      step.id === "checks" ||
+      (step.prompt !== undefined && step.alias !== undefined),
+    {
+      message: "a step other than checks needs a prompt and an alias",
+      path: ["prompt"],
+    },
+  );
 
 export const followUpSchema = z
   .object({
     mode: z
       .enum(["same-session", "de-novo", "different-model"])
       .default("same-session"),
-    role: z.string().min(1).optional(),
+    alias: z.string().min(1).optional(),
   })
-  .default({ mode: "same-session" });
+  .strict()
+  .default({ mode: "same-session" })
+  .refine(
+    (followUp) => followUp.mode !== "different-model" || !!followUp.alias,
+    {
+      message: "follow-up mode different-model needs an alias",
+      path: ["alias"],
+    },
+  );
 
 export const flowSchema = z
   .object({
@@ -102,22 +122,30 @@ export const taskTypeSchema = z
   })
   .strict();
 
+/** Every boundary step names its prompt and alias; unknown steps are refused. */
+export const boundarySchema = z
+  .object(
+    Object.fromEntries(
+      BOUNDARY_STEPS.map((step) => [step, turnSchema]),
+    ) as Record<BoundaryStep, typeof turnSchema>,
+  )
+  .strict();
+
+/** A repo override may retarget one boundary step without restating the rest. */
+export const boundaryOverrideSchema = z
+  .object(
+    Object.fromEntries(
+      BOUNDARY_STEPS.map((step) => [step, turnSchema.optional()]),
+    ) as Record<BoundaryStep, z.ZodOptional<typeof turnSchema>>,
+  )
+  .strict();
+
 /** Process layer: package default deep-merged with an optional repo override. */
 export const processConfigSchema = z
   .object({
     flows: z.record(z.string(), flowSchema).default({}),
     taskTypes: z.record(z.string(), taskTypeSchema).default({}),
-    roles: z
-      .record(
-        z.string(),
-        z
-          .object({
-            prompt: z.string().min(1),
-            alias: z.string().min(1).optional(),
-          })
-          .strict(),
-      )
-      .default({}),
+    boundary: boundarySchema,
     reminders: z.number().int().nonnegative().default(1),
     calibration: z.string().optional(),
     promptsDir: z.string().min(1).optional(),
@@ -133,6 +161,16 @@ export const processConfigSchema = z
       .optional(),
   })
   .strict();
+
+/**
+ * A repo process override on its own: every top-level block the package
+ * default already supplies is optional here, and boundary entries merge one by
+ * one. The merged layer parses with `processConfigSchema`, so an override that
+ * leaves a boundary step out still resolves the package default.
+ */
+export const processOverrideSchema = processConfigSchema.extend({
+  boundary: boundaryOverrideSchema.optional(),
+});
 
 /** Run layer: not tracked; aliases, price ids, limits, session store, scout pin. */
 export const fallbackSchema = z
@@ -431,26 +469,13 @@ function processLayer(
     findings,
   );
   if (!processData) return undefined;
-  for (const [name, flow] of Object.entries(processData.flows)) {
-    if (flow.followUp?.mode === "different-model" && !flow.followUp.role) {
-      findings.push({
-        file: processFileFor(
-          overrideLayer.data,
-          { path: ["flows", name] },
-          files,
-        ),
-        key: `flows.${name}.followUp.role`,
-        message: "follow-up mode different-model needs a role",
-      });
-    }
-  }
   return processData as ProcessConfig;
 }
 
 /**
  * Loads the three layers into one report. Missing files take schema defaults;
- * a missing run config leaves aliases empty so pre-flight names the roles
- * instead of inventing a harness.
+ * a missing run config leaves aliases empty so pre-flight names the aliases
+ * the process config requires instead of inventing a harness.
  */
 export function loadConfigs(
   repoRoot: string,

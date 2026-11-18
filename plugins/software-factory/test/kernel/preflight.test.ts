@@ -24,6 +24,7 @@ import { task } from "./helpers.js";
 const RUN_HEAD = `aliases:
   architect: { harness: fake, model: arch, effort: highest }
   pm: { harness: fake, model: pm }
+  digest: { harness: fake, model: digest }
   implementer: { harness: fake, model: impl }
   reviewer: { harness: fake, model: rev }
   steward: { harness: fake, model: steward }
@@ -218,10 +219,10 @@ describe("pre-flight", () => {
     }
   });
 
-  it("reports an alias missing for a required role with file and key", async () => {
+  it("reports a renamed boundary alias missing from the run config", async () => {
     const f = await fixture();
     try {
-      f.configs.process.roles.architect = {
+      f.configs.process.boundary.architect = {
         prompt: "architect",
         alias: "boss",
       };
@@ -233,30 +234,54 @@ describe("pre-flight", () => {
         }),
       );
       expect(err.report).toContain("aliases.boss");
+      expect(err.report).toContain('boundary step "architect"');
       expect(err.report).toContain(".factory/run.yaml");
     } finally {
       f.repo.cleanup();
     }
   });
 
-  for (const role of ["plan-checker", "plan-reviewer"]) {
-    it(`refuses a missing ${role} alias before a plan exists`, async () => {
+  for (const [step, alias] of [
+    ["plancheck", "plan-checker"],
+    ["planreview", "plan-reviewer"],
+  ] as const) {
+    it(`refuses the missing ${alias} alias its boundary step names`, async () => {
       const f = await fixture();
       try {
-        delete f.configs.run.aliases[role];
+        delete f.configs.run.aliases[alias];
         const err = await refusal(f.input);
         expect(err.findings).toContainEqual({
           file: path.join(f.repo.dir, ".factory/run.yaml"),
-          key: `aliases.${role}`,
-          message: `required by role "${role}" but missing`,
+          key: `aliases.${alias}`,
+          message: `required by boundary step "${step}" but missing`,
         });
-        expect(err.report).toContain(`aliases.${role}`);
-        expect(err.report).toContain(`role "${role}"`);
+        expect(err.report).toContain(`aliases.${alias}`);
+        expect(err.report).toContain(`boundary step "${step}"`);
       } finally {
         f.repo.cleanup();
       }
     });
   }
+
+  it("requires only the aliases process config names, not role names", async () => {
+    const f = await fixture();
+    try {
+      // The PM and front boundaries name `escalation`; the role names `pm` and
+      // `front` are not required, so removing them changes nothing.
+      f.configs.process.boundary.pm = { prompt: "pm", alias: "escalation" };
+      f.configs.process.boundary.front = {
+        prompt: "front",
+        alias: "escalation",
+      };
+      f.configs.run.aliases.escalation = { harness: "fake", model: "esc" };
+      delete f.configs.run.aliases.pm;
+      const result = await preflight(f.input);
+      expect(result.aliases.architect).toBe("max");
+      expect(f.configs.run.aliases.front).toBeUndefined();
+    } finally {
+      f.repo.cleanup();
+    }
+  });
 
   it("refuses an effort level the model does not accept", async () => {
     const f = await fixture(

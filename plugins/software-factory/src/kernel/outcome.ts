@@ -2,6 +2,7 @@ import fs from "node:fs";
 import yaml from "yaml";
 import type { z } from "zod";
 import {
+  type BoundaryStep,
   type FlowDefinition,
   type FlowStep,
   type Outcome,
@@ -137,7 +138,7 @@ export const KERNEL_TURN_STEPS = {
   planreview: "any",
   pm: "any",
   steward: "any",
-} as const satisfies Record<string, OutcomeExpectation>;
+} as const satisfies Record<BoundaryStep, OutcomeExpectation>;
 
 export type KernelTurnStep = keyof typeof KERNEL_TURN_STEPS;
 

@@ -4,19 +4,19 @@ import yaml from "yaml";
 import { writeTextAtomic } from "../core/records/io.js";
 import type { Stop } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
-import { resolveRole } from "./flow-context.js";
-import { KERNEL_TURN_STEPS } from "./outcome.js";
+import { boundaryTarget, type TurnTarget } from "./flow-context.js";
 import {
   expireHold,
   formatSteerTurn,
   holdsDir,
   markProcessed,
   planCheckProvenance,
+  type Steer,
   stallProvenance,
   steerProvenance,
   writeOutbox,
-  type Steer,
 } from "./mailbox.js";
+import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { appendCancel, appendPark, scriptMeta } from "./record.js";
 import {
   doneWhen,
@@ -34,8 +34,8 @@ import type {
   StallDecision,
   StallRouteEntry,
   State,
-  StepRecord,
   SteerRoute,
+  StepRecord,
   TaskFile,
   TaskStatus,
   TaskTypeDefinition,
@@ -413,7 +413,7 @@ interface RungStep {
 function rungSteps(runtime: KernelRuntime): RungStep[] {
   const chain: string[] = [];
   const seen = new Set<string>();
-  let name: string | undefined = resolveRole(runtime, "pm").alias;
+  let name: string | undefined = boundaryTarget(runtime, "pm").alias;
   while (name) {
     if (seen.has(name)) {
       throw new Error(`PM escalation cycle: ${[...seen, name].join(" -> ")}`);
@@ -461,7 +461,7 @@ function failureReasons(
 
 function ladderNote(
   rung: { alias: string; mandate: PmMandate },
-  target: ReturnType<typeof resolveRole>,
+  target: TurnTarget,
   failure: string[],
 ): string {
   const notes: string[] = [];
@@ -502,7 +502,7 @@ export async function runPm(
   let failure: string[] = [];
 
   for (const [index, rung] of rungSteps(runtime).entries()) {
-    const target = resolveRole(runtime, "pm", rung.alias, opts.iteration);
+    const target = boundaryTarget(runtime, "pm", opts.iteration, rung.alias);
     const round = index + 1;
     const { tasks } = parseTasks(
       await readTaskTexts(runtime),
@@ -573,7 +573,7 @@ export async function runPm(
 
 function steerLadderNote(
   rung: { alias: string; mandate: PmMandate },
-  target: ReturnType<typeof resolveRole>,
+  target: TurnTarget,
   failure: string[],
 ): string {
   const notes: string[] = [];
@@ -865,7 +865,7 @@ export async function runSteerPm(
   let failure: string[] = [];
 
   for (const [index, rung] of rungSteps(runtime).entries()) {
-    const target = resolveRole(runtime, "pm", rung.alias, opts.iteration);
+    const target = boundaryTarget(runtime, "pm", opts.iteration, rung.alias);
     const round = index + 1;
     const { tasks } = parseTasks(
       await readTaskTexts(runtime),
@@ -1054,7 +1054,7 @@ function slugFactLines(
 
 function stallLadderNote(
   rung: { alias: string; mandate: PmMandate },
-  target: ReturnType<typeof resolveRole>,
+  target: TurnTarget,
   failure: string[],
 ): string {
   const notes: string[] = [];
@@ -1415,7 +1415,7 @@ export async function runStallPm(
   let failure: string[] = [];
 
   for (const [index, rung] of rungSteps(runtime).entries()) {
-    const target = resolveRole(runtime, "pm", rung.alias, opts.iteration);
+    const target = boundaryTarget(runtime, "pm", opts.iteration, rung.alias);
     const round = index + 1;
     const { tasks } = parseTasks(
       await readTaskTexts(runtime),
@@ -1558,7 +1558,7 @@ async function planCheckPmBrief(
 
 function planCheckLadderNote(
   rung: { alias: string; mandate: PmMandate },
-  target: ReturnType<typeof resolveRole>,
+  target: TurnTarget,
   failure: string[],
 ): string {
   const notes: string[] = [];
@@ -1823,7 +1823,7 @@ export async function runPlanCheckPm(
   let failure: string[] = [];
 
   for (const [index, rung] of rungSteps(runtime).entries()) {
-    const target = resolveRole(runtime, "pm", rung.alias, opts.iteration);
+    const target = boundaryTarget(runtime, "pm", opts.iteration, rung.alias);
     const round = index + 1;
     const { tasks } = parseTasks(
       await readTaskTexts(runtime),

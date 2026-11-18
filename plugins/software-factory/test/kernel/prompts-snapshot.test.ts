@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
-import path from "node:path";
 import os from "node:os";
+import path from "node:path";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import { packageRoot } from "../../src/kernel/config.js";
 import { promptVars } from "../../src/kernel/flow-context.js";
@@ -13,12 +13,12 @@ import {
   tierNamesVar,
 } from "../../src/kernel/prompt-schema.js";
 import { loadPromptLibrary, loadPrompts } from "../../src/kernel/prompts.js";
-import type { ProcessConfig, RunConfig } from "../../src/kernel/types.js";
 import {
   formatFixDispositions,
   formatReviewFindings,
 } from "../../src/kernel/record.js";
-import { rec, task } from "./helpers.js";
+import type { ProcessConfig, RunConfig } from "../../src/kernel/types.js";
+import { rec, TEST_BOUNDARY, task } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -170,34 +170,26 @@ function library() {
 }
 
 function processConfig(): ProcessConfig {
-  return {
-    flows: {},
-    roles: Object.fromEntries(
-      Object.keys(ROLES).map((role) => [role, { prompt: role }]),
-    ),
-    reminders: 1,
-  };
+  return { flows: {}, boundary: TEST_BOUNDARY, reminders: 1 };
 }
 
 describe("role prompts", () => {
   for (const [role, vars] of Object.entries(ROLES)) {
     it(`renders ${role} from exactly its documented variables`, () => {
       const lib = library();
-      const placeholders = new Set(
-        lib.placeholders(processConfig().roles[role]!.prompt, vars),
-      );
+      const placeholders = new Set(lib.placeholders(role, vars));
       expect([...placeholders].sort()).toEqual(Object.keys(vars).sort());
 
-      const rendered = lib.render(processConfig().roles[role]!.prompt, vars);
+      const rendered = lib.render(role, vars);
       expect(rendered).toMatchSnapshot(role);
       expect(rendered).not.toContain("{{");
 
       for (const name of placeholders) {
         const missing = { ...vars };
         delete missing[name];
-        expect(() =>
-          lib.render(processConfig().roles[role]!.prompt, missing),
-        ).toThrow("Missing required prompt variables");
+        expect(() => lib.render(role, missing)).toThrow(
+          "Missing required prompt variables",
+        );
       }
     });
   }
@@ -205,10 +197,7 @@ describe("role prompts", () => {
   it("keeps role text out of a separate system channel", () => {
     // The harness contract has `system`, but OpenCode has no system flag; role
     // identity must therefore live in the rendered prompt itself (KERNEL0 S3).
-    const rendered = library().render(
-      processConfig().roles.architect!.prompt,
-      ROLES.architect!,
-    );
+    const rendered = library().render("architect", ROLES.architect!);
     expect(rendered.startsWith("You are the architect")).toBe(true);
   });
 });
@@ -461,9 +450,7 @@ describe("preset snapshots", () => {
       it(`renders ${role} with ${preset} preset`, () => {
         const process: ProcessConfig = {
           flows: {},
-          roles: Object.fromEntries(
-            Object.keys(ROLES).map((role) => [role, { prompt: role }]),
-          ),
+          boundary: TEST_BOUNDARY,
           reminders: 1,
           presets: {
             autonomous: { calibration: "AUTO" },
@@ -475,7 +462,7 @@ describe("preset snapshots", () => {
           preset,
         } as RunConfig;
         const lib = loadPrompts(process, os.tmpdir(), { run });
-        const rendered = lib.render(process.roles[role]!.prompt, ROLES[role]!);
+        const rendered = lib.render(role, ROLES[role]!);
         expect(rendered).toMatchSnapshot(`${role}-${preset}`);
       });
     }

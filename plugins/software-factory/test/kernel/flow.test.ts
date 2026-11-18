@@ -47,11 +47,12 @@ describe("flow data drives the steps", () => {
         flows: {
           "draft-polish": {
             steps: [
-              { id: "draft", role: "implementer" },
-              { id: "polish", role: "implementer" },
+              { id: "draft", prompt: "implementer", alias: "implementer" },
+              { id: "polish", prompt: "implementer", alias: "implementer" },
               {
                 id: "critique",
-                role: "reviewer",
+                prompt: "reviewer",
+                alias: "reviewer",
                 review: true,
                 changeRequests: 0,
               },
@@ -327,13 +328,7 @@ describe("fix-round follow-up modes", () => {
       process: {
         flows: {
           "implement-review": {
-            followUp: { mode: "different-model", role: "implementer-strong" },
-          },
-        },
-        roles: {
-          "implementer-strong": {
-            prompt: "implementer",
-            alias: "implementer-strong",
+            followUp: { mode: "different-model", alias: "implementer-strong" },
           },
         },
       },
@@ -419,11 +414,13 @@ describe("checks step bound and last call", () => {
         "  implement-review:",
         "    steps:",
         "      - id: implement",
-        "        role: implementer",
+        "        prompt: implementer",
+        "        alias: implementer",
         "      - id: checks",
         "        changeRequests: 1",
         "      - id: review",
-        "        role: reviewer",
+        "        prompt: reviewer",
+        "        alias: reviewer",
         "        review: true",
         "",
       ].join("\n");

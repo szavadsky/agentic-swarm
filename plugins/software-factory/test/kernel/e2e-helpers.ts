@@ -2,18 +2,19 @@ import { expect } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { dispatch } from "../../src/cli/dispatch.js";
-import type { PriceSource } from "../../src/kernel/openrouter.js";
-import { testPriceSource } from "../helpers/price-source.js";
 import {
   FakeHarness,
+  fakeTurnIdentity,
   type FakeTurnHandler,
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
+import type { PriceSource } from "../../src/kernel/openrouter.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type { State } from "../../src/kernel/types.js";
+import { testPriceSource } from "../helpers/price-source.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
-import { scriptPlanRoleFallbacks } from "./fake-defaults.js";
+import { scriptKernelRoleFallbacks } from "./fake-defaults.js";
 
 export interface E2EGoal {
   repo: TmpRepo;
@@ -25,6 +26,8 @@ export interface E2EGoal {
 export interface GoalOptions {
   runYaml?: string;
   repoYaml?: string;
+  /** Process-layer override; the package defaults fill every other key. */
+  processYaml?: string;
   /** `null` leaves the goal without a class so the front turn runs; default is a bigger-class goal. */
   classYaml?: string | null;
 }
@@ -59,6 +62,8 @@ export function makeGoal(opts: GoalOptions = {}): E2EGoal {
   const repo = createTmpRepo();
   repo.writeFile(".factory/repo.yaml", opts.repoYaml ?? DEFAULT_REPO_YAML);
   repo.writeFile(".factory/run.yaml", opts.runYaml ?? DEFAULT_RUN_YAML);
+  if (opts.processYaml !== undefined)
+    repo.writeFile(".factory/process.yaml", opts.processYaml);
   repo.commit("factory config");
   const goalDir = path.join(repo.dir, ".factory/artifacts/demo");
   fs.mkdirSync(goalDir, { recursive: true });
@@ -87,7 +92,7 @@ export async function launch(
   harness: FakeHarness,
   iterations = 1,
 ): Promise<number> {
-  scriptPlanRoleFallbacks(harness);
+  scriptKernelRoleFallbacks(harness);
   return dispatch(launchArgs(repo, iterations), {
     harnesses: { fake: harness },
     priceSource: testPriceSource(repo.dir),
@@ -129,7 +134,7 @@ export async function expectDispatch(
   deps: Parameters<typeof dispatch>[1],
 ): Promise<void> {
   for (const harness of Object.values(deps?.harnesses ?? {})) {
-    if (harness instanceof FakeHarness) scriptPlanRoleFallbacks(harness);
+    if (harness instanceof FakeHarness) scriptKernelRoleFallbacks(harness);
   }
   const lines: string[] = [];
   const realLog = console.log;
@@ -203,13 +208,16 @@ export function scriptDigest(
   goalDir: string,
   iteration: number,
 ): void {
-  harness.script((req, ctx) => {
-    const digest = path.join(goalDir, `iterations/${iteration}/digest.md`);
-    expect(fs.existsSync(digest)).toBe(true);
-    fs.appendFileSync(digest, "\n## Loops\n- none\n", "utf8");
-    ctx.writeOutcome(outcome({ summary: "digest scout done" }));
-    return fakeTurnResult(req);
-  });
+  harness.script(
+    (req, ctx) => {
+      const digest = path.join(goalDir, `iterations/${iteration}/digest.md`);
+      expect(fs.existsSync(digest)).toBe(true);
+      fs.appendFileSync(digest, "\n## Loops\n- none\n", "utf8");
+      ctx.writeOutcome(outcome({ summary: "digest scout done" }));
+      return fakeTurnResult(req);
+    },
+    { when: (req) => fakeTurnIdentity(req).step === "digest" },
+  );
 }
 
 /** Standard task text with one observable file. */

@@ -143,14 +143,14 @@ export interface GoalMetrics {
   totals: MetricsTotals;
 }
 
-/** Step id -> role across every configured flow; metrics name roles, not steps. */
+/** Step id -> prompt (the role) across every configured flow; metrics name roles, not steps. */
 export function rolesByStep(
   flows: Record<string, FlowDefinition>,
 ): Record<string, string> {
   const roles: Record<string, string> = {};
   for (const flow of Object.values(flows)) {
     for (const step of flow.steps) {
-      if (step.role) roles[step.id] = step.role;
+      if (step.prompt) roles[step.id] = step.prompt;
     }
   }
   return roles;

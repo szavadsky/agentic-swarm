@@ -12,14 +12,15 @@ import {
 import { preexistingRed, recordedBaseGates } from "./baseline.js";
 import { contextPackRelPath } from "./context-pack.js";
 import { formatFailingChecks, newGateFailures } from "./gates.js";
-import { formatFixDispositions, formatReviewFindings } from "./record.js";
 import { taskOutcomeSchema } from "./outcome-schemas.js";
 import { outcomeSchemaVar } from "./prompt-schema.js";
-import { sessionCacheHot } from "./sessions.js";
 import { GATE_LAST_CALL_ASK } from "./prompts.js";
+import { formatFixDispositions, formatReviewFindings } from "./record.js";
 import { agentSteps, isLastChecksFixCall } from "./review.js";
+import { sessionCacheHot } from "./sessions.js";
 import type {
   AliasConfig,
+  BoundaryStep,
   FlowDefinition,
   FlowStep,
   KernelRuntime,
@@ -27,6 +28,7 @@ import type {
   TaskFile,
   TaskState,
   Timeouts,
+  TurnSpec,
 } from "./types.js";
 
 /** One resolved fallback tier: the harness, model, effort and quota pool one call draws on. */
@@ -52,9 +54,10 @@ export function tierPoolKey(tier: {
   return `${harnessId}+${modelId}`;
 }
 
-/** Everything one turn needs to run: the resolved alias, harness, model and its own limits. */
-export interface RoleTarget {
-  role: string;
+/** Everything one turn needs to run: the resolved prompt, alias, harness, model and its own limits. */
+export interface TurnTarget {
+  /** Prompt template the turn renders; the role the agent acts as. */
+  prompt: string;
   alias: string;
   harness: Harness;
   model: ModelRef;
@@ -251,20 +254,19 @@ export function countRedGateRequests(
 }
 
 /**
- * A role target on a named alias. `resolveRole` computes the alias from the
- * role and tier; callers with an explicit alias (the front's `pm` fallback)
- * use this directly instead of smuggling the alias through the tier argument.
+ * A turn target on a named alias. `resolveTurn` takes the prompt from the
+ * configured step; callers that already hold it use this directly.
  */
 function targetForAlias(
   runtime: KernelRuntime,
-  role: string,
+  prompt: string,
   aliasName: string,
   iteration?: number,
-): RoleTarget {
+): TurnTarget {
   const alias = runtime.configs.run.aliases[aliasName];
   if (!alias)
     throw new Error(
-      `run config has no alias "${aliasName}" (needed by role "${role}")`,
+      `run config has no alias "${aliasName}" (needed by prompt "${prompt}")`,
     );
   const chain = resolveChain(runtime, aliasName, iteration);
   const available = chain.filter(
@@ -274,7 +276,7 @@ function targetForAlias(
   const first = tiers[0]!;
   const offset = chain.indexOf(first);
   return {
-    role,
+    prompt,
     alias: aliasName,
     harness: first.harness,
     model: first.model,
@@ -375,70 +377,77 @@ function effectiveAliasHarness(
 }
 
 /**
- * Resolves a role to its alias, harness and model for an iteration. A task
- * tier names an alias directly (`default` and absent mean no override); flows
- * branch on this, never on a harness id. An alias with `rotate` resolves the
+ * Resolves a configured prompt and alias for an iteration. `aliasOverride` is
+ * a task tier or a PM rung (`default` means no override); flows branch on the
+ * resolved alias, never on a harness id. An alias with `rotate` resolves the
  * iteration's entry as its primary; omitting the iteration resolves the
  * alias's own primary, for callers that need only its identity.
  */
-export function resolveRole(
+export function resolveTurn(
   runtime: KernelRuntime,
-  role: string,
-  tier?: string,
+  prompt: string,
+  aliasName: string,
+  aliasOverride?: string,
   iteration?: number,
-): RoleTarget {
-  const roleConfig = runtime.configs.process.roles[role];
-  if (!roleConfig) throw new Error(`process config has no role "${role}"`);
-  const override = tier && tier !== "default" ? tier : undefined;
-  const aliasName = override ?? roleConfig.alias ?? role;
-  return targetForAlias(runtime, role, aliasName, iteration);
+): TurnTarget {
+  const override =
+    aliasOverride && aliasOverride !== "default" ? aliasOverride : undefined;
+  return targetForAlias(runtime, prompt, override ?? aliasName, iteration);
 }
 
-/** The role that actually runs this step: a `different-model` fix turn overrides it. */
-function stepRole(
+/** Resolves one kernel boundary step from process config. */
+export function boundaryTarget(
+  runtime: KernelRuntime,
+  step: BoundaryStep,
+  iteration?: number,
+  aliasOverride?: string,
+): TurnTarget {
+  const spec: TurnSpec | undefined = runtime.configs.process.boundary[step];
+  if (!spec) throw new Error(`process config has no boundary step "${step}"`);
+  return resolveTurn(
+    runtime,
+    spec.prompt,
+    spec.alias,
+    aliasOverride,
+    iteration,
+  );
+}
+
+/**
+ * The prompt and alias that actually run this step: a `different-model` fix
+ * turn keeps the step's prompt and moves to the follow-up alias.
+ */
+function stepTurn(
   runtime: KernelRuntime,
   task: TaskFile,
   state: TaskState,
   stepId: string,
-): string {
+): TurnSpec {
   const flow = flowOf(runtime, task);
   const step = findStep(flow, stepId);
-  const followUp = flow.followUp ?? { mode: "same-session" as const };
-  if (followUp.mode === "different-model" && isFixTurn(flow, state, stepId)) {
-    if (!followUp.role) {
-      throw new Error(
-        `flow "${task.flow}": follow-up mode different-model needs a role`,
-      );
-    }
-    return followUp.role;
-  }
-  if (!step.role) {
+  if (!step.prompt || !step.alias) {
     throw new Error(
-      `flow "${task.flow}": step "${stepId}" has no configured role`,
+      `flow "${task.flow}": step "${stepId}" needs a prompt and an alias`,
     );
   }
-  return step.role;
+  const followUp = flow.followUp ?? { mode: "same-session" as const };
+  if (followUp.mode === "different-model" && isFixTurn(flow, state, stepId)) {
+    if (!followUp.alias) {
+      throw new Error(
+        `flow "${task.flow}": follow-up mode different-model needs an alias`,
+      );
+    }
+    return { prompt: step.prompt, alias: followUp.alias };
+  }
+  return { prompt: step.prompt, alias: step.alias };
 }
 
-/**
- * The front alias is optional: when the run config has no `front` alias, the
- * front speaks through the `pm` alias, so the ladder needs no new required knob.
- */
+/** The front's configured boundary target. */
 export function frontTarget(
   runtime: KernelRuntime,
   iteration?: number,
-): RoleTarget {
-  const configured = runtime.configs.process.roles.front;
-  if (!configured) throw new Error('process config has no role "front"');
-  const aliasName = configured.alias ?? "front";
-  if (runtime.configs.run.aliases[aliasName])
-    return resolveRole(runtime, "front", undefined, iteration);
-  if (aliasName === "front" && runtime.configs.run.aliases.pm) {
-    return targetForAlias(runtime, "front", "pm", iteration);
-  }
-  throw new Error(
-    `run config has no alias "${aliasName}" (needed by role "front") and no "pm" fallback`,
-  );
+): TurnTarget {
+  return boundaryTarget(runtime, "front", iteration);
 }
 
 function lastFrontRecord(records: StepRecord[]): StepRecord | undefined {
@@ -521,7 +530,7 @@ export function isTrivialImplementTurn(
   const step = findStep(flowOf(runtime, task), stepId);
   return (
     !step.review &&
-    stepRole(runtime, task, state, stepId) === "implementer" &&
+    stepTurn(runtime, task, state, stepId).prompt === "implementer" &&
     frontTaskClass(runtime, task) === "trivial"
   );
 }
@@ -532,18 +541,20 @@ export function stepTarget(
   state: TaskState,
   stepId: string,
   iteration: number,
-): RoleTarget {
+): TurnTarget {
   if (isTrivialImplementTurn(runtime, task, state, stepId)) {
     // The front's alias and model run the turn, but the prompt stays the
-    // implementer's: the role names the prompt, not the agent's history.
-    return { ...frontTarget(runtime, iteration), role: "implementer" };
+    // implementer's: the prompt names the role, not the agent's history.
+    const turn = stepTurn(runtime, task, state, stepId);
+    return { ...frontTarget(runtime, iteration), prompt: turn.prompt };
   }
   const step = findStep(flowOf(runtime, task), stepId);
-  const role = stepRole(runtime, task, state, stepId);
+  const turn = stepTurn(runtime, task, state, stepId);
   // A task tier escalates the producer; review keeps the reviewer alias.
-  return resolveRole(
+  return resolveTurn(
     runtime,
-    role,
+    turn.prompt,
+    turn.alias,
     step.review ? undefined : task.tier,
     iteration,
   );
@@ -603,7 +614,7 @@ export async function compactSession(
 export async function followUpSession(
   runtime: KernelRuntime,
   task: TaskFile,
-  target: RoleTarget,
+  target: TurnTarget,
   records: StepRecord[],
   worktree: string,
   iteration?: number,
@@ -631,7 +642,7 @@ export async function followUpSession(
 export async function reviewSession(
   runtime: KernelRuntime,
   task: TaskFile,
-  target: RoleTarget,
+  target: TurnTarget,
   stepId: string,
   records: StepRecord[],
   worktree: string,

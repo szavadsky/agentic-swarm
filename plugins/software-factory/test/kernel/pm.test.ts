@@ -24,6 +24,7 @@ import type {
   RepoConfig,
   RunConfig,
 } from "../../src/kernel/types.js";
+import { testPriceSource } from "../helpers/price-source.js";
 import {
   cleanup,
   expectLaunch,
@@ -33,6 +34,8 @@ import {
   writeTask as writeGoalTask,
   writePlan,
 } from "./e2e-helpers.js";
+import { withKernelRoleFallbacks, workCalls } from "./fake-defaults.js";
+import { TEST_BOUNDARY, task } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -40,14 +43,11 @@ import {
   setupFlowRepo,
   whenTurn,
 } from "./s2-helpers.js";
-import { task } from "./helpers.js";
-import { testPriceSource } from "../helpers/price-source.js";
-import { withPlanRoleFallbacks, workCalls } from "./fake-defaults.js";
 
 function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
   const process: ProcessConfig = {
     flows: {},
-    roles: { pm: { prompt: "pm" } },
+    boundary: TEST_BOUNDARY,
     reminders: 1,
   };
   const repo: RepoConfig = {
@@ -103,7 +103,7 @@ async function setup(): Promise<{
   planPath: string;
 }> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-pm-"));
-  const fake = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
+  const fake = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
   const runtime = runtimeFor(fake, root);
   await runtime.store.ensureLayout();
   const planPath = path.join(runtime.store.goalDir, "plan.md");
@@ -590,7 +590,7 @@ describe("PM turn reconciliation", () => {
     const goal = makeGoal();
     try {
       writePlan(goal.goalDir, "# Plan\n\n## alpha\nCreate alpha.txt.\n");
-      const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
+      const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
       harness.script((req, ctx) => {
         fs.appendFileSync(goal.planPath, "\n## architect edit\n", "utf8");
         ctx.writeOutcome(
@@ -860,6 +860,7 @@ describe("PM turn reconciliation", () => {
         "  architect: { harness: fake, model: fake-architect }",
         "  pm: { harness: fake, model: fake-pm, escalateTo: escalation }",
         "  escalation: { harness: fake, model: fake-escalated }",
+        "  digest: { harness: fake, model: fake-digest }",
         "  implementer: { harness: fake, model: fake-impl }",
         "  reviewer: { harness: fake, model: fake-review }",
         "  steward: { harness: fake, model: fake-steward }",
@@ -871,7 +872,7 @@ describe("PM turn reconciliation", () => {
     });
     try {
       writePlan(goal.goalDir, "# Plan\n\n## alpha\nCreate alpha.txt.\n");
-      const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
+      const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
       harness.script((req, ctx) => {
         fs.appendFileSync(goal.planPath, "\n## architect edit\n", "utf8");
         ctx.writeOutcome(
@@ -926,6 +927,7 @@ describe("PM turn reconciliation", () => {
         "  pm: { harness: fake, model: fake-pm, escalateTo: escalation }",
         "  escalation: { harness: fake, model: fake-escalated, escalateTo: deeper }",
         "  deeper: { harness: fake, model: fake-deeper }",
+        "  digest: { harness: fake, model: fake-digest }",
         "  implementer: { harness: fake, model: fake-impl }",
         "  reviewer: { harness: fake, model: fake-review }",
         "  steward: { harness: fake, model: fake-steward }",
@@ -937,7 +939,7 @@ describe("PM turn reconciliation", () => {
     });
     try {
       writePlan(goal.goalDir, "# Plan\n\n## alpha\nCreate alpha.txt.\n");
-      const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
+      const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
       harness.script((req, ctx) => {
         fs.appendFileSync(goal.planPath, "\n## architect edit\n", "utf8");
         ctx.writeOutcome(
@@ -1121,7 +1123,7 @@ describe("PM turn reconciliation", () => {
   it("ends the boundary with the infra cause and details", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
-      const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
+      const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       fs.writeFileSync(
         path.join(runtime.store.goalDir, "plan.md"),
@@ -1171,7 +1173,7 @@ describe("PM turn reconciliation", () => {
   it("ends the launch as infra when the first PM rung stops on quota", async () => {
     const goal = makeGoal();
     try {
-      const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
+      const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
       harness.script((req, ctx) => {
         writePlan(
           goal.goalDir,
@@ -1262,7 +1264,7 @@ describe("stall PM — zero-merge stall in the running iteration", () => {
         concurrency: { overall: 1, perSubscription: {}, perModel: {} },
       },
     });
-    const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
+    const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
     return { repo, goal, harness };
   }
 
@@ -1833,7 +1835,7 @@ describe("stall PM — zero-merge stall in the running iteration", () => {
         turns: 1,
       },
     });
-    const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
+    const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
     try {
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await runtime.store.writeTask(
@@ -2002,7 +2004,7 @@ describe("stall PM validation", () => {
         concurrency: { overall: 1, perSubscription: {}, perModel: {} },
       },
     });
-    const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
+    const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
     const runtime = await makeRuntime(repo, goal, { fake: harness });
     fs.writeFileSync(
       path.join(runtime.store.goalDir, "plan.md"),
@@ -2339,7 +2341,7 @@ describe("stall PM validation", () => {
         concurrency: { overall: 1, perSubscription: {}, perModel: {} },
       },
     });
-    const harness = withPlanRoleFallbacks(new FakeHarness({ id: "fake" }));
+    const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
     try {
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       fs.writeFileSync(

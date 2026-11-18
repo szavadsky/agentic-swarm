@@ -58,13 +58,18 @@ gates:
 flows:
   implement-review:
     steps:
-      - { id: implement, role: implementer }
-      - { id: review, role: reviewer, review: true, changeRequests: 2 }
+      - { id: implement, prompt: implementer, alias: implementer }
+      - { id: review, prompt: reviewer, alias: reviewer, review: true, changeRequests: 2 }
 taskTypes:
   development: { flow: implement-review, kind: development, schema: outcome }
-roles:
-  architect: { prompt: architect }
-  implementer: { prompt: implementer }
+boundary:                       # the kernel turns outside any task flow
+  architect: { prompt: architect, alias: architect }
+  digest: { prompt: digest, alias: digest }
+  front: { prompt: front, alias: pm }
+  plancheck: { prompt: plan-checker, alias: plan-checker }
+  planreview: { prompt: reviewer, alias: plan-reviewer }
+  pm: { prompt: pm, alias: pm }
+  steward: { prompt: steward, alias: steward }
 ```
 
 **Run** — transient, passed with `--run-config`:

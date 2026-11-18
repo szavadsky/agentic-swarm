@@ -1,8 +1,21 @@
 import type {
+  BoundaryStep,
   RecordStart,
   StepRecord,
   TaskFile,
+  TurnSpec,
 } from "../../src/kernel/types.js";
+
+/** Boundary prompts and aliases the direct-runtime fixtures wire their run config for. */
+export const TEST_BOUNDARY: Record<BoundaryStep, TurnSpec> = {
+  architect: { prompt: "architect", alias: "architect" },
+  digest: { prompt: "digest", alias: "digest" },
+  front: { prompt: "front", alias: "front" },
+  plancheck: { prompt: "plan-checker", alias: "plan-checker" },
+  planreview: { prompt: "reviewer", alias: "plan-reviewer" },
+  pm: { prompt: "pm", alias: "pm" },
+  steward: { prompt: "steward", alias: "steward" },
+};
 
 export function task(slug: string, patch: Partial<TaskFile> = {}): TaskFile {
   return {

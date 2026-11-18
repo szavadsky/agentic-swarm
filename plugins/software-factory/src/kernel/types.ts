@@ -5,7 +5,6 @@
 import { z } from "zod";
 import type { CheckResult } from "../core/checks/types.js";
 import type { Repo } from "../core/git/repo.js";
-import type { PromptLibrary } from "./prompts.js";
 import type {
   Harness,
   ModelRef,
@@ -16,6 +15,7 @@ import type {
   Usage,
 } from "../harness/types.js";
 import type { PriceSource } from "./openrouter.js";
+import type { PromptLibrary } from "./prompts.js";
 
 export const concernSchema = z.object({
   kind: z.enum(["debt", "risk", "uncertainty", "choice"]),
@@ -286,9 +286,34 @@ export type Action =
   | { kind: "boundary" }
   | { kind: "exit"; reason: string };
 
+/** A step's prompt template and the run-config alias its turns run on. */
+export interface TurnSpec {
+  /** Prompt template name under `prompts/`. */
+  prompt: string;
+  /** Run-config alias; pre-flight requires every named alias. */
+  alias: string;
+}
+
+/**
+ * The kernel turns that run outside a configured flow. Their names are the
+ * record step vocabulary; process config names a prompt and alias for each.
+ */
+export const BOUNDARY_STEPS = [
+  "architect",
+  "digest",
+  "front",
+  "plancheck",
+  "planreview",
+  "pm",
+  "steward",
+] as const;
+export type BoundaryStep = (typeof BOUNDARY_STEPS)[number];
+
 export interface FlowStep {
   id: string;
-  role?: string;
+  /** Non-script steps name their prompt and alias; script steps (`checks`) name neither. */
+  prompt?: string;
+  alias?: string;
   /** Review steps carry the verdict contract and consume a review round. */
   review?: boolean;
   /**
@@ -301,8 +326,11 @@ export interface FlowStep {
 /** How a fix turn follows the turn it repairs. */
 export interface FollowUp {
   mode: "same-session" | "de-novo" | "different-model";
-  /** Role (and therefore alias/prompt) used when mode is `different-model`. */
-  role?: string;
+  /**
+   * Run-config alias the fix turn runs on when mode is `different-model`; the
+   * prompt stays the step's, so a retry changes the model, not the role.
+   */
+  alias?: string;
 }
 
 export interface FlowDefinition {
@@ -528,13 +556,6 @@ export interface RepoConfig {
   }[];
 }
 
-export interface RoleConfig {
-  /** Prompt template name under `prompts/`. */
-  prompt: string;
-  /** Run-config alias; defaults to the role name. */
-  alias?: string;
-}
-
 export interface ProcessConfig {
   flows: Record<string, FlowDefinition>;
   /**
@@ -542,7 +563,8 @@ export interface ProcessConfig {
    * flow, kind and output schema; a task file names only the type.
    */
   taskTypes?: Record<string, TaskTypeDefinition>;
-  roles: Record<string, RoleConfig>;
+  /** Each kernel boundary step's prompt and alias; pre-flight requires these aliases. */
+  boundary: Record<BoundaryStep, TurnSpec>;
   /** Outcome reminders after the first attempt; a task file's `repairTurns` overrides it for that task's turns only. */
   reminders: number;
   calibration?: string;
