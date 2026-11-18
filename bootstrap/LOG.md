@@ -705,3 +705,9 @@ Verbatim, newest last; each with what it changed.
 - Legs cumulative: NO new architect turn (resume); gemini 74t $43.47 list (disregarded); deepseek 10t $1.25 fallback-active; hy4 16t $0; ernie 21t $0; opus 1t $4.67. Implementer 28 failure + 2 glitch, 28 outcome-repairs, reviewer 13 change-requests — no-outcome persists. Inbox: park-friction + resume-friction STILL queued (architect-routed, no architect on resume); digest-1 second file queued.
 - Incidents: 9 infra retries, 4 fallback hops, 28 outcome-repairs, 1 merged-gate failure, 6 flakes, 4 empty-diff parks, 4 loops, 0 conflicts. 460 files +8235/-2103, 410 test runs/82 gates.
 - Next launch resumes i1 AGAIN (true i2 gated on i1 completing).
+
+### 2026-11-18 — delta i1-resume-3 landed: boundary-only 13min, 0 merges (1st 0-merge)
+- Exit 3 (iteration-limit), 757s wall, status in-progress. Boundary-only: baseline 00363 → digest 00364 ($0) → pm 00365 (digest-1-94d8fd1f→spike gate-red-repair-loop-spike) → pm 00367 (resume2-friction→spike resume2-friction-spike) → plancheck-r2 00369 (agy/gemini $0.075, FAILED, verdict ARCHITECT: execution stalled, mechanical follow-ups insufficient, needs architect reassessment of lint-ratchet/gates/containment + review friction) → NO dispatch records. 0 merges, 0 parks, 0 implement/reviewer turns; metrics untouched.
+- Pending 29→31 (2 new spikes), parks 18, debt 2 (+plancheck r2). Milestone A still open. Inbox 6 files (2 routed with holds). Segment cost ~$0.08.
+- STALL RISK: plancheck demands architect but resumes have no architect turn. Next launch resume-vs-advance uncertain; a repeat = 2nd consecutive 0-merge → stop-and-report.
+- Gates skipped: tree unchanged since last green (1106/0), nothing merged.
