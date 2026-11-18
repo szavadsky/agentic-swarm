@@ -35,7 +35,8 @@ suggestions:
       file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/003-research-r2-a1/output.yaml
       line: 124
     summary: Per-module N/S counts systematically wrong (~25 files)
-  - detail: "Product flags exist with zero test pins: cli.py:292-296 --force-fix +
+  - detail:
+      "Product flags exist with zero test pins: cli.py:292-296 --force-fix +
       PYTHON_SETUP_LINT_FORCE_FIX, :317-321 --format, :339-343 --cwd, :363-367
       --config-status; grep tests for force-fix/config-status hits none;
       MAIN_ARGPARSE_CASES (_factories_tables.py:148-173) covers only
@@ -54,7 +55,8 @@ suggestions:
       file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/003-research-r2-a1/output.yaml
       line: 374
     summary: Pinning inventory drops ~14 blocking-debt limbs as pinned/omitted
-  - detail: "Still present at HEAD: test_pyright_noise_filter.py:17-50 (module-slow,
+  - detail:
+      "Still present at HEAD: test_pyright_noise_filter.py:17-50 (module-slow,
       run_lint on repo_root), test_setup.py:326 TestModuleSizeGates,
       test_runner_private_imports.py:69 repo-AST scan,
       test_autofix_conflict_integration.py:44 TestRunLintFixDownstream (slow),
@@ -83,7 +85,8 @@ suggestions:
       file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/003-research-r2-a1/output.yaml
       line: 511
     summary: Planned-path reservations omit epic conftest/assumption paths
-  - detail: "Unified map (output.yaml:85) lists semantic symbol exclusions inside
+  - detail:
+      "Unified map (output.yaml:85) lists semantic symbol exclusions inside
       checkers files: _base.py:143-238 check_if_meaningful (+_base.pyi:69-96)
       and conformance/no_try_import_checker.py:12 _OPTIONAL_IMPORT_PATTERNS. r2
       section 4 drops both and mis-owns
@@ -122,7 +125,8 @@ suggestions:
       file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/003-research-r2-a1/output.yaml
       line: 543
     summary: Removing default pipeline smoke leaves no default full-pipeline pin
-  - detail: TestPerfBenchmark (test_baseline_diff_edge.py:75-110) holds BOTH slow
+  - detail:
+      TestPerfBenchmark (test_baseline_diff_edge.py:75-110) holds BOTH slow
       tests (:76 and :91); file truth is 16 default + 2 slow, but row 33 claims
       12|1 and section 6.2 books 1 slow. Suppression truth is 40|2 but row 24
       claims 42|1 (section 4 correctly says 2). Dropping
@@ -134,7 +138,8 @@ suggestions:
       file: .factory/tasks/modernize/items/test-debloat-audit-i2/steps/003-research-r2-a1/output.yaml
       line: 543
     summary: Slow budget miscounts baseline-edge and suppression slow tests
-  - detail: "coding-rules-audit measured 9 passed in 106.61s (output.yaml:27); r1
+  - detail:
+      "coding-rules-audit measured 9 passed in 106.61s (output.yaml:27); r1
       reported ~65-107s explicit. r2 row 28 claims ~10-20s with no evidence,
       understating the explicit-gate cost ~5x for replan scheduling. Re-measure
       or restore 65-107s with measurement conditions (WSL2/Python

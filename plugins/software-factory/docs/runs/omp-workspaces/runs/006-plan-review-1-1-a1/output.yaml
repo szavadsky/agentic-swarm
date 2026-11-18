@@ -15,7 +15,8 @@ suggestions:
   - id: c-317a4e9b8b
     disposition: optional
     summary: Route usage-parser cache-token risk to M2 plumbing
-    detail: "Covered: usage-cache-tokens dev (180 lines) + td-usage-cache impacting
+    detail:
+      "Covered: usage-cache-tokens dev (180 lines) + td-usage-cache impacting
       + adr-cache-fields-additive optional zero-defaults; fixture
       turn-yield.ndjson shows cacheRead/cacheWrite/totalTokens+cost dropped by
       ndjson.ts:84-98. Scheduled iteration-1; close on merge."
@@ -71,7 +72,8 @@ suggestions:
   - id: milestone-cap
     disposition: optional
     summary: Note milestone cap reached; iteration-2 must reuse M3-M8
-    detail: 8 milestones == maxMilestones 8; 6 items << maxItemsPerPlan 50, slugs
+    detail:
+      8 milestones == maxMilestones 8; 6 items << maxItemsPerPlan 50, slugs
       unique, acyclic, all prodBudgetHints present (180<300). Progressive plan
       correctly reuses M3-M8 via replanAfter, but iteration-2 must map 5
       proposed epics onto existing milestones without adding. Advisory only.
@@ -79,7 +81,8 @@ suggestions:
       file: .factory/tasks/omp-workspaces/plan/plan-1.yaml
       line: 2
 remarkable:
-  - chosen: Iteration-1 spikes+measurement only, epics deferred to iteration-2 via
+  - chosen:
+      Iteration-1 spikes+measurement only, epics deferred to iteration-2 via
       replanAfter
     why: All major subsystems hinge on unvalidated omp mechanics; epic child
       worktrees branch at launch and cannot see later-merged spike findings, so
@@ -87,7 +90,8 @@ remarkable:
     alternatives:
       - Launch epics in parallel with spikes
       - Guess backend/provider/cache contracts into dev stories
-  - chosen: Additive optional cache-token fields with zero-default aggregation, no
+  - chosen:
+      Additive optional cache-token fields with zero-default aggregation, no
       migration
     why: Captures cacheRead/cacheWrite/totalTokens+cost breakdown for 20-cost
       decisions without invalidating historical records; fixture confirms NDJSON

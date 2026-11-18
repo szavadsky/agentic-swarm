@@ -9,9 +9,8 @@ import {
 } from "../core/records/io.js";
 import { terminalFactFromRecords } from "./derive-task.js";
 import { parseTaskFile, renderTaskFile, TaskFileError } from "./tasks.js";
-import type {
+import {
   ArtifactStore,
-  Outcome,
   RecordEnd,
   RecordStart,
   StepRecord,
@@ -21,6 +20,7 @@ import type {
   TaskTypeDefinition,
   TurnRecord,
 } from "./types.js";
+import type { Outcome } from "./types.js";
 
 const RECORD_DIR = /^(\d{5})-/;
 
@@ -30,6 +30,31 @@ function isENOENT(err: unknown): boolean {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeOutcome(raw: unknown): Outcome {
+  if (!isPlainObject(raw)) {
+    return {
+      status: "failed",
+      summary: "Invalid outcome: not an object",
+      concerns: [],
+      forward: [],
+    };
+  }
+
+  const outcome = { ...raw } as any;
+
+  // Normalize
+  outcome.concerns = Array.isArray(outcome.concerns) ? outcome.concerns : [];
+  outcome.forward = Array.isArray(outcome.forward) ? outcome.forward : [];
+  outcome.status =
+    typeof outcome.status === "string" ? outcome.status : "failed";
+  outcome.summary =
+    typeof outcome.summary === "string"
+      ? outcome.summary
+      : "Missing or invalid summary";
+
+  return outcome;
 }
 
 function recordDirName(seq: number, meta: RecordStart): string {
@@ -438,7 +463,10 @@ class FolderStore implements ArtifactStore {
       }
       let outcome: Outcome | undefined;
       try {
-        outcome = (await readYaml(path.join(dir, "outcome.yaml"))) as Outcome;
+        const raw = await readYaml(path.join(dir, "outcome.yaml"));
+        if (raw) {
+          outcome = normalizeOutcome(raw);
+        }
       } catch (err) {
         if (
           !isENOENT(err) &&

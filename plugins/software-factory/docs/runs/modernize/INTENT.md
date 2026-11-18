@@ -1,6 +1,7 @@
 # modernize
 
 Modernize the project while preserving every material lint/check behavior.
+
 - Enforce the project's coding rules (CodingRules.md, AGENTS.md) across the code base.
 - Debloat code and tests; keep test intent, never test linting, test infra/assumptions first.
 - Remove redundant tests.

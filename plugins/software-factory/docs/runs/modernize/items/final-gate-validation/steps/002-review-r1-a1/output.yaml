@@ -5,7 +5,8 @@ suggestions:
   - id: c-1882d3f0f7
     disposition: optional
     summary: Constant rule symbols collapse cache-key rule component
-    detail: "Verified at HEAD: 3 call sites pass rule=unjustified-suppression and 2
+    detail:
+      "Verified at HEAD: 3 call sites pass rule=unjustified-suppression and 2
       pass rule=bare-except-comment; _semantic.py includes rule then truncates
       SHA-256 to 64 bits. In-process only today. Downstream cache-design debt,
       not this read-only gate."
@@ -25,7 +26,8 @@ suggestions:
   - id: c-a816c72150
     disposition: optional
     summary: Golden-regen-hatch report absent from HEAD
-    detail: "Verified absent (only ADR-011:68 names item; side-branch 10fa9d0 not
+    detail:
+      "Verified absent (only ADR-011:68 names item; side-branch 10fa9d0 not
       ancestor). Byte-identity independently proven: 158 findings, hashes
       c2b8dc3a/1d239741 match, multiset+byte-replay pass, unchanged since
       1a811af. No regen needed; track hatch artifact downstream."
@@ -35,7 +37,8 @@ suggestions:
   - id: c-b18093e36e
     disposition: optional
     summary: No production lock; PoC fcntl concern deferred
-    detail: "Verified: no fcntl/flock in src/; _semantic.py is in-process memo only,
+    detail:
+      "Verified: no fcntl/flock in src/; _semantic.py is in-process memo only,
       tracked cache unimplemented. POSIX-only question belongs to
       cache-design-spike/decision-cache-impl, not documented as delivered."
     location:
@@ -56,7 +59,8 @@ suggestions:
   - id: c-b0cfd8817b
     disposition: optional
     summary: Legacy hatch fail-open; this gate is no-regen byte-identity only
-    detail: "Valid scope guard: legacy 0/3 handoff must not be read as all-no-shift;
+    detail:
+      "Valid scope guard: legacy 0/3 handoff must not be read as all-no-shift;
       consume as no-authorized-regen plus hash equality. V2 consumes
       behavior-item declarations downstream."
     location:
@@ -64,7 +68,8 @@ suggestions:
   - id: c-4fe00e3cba
     disposition: optional
     summary: UNIFIED ownership map unavailable; ADR-011 labels provisional
-    detail: "Valid: map lives in orchestration records research must not inspect;
+    detail:
+      "Valid: map lives in orchestration records research must not inspect;
       ADR-011 five-owner labels used with explicit confirm-downstream caveat.
       Downstream test-debloat must confirm each row."
   - id: c-5e0d0157c2

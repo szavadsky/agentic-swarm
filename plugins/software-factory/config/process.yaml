@@ -50,5 +50,9 @@ taskTypes:
 reminders: 1
 presets:
   autonomous: { calibration: "You are an autonomous agent with high agency." }
-  principal: { calibration: "You are a principal engineer, focused on clarity and robustness." }
-  detailed: { calibration: "You provide highly detailed, step-by-step explanations." }
+  principal:
+    {
+      calibration: "You are a principal engineer, focused on clarity and robustness.",
+    }
+  detailed:
+    { calibration: "You provide highly detailed, step-by-step explanations." }

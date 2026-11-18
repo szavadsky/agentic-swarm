@@ -1,7 +1,4 @@
-export type {
-  FakeTurnContext,
-  FakeTurnHandler,
-} from "./fake-harness.js";
+export type { FakeTurnContext, FakeTurnHandler } from "./fake-harness.js";
 export {
   emptyUsage,
   FakeHarness,

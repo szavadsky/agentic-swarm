@@ -9,7 +9,8 @@ rationale: "Exit 127 on gate 'tests' is unknown-gate (infra uses singular
   escalates carried no target override so 127 recurred; fresh HEAD plus
   owned-only re-apply with a valid narrow custom target unblocks."
 target:
-  command: uv run pytest tests/checkers/test_suppression_justification_checker.py
+  command:
+    uv run pytest tests/checkers/test_suppression_justification_checker.py
     tests/checkers/test_source_stream.py tests/checkers/test_stub_coverage.py
     tests/assumptions/test_astroid_contracts.py -q
   customTarget: true

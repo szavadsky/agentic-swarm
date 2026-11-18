@@ -16,7 +16,8 @@ suggestions:
   - id: confidence-none-narrowing
     disposition: optional
     summary: Assert confidence is not None before reading .name
-    detail: message.confidence is Confidence|None; direct mypy flags .name access
+    detail:
+      message.confidence is Confidence|None; direct mypy flags .name access
       (tests/ excluded from the mypy gate via config/mypy.ini, so no gate
       failure). An explicit `assert message.confidence is not None` pins the
       observed non-None contract and documents why .name is safe. Non-blocking.

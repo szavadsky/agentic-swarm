@@ -24,7 +24,8 @@ text: "Fresh HEAD worktree from engine; re-apply ONLY 12 owned paths (8 prod:
   capture full command plus stderr."
 persist: true
 target:
-  command: uv run pytest tests/checkers/test_suppression_justification_checker.py
+  command:
+    uv run pytest tests/checkers/test_suppression_justification_checker.py
     tests/checkers/test_source_stream.py tests/checkers/test_stub_coverage.py
     tests/assumptions/test_astroid_contracts.py -q
   customTarget: true

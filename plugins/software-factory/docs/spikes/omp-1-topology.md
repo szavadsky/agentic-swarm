@@ -13,11 +13,14 @@ An automated headless launch via `omp -p` can execute an `eval` JS cell that dyn
 ### Working Snippet & Command
 
 **Orchestrator Module (`/path/to/orchestrator.ts`)**:
+
 ```ts
 export async function runOrchestrator(agentFn?: any) {
   // Global agent is available on globalThis inside the eval worker
   const resolvedAgent = agentFn || (globalThis as any).agent;
-  console.log(`[orchestrator] globalThis.agent exists: ${typeof (globalThis as any).agent === "function"}`);
+  console.log(
+    `[orchestrator] globalThis.agent exists: ${typeof (globalThis as any).agent === "function"}`,
+  );
 
   // Launch subagent (perCallModel must be enabled if specifying model)
   const handle = await resolvedAgent("Reply with exactly: SUBAGENT_OK", {
@@ -25,12 +28,15 @@ export async function runOrchestrator(agentFn?: any) {
   });
 
   const result = await handle.wait();
-  console.log(`[orchestrator] Subagent ${handle.id} finished: ${JSON.stringify(result)}`);
+  console.log(
+    `[orchestrator] Subagent ${handle.id} finished: ${JSON.stringify(result)}`,
+  );
   return { id: handle.id, output: result };
 }
 ```
 
 **Headless CLI Execution**:
+
 ```bash
 omp -p --no-session \
   --config /path/to/extra-config.yml \
@@ -44,6 +50,7 @@ console.log(\"FINAL:\", JSON.stringify(res));
 ```
 
 ### Observed Behavior & Evidence
+
 - **TypeScript Import**: Bun evaluates the cell directly; `await import("/abs/path.ts")` loads TypeScript directly without prior bundling or transpile steps.
 - **Prelude Visibility**: `globalThis.agent` is globally visible inside the imported module (`[orchestrator] globalThis.agent exists: true`).
 - **Cell Timeout (`timeout: 0`)**: `params.timeout === 0` disables the per-cell deadline (`packages/coding-agent/src/tools/eval.ts`).
@@ -61,6 +68,7 @@ An extension loaded via `--extension <path>` provides access to `pi.pi.createAge
 ### Working Snippet & Inspection
 
 **Extension Definition (`inspect-ext.ts`)**:
+
 ```ts
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 
@@ -87,16 +95,17 @@ export default function myExtension(pi: ExtensionAPI) {
 
 ### Capability Matrix: `createAgentSession` vs `runStructuredSubagent`
 
-| Capability | `pi.pi.createAgentSession` | `eval` prelude `agent()` |
-|---|---|---|
-| **Model Override per Launch** | Yes (`modelPattern` or `model`) | Yes (requires `task.perCallModel: on`) |
-| **Output Schema Validation** | Yes (`outputSchema`, `outputSchemaMode`) | Yes (`schema`, `schemaMode`) |
-| **Custom Agent / System Prompt** | Yes (`systemPrompt: string \| fn`) | Yes (`agent: "<name>"`) |
-| **Tool Allowlist** | Yes (`toolNames: [...]`, `restrictToolNames: true`) | No (inherits session tools; `tools` in `agent()` only accepts eval-defined kernel tools) |
-| **Custom Working Directory (`cwd`)** | Yes (`cwd: "/path/to/worktree"`) | No (`cwd` not accepted) |
-| **IRC Identity & Registry** | Yes (`agentId`, `agentName`, `agentRegistry`) | Yes (inherits global registry, assigns auto/custom id) |
+| Capability                           | `pi.pi.createAgentSession`                          | `eval` prelude `agent()`                                                                 |
+| ------------------------------------ | --------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **Model Override per Launch**        | Yes (`modelPattern` or `model`)                     | Yes (requires `task.perCallModel: on`)                                                   |
+| **Output Schema Validation**         | Yes (`outputSchema`, `outputSchemaMode`)            | Yes (`schema`, `schemaMode`)                                                             |
+| **Custom Agent / System Prompt**     | Yes (`systemPrompt: string \| fn`)                  | Yes (`agent: "<name>"`)                                                                  |
+| **Tool Allowlist**                   | Yes (`toolNames: [...]`, `restrictToolNames: true`) | No (inherits session tools; `tools` in `agent()` only accepts eval-defined kernel tools) |
+| **Custom Working Directory (`cwd`)** | Yes (`cwd: "/path/to/worktree"`)                    | No (`cwd` not accepted)                                                                  |
+| **IRC Identity & Registry**          | Yes (`agentId`, `agentName`, `agentRegistry`)       | Yes (inherits global registry, assigns auto/custom id)                                   |
 
 ### Gotchas
+
 - Parameter definition syntax: `pi.typebox.Type.String()` (not `pi.typebox.String()`), or use `pi.zod.z.string()`.
 - `runStructuredSubagent` is internal to `task/structured-subagent.ts` and not exposed on the `pi.pi` facade. Any extension driving full session lifecycle must use `pi.pi.createAgentSession`.
 
@@ -113,8 +122,8 @@ Per-call model overrides for `agent()` (including `@role:level` aliases and mode
 1. **Required Settings**:
    ```yaml
    task:
-     perCallModel: on         # Must be "on" or "eval" (default is "off")
-     perCallModelAllow:       # Whitelist of allowed providers/models
+     perCallModel: on # Must be "on" or "eval" (default is "off")
+     perCallModelAllow: # Whitelist of allowed providers/models
        - opencode-go/deepseek-v4.1-flash
        - opencode-go/muse-spark-1.3-contributor:max
    ```
@@ -140,6 +149,7 @@ OMP dynamically discovers agent definitions from arbitrary plugin folders outsid
 ### Working Structure & Manifest
 
 **Directory Layout**:
+
 ```
 /path/to/plugins/software-factory/
 ├── package.json
@@ -148,6 +158,7 @@ OMP dynamically discovers agent definitions from arbitrary plugin folders outsid
 ```
 
 **`package.json`**:
+
 ```json
 {
   "name": "software-factory",
@@ -159,6 +170,7 @@ OMP dynamically discovers agent definitions from arbitrary plugin folders outsid
 ```
 
 **`agents/custom-worker.md`**:
+
 ```markdown
 ---
 name: custom-worker
@@ -168,10 +180,12 @@ tools:
   - write
 model: opencode-go/deepseek-v4.1-flash
 ---
+
 You are a custom software factory worker. Complete the assigned task.
 ```
 
 ### Launch Command
+
 ```bash
 omp -p --no-session \
   --plugin-dir /path/to/plugins/software-factory \
@@ -181,6 +195,7 @@ omp -p --no-session \
 ```
 
 ### Observed Behavior
+
 - `discoverAgents` loads `<plugin-dir>/agents/*.md` with top precedence.
 - Calling `agent("...", { agent: "custom-worker" })` successfully dispatches to the agent and injects its frontmatter prompt and model configuration.
 
@@ -193,6 +208,7 @@ omp -p --no-session \
 Empirical comparison between OMP's built-in `isolated: true` and engine-created Git worktrees:
 
 ### A. Built-in `isolated: true` Behavior
+
 - **Branch Naming**: Hardcoded to `omp/task/<agentId>`. The caller has **no control** over base branch or target branch name.
 - **No `cwd` Support**: Eval `agent()` does not accept `cwd`.
 - **`merge: false` Trap**: Passing `merge: false` alone still merges/applies the diff to the parent working tree. You must pass `apply: false` to keep changes off the parent worktree.
@@ -201,6 +217,7 @@ Empirical comparison between OMP's built-in `isolated: true` and engine-created 
 - **Failure / Rejection Trap (Critical)**: In `packages/coding-agent/src/task/isolation-runner.ts`, if the subagent fails or rejects (`exitCode !== 0`), `commitToBranch` is completely skipped! **No branch commits are captured on failure/rejection**, and the temporary isolation worktree is deleted.
 
 ### B. Engine-Created Git Worktree (`git worktree add -b topic/x/y /path`)
+
 - **Execution Command**:
   ```bash
   git worktree add -b topic/my-feature /tmp/my-worktree master
@@ -219,36 +236,45 @@ Empirical comparison between OMP's built-in `isolated: true` and engine-created 
 ### Verdict: **VERIFIED**
 
 ### Schema Enforcement
+
 When launching an agent with `schema` and `schemaMode: "strict"`:
+
 ```js
 const schema = {
   type: "object",
   properties: {
     status: { type: "string" },
-    count: { type: "number" }
+    count: { type: "number" },
   },
-  required: ["status", "count"]
+  required: ["status", "count"],
 };
 
-const handle = await agent("Call yield with data: { status: 'ready', count: 42 }", {
-  schema,
-  schemaMode: "strict"
-});
+const handle = await agent(
+  "Call yield with data: { status: 'ready', count: 42 }",
+  {
+    schema,
+    schemaMode: "strict",
+  },
+);
 
 const res = await handle.wait();
 // res is a PARSED JavaScript object directly:
 // typeof res === "object", res.status === "ready", res.count === 42
 ```
+
 - The caller receives a parsed JavaScript object directly (not a JSON string).
 
 ### Yield Error Propagation
+
 When a subagent calls `yield({ error: "fatal subagent error: bad data" })`:
+
 - `await handle.wait()` **rejects and throws an Error**.
 - The thrown exception's `message` is verbatim the string provided to `yield({ error })`:
   `Error: fatal subagent error: bad data`
 - Stack trace originates in `resolveHandleSnapshot` in the host bridge.
 
 ### Critical Gotchas
+
 - **Do not pass `"yield"` in `tools`**: Eval `agent("...", { tools: ["yield"] })` throws:
   `Unknown eval tool(s): yield. Define them with @tool (Python) or tool(fn, {…}) (JS) in an eval cell first.`
   The `tools` array in eval `agent()` is reserved for eval-defined kernel tools. The built-in `yield` tool is automatically provided to structured subagents.
@@ -260,6 +286,7 @@ When a subagent calls `yield({ error: "fatal subagent error: bad data" })`:
 ### Verdict: **VERIFIED**
 
 ### Live Peer Messaging & Context Retention
+
 - Subagents keep full conversational memory across turns.
 - In our test:
   1. Agent `ComplexCarp` was spawned: `"Remember secret code 777888. Reply CODE_STORED"`.
@@ -268,12 +295,14 @@ When a subagent calls `yield({ error: "fatal subagent error: bad data" })`:
   4. Agent woke up (`receipts: [{ outcome: "woken" }]`), remembered context, and replied `"CODE=777888"`.
 
 ### Crucial Tool Dependency for `handle.send()`
+
 - `AgentHandle.send()` in eval is implemented by delegating to the session's `write` tool with path `agent://<id>`.
 - If the root session was launched with `--tools=eval` (omitting `write`), `handle.send()` throws:
   `ToolError: Tool is registered but not available in this session: write`
 - **Fix**: The root session must include `write` in its tool list (`--tools=eval,write,read`).
 
 ### Parking & Revival Semantics (7-minute TTL)
+
 - Subagents transition to `idle` upon yielding.
 - `AgentLifecycleManager` arms a timer based on `task.agentIdleTtlMs` (default 420,000ms / 7 minutes).
 - **While Idle (< 7 min)**: The `AgentSession` remains live in memory. Incoming messages immediately cancel the timer and run the turn in-memory.
@@ -289,23 +318,28 @@ When a subagent calls `yield({ error: "fatal subagent error: bad data" })`:
 The prelude `completion()` helper provides lightweight, stateless LLM calls with schema enforcement for repair and extraction.
 
 ### Working Snippet
+
 ```js
-const brokenJson = "{ status: 'repaired', count: 99, notes: unquoted_value_here }";
+const brokenJson =
+  "{ status: 'repaired', count: 99, notes: unquoted_value_here }";
 
 const repairSchema = {
   type: "object",
   properties: {
     status: { type: "string" },
     count: { type: "number" },
-    notes: { type: "string" }
+    notes: { type: "string" },
   },
-  required: ["status", "count", "notes"]
+  required: ["status", "count", "notes"],
 };
 
-const handle = await completion("Extract and repair data into the requested schema: " + brokenJson, {
-  model: "smol", // maps to @smol role
-  schema: repairSchema
-});
+const handle = await completion(
+  "Extract and repair data into the requested schema: " + brokenJson,
+  {
+    model: "smol", // maps to @smol role
+    schema: repairSchema,
+  },
+);
 
 const result = await handle.wait();
 // Returns parsed object directly:
@@ -313,6 +347,7 @@ const result = await handle.wait();
 ```
 
 ### Observed Behavior
+
 - `model: "smol"` accepted (maps to `@smol` configured model, e.g. `ling-3.1-flash` or `deepseek-flash`).
 - Automatically forces internal structured tool `respond`, validates output against `schema`, and returns a parsed JavaScript object.
 - Tolerates single quotes and unquoted literals in the input, resolving them to valid typed properties.
@@ -324,7 +359,9 @@ const result = await handle.wait();
 ### Verdict: **VERIFIED**
 
 ### Storage Hierarchy
+
 Session traces are stored deterministically under `~/.omp/agent/sessions/`:
+
 ```
 ~/.omp/agent/sessions/<project-slug>/
 ├── <timestamp>_<sessionId>.jsonl        # Root session transcript
@@ -336,7 +373,9 @@ Session traces are stored deterministically under `~/.omp/agent/sessions/`:
 ```
 
 ### Locating Traces Programmatically
+
 Given a root `sessionManager`:
+
 - Session file: `session.sessionManager.getSessionFile()` (e.g. `.../2026-11-07T01-41-40_abc.jsonl`).
 - Subagent directory: `sessionFile.replace(/\.jsonl$/, "")`.
 - Individual subagent transcript: `path.join(subagentDir, `${agentId}.jsonl`)`.
@@ -349,11 +388,11 @@ Given a root `sessionManager`:
 ### Evaluation of Options
 
 1. **Option A: Pure Eval-Kernel Host (`omp -p` running an eval loop)**
-   - *Pros*: Built-in IRC handle management (`agent()`, `handle.send()`), prelude `completion()`, `judge()`.
-   - *Cons*: Cannot control subagent `cwd` (no git worktrees per worker); relies on `isolated: true` which discards branch commits on failure/rejection; vulnerable to eval auto-backgrounding; tool permissions tightly coupled to root session.
+   - _Pros_: Built-in IRC handle management (`agent()`, `handle.send()`), prelude `completion()`, `judge()`.
+   - _Cons_: Cannot control subagent `cwd` (no git worktrees per worker); relies on `isolated: true` which discards branch commits on failure/rejection; vulnerable to eval auto-backgrounding; tool permissions tightly coupled to root session.
 2. **Option B: Pure OMP Extension (`--extension factory.ts`)**
-   - *Pros*: Hooks into OMP lifecycle, can call `createAgentSession`.
-   - *Cons*: Requires authoring custom CLI/TUI interactions inside OMP's extension API; `runStructuredSubagent` is not exported on `pi.pi`; couples orchestration logic to OMP internal packages.
+   - _Pros_: Hooks into OMP lifecycle, can call `createAgentSession`.
+   - _Cons_: Requires authoring custom CLI/TUI interactions inside OMP's extension API; `runStructuredSubagent` is not exported on `pi.pi`; couples orchestration logic to OMP internal packages.
 3. **Option C: Hybrid External Bun CLI + OMP Headless Adapter (RECOMMENDED)**
 
 ### Recommended Design: External Bun CLI + OMP Headless CLI Adapter
@@ -388,6 +427,7 @@ The factory orchestrator should run as an **independent Bun process** (harness-a
 ```
 
 ### Why this shape wins:
+
 1. **True Git Isolation & Retention**: Engine creates worktrees (`git worktree add -b topic/wave-1/task-2 /tmp/worktrees/task-2 master`). OMP runs with `--cwd /tmp/worktrees/task-2`. All commits and rejected edits are 100% retained regardless of exit status.
 2. **Per-Launch Model Control**: Each launch passes exact `--model <role-or-id>` directly on the CLI without fighting `task.perCallModel` provenance barriers.
 3. **Agent Discovery**: Uses `--plugin-dir /path/to/plugins/software-factory` to cleanly load custom agents (`agents/*.md`).

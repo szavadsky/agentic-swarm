@@ -7,7 +7,8 @@ suggestions:
   - id: m2-parallel-file-collision
     disposition: fix
     summary: M2 stale-disables and never-test-prune claim same files in parallel
-    detail: "stale-disables owns test_autofix_conflict_integration.py:181 + t9_7 :31
+    detail:
+      "stale-disables owns test_autofix_conflict_integration.py:181 + t9_7 :31
       hardcoded paths while prune owns autofix-conflict slow/home-write +
       hardcoded-checkout live (same files). Both dep-free parallel violates
       ADR-013 file-level single-writer. Evidence: :181 install dev_path
@@ -32,7 +33,8 @@ suggestions:
   - id: shim-init-orphan
     disposition: fix
     summary: peek_fallback_tools removal orphaned between shim item and dispatch item
-    detail: "baseline.py:27 defines peek, __init__.py:22 re-exports. Shim-removal
+    detail:
+      "baseline.py:27 defines peek, __init__.py:22 re-exports. Shim-removal
       deletes baseline symbols but FORBIDDEN __init__; dispatch-split sole
       __init__ writer omits peek removal. Both dep-free parallel -> ImportError
       or incomplete. Fix: explicitly assign __init__ peek lines to
@@ -54,7 +56,8 @@ suggestions:
   - id: docs-final-missing-deps
     disposition: fix
     summary: Docs + final gate omit deps on M2, will record stale counts
-    detail: "docs-reconciliation deps only backend/cache but AGENTS counts need M2
+    detail:
+      "docs-reconciliation deps only backend/cache but AGENTS counts need M2
       prune/factories/baseline (--collect-only, TOOLS==14, 9-collected);
       final-gate deps only docs+regen but gate table needs all M2
       pytest/integration/golden effects. Both can run before M2. Fix: add deps
@@ -100,7 +103,8 @@ suggestions:
   - id: legacy-stream-unverifiable
     disposition: fix
     summary: M3 legacy + stream omit rename target, API, blocks, locations, joiner
-    detail: "_legacy_scan rename target undefined (:61,63 + .pyi:21); astroid 3.x
+    detail:
+      "_legacy_scan rename target undefined (:61,63 + .pyi:21); astroid 3.x
       body[0].value branch uncited; register() scope conformance-only vs all 20+
       ambiguous vs ADR-012; _source_stream signature + enumerated sites missing
       (all listed blocks unlisted; verified 3 stream() sites but
@@ -137,7 +141,8 @@ suggestions:
   - id: secrets-scan-ambiguity
     disposition: fix
     summary: Secrets full scan vs filtered + clean vs scoped undefined
-    detail: ".secrets.baseline:42 excludes ^\\.factory/ so full git-ls-files exit 0
+    detail:
+      ".secrets.baseline:42 excludes ^\\.factory/ so full git-ls-files exit 0
       is filtered not full; M1 clean checkout vs M5 scoped/clean for MemoryError
       undefined (fresh clone? which paths/tools? all 14 or detect-secrets
       only?). Fix: rephrase filtered scan (cite filter+version+signature),
@@ -162,7 +167,8 @@ suggestions:
   - id: cache-refresh-decisions
     disposition: architect
     summary: Cache refresh disjunction + guards need architect contract
-    detail: Interface cli-flag OR setup-subcommand per verdict is disjunction not
+    detail:
+      Interface cli-flag OR setup-subcommand per verdict is disjunction not
       contract; lockfile+merge+atomic is implementation not caller/callee;
       DECISIONS_PATH scope (test-only under PYTEST_CURRENT_TEST vs prod?
       traversal guard?) undefined; files POSIX cardinality/merge, prune +age
@@ -175,7 +181,8 @@ suggestions:
   - id: file-level-boundary-breach
     disposition: architect
     summary: Block-level split + double-merge breach ADR-013 file-level
-    detail: Guards owns suppression file EXCEPT pipeline block :357, semantic-tests
+    detail:
+      Guards owns suppression file EXCEPT pipeline block :357, semantic-tests
       owns block in same file (block-level not file-level) serial but
       conflict-prone; threshold files touched by M2 merge then M4
       merge-tables-pinned (double-touch, second may discard first). Violates
@@ -211,7 +218,8 @@ suggestions:
   - id: polish-typos-categorization
     disposition: optional
     summary: Polish typos, wording, license site, categorization, skeleton, gitignore
-    detail: M1 title K kickoff typo; assumption item-cap wording (22 within 50 not
+    detail:
+      M1 title K kickoff typo; assumption item-cap wording (22 within 50 not
       cap=22); U1 CC-BY-NC buried should be assumption/ADR allowlist; TD4-I2
       cache blocks M4 should be blocking not impacting (or justify); skeleton
       allowed should be required/skipped or forbidden; .gitignore old cache

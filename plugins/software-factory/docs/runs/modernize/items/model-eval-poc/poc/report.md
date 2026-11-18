@@ -12,13 +12,13 @@ Sensitivity analysis on the augmented corpus also finds no compliant eligible ca
 
 ## 2. What was evaluated
 
-| Candidate | Repo @ revision | Params | Weight bytes | CPU RSS | p50 | p95 | Prompt | Status |
-|---|---|---:|---:|---:|---:|---:|---|---|
-| GLiDE-0.4B | fastino/GLiDE-0.4B | 395,042,816 | 790,103,664 | 0 MB | n/a ms | n/a ms | `canonical` | eligible |
-| tasksource-decider-nano | tasksource/tasksource-decider-nano | 149,015,041 | 298,044,578 | 1464 MB | 162 ms | 233 ms | `canonical` | eligible |
-| bekko-system-one-v0-17m | hotchpotch/bekko-system-one-v0-17m | 16,798,211 | 67,198,244 | 624 MB | 34 ms | 45 ms | `canonical` | excluded: weights carry no declared license; scored but excluded from recommendation |
-| ettin-reranker-150m-v1 | cross-encoder/ettin-reranker-150m-v1 | 149,606,401 | 598,439,036 | 991 MB | 439 ms | 1103 ms | `current` | eligible |
-| all-MiniLM-L6-v2 | sentence-transformers/all-MiniLM-L6-v2 | 22,713,728 | 90,868,376 | 556 MB | 224 ms | 1341 ms | `current` | excluded: untrained CrossEncoder classifier head; accuracy row not comparable (latency/RSS only) |
+| Candidate               | Repo @ revision                        |      Params | Weight bytes | CPU RSS |    p50 |     p95 | Prompt      | Status                                                                                           |
+| ----------------------- | -------------------------------------- | ----------: | -----------: | ------: | -----: | ------: | ----------- | ------------------------------------------------------------------------------------------------ |
+| GLiDE-0.4B              | fastino/GLiDE-0.4B                     | 395,042,816 |  790,103,664 |    0 MB | n/a ms |  n/a ms | `canonical` | eligible                                                                                         |
+| tasksource-decider-nano | tasksource/tasksource-decider-nano     | 149,015,041 |  298,044,578 | 1464 MB | 162 ms |  233 ms | `canonical` | eligible                                                                                         |
+| bekko-system-one-v0-17m | hotchpotch/bekko-system-one-v0-17m     |  16,798,211 |   67,198,244 |  624 MB |  34 ms |   45 ms | `canonical` | excluded: weights carry no declared license; scored but excluded from recommendation             |
+| ettin-reranker-150m-v1  | cross-encoder/ettin-reranker-150m-v1   | 149,606,401 |  598,439,036 |  991 MB | 439 ms | 1103 ms | `current`   | eligible                                                                                         |
+| all-MiniLM-L6-v2        | sentence-transformers/all-MiniLM-L6-v2 |  22,713,728 |   90,868,376 |  556 MB | 224 ms | 1341 ms | `current`   | excluded: untrained CrossEncoder classifier head; accuracy row not comparable (latency/RSS only) |
 
 Params and weight bytes are measured directly from the cached `*.safetensors` headers by `eval/model_stats.py` (`out/model_stats.json`); they supersede the hand-written adapter constants. Latency is single-request, float32, 10 torch threads, warmup on the first three items, on a 12th Gen Intel i7-12700H (20 logical / 10 physical cores, WSL2, 19 GiB RAM).
 
@@ -31,28 +31,28 @@ Params and weight bytes are measured directly from the cached `*.safetensors` he
 
 ## 3. Corpus
 
-| Source | Raw rows | Post-dedup | Dedup-dropped |
-|---|---:|---:|---:|
-| brushoff_table | 35 | 32 | 3 |
-| hard_negative | 40 | 39 | 1 |
-| meaningful_table | 33 | 3 | 30 |
-| repo_suppression | 370 | 183 | 187 |
-| threshold_meaningful | 30 | 30 | 0 |
-| threshold_meaningless | 50 | 49 | 1 |
-| **total** | **558** | **336** | **222** |
+| Source                | Raw rows | Post-dedup | Dedup-dropped |
+| --------------------- | -------: | ---------: | ------------: |
+| brushoff_table        |       35 |         32 |             3 |
+| hard_negative         |       40 |         39 |             1 |
+| meaningful_table      |       33 |          3 |            30 |
+| repo_suppression      |      370 |        183 |           187 |
+| threshold_meaningful  |       30 |         30 |             0 |
+| threshold_meaningless |       50 |         49 |             1 |
+| **total**             |  **558** |    **336** |       **222** |
 
 Deduplication is first-wins on the normalized justification. The collapse is large and is disclosed per source above: `meaningful_table` contributes 33 raw rows but only 3 after 30 duplicates of `threshold_meaningful`; `repo_suppression` contributes 370 raw line-level rows but 183 after dedup. The contracted corpus is 297 items; the augmented corpus is 336 items.
 
 ### Stratification and the precision-bar problem
 
-| Scope | Stratum | Meaningful | Meaningless |
-|---|---|---:|---:|
-| contracted | heuristic_accepted | 215 | 0 |
-| contracted | heuristic_rejected | 0 | 82 |
-| contracted | overall | 215 | 82 |
-| augmented | heuristic_accepted | 215 | 39 |
-| augmented | heuristic_rejected | 0 | 82 |
-| augmented | overall | 215 | 121 |
+| Scope      | Stratum            | Meaningful | Meaningless |
+| ---------- | ------------------ | ---------: | ----------: |
+| contracted | heuristic_accepted |        215 |           0 |
+| contracted | heuristic_rejected |          0 |          82 |
+| contracted | overall            |        215 |          82 |
+| augmented  | heuristic_accepted |        215 |          39 |
+| augmented  | heuristic_rejected |          0 |          82 |
+| augmented  | overall            |        215 |         121 |
 
 The contracted corpus has **no heuristic-accepted negative** (`repo_suppression` false rows are all in the heuristic-rejected stratum; the test-table labels are the heuristic's own outputs). Therefore the 95% meaningless-precision bar is vacuous on the contract's primary stratum. The 39 synthetic `hard_negative` rows (all heuristic-accepted, all labelled meaningless) are reported **separately as a sensitivity analysis**, never mixed into the contracted compliance claim.
 
@@ -66,14 +66,14 @@ The contracted corpus has **no heuristic-accepted negative** (`repo_suppression`
 
 ### 4.1 Heuristic baseline (no model)
 
-| Scope / stratum | n | Accuracy | Meaningless precision | Meaningful recall | tp/tn/fp/fn |
-|---|---:|---:|---:|---:|---|
-| contracted / heuristic_accepted | 215 | 100.0% | n/a | 100.0% | 215/0/0/0 |
-| contracted / heuristic_rejected | 82 | 100.0% | 100.0% | n/a | 0/82/0/0 |
-| contracted / overall | 297 | 100.0% | 100.0% | 100.0% | 215/82/0/0 |
-| augmented / heuristic_accepted | 254 | 84.6% | n/a | 100.0% | 215/0/39/0 |
-| augmented / heuristic_rejected | 82 | 100.0% | 100.0% | n/a | 0/82/0/0 |
-| augmented / overall | 336 | 88.4% | 100.0% | 100.0% | 215/82/39/0 |
+| Scope / stratum                 |   n | Accuracy | Meaningless precision | Meaningful recall | tp/tn/fp/fn |
+| ------------------------------- | --: | -------: | --------------------: | ----------------: | ----------- |
+| contracted / heuristic_accepted | 215 |   100.0% |                   n/a |            100.0% | 215/0/0/0   |
+| contracted / heuristic_rejected |  82 |   100.0% |                100.0% |               n/a | 0/82/0/0    |
+| contracted / overall            | 297 |   100.0% |                100.0% |            100.0% | 215/82/0/0  |
+| augmented / heuristic_accepted  | 254 |    84.6% |                   n/a |            100.0% | 215/0/39/0  |
+| augmented / heuristic_rejected  |  82 |   100.0% |                100.0% |               n/a | 0/82/0/0    |
+| augmented / overall             | 336 |    88.4% |                100.0% |            100.0% | 215/82/39/0 |
 
 ### 4.2 Production-prompt matrix
 
@@ -85,208 +85,208 @@ Not scored: incomplete (6/336 rows).
 
 #### tasksource-decider-nano (`canonical`)
 
-| Scope / stratum | Threshold / mode | n | Accuracy | Meaningless precision | Meaningful recall | tp/tn/fp/fn |
-|---|---|---:|---:|---:|---:|---|
-| contracted / accepted | 0.5/veto | 215 | 26.5% | 0.0% | 26.5% | 57/0/0/158 |
-| contracted / overall | 0.5/veto | 297 | 46.8% | 34.2% | 26.5% | 57/82/0/158 |
-| contracted / accepted | 0.5/replace | 215 | 26.5% | 0.0% | 26.5% | 57/0/0/158 |
-| contracted / overall | 0.5/replace | 297 | 46.8% | 34.2% | 26.5% | 57/82/0/158 |
-| contracted / accepted | 0.6/veto | 215 | 8.8% | 0.0% | 8.8% | 19/0/0/196 |
-| contracted / overall | 0.6/veto | 297 | 34.0% | 29.5% | 8.8% | 19/82/0/196 |
-| contracted / accepted | 0.6/replace | 215 | 8.8% | 0.0% | 8.8% | 19/0/0/196 |
-| contracted / overall | 0.6/replace | 297 | 34.0% | 29.5% | 8.8% | 19/82/0/196 |
-| contracted / accepted | 0.7/veto | 215 | 0.9% | 0.0% | 0.9% | 2/0/0/213 |
-| contracted / overall | 0.7/veto | 297 | 28.3% | 27.8% | 0.9% | 2/82/0/213 |
-| contracted / accepted | 0.7/replace | 215 | 0.9% | 0.0% | 0.9% | 2/0/0/213 |
-| contracted / overall | 0.7/replace | 297 | 28.3% | 27.8% | 0.9% | 2/82/0/213 |
-| augmented / accepted | 0.5/veto | 254 | 37.0% | 19.0% | 26.5% | 57/37/2/158 |
-| augmented / overall | 0.5/veto | 336 | 52.4% | 43.0% | 26.5% | 57/119/2/158 |
-| augmented / accepted | 0.5/replace | 254 | 37.0% | 19.0% | 26.5% | 57/37/2/158 |
-| augmented / overall | 0.5/replace | 336 | 52.4% | 43.0% | 26.5% | 57/119/2/158 |
-| augmented / accepted | 0.6/veto | 254 | 22.8% | 16.6% | 8.8% | 19/39/0/196 |
-| augmented / overall | 0.6/veto | 336 | 41.7% | 38.2% | 8.8% | 19/121/0/196 |
-| augmented / accepted | 0.6/replace | 254 | 22.8% | 16.6% | 8.8% | 19/39/0/196 |
-| augmented / overall | 0.6/replace | 336 | 41.7% | 38.2% | 8.8% | 19/121/0/196 |
-| augmented / accepted | 0.7/veto | 254 | 16.1% | 15.5% | 0.9% | 2/39/0/213 |
-| augmented / overall | 0.7/veto | 336 | 36.6% | 36.2% | 0.9% | 2/121/0/213 |
-| augmented / accepted | 0.7/replace | 254 | 16.1% | 15.5% | 0.9% | 2/39/0/213 |
-| augmented / overall | 0.7/replace | 336 | 36.6% | 36.2% | 0.9% | 2/121/0/213 |
+| Scope / stratum       | Threshold / mode |   n | Accuracy | Meaningless precision | Meaningful recall | tp/tn/fp/fn  |
+| --------------------- | ---------------- | --: | -------: | --------------------: | ----------------: | ------------ |
+| contracted / accepted | 0.5/veto         | 215 |    26.5% |                  0.0% |             26.5% | 57/0/0/158   |
+| contracted / overall  | 0.5/veto         | 297 |    46.8% |                 34.2% |             26.5% | 57/82/0/158  |
+| contracted / accepted | 0.5/replace      | 215 |    26.5% |                  0.0% |             26.5% | 57/0/0/158   |
+| contracted / overall  | 0.5/replace      | 297 |    46.8% |                 34.2% |             26.5% | 57/82/0/158  |
+| contracted / accepted | 0.6/veto         | 215 |     8.8% |                  0.0% |              8.8% | 19/0/0/196   |
+| contracted / overall  | 0.6/veto         | 297 |    34.0% |                 29.5% |              8.8% | 19/82/0/196  |
+| contracted / accepted | 0.6/replace      | 215 |     8.8% |                  0.0% |              8.8% | 19/0/0/196   |
+| contracted / overall  | 0.6/replace      | 297 |    34.0% |                 29.5% |              8.8% | 19/82/0/196  |
+| contracted / accepted | 0.7/veto         | 215 |     0.9% |                  0.0% |              0.9% | 2/0/0/213    |
+| contracted / overall  | 0.7/veto         | 297 |    28.3% |                 27.8% |              0.9% | 2/82/0/213   |
+| contracted / accepted | 0.7/replace      | 215 |     0.9% |                  0.0% |              0.9% | 2/0/0/213    |
+| contracted / overall  | 0.7/replace      | 297 |    28.3% |                 27.8% |              0.9% | 2/82/0/213   |
+| augmented / accepted  | 0.5/veto         | 254 |    37.0% |                 19.0% |             26.5% | 57/37/2/158  |
+| augmented / overall   | 0.5/veto         | 336 |    52.4% |                 43.0% |             26.5% | 57/119/2/158 |
+| augmented / accepted  | 0.5/replace      | 254 |    37.0% |                 19.0% |             26.5% | 57/37/2/158  |
+| augmented / overall   | 0.5/replace      | 336 |    52.4% |                 43.0% |             26.5% | 57/119/2/158 |
+| augmented / accepted  | 0.6/veto         | 254 |    22.8% |                 16.6% |              8.8% | 19/39/0/196  |
+| augmented / overall   | 0.6/veto         | 336 |    41.7% |                 38.2% |              8.8% | 19/121/0/196 |
+| augmented / accepted  | 0.6/replace      | 254 |    22.8% |                 16.6% |              8.8% | 19/39/0/196  |
+| augmented / overall   | 0.6/replace      | 336 |    41.7% |                 38.2% |              8.8% | 19/121/0/196 |
+| augmented / accepted  | 0.7/veto         | 254 |    16.1% |                 15.5% |              0.9% | 2/39/0/213   |
+| augmented / overall   | 0.7/veto         | 336 |    36.6% |                 36.2% |              0.9% | 2/121/0/213  |
+| augmented / accepted  | 0.7/replace      | 254 |    16.1% |                 15.5% |              0.9% | 2/39/0/213   |
+| augmented / overall   | 0.7/replace      | 336 |    36.6% |                 36.2% |              0.9% | 2/121/0/213  |
 
 #### bekko-system-one-v0-17m (`canonical`)
 
-| Scope / stratum | Threshold / mode | n | Accuracy | Meaningless precision | Meaningful recall | tp/tn/fp/fn |
-|---|---|---:|---:|---:|---:|---|
-| contracted / accepted | 0.5/veto | 215 | 22.3% | 0.0% | 22.3% | 48/0/0/167 |
-| contracted / overall | 0.5/veto | 297 | 43.8% | 32.9% | 22.3% | 48/82/0/167 |
-| contracted / accepted | 0.5/replace | 215 | 22.3% | 0.0% | 22.3% | 48/0/0/167 |
-| contracted / overall | 0.5/replace | 297 | 41.1% | 30.7% | 22.3% | 48/74/8/167 |
-| contracted / accepted | 0.6/veto | 215 | 2.3% | 0.0% | 2.3% | 5/0/0/210 |
-| contracted / overall | 0.6/veto | 297 | 29.3% | 28.1% | 2.3% | 5/82/0/210 |
-| contracted / accepted | 0.6/replace | 215 | 2.3% | 0.0% | 2.3% | 5/0/0/210 |
-| contracted / overall | 0.6/replace | 297 | 29.3% | 28.1% | 2.3% | 5/82/0/210 |
-| contracted / accepted | 0.7/veto | 215 | 0.0% | 0.0% | 0.0% | 0/0/0/215 |
-| contracted / overall | 0.7/veto | 297 | 27.6% | 27.6% | 0.0% | 0/82/0/215 |
-| contracted / accepted | 0.7/replace | 215 | 0.0% | 0.0% | 0.0% | 0/0/0/215 |
-| contracted / overall | 0.7/replace | 297 | 27.6% | 27.6% | 0.0% | 0/82/0/215 |
-| augmented / accepted | 0.5/veto | 254 | 32.3% | 16.9% | 22.3% | 48/34/5/167 |
-| augmented / overall | 0.5/veto | 336 | 48.8% | 41.0% | 22.3% | 48/116/5/167 |
-| augmented / accepted | 0.5/replace | 254 | 32.3% | 16.9% | 22.3% | 48/34/5/167 |
-| augmented / overall | 0.5/replace | 336 | 46.4% | 39.3% | 22.3% | 48/108/13/167 |
-| augmented / accepted | 0.6/veto | 254 | 17.3% | 15.7% | 2.3% | 5/39/0/210 |
-| augmented / overall | 0.6/veto | 336 | 37.5% | 36.6% | 2.3% | 5/121/0/210 |
-| augmented / accepted | 0.6/replace | 254 | 17.3% | 15.7% | 2.3% | 5/39/0/210 |
-| augmented / overall | 0.6/replace | 336 | 37.5% | 36.6% | 2.3% | 5/121/0/210 |
-| augmented / accepted | 0.7/veto | 254 | 15.4% | 15.4% | 0.0% | 0/39/0/215 |
-| augmented / overall | 0.7/veto | 336 | 36.0% | 36.0% | 0.0% | 0/121/0/215 |
-| augmented / accepted | 0.7/replace | 254 | 15.4% | 15.4% | 0.0% | 0/39/0/215 |
-| augmented / overall | 0.7/replace | 336 | 36.0% | 36.0% | 0.0% | 0/121/0/215 |
+| Scope / stratum       | Threshold / mode |   n | Accuracy | Meaningless precision | Meaningful recall | tp/tn/fp/fn   |
+| --------------------- | ---------------- | --: | -------: | --------------------: | ----------------: | ------------- |
+| contracted / accepted | 0.5/veto         | 215 |    22.3% |                  0.0% |             22.3% | 48/0/0/167    |
+| contracted / overall  | 0.5/veto         | 297 |    43.8% |                 32.9% |             22.3% | 48/82/0/167   |
+| contracted / accepted | 0.5/replace      | 215 |    22.3% |                  0.0% |             22.3% | 48/0/0/167    |
+| contracted / overall  | 0.5/replace      | 297 |    41.1% |                 30.7% |             22.3% | 48/74/8/167   |
+| contracted / accepted | 0.6/veto         | 215 |     2.3% |                  0.0% |              2.3% | 5/0/0/210     |
+| contracted / overall  | 0.6/veto         | 297 |    29.3% |                 28.1% |              2.3% | 5/82/0/210    |
+| contracted / accepted | 0.6/replace      | 215 |     2.3% |                  0.0% |              2.3% | 5/0/0/210     |
+| contracted / overall  | 0.6/replace      | 297 |    29.3% |                 28.1% |              2.3% | 5/82/0/210    |
+| contracted / accepted | 0.7/veto         | 215 |     0.0% |                  0.0% |              0.0% | 0/0/0/215     |
+| contracted / overall  | 0.7/veto         | 297 |    27.6% |                 27.6% |              0.0% | 0/82/0/215    |
+| contracted / accepted | 0.7/replace      | 215 |     0.0% |                  0.0% |              0.0% | 0/0/0/215     |
+| contracted / overall  | 0.7/replace      | 297 |    27.6% |                 27.6% |              0.0% | 0/82/0/215    |
+| augmented / accepted  | 0.5/veto         | 254 |    32.3% |                 16.9% |             22.3% | 48/34/5/167   |
+| augmented / overall   | 0.5/veto         | 336 |    48.8% |                 41.0% |             22.3% | 48/116/5/167  |
+| augmented / accepted  | 0.5/replace      | 254 |    32.3% |                 16.9% |             22.3% | 48/34/5/167   |
+| augmented / overall   | 0.5/replace      | 336 |    46.4% |                 39.3% |             22.3% | 48/108/13/167 |
+| augmented / accepted  | 0.6/veto         | 254 |    17.3% |                 15.7% |              2.3% | 5/39/0/210    |
+| augmented / overall   | 0.6/veto         | 336 |    37.5% |                 36.6% |              2.3% | 5/121/0/210   |
+| augmented / accepted  | 0.6/replace      | 254 |    17.3% |                 15.7% |              2.3% | 5/39/0/210    |
+| augmented / overall   | 0.6/replace      | 336 |    37.5% |                 36.6% |              2.3% | 5/121/0/210   |
+| augmented / accepted  | 0.7/veto         | 254 |    15.4% |                 15.4% |              0.0% | 0/39/0/215    |
+| augmented / overall   | 0.7/veto         | 336 |    36.0% |                 36.0% |              0.0% | 0/121/0/215   |
+| augmented / accepted  | 0.7/replace      | 254 |    15.4% |                 15.4% |              0.0% | 0/39/0/215    |
+| augmented / overall   | 0.7/replace      | 336 |    36.0% |                 36.0% |              0.0% | 0/121/0/215   |
 
 #### ettin-reranker-150m-v1 (`current`)
 
-| Scope / stratum | Threshold / mode | n | Accuracy | Meaningless precision | Meaningful recall | tp/tn/fp/fn |
-|---|---|---:|---:|---:|---:|---|
-| contracted / accepted | 0.5/veto | 215 | 100.0% | n/a | 100.0% | 215/0/0/0 |
-| contracted / overall | 0.5/veto | 297 | 100.0% | 100.0% | 100.0% | 215/82/0/0 |
-| contracted / accepted | 0.5/replace | 215 | 100.0% | n/a | 100.0% | 215/0/0/0 |
-| contracted / overall | 0.5/replace | 297 | 72.4% | n/a | 100.0% | 215/0/82/0 |
-| contracted / accepted | 0.6/veto | 215 | 100.0% | n/a | 100.0% | 215/0/0/0 |
-| contracted / overall | 0.6/veto | 297 | 100.0% | 100.0% | 100.0% | 215/82/0/0 |
-| contracted / accepted | 0.6/replace | 215 | 100.0% | n/a | 100.0% | 215/0/0/0 |
-| contracted / overall | 0.6/replace | 297 | 72.4% | n/a | 100.0% | 215/0/82/0 |
-| contracted / accepted | 0.7/veto | 215 | 100.0% | n/a | 100.0% | 215/0/0/0 |
-| contracted / overall | 0.7/veto | 297 | 100.0% | 100.0% | 100.0% | 215/82/0/0 |
-| contracted / accepted | 0.7/replace | 215 | 100.0% | n/a | 100.0% | 215/0/0/0 |
-| contracted / overall | 0.7/replace | 297 | 72.4% | n/a | 100.0% | 215/0/82/0 |
-| augmented / accepted | 0.5/veto | 254 | 84.6% | n/a | 100.0% | 215/0/39/0 |
-| augmented / overall | 0.5/veto | 336 | 88.4% | 100.0% | 100.0% | 215/82/39/0 |
-| augmented / accepted | 0.5/replace | 254 | 84.6% | n/a | 100.0% | 215/0/39/0 |
-| augmented / overall | 0.5/replace | 336 | 64.0% | n/a | 100.0% | 215/0/121/0 |
-| augmented / accepted | 0.6/veto | 254 | 84.6% | n/a | 100.0% | 215/0/39/0 |
-| augmented / overall | 0.6/veto | 336 | 88.4% | 100.0% | 100.0% | 215/82/39/0 |
-| augmented / accepted | 0.6/replace | 254 | 84.6% | n/a | 100.0% | 215/0/39/0 |
-| augmented / overall | 0.6/replace | 336 | 64.0% | n/a | 100.0% | 215/0/121/0 |
-| augmented / accepted | 0.7/veto | 254 | 84.6% | n/a | 100.0% | 215/0/39/0 |
-| augmented / overall | 0.7/veto | 336 | 88.4% | 100.0% | 100.0% | 215/82/39/0 |
-| augmented / accepted | 0.7/replace | 254 | 84.6% | n/a | 100.0% | 215/0/39/0 |
-| augmented / overall | 0.7/replace | 336 | 64.0% | n/a | 100.0% | 215/0/121/0 |
+| Scope / stratum       | Threshold / mode |   n | Accuracy | Meaningless precision | Meaningful recall | tp/tn/fp/fn |
+| --------------------- | ---------------- | --: | -------: | --------------------: | ----------------: | ----------- |
+| contracted / accepted | 0.5/veto         | 215 |   100.0% |                   n/a |            100.0% | 215/0/0/0   |
+| contracted / overall  | 0.5/veto         | 297 |   100.0% |                100.0% |            100.0% | 215/82/0/0  |
+| contracted / accepted | 0.5/replace      | 215 |   100.0% |                   n/a |            100.0% | 215/0/0/0   |
+| contracted / overall  | 0.5/replace      | 297 |    72.4% |                   n/a |            100.0% | 215/0/82/0  |
+| contracted / accepted | 0.6/veto         | 215 |   100.0% |                   n/a |            100.0% | 215/0/0/0   |
+| contracted / overall  | 0.6/veto         | 297 |   100.0% |                100.0% |            100.0% | 215/82/0/0  |
+| contracted / accepted | 0.6/replace      | 215 |   100.0% |                   n/a |            100.0% | 215/0/0/0   |
+| contracted / overall  | 0.6/replace      | 297 |    72.4% |                   n/a |            100.0% | 215/0/82/0  |
+| contracted / accepted | 0.7/veto         | 215 |   100.0% |                   n/a |            100.0% | 215/0/0/0   |
+| contracted / overall  | 0.7/veto         | 297 |   100.0% |                100.0% |            100.0% | 215/82/0/0  |
+| contracted / accepted | 0.7/replace      | 215 |   100.0% |                   n/a |            100.0% | 215/0/0/0   |
+| contracted / overall  | 0.7/replace      | 297 |    72.4% |                   n/a |            100.0% | 215/0/82/0  |
+| augmented / accepted  | 0.5/veto         | 254 |    84.6% |                   n/a |            100.0% | 215/0/39/0  |
+| augmented / overall   | 0.5/veto         | 336 |    88.4% |                100.0% |            100.0% | 215/82/39/0 |
+| augmented / accepted  | 0.5/replace      | 254 |    84.6% |                   n/a |            100.0% | 215/0/39/0  |
+| augmented / overall   | 0.5/replace      | 336 |    64.0% |                   n/a |            100.0% | 215/0/121/0 |
+| augmented / accepted  | 0.6/veto         | 254 |    84.6% |                   n/a |            100.0% | 215/0/39/0  |
+| augmented / overall   | 0.6/veto         | 336 |    88.4% |                100.0% |            100.0% | 215/82/39/0 |
+| augmented / accepted  | 0.6/replace      | 254 |    84.6% |                   n/a |            100.0% | 215/0/39/0  |
+| augmented / overall   | 0.6/replace      | 336 |    64.0% |                   n/a |            100.0% | 215/0/121/0 |
+| augmented / accepted  | 0.7/veto         | 254 |    84.6% |                   n/a |            100.0% | 215/0/39/0  |
+| augmented / overall   | 0.7/veto         | 336 |    88.4% |                100.0% |            100.0% | 215/82/39/0 |
+| augmented / accepted  | 0.7/replace      | 254 |    84.6% |                   n/a |            100.0% | 215/0/39/0  |
+| augmented / overall   | 0.7/replace      | 336 |    64.0% |                   n/a |            100.0% | 215/0/121/0 |
 
 #### all-MiniLM-L6-v2 (`current`)
 
-| Scope / stratum | Threshold / mode | n | Accuracy | Meaningless precision | Meaningful recall | tp/tn/fp/fn |
-|---|---|---:|---:|---:|---:|---|
-| contracted / accepted | 0.5/veto | 215 | 100.0% | n/a | 100.0% | 215/0/0/0 |
-| contracted / overall | 0.5/veto | 297 | 100.0% | 100.0% | 100.0% | 215/82/0/0 |
-| contracted / accepted | 0.5/replace | 215 | 100.0% | n/a | 100.0% | 215/0/0/0 |
-| contracted / overall | 0.5/replace | 297 | 72.4% | n/a | 100.0% | 215/0/82/0 |
-| contracted / accepted | 0.6/veto | 215 | 100.0% | n/a | 100.0% | 215/0/0/0 |
-| contracted / overall | 0.6/veto | 297 | 100.0% | 100.0% | 100.0% | 215/82/0/0 |
-| contracted / accepted | 0.6/replace | 215 | 100.0% | n/a | 100.0% | 215/0/0/0 |
-| contracted / overall | 0.6/replace | 297 | 72.4% | n/a | 100.0% | 215/0/82/0 |
-| contracted / accepted | 0.7/veto | 215 | 0.0% | 0.0% | 0.0% | 0/0/0/215 |
-| contracted / overall | 0.7/veto | 297 | 27.6% | 27.6% | 0.0% | 0/82/0/215 |
-| contracted / accepted | 0.7/replace | 215 | 0.0% | 0.0% | 0.0% | 0/0/0/215 |
-| contracted / overall | 0.7/replace | 297 | 27.6% | 27.6% | 0.0% | 0/82/0/215 |
-| augmented / accepted | 0.5/veto | 254 | 84.6% | n/a | 100.0% | 215/0/39/0 |
-| augmented / overall | 0.5/veto | 336 | 88.4% | 100.0% | 100.0% | 215/82/39/0 |
-| augmented / accepted | 0.5/replace | 254 | 84.6% | n/a | 100.0% | 215/0/39/0 |
-| augmented / overall | 0.5/replace | 336 | 64.0% | n/a | 100.0% | 215/0/121/0 |
-| augmented / accepted | 0.6/veto | 254 | 84.6% | n/a | 100.0% | 215/0/39/0 |
-| augmented / overall | 0.6/veto | 336 | 88.4% | 100.0% | 100.0% | 215/82/39/0 |
-| augmented / accepted | 0.6/replace | 254 | 84.6% | n/a | 100.0% | 215/0/39/0 |
-| augmented / overall | 0.6/replace | 336 | 64.0% | n/a | 100.0% | 215/0/121/0 |
-| augmented / accepted | 0.7/veto | 254 | 15.4% | 15.4% | 0.0% | 0/39/0/215 |
-| augmented / overall | 0.7/veto | 336 | 36.0% | 36.0% | 0.0% | 0/121/0/215 |
-| augmented / accepted | 0.7/replace | 254 | 15.4% | 15.4% | 0.0% | 0/39/0/215 |
-| augmented / overall | 0.7/replace | 336 | 36.0% | 36.0% | 0.0% | 0/121/0/215 |
+| Scope / stratum       | Threshold / mode |   n | Accuracy | Meaningless precision | Meaningful recall | tp/tn/fp/fn |
+| --------------------- | ---------------- | --: | -------: | --------------------: | ----------------: | ----------- |
+| contracted / accepted | 0.5/veto         | 215 |   100.0% |                   n/a |            100.0% | 215/0/0/0   |
+| contracted / overall  | 0.5/veto         | 297 |   100.0% |                100.0% |            100.0% | 215/82/0/0  |
+| contracted / accepted | 0.5/replace      | 215 |   100.0% |                   n/a |            100.0% | 215/0/0/0   |
+| contracted / overall  | 0.5/replace      | 297 |    72.4% |                   n/a |            100.0% | 215/0/82/0  |
+| contracted / accepted | 0.6/veto         | 215 |   100.0% |                   n/a |            100.0% | 215/0/0/0   |
+| contracted / overall  | 0.6/veto         | 297 |   100.0% |                100.0% |            100.0% | 215/82/0/0  |
+| contracted / accepted | 0.6/replace      | 215 |   100.0% |                   n/a |            100.0% | 215/0/0/0   |
+| contracted / overall  | 0.6/replace      | 297 |    72.4% |                   n/a |            100.0% | 215/0/82/0  |
+| contracted / accepted | 0.7/veto         | 215 |     0.0% |                  0.0% |              0.0% | 0/0/0/215   |
+| contracted / overall  | 0.7/veto         | 297 |    27.6% |                 27.6% |              0.0% | 0/82/0/215  |
+| contracted / accepted | 0.7/replace      | 215 |     0.0% |                  0.0% |              0.0% | 0/0/0/215   |
+| contracted / overall  | 0.7/replace      | 297 |    27.6% |                 27.6% |              0.0% | 0/82/0/215  |
+| augmented / accepted  | 0.5/veto         | 254 |    84.6% |                   n/a |            100.0% | 215/0/39/0  |
+| augmented / overall   | 0.5/veto         | 336 |    88.4% |                100.0% |            100.0% | 215/82/39/0 |
+| augmented / accepted  | 0.5/replace      | 254 |    84.6% |                   n/a |            100.0% | 215/0/39/0  |
+| augmented / overall   | 0.5/replace      | 336 |    64.0% |                   n/a |            100.0% | 215/0/121/0 |
+| augmented / accepted  | 0.6/veto         | 254 |    84.6% |                   n/a |            100.0% | 215/0/39/0  |
+| augmented / overall   | 0.6/veto         | 336 |    88.4% |                100.0% |            100.0% | 215/82/39/0 |
+| augmented / accepted  | 0.6/replace      | 254 |    84.6% |                   n/a |            100.0% | 215/0/39/0  |
+| augmented / overall   | 0.6/replace      | 336 |    64.0% |                   n/a |            100.0% | 215/0/121/0 |
+| augmented / accepted  | 0.7/veto         | 254 |    15.4% |                 15.4% |              0.0% | 0/39/0/215  |
+| augmented / overall   | 0.7/veto         | 336 |    36.0% |                 36.0% |              0.0% | 0/121/0/215 |
+| augmented / accepted  | 0.7/replace      | 254 |    15.4% |                 15.4% |              0.0% | 0/39/0/215  |
+| augmented / overall   | 0.7/replace      | 336 |    36.0% |                 36.0% |              0.0% | 0/121/0/215 |
 
 ### 4.3 Prompt ablation
 
-| Candidate | Prompt | Best augmented accepted cell | Accuracy | Precision | Recall | Contracted accepted recall |
-|---|---|---|---:|---:|---:|---:|
-| GLiDE-0.4B | `canonical` | not scored (incomplete) | n/a | n/a | n/a | n/a |
-| GLiDE-0.4B | `rubric` | not scored (incomplete) | n/a | n/a | n/a | n/a |
-| GLiDE-0.4B | `compact` | not scored (incomplete) | n/a | n/a | n/a | n/a |
-| tasksource-decider-nano | `canonical` | 0.5/veto | 37.0% | 19.0% | 26.5% | 26.5% |
-| tasksource-decider-nano | `rubric` | 0.5/veto | 25.6% | 3.1% | 27.9% | 27.9% |
-| tasksource-decider-nano | `compact` | 0.5/veto | 39.4% | 15.2% | 34.9% | 34.9% |
-| bekko-system-one-v0-17m | `canonical` | 0.5/veto | 32.3% | 16.9% | 22.3% | 22.3% |
-| bekko-system-one-v0-17m | `rubric` | 0.5/veto | 39.0% | 11.8% | 37.7% | 37.7% |
-| bekko-system-one-v0-17m | `compact` | 0.5/veto | 16.5% | 15.5% | 1.4% | 1.4% |
-| ettin-reranker-150m-v1 | `current` | 0.5/veto | 84.6% | n/a | 100.0% | 100.0% |
-| ettin-reranker-150m-v1 | `query_first` | not scored (missing) | n/a | n/a | n/a | n/a |
-| ettin-reranker-150m-v1 | `rubric_query` | not scored (missing) | n/a | n/a | n/a | n/a |
-| all-MiniLM-L6-v2 | `current` | 0.5/veto | 84.6% | n/a | 100.0% | 100.0% |
-| all-MiniLM-L6-v2 | `query_first` | not scored (missing) | n/a | n/a | n/a | n/a |
-| all-MiniLM-L6-v2 | `rubric_query` | not scored (missing) | n/a | n/a | n/a | n/a |
+| Candidate               | Prompt         | Best augmented accepted cell | Accuracy | Precision | Recall | Contracted accepted recall |
+| ----------------------- | -------------- | ---------------------------- | -------: | --------: | -----: | -------------------------: |
+| GLiDE-0.4B              | `canonical`    | not scored (incomplete)      |      n/a |       n/a |    n/a |                        n/a |
+| GLiDE-0.4B              | `rubric`       | not scored (incomplete)      |      n/a |       n/a |    n/a |                        n/a |
+| GLiDE-0.4B              | `compact`      | not scored (incomplete)      |      n/a |       n/a |    n/a |                        n/a |
+| tasksource-decider-nano | `canonical`    | 0.5/veto                     |    37.0% |     19.0% |  26.5% |                      26.5% |
+| tasksource-decider-nano | `rubric`       | 0.5/veto                     |    25.6% |      3.1% |  27.9% |                      27.9% |
+| tasksource-decider-nano | `compact`      | 0.5/veto                     |    39.4% |     15.2% |  34.9% |                      34.9% |
+| bekko-system-one-v0-17m | `canonical`    | 0.5/veto                     |    32.3% |     16.9% |  22.3% |                      22.3% |
+| bekko-system-one-v0-17m | `rubric`       | 0.5/veto                     |    39.0% |     11.8% |  37.7% |                      37.7% |
+| bekko-system-one-v0-17m | `compact`      | 0.5/veto                     |    16.5% |     15.5% |   1.4% |                       1.4% |
+| ettin-reranker-150m-v1  | `current`      | 0.5/veto                     |    84.6% |       n/a | 100.0% |                     100.0% |
+| ettin-reranker-150m-v1  | `query_first`  | not scored (missing)         |      n/a |       n/a |    n/a |                        n/a |
+| ettin-reranker-150m-v1  | `rubric_query` | not scored (missing)         |      n/a |       n/a |    n/a |                        n/a |
+| all-MiniLM-L6-v2        | `current`      | 0.5/veto                     |    84.6% |       n/a | 100.0% |                     100.0% |
+| all-MiniLM-L6-v2        | `query_first`  | not scored (missing)         |      n/a |       n/a |    n/a |                        n/a |
+| all-MiniLM-L6-v2        | `rubric_query` | not scored (missing)         |      n/a |       n/a |    n/a |                        n/a |
 
 ### 4.4 Compliance table
 
-| Candidate | Prompt | Threshold / mode | Contracted accepted (acc/prec/rec) | Augmented accepted (acc/prec/rec) | Compliant contracted | Compliant augmented |
-|---|---|---|---|---|---|---|
-| tasksource-decider-nano | `canonical` | 0.5/veto | 26.5% / 0.0% / 26.5% | 37.0% / 19.0% / 26.5% | no | no |
-| tasksource-decider-nano | `canonical` | 0.5/replace | 26.5% / 0.0% / 26.5% | 37.0% / 19.0% / 26.5% | no | no |
-| tasksource-decider-nano | `canonical` | 0.6/veto | 8.8% / 0.0% / 8.8% | 22.8% / 16.6% / 8.8% | no | no |
-| tasksource-decider-nano | `canonical` | 0.6/replace | 8.8% / 0.0% / 8.8% | 22.8% / 16.6% / 8.8% | no | no |
-| tasksource-decider-nano | `canonical` | 0.7/veto | 0.9% / 0.0% / 0.9% | 16.1% / 15.5% / 0.9% | no | no |
-| tasksource-decider-nano | `canonical` | 0.7/replace | 0.9% / 0.0% / 0.9% | 16.1% / 15.5% / 0.9% | no | no |
-| tasksource-decider-nano | `rubric` | 0.5/veto | 27.9% / 0.0% / 27.9% | 25.6% / 3.1% / 27.9% | no | no |
-| tasksource-decider-nano | `rubric` | 0.5/replace | 27.9% / 0.0% / 27.9% | 25.6% / 3.1% / 27.9% | no | no |
-| tasksource-decider-nano | `rubric` | 0.6/veto | 16.7% / 0.0% / 16.7% | 18.9% / 6.3% / 16.7% | no | no |
-| tasksource-decider-nano | `rubric` | 0.6/replace | 16.7% / 0.0% / 16.7% | 18.9% / 6.3% / 16.7% | no | no |
-| tasksource-decider-nano | `rubric` | 0.7/veto | 10.7% / 0.0% / 10.7% | 18.1% / 10.7% / 10.7% | no | no |
-| tasksource-decider-nano | `rubric` | 0.7/replace | 10.7% / 0.0% / 10.7% | 18.1% / 10.7% / 10.7% | no | no |
-| tasksource-decider-nano | `compact` | 0.5/veto | 34.9% / 0.0% / 34.9% | 39.4% / 15.2% / 34.9% | no | no |
-| tasksource-decider-nano | `compact` | 0.5/replace | 34.9% / 0.0% / 34.9% | 39.4% / 15.2% / 34.9% | no | no |
-| tasksource-decider-nano | `compact` | 0.6/veto | 19.1% / 0.0% / 19.1% | 29.1% / 15.9% / 19.1% | no | no |
-| tasksource-decider-nano | `compact` | 0.6/replace | 19.1% / 0.0% / 19.1% | 29.1% / 15.9% / 19.1% | no | no |
-| tasksource-decider-nano | `compact` | 0.7/veto | 8.4% / 0.0% / 8.4% | 22.0% / 16.2% / 8.4% | no | no |
-| tasksource-decider-nano | `compact` | 0.7/replace | 8.4% / 0.0% / 8.4% | 22.0% / 16.2% / 8.4% | no | no |
-| ettin-reranker-150m-v1 | `current` | 0.5/veto | 100.0% / n/a / 100.0% | 84.6% / n/a / 100.0% | no | no |
-| ettin-reranker-150m-v1 | `current` | 0.5/replace | 100.0% / n/a / 100.0% | 84.6% / n/a / 100.0% | no | no |
-| ettin-reranker-150m-v1 | `current` | 0.6/veto | 100.0% / n/a / 100.0% | 84.6% / n/a / 100.0% | no | no |
-| ettin-reranker-150m-v1 | `current` | 0.6/replace | 100.0% / n/a / 100.0% | 84.6% / n/a / 100.0% | no | no |
-| ettin-reranker-150m-v1 | `current` | 0.7/veto | 100.0% / n/a / 100.0% | 84.6% / n/a / 100.0% | no | no |
-| ettin-reranker-150m-v1 | `current` | 0.7/replace | 100.0% / n/a / 100.0% | 84.6% / n/a / 100.0% | no | no |
+| Candidate               | Prompt      | Threshold / mode | Contracted accepted (acc/prec/rec) | Augmented accepted (acc/prec/rec) | Compliant contracted | Compliant augmented |
+| ----------------------- | ----------- | ---------------- | ---------------------------------- | --------------------------------- | -------------------- | ------------------- |
+| tasksource-decider-nano | `canonical` | 0.5/veto         | 26.5% / 0.0% / 26.5%               | 37.0% / 19.0% / 26.5%             | no                   | no                  |
+| tasksource-decider-nano | `canonical` | 0.5/replace      | 26.5% / 0.0% / 26.5%               | 37.0% / 19.0% / 26.5%             | no                   | no                  |
+| tasksource-decider-nano | `canonical` | 0.6/veto         | 8.8% / 0.0% / 8.8%                 | 22.8% / 16.6% / 8.8%              | no                   | no                  |
+| tasksource-decider-nano | `canonical` | 0.6/replace      | 8.8% / 0.0% / 8.8%                 | 22.8% / 16.6% / 8.8%              | no                   | no                  |
+| tasksource-decider-nano | `canonical` | 0.7/veto         | 0.9% / 0.0% / 0.9%                 | 16.1% / 15.5% / 0.9%              | no                   | no                  |
+| tasksource-decider-nano | `canonical` | 0.7/replace      | 0.9% / 0.0% / 0.9%                 | 16.1% / 15.5% / 0.9%              | no                   | no                  |
+| tasksource-decider-nano | `rubric`    | 0.5/veto         | 27.9% / 0.0% / 27.9%               | 25.6% / 3.1% / 27.9%              | no                   | no                  |
+| tasksource-decider-nano | `rubric`    | 0.5/replace      | 27.9% / 0.0% / 27.9%               | 25.6% / 3.1% / 27.9%              | no                   | no                  |
+| tasksource-decider-nano | `rubric`    | 0.6/veto         | 16.7% / 0.0% / 16.7%               | 18.9% / 6.3% / 16.7%              | no                   | no                  |
+| tasksource-decider-nano | `rubric`    | 0.6/replace      | 16.7% / 0.0% / 16.7%               | 18.9% / 6.3% / 16.7%              | no                   | no                  |
+| tasksource-decider-nano | `rubric`    | 0.7/veto         | 10.7% / 0.0% / 10.7%               | 18.1% / 10.7% / 10.7%             | no                   | no                  |
+| tasksource-decider-nano | `rubric`    | 0.7/replace      | 10.7% / 0.0% / 10.7%               | 18.1% / 10.7% / 10.7%             | no                   | no                  |
+| tasksource-decider-nano | `compact`   | 0.5/veto         | 34.9% / 0.0% / 34.9%               | 39.4% / 15.2% / 34.9%             | no                   | no                  |
+| tasksource-decider-nano | `compact`   | 0.5/replace      | 34.9% / 0.0% / 34.9%               | 39.4% / 15.2% / 34.9%             | no                   | no                  |
+| tasksource-decider-nano | `compact`   | 0.6/veto         | 19.1% / 0.0% / 19.1%               | 29.1% / 15.9% / 19.1%             | no                   | no                  |
+| tasksource-decider-nano | `compact`   | 0.6/replace      | 19.1% / 0.0% / 19.1%               | 29.1% / 15.9% / 19.1%             | no                   | no                  |
+| tasksource-decider-nano | `compact`   | 0.7/veto         | 8.4% / 0.0% / 8.4%                 | 22.0% / 16.2% / 8.4%              | no                   | no                  |
+| tasksource-decider-nano | `compact`   | 0.7/replace      | 8.4% / 0.0% / 8.4%                 | 22.0% / 16.2% / 8.4%              | no                   | no                  |
+| ettin-reranker-150m-v1  | `current`   | 0.5/veto         | 100.0% / n/a / 100.0%              | 84.6% / n/a / 100.0%              | no                   | no                  |
+| ettin-reranker-150m-v1  | `current`   | 0.5/replace      | 100.0% / n/a / 100.0%              | 84.6% / n/a / 100.0%              | no                   | no                  |
+| ettin-reranker-150m-v1  | `current`   | 0.6/veto         | 100.0% / n/a / 100.0%              | 84.6% / n/a / 100.0%              | no                   | no                  |
+| ettin-reranker-150m-v1  | `current`   | 0.6/replace      | 100.0% / n/a / 100.0%              | 84.6% / n/a / 100.0%              | no                   | no                  |
+| ettin-reranker-150m-v1  | `current`   | 0.7/veto         | 100.0% / n/a / 100.0%              | 84.6% / n/a / 100.0%              | no                   | no                  |
+| ettin-reranker-150m-v1  | `current`   | 0.7/replace      | 100.0% / n/a / 100.0%              | 84.6% / n/a / 100.0%              | no                   | no                  |
 
 ## 5. Per-source breakdown
 
 Per-source cells at threshold 0.5 are shown for the heuristic baseline and for each eligible production prompt; the full matrix (all thresholds and modes, both scopes) is in `out/metrics.json`.
 
-| Scope / source | n (pos/neg) | Heuristic accuracy | Model | Accuracy | Precision | Recall |
-|---|---:|---:|---|---:|---:|---:|
-| contracted / brushoff_table | 0/32 | 100.0% | heuristic baseline | 100.0% | n/a | n/a |
-| contracted / meaningful_table | 3/0 | 100.0% | heuristic baseline | 100.0% | n/a | n/a |
-| contracted / repo_suppression | 182/1 | 100.0% | heuristic baseline | 100.0% | n/a | n/a |
-| contracted / threshold_meaningful | 30/0 | 100.0% | heuristic baseline | 100.0% | n/a | n/a |
-| contracted / threshold_meaningless | 0/49 | 100.0% | heuristic baseline | 100.0% | n/a | n/a |
-| augmented / brushoff_table | 0/32 | 100.0% | heuristic baseline | 100.0% | n/a | n/a |
-| augmented / hard_negative | 0/39 | 0.0% | heuristic baseline | 0.0% | n/a | n/a |
-| augmented / meaningful_table | 3/0 | 100.0% | heuristic baseline | 100.0% | n/a | n/a |
-| augmented / repo_suppression | 182/1 | 100.0% | heuristic baseline | 100.0% | n/a | n/a |
-| augmented / threshold_meaningful | 30/0 | 100.0% | heuristic baseline | 100.0% | n/a | n/a |
-| augmented / threshold_meaningless | 0/49 | 100.0% | heuristic baseline | 100.0% | n/a | n/a |
-| contracted / brushoff_table | 0/32 | — | tasksource-decider-nano | 100.0% | 100.0% | n/a |
-| contracted / meaningful_table | 3/0 | — | tasksource-decider-nano | 0.0% | 0.0% | 0.0% |
-| contracted / repo_suppression | 182/1 | — | tasksource-decider-nano | 24.6% | 0.7% | 24.2% |
-| contracted / threshold_meaningful | 30/0 | — | tasksource-decider-nano | 43.3% | 0.0% | 43.3% |
-| contracted / threshold_meaningless | 0/49 | — | tasksource-decider-nano | 100.0% | 100.0% | n/a |
-| augmented / brushoff_table | 0/32 | — | tasksource-decider-nano | 100.0% | 100.0% | n/a |
-| augmented / hard_negative | 0/39 | — | tasksource-decider-nano | 94.9% | 100.0% | n/a |
-| augmented / meaningful_table | 3/0 | — | tasksource-decider-nano | 0.0% | 0.0% | 0.0% |
-| augmented / repo_suppression | 182/1 | — | tasksource-decider-nano | 24.6% | 0.7% | 24.2% |
-| augmented / threshold_meaningful | 30/0 | — | tasksource-decider-nano | 43.3% | 0.0% | 43.3% |
-| augmented / threshold_meaningless | 0/49 | — | tasksource-decider-nano | 100.0% | 100.0% | n/a |
-| contracted / brushoff_table | 0/32 | — | ettin-reranker-150m-v1 | 100.0% | 100.0% | n/a |
-| contracted / meaningful_table | 3/0 | — | ettin-reranker-150m-v1 | 100.0% | n/a | 100.0% |
-| contracted / repo_suppression | 182/1 | — | ettin-reranker-150m-v1 | 100.0% | 100.0% | 100.0% |
-| contracted / threshold_meaningful | 30/0 | — | ettin-reranker-150m-v1 | 100.0% | n/a | 100.0% |
-| contracted / threshold_meaningless | 0/49 | — | ettin-reranker-150m-v1 | 100.0% | 100.0% | n/a |
-| augmented / brushoff_table | 0/32 | — | ettin-reranker-150m-v1 | 100.0% | 100.0% | n/a |
-| augmented / hard_negative | 0/39 | — | ettin-reranker-150m-v1 | 0.0% | n/a | n/a |
-| augmented / meaningful_table | 3/0 | — | ettin-reranker-150m-v1 | 100.0% | n/a | 100.0% |
-| augmented / repo_suppression | 182/1 | — | ettin-reranker-150m-v1 | 100.0% | 100.0% | 100.0% |
-| augmented / threshold_meaningful | 30/0 | — | ettin-reranker-150m-v1 | 100.0% | n/a | 100.0% |
-| augmented / threshold_meaningless | 0/49 | — | ettin-reranker-150m-v1 | 100.0% | 100.0% | n/a |
+| Scope / source                     | n (pos/neg) | Heuristic accuracy | Model                   | Accuracy | Precision | Recall |
+| ---------------------------------- | ----------: | -----------------: | ----------------------- | -------: | --------: | -----: |
+| contracted / brushoff_table        |        0/32 |             100.0% | heuristic baseline      |   100.0% |       n/a |    n/a |
+| contracted / meaningful_table      |         3/0 |             100.0% | heuristic baseline      |   100.0% |       n/a |    n/a |
+| contracted / repo_suppression      |       182/1 |             100.0% | heuristic baseline      |   100.0% |       n/a |    n/a |
+| contracted / threshold_meaningful  |        30/0 |             100.0% | heuristic baseline      |   100.0% |       n/a |    n/a |
+| contracted / threshold_meaningless |        0/49 |             100.0% | heuristic baseline      |   100.0% |       n/a |    n/a |
+| augmented / brushoff_table         |        0/32 |             100.0% | heuristic baseline      |   100.0% |       n/a |    n/a |
+| augmented / hard_negative          |        0/39 |               0.0% | heuristic baseline      |     0.0% |       n/a |    n/a |
+| augmented / meaningful_table       |         3/0 |             100.0% | heuristic baseline      |   100.0% |       n/a |    n/a |
+| augmented / repo_suppression       |       182/1 |             100.0% | heuristic baseline      |   100.0% |       n/a |    n/a |
+| augmented / threshold_meaningful   |        30/0 |             100.0% | heuristic baseline      |   100.0% |       n/a |    n/a |
+| augmented / threshold_meaningless  |        0/49 |             100.0% | heuristic baseline      |   100.0% |       n/a |    n/a |
+| contracted / brushoff_table        |        0/32 |                  — | tasksource-decider-nano |   100.0% |    100.0% |    n/a |
+| contracted / meaningful_table      |         3/0 |                  — | tasksource-decider-nano |     0.0% |      0.0% |   0.0% |
+| contracted / repo_suppression      |       182/1 |                  — | tasksource-decider-nano |    24.6% |      0.7% |  24.2% |
+| contracted / threshold_meaningful  |        30/0 |                  — | tasksource-decider-nano |    43.3% |      0.0% |  43.3% |
+| contracted / threshold_meaningless |        0/49 |                  — | tasksource-decider-nano |   100.0% |    100.0% |    n/a |
+| augmented / brushoff_table         |        0/32 |                  — | tasksource-decider-nano |   100.0% |    100.0% |    n/a |
+| augmented / hard_negative          |        0/39 |                  — | tasksource-decider-nano |    94.9% |    100.0% |    n/a |
+| augmented / meaningful_table       |         3/0 |                  — | tasksource-decider-nano |     0.0% |      0.0% |   0.0% |
+| augmented / repo_suppression       |       182/1 |                  — | tasksource-decider-nano |    24.6% |      0.7% |  24.2% |
+| augmented / threshold_meaningful   |        30/0 |                  — | tasksource-decider-nano |    43.3% |      0.0% |  43.3% |
+| augmented / threshold_meaningless  |        0/49 |                  — | tasksource-decider-nano |   100.0% |    100.0% |    n/a |
+| contracted / brushoff_table        |        0/32 |                  — | ettin-reranker-150m-v1  |   100.0% |    100.0% |    n/a |
+| contracted / meaningful_table      |         3/0 |                  — | ettin-reranker-150m-v1  |   100.0% |       n/a | 100.0% |
+| contracted / repo_suppression      |       182/1 |                  — | ettin-reranker-150m-v1  |   100.0% |    100.0% | 100.0% |
+| contracted / threshold_meaningful  |        30/0 |                  — | ettin-reranker-150m-v1  |   100.0% |       n/a | 100.0% |
+| contracted / threshold_meaningless |        0/49 |                  — | ettin-reranker-150m-v1  |   100.0% |    100.0% |    n/a |
+| augmented / brushoff_table         |        0/32 |                  — | ettin-reranker-150m-v1  |   100.0% |    100.0% |    n/a |
+| augmented / hard_negative          |        0/39 |                  — | ettin-reranker-150m-v1  |     0.0% |       n/a |    n/a |
+| augmented / meaningful_table       |         3/0 |                  — | ettin-reranker-150m-v1  |   100.0% |       n/a | 100.0% |
+| augmented / repo_suppression       |       182/1 |                  — | ettin-reranker-150m-v1  |   100.0% |    100.0% | 100.0% |
+| augmented / threshold_meaningful   |        30/0 |                  — | ettin-reranker-150m-v1  |   100.0% |       n/a | 100.0% |
+| augmented / threshold_meaningless  |        0/49 |                  — | ettin-reranker-150m-v1  |   100.0% |    100.0% |    n/a |
 
 ## 6. Deviations, exclusions, and risks
 
@@ -306,4 +306,3 @@ Per-source cells at threshold 0.5 are shown for the heuristic baseline and for e
 - MiniLM-L6-v2 is explicitly excluded from accuracy comparison: the CrossEncoder classifier head is newly initialised (transformers LOAD REPORT), so only its latency/RSS rows are meaningful.
 - bekko-17m has no declared weight license; it is scored but excluded from any recommendation.
 - Decision-model states omit rule/context lines when the item has no rule or context instead of injecting `(unknown)`/`(none)` literals. A placeholder-vs-omitted ablation was not run; the reranker `current` prompt, by contrast, exactly mirrors production query construction.
-

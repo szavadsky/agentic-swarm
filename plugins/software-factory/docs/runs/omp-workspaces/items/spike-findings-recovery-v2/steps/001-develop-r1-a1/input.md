@@ -1,9 +1,11 @@
 # Step: Develop
 
 ## Goal
+
 Implement production code changes and supporting tests to satisfy the assignment, make declared targets pass green, and pass all project gates.
 
 ## Rules
+
 - Target green: every test selector and case identified in `target` MUST pass cleanly.
 - Quality gates: run project gates via `bash`; all gates MUST succeed with exit code 0.
 - Sizing budget: keep changes minimal and within the engine-enforced prod-line budget (see agent philosophy). The engine rejects oversized diffs mechanically.
@@ -11,26 +13,29 @@ Implement production code changes and supporting tests to satisfy the assignment
 - Evidence mandatory: yield `status: ok` with non-empty `evidence` (array of strings detailing personal verification) matching `developer-output.schema.json`.
 
 ## Assignment
+
 {
-  "slug": "spike-findings-recovery-v2",
-  "kind": "no-behavior",
-  "title": "Recover wave-1 spike findings onto parent branch (v2)",
-  "assignment": "Docs-only salvage retry (zero prod lines, no-behavior kind). Source branch topic/omp-workspaces--spike-findings-recovery holds the 5 approved files from the failed wave-2 recovery. Using read-only `git show <branch>:<path>` ONLY — NEVER checkout/switch/branch/merge and NEVER write to .factory/** engine paths — copy onto this item branch at identical repo-relative paths: plugins/software-factory/docs/spikes/omp-3-isolation.md, omp-4-mock-provider.md, omp-5-cache-keys.md, omp-6-repo-rules.md, plus items/spike-findings-recovery/RECOVERY.md (if that path is not writable from this item worktree, place as items/spike-findings-recovery-v2/RECOVERY.md with a header noting the source path). Fix the `oMP` capitalization typo in omp-6-repo-rules.md to `omp`. Verify: all 5 files present, each spike doc contains probe-evidence + recommendations sections, RECOVERY.md maps each M1 scenario to evidence + followUps for iteration-2 planning. CRITICAL mergeability: do NOT record a gate target (target {gate:test} requires full-suite exit 0 and is unmergeable on the red td-baseline-disk baseline); omit target entirely or record a single passing selector target only. Minimal verification from cwd=plugins/software-factory (e.g. file-presence check); do not gate on full suite.",
-  "outlineRef": "spike-findings-recovery-v2",
-  "milestone": "m1-omp-de-risk",
-  "wave": 3
+"slug": "spike-findings-recovery-v2",
+"kind": "no-behavior",
+"title": "Recover wave-1 spike findings onto parent branch (v2)",
+"assignment": "Docs-only salvage retry (zero prod lines, no-behavior kind). Source branch topic/omp-workspaces--spike-findings-recovery holds the 5 approved files from the failed wave-2 recovery. Using read-only `git show <branch>:<path>` ONLY — NEVER checkout/switch/branch/merge and NEVER write to .factory/** engine paths — copy onto this item branch at identical repo-relative paths: plugins/software-factory/docs/spikes/omp-3-isolation.md, omp-4-mock-provider.md, omp-5-cache-keys.md, omp-6-repo-rules.md, plus items/spike-findings-recovery/RECOVERY.md (if that path is not writable from this item worktree, place as items/spike-findings-recovery-v2/RECOVERY.md with a header noting the source path). Fix the `oMP` capitalization typo in omp-6-repo-rules.md to `omp`. Verify: all 5 files present, each spike doc contains probe-evidence + recommendations sections, RECOVERY.md maps each M1 scenario to evidence + followUps for iteration-2 planning. CRITICAL mergeability: do NOT record a gate target (target {gate:test} requires full-suite exit 0 and is unmergeable on the red td-baseline-disk baseline); omit target entirely or record a single passing selector target only. Minimal verification from cwd=plugins/software-factory (e.g. file-presence check); do not gate on full suite.",
+"outlineRef": "spike-findings-recovery-v2",
+"milestone": "m1-omp-de-risk",
+"wave": 3
 }
 
 ## Target
+
 tests
 
 ## Context & Citations
+
 []
 
 ## Review Feedback
 
-
 ## Open Concerns
+
 - id: rm-02fe59eb65
   kind: remarkable
   summary: Deterministic architect brief skeleton + cheap `@simpler` relevance judge (`brief.ts`)
@@ -41,13 +46,13 @@ tests
   kind: remarkable
   summary: Configure omp via a generated YAML overlay per turn
 
-
 - Review the concerns above before starting; they constrain this step but are not part of the assignment.
 - Raise concerns with evidence when you find cross-cutting issues; do not triage pre-existing concerns.
 
 ## Output
 
 Yield a structured JSON object matching this schema:
+
 - status (string, required, enum: ["ok","blocked","failed"]): Step execution status (ok, blocked, failed)
 - summary (string, required): Concise summary of implementation actions and test results
 - target (object, optional): Target test selectors, gate, or custom command for red/green verification

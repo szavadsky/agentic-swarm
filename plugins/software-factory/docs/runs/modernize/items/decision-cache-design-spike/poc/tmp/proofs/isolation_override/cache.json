@@ -1,9 +1,7 @@
 [
   {
     "decision": true,
-    "files": [
-      "src/app.py"
-    ],
+    "files": ["src/app.py"],
     "justification": "retry loop must not swallow keyboard interrupt",
     "key": "dk1.rqe7hoh6.wtubtklk.wdme4ym5.2rmpzejw.r6abbzdo.b73dpz7a.pwxa",
     "last_seen": "2026-11-08",

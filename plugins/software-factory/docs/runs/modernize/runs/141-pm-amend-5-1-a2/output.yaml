@@ -1,6 +1,6 @@
 iteration: 5
 items:
-  - assignment: "M3 split 1/2 — storage + refresh core. Replaces failed
+  - assignment: 'M3 split 1/2 — storage + refresh core. Replaces failed
       decision-cache-impl storage half. Consumes plan cache format contracts
       (sorted (rule,justification,model) indent=2/sort_keys, double-write
       byte-identical, last-seen change-only, schema-never-hex>=20); assumption
@@ -17,8 +17,8 @@ items:
       (cli.py/types.py/_cli_complexity), checker observation lines, tests/data,
       baseline, docs, .gitignore/hatch/.secrets. IMPLEMENT ADR-019 storage:
       array sorted (rule,justification,model) indent=2 sort_keys; entry
-      {justification normalized, rule joined codes, model '<id> rev <short12>
-      prompt-vN', score float [0,1]+decision bool, files sorted unique POSIX} +
+      {justification normalized, rule joined codes, model ''<id> rev <short12>
+      prompt-vN'', score float [0,1]+decision bool, files sorted unique POSIX} +
       {version, prompt hash hexdigest[:12], last-seen ISO date updated ONLY on
       score/decision/files change}; key (justification,rule,model);
       secrets-clean schema (schema fields hex-free; verbatim SHA in
@@ -31,12 +31,12 @@ items:
       FAIL under CI/GITHUB_ACTIONS. EXPORT-CONSISTENCY PROTOCOL:
       refresh_blockers exact spelling in .py+.pyi, grep both trees, python -c
       import, stubtest clean, clear __pycache__, prove red/green locally (prod
-      aside fails red, restored passes). DECLARE TARGET {\"command\":\"uv run
-      pytest -q\",\"customTarget\":true} NEVER {\"gate\":\"tests\"}. VERIFY: tmp
+      aside fails red, restored passes). DECLARE TARGET {"command":"uv run
+      pytest -q","customTarget":true} NEVER {"gate":"tests"}. VERIFY: tmp
       round-trip double-run byte-identical + last-seen stable; prune
       granularity; CI/jobs/isolation guards; tach + detect-secrets clean; no new
       failures vs HEAD recount; golden hash-equal. Downstream v2 rewiring
-      deferred to next amendment to respect item cap."
+      deferred to next amendment to respect item cap.'
     citations:
       - python_setup_lint/decisions/_decision_cache.py
       - tach.toml

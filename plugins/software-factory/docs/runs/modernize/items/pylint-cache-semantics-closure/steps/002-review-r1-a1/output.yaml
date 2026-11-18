@@ -6,7 +6,8 @@ suggestions:
   - id: jobs-rcfile-bypass-unpinned
     disposition: fix
     summary: Single-writer verdict bypassable via consumer rcfile jobs>1; no watchdog
-    detail: "jobs is an rcfile-settable int option (pylint/lint/base_options.py jobs
+    detail:
+      "jobs is an rcfile-settable int option (pylint/lint/base_options.py jobs
       default 1). Runner resolves rcfile via _resolve_pylintrc (dispatch.py:307,
       cmd_build.py:143-150): explicit config_paths['pylint'],
       cwd/config/.pylintrc, cwd/.pylintrc, plus --config TOOL=PATH. A consumer
@@ -45,7 +46,8 @@ suggestions:
   - id: empty-primary-no-write-unpinned
     disposition: optional
     summary: Third no-write path (empty primary) omitted from timing enumeration
-    detail: "_semantic.py:139-140 returns False before key computation when primary
+    detail:
+      "_semantic.py:139-140 returns False before key computation when primary
       empty: writes nothing and caches nothing. Verdict timing lists only 'hits
       and heuristic fallbacks write nothing'. Pin this path or extend
       enumeration so epic does not assume every False is cached."
@@ -55,7 +57,8 @@ suggestions:
   - id: runner-sequentiality-not-pinned
     disposition: optional
     summary: Sequential runner assumed but only registry order pinned
-    detail: Concurrency relies on cli.py:153 blocking for-loop over tools, but tests
+    detail:
+      Concurrency relies on cli.py:153 blocking for-loop over tools, but tests
       pin only TOOLS order + no -j flags. A future ThreadPool/ProcessPool
       dispatch in the runner would silently void single-writer. Consider an AST
       watchdog (like the writer single-caller test) asserting no concurrent
@@ -77,7 +80,8 @@ suggestions:
   - id: pylint-stats-path-platform
     disposition: optional
     summary: Pylint stats path cited as Linux-only ~/.cache/pylint
-    detail: Line 6 contrasts with '~/.cache/pylint/*.stats' as if universal; pylint
+    detail:
+      Line 6 contrasts with '~/.cache/pylint/*.stats' as if universal; pylint
       persistent-data home is platform-dependent. Qualify as Linux example to
       avoid confusion on macOS/Windows.
     location:
@@ -86,7 +90,8 @@ suggestions:
   - id: single-caller-scan-misses-attribute
     disposition: optional
     summary: Single-caller AST scan matches only bare Name calls
-    detail: Writer watchdog checks getattr(node.func,'id')=='_save_result_cache',
+    detail:
+      Writer watchdog checks getattr(node.func,'id')=='_save_result_cache',
       missing module-qualified forms (e.g. semantic_module._save_result_cache,
       self._save_result_cache). A second writer via attribute call would pass
       silently. Also match ast.Attribute attr.

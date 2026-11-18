@@ -28,6 +28,7 @@ Running a custom agent definition as the root session role (`omp -p`) is fully s
    - Commits and files created during the turn land strictly inside that git worktree.
 
 ### Exact Launch Command Template
+
 ```bash
 omp --cwd /tmp/worktrees/task-1 \
     --system-prompt /path/to/plugins/software-factory/agents/worker.md \
@@ -49,11 +50,18 @@ While the OMP CLI has no `--output-schema` flag for root sessions, `--mode json`
 When launched with `--mode json`, stdout emits one JSON object per line.
 
 #### Key Lifecycle Events:
+
 1. **Session Announcement (Line 1)**:
    ```json
-   {"type":"session","version":3,"id":"01a1b3d1-c014-7017-8cc3-c796734c2f17","timestamp":"2026-11-07T02:23:50.292Z","cwd":"/tmp/spike-omp2-test"}
+   {
+     "type": "session",
+     "version": 3,
+     "id": "01a1b3d1-c014-7017-8cc3-c796734c2f17",
+     "timestamp": "2026-11-07T02:23:50.292Z",
+     "cwd": "/tmp/spike-omp2-test"
+   }
    ```
-   *The orchestrator captures `id` immediately from line 1.*
+   _The orchestrator captures `id` immediately from line 1._
 2. **Turn Completion (`turn_end`)**:
    ```json
    {
@@ -61,8 +69,8 @@ When launched with `--mode json`, stdout emits one JSON object per line.
      "message": {
        "role": "assistant",
        "content": [
-         {"type": "thinking", "thinking": "..."},
-         {"type": "text", "text": "{\"status\":\"OK\",\"count\":42}"}
+         { "type": "thinking", "thinking": "..." },
+         { "type": "text", "text": "{\"status\":\"OK\",\"count\":42}" }
        ],
        "usage": {
          "input": 12884,
@@ -86,11 +94,12 @@ When launched with `--mode json`, stdout emits one JSON object per line.
    ```
 
 ### Extracting Required Metrics:
+
 - **(a) Final Assistant Text**:
   ```ts
   const text = turnEndEvent.message.content
-    .filter(c => c.type === "text")
-    .map(c => c.text)
+    .filter((c) => c.type === "text")
+    .map((c) => c.text)
     .join("");
   ```
 - **(b) Failure / Abort vs Success**:
@@ -103,6 +112,7 @@ When launched with `--mode json`, stdout emits one JSON object per line.
   - `usage.cost.total` (exact USD cost).
 
 ### Root `yield` Tool Behavior
+
 - Passing `--tools=...,yield` mounts the `yield` tool on the root session.
 - When the model calls `yield({ data: { ... } })`:
   - The session immediately terminates (`isTerminal: true`, `yielded: true`).
@@ -120,16 +130,19 @@ A persistent session (such as the Architect or Triage) can be maintained across 
 ### Working Multi-Turn Execution Sequence
 
 #### Turn 1: Fresh Session Initialization
+
 ```bash
 omp -p --session-dir /path/to/sessions \
     --mode json \
     --model opencode-go/deepseek-v4.1-flash \
     "My secret number is 445566. Remember it."
 ```
+
 - Line 1 emits: `{"type":"session","id":"01a1b3d1-fddf-7418-8334-d4ae0447f974", ...}`.
 - Transcript file created: `/path/to/sessions/2026-11-07T02-24-06-111Z_01a1b3d1-fddf-7418-8334-d4ae0447f974.jsonl` (initial size: 6,979 bytes).
 
 #### Turn 2: Resumed Session (Context Retention)
+
 ```bash
 omp -p --session-dir /path/to/sessions \
     --resume 01a1b3d1-fddf-7418-8334-d4ae0447f974 \
@@ -137,11 +150,13 @@ omp -p --session-dir /path/to/sessions \
     --model opencode-go/deepseek-v4.1-flash \
     "What was my secret number? Reply with NUMBER=<num>"
 ```
+
 - Line 1 announces the identical session ID.
 - The **same transcript file is appended** on disk (size grew to 15,354 bytes).
 - Model responded: `NUMBER=445566` (100% conversational memory retained).
 
 #### Turn 3: Model Switch on Resume
+
 ```bash
 omp -p --session-dir /path/to/sessions \
     --resume 01a1b3d1-fddf-7418-8334-d4ae0447f974 \
@@ -149,9 +164,11 @@ omp -p --session-dir /path/to/sessions \
     --model opencode-go/muse-spark-1.3-contributor \
     "Repeat my secret number and state your model"
 ```
+
 - Model switched cleanly to `muse-spark-1.3-contributor` while retaining context (`Secret number: 445566`).
 
 ### Working Directory Persistence
+
 - The original session's `cwd` is permanently recorded in the session JSONL header.
 - Resuming without `--cwd` retains the original working directory automatically.
 
@@ -186,30 +203,35 @@ retry:
 # Critical settings for unattended headless runs (never block on prompts):
 eval:
   autoBackground:
-    enabled: false        # Prevent long cells auto-backgrounding into bg_N
+    enabled: false # Prevent long cells auto-backgrounding into bg_N
 title:
-  generator: none         # Disable async title-generation model calls
+  generator: none # Disable async title-generation model calls
 checkpoint:
-  enabled: false         # Disable git checkpoint reminders
+  enabled: false # Disable git checkpoint reminders
 advisor:
-  enabled: false         # Disable passive background advisor prompts
+  enabled: false # Disable passive background advisor prompts
 bash:
-  gitGuard: false         # Disable interactive confirmations on git clean/reset
+  gitGuard: false # Disable interactive confirmations on git clean/reset
   allowCompoundCommands: true
 mnemopi:
   polyphonicRecall: false # Disable ambient long-term memory prompts
   enhancedRecall: false
   proactiveLinking: false
 update:
-  auto: false             # Disable background update checks
+  auto: false # Disable background update checks
 ```
 
 ### Empirical Fallback Proof
+
 - Ran: `omp -p --no-session --config orchestrator-overlay.yml --mode json --model @fallback-test "Reply FALLBACK_OK"`.
 - Primary invalid model failed immediately.
 - Event emitted:
   ```json
-  {"type":"retry_fallback_succeeded","model":"opencode-go/deepseek-v4.1-flash:max","role":"fallback-test"}
+  {
+    "type": "retry_fallback_succeeded",
+    "model": "opencode-go/deepseek-v4.1-flash:max",
+    "role": "fallback-test"
+  }
   ```
 - Assistant output: `FALLBACK_OK` (cost: $0.002048).
 - Verified: `@role` aliases resolve, `:max` suffix sets thinking effort, and fallback chains execute transparently.
@@ -221,6 +243,7 @@ update:
 ### Verdict: **VERIFIED — CLI `--tools=` Wins Over Standalone SDK Import**
 
 ### Investigation of `import { createAgentSession } from "@oh-my-pi/pi-coding-agent"`
+
 - Attempting to import `@oh-my-pi/pi-coding-agent` in a standalone Bun script outside `omp` fails:
   ```
   FAILED to resolve @oh-my-pi/pi-coding-agent: Cannot find module '@opentelemetry/api'
@@ -229,13 +252,16 @@ update:
 - The OMP package is not published as a standalone self-contained npm module; only the compiled single-binary `omp` executable bundles all native addons and dependencies hermetically.
 
 ### Best Pattern for Stateless Small Completions
+
 Use `omp -p --no-session --tools= --mode json --model @simpler`:
+
 ```bash
 omp -p --no-session --tools= --mode json --model opencode-go/deepseek-v4.1-flash \
   "Extract data into valid JSON matching schema: { status: string, count: number }. Input: Status is ready, count is 55. Output only valid JSON."
 ```
 
 #### Empirical Measurements:
+
 - **Token Efficiency**: Dropping tools (`--tools=`) stripped all tool prompt templates, reducing input context from **13,803 tokens to 4,216 tokens (70% reduction)**.
 - **Latency & Cost**: Completed in 3.1s; cost dropped from $0.0020 to $0.0006.
 - **Authentication**: Fully inherits existing credentials from `~/.omp/agent/auth.db` without requiring separate API keys in the Bun process.
@@ -247,6 +273,7 @@ omp -p --no-session --tools= --mode json --model opencode-go/deepseek-v4.1-flash
 ### Verdict: **VERIFIED**
 
 ### 1. Concurrent Execution Across 4 Worktrees
+
 - Tested 4 simultaneous `omp -p` processes running concurrently in separate worktrees (`/tmp/spike-wt1` through `wt4`).
 - Results:
   - Exit codes: `0 0 0 0`.
@@ -255,17 +282,19 @@ omp -p --no-session --tools= --mode json --model opencode-go/deepseek-v4.1-flash
   - Zero session directory conflicts.
 
 ### 2. Startup Overhead
+
 - Pure binary execution (`omp --version`): **12 milliseconds (0.012s)**.
 - Harness bootstrap to `turn_start` in `--mode json`: **~0.8s to 1.2s**.
 
 ### 3. Exit Codes & SIGTERM Behavior
-| Scenario | Exit Code | Observed Behavior |
-|---|---|---|
-| **Clean Completion** | `0` | Full output emitted, session file persisted. |
-| **Model / Arg Error** | `1` | Stderr contains error description. |
-| **Killed by SIGTERM** | `143` | `[Stopped by SIGTERM]` emitted. **Partial session flushed to disk**. Prints recovery command: `[Recovery] Main: omp --resume <id>`. |
 
-*Note: OMP has no top-level CLI `--timeout` flag; process deadlines must be enforced by the orchestrator process via `AbortSignal.timeout(ms)` or `timeout <N>s`.*
+| Scenario              | Exit Code | Observed Behavior                                                                                                                   |
+| --------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Clean Completion**  | `0`       | Full output emitted, session file persisted.                                                                                        |
+| **Model / Arg Error** | `1`       | Stderr contains error description.                                                                                                  |
+| **Killed by SIGTERM** | `143`     | `[Stopped by SIGTERM]` emitted. **Partial session flushed to disk**. Prints recovery command: `[Recovery] Main: omp --resume <id>`. |
+
+_Note: OMP has no top-level CLI `--timeout` flag; process deadlines must be enforced by the orchestrator process via `AbortSignal.timeout(ms)` or `timeout <N>s`._
 
 ---
 
@@ -370,10 +399,14 @@ export interface OmpRunResult {
 export async function runOmpTurn(opts: OmpRunOptions): Promise<OmpRunResult> {
   const args = [
     "omp",
-    "--cwd", opts.cwd,
-    "--config", opts.configOverlayPath,
-    "--mode", "json",
-    "--model", opts.model,
+    "--cwd",
+    opts.cwd,
+    "--config",
+    opts.configOverlayPath,
+    "--mode",
+    "json",
+    "--model",
+    opts.model,
   ];
 
   if (opts.sessionDir) {
@@ -432,13 +465,16 @@ export async function runOmpTurn(opts: OmpRunOptions): Promise<OmpRunResult> {
         if (event.type === "session") {
           sessionId = event.id;
           sessionTimestamp = event.timestamp;
-        } else if (event.type === "turn_end" && event.message?.role === "assistant") {
+        } else if (
+          event.type === "turn_end" &&
+          event.message?.role === "assistant"
+        ) {
           const parts = event.message.content || [];
           finalAssistantText = parts
             .filter((p: any) => p.type === "text")
             .map((p: any) => p.text)
             .join("");
-          
+
           if (event.message.usage) {
             usage.inputTokens += event.message.usage.input || 0;
             usage.outputTokens += event.message.usage.output || 0;
@@ -465,9 +501,10 @@ export async function runOmpTurn(opts: OmpRunOptions): Promise<OmpRunResult> {
   const exitCode = await proc.exited;
   if (timer) clearTimeout(timer);
 
-  const transcriptPath = opts.sessionDir && sessionId && sessionTimestamp
-    ? `${opts.sessionDir}/${sessionTimestamp.replace(/[:.]/g, "-")}_${sessionId}.jsonl`
-    : undefined;
+  const transcriptPath =
+    opts.sessionDir && sessionId && sessionTimestamp
+      ? `${opts.sessionDir}/${sessionTimestamp.replace(/[:.]/g, "-")}_${sessionId}.jsonl`
+      : undefined;
 
   return {
     sessionId,

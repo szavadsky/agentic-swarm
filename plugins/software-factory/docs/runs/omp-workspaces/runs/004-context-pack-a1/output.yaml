@@ -479,10 +479,10 @@ recommendations:
 concerns:
   - kind: risk
     summary: Preflight's omp overlay validation is a no-op
-    detail: "`execFileSync(ompBinary, [\"--config\", tempOverlay, \"--version\"])`
+    detail: '`execFileSync(ompBinary, ["--config", tempOverlay, "--version"])`
       returns exit 0 with bogus keys/enum values (verified by probe), so item
-      19.2's \"config overlay keys / isolation backend usable\" check does not
-      exist today."
+      19.2''s "config overlay keys / isolation backend usable" check does not
+      exist today.'
     severity: high
     location:
       file: plugins/software-factory/src/cli/preflight.ts
@@ -493,7 +493,8 @@ concerns:
   - kind: blocker
     summary: Saga launches do not exist and epic INTENT is not resolvable by
       `factory run`
-    detail: "`saga` is only a TaskKind; epic INTENT is written under the parent task
+    detail:
+      "`saga` is only a TaskKind; epic INTENT is written under the parent task
       dir on the parent branch (`plan/apply.ts:9-16`), while `factory run`
       resolves/loads intent from the main checkout (`cli/run.ts:27-75`).
       Independent epic launches need an explicit parent/workspace contract."
@@ -505,7 +506,8 @@ concerns:
       - "19.6"
   - kind: risk
     summary: Usage parser discards cache-read/write tokens needed for item 20 defaults
-    detail: "`ndjson.ts:84-98` sums only input/output/cost; `StepUsage` has no cache
+    detail:
+      "`ndjson.ts:84-98` sums only input/output/cost; `StepUsage` has no cache
       fields; `budget.ts` aggregates only the three. omp NDJSON carries
       `cacheRead`/`cacheWrite` (fixtures and spike doc), so measurement is
       blocked until the types/parser/records are extended."
@@ -519,9 +521,11 @@ concerns:
       - 20-cost
       - 20d
   - kind: risk
-    summary: omp isolation backend values and runtime applicability are undocumented
+    summary:
+      omp isolation backend values and runtime applicability are undocumented
       locally
-    detail: '`isolation.backend` is an enum defaulting to `rcopy` with description
+    detail:
+      '`isolation.backend` is an enum defaulting to `rcopy` with description
       "subagent isolation and worktree cloning"; allowed values, failure
       retention, and behavior for root `omp --cwd` processes are unverified.
       `omp --config` cannot be validated via `config get`, and there is no
@@ -559,7 +563,8 @@ concerns:
       - "19.3"
   - kind: risk
     summary: Per-turn prompt transport path embeds timestamp+randomness
-    detail: "`prompt-${Date.now()}-${random}.txt` is passed as `-p @path` on every
+    detail:
+      "`prompt-${Date.now()}-${random}.txt` is passed as `-p @path` on every
       turn (`harness.ts:311-316`). Item 20c forbids timestamps/randomness/temp
       paths in the cached prefix; whether omp keys cache by content or transport
       must be audited and, if needed, made stable."
@@ -606,9 +611,11 @@ concerns:
     affects:
       - "19.8"
 remarkable:
-  - chosen: "Engine-managed git worktrees (`git worktree add` + `omp --cwd`) rather
+  - chosen:
+      "Engine-managed git worktrees (`git worktree add` + `omp --cwd`) rather
       than omp `isolated: true` subagent tasks"
-    why: The prior spike verified omp's isolation runner skips `commitToBranch` when
+    why:
+      The prior spike verified omp's isolation runner skips `commitToBranch` when
       the subagent fails or rejects, deleting the temporary worktree and losing
       all branch commits; engine worktrees retain every file and commit
       regardless of exit status and give full control of branch naming/base.
@@ -618,7 +625,8 @@ remarkable:
       - hybrid eval-kernel host
       - omp extension-only host
   - chosen: Epics run in-process as child tasks with an in-process `runTaskChild`
-    why: It reuses one engine/process, shares the root budget and mailbox, and keeps
+    why:
+      It reuses one engine/process, shares the root budget and mailbox, and keeps
       epic records on the parent branch with `child-closeup.yaml`; simple to
       make restart-safe from records.
     alternatives:
@@ -634,7 +642,8 @@ remarkable:
         lesson; item 20 asks to re-evaluate from measured repair turns)
   - chosen: Deterministic architect brief skeleton + cheap `@simpler` relevance
       judge (`brief.ts`)
-    why: Keeps hydration small and restart-friendly while failing open to the full
+    why:
+      Keeps hydration small and restart-friendly while failing open to the full
       skeleton; a natural base for compaction/handoff on resume.
     alternatives:
       - inject full history

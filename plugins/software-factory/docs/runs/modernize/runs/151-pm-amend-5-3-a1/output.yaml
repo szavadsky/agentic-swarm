@@ -1,6 +1,7 @@
 iteration: 5
 items:
-  - assignment: 'Tests-only, NEW tests/assumptions/test_decision_cache_contracts.py
+  - assignment:
+      'Tests-only, NEW tests/assumptions/test_decision_cache_contracts.py
       ONLY (append-only; FORBIDDEN root __init__ + astroid/beartype/pylint
       contracts + test_pylint_cache_semantics.py, src, docs, tests/data,
       baseline). Passable at M1: build tmp JSON inline WITHOUT prod imports and
@@ -25,18 +26,19 @@ items:
     slug: cache-contract-assumptions
     title: Pin tracked-cache file format contracts
     wave: 7
-  - assignment: "Tests-only, NEW tests/assumptions/test_decision_loader_contracts.py
+  - assignment:
+      'Tests-only, NEW tests/assumptions/test_decision_loader_contracts.py
       ONLY (same forbiddens as cache-contracts). DELTA ONLY —
       honors/ignores/warn-once already pinned at
       tests/checkers/test_decision_backend.py:117-165 (cite file:line, never
       duplicate). Pin: PROD_MODEL_ID_RE + FAKE_ALLOWLIST (both exact strings
       asserted; M4 loader output must match one); DECISION_MODEL_RE parse +
-      malformed table (missing rev, rev len!=12, non-hex rev, trailing '
-      prompt-vN', empty/whitespace, extra tokens → None + exactly-one warning
+      malformed table (missing rev, rev len!=12, non-hex rev, trailing ''
+      prompt-vN'', empty/whitespace, extra tokens → None + exactly-one warning
       each); failure-to-None mapping to heuristic bool (no raise, no retry).
       Consumed by model-backend-wiring via dep. Verify: new tests pass offline;
-      format-clean. Declare target {\"command\":\"uv run pytest
-      -q\",\"customTarget\":true} NEVER {\"gate\":\"tests\"}."
+      format-clean. Declare target {"command":"uv run pytest
+      -q","customTarget":true} NEVER {"gate":"tests"}.'
     citations:
       - tests/assumptions/test_decision_loader_contracts.py
       - tests/checkers/test_decision_backend.py:117-165
@@ -100,7 +102,8 @@ items:
     slug: pylint-pyi-scope-spike
     title: Decide pylint-pyi companion-stub scope
     wave: 7
-  - assignment: 'Owns src/python_setup_lint/testing.py + testing.pyi (atomic sync;
+  - assignment:
+      'Owns src/python_setup_lint/testing.py + testing.pyi (atomic sync;
       stubtest must pass) — _make_tc/_walk_and_release options +
       _msg_ids/_msg_ids_sorted ONLY — + tests/checkers/test_*.py local wrappers
       ONLY (enumerate via grep at HEAD: ~13/10/8 per pack, verify actual; report
@@ -121,7 +124,8 @@ items:
     slug: checker-harness-dedup
     title: Single-source checker-test harness
     wave: 7
-  - assignment: 'Tests-only. Owns tests/runner/_factories.py + _factories_extras.py
+  - assignment:
+      'Tests-only. Owns tests/runner/_factories.py + _factories_extras.py
       + _factories_baseline.py + test_setup.py + test_setup_install.py +
       test_real_pipeline_smoke.py + tests/conftest.py (sample_project fixture
       lines only) ONLY. FORBIDDEN src, docs, baseline, tests/data, checker
@@ -161,7 +165,8 @@ items:
     slug: source-simplifications
     title: Simplify semantic memo, heuristic sets, rcfile paths
     wave: 7
-  - assignment: 'Owns runner/_tool_specs.py ruff-format entry + runner/dispatch.py
+  - assignment:
+      'Owns runner/_tool_specs.py ruff-format entry + runner/dispatch.py
       _RuffFormatLintTool.build_command/_build ONLY +
       tests/runner/test_lint_runner*.py command-shape test ONLY. FORBIDDEN docs,
       baseline, tests/data, other tools. Makes `uv run lint` check-only:
@@ -178,7 +183,8 @@ items:
     slug: ruff-format-check-only-fix
     title: Make ruff format ToolSpec check-only
     wave: 7
-  - assignment: 'Owns conformance/suppression_justification_checker.py _legacy_scan
+  - assignment:
+      'Owns conformance/suppression_justification_checker.py _legacy_scan
       rename + trivial _legacy_* + astroid 3.x branch + unscoped register ONLY
       (+ .pyi rows + tests/checkers/test_suppression_justification_checker.py
       legacy block ONLY). FORBIDDEN _base/_semantic/_decision_backend,
@@ -218,7 +224,8 @@ items:
     slug: semantic-test-doubles-dedup
     title: Single-source semantic test doubles and fixtures
     wave: 8
-  - assignment: "Prototype on tmp/venv only; zero committed files; network inside
+  - assignment:
+      "Prototype on tmp/venv only; zero committed files; network inside
       spike only. Consumes matrix + corpus reports (never invents
       candidates/labels). FIRST re-validate corpus (re-normalize + re-dedup,
       counts match, strata non-empty). VETO-ONLY final=heuristic AND
@@ -238,7 +245,8 @@ items:
     slug: model-eval-poc
     title: CPU accuracy/latency evaluation (veto-only)
     wave: 8
-  - assignment: 'Owns NEW python_setup_lint/decisions/_decision_cache.py + .pyi +
+  - assignment:
+      'Owns NEW python_setup_lint/decisions/_decision_cache.py + .pyi +
       BOTH tach.toml (sole owner, exact 3-module TOML) + NEW
       tests/decisions/test_decision_cache.py ONLY. FORBIDDEN
       _base/_semantic/_decision_backend bodies, CLI threading, checker
@@ -300,7 +308,8 @@ items:
     slug: decision-runtime-pinning
     title: Pin chosen runtime wheels and API contracts
     wave: 9
-  - assignment: 'Owns NEW checkers/_source_stream.py/.pyi + stream sites ONLY (12
+  - assignment:
+      'Owns NEW checkers/_source_stream.py/.pyi + stream sites ONLY (12
       paths). FORBIDDEN _base.py/.pyi zero diff, no_try_import, tests/data,
       baseline, docs, tach.toml, decisions/, CLI. API @beartype tach-clean
       <=500: read_module_source, is_under_source_root, split_trailing_comment.
@@ -392,7 +401,8 @@ items:
     slug: model-backend-wiring-v2
     title: Wire production decision backend (or no-go attestation) (v2 rewired)
     wave: 12
-  - assignment: 'Docs-only, sole writer in I5. Owns semantic-justification.md (full
+  - assignment:
+      'Docs-only, sole writer in I5. Owns semantic-justification.md (full
       rewrite) + custom-checks + troubleshooting + tutorials + AGENTS + README +
       CHANGELOG + config/ty.toml + ADR-013/015 verify + ADR-014/016 rewrite +
       ADR-009/002/011 notes + README index + NEW ADR-019..024 ONLY. FORBIDDEN
@@ -419,7 +429,8 @@ items:
     slug: docs-adr-reconciliation-v2
     title: Reconcile docs, ADRs, and version pins (v2 rewired)
     wave: 13
-  - assignment: 'Sole tests/data/golden writer; FORBIDDEN all other paths. ONLY on
+  - assignment:
+      'Sole tests/data/golden writer; FORBIDDEN all other paths. ONLY on
       reviewed shift report: run PYTHON_SETUP_LINT_UPDATE_GOLDEN=1 locally
       (never under CI), double-run byte-identical, key-by-key diff review,
       commit golden + counts together. If all no-shift: no-op attestation with
@@ -440,7 +451,8 @@ items:
     slug: golden-regen-hatch-v2
     title: Conditional golden regen on shift reports (v2 rewired)
     wave: 13
-  - assignment: "Report-only, zero writes. Record final gate table at HEAD: format
+  - assignment:
+      "Report-only, zero writes. Record final gate table at HEAD: format
       exit 0; lint 14/14 per-tool; pytest counts; integration
       9-collected-0-failed; golden hash or regen diff; baseline []; docs
       exact-strings with INDEPENDENT rerun; :bash proof via git ls-files.

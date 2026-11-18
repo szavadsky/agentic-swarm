@@ -1,9 +1,7 @@
 [
   {
     "decision": true,
-    "files": [
-      "src/a.py"
-    ],
+    "files": ["src/a.py"],
     "justification": "a specific technical reason for retrying",
     "key": "dk1.7slmqcwz.3uxhtzmb.pcuomhfv.dgqzmwkg.sfqkooqx.mttwjc2o.dv7q",
     "last_seen": "2026-11-08",
