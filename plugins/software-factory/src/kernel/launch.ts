@@ -557,7 +557,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         if (resume) {
           front = { action: "dispatch" };
         } else {
-          front = await runFront(runtime, { iteration });
+          front = await runFront(runtime, { iteration, state: before });
           if (front.action === "blocked") {
             const cause = `front turn ended the launch as blocked: ${
               front.cause ?? "unknown cause"

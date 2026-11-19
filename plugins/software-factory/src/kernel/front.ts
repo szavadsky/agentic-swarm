@@ -10,9 +10,15 @@ import {
 } from "./flow-context.js";
 import { scanInbox } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
-import { parseTaskFile, TaskFileError, validateTaskGraph } from "./tasks.js";
+import {
+  parseTaskFile,
+  TaskFileError,
+  taskStatuses,
+  validateTaskGraph,
+} from "./tasks.js";
 import type {
   KernelRuntime,
+  State,
   StepRecord,
   TaskFile,
   TaskTypeDefinition,
@@ -31,6 +37,8 @@ export interface FrontResult {
 
 interface FrontRunOptions {
   iteration: number;
+  /** Derived state at launch: a terminal continuation's base is history. */
+  state: State;
 }
 
 const PLAN_FILE = "plan.md";
@@ -102,9 +110,13 @@ function readTasks(runtime: KernelRuntime): TaskFile[] {
  * graph (slug, scope, deps, base), and the run-config tier pre-flight would have
  * checked had the file existed before launch.
  */
-function validateFrontTasks(runtime: KernelRuntime, cls: FrontClass): void {
+function validateFrontTasks(
+  runtime: KernelRuntime,
+  cls: FrontClass,
+  state: State,
+): void {
   const tasks = readTasks(runtime);
-  const findings = validateTaskGraph(tasks);
+  const findings = validateTaskGraph(tasks, { status: taskStatuses(state) });
   if (findings.length > 0) {
     throw new FrontError(
       `front task files are invalid: ${findings.join("; ")}`,
@@ -157,7 +169,7 @@ function gateCommands(runtime: KernelRuntime): string {
 function resultFor(
   runtime: KernelRuntime,
   cls: FrontClass,
-  opts: { ran: boolean; iteration: number },
+  opts: { ran: boolean; iteration: number; state: State },
 ): FrontResult {
   const packRel = contextPackRelPath(opts.iteration);
   // Every class gets a pack: a bigger front hands it to the architect, a
@@ -176,7 +188,7 @@ function resultFor(
       ? { action: "boundary", packPath: packRel }
       : { action: "boundary" };
   }
-  validateFrontTasks(runtime, cls);
+  validateFrontTasks(runtime, cls, opts.state);
   return { action: "dispatch" };
 }
 
@@ -206,6 +218,7 @@ export async function runFront(
       return resultFor(runtime, existing, {
         ran: false,
         iteration: opts.iteration,
+        state: opts.state,
       });
 
     const target = frontTarget(runtime, opts.iteration);
@@ -255,7 +268,11 @@ export async function runFront(
         cause: `front turn wrote no ${CLASS_FILE} at ${path.join(goalDir, CLASS_FILE)}`,
       };
     }
-    return resultFor(runtime, cls, { ran: true, iteration: opts.iteration });
+    return resultFor(runtime, cls, {
+      ran: true,
+      iteration: opts.iteration,
+      state: opts.state,
+    });
   } catch (err) {
     if (err instanceof FrontError || err instanceof FrontClassError) {
       return { action: "infra", cause: err.message };

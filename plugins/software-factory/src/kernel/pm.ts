@@ -26,6 +26,7 @@ import {
   materialHash,
   parseTaskFile,
   TaskFileError,
+  taskStatuses,
   validateTaskGraph,
 } from "./tasks.js";
 import type {
@@ -315,12 +316,9 @@ async function validate(
     runtime.configs.process.taskTypes,
   );
   findings.push(...parseFindings);
-  const parked = new Set(
-    Object.keys(opts.state.tasks).filter(
-      (slug) => opts.state.tasks[slug]!.status === "parked",
-    ),
+  findings.push(
+    ...validateTaskGraph(tasks, { status: taskStatuses(opts.state) }),
   );
-  findings.push(...validateTaskGraph(tasks, { parked }));
   return [...new Set(findings)];
 }
 
@@ -657,12 +655,9 @@ async function validateSteerTurn(
     runtime.configs.process.taskTypes,
   );
   findings.push(...parseFindings);
-  const parked = new Set(
-    Object.keys(opts.state.tasks).filter(
-      (slug) => opts.state.tasks[slug]!.status === "parked",
-    ),
+  findings.push(
+    ...validateTaskGraph(tasks, { status: taskStatuses(opts.state) }),
   );
-  findings.push(...validateTaskGraph(tasks, { parked }));
 
   const routes = outcome?.steerRoutes ?? [];
   const claimed = new Set(opts.claim.map((steer) => steer.id));
@@ -1326,12 +1321,9 @@ async function validateStallTurn(
     runtime.configs.process.taskTypes,
   );
   findings.push(...parseFindings);
-  const parked = new Set(
-    Object.keys(opts.state.tasks).filter(
-      (slug) => opts.state.tasks[slug]!.status === "parked",
-    ),
+  findings.push(
+    ...validateTaskGraph(tasks, { status: taskStatuses(opts.state) }),
   );
-  findings.push(...validateTaskGraph(tasks, { parked }));
   const used = amendsUsed(await runtime.store.listRecords(), opts.iteration);
 
   const routes = outcome?.stallRoutes;
@@ -1679,12 +1671,9 @@ async function validatePlanCheckTurn(
     runtime.configs.process.taskTypes,
   );
   findings.push(...parseFindings);
-  const parked = new Set(
-    Object.keys(opts.state.tasks).filter(
-      (slug) => opts.state.tasks[slug]!.status === "parked",
-    ),
+  findings.push(
+    ...validateTaskGraph(tasks, { status: taskStatuses(opts.state) }),
   );
-  findings.push(...validateTaskGraph(tasks, { parked }));
   const used = amendsUsed(await runtime.store.listRecords(), opts.iteration);
 
   const routes = outcome?.planCheckRoutes;

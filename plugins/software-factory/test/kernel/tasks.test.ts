@@ -13,6 +13,7 @@ import {
   validateTaskFlows,
   validateTaskGraph,
 } from "../../src/kernel/tasks.js";
+import type { TaskStatus } from "../../src/kernel/types.js";
 import { task } from "./helpers.js";
 
 const TEXT = `---
@@ -267,31 +268,97 @@ Done when: refresh rotates the token.
   });
 
   it("finds missing deps, self deps, cycles, duplicates and bad bases", () => {
-    const findings = validateTaskGraph(
-      [
-        task("a", { deps: ["b"] }),
-        task("b", { deps: ["a"] }),
-        task("c", { deps: ["missing"] }),
-        task("d", { deps: ["d"] }),
-        task("a"),
-      ],
-      { parked: new Set() },
-    );
+    const findings = validateTaskGraph([
+      task("a", { deps: ["b"] }),
+      task("b", { deps: ["a"] }),
+      task("c", { deps: ["missing"] }),
+      task("d", { deps: ["d"] }),
+      task("a"),
+    ]);
     expect(findings.some((f) => f.includes("cycle"))).toBe(true);
     expect(findings.some((f) => f.includes("missing task"))).toBe(true);
     expect(findings.some((f) => f.includes("itself"))).toBe(true);
     expect(findings.some((f) => f.includes("declared twice"))).toBe(true);
   });
 
-  it("requires a base to name a parked task when a parked set is supplied", () => {
+  it("exempts a terminal continuation from base findings", () => {
+    // delta i5: three continuations of bases the plan cancelled as landed.
+    // Two continuations are merged, one parked; the cancelled files remain.
+    const tasks = [
+      task("gate-handoff-log", { scope: ["flow"] }),
+      task("gate-handoff-land", { scope: ["flow"], base: "gate-handoff-log" }),
+      task("kept-land-live", { scope: ["integrate"] }),
+      task("kept-land-fix", { scope: ["integrate"], base: "kept-land-live" }),
+      task("metrics-attrib", { scope: ["metrics"] }),
+      task("metrics-attrib-land", {
+        scope: ["metrics"],
+        base: "metrics-attrib",
+      }),
+    ];
+    const status = new Map<string, TaskStatus>([
+      ["gate-handoff-log", "cancelled"],
+      ["gate-handoff-land", "merged"],
+      ["kept-land-live", "cancelled"],
+      ["kept-land-fix", "parked"],
+      ["metrics-attrib", "cancelled"],
+      ["metrics-attrib-land", "merged"],
+    ]);
+    expect(validateTaskGraph(tasks, { status })).toEqual([]);
+  });
+
+  it("names the base's state on a live continuation", () => {
     const tasks = [
       task("old", { scope: ["old-area"] }),
-      task("new", { base: "old", scope: ["new-area"] }),
+      task("new", { scope: ["new-area"], base: "old" }),
     ];
-    expect(validateTaskGraph(tasks, { parked: new Set() })).toContain(
+    const parked = new Map<string, TaskStatus>([
+      ["old", "parked"],
+      ["new", "ready"],
+    ]);
+    expect(validateTaskGraph(tasks, { status: parked })).toEqual([]);
+    for (const state of ["merged", "cancelled", "finished"] as const) {
+      expect(
+        validateTaskGraph(tasks, { status: new Map(parked).set("old", state) }),
+      ).toEqual([`task "new" continues "old", which is ${state}`]);
+    }
+  });
+
+  it("counts a task with no state entry as live", () => {
+    const tasks = [
+      task("old", { scope: ["old-area"] }),
+      task("new", { scope: ["new-area"], base: "old" }),
+    ];
+    expect(validateTaskGraph(tasks, { status: new Map() })).toEqual([
       'task "new" continues "old", which is not parked',
+    ]);
+    // A live continuation of a base the state records as cancelled names that
+    // state even after the base's task file is gone.
+    expect(
+      validateTaskGraph([tasks[1]!], {
+        status: new Map([["old", "cancelled"]]),
+      }),
+    ).toEqual(['task "new" continues "old", which is cancelled']);
+  });
+
+  it("still checks duplicates, scope and cycles on terminal tasks", () => {
+    const findings = validateTaskGraph(
+      [
+        task("a", { scope: [], deps: ["b"] }),
+        task("a", { scope: [], deps: ["b"] }),
+        task("b", { scope: ["b"], deps: ["a"] }),
+      ],
+      {
+        status: new Map([
+          ["a", "merged"],
+          ["b", "merged"],
+        ]),
+      },
     );
-    expect(validateTaskGraph(tasks, { parked: new Set(["old"]) })).toEqual([]);
+    expect(findings).toContain(
+      'task "a" has no scope: declare the predicted area it works in',
+    );
+    expect(findings.some((f) => f.includes("declared twice"))).toBe(true);
+    expect(findings.some((f) => f.includes("cycle"))).toBe(true);
   });
 
   it("rejects a task with no scope", () => {
