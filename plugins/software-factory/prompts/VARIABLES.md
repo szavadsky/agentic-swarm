@@ -189,17 +189,18 @@ The digest scout appends loops, failures and interventions; it does not restate 
 
 ## plan-checker.md
 
-| variable         | meaning                                                                                                                      |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `iteration`      | 1-based iteration number of this launch                                                                                      |
-| `intent_path`    | path to the goal's `intent.md`, for resolving wording only                                                                   |
-| `plan_path`      | path to the plan to verify against the repo; read-only to the checker                                                        |
-| `checkout`       | path to the stable goal checkout (integration worktree)                                                                      |
-| `tasks_dir`      | directory holding one `<slug>.md` task file per task                                                                         |
-| `existing_tasks` | existing task files as `- slug \| status \| hash \| deps: a,b` lines (`none` when empty), then parked slugs with their cause |
-| `outcome_path`   | path where the outcome file must be written when the harness asks for a file                                                 |
-| `validate_cmd`   | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                             |
-| `outcome_schema` | outcome YAML skeleton from the kernel schema; renderer default                                                               |
+| variable           | meaning                                                                                                                      |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `iteration`        | 1-based iteration number of this launch                                                                                      |
+| `intent_path`      | path to the goal's `intent.md`, for resolving wording only                                                                   |
+| `plan_path`        | path to the plan to verify against the repo; read-only to the checker                                                        |
+| `checkout`         | path to the stable goal checkout (integration worktree)                                                                      |
+| `tasks_dir`        | directory holding one `<slug>.md` task file per task                                                                         |
+| `existing_tasks`   | existing task files as `- slug \| status \| hash \| deps: a,b` lines (`none` when empty), then parked slugs with their cause |
+| `gate_record_path` | `end.yaml` of the newest record that ran gates, to read instead of running them; `none recorded` when no gate has run        |
+| `outcome_path`     | path where the outcome file must be written when the harness asks for a file                                                 |
+| `validate_cmd`     | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                             |
+| `outcome_schema`   | outcome YAML skeleton from the kernel schema; renderer default                                                               |
 
 ## delivery-repair.md
 

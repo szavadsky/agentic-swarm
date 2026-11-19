@@ -160,6 +160,7 @@ const ROLES: Record<string, Record<string, string>> = {
     checkout: "/worktrees/demo",
     tasks_dir: "/goal/tasks",
     existing_tasks: "- alpha | merged | abcdef1234 | deps: none | frozen",
+    gate_record_path: "/goal/records/00007-i3-alpha-checks-r1/end.yaml",
     outcome_path: "/goal/records/00045-i3-plan-check-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: OUTCOME_SCHEMA,

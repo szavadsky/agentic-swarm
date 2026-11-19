@@ -1,8 +1,12 @@
 # Software Factory
 
-The factory runs one goal as bounded iterations. Each iteration is one
-architect consult (plan) plus the task dispatch it starts. State is derived from
-task files and append-only records; there is no state file to repair.
+The factory runs one goal as bounded iterations. An iteration is one
+architect consult (plan) plus the task dispatch it starts. When open work
+remains, the boundary runs the plan checker first: a `progress` verdict resumes
+dispatch without a consult, bounded by `limits.planCheckRounds`; the consult
+runs on `architect`, when nothing is open, or when the bound is hit. State is
+derived from task files and append-only records; there is no state file to
+repair.
 
 ## Commands
 
@@ -168,8 +172,8 @@ spent, the previous resume started no task turn, the iteration's latest
 plan-check is `architect`, every ready task is held by a pending steer, a hold
 file is unreadable, or a goal hold or iteration brake stands. A refused resume
 goes straight to the boundary at the next iteration. A resumed pass that starts
-no task turn or ends on `architect` does not consume the `iterations` budget:
-the boundary runs next in the same launch.
+no task turn, ends on `architect`, or ends with nothing left open does not
+consume the `iterations` budget: the boundary runs next in the same launch.
 
 Pre-flight resolves every alias (and fallback) through the harness, checks the
 model list, `effort: highest` (highest level the model accepts), binaries, the

@@ -35,7 +35,13 @@ import {
   writeOutbox,
 } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
-import { latestPlanCheck } from "./plan-check.js";
+import {
+  consultGate,
+  latestPlanCheck,
+  openWork,
+  PLAN_CHECK_STEP,
+  runPlanCheckRound,
+} from "./plan-check.js";
 import { latestPlanReview, runPlanReview } from "./plan-review.js";
 import { type PmRung, runPm } from "./pm.js";
 import { scriptMeta } from "./record.js";
@@ -200,7 +206,9 @@ async function spikeFindings(
 /**
  * One architect consult: digest on a relaunch, inbox, deterministic pack,
  * architect turn (plan edited in place), steer answers, then the PM turn and
- * its validation. Called at every iteration start, never mid-iteration.
+ * its validation. A boundary with open work runs the plan checker first and
+ * returns `continue` when its follow-ups resume dispatch, so a consult is not
+ * unconditional. Called at every iteration start, never mid-iteration.
  */
 export async function runBoundary(
   runtime: KernelRuntime,
@@ -215,6 +223,37 @@ export async function runBoundary(
   await runKeptLand(runtime, iteration);
   records = await runtime.store.listRecords();
   state = derive(tasks, records, runtime.configs.process.flows);
+  const planPath = path.join(runtime.store.goalDir, "plan.md");
+  const steers = await scanInbox(runtime.store);
+  const gate = consultGate({
+    plan: fs.existsSync(planPath),
+    open: openWork(state),
+    steerWaiting: steers.length > 0,
+    records,
+    bound: runtime.limits.planCheckRounds,
+  });
+  if (gate === "check") {
+    // The checker runs before the architect, so a mechanical follow-up costs
+    // one task-tier round instead of a consult. `planCheckRounds` bounds the
+    // rounds one consult owns, wherever they ran.
+    const round =
+      records.filter(
+        (record) =>
+          record.iteration === iteration &&
+          record.actor === "agent" &&
+          record.step === PLAN_CHECK_STEP &&
+          record.endedAt,
+      ).length + 1;
+    const checked = await runPlanCheckRound(runtime, {
+      iteration,
+      round,
+      state,
+    });
+    if (checked.continued.length > 0)
+      return { iteration, decision: "continue", seenSteers: [] };
+    records = await runtime.store.listRecords();
+    state = derive(tasks, records, runtime.configs.process.flows);
+  }
   // Script records (baseline, checks) may exist before the first architect turn;
   // "first" means no architect turn has run yet, not an empty record store.
   const firstTurn = !records.some((r) => r.step === "architect");
@@ -229,7 +268,6 @@ export async function runBoundary(
     ? path.join(runtime.store.goalDir, digestRel)
     : undefined;
 
-  const steers = await scanInbox(runtime.store);
   const seenSteers = steers.map((steer) => steer.id);
   const packRel = opts.frontPack ?? contextPackRelPath(iteration);
   const pmRoutes = collectSteerRoutes(records);
@@ -319,7 +357,6 @@ export async function runBoundary(
 
   const tasksBefore = await taskSnapshot(runtime.store.goalDir);
   const session = await resumableSession(runtime, records, iteration);
-  const planPath = path.join(runtime.store.goalDir, "plan.md");
   // The guard inside the turn owns the plan-edit rule and its repair ask; the
   // post-turn check below is the same rule as a backstop for a halted turn
   // that kept its continue decision, so both compare against these pre-turn bytes.

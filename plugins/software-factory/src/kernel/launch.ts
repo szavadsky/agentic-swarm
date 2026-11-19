@@ -724,14 +724,27 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         );
         if (decision !== "continue" || stopped || signals.shouldStop()) break;
         if (frontFinished) break;
+        // A resume that ended with nothing left open has no work to hand the
+        // next dispatch: the boundary must run, and the resumed pass is not a
+        // pass. The checker can no longer summon the boundary on its own when
+        // nothing is open, so the terminal state itself is the signal.
+        const settledResume =
+          dispatched?.reason === "boundary" &&
+          Object.values(afterStop.tasks).every(
+            (task) =>
+              task.status === "merged" ||
+              task.status === "finished" ||
+              task.status === "cancelled",
+          );
         if (
           resume &&
           dispatched !== undefined &&
           (dispatched.taskTurnsStarted === 0 ||
-            dispatched.planCheck === "architect")
+            dispatched.planCheck === "architect" ||
+            settledResume)
         ) {
-          // An empty or architect-summoning resume is not a pass: give the
-          // budget back and go straight to the boundary at iteration+1.
+          // An empty, architect-summoning, or fully landed resume is not a
+          // pass: give the budget back and go straight to the boundary.
           resumeForcedOff = true;
           iterations -= 1;
           i -= 1;

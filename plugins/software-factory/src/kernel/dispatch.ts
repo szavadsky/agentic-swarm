@@ -7,16 +7,12 @@ import type { MergeResult } from "./integrate.js";
 import { type Hold, readHolds, type Steer, scanInbox } from "./mailbox.js";
 import { next } from "./next.js";
 import {
-  latestPlanCheck,
+  openWork,
   PLAN_CHECK_STEP,
-  runPlanCheck,
+  planChecksSinceConsult,
+  runPlanCheckRound,
 } from "./plan-check.js";
-import {
-  runPlanCheckPm,
-  runStallPm,
-  runSteerPm,
-  STALL_ROUTES_STEP,
-} from "./pm.js";
+import { runStallPm, runSteerPm, STALL_ROUTES_STEP } from "./pm.js";
 import { loadPriceTable } from "./openrouter.js";
 import { type PriceTable, pricedRecord } from "./pricing.js";
 import { scriptMeta } from "./record.js";
@@ -675,11 +671,10 @@ export async function runDispatch(
         };
       }
       if (!steward.skipped) continue;
-      // Zero-merge stall: the dispatch set ran out with no merges and fresh
-      // parks, and no drain caused it. The PM owns the dispatch sets, so one
-      // stall turn resolves it in this iteration; a second stall, an
-      // all-left turn, or any drain falls through to the boundary as today.
-      // Owner ruling 2.
+      // Wave-end stall: the dispatch set ran out with fresh parks. The PM owns
+      // the dispatch sets, so one stall turn resolves them in this iteration
+      // whether or not the wave merged something; a second stall, an all-left
+      // turn, or any drain falls through to the boundary as today.
       if (!opts.signals?.shouldStop()) {
         const stallTasks = await runtime.store.listTasks();
         const stallRecords = await runtime.store.listRecords();
@@ -688,20 +683,13 @@ export async function runDispatch(
           stallRecords,
           runtime.configs.process.flows,
         );
-        const merges = stallRecords.filter(
-          (record) =>
-            record.iteration === iteration &&
-            record.step === "merge" &&
-            record.ok === true &&
-            record.endedAt,
-        ).length;
         const attempted = stallRecords.some(
           (record) =>
             record.iteration === iteration &&
             record.step === STALL_ROUTES_STEP &&
             record.endedAt,
         );
-        if (merges === 0 && !attempted) {
+        if (!attempted) {
           const slugs = [
             ...new Set(
               stallRecords
@@ -727,15 +715,16 @@ export async function runDispatch(
           }
         }
       }
-      // Plan check: the dispatch set ran out short of terminal. A task-tier
-      // checker verifies the plan against the repo; on `progress` the PM
-      // writes the follow-ups and dispatch resumes in this iteration, and
-      // the checker re-runs after. `architect`, an empty follow-up list, a
-      // failed PM turn, or exhausted rounds fall through to the boundary,
-      // whose pack carries the checker's evidence per plan item. Without a
-      // plan there is nothing to verify, so the front path dispatches as
-      // before instead of spending a checker turn. The alias is required by
-      // pre-flight, so only the plan's presence gates this step.
+      // Plan check: the dispatch set ran out short of terminal with open work
+      // left. A task-tier checker verifies the plan against the repo; on
+      // `progress` the PM writes the follow-ups and dispatch resumes in this
+      // iteration. `architect`, an empty follow-up list, a failed PM turn, or
+      // the repeated-round bound fall through to the boundary, whose pack
+      // carries the checker's evidence per plan item. With no open work there
+      // is nothing mechanical left to name: the boundary consults directly.
+      // Without a plan there is nothing to verify, so the front path dispatches
+      // as before instead of spending a checker turn. The alias is required by
+      // pre-flight, so only the plan's presence gates the turn itself.
       const planPath = path.join(runtime.store.goalDir, "plan.md");
       if (!opts.signals?.shouldStop() && fs.existsSync(planPath)) {
         const checkTasks = await runtime.store.listTasks();
@@ -752,31 +741,20 @@ export async function runDispatch(
             record.actor === "agent" &&
             record.endedAt,
         ).length;
-        if (rounds < runtime.limits.planCheckRounds) {
-          const checked = await runPlanCheck(runtime, {
+        const checked = planChecksSinceConsult(checkRecords);
+        if (
+          openWork(checkState).length > 0 &&
+          checked.length < runtime.limits.planCheckRounds
+        ) {
+          const round = await runPlanCheckRound(runtime, {
             iteration,
             round: rounds + 1,
             state: checkState,
           });
-          planCheck = checked.verdict;
-          if (
-            !checked.infra &&
-            checked.verdict === "progress" &&
-            checked.followUps.length > 0
-          ) {
-            const followed = await runPlanCheckPm(runtime, {
-              iteration,
-              state: checkState,
-              followUps: checked.followUps,
-              cwd: runtime.paths.goalCheckout,
-            });
-            if (followed.continued.length > 0) continue;
-          }
-        } else {
-          planCheck = latestPlanCheck(checkRecords)?.verdict as
-            | "progress"
-            | "architect"
-            | undefined;
+          planCheck = round.turn.verdict;
+          if (round.continued.length > 0) continue;
+        } else if (openWork(checkState).length > 0) {
+          planCheck = checked.at(-1)?.outcome?.planCheck?.verdict;
         }
       }
       const turns = settledTurns(await runtime.store.listRecords(), iteration);

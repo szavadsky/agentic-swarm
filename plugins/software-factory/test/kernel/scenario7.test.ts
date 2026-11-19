@@ -15,6 +15,7 @@ import {
   writePlan,
   writeTask,
 } from "./e2e-helpers.js";
+import { scriptStallLeave } from "./s2-helpers.js";
 
 const PLAN_1 = `# Milestone 1
 
@@ -73,6 +74,8 @@ function scriptFirstIteration(harness: FakeHarness, goalDir: string): void {
     ctx.writeOutcome(outcome({ summary: "filed four tasks" }));
     return fakeTurnResult(req);
   });
+  // p parks while alpha merges: the wave-end stall owns the park.
+  scriptStallLeave(harness, ["p"]);
   harness.script(implementerTurn("alpha.txt"));
   harness.script((req, ctx) => {
     ctx.writeOutcome(

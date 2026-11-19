@@ -14,6 +14,7 @@ import {
   scriptDigest,
   stateOf,
 } from "./e2e-helpers.js";
+import { scriptStallLeave } from "./s2-helpers.js";
 
 const PLAN_1 = `# Milestone 1
 
@@ -177,6 +178,9 @@ describe("cross-slice E2E — init, steer and three launches through S2/S3/S4", 
         ctx.writeOutcome(outcome({ summary: "filed three tasks" }));
         return fakeTurnResult(req);
       });
+      // beta parks on its last-call rejection while alpha merges: the
+      // wave-end stall owns the park.
+      scriptStallLeave(first, ["beta"]);
       first.script((req, ctx) => {
         write(req.cwd!, "alpha.txt", "alpha\n");
         ctx.writeOutcome(outcome({ summary: "alpha implemented" }));
@@ -234,7 +238,7 @@ describe("cross-slice E2E — init, steer and three launches through S2/S3/S4", 
       ).toBe(true);
       const one = await metricsOf(goalDir);
       expect(one.iterations.map((i) => i.n)).toEqual([1]);
-      expect(one.iterations[0]!.turns).toBe(10);
+      expect(one.iterations[0]!.turns).toBe(11);
       expect(one.iterations[0]!.merged).toEqual(["alpha"]);
       expect(one.iterations[0]!.parked).toEqual(["beta"]);
       const betaTip = repo

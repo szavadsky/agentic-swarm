@@ -277,7 +277,7 @@ const limitsSchema = z
   .object({
     concurrency: concurrencySchema,
     iterations: z.number().int().positive().default(1),
-    /** Plan-checker re-runs per iteration; exhausted rounds consult the architect. */
+    /** Plan-checker rounds one consult owns; exhausted rounds consult the architect. */
     planCheckRounds: z.number().int().positive().default(2),
     resumeAttempts: z.number().int().nonnegative().optional(),
     /** Optional drain limits for one iteration. */
