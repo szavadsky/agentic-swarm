@@ -816,3 +816,7 @@ Verbatim, newest last; each with what it changed.
 
 ### 2026-11-19 — run config: dead-agy fix (steward + plan roles → hy4/deepseek)
 - agy HARD DEAD 130h: plan-reviewer + plan-checker + steward move to opencode/hy4-flash-free primary (fb omp-Go/deepseek:max). Implementer primary stays agy (owner call pending). Rest unchanged (implementer-b/researcher kept). Loader + 52 price-coverage tests green before commit. (First attempt: full rewrite from stale i46-era copy dropped implementer-b/researcher/omp-options and failed validation — restored, applied surgically.)
+
+### 2026-11-19 — goal `friction` init (owner directive): repair/friction-reduction, symptoms+facts
+- Fresh orchestration subfolder, factory iteration 1, fixed self-quota map (dead-agy fix live), inbox EMPTY. Intent carries status quo + 8 symptoms with evidence pointers (PM-ladder x2, no-architect-on-resume, quota infra-stop, conflict parks, qa-step x2 containment, no-outcome 3rd-leg + forensics, aging-ready spike, forwarded-debt evaporation); diagnosis delegated to architect. Scope: stall mechanics + friction + salvage-via-flow. Owner order: run till DONE, then STOP (no auto-return to delta). Delta + self + repair paused.
+- Land-state verified before init: V3/main converged, factory/delta|self|repair empty (nothing to land); 63 delta task branches hold non-ancestor commits (flow-landed content + parks) — hand-merging parked work bypasses review, does not make sense; salvage owned by this goal's recovery tasks.
