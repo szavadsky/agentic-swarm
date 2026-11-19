@@ -7,6 +7,7 @@ import yaml from "yaml";
 import { z } from "zod";
 import { acpxConfigSchema } from "../harness/acpx/config.js";
 import { type Finding, formatFindings } from "./findings.js";
+import { DEFAULT_POOL_RESET_MINUTES } from "./quota-pools.js";
 import type {
   BoundaryStep,
   ConfigBundle,
@@ -351,6 +352,16 @@ export const runConfigSchema = z
       })
       .strict()
       .default(() => ({ dir: "", keepRuns: 5, retention: "short" as const })),
+    /**
+     * Quota-pool cooldown. The harness contract carries no provider reset, so
+     * an exhausted pool's stored reset time is this window from the stop.
+     */
+    quota: z
+      .object({
+        resetMinutes: z.number().positive().default(DEFAULT_POOL_RESET_MINUTES),
+      })
+      .strict()
+      .default(() => ({ resetMinutes: DEFAULT_POOL_RESET_MINUTES })),
     worktreeRoot: z.string().min(1).optional(),
     /**
      * Enable artifact LSP where the harness supports it. omp runs without

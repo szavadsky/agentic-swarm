@@ -25,6 +25,7 @@ import {
 } from "./outcome.js";
 import { pricedServed, pricedUsage } from "./pricing.js";
 import { outcomeRepairSchemaVar } from "./prompt-schema.js";
+import { markPoolExhausted, poolResetAt } from "./quota-pools.js";
 import { appendPark } from "./record.js";
 import {
   DEFAULT_TIMEOUTS,
@@ -280,7 +281,12 @@ export async function runAgentTurn(
       }
       current = result.session;
       if (result.stop.kind === "infra" && result.stop.cause === "quota") {
-        runtime.exhaustedPools.add(tierPoolKey(tier));
+        await markPoolExhausted({
+          paths: runtime.paths,
+          pools: runtime.exhaustedPools,
+          pool: tierPoolKey(tier),
+          resetAt: poolResetAt(runtime.configs.run),
+        });
       }
       if (result.stop.kind !== "infra" || index + 1 >= tiers.length) break;
       index += 1;

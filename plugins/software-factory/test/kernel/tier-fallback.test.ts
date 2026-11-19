@@ -76,6 +76,11 @@ function quota() {
   return { stop: { kind: "infra", cause: "quota" } as const };
 }
 
+/** Latch a pool as if it answered quota a moment ago. */
+function latchPool(runtime: KernelRuntime, pool: string): void {
+  runtime.exhaustedPools.set(pool, Date.now() + 60_000);
+}
+
 describe("alias fallback tiers", () => {
   it("falls back across harnesses with each tier's own effort and opaque config", async () => {
     const t = await tierRuntime({
@@ -137,7 +142,7 @@ describe("alias fallback tiers", () => {
       fallbacks: [{ harness: "b", model: "mb" }],
     });
     try {
-      t.runtime.exhaustedPools.add("a+ma");
+      latchPool(t.runtime, "a+ma");
       t.b.script((req, ctx) => {
         ctx.writeOutcome(outcome({ summary: "done on b" }));
         return fakeTurnResult(req);
@@ -500,12 +505,12 @@ describe("alias fallback tiers", () => {
       ]);
 
       // One pool covers the named alias's whole ladder: both its tiers drop.
-      t.runtime.exhaustedPools.add("inner");
+      latchPool(t.runtime, "inner");
       const withoutInner = resolveTurn(t.runtime, "implementer", "implementer");
       expect(withoutInner.harness.id).toBe("a");
       expect(withoutInner.tiers.map((tier) => tier.model.id)).toEqual(["ma"]);
 
-      t.runtime.exhaustedPools.add("outer");
+      latchPool(t.runtime, "outer");
       const withoutPools = resolveTurn(t.runtime, "implementer", "implementer");
       expect(withoutPools.model.id).toBe("mb2");
       expect(withoutPools.tierOffset).toBe(2);

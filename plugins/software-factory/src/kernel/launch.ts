@@ -36,6 +36,7 @@ import {
   tmpHeadroom,
 } from "./preflight.js";
 import { loadPrompts } from "./prompts.js";
+import { loadPoolResets } from "./quota-pools.js";
 import { scriptMeta } from "./record.js";
 import { recoverLaunch } from "./recovery.js";
 import { RESUME_REFUSED_STEP, RESUME_STEP, resumeVerdict } from "./resume.js";
@@ -415,7 +416,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
       run: configs.run,
     }),
     limits: toLimits(configs),
-    exhaustedPools: new Set(),
+    exhaustedPools: await loadPoolResets(paths),
     priceSource: opts.priceSource,
   };
 

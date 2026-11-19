@@ -195,7 +195,7 @@ export async function makeRuntime(
       run: configs.run,
     }),
     limits: toLimits(configs),
-    exhaustedPools: new Set(),
+    exhaustedPools: new Map(),
     // Hermetic prices: the repo-local cache, never the network.
     priceSource: {
       cachePath: priceCachePath(repo.dir),

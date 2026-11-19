@@ -701,6 +701,11 @@ export interface RunConfig {
     minTmpFreeBytes?: number;
   };
   sessions: { dir: string; keepRuns: number; retention: "short" | "long" };
+  /**
+   * Quota-pool cooldown: minutes a pool is skipped after a quota stop. Absent
+   * uses the 300-minute default.
+   */
+  quota?: { resetMinutes: number };
   worktreeRoot?: string;
   /** Enable artifact LSP where the harness supports it. */
   lsp?: boolean;
@@ -743,10 +748,12 @@ export interface KernelRuntime {
   prompts: PromptLibrary;
   limits: Limits;
   /**
-   * Quota pool keys (subscription, or harness+model when none) exhausted during
-   * this launch. Subsequent turns skip tiers drawing on these pools.
+   * Quota pool keys (subscription, or harness+model when none) latched by a
+   * quota stop, mapped to the epoch ms they may serve again. Loaded from the
+   * session store at launch, so a relaunch before a stored reset skips the
+   * pool; turns skip tiers drawing on a pool until its reset time.
    */
-  exhaustedPools: Set<string>;
+  exhaustedPools: Map<string, number>;
   /** Price cache and fetcher; undefined means the shared cache plus network. */
   priceSource?: PriceSource;
 }

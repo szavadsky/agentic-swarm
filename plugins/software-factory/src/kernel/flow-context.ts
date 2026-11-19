@@ -20,6 +20,7 @@ import { launchKindOf } from "./metrics.js";
 import { taskOutcomeSchema } from "./outcome-schemas.js";
 import { outcomeSchemaVar } from "./prompt-schema.js";
 import { CHECK_HANDOFF_DEFAULTS, GATE_LAST_CALL_ASK } from "./prompts.js";
+import { poolExhausted } from "./quota-pools.js";
 import { formatFixDispositions, formatReviewFindings } from "./record.js";
 import { agentSteps, isLastChecksFixCall } from "./review.js";
 import { sessionCacheHot } from "./sessions.js";
@@ -303,7 +304,7 @@ function targetForAlias(
     );
   const chain = resolveChain(runtime, aliasName, iteration);
   const available = chain.filter(
-    (tier) => !runtime.exhaustedPools.has(tierPoolKey(tier)),
+    (tier) => !poolExhausted(runtime.exhaustedPools, tierPoolKey(tier)),
   );
   const tiers = available.length > 0 ? available : [chain[chain.length - 1]!];
   const first = tiers[0]!;
@@ -455,7 +456,7 @@ function effectiveAliasHarness(
 ): string {
   const chain = resolveChain(runtime, alias, iteration);
   const available = chain.filter(
-    (tier) => !runtime.exhaustedPools.has(tierPoolKey(tier)),
+    (tier) => !poolExhausted(runtime.exhaustedPools, tierPoolKey(tier)),
   );
   const first = available[0] ?? chain[chain.length - 1]!;
   return first.harness.id;

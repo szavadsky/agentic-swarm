@@ -112,6 +112,7 @@ limits:
   iterations: 1
   iterationUsd: 5
 sessions: { dir: ~/.local/share/factory/sessions, keepRuns: 5, retention: short }
+quota: { resetMinutes: 300 }                         # pool cooldown after a quota stop
 worktreeRoot: ~/.local/share/factory/worktrees
 lsp: true                                             # artifact LSP on omp
 scouts: { model: opencode-go/deepseek-v4.1-flash }   # omp architect subagents
@@ -141,6 +142,13 @@ names another alias (`{ alias: backup }`) and reuses that alias's whole ladder,
 each of its tiers keeping its own quota pool; pre-flight refuses a missing alias
 or a fallback cycle. A turn that lands on a tier keeps the launch on it, and
 dispatch throttles each pool and model within the overall limit.
+
+A tier that answers quota latches its pool. The launch stores the pool's reset
+time in the goal's session store (`quota-pools.yaml` beside the launch
+directories, so rotation keeps it), and a relaunch before that time skips the
+pool and starts on the next tier. `quota.resetMinutes` sets the cooldown
+(default 300); the harness contract carries no provider reset, so the stored
+time is a cooldown from the stop, not the provider's own schedule.
 
 An alias may carry `rotate: [{ harness, model, effort }]` to change its primary
 per iteration: iteration N resolves `rotate[N % rotate.length]`, so iteration 1
