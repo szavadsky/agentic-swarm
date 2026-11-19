@@ -612,6 +612,35 @@ describe("factory validate", () => {
   );
 
   it(
+    "bounds a plan-check follow-up by the plan's bullets",
+    withTmp(async (root) => {
+      writeFile(root, "plan.md", "# Plan\n\n- alpha — Alpha works.\n");
+      const record = "records/00012-i1-plancheck-r1";
+      writeFile(root, `${record}/started.yaml`, STARTED("plancheck"));
+      const outside = writeFile(
+        root,
+        `${record}/outcome.yaml`,
+        "status: done\nsummary: checked\nplanCheck:\n  verdict: progress\n  evidence: []\n  followUps:\n    - kind: amend\n      slug: alpha\n      reason: retry alpha\n    - kind: amend\n      slug: retired\n      reason: retry the old slug\n",
+      );
+      const rejected = await runValidate(outside);
+      expect(rejected.code).toBe(1);
+      expect(rejected.err).toContain(
+        'follow-up slug "retired" has no "- retired —" bullet in the plan; merged and retired slugs are history',
+      );
+      expect(rejected.err).not.toContain('follow-up slug "alpha"');
+
+      const inside = writeFile(
+        root,
+        `${record}/outcome.yaml`,
+        "status: done\nsummary: checked\nplanCheck:\n  verdict: progress\n  evidence: []\n  followUps:\n    - kind: amend\n      slug: alpha\n      reason: retry alpha\n",
+      );
+      const accepted = await runValidate(inside);
+      expect(accepted.code).toBe(0);
+      expect(accepted.out).toContain(": valid");
+    }),
+  );
+
+  it(
     "rejects retired steps from old records as unknown",
     withTmp(async (root) => {
       const record = "records/00010-alpha-merge-attempt-r1";

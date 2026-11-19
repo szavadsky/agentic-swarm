@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { runAgentTurn } from "./agent.js";
 import type { PlanCheckPack } from "./context-pack.js";
@@ -19,6 +20,45 @@ import type {
 
 /** Agent step of a plan-checker turn; slug-less, so it stays out of the item's turn count. */
 export const PLAN_CHECK_STEP = "plancheck";
+
+/** A top-level plan bullet: `- <slug> — <title>` (the em dash is the plan's). */
+const PLAN_BULLET = /^-\s+(\S+)\s+—/u;
+
+/**
+ * The slugs the plan names as task bullets. Prose mentions and nested bullets
+ * (`  - done: …`) name no task, so a follow-up cannot hide behind them.
+ * `plan-scopes` generalizes this parser once every scope has its own plan.
+ */
+export function planSlugs(plan: string): Set<string> {
+  const slugs = new Set<string>();
+  for (const line of plan.split(/\r?\n/)) {
+    const match = PLAN_BULLET.exec(line);
+    if (match) slugs.add(match[1]!);
+  }
+  return slugs;
+}
+
+/**
+ * Findings for a plan-check report whose follow-ups reach outside the plan:
+ * each follow-up's own slug must be a `- <slug> —` bullet. A `missing-dep`
+ * follow-up's dead dependency may be absent from the plan; it is the dep, not
+ * the slug acted on. Only a `done` outcome carries a report to check.
+ */
+export function validatePlanCheck(plan: string, outcome: Outcome): string[] {
+  if (outcome.status !== "done" || !outcome.planCheck) return [];
+  const named = planSlugs(plan);
+  const outside = [
+    ...new Set(
+      outcome.planCheck.followUps
+        .map((followUp) => followUp.slug)
+        .filter((slug) => !named.has(slug)),
+    ),
+  ];
+  return outside.map(
+    (slug) =>
+      `follow-up slug "${slug}" has no "- ${slug} —" bullet in the plan; merged and retired slugs are history`,
+  );
+}
 
 /**
  * The checker's brief: every task file with status, then parked slugs with
@@ -60,6 +100,9 @@ export async function runPlanCheck(
   opts: { iteration: number; round: number; state: State },
 ): Promise<PlanCheckTurn> {
   const planPath = path.join(runtime.store.goalDir, "plan.md");
+  const plan = fs.existsSync(planPath)
+    ? await fs.promises.readFile(planPath, "utf8")
+    : "";
   const snapshot = await snapshotTurn(runtime, planPath);
   const tasks = await runtime.store.listTasks();
   const result = await runAgentTurn(runtime, {
@@ -79,6 +122,7 @@ export async function runPlanCheck(
       existing_tasks: planCheckBrief(opts.state, tasks),
     },
     expectation: KERNEL_TURN_STEPS[PLAN_CHECK_STEP],
+    validate: (outcome) => validatePlanCheck(plan, outcome),
   });
   const restored = await restoreTurn(runtime, snapshot);
   const touched = [

@@ -14,6 +14,9 @@ import {
   latestPlanCheck,
   PLAN_CHECK_STEP,
   planCheckBrief,
+  planSlugs,
+  runPlanCheck,
+  validatePlanCheck,
 } from "../../src/kernel/plan-check.js";
 import { PLAN_CHECK_ROUTES_STEP, runPlanCheckPm } from "../../src/kernel/pm.js";
 import { appendCancel, scriptMeta } from "../../src/kernel/record.js";
@@ -150,7 +153,7 @@ describe("plan checker", () => {
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
       fs.writeFileSync(
         path.join(runtime.store.goalDir, "plan.md"),
-        "# Plan\n\n- alpha\n- beta\n",
+        "# Plan\n\n- alpha — Alpha.\n- beta — Beta.\n",
         "utf8",
       );
 
@@ -226,7 +229,7 @@ describe("plan checker", () => {
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
       fs.writeFileSync(
         path.join(runtime.store.goalDir, "plan.md"),
-        "# Plan\n\n- alpha\n- beta\n",
+        "# Plan\n\n- alpha — Alpha.\n- beta — Beta.\n",
         "utf8",
       );
 
@@ -328,7 +331,7 @@ describe("plan checker", () => {
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
       fs.writeFileSync(
         path.join(runtime.store.goalDir, "plan.md"),
-        "# Plan\n\n- alpha\n- beta\n",
+        "# Plan\n\n- alpha — Alpha.\n- beta — Beta.\n",
         "utf8",
       );
 
@@ -352,7 +355,7 @@ describe("plan checker", () => {
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       fs.writeFileSync(
         path.join(runtime.store.goalDir, "plan.md"),
-        "# Plan\n\n- alpha\n",
+        "# Plan\n\n- alpha — Alpha.\n",
         "utf8",
       );
       await runtime.store.appendRecord(
@@ -441,7 +444,11 @@ describe("plan checker", () => {
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const planPath = path.join(runtime.store.goalDir, "plan.md");
-      fs.writeFileSync(planPath, "# Plan\n\n- alpha\n- beta\n", "utf8");
+      fs.writeFileSync(
+        planPath,
+        "# Plan\n\n- alpha — Alpha.\n- beta — Beta.\n",
+        "utf8",
+      );
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
       const betaBefore = fs.readFileSync(
@@ -527,7 +534,7 @@ describe("plan checker", () => {
       );
       fs.writeFileSync(
         path.join(runtime.store.goalDir, "plan.md"),
-        "# Plan\n\n- app\n",
+        "# Plan\n\n- app — App works.\n",
         "utf8",
       );
       await appendCancel(
@@ -779,7 +786,7 @@ describe("plan checker", () => {
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
       fs.writeFileSync(
         path.join(runtime.store.goalDir, "plan.md"),
-        "# Plan\n\n- alpha\n- beta\n",
+        "# Plan\n\n- alpha — Alpha.\n- beta — Beta.\n",
         "utf8",
       );
 
@@ -899,4 +906,145 @@ describe("plan checker", () => {
     expect(latestPlanCheck([silent])).toBeUndefined();
     expect(latestPlanCheck([])).toBeUndefined();
   });
+
+  it("bounds follow-up slugs by plan bullets and exempts a dead dep", () => {
+    const plan = [
+      "# Plan",
+      "",
+      "- app — App works.",
+      "- beta — Beta works.",
+      "",
+      "Retired: gamma was merged.",
+    ].join("\n");
+    expect([...planSlugs(plan)].sort()).toEqual(["app", "beta"]);
+    const check = outcome({
+      planCheck: {
+        verdict: "progress",
+        evidence: [],
+        followUps: [
+          {
+            kind: "missing-dep",
+            slug: "app",
+            dep: "ghost",
+            reason: "ghost is gone",
+          },
+          { kind: "amend", slug: "gamma", reason: "retry the old slug" },
+        ],
+      },
+    });
+    expect(validatePlanCheck(plan, check)).toEqual([
+      'follow-up slug "gamma" has no "- gamma —" bullet in the plan; merged and retired slugs are history',
+    ]);
+  });
+
+  it("repairs a follow-up outside the plan and briefs the PM with the rest", async () => {
+    const { repo, goal } = setupFlowRepo({ aliases: ALIASES });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
+      fs.writeFileSync(
+        path.join(runtime.store.goalDir, "plan.md"),
+        "# Plan\n\n- beta — Beta.\n",
+        "utf8",
+      );
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
+
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({
+              summary: "beta can continue",
+              planCheck: {
+                verdict: "progress",
+                evidence: [],
+                followUps: [
+                  {
+                    kind: "cancel",
+                    slug: "beta",
+                    reason: "no longer worth it",
+                  },
+                  { kind: "amend", slug: "retired", reason: "old slug" },
+                ],
+              },
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: PLAN_CHECK_STEP }) },
+      );
+      let repairPrompt = "";
+      harness.script(
+        (req, ctx) => {
+          repairPrompt = req.prompt;
+          ctx.writeOutcome(
+            outcome({
+              summary: "beta can continue",
+              planCheck: {
+                verdict: "progress",
+                evidence: [],
+                followUps: [
+                  {
+                    kind: "cancel",
+                    slug: "beta",
+                    reason: "no longer worth it",
+                  },
+                ],
+              },
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: PLAN_CHECK_STEP }) },
+      );
+
+      const checked = await runPlanCheck(runtime, {
+        iteration: 1,
+        round: 1,
+        state,
+      });
+      expect(checked.verdict).toBe("progress");
+      expect(checked.followUps.map((item) => item.slug)).toEqual(["beta"]);
+      expect(repairPrompt).toContain(
+        'follow-up slug "retired" has no "- retired —" bullet in the plan',
+      );
+      expect(repairPrompt).not.toContain('follow-up slug "beta"');
+
+      let pmPrompt = "";
+      harness.script(
+        (req, ctx) => {
+          pmPrompt = req.prompt;
+          ctx.writeOutcome(
+            outcome({
+              summary: "left beta",
+              planCheckRoutes: [
+                {
+                  slug: "beta",
+                  action: "leave",
+                  reason: "needs the architect",
+                },
+              ],
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
+      const followed = await runPlanCheckPm(runtime, {
+        iteration: 1,
+        state,
+        followUps: checked.followUps,
+        cwd: runtime.paths.goalCheckout,
+      });
+      expect(followed.left).toEqual(["beta"]);
+      expect(pmPrompt).toContain("- beta (cancel)");
+      expect(pmPrompt).not.toContain("retired");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
 });

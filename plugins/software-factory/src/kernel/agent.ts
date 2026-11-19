@@ -47,6 +47,11 @@ export interface AgentTurnSpec {
   vars: Record<string, string>;
   expectation: OutcomeExpectation;
   /**
+   * The step's contract beyond the outcome schema: findings that send the
+   * delivered outcome back for repair, like a schema failure.
+   */
+  validate?: (outcome: Outcome) => string[];
+  /**
    * The task type's output schema; defaults to the kernel outcome schema for
    * kernel turns and legacy tasks.
    */
@@ -358,9 +363,12 @@ export async function runAgentTurn(
       );
       if (delivered) {
         outcome = delivered.outcome;
-        findings = validateExpectation(outcome, spec.expectation, {
-          lastCall: spec.lastCall,
-        });
+        findings = [
+          ...validateExpectation(outcome, spec.expectation, {
+            lastCall: spec.lastCall,
+          }),
+          ...(spec.validate?.(outcome) ?? []),
+        ];
       }
     } catch (err) {
       if (!(err instanceof OutcomeInvalidError)) throw err;
