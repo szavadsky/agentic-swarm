@@ -457,6 +457,7 @@ exports[`role prompts renders implementer from exactly its documented variables:
 - Errors: fail loudly at the boundary, contain them where the direction says; never swallow, never \`catch {}\`.
 - No TODO, stub, placeholder, mock fallback, fake success, unused parameter, unused export, or unused file.
 - Add a dependency only when the standard library and existing dependencies cannot do it; need, not preference.
+- Clean up: remove scaffolds, debug output, temporary files, and dead code you introduced.
 
 
 ## Calibration
@@ -549,6 +550,7 @@ You implement one task in one worktree. The task file is the assignment: its \`s
 - Errors: fail loudly at the boundary, contain them where the direction says; never swallow, never \`catch {}\`.
 - No TODO, stub, placeholder, mock fallback, fake success, unused parameter, unused export, or unused file.
 - Add a dependency only when the standard library and existing dependencies cannot do it; need, not preference.
+- Clean up: remove scaffolds, debug output, temporary files, and dead code you introduced.
 
 
 ## Calibration
@@ -742,6 +744,7 @@ exports[`role prompts renders steward from exactly its documented variables: ste
 - Errors: fail loudly at the boundary, contain them where the direction says; never swallow, never \`catch {}\`.
 - No TODO, stub, placeholder, mock fallback, fake success, unused parameter, unused export, or unused file.
 - Add a dependency only when the standard library and existing dependencies cannot do it; need, not preference.
+- Clean up: remove scaffolds, debug output, temporary files, and dead code you introduced.
 
 
 ## Calibration

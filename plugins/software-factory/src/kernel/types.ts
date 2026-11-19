@@ -568,6 +568,10 @@ export interface RepoConfig {
     command: string;
     format?: { junit?: string; pattern?: "pytest" | "jest" | "cargo" };
   }[];
+  cleanliness?: {
+    maxFileSizeBytes?: number;
+    allowedExtensions?: string[];
+  };
 }
 
 export interface ProcessConfig {

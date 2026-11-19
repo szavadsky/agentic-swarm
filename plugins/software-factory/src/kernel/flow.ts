@@ -29,6 +29,7 @@ import {
   newGateFailures,
   runGates,
 } from "./gates.js";
+import { runCleanlinessCheck } from "./cleanliness.js";
 import { type MergeResult, mergeTask } from "./integrate.js";
 import { taskOutcomeSchema } from "./outcome-schemas.js";
 import {
@@ -164,6 +165,14 @@ async function runTaskGates(
   const gate = await startChecks(runtime.store, meta);
   let checks = await runGates(runtime, worktree);
   markInfraGates(checks);
+
+  const base =
+    firstBase(await runtime.store.listRecords(), meta.slug) ?? "HEAD";
+  const cleanliness = await runCleanlinessCheck(runtime, worktree, base);
+  if (!cleanliness.ok) {
+    checks.push(cleanliness);
+  }
+
   const red = newGateFailures(checks, preexisting).filter(
     (check) => !isInfraCheck(check),
   );

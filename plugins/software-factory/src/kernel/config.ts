@@ -50,6 +50,13 @@ export const repoConfigSchema = z
     identity: identitySchema.optional(),
     setup: z.array(z.string().min(1)).default([]),
     gates: z.array(gateSchema).default([]),
+    cleanliness: z
+      .object({
+        maxFileSizeBytes: z.number().int().positive().optional(),
+        allowedExtensions: z.array(z.string().min(1)).optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
