@@ -838,3 +838,9 @@ Verbatim, newest last; each with what it changed.
 - Duplicate-land handoff REPEATED verbatim (delta-inbox steer before delta relaunch: cancel outcome-ids-land/gate-mutex-land/lint-ratchet-land; landed-by 9b6cd065/4311aaa9/e1a43616). i2 retries thin, not a cluster.
 - Legs: opus 1t unpriced (22nd shaping); hy4 5t $0; deepseek 1t $0.03. Cost $0.03 ($0.03/merge). 6 agent + 5 script turns. 0 failures, 0 outcome-repairs, 0 conflicts, 0 flakes.
 - Goal NOT complete (architect: M5 just merged, declaration expected next i4). No stop pressure.
+
+### 2026-11-19 — friction-i4 landed: DONE VERIFIED (goal-met) → FULL STOP per owner order
+- Exit 0 stop=done, 10min wall, 2 turns, status goal-met. Architect declared with complete evidence on adb63caf: all 19 tasks merged (M1-M5 + 4 salvage lands), 0 parks, 0 pending, 0 debt, base gates green. Done-proof = resume-boundary scenario test (variant A dispatches, variant B architect rules same launch). Per-mechanism tests re-run on head: 21 files, 405 pass / 2 skip / 0 fail (M1 tasks/pm/steer-routing/resume-boundary/merge-conflict/tier-fallback/quota-persist/repro-e7; M2 merge-conflict/containment/agent/acpx-adapter/context-pack/boundary-pack; M3 outcome/gate-parallel/config/live-run-configs/lint-ratchet + every other delta park dropped with reason in plan M3; M4 plan-check/fallback/quota-persist/schemas; M5 plan-check). M5 fix verified (64473eac, route-action check, amend/replace/split/cancel-leave tested).
+- Handoff verbatim: cancel outcome-ids-land/gate-mutex-land/lint-ratchet-land (landed-by 9b6cd065/4311aaa9/e1a43616) — delta-inbox steer before delta relaunch (owner default).
+- Branch empty (0-merge-because-done), inbox empty. Legs: digest hy4 $0 + architect opus unpriced (~$0.16 list); $0 cost. Incidents: ALL ZERO. No assumptions. Gates skipped (tree unchanged). DONE CLAUSE SATISFIED.
+- Operator: FULL STOP — no relaunch (owner order: once repair done, stop).
