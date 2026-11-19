@@ -639,6 +639,9 @@ Forward only what the calibration calls remarkable.
 - prior findings: \`\` — empty in round 1; numbered, each answered by a change, a reply, or both
 - standalone upscope: \`\` — empty when this task is part of an architect plan; then give no upscope field
 - fix dispositions: \`\` — empty in round 1. Re-judge each finding against the diff or its reply; a reply is judged on its argument, not on whether the diff evidences it.
+- checks: \`pass\`
+- checks tree: \`3ba247e47772a8ba5874d089990419f572432df8\`
+- checks log: \`/goal/records/1/alpha/checks\`
 - worktree: \`/worktrees/demo-tasks/alpha\` (run git as \`git -C <worktree>\`; cited paths are relative to it)
 - outcome path: \`/worktrees/demo-tasks/alpha/outcome.yaml\`
 "

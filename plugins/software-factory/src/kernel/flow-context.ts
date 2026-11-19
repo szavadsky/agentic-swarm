@@ -15,7 +15,7 @@ import { formatFailingChecks, newGateFailures } from "./gates.js";
 import { launchKindOf } from "./metrics.js";
 import { taskOutcomeSchema } from "./outcome-schemas.js";
 import { outcomeSchemaVar } from "./prompt-schema.js";
-import { GATE_LAST_CALL_ASK } from "./prompts.js";
+import { CHECK_HANDOFF_DEFAULTS, GATE_LAST_CALL_ASK } from "./prompts.js";
 import { formatFixDispositions, formatReviewFindings } from "./record.js";
 import { agentSteps, isLastChecksFixCall } from "./review.js";
 import { sessionCacheHot } from "./sessions.js";
@@ -965,6 +965,18 @@ export function promptVars(
         .join("\n") || "none",
     baseline_checks: base ? formatFailingChecks(base.checks) || "none" : "none",
     findings,
+    checks_result: checks?.checks
+      ? formatFailingChecks(checks.checks) || "pass"
+      : CHECK_HANDOFF_DEFAULTS.checks_result,
+    checks_tree: checks?.tree ?? CHECK_HANDOFF_DEFAULTS.checks_tree,
+    checks_log: checks
+      ? path.join(
+          runtime.store.recordsDir,
+          checks.iteration.toString(),
+          checks.slug ?? "unknown",
+          checks.step,
+        )
+      : CHECK_HANDOFF_DEFAULTS.checks_log,
     round: String(round),
     base_hash: "",
     head_hash: "",

@@ -125,6 +125,9 @@ const ROLES: Record<string, Record<string, string>> = {
     max_rounds: "3",
     last_call: "false",
     baseline_checks: "- test: 2 failing",
+    checks_result: "pass",
+    checks_tree: "3ba247e47772a8ba5874d089990419f572432df8",
+    checks_log: "/goal/records/1/alpha/checks",
     prior_findings: "",
     upscope_ask: "",
     fix_dispositions: "",
@@ -195,6 +198,19 @@ describe("role prompts", () => {
       }
     });
   }
+
+  it("defaults the checks handoff when a render has no checks record", () => {
+    const lib = loadPrompts(processConfig(), os.tmpdir(), {
+      run: {} as RunConfig,
+    });
+    const vars = { ...ROLES.reviewer! };
+    for (const name of ["checks_result", "checks_tree", "checks_log"])
+      delete vars[name];
+    const rendered = lib.render("reviewer", vars);
+    expect(rendered).toContain("- checks: `no checks run`");
+    expect(rendered).toContain("- checks tree: `unknown`");
+    expect(rendered).toContain("- checks log: `unknown`");
+  });
 
   it("keeps role text out of a separate system channel", () => {
     // The harness contract has `system`, but OpenCode has no system flag; role

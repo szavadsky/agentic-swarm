@@ -18,7 +18,7 @@ The shared definitions exist once as partials: `scope` (the predicted-area rule:
 
 `calibration` is the default calibration partial. The process config may replace its content per repo; the prompt template does not change.
 
-Renderer defaults live outside any `This turn` block and the renderer supplies them, so turn code does not pass them: `validate_cmd` (the running build's absolute `bun <build>/bin/factory.ts validate`, stable only within one checkout), `outcome_schema` (the outcome YAML skeleton rendered from the task type's kernel output schema, in the `outcome` partial), `task_frontmatter` (the frontmatter YAML skeleton rendered from the kernel task schema, in the `task-frontmatter` partial), `task_types` (configured task type names in config order with the flow, kind and output schema each supplies, from the process config), `tiers` (run-config alias names in config order; `default` is kernel vocabulary for no tier override and stays literal) and `author` (the reviewer's author role; it selects the `<role>-body` and `review-<role>` fragments). `author` defaults to `implementer`; the plan-review turn overrides it with `architect`. `class_types` is a turn-supplied variable above the block: the front turn renders its class-to-task-type mapping from the same kernel mapping the validator enforces. The delivery-repair ask also supplies its own narrowed `outcome_schema`; it has no role prompt, so its shape must match the turn it repairs.
+Renderer defaults live outside any `This turn` block and the renderer supplies them, so turn code does not pass them: `validate_cmd` (the running build's absolute `bun <build>/bin/factory.ts validate`, stable only within one checkout), `outcome_schema` (the outcome YAML skeleton rendered from the task type's kernel output schema, in the `outcome` partial), `task_frontmatter` (the frontmatter YAML skeleton rendered from the kernel task schema, in the `task-frontmatter` partial), `task_types` (configured task type names in config order with the flow, kind and output schema each supplies, from the process config), `tiers` (run-config alias names in config order; `default` is kernel vocabulary for no tier override and stays literal), `author` (the reviewer's author role; it selects the `<role>-body` and `review-<role>` fragments) and `checks_result`/`checks_tree`/`checks_log` (the latest checks record's result, tree and log; a render with no checks record gets `no checks run`, `unknown` and `unknown`). `author` defaults to `implementer`; the plan-review turn overrides it with `architect`. `class_types` is a turn-supplied variable above the block: the front turn renders its class-to-task-type mapping from the same kernel mapping the validator enforces. The delivery-repair ask also supplies its own narrowed `outcome_schema`; it has no role prompt, so its shape must match the turn it repairs.
 
 ## architect.md
 
@@ -108,13 +108,16 @@ which selects `implementer-body`, `review-implementer` and
 `review-implementer-turn`. All turn variables stay in the final `## This turn`
 block.
 
-| variable         | meaning                                                                            |
-| ---------------- | ---------------------------------------------------------------------------------- |
-| `worktree`       | task worktree for a task review; goal checkout for a plan review                   |
-| `author`         | role whose body the reviewer includes (`implementer` by default); renderer default |
-| `outcome_path`   | path where the outcome file must be written when the harness asks for a file       |
-| `validate_cmd`   | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default   |
-| `outcome_schema` | outcome YAML skeleton from the kernel schema; renderer default                     |
+| variable         | meaning                                                                                                                                  |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `worktree`       | task worktree for a task review; goal checkout for a plan review                                                                         |
+| `author`         | role whose body the reviewer includes (`implementer` by default); renderer default                                                       |
+| `checks_result`  | latest checks record's failing-check text, or `pass` when green; `no checks run` when the render has no checks record (renderer default) |
+| `checks_tree`    | the checked tree's hash; `unknown` without a checks record (renderer default)                                                            |
+| `checks_log`     | the checks record's directory; `unknown` without a checks record (renderer default)                                                      |
+| `outcome_path`   | path where the outcome file must be written when the harness asks for a file                                                             |
+| `validate_cmd`   | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                                         |
+| `outcome_schema` | outcome YAML skeleton from the kernel schema; renderer default                                                                           |
 
 ## review-implementer.md
 
