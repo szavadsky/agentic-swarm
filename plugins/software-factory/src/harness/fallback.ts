@@ -1,4 +1,5 @@
 // biome-ignore-all lint/complexity: split-rest
+import { statedWaitMs } from "./stated-wait.js";
 import type { ModelRef, Stop, TurnAttempt, Usage } from "./types.js";
 
 /**
@@ -10,6 +11,7 @@ export interface RetryPolicy {
   /** Extra calls shared by the whole chain, only for retryable causes. */
   retries: number;
   baseDelayMs: number;
+  /** Longest single backoff; a quota stop naming a longer wait is not retried. */
   maxDelayMs: number;
 }
 
@@ -29,6 +31,17 @@ export function isTransientInfraCause(cause: string): boolean {
 
 export function isRetryableInfra(stop: Stop): boolean {
   return stop.kind === "infra" && isTransientInfraCause(stop.cause);
+}
+
+/**
+ * A quota stop whose stated wait is longer than the retry window cannot be
+ * cleared by another call seconds later: the chain advances instead. Rate and
+ * network stops, and quota stops naming no wait, keep the bounded retries.
+ */
+function quotaWaitBeyondWindow(stop: Stop, maxDelayMs: number): boolean {
+  if (stop.kind !== "infra" || stop.cause !== "quota") return false;
+  const waitMs = statedWaitMs(stop.details);
+  return waitMs !== undefined && waitMs > maxDelayMs;
 }
 
 export interface AttemptOutput<T> {
@@ -87,6 +100,7 @@ export async function runWithFallbacks<T>(opts: {
         return { outcome, attempts };
       }
       if (retriesLeft > 0 && isRetryableInfra(outcome.stop)) {
+        if (quotaWaitBeyondWindow(outcome.stop, policy.maxDelayMs)) break;
         const delay = Math.min(
           policy.baseDelayMs * 2 ** retryIndex,
           policy.maxDelayMs,

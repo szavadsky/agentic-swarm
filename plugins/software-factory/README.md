@@ -191,10 +191,13 @@ or a fallback cycle. A turn that lands on a tier keeps the launch on it, and
 dispatch throttles each pool and model within the overall limit.
 
 A tier that answers quota latches its pool. The stop's stated reset
-(`Resets in 130h19m23s`, `Resets in 33m53s`) sets that pool's cooldown, capped
-by `quota.maxResetMinutes` when the run config sets one; a stop whose text names
-no parseable reset falls back to `quota.resetMinutes` (default 300) from the
-stop. The launch stores the reset time in the goal's session store
+(`Resets in 130h19m23s`, `Resets in 33m53s`, `retry-after-ms=38240413`) sets
+that pool's cooldown, capped by `quota.maxResetMinutes` when the run config sets
+one; a stop whose text names no parseable reset falls back to
+`quota.resetMinutes` (default 300) from the stop. A quota stop whose stated wait
+is longer than the retry window skips the bounded retry and moves straight to
+the next model; without a stated wait the bounded retries stand. The launch
+stores the reset time in the goal's session store
 (`quota-pools.yaml` beside the launch directories, so rotation keeps it), and a
 relaunch before that time skips the pool and starts on the next tier. An alias
 whose every tier is exhausted is unavailable: no harness call is made, and
