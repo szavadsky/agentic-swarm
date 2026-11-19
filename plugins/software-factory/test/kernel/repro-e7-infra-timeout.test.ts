@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";

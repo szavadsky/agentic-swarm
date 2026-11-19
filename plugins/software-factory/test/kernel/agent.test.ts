@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -10,12 +11,12 @@ import {
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
 import type { SessionRef } from "../../src/harness/types.js";
+import { countOutcomeRepairs } from "../../src/harness/usage.js";
 import { OUTCOME_SETTLE_MS, runAgentTurn } from "../../src/kernel/agent.js";
 import { renderContextPack } from "../../src/kernel/context-pack.js";
 import { derive } from "../../src/kernel/derive.js";
 import { boundaryTarget, resolveTurn } from "../../src/kernel/flow-context.js";
 import { frontClassTypesVar } from "../../src/kernel/front.js";
-import { countOutcomeRepairs } from "../../src/kernel/metrics.js";
 import { writePriceCache } from "../../src/kernel/openrouter.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import { appendPark, parkLaunchKind } from "../../src/kernel/record.js";

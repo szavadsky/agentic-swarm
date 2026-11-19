@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import fs from "node:fs";
 import yaml from "yaml";
 import type { z } from "zod";

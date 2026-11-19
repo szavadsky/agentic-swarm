@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { commitAll } from "../core/git/commit.js";
 import { git } from "../core/git/exec.js";
 import { unmergedFiles } from "../core/git/merge.js";

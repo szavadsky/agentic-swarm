@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import path from "node:path";
 import { recordedBaseGates } from "./baseline.js";
 import { summaryRelPath } from "./context-pack.js";

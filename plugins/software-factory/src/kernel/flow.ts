@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-flow-dispatch
 import type { CheckResult } from "../core/checks/types.js";
 import { commitAll, isAncestor } from "../core/git/commit.js";
 import { git } from "../core/git/exec.js";

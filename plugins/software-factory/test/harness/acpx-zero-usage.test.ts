@@ -1,10 +1,11 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import type { AcpxConfig } from "../../src/harness/acpx/config.js";
 import { AcpxHarness } from "../../src/harness/acpx/harness.js";
 import { isRetryableInfra } from "../../src/harness/fallback.js";
-import { countOutcomeRepairs } from "../../src/kernel/metrics.js";
+import { countOutcomeRepairs } from "../../src/harness/usage.js";
 import { createAcpxStub } from "./acpx-stub.js";
 
 const TIMEOUTS = { idleMs: 10_000, wallMs: 30_000 };

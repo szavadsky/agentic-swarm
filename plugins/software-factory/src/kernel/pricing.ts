@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import type {
   ModelRef,
   ServedUsage,

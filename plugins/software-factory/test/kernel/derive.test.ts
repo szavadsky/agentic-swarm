@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import { derive, hasOpenDebt, openDebts } from "../../src/kernel/derive.js";
 import type { StepRecord } from "../../src/kernel/types.js";

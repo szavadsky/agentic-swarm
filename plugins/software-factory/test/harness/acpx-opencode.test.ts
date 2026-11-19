@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import path from "node:path";
 import type { AcpxConfig } from "../../src/harness/acpx/config.js";

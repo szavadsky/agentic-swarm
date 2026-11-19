@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";

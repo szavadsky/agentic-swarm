@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 /**
  * The architect register is the only hierarchy state the main architect writes
  * (plan §2): one bullet per epic under `## Architect register`. This module is

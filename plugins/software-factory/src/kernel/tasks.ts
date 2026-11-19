@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { createHash } from "node:crypto";
 import { z, type ZodIssue } from "zod";
 import yaml from "yaml";

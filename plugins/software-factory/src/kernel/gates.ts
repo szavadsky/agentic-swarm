@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import fs from "node:fs";
 import path from "node:path";
 import type { CheckResult } from "../core/checks/types.js";

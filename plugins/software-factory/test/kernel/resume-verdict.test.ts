@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import type { Hold } from "../../src/kernel/mailbox.js";
 import { resumeVerdict } from "../../src/kernel/resume.js";

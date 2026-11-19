@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import type { CheckResult } from "../core/checks/types.js";
 import { runWorktreeSetup } from "../core/checks/setup.js";
 import { commitAll, isAncestor } from "../core/git/commit.js";

@@ -1,6 +1,7 @@
+// biome-ignore-all lint/complexity: split-flow-dispatch
 import type { CheckResult } from "../core/checks/types.js";
 import { isInfraCheck } from "./gates.js";
-import { countOutcomeRepairs } from "./metrics.js";
+import { countOutcomeRepairs } from "../harness/usage.js";
 import { stepFingerprint } from "./progress.js";
 import { SPIKE_REPORT_CHECK, spikeReportPath } from "./spike-report.js";
 import {

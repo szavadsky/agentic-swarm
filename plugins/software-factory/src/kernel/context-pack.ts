@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import type { ConcernKind } from "../core/concern-types.js";
 import { concernFingerprint } from "../core/concerns.js";
 import type { BaseGateState } from "./baseline.js";

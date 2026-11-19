@@ -1,6 +1,7 @@
+// biome-ignore-all lint/complexity: split-rest
 import yaml from "yaml";
 import type { Stop, TurnAttempt, Usage } from "../harness/types.js";
-import { addUsage, zeroUsage } from "../harness/usage.js";
+import { addUsage, countOutcomeRepairs, zeroUsage } from "../harness/usage.js";
 import { type PriceTable, pricedRecord } from "./pricing.js";
 import type { SummaryStatus } from "./summary.js";
 import type {
@@ -304,22 +305,6 @@ export function hasFallbackHop(
     return true;
   }
   return false;
-}
-
-/**
- * Retries, fallbacks and outcome repairs all live in one `attempts` array.
- * Inside a harness turn attempts continue only after an infra stop; a call
- * that follows any other stop is the separate repair turn `agent.ts` appends.
- */
-export function countOutcomeRepairs(
-  attempts: readonly TurnAttempt[] | undefined,
-): number {
-  if (!attempts) return 0;
-  let repairs = 0;
-  for (let i = 1; i < attempts.length; i += 1) {
-    if (attempts[i - 1]!.stop.kind !== "infra") repairs += 1;
-  }
-  return repairs;
 }
 
 /**

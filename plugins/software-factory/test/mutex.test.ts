@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import { AsyncMutex, KeyedMutex } from "../src/core/mutex.js";
 

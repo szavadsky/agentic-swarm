@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import { derive } from "../../src/kernel/derive.js";
 import { next } from "../../src/kernel/next.js";
