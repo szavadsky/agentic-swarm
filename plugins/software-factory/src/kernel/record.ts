@@ -1,10 +1,7 @@
-import fs from "node:fs";
-import path from "node:path";
 import type { CheckResult } from "../core/checks/types.js";
 import { git } from "../core/git/exec.js";
 import { newGateFailures } from "./gates.js";
-import { spikeReportPath } from "./spike-report.js";
-import { writeTextAtomic } from "../core/records/io.js";
+import { committedSpikeReport, spikeReportRef } from "./spike-report.js";
 import type {
   ArtifactStore,
   Concern,
@@ -195,35 +192,27 @@ export async function appendFinish(
   task: TaskFile,
   commit?: string,
 ): Promise<void> {
-  if (task.kind === "spike" && commit) {
-    const reportPath = spikeReportPath(task.slug);
-    const ABSENT_FROM_TREE = /does not exist in|exists on disk, but not in/;
-    const shown = await git(
-      store.goalDir,
-      ["show", `${commit}:${reportPath}`],
-      {
-        allowFail: true,
-        stripNewline: false,
-      },
-    );
-    if (shown.code === 0) {
-      const reportFile = path.join(
-        store.goalDir,
-        `finish/${task.slug}/report.md`,
-      );
-      await writeTextAtomic(reportFile, shown.stdout);
-      await fs.promises.chmod(reportFile, 0o444);
-    } else if (!ABSENT_FROM_TREE.test(shown.stderr)) {
-      throw new Error(
-        `failed to show ${commit}:${reportPath}: ${shown.stderr}`,
-      );
-    }
-  }
-
+  // A spike's report has one copy: the one its commit carries. The record
+  // references `<commit>:<report path>`; nothing is copied into the goal.
+  const report =
+    task.kind === "spike" && commit
+      ? await spikeFinishReport(store.goalDir, task.slug, commit)
+      : undefined;
   await store.appendRecord(scriptMeta(meta.iteration, "finish", meta), {
     ok: true,
     commit,
+    ...(report ? { report } : {}),
   });
+}
+
+/** The finish record's report reference, once the commit is known to carry it. */
+async function spikeFinishReport(
+  repoDir: string,
+  slug: string,
+  commit: string,
+): Promise<string | undefined> {
+  const ref = spikeReportRef(commit, slug);
+  return (await committedSpikeReport(repoDir, ref)) === null ? undefined : ref;
 }
 
 /** A task an explicit leave decision cancels; the slug stays spent. */

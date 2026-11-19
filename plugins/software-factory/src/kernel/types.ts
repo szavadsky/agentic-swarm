@@ -463,6 +463,8 @@ export interface StepRecord {
   compactUsage?: Usage;
   session?: SessionRef;
   commit?: string;
+  /** Spike finish only: `<commit>:<report path>`, the finding's one copy. */
+  report?: string;
   /** UTF-8 bytes of the rendered prompt sent to the harness (agent steps only). */
   promptBytes?: number;
   /** Boundary roles only: UTF-8 bytes of the iteration context pack. */
@@ -534,6 +536,8 @@ export interface RecordEnd {
   /** Incident launches only: why this launch ran again. */
   launchKind?: LaunchKind;
   commit?: string;
+  /** Spike finish only: `<commit>:<report path>`, the finding's one copy. */
+  report?: string;
   tree?: string;
   /** base-advance only: integration head tree at the creation advance. */
   headTree?: string;
