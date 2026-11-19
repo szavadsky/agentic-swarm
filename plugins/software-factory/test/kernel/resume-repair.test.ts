@@ -338,14 +338,21 @@ Create delta.txt.
           },
           { when: whenTurn({ step: "architect" }) },
         );
-        scriptStallLeave(second, ["beta"]);
+        // The resumed pass rules on the digest steer's architect route first.
+        // A derive PM turn is the one with no steer, park or follow-up lists.
         second.script(
           (req, ctx) => {
             ctx.writeOutcome(outcome({ summary: "nothing to file" }));
             return fakeTurnResult(req);
           },
-          { when: whenTurn({ step: "pm" }) },
+          {
+            when: (req) =>
+              whenTurn({ step: "pm" })(req) &&
+              req.prompt.includes("pending steers: `none`") &&
+              req.prompt.includes("stalled parks: `none`"),
+          },
         );
+        scriptStallLeave(second, ["beta"]);
         second.script(checkerTurn("architect"), {
           when: whenTurn({ step: "plancheck" }),
         });
@@ -363,7 +370,8 @@ Create delta.txt.
         expect(state.tasks.beta!.cause).toContain("does not exist");
         expect(state.tasks.gamma!.status).toBe("pending");
         expect(state.tasks.delta!.status).toBe("merged");
-        // Still no architect in the resumed iteration, and the checker ran.
+        // The resume's architect route reached the boundary in iteration 1
+        // (the first launch also had one architect there); the checker ran.
         expect(
           records.filter(
             (r) =>
@@ -371,7 +379,7 @@ Create delta.txt.
               r.step === "architect" &&
               r.iteration === 1,
           ).length,
-        ).toBe(1);
+        ).toBe(2);
         expect(
           records.filter(
             (r) =>
@@ -391,7 +399,8 @@ Create delta.txt.
           ),
         ).toBe(true);
         // The iteration ends at the boundary with the stuck state recorded, and
-        // the digest steer stays in the inbox, unanswered by iteration 2's architect.
+        // the digest steer stays in the inbox, unanswered by this boundary's
+        // architect, so a later consult presents it again.
         expect(
           records.filter(
             (r) =>
@@ -399,7 +408,7 @@ Create delta.txt.
               r.step === "architect" &&
               r.iteration === 2,
           ),
-        ).toHaveLength(1);
+        ).toHaveLength(0);
         expect(await store.readFile("iterations/1/summary.md")).toContain(
           "nothing dispatchable, non-terminal work remains: gamma pending",
         );

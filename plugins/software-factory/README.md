@@ -226,12 +226,15 @@ directory, the free bytes and `operator: purge <tmpdir>`.
 A relaunch into an interrupted iteration resumes it as a recorded attempt (a
 `resume` script record) bounded by `limits.resumeAttempts` (default 2). It
 refuses, with a `resume-refused` record naming the cause, when attempts are
-spent, the previous resume started no task turn, the iteration's latest
-plan-check is `architect`, every ready task is held by a pending steer, a hold
-file is unreadable, or a goal hold or iteration brake stands. A refused resume
-goes straight to the boundary at the next iteration. A resumed pass that starts
-no task turn, ends on `architect`, or ends with nothing left open does not
-consume the `iterations` budget: the boundary runs next in the same launch.
+spent, the previous resume started no task turn or architect ruling, the
+iteration's latest plan-check is `architect`, every ready task is held by a
+pending steer, a hold file is unreadable, or a goal hold or iteration brake
+stands. A refused resume goes straight to the boundary at the next iteration.
+An architect route (a stall waits for the architect too) or an underivable graph
+finding from the resume's steer turn runs the boundary before dispatch in the
+same iteration, and that ruling counts as the pass's progress. A resumed pass that starts no task turn and runs no
+boundary does not consume the `iterations` budget: the boundary runs next in the
+same launch.
 
 Pre-flight resolves every alias (and fallback) through the harness, checks the
 model list, the effort level, binaries, the base branch, and that

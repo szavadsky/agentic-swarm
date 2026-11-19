@@ -16,7 +16,7 @@ import {
   setupRepo,
   silenceWarn,
   DIGEST_SCOUT_MARKER,
-  digestSteerId,
+  digestTaskTurn,
   queueDigestSteer,
   digestScoutTurn,
   addAlias,
@@ -81,7 +81,7 @@ describe("resume iteration — SIGINT and hard death", () => {
         // Relaunch finishes iteration 1: the digest steer reaches the PM, then
         // dispatches beta, with no new architect record in iteration 1.
         const second = new FakeHarness({ id: "fake" });
-        queueDigestSteer(second);
+        queueDigestSteer(second, digestTaskTurn(taskDir, "beta"));
         second.script((req, ctx) => {
           fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
           ctx.writeOutcome(outcome({ summary: "beta added" }));
@@ -189,14 +189,7 @@ describe("resume iteration — SIGINT and hard death", () => {
         let pmSawDigest = false;
         queueDigestSteer(second, (req, ctx) => {
           pmSawDigest = req.prompt.includes("digest-scout-marker");
-          const id = digestSteerId(req);
-          ctx.writeOutcome(
-            outcome({
-              summary: `digest steer ${id} routed to the architect`,
-              steerRoutes: [{ steer: id, route: "architect" }],
-            }),
-          );
-          return fakeTurnResult(req);
+          return digestTaskTurn(taskDir, "beta")(req, ctx);
         });
         second.script(digestScoutTurn(goalDir, 1), {
           when: whenTurn({ step: "digest" }),
@@ -271,8 +264,7 @@ describe("resume iteration — SIGINT and hard death", () => {
           routes.some((r) =>
             (r.outcome?.steerRoutes ?? []).some(
               (entry) =>
-                entry.steer.startsWith("digest-1-") &&
-                entry.route === "architect",
+                entry.steer.startsWith("digest-1-") && entry.route === "task",
             ),
           ),
         ).toBe(true);
@@ -333,19 +325,19 @@ describe("resume iteration — SIGINT and hard death", () => {
         expect(pmBefore).toBe(1);
 
         const second = new FakeHarness({ id: "fake" });
-        queueDigestSteer(second);
-        second.script((_req, ctx) => {
-          fs.mkdirSync(path.join(goalDir, "mailbox/holds"), {
-            recursive: true,
-          });
-          fs.writeFileSync(
-            path.join(goalDir, "mailbox/holds/s1.yaml"),
-            "slugs: []\ngoal: false\n",
-            "utf8",
-          );
-          ctx.writeOutcome(outcome({ summary: "steer structured" }));
-          return fakeTurnResult(_req);
-        });
+        queueDigestSteer(second, digestTaskTurn(taskDir, "beta"));
+        second.script(
+          (req, ctx) => {
+            ctx.writeOutcome(
+              outcome({
+                summary: "steer s1 routed to the architect",
+                steerRoutes: [{ steer: "s1", route: "architect" }],
+              }),
+            );
+            return fakeTurnResult(req);
+          },
+          { when: (req) => req.prompt.includes("s1 (mailbox/inbox/s1.md)") },
+        );
         second.script((req, ctx) => {
           fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
           ctx.writeOutcome(outcome({ summary: "beta added" }));

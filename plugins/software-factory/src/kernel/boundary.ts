@@ -77,6 +77,11 @@ export interface BoundaryOptions {
   frontPack?: string;
   /** Absolute path of the run config the launch loaded; the pack names it. */
   runConfigPath?: string;
+  /**
+   * Write this consult's launch digest. Defaults to `relaunch`; a resume that
+   * already ran its digest passes false so the evidence is not gathered twice.
+   */
+  digest?: boolean;
 }
 
 function previousSummary(
@@ -261,7 +266,7 @@ export async function runBoundary(
 
   fs.mkdirSync(runtime.paths.sessionsDir, { recursive: true });
   const digestRel =
-    opts.relaunch && records.length > 0
+    (opts.digest ?? opts.relaunch) && records.length > 0
       ? await writeLaunchDigest(runtime, iteration, records)
       : null;
   const digestPath = digestRel

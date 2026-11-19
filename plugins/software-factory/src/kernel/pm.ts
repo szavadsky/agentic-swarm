@@ -407,6 +407,21 @@ export type PmRun =
   /** Every tier failed both of its turns. */
   | { status: "exhausted"; rungs: PmRung[] };
 
+/**
+ * A steer turn's result. `architect` is the outlet for anything the PM cannot
+ * decide: a claimed steer routed there, a graph finding no rung can derive
+ * away, or a ladder that exhausted with no route at all. The boundary is the
+ * only consumer of those, so the caller runs it before dispatch.
+ */
+export type SteerPmRun =
+  | { status: "routed"; routes: NonNullable<Outcome["steerRoutes"]> }
+  | {
+      status: "architect";
+      routes: NonNullable<Outcome["steerRoutes"]>;
+      findings: string[];
+    }
+  | { status: "infra"; stop: PmInfraStop };
+
 interface RungStep {
   alias: string;
   mandate: PmMandate;
@@ -870,7 +885,8 @@ function ensureSteerHold(
  * are rolled back and the steer still reaches the architect, so a steer turn
  * never blocks dispatch. Findings the graph already raised before the first
  * rung do not fail a rung: routing a steer is independent of a plan the PM
- * cannot derive.
+ * cannot derive; they come back as `architect` instead, the same outlet as a
+ * steer that needs a ruling.
  */
 export async function runSteerPm(
   runtime: KernelRuntime,
@@ -881,21 +897,18 @@ export async function runSteerPm(
     steers: Steer[];
     cwd: string;
   },
-): Promise<void> {
+): Promise<SteerPmRun> {
   const planPath = path.join(runtime.store.goalDir, "plan.md");
   const snapshot = await snapshotTurn(runtime, planPath);
   const planBefore = snapshot.plan;
   const taskSnapshot = snapshot.tasks;
-  const baselineKeys = new Set(
-    (
-      await graphFindings(
-        runtime,
-        { iteration: opts.iteration, state: opts.state, planPath, round: 1 },
-        planBefore,
-        taskSnapshot,
-      )
-    ).map(findingKey),
+  const baseline = await graphFindings(
+    runtime,
+    { iteration: opts.iteration, state: opts.state, planPath, round: 1 },
+    planBefore,
+    taskSnapshot,
   );
+  const baselineKeys = new Set(baseline.map(findingKey));
   const claim = new Map(opts.steers.map((steer) => [steer.id, steer]));
   let failure: string[] = [];
 
@@ -940,26 +953,30 @@ export async function runSteerPm(
           },
         );
       }
-      return;
+      return {
+        status: "architect",
+        routes: [],
+        findings: [
+          "the steer turn produced no steerRoutes; the steers reach the architect",
+        ],
+      };
     }
 
-    const findings = introducedFindings(
-      await validateSteerTurn(
-        runtime,
-        {
-          iteration: opts.iteration,
-          state: opts.state,
-          planPath,
-          round,
-          claim: opts.steers,
-        },
-        planBefore,
-        taskSnapshot,
-        outcome,
-      ),
-      baselineKeys,
+    const findings = await validateSteerTurn(
+      runtime,
+      {
+        iteration: opts.iteration,
+        state: opts.state,
+        planPath,
+        round,
+        claim: opts.steers,
+      },
+      planBefore,
+      taskSnapshot,
+      outcome,
     );
-    if (outcome?.status === "done" && findings.length === 0) {
+    const introduced = introducedFindings(findings, baselineKeys);
+    if (outcome?.status === "done" && introduced.length === 0) {
       const accepted = [...(outcome.steerRoutes ?? [])].sort((a, b) =>
         a.steer.localeCompare(b.steer),
       );
@@ -994,18 +1011,35 @@ export async function runSteerPm(
           ensureSteerHold(runtime, steer.id, entry.route);
         }
       }
-      return;
+      const remaining = unfixedBaseline(baseline, findings);
+      // `stall` drains the goal and waits for the architect too; both are the
+      // same outlet, so the caller runs the boundary for either.
+      const architectRoute = accepted.some(
+        (entry) => entry.route === "architect" || entry.route === "stall",
+      );
+      return architectRoute || remaining.length > 0
+        ? { status: "architect", routes: accepted, findings: remaining }
+        : { status: "routed", routes: accepted };
     }
 
-    const reasons = failureReasons(outcome, findings, result.record);
+    const reasons = failureReasons(outcome, introduced, result.record);
     await runtime.store.appendRecord(
       scriptMeta(opts.iteration, "pm-validate", { round }),
       { ok: false, cause: reasons.join("; ") },
     );
     await restoreTurn(runtime, snapshot);
-    if (result.record.stop?.kind === "infra") return;
+    if (result.record.stop?.kind === "infra")
+      return { status: "infra", stop: result.record.stop };
     failure = reasons;
   }
+  return {
+    status: "architect",
+    routes: [],
+    findings:
+      failure.length > 0
+        ? failure
+        : ["the steer ladder exhausted without a route"],
+  };
 }
 
 /** Script step committing a stall turn's routes; one record per park-decision turn. */

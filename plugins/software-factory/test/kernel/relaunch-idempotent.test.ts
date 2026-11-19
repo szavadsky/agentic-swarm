@@ -10,6 +10,7 @@ import { derive } from "../../src/kernel/derive.js";
 import { createDrainController } from "../../src/kernel/signals.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { expectDispatch } from "./e2e-helpers.js";
+import { whenTurn } from "./s2-helpers.js";
 import {
   ALPHA,
   BETA,
@@ -84,12 +85,24 @@ function diffTrees(
   };
 }
 
-/** Every change is a record or a script artifact derived from one. */
-function expectOnlyRecordTreeChanges(before: Tree, after: Tree): void {
+/**
+ * Every change is a record or a script artifact derived from one, except the
+ * paths an agent turn is allowed to author (the architect edits the plan).
+ */
+function expectOnlyRecordTreeChanges(
+  before: Tree,
+  after: Tree,
+  allowedAuthored: readonly string[] = [],
+): void {
+  const allowed = new Set(allowedAuthored);
   const diff = diffTrees(before, after);
   expect(diff.removed.filter((rel) => !isRecordTree(rel))).toEqual([]);
-  expect(diff.changed.filter((rel) => !isRecordTree(rel))).toEqual([]);
-  expect(diff.added.filter((rel) => !isRecordTree(rel))).toEqual([]);
+  expect(
+    diff.changed.filter((rel) => !isRecordTree(rel) && !allowed.has(rel)),
+  ).toEqual([]);
+  expect(
+    diff.added.filter((rel) => !isRecordTree(rel) && !allowed.has(rel)),
+  ).toEqual([]);
   expect(diff.changed.filter((rel) => rel.startsWith("records/"))).toEqual([]);
 }
 
@@ -108,7 +121,7 @@ function turnsBeforeFirstTask(harness: FakeHarness): {
 }
 
 describe("relaunch is idempotent by script", () => {
-  it("two relaunches resume the same iteration with only digest turns and leave the authored tree untouched", async () => {
+  it("two relaunches resume the same iteration without rewriting task files or config", async () => {
     const { repo, goalDir, taskDir } = setupRepo();
     const firstDrain = createDrainController();
     const secondDrain = createDrainController();
@@ -163,6 +176,41 @@ describe("relaunch is idempotent by script", () => {
       // pass before gamma starts, so the iteration stays interrupted.
       const second = new FakeHarness({ id: "fake" });
       queueDigestSteer(second);
+      // The digest steer is routed to the architect, so the resumed pass opens
+      // the boundary before dispatch. The ruling writes nothing authored.
+      second.script(
+        (req, ctx) => {
+          fs.appendFileSync(
+            path.join(goalDir, "plan.md"),
+            "\n## architect ruling after the resume\n",
+            "utf8",
+          );
+          const id = /- (digest-\S+) \(mailbox\/inbox\//.exec(req.prompt)?.[1];
+          ctx.writeOutcome(
+            outcome({
+              summary: "digest ruled: continue",
+              decision: "continue",
+              forward: id
+                ? [`steer ${id}: noted; the digest is in the record.`]
+                : [],
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "architect" }) },
+      );
+      second.script(
+        (req, ctx) => {
+          ctx.writeOutcome(outcome({ summary: "no task changes" }));
+          return fakeTurnResult(req);
+        },
+        {
+          when: (req) =>
+            whenTurn({ step: "pm" })(req) &&
+            req.prompt.includes("pending steers: `none`") &&
+            req.prompt.includes("stalled parks: `none`"),
+        },
+      );
       second.script((req, ctx) => {
         secondDrain.handleSignal("SIGINT");
         fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
@@ -188,19 +236,59 @@ describe("relaunch is idempotent by script", () => {
       expect(afterFirstRelaunch.iteration).toBe(1);
       expect(afterFirstRelaunch.tasks.beta!.status).toBe("merged");
       expect(afterFirstRelaunch.tasks.gamma!.status).toBe("ready");
-      expectOnlyRecordTreeChanges(interruptedTree, snapshotTree(goalDir));
+      expectOnlyRecordTreeChanges(interruptedTree, snapshotTree(goalDir), [
+        "plan.md",
+      ]);
 
-      // No front or architect turn precedes dispatch on a resume: the digest
-      // scout and the PM turn that reads the digest steer are the whole prefix.
+      // No front turn precedes dispatch on a resume: the digest scout, the PM
+      // turn that routes the digest steer, and the boundary its architect route
+      // summons are the whole prefix.
       const firstRelaunchTurns = turnsBeforeFirstTask(second);
-      expect(firstRelaunchTurns).toHaveLength(2);
+      expect(firstRelaunchTurns.map((turn) => turn.step)).toEqual([
+        "digest",
+        "pm",
+        "architect",
+        "planreview",
+        "pm",
+      ]);
       expect(firstRelaunchTurns[0]).toEqual({ step: "digest", digest: false });
       expect(firstRelaunchTurns[1]).toEqual({ step: "pm", digest: true });
 
       // Relaunch 2: resume the same iteration again; gamma lands and the
-      // iteration closes. No architect runs in iteration 1.
+      // iteration closes.
       const third = new FakeHarness({ id: "fake" });
       queueDigestSteer(third);
+      third.script(
+        (req, ctx) => {
+          fs.appendFileSync(
+            path.join(goalDir, "plan.md"),
+            "\n## second architect ruling after the resume\n",
+            "utf8",
+          );
+          const id = /- (digest-\S+) \(mailbox\/inbox\//.exec(req.prompt)?.[1];
+          ctx.writeOutcome(
+            outcome({
+              summary: "digest ruled again",
+              decision: "continue",
+              forward: id ? [`steer ${id}: noted again.`] : [],
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "architect" }) },
+      );
+      third.script(
+        (req, ctx) => {
+          ctx.writeOutcome(outcome({ summary: "no task changes" }));
+          return fakeTurnResult(req);
+        },
+        {
+          when: (req) =>
+            whenTurn({ step: "pm" })(req) &&
+            req.prompt.includes("pending steers: `none`") &&
+            req.prompt.includes("stalled parks: `none`"),
+        },
+      );
       third.script((req, ctx) => {
         fs.writeFileSync(path.join(req.cwd!, "gamma.txt"), "gamma\n", "utf8");
         ctx.writeOutcome(outcome({ summary: "gamma added" }));
@@ -223,7 +311,13 @@ describe("relaunch is idempotent by script", () => {
       );
 
       const secondRelaunchTurns = turnsBeforeFirstTask(third);
-      expect(secondRelaunchTurns).toHaveLength(2);
+      expect(secondRelaunchTurns.map((turn) => turn.step)).toEqual([
+        "digest",
+        "pm",
+        "architect",
+        "planreview",
+        "pm",
+      ]);
       expect(secondRelaunchTurns[0]).toEqual({
         step: "digest",
         digest: false,
@@ -245,32 +339,38 @@ describe("relaunch is idempotent by script", () => {
         "resume attempt 2 of iteration 1",
       ]);
       expect(records.some((r) => r.step === "resume-refused")).toBe(false);
+      // One architect from the first launch and one boundary ruling per resume.
       expect(
         records.filter(
           (r) =>
             r.iteration === 1 && r.actor === "agent" && r.step === "architect",
         ),
-      ).toHaveLength(1);
+      ).toHaveLength(3);
       expect(
         records
           .filter((r) => r.slug === "gamma")
           .every((r) => r.iteration === 1),
       ).toBe(true);
 
-      // The authored tree is byte-identical across both relaunches; only the
-      // record tree grew, and no record was rewritten.
+      // Only the record tree grew and the architect's rulings edited the plan;
+      // no record was rewritten and no task file changed.
       const finalTree = snapshotTree(goalDir);
-      expectOnlyRecordTreeChanges(interruptedTree, finalTree);
+      expectOnlyRecordTreeChanges(interruptedTree, finalTree, ["plan.md"]);
       for (const rel of [
         "intent.md",
         "class.yaml",
-        "plan.md",
         "tasks/alpha.md",
         "tasks/beta.md",
         "tasks/gamma.md",
       ]) {
         expect(finalTree.get(rel)).toBe(interruptedTree.get(rel));
       }
+      expect(finalTree.get("plan.md")).toContain(
+        "## architect ruling after the resume",
+      );
+      expect(finalTree.get("plan.md")).toContain(
+        "## second architect ruling after the resume",
+      );
     } finally {
       restoreWarn();
       repo.cleanup();

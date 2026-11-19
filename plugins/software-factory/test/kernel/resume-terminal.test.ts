@@ -12,16 +12,17 @@ import {
   BETA,
   outcome,
   setupRepo,
+  digestTaskTurn,
   queueDigestSteer,
   drainedAfterAlpha,
 } from "./resume-helpers.js";
 
 describe("resume guards — front-stop, holds and terminal", () => {
   it("a resume never writes a front-stop record", async () => {
-    const { repo, goalDir } = await drainedAfterAlpha();
+    const { repo, goalDir, taskDir } = await drainedAfterAlpha();
     try {
       const second = new FakeHarness({ id: "fake" });
-      queueDigestSteer(second);
+      queueDigestSteer(second, digestTaskTurn(taskDir, "beta"));
       second.script((req, ctx) => {
         fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
         ctx.writeOutcome(outcome({ summary: "beta added" }));

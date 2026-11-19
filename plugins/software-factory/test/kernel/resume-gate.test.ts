@@ -7,6 +7,7 @@ import { postSteer } from "../../src/kernel/mailbox.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { expectDispatch } from "./e2e-helpers.js";
 import {
+  digestTaskTurn,
   drainedAfterAlpha,
   outcome,
   queueDigestSteer,
@@ -121,11 +122,11 @@ describe("resume gate — recorded, bounded attempts", () => {
   }, 120_000);
 
   it("a healthy resume records its attempt and, when its plan-check summons the architect, does not consume the pass budget", async () => {
-    const { repo, goalDir } = await drainedAfterAlpha();
+    const { repo, goalDir, taskDir } = await drainedAfterAlpha();
     const restoreWarn = silenceWarn();
     try {
       const second = new FakeHarness({ id: "fake" });
-      queueDigestSteer(second);
+      queueDigestSteer(second, digestTaskTurn(taskDir, "beta"));
       second.script((req, ctx) => {
         fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
         ctx.writeOutcome(outcome({ summary: "beta added" }));
