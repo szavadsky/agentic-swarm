@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import type { z } from "zod";
 import {
   type ModelRef,
@@ -21,6 +22,7 @@ import {
   failedOutcome,
   type OutcomeExpectation,
   OutcomeInvalidError,
+  type OutcomeSource,
   readDeliveredOutcome,
   validateExpectation,
 } from "./outcome.js";
@@ -40,6 +42,13 @@ import {
 } from "./types.js";
 
 export { DEFAULT_TIMEOUTS } from "./types.js";
+
+/**
+ * Bound on the detector's one settle re-read of the outcome path: a tool
+ * call's write can land just after the harness returns. A turn that wrote
+ * nothing waits this once, never once per repair round.
+ */
+export const OUTCOME_SETTLE_MS = 500;
 
 export interface AgentTurnSpec {
   target: TurnTarget;
@@ -74,6 +83,11 @@ export interface AgentTurnSpec {
     outcome: Outcome | undefined,
     session: SessionRef | undefined,
   ) => Promise<RecordEnd>;
+  /**
+   * Sleeps out the detector's one settle re-read of the outcome path. Tests
+   * inject a recorder instead of waiting.
+   */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export interface AgentTurnResult {
@@ -373,15 +387,36 @@ export async function runAgentTurn(
     runtime.configs.process.repairPrompt ??
     "delivery-repair";
 
-  const assess = async (afterRepair: boolean): Promise<void> => {
-    outcome = null;
-    findings = [];
-    try {
-      const delivered = readDeliveredOutcome(
+  /**
+   * One settled read per turn: the file may land just after the harness
+   * returns, so a missing outcome waits the bound once and looks again. A turn
+   * that wrote nothing pays that bound once, never once per repair round.
+   */
+  let outcomeSettled = false;
+  const readOutcome = async (): Promise<OutcomeSource | null> => {
+    const read = () =>
+      readDeliveredOutcome(
         outcomePath,
         text,
         spec.outcomeSchema ?? outcomeSchema,
       );
+    const delivered = read();
+    if (delivered !== null || outcomeSettled) return delivered;
+    const halted =
+      stop.kind === "infra" ||
+      stop.kind === "refusal" ||
+      stop.kind === "cancelled";
+    if (halted) return delivered;
+    outcomeSettled = true;
+    await (spec.sleep ?? sleep)(OUTCOME_SETTLE_MS);
+    return read();
+  };
+
+  const assess = async (afterRepair: boolean): Promise<void> => {
+    outcome = null;
+    findings = [];
+    try {
+      const delivered = await readOutcome();
       if (delivered) {
         outcome = delivered.outcome;
         // A closure cites an id ingest assigned to an earlier record, so the
@@ -470,6 +505,11 @@ export async function runAgentTurn(
     tierIndex = repair.endIndex;
     await assess(true);
   }
+  // The final outcome passed the same checks the reminders named, so every
+  // finding that triggered one is closed. The marker keeps a done record from
+  // reading as an open failure beside its own repair history.
+  const repairFindingsResolved =
+    repairFindings.length > 0 && outcome !== null && findings.length === 0;
   if (needsRepair) {
     if (!outcome && haltedNow()) {
       // An infrastructure interruption of the repair turn consumes no outcome.
@@ -536,6 +576,7 @@ export async function runAgentTurn(
     ...(pricedAttempts.length > 0 ? { attempts: pricedAttempts } : {}),
     ...(pricedSplit ? { served: pricedSplit.served } : {}),
     ...(repairFindings.length > 0 ? { repairFindings } : {}),
+    ...(repairFindingsResolved ? { repairFindingsResolved: true } : {}),
     ...(launchKind ? { launchKind } : {}),
     ...(lastResult.transcript ? { transcript: lastResult.transcript } : {}),
     session: settled.session ?? session,

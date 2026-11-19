@@ -493,6 +493,11 @@ export interface StepRecord {
   served?: ServedUsage[];
   /** Validator findings that triggered outcome reminders, in round order. */
   repairFindings?: string[];
+  /**
+   * Set when the turn delivered after its reminders: the final outcome passed
+   * the same checks, so every listed finding is closed.
+   */
+  repairFindingsResolved?: boolean;
   /** Incident launches only: why this launch ran again. */
   launchKind?: LaunchKind;
   /** Resumed turn: unsplit input is priced as the cached prefix. */
@@ -589,6 +594,11 @@ export interface RecordEnd {
   served?: ServedUsage[];
   /** Validator findings that triggered outcome reminders, in round order. */
   repairFindings?: string[];
+  /**
+   * Set when the turn delivered after its reminders: the final outcome passed
+   * the same checks, so every listed finding is closed.
+   */
+  repairFindingsResolved?: boolean;
   /** Incident launches only: why this launch ran again. */
   launchKind?: LaunchKind;
   commit?: string;

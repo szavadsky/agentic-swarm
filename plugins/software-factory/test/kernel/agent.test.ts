@@ -10,7 +10,7 @@ import {
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
 import type { SessionRef } from "../../src/harness/types.js";
-import { runAgentTurn } from "../../src/kernel/agent.js";
+import { OUTCOME_SETTLE_MS, runAgentTurn } from "../../src/kernel/agent.js";
 import { renderContextPack } from "../../src/kernel/context-pack.js";
 import { derive } from "../../src/kernel/derive.js";
 import { boundaryTarget, resolveTurn } from "../../src/kernel/flow-context.js";
@@ -270,6 +270,7 @@ describe("agent turn outcome delivery", () => {
     expect(fake.calls).toHaveLength(2);
     expect(result.outcome?.status).toBe("failed");
     expect(result.outcome?.summary).toContain("invalid outcome");
+    expect(result.record.repairFindingsResolved).toBeUndefined();
     expect(derive([], await runtime.store.listRecords()).iteration).toBe(1);
     fs.rmSync(root, { recursive: true, force: true });
   });
@@ -1448,6 +1449,70 @@ describe("bounded repairs", () => {
     }
   });
 
+  it("accepts an outcome written just after the harness returns", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      fake.script((req) => {
+        const outcomePath = req.outcomePath!;
+        // The write lands after the turn returned, like a tool's flush racing
+        // the harness's own exit.
+        setTimeout(() => {
+          fs.mkdirSync(path.dirname(outcomePath), { recursive: true });
+          fs.writeFileSync(
+            outcomePath,
+            "status: done\nsummary: written late\n",
+            "utf8",
+          );
+        }, 10);
+        return fakeTurnResult(req, { text: "done" });
+      });
+
+      const result = await runAgentTurn(runtime, {
+        target: resolveTurn(runtime, "implementer", "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+
+      expect(fake.calls).toHaveLength(1);
+      expect(result.outcome?.status).toBe("done");
+      expect(result.outcome?.summary).toBe("written late");
+      expect(result.record.repairFindings).toBeUndefined();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("settles a missing outcome once for the whole turn", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
+      fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+      fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+      const waits: number[] = [];
+
+      const result = await runAgentTurn(runtime, {
+        target: resolveTurn(runtime, "implementer", "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+        repairTurns: 2,
+        sleep: async (ms) => {
+          waits.push(ms);
+        },
+      });
+
+      expect(fake.calls).toHaveLength(3);
+      expect(waits).toEqual([OUTCOME_SETTLE_MS]);
+      expect(result.outcome?.status).toBe("failed");
+      expect(result.record.repairFindingsResolved).toBeUndefined();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("carries each repair latest YAML finding verbatim with line and column", async () => {
     const { root, fake, runtime } = await setup();
     try {
@@ -1654,7 +1719,7 @@ describe("repair findings and launch kinds", () => {
     last_call: "false",
   };
 
-  it("stores validator findings that triggered the reminder on the record", async () => {
+  it("marks repair findings resolved when the repair delivers", async () => {
     const { root, fake, runtime } = await setup();
     try {
       fake.script((req) => {
@@ -1686,12 +1751,14 @@ describe("repair findings and launch kinds", () => {
       expect(result.record.repairFindings?.join("\n")).toMatch(
         /line \d+, column \d+/,
       );
-      // The reminder delivered: the repair finding stays, the launch did not fail.
+      // The reminder delivered: the finding stays for the incident count and
+      // reads as resolved, so the launch did not fail.
+      expect(result.record.repairFindingsResolved).toBe(true);
       expect(result.record.launchKind).toBeUndefined();
       const reread = await runtime.store.listRecords();
-      expect(
-        reread.find((r) => r.seq === result.record.seq)?.repairFindings,
-      ).toEqual(result.record.repairFindings);
+      const stored = reread.find((r) => r.seq === result.record.seq);
+      expect(stored?.repairFindings).toEqual(result.record.repairFindings);
+      expect(stored?.repairFindingsResolved).toBe(true);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
