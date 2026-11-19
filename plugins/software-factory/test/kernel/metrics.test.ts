@@ -503,9 +503,11 @@ describe("record cost truth", () => {
       expect(one.models["mystery/model"]!.turns).toBe(1);
       expect(one.models["mystery/model"]!.unpricedTurns).toBe(1);
 
-      // Work: edits from agent commits, test runs attributed to the b turn.
+      // Work: edits from agent commits; gate runs are credited to the script
+      // role, not the b turn.
       expect(one.models["paid/one"]!.edits).toBe(3);
-      expect(one.models["paid/one"]!.testRuns).toBe(2);
+      expect(one.models["paid/one"]!.testRuns).toBe(0);
+      expect(one.roles["script"]!.testRuns).toBe(2);
       expect(one.edits).toBe(3);
       expect(one.testRuns).toBe(2);
       expect(one.gateRuns).toBe(1);

@@ -32,7 +32,7 @@ export interface GroupMetrics {
   edits: number;
   addedLines: number;
   removedLines: number;
-  /** Gates run by checks records attributed to these turns. */
+  /** Gate runs credited to this group; every gate run lands on the script role. */
   testRuns: number;
   /** Incident launches for these turns, per kind. */
   launches: LaunchCounts;
@@ -500,43 +500,11 @@ export function iterationMetrics(
   const tokens = tokenTotal(usage);
 
   // Gate/commit wall and test runs come from the script records' own stamps;
-  // test runs attribute to the latest preceding agent turn for the same slug.
+  // a gate's test runs are the script's work, not the agent turn it verifies.
   let gateWallMs = 0;
   let commitWallMs = 0;
   let gateRuns = 0;
   let testRuns = 0;
-  const bySlug = new Map<string, StepRecord[]>();
-  for (const rec of recs) {
-    if (!rec.slug) continue;
-    const list = bySlug.get(rec.slug) ?? [];
-    list.push(rec);
-    bySlug.set(rec.slug, list);
-  }
-  for (const list of bySlug.values()) list.sort((a, b) => a.seq - b.seq);
-  const agentBySeq = [...recs].sort((a, b) => a.seq - b.seq);
-  const attributeTestRuns = (gate: StepRecord, runs: number): void => {
-    const pool = gate.slug ? (bySlug.get(gate.slug) ?? []) : agentBySeq;
-    let owner: StepRecord | undefined;
-    for (const candidate of pool) {
-      if (candidate.seq < gate.seq) owner = candidate;
-      else break;
-    }
-    owner ??= agentBySeq.filter((r) => r.seq < gate.seq).at(-1);
-    const key = owner?.model?.id ?? "unknown";
-    const entry = models[key] ?? { model: key, ...emptyGroup() };
-    entry.testRuns += runs;
-    models[key] = entry;
-    if (owner) {
-      const role =
-        roleByStep[owner.step] ??
-        DEFAULT_ROLE_BY_STEP[owner.step] ??
-        owner.step;
-      const roleEntry = roles[role];
-      if (roleEntry) roleEntry.testRuns += runs;
-      const aliasEntry = aliases[owner.alias ?? role];
-      if (aliasEntry) aliasEntry.testRuns += runs;
-    }
-  };
   for (const rec of all) {
     if (!rec.endedAt) continue;
     if (rec.step === "checks" || rec.step === "merge-checks") {
@@ -544,7 +512,12 @@ export function iterationMetrics(
       gateRuns += 1;
       const runs = rec.testRuns ?? rec.checks?.length ?? 0;
       testRuns += runs;
-      attributeTestRuns(rec, runs);
+      const scriptRole = roles["script"] ?? {
+        role: "script",
+        ...emptyGroup(),
+      };
+      scriptRole.testRuns += runs;
+      roles["script"] = scriptRole;
     } else if (rec.step === "commit") {
       commitWallMs += wallMsOf(rec);
     }

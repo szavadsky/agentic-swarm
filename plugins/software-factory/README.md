@@ -213,8 +213,9 @@ empty-diff parks; a spike's empty finish and overflow parks are not loop
 incidents), human interventions (processed steers) and the observable
 operator-act counter (steers plus containment outside-changes and
 integration-moved merges), gate and commit wall time, and turns, tokens, cost
-and work (committed files/lines, attributed gate runs) by role, alias and
-model. Costs come from the price table, and every retry or fallback call the
+and work (committed files/lines) by role, alias and model, with gate runs
+credited to the script role.
+Costs come from the price table, and every retry or fallback call the
 harness reports in `attempts` is priced too, each call once. A turn whose
 harness resolved its model inside one call (an omp `@` alias, which can hop
 natively) records each served model with its own tokens and prices each at its
