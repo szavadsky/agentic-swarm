@@ -381,12 +381,14 @@ export const runConfigSchema = z
       .strict()
       .default(() => ({ dir: "", keepRuns: 5, retention: "short" as const })),
     /**
-     * Quota-pool cooldown. The harness contract carries no provider reset, so
-     * an exhausted pool's stored reset time is this window from the stop.
+     * Quota-pool cooldown. A quota stop's stated reset ("Resets in 130h") sets
+     * the pool's cooldown, capped by `maxResetMinutes` when set; without a
+     * stated reset the window is `resetMinutes` from the stop.
      */
     quota: z
       .object({
         resetMinutes: z.number().positive().default(DEFAULT_POOL_RESET_MINUTES),
+        maxResetMinutes: z.number().positive().optional(),
       })
       .strict()
       .default(() => ({ resetMinutes: DEFAULT_POOL_RESET_MINUTES })),

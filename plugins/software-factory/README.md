@@ -140,7 +140,7 @@ limits:
   iterations: 1
   iterationUsd: 5
 sessions: { dir: ~/.local/share/factory/sessions, keepRuns: 5, retention: short }
-quota: { resetMinutes: 300 }                         # pool cooldown after a quota stop
+quota: { resetMinutes: 300 }                         # fallback cooldown; a stated reset wins; maxResetMinutes caps it
 worktreeRoot: ~/.local/share/factory/worktrees
 lsp: true                                             # artifact LSP on omp
 scouts: { model: opencode-go/deepseek-v4.1-flash }   # omp architect subagents
@@ -190,12 +190,16 @@ each of its tiers keeping its own quota pool; pre-flight refuses a missing alias
 or a fallback cycle. A turn that lands on a tier keeps the launch on it, and
 dispatch throttles each pool and model within the overall limit.
 
-A tier that answers quota latches its pool. The launch stores the pool's reset
-time in the goal's session store (`quota-pools.yaml` beside the launch
-directories, so rotation keeps it), and a relaunch before that time skips the
-pool and starts on the next tier. `quota.resetMinutes` sets the cooldown
-(default 300); the harness contract carries no provider reset, so the stored
-time is a cooldown from the stop, not the provider's own schedule.
+A tier that answers quota latches its pool. The stop's stated reset
+(`Resets in 130h19m23s`, `Resets in 33m53s`) sets that pool's cooldown, capped
+by `quota.maxResetMinutes` when the run config sets one; a stop whose text names
+no parseable reset falls back to `quota.resetMinutes` (default 300) from the
+stop. The launch stores the reset time in the goal's session store
+(`quota-pools.yaml` beside the launch directories, so rotation keeps it), and a
+relaunch before that time skips the pool and starts on the next tier. An alias
+whose every tier is exhausted is unavailable: no harness call is made, and
+dispatch defers that work under a cause naming the dead pools and their reset
+times instead of probing the last dead tier.
 
 An alias may carry `rotate: [{ harness, model, effort }]` to change its primary
 per iteration: iteration N resolves `rotate[N % rotate.length]`, so iteration 1

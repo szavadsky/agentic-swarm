@@ -62,6 +62,24 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("reads the quota window and its cap", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    const run = path.join(root, ".factory/run.yaml");
+    expect(loadConfigs(root).run.quota).toEqual({ resetMinutes: 300 });
+    fs.writeFileSync(
+      run,
+      "quota: { resetMinutes: 45, maxResetMinutes: 600 }\n",
+    );
+    expect(loadConfigs(root).run.quota).toEqual({
+      resetMinutes: 45,
+      maxResetMinutes: 600,
+    });
+    fs.writeFileSync(run, "quota: { resetMinutes: 45, capMinutes: 600 }\n");
+    expect(() => loadConfigs(root)).toThrow(ConfigError);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("refuses a task type kind outside spike and development", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });

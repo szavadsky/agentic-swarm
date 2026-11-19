@@ -796,10 +796,11 @@ export interface RunConfig {
   };
   sessions: { dir: string; keepRuns: number; retention: "short" | "long" };
   /**
-   * Quota-pool cooldown: minutes a pool is skipped after a quota stop. Absent
-   * uses the 300-minute default.
+   * Quota-pool cooldown: a quota stop's stated reset sets the pool's skip
+   * window, capped by `maxResetMinutes` when set; without a stated reset the
+   * window is `resetMinutes` from the stop (default 300).
    */
-  quota?: { resetMinutes: number };
+  quota?: { resetMinutes: number; maxResetMinutes?: number };
   worktreeRoot?: string;
   /** Enable artifact LSP where the harness supports it. */
   lsp?: boolean;

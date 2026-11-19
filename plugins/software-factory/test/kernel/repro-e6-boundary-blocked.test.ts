@@ -43,7 +43,7 @@ function facts(goalDir: string, iteration: number): string {
 
 /** An architect turn that dies before it can write a decision. */
 function diesOn(
-  cause: "quota" | "crash" | "auth" | "overflow",
+  cause: "quota" | "rate" | "crash" | "auth" | "overflow",
   details: string,
 ): FakeTurnHandler {
   return (req) =>
@@ -97,11 +97,10 @@ const PM_CHAIN_YAML = [
 ].join("\n");
 
 describe("E6 inverted: an architect infra death is infra, not blocked-by-user", () => {
-  it("retries a quota death once, then stops the launch as infra with the cause", async () => {
+  it("stops the launch as infra with the dead architect alias, not a retry on it", async () => {
     const goal = makeGoal();
     try {
       const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
-      harness.script(diesOn("quota", "quota exceeded for fake-architect"));
       harness.script(diesOn("quota", "quota exceeded for fake-architect"));
       const result = await runGoal({
         repo: goal.repo.dir,
@@ -112,18 +111,21 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
       });
       const summary = facts(goal.goalDir, 1);
       expect(result.stop).toBe("infra");
-      expect(result.cause).toContain("quota");
-      expect(result.cause).toContain("quota exceeded for fake-architect");
+      // The only architect tier answered quota: the alias is unavailable, so
+      // the de-novo retry never probes it again.
+      expect(result.cause).toContain("unavailable");
+      expect(result.cause).toContain('alias "architect" has no live tier');
+      expect(result.cause).toContain("fake+fake-architect resets at");
       expect(result.iterations).toBe(1);
       expect(summary).toContain("status: stopped-with-debt");
       expect(summary).not.toContain("blocked-by-user");
       expect(summary).toContain(
-        "architect turn stopped on infrastructure: quota: quota exceeded for fake-architect",
+        'architect turn stopped on infrastructure: unavailable: alias "architect" has no live tier',
       );
       expect(
         fs.existsSync(path.join(goal.goalDir, "iterations/2/summary.md")),
       ).toBe(false);
-      expect(workCalls(harness)).toHaveLength(2);
+      expect(workCalls(harness)).toHaveLength(1);
     } finally {
       cleanup(goal);
     }
@@ -148,7 +150,8 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
       const resumed = await seedResumableSession(goal);
       const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
       scriptDigest(harness, goal.goalDir, 2);
-      harness.script(diesOn("quota", "quota exceeded for fake-architect"));
+      // A transient loss, not quota: the alias stays live for the de-novo retry.
+      harness.script(diesOn("rate", "rate limited for fake-architect"));
       harness.script((req, ctx) => {
         fs.appendFileSync(
           goal.planPath,

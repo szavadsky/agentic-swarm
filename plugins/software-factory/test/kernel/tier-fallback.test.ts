@@ -339,7 +339,7 @@ describe("alias fallback tiers", () => {
     }
   });
 
-  it("marks pool exhausted by subscription on quota and skips it for other aliases on that pool", async () => {
+  it("marks pool exhausted by subscription on quota and leaves another alias on that pool unavailable", async () => {
     const { repo, goal } = setupFlowRepo({
       aliases: {
         ...BASE_ALIASES,
@@ -379,22 +379,23 @@ describe("alias fallback tiers", () => {
       expect(res.outcome?.status).toBe("done");
       expect(runtime.exhaustedPools.has("pool-shared")).toBe(true);
 
-      // alias2 also draws on pool-shared, so it skips its primary and starts on fallback
+      // alias2's literal fallback inherits pool-shared, so the exhausted pool
+      // leaves it with no live tier: nothing is called on the dead pool.
       const target2 = resolveTurn(
         runtime,
         "implementer",
         "implementer",
         "alias2",
       );
-      expect(target2.harness.id).toBe("b");
-      expect(target2.model).toEqual({ id: "mb2" });
-      expect(target2.tierOffset).toBe(1);
+      expect(target2.tiers).toEqual([]);
+      expect(target2.unavailable).toContain('alias "alias2"');
+      expect(target2.unavailable).toContain("pool-shared resets at");
     } finally {
       cleanupFlowRepo(repo);
     }
   });
 
-  it("retries the last tier when every tier is exhausted", async () => {
+  it("marks an alias with every tier exhausted unavailable instead of retrying the last tier", async () => {
     const t = await tierRuntime({
       harness: "a",
       model: "ma",
@@ -402,7 +403,6 @@ describe("alias fallback tiers", () => {
     });
     try {
       t.a.scriptResult(quota());
-      t.b.scriptResult(quota());
       t.b.scriptResult(quota());
 
       const spec = {
@@ -417,21 +417,52 @@ describe("alias fallback tiers", () => {
       expect(t.runtime.exhaustedPools.has("a+ma")).toBe(true);
       expect(t.runtime.exhaustedPools.has("b+mb")).toBe(true);
 
-      // Every tier is exhausted: still tries last tier (b), rather than failing without a call
+      // Every tier is exhausted: the target names the dead pools and carries
+      // no tier to call, instead of selecting the last dead one again.
       const target = resolveTurn(t.runtime, "implementer", "implementer");
-      expect(target.harness.id).toBe("b");
-      expect(target.tierOffset).toBe(1);
-      expect(target.tiers).toHaveLength(1);
+      expect(target.tiers).toEqual([]);
+      expect(target.tierOffset).toBe(2);
+      expect(target.unavailable).toContain(
+        'alias "implementer" has no live tier',
+      );
+      expect(target.unavailable).toContain("a+ma resets at");
+      expect(target.unavailable).toContain("b+mb resets at");
 
-      const second = await runAgentTurn(t.runtime, {
-        ...spec,
-        target,
+      const second = await runAgentTurn(t.runtime, { ...spec, target });
+      expect(second.record.stop).toEqual({
+        kind: "infra",
+        cause: "unavailable",
+        details: target.unavailable,
       });
-      expect(second.record.stop).toEqual({ kind: "infra", cause: "quota" });
+      // No harness was called on either tier for the unavailable turn.
       expect(t.a.calls).toHaveLength(1);
-      expect(t.b.calls).toHaveLength(2);
+      expect(t.b.calls).toHaveLength(1);
     } finally {
       cleanupFlowRepo(t.repo);
+    }
+  });
+
+  it("defers a task whose alias has no live tier and names the cause", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const fake = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake });
+      const resetAt = Date.now() + 60 * 60_000;
+      runtime.exhaustedPools.set("fake+fake-impl", resetAt);
+      await writeTask(runtime, task("alpha", { scope: ["alpha-area"] }));
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+
+      expect(result.reason).toBe("infra");
+      expect(result.taskTurnsStarted).toBe(0);
+      expect(result.cause).toContain("alpha:");
+      expect(result.cause).toContain('alias "implementer" has no live tier');
+      expect(result.cause).toContain(
+        `fake+fake-impl resets at ${new Date(resetAt).toISOString()}`,
+      );
+      expect(fake.calls).toHaveLength(0);
+    } finally {
+      cleanupFlowRepo(repo);
     }
   });
 
@@ -542,8 +573,11 @@ describe("alias fallback tiers", () => {
 
       latchPool(t.runtime, "outer");
       const withoutPools = resolveTurn(t.runtime, "implementer", "implementer");
-      expect(withoutPools.model.id).toBe("mb2");
-      expect(withoutPools.tierOffset).toBe(2);
+      expect(withoutPools.tiers).toEqual([]);
+      expect(withoutPools.tierOffset).toBe(3);
+      expect(withoutPools.unavailable).toContain('alias "implementer"');
+      expect(withoutPools.unavailable).toContain("outer resets at");
+      expect(withoutPools.unavailable).toContain("inner resets at");
     } finally {
       cleanupFlowRepo(t.repo);
     }

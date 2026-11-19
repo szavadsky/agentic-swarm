@@ -641,6 +641,13 @@ export async function runDispatch(
           iteration,
           records,
         );
+        // Every tier is exhausted: no turn can make progress, so book the
+        // named cause against the slug and defer it. The wave keeps its other
+        // work; with nothing else dispatchable the launch stops naming this.
+        if (target.unavailable !== undefined) {
+          noteInfra(action.slug, target.unavailable);
+          continue;
+        }
         if (target.subscription !== undefined) {
           const poolLimit =
             runtime.limits.concurrency.perSubscription[target.subscription];

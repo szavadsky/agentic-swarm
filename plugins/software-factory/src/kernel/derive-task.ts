@@ -545,7 +545,8 @@ export function reduceTask(
 
     // Infra without a valid outcome: a reported timeout/crash counts as a turn
     // and parks after two repeats on the same step; bare recovery seals
-    // (free interruptions) and other infra (quota, auth, ...) stay free and resumable.
+    // (free interruptions) and other infra (quota, auth, unavailable, ...)
+    // stay free and resumable.
     if (isInfra && !hasOutcome) {
       if (isTimeoutOrCrash && !isBareRecoverySeal(rec)) {
         if (lastInfraStep === rec.step) infraRepeatCount += 1;

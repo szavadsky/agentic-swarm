@@ -211,6 +211,19 @@ export async function runAgentTurn(
     alias,
     model,
   });
+  // Every tier is exhausted: no call may run. The record names the cause so
+  // dispatch defers the slug and the launch reports why, instead of probing a
+  // tier already known dead.
+  if (spec.target.unavailable !== undefined) {
+    const record = await started.finish({
+      stop: {
+        kind: "infra",
+        cause: "unavailable",
+        details: spec.target.unavailable,
+      },
+    });
+    return { record, outcome: undefined, text: "" };
+  }
   const outcomePath = started.outcomePath;
   const prompt = runtime.prompts.render(spec.target.prompt, {
     ...spec.vars,
@@ -291,7 +304,11 @@ export async function runAgentTurn(
           paths: runtime.paths,
           pools: runtime.exhaustedPools,
           pool: tierPoolKey(tier),
-          resetAt: poolResetAt(runtime.configs.run),
+          resetAt: poolResetAt(
+            runtime.configs.run,
+            Date.now(),
+            result.stop.details,
+          ),
         });
       }
       if (result.stop.kind !== "infra" || index + 1 >= tiers.length) break;
