@@ -16,7 +16,7 @@ import type { Outcome } from "../../src/kernel/types.js";
 import { postSteer } from "../../src/kernel/mailbox.js";
 import { rec, task } from "./helpers.js";
 import { scriptMeta } from "../../src/kernel/record.js";
-import { createFolderStore } from "../../src/kernel/store.js";
+import { createFolderStore, recordDirName } from "../../src/kernel/store.js";
 import {
   cleanup,
   launch,
@@ -136,7 +136,7 @@ describe("boundary context pack", () => {
         `- previous-launch digest: ${path.join(goal.goalDir, "iterations/2/digest.md")}`,
       );
       expect(pack).toContain(
-        "## Debt register (every open debt-kind concern; close one with `debtClosed: [{id, reason}]`)\n- none open",
+        "## Debt register (open debt-kind concerns; own one by citing its id in a plan bullet, or close it with `debtClosed: [{id, reason}]`)\n- none open",
       );
       expect(pack).toContain("## Open records (started, no end)\n- none");
       expect(pack).toContain(
@@ -205,6 +205,68 @@ describe("boundary context pack", () => {
       expect(pack).toContain(`- ${open.dir}`);
       expect(pack).not.toContain(closed.dir);
       expect(pack).toContain(`- run config: ${runPath}`);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 90_000);
+
+  it("drops an owned debt from the pack the architect receives", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const meta = {
+        iteration: 1,
+        slug: "alpha",
+        step: "review",
+        round: 1,
+        actor: "agent",
+      } as const;
+      const debtText =
+        "env allowlist v2 is dead config and needs a removal task";
+      const debtId = `${recordDirName(1, meta)}#1`;
+      await runtime.store.appendRecord(meta, {
+        ok: true,
+        outcome: {
+          status: "done",
+          summary: "approved with debt",
+          concerns: [
+            { kind: "debt", calibration: "architect", text: debtText },
+          ],
+          forward: [],
+          verdict: "approve",
+        },
+      });
+      const planPath = path.join(runtime.store.goalDir, "plan.md");
+      fs.writeFileSync(
+        planPath,
+        `# Plan\n\n- env-allowlist-v2 — Remove the dead allowlist (${debtId})\n`,
+        "utf8",
+      );
+      harness.script((req, ctx) => {
+        fs.appendFileSync(planPath, "\n## next\n", "utf8");
+        ctx.writeOutcome(
+          outcome({ summary: "filed the remover", decision: "continue" }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "no new tasks" }));
+        return fakeTurnResult(req);
+      });
+
+      const boundary = await runBoundary(runtime, { relaunch: false });
+      const pack = fs.readFileSync(
+        path.join(
+          runtime.store.goalDir,
+          contextPackRelPath(boundary.iteration),
+        ),
+        "utf8",
+      );
+      const register = pack.slice(pack.indexOf("## Debt register"));
+      expect(register).toContain("- none open");
+      expect(register).not.toContain(debtId);
+      expect(register).not.toContain(debtText);
     } finally {
       cleanupFlowRepo(repo);
     }

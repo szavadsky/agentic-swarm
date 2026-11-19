@@ -261,7 +261,7 @@ export function renderContextPack(input: ContextPackInput): string {
 
   lines.push(
     "",
-    "## Debt register (every open debt-kind concern; close one with `debtClosed: [{id, reason}]`)",
+    "## Debt register (open debt-kind concerns; own one by citing its id in a plan bullet, or close it with `debtClosed: [{id, reason}]`)",
   );
   if (input.debts.length === 0) lines.push("- none open");
   else for (const debt of input.debts) lines.push(formatDebt(debt));

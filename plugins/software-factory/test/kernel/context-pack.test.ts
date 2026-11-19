@@ -288,7 +288,8 @@ describe("context pack", () => {
       debts,
     });
     const register = pack.slice(pack.indexOf("## Debt register"));
-    expect(register).toContain("close one with `debtClosed: [{id, reason}]`");
+    expect(register).toContain("own one by citing its id in a plan bullet");
+    expect(register).toContain("`debtClosed: [{id, reason}]`");
     for (const debt of debts) {
       expect(register).toContain(
         `${debt.id} [${debt.calibration}] ${debt.text}`,
@@ -296,6 +297,117 @@ describe("context pack", () => {
     }
     expect(register).not.toContain("retired shim");
     expect(register).not.toContain("00026#1");
+  });
+
+  it("keeps every task and review debt listed until a plan bullet owns it or a forward closes it", () => {
+    const taskDebt = {
+      id: "00010-i1-a-implement-r1#1",
+      text: "env allowlist v2 is dead config and needs a removal task",
+    };
+    const reviewDebt = {
+      id: "00011-i1-a-review-r1#1",
+      text: "quota reset text parsing duplicates the provider table",
+    };
+    const records = [
+      rec(1, {
+        step: "implement",
+        outcome: {
+          status: "done",
+          summary: "shipped with a shim",
+          concerns: [
+            {
+              kind: "debt" as const,
+              calibration: "architect" as const,
+              text: taskDebt.text,
+              id: taskDebt.id,
+            },
+          ],
+          forward: [],
+        },
+      }),
+      rec(2, {
+        step: "review",
+        outcome: {
+          status: "done",
+          summary: "approved with debt",
+          concerns: [
+            {
+              kind: "debt" as const,
+              calibration: "architect" as const,
+              text: reviewDebt.text,
+              id: reviewDebt.id,
+            },
+          ],
+          forward: [],
+          verdict: "approve",
+        },
+      }),
+    ];
+    const registerFor = (debts: ReturnType<typeof openDebts>): string => {
+      const pack = renderContextPack({
+        goal: "demo",
+        iteration: 2,
+        intentPath: "/goal/intent.md",
+        planPath: "/goal/plan.md",
+        checkout: "/wt/demo",
+        integrationBranch: "factory/demo",
+        headHash: "abcdef1234567890",
+        recordsDir: "/goal/records",
+        tasksDir: "/goal/tasks",
+        tasks,
+        state: derive(tasks, records),
+        steers: [],
+        setup: [],
+        gates: [],
+        forwarded: forwardedConcerns(records),
+        debts,
+      });
+      return pack.slice(pack.indexOf("## Debt register"));
+    };
+
+    const open = openDebts(records);
+    expect(open.map((debt) => debt.id)).toEqual([taskDebt.id, reviewDebt.id]);
+    const listed = registerFor(open);
+    expect(listed).toContain(`${taskDebt.id} [architect] ${taskDebt.text}`);
+    expect(listed).toContain(`${reviewDebt.id} [architect] ${reviewDebt.text}`);
+
+    const ownById = `- env-allowlist-v2 — Remove the dead allowlist (${taskDebt.id})`;
+    const owned = openDebts(records, ownById);
+    expect(owned.map((debt) => debt.id)).toEqual([reviewDebt.id]);
+    const ownedRegister = registerFor(owned);
+    expect(ownedRegister).not.toContain(taskDebt.id);
+    expect(ownedRegister).toContain(reviewDebt.id);
+
+    const ownByText = `- env-allowlist-v2 — ${taskDebt.text}`;
+    expect(openDebts(records, ownByText).map((debt) => debt.id)).toEqual([
+      reviewDebt.id,
+    ]);
+
+    const closedRecords = [
+      ...records,
+      rec(3, {
+        slug: undefined,
+        step: "architect",
+        outcome: {
+          status: "done",
+          summary: "closed the table duplicate",
+          concerns: [],
+          forward: [`debt closed: ${reviewDebt.text}`],
+          decision: "continue",
+        },
+      }),
+    ];
+    const closed = openDebts(closedRecords, ownById);
+    expect(closed).toEqual([]);
+    expect(registerFor(closed)).toContain("- none open");
+
+    // Ownership is the current plan's, not a recorded claim: dropping the
+    // bullet returns the debt to the register, while the forwarded close stays.
+    expect(
+      openDebts(closedRecords, "- later — nothing filed yet").map(
+        (debt) => debt.id,
+      ),
+    ).toEqual([taskDebt.id]);
   });
 
   it("groups a repository listing into a shallow path index", () => {

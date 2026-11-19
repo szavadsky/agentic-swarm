@@ -385,6 +385,9 @@ export async function runBoundary(
             ),
           })
         : undefined;
+    const planText = fs.existsSync(planPath)
+      ? fs.readFileSync(planPath, "utf8")
+      : "";
     const pack = renderContextPack({
       goal: path.basename(runtime.paths.goalDir),
       iteration,
@@ -408,7 +411,7 @@ export async function runBoundary(
       gates: runtime.configs.repo.gates,
       baseGates: recordedBaseGates(records),
       forwarded: forwardedConcerns(records),
-      debts: openDebts(records),
+      debts: openDebts(records, planText),
       runConfigPath: opts.runConfigPath,
       openRecords: await openRecords(runtime.store),
       planCheck: latestPlanCheck(records),
