@@ -4,7 +4,7 @@ import {
   renderContextPack,
   shallowCodeMap,
 } from "../../src/kernel/context-pack.js";
-import { derive } from "../../src/kernel/derive.js";
+import { derive, openDebts } from "../../src/kernel/derive.js";
 import { rec, script, task } from "./helpers.js";
 
 const tasks = [task("a"), task("b", { deps: ["a"] })];
@@ -63,6 +63,7 @@ describe("context pack", () => {
           text: "watch it",
         },
       ],
+      debts: [],
     };
     const first = renderContextPack(input);
     const second = renderContextPack(input);
@@ -132,6 +133,7 @@ describe("context pack", () => {
           text: "flaky gate on macOS",
         },
       ],
+      debts: [],
     });
     // Past the old 8000-byte cap: the retired tail cut would have eaten the table.
     expect(Buffer.byteLength(pack, "utf8")).toBeGreaterThan(8000);
@@ -197,6 +199,104 @@ describe("context pack", () => {
     );
   });
 
+  it("forwards every concern, past the old twenty-line cap", () => {
+    const records = Array.from({ length: 25 }, (_, i) =>
+      rec(i + 1, {
+        step: "review",
+        outcome: {
+          status: "done",
+          summary: `r${i + 1}`,
+          concerns: [
+            {
+              kind: "risk" as const,
+              calibration: "architect" as const,
+              text: `distinct risk ${i + 1}`,
+            },
+          ],
+          forward: [],
+          verdict: "approve",
+        },
+      }),
+    );
+    const forwarded = forwardedConcerns(records);
+    expect(forwarded).toHaveLength(25);
+    expect(forwarded[0]!.text).toBe("distinct risk 1");
+  });
+
+  it("lists every open debt with its id and drops the closed one", () => {
+    const debtRecord = (seq: number, text: string, id: string) =>
+      rec(seq, {
+        step: "review",
+        outcome: {
+          status: "done",
+          summary: `r${seq}`,
+          concerns: [
+            {
+              kind: "debt" as const,
+              calibration:
+                seq % 2 === 0 ? ("fyi" as const) : ("architect" as const),
+              text,
+              id,
+            },
+          ],
+          forward: [],
+          verdict: "approve",
+        },
+      });
+    // 25 debts, past the old `slice(-20)` cap, plus one retired by id.
+    const records = [
+      ...Array.from({ length: 25 }, (_, i) =>
+        debtRecord(
+          i + 1,
+          `debt number ${i + 1} needs a follow-up`,
+          `00${String(i + 1).padStart(3, "0")}#1`,
+        ),
+      ),
+      debtRecord(26, "retired shim", "00026#1"),
+      rec(27, {
+        slug: undefined,
+        step: "architect",
+        outcome: {
+          status: "done",
+          summary: "closed the shim",
+          concerns: [],
+          forward: [],
+          debtClosed: [{ id: "00026#1", reason: "shim removed" }],
+          decision: "continue",
+        },
+      }),
+    ];
+    const debts = openDebts(records);
+    expect(debts).toHaveLength(25);
+    const pack = renderContextPack({
+      goal: "demo",
+      iteration: 2,
+      intentPath: "/goal/intent.md",
+      planPath: "/goal/plan.md",
+      checkout: "/wt/demo",
+      integrationBranch: "factory/demo",
+      headHash: "abcdef1234567890",
+      recordsDir: "/goal/records",
+      tasksDir: "/goal/tasks",
+      tasks,
+      state: derive(tasks, records),
+      steers: [],
+      setup: [],
+      gates: [],
+      forwarded: forwardedConcerns(records),
+      debts,
+    });
+    const register = pack.slice(pack.indexOf("## Debt register"));
+    expect(register).toContain("close one with `debtClosed: [{id, reason}]`");
+    for (const debt of debts) {
+      expect(register).toContain(
+        `${debt.id} [${debt.calibration}] ${debt.text}`,
+      );
+    }
+    expect(register).not.toContain("retired shim");
+    expect(register).not.toContain("00026#1");
+  });
+
   it("groups a repository listing into a shallow path index", () => {
     expect(
       shallowCodeMap([
@@ -233,6 +333,7 @@ describe("context pack", () => {
       setup: [],
       gates: [],
       forwarded: [],
+      debts: [],
     });
     expect(pack).toContain(
       "## Spike findings\n- probe:\n  # Finding\n  Cursor wins.\n",

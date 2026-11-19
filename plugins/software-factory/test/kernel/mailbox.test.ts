@@ -209,6 +209,27 @@ describe("mailbox", () => {
     }
   });
 
+  it("answers from steerAnswers, and a typed answer wins over a legacy forward line", () => {
+    const responses = steerResponses(
+      {
+        status: "done",
+        summary: "s",
+        concerns: [],
+        forward: ["steer s1: stale legacy answer"],
+        steerAnswers: [
+          { steer: "s1", answer: "typed answer" },
+          { steer: "s2", answer: "second steer" },
+          { steer: "gone", answer: "not pending" },
+        ],
+      },
+      ["s1", "s2"],
+    );
+    expect([...responses.entries()]).toEqual([
+      ["s1", "typed answer"],
+      ["s2", "second steer"],
+    ]);
+  });
+
   it("answers steer ids containing spaces, colons and quotes", async () => {
     const responses = steerResponses(
       {

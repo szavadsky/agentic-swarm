@@ -21,7 +21,7 @@ import {
   TaskTypeDefinition,
   TurnRecord,
 } from "./types.js";
-import type { Outcome } from "./types.js";
+import type { RecordedOutcome } from "./types.js";
 
 const RECORD_DIR = /^(\d{5})-/;
 
@@ -33,7 +33,13 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function normalizeOutcome(raw: unknown): Outcome {
+/**
+ * One record's stored outcome, read for the kernel: missing arrays defaulted
+ * and every concern given its kernel id `<recordId>#<n>`. The id is assigned
+ * here, at ingest, and always overwrites anything the agent wrote: the record
+ * directory names the record, and the concern's position in it is stable.
+ */
+function normalizeOutcome(raw: unknown, recordId: string): RecordedOutcome {
   if (!isPlainObject(raw)) {
     return {
       status: "failed",
@@ -46,7 +52,13 @@ function normalizeOutcome(raw: unknown): Outcome {
   const outcome = { ...raw } as any;
 
   // Normalize
-  outcome.concerns = Array.isArray(outcome.concerns) ? outcome.concerns : [];
+  const concerns: unknown[] = Array.isArray(outcome.concerns)
+    ? outcome.concerns
+    : [];
+  outcome.concerns = concerns.map((concern, index) => ({
+    ...(isPlainObject(concern) ? concern : {}),
+    id: `${recordId}#${index + 1}`,
+  }));
   outcome.forward = Array.isArray(outcome.forward) ? outcome.forward : [];
   outcome.status =
     typeof outcome.status === "string" ? outcome.status : "failed";
@@ -501,12 +513,9 @@ class FolderStore implements ArtifactStore {
         )
           throw err;
       }
-      let outcome: Outcome | undefined;
+      let delivered: unknown;
       try {
-        const raw = await readYaml(path.join(dir, "outcome.yaml"));
-        if (raw) {
-          outcome = normalizeOutcome(raw);
-        }
+        delivered = await readYaml(path.join(dir, "outcome.yaml"));
       } catch (err) {
         if (
           !isENOENT(err) &&
@@ -514,7 +523,14 @@ class FolderStore implements ArtifactStore {
         )
           throw err;
       }
-      records.push({ ...base, ...end, ...(outcome ? { outcome } : {}) });
+      const record: StepRecord = { ...base, ...end };
+      // Script steps carry their outcome in end.yaml; an agent's own
+      // outcome.yaml wins when both exist.
+      const stored = delivered ?? record.outcome;
+      if (stored !== undefined) {
+        record.outcome = normalizeOutcome(stored, entry.name);
+      }
+      records.push(record);
     }
     return records.sort((a, b) => a.seq - b.seq);
   }

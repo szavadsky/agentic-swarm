@@ -133,7 +133,7 @@ describe("boundary context pack", () => {
         `- previous-launch digest: ${path.join(goal.goalDir, "iterations/2/digest.md")}`,
       );
       expect(pack).toContain(
-        "## Debt register (debt-kind concerns; drill into the source records)\n- none recorded",
+        "## Debt register (every open debt-kind concern; close one with `debtClosed: [{id, reason}]`)\n- none open",
       );
       expect(pack).toContain("## Open records (started, no end)\n- none");
       expect(pack).toContain(

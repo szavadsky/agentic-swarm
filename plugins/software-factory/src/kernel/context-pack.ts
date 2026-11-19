@@ -1,6 +1,7 @@
 import type { ConcernKind } from "../core/concern-types.js";
 import { concernFingerprint } from "../core/concerns.js";
 import type { BaseGateState } from "./baseline.js";
+import type { OpenDebt } from "./derive.js";
 import type { Steer } from "./mailbox.js";
 import type {
   PlanCheckEvidence,
@@ -71,6 +72,8 @@ export interface ContextPackInput {
   /** Last recorded pre-flight base run; absent when it was skipped. */
   baseGates?: BaseGateState;
   forwarded: ForwardedConcern[];
+  /** Every open debt-kind concern, the register's whole content. */
+  debts: OpenDebt[];
   /** Absolute path of the run config the launch loaded; absent when not recorded. */
   runConfigPath?: string;
   /** Records with started.yaml but no end.yaml, as paths the architect can drill into. */
@@ -105,6 +108,14 @@ function formatForwarded(concern: ForwardedConcern): string {
   return `- [${concern.calibration}/${concern.kind}]${repeats} ${concern.text}${
     concern.evidence ? ` (${concern.evidence})` : ""
   } — ${concern.source}`;
+}
+
+/** One register line: the id the architect closes, then what the debt is and where it came from. */
+function formatDebt(debt: OpenDebt): string {
+  const id = debt.id ? `${debt.id} ` : "";
+  return `- ${id}[${debt.calibration}] ${debt.text}${
+    debt.evidence ? ` (${debt.evidence})` : ""
+  } — ${debt.source}`;
 }
 
 /**
@@ -202,11 +213,10 @@ export function renderContextPack(input: ContextPackInput): string {
 
   lines.push(
     "",
-    "## Debt register (debt-kind concerns; drill into the source records)",
+    "## Debt register (every open debt-kind concern; close one with `debtClosed: [{id, reason}]`)",
   );
-  const debts = input.forwarded.filter((c) => c.kind === "debt");
-  if (debts.length === 0) lines.push("- none recorded");
-  else for (const concern of debts) lines.push(formatForwarded(concern));
+  if (input.debts.length === 0) lines.push("- none open");
+  else for (const debt of input.debts) lines.push(formatDebt(debt));
 
   lines.push("", "## Open records (started, no end)");
   if (!input.openRecords || input.openRecords.length === 0)
@@ -331,7 +341,8 @@ function fingerprintOf(kind: string, text: string, evidence?: string): string {
 /**
  * Collects forwarded concerns from records, deduplicated by the kept concern
  * fingerprint. The same text raised every round is one line with a count; an
- * owner calibration outranks an architect one. FYI entries do not travel.
+ * owner calibration outranks an architect one. FYI entries do not travel here;
+ * the debt register lists them.
  */
 export function forwardedConcerns(records: StepRecord[]): ForwardedConcern[] {
   const byFingerprint = new Map<string, ForwardedConcern>();
@@ -384,5 +395,5 @@ export function forwardedConcerns(records: StepRecord[]): ForwardedConcern[] {
       );
     }
   }
-  return [...byFingerprint.values()].slice(-20);
+  return [...byFingerprint.values()];
 }

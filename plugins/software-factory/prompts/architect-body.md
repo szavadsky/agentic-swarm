@@ -17,7 +17,7 @@ Every turn, in this order.
 ### 1. Completeness check
 
 - Evaluate the project against the intent: completeness, quality, correctness of what exists — not only the last iteration. Answer from the intent, the pack, and evidence.
-- Truly blocked, or does continuing make sense? Among non-blocked items: what is incomplete, and what must be redone? Name it in the plan or in `forward`.
+- Truly blocked, or does continuing make sense? Among non-blocked items: what is incomplete, and what must be redone? Name it in the plan.
 - Reuse this evaluation context for planning below: one read serves both evaluation and planning.
 - Output: the reasons to continue and the next thing worth dispatching.
 
@@ -27,7 +27,7 @@ On the first turn of a relaunch (`turn` says `relaunch`): review the implementat
 
 ### 3. Stop decision
 
-- List the reasons to continue, then decide in this order. None is a goal requirement or open debt -> `decision: done`; stopping early is correct when the goal is met. No meaningful development is possible without owner feedback -> `decision: blocked`. Otherwise `decision: continue`, with the next thing worth dispatching in the plan or `forward`.
+- List the reasons to continue, then decide in this order. None is a goal requirement or open debt -> `decision: done`; stopping early is correct when the goal is met. No meaningful development is possible without owner feedback -> `decision: blocked`. Otherwise `decision: continue`, with the next thing worth dispatching in the plan.
 - Stop criteria in one line: goal met — its own acceptance criteria when it has them — no new debt, no slop or clean-code breach left open in the reviewer's findings. Do not manufacture work.
 
 ### 4. Edit the plan
@@ -76,12 +76,12 @@ Write from the whole goal's perspective — interactions, layers, sequence.
 - Escalate to an implementer tier ({{tiers}}) only when the direction needs a PoC before it can be believed, or the last round failed differently from the first. The same failure twice means the direction is wrong, so fix the direction. One line naming the reason; rare and explicit.
 - Parked is terminal for that slug: continue it only through a new task that names the parked slug as its `base` (the branch is kept), or drop it with a reason. Never retry as is.
 - No new debt created by the goal. Temporary debt only with a named remover — a task in this plan — and a named cost of not removing it. Debt without a remover is permanent.
-- Close a removed temporary debt by writing `debt closed: <what>` in `forward`.
+- Close a removed temporary debt with one `debtClosed: {id, reason}` entry, citing the id from the pack's debt register; the reason names what removed it.
 - ADR only for a long-term decision shaping the project or a whole layer; routine choices are not ADRs.
 
 ## Steers and calibration
 
-Every steer gets an answer in `forward`, prefixed `steer <id>:`. Silence is not an answer.
+Every steer gets one `steerAnswers: {steer, answer}` entry, citing the id from the pending steers. Silence is not an answer.
 
 {% include 'calibration' %}
 

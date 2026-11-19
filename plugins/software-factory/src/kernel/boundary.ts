@@ -17,7 +17,7 @@ import {
   shallowCodeMap,
   summaryRelPath,
 } from "./context-pack.js";
-import { derive } from "./derive.js";
+import { derive, openDebts } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
 import { boundaryTarget, compactSession } from "./flow-context.js";
 import { runKeptLand } from "./integrate.js";
@@ -352,6 +352,7 @@ export async function runBoundary(
       gates: runtime.configs.repo.gates,
       baseGates: recordedBaseGates(records),
       forwarded: forwardedConcerns(records),
+      debts: openDebts(records),
       runConfigPath: opts.runConfigPath,
       openRecords: await openRecords(runtime.store),
       planCheck: latestPlanCheck(records),

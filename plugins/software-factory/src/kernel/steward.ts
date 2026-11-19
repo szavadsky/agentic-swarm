@@ -83,7 +83,7 @@ function pointerConcern(
         evidence: `records steward ${slug}`,
       },
     ],
-    forward: [`steward held ${slug}: relaunch on the new branch state`],
+    forward: [],
   };
 }
 

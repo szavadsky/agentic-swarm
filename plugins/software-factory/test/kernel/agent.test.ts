@@ -720,6 +720,125 @@ describe("delivery guard", () => {
     }
   });
 
+  it("resolves a debtClosed id against the records and repairs an unknown one", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      const seed = await runtime.store.startRecord({
+        iteration: 1,
+        slug: "a",
+        step: "review",
+        round: 1,
+        actor: "agent",
+        alias: "reviewer",
+        model: { id: "fake" },
+      });
+      await seed.finish({
+        stop: { kind: "done" },
+        outcome: {
+          status: "done",
+          summary: "raised a debt",
+          concerns: [
+            {
+              kind: "debt",
+              calibration: "architect",
+              text: "shim in the writer",
+            },
+          ],
+          forward: [],
+          verdict: "approve",
+        },
+      });
+      const debtId = `${path.basename(seed.dir)}#1`;
+
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({
+          status: "done",
+          summary: "closed",
+          debtClosed: [{ id: debtId, reason: "shim removed" }],
+        });
+        return fakeTurnResult(req);
+      });
+      await runAgentTurn(runtime, {
+        target: resolveTurn(runtime, "implementer", "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "b", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+      expect(fake.calls).toHaveLength(1);
+
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({
+          status: "done",
+          summary: "closed the wrong id",
+          debtClosed: [{ id: "nope#1", reason: "shim removed" }],
+        });
+        return fakeTurnResult(req);
+      });
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({ status: "done", summary: "repaired" });
+        return fakeTurnResult(req);
+      });
+      const repaired = await runAgentTurn(runtime, {
+        target: resolveTurn(runtime, "implementer", "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "c", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+      expect(fake.calls).toHaveLength(3);
+      expect(fake.calls[2]!.prompt).toContain(
+        "- unknown debt id: nope#1: no ingested debt concern has that id",
+      );
+      expect(repaired.outcome?.summary).toBe("repaired");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a debt raised and closed in the same record", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      let ownId = "";
+      fake.script((req, ctx) => {
+        if (!req.outcomePath) throw new Error("turn has no outcome path");
+        ownId = `${path.basename(path.dirname(req.outcomePath))}#1`;
+        ctx.writeOutcome({
+          status: "done",
+          summary: "raised and closed its own debt",
+          concerns: [
+            {
+              kind: "debt",
+              calibration: "fyi",
+              text: "shim in the reader",
+            },
+          ],
+          debtClosed: [{ id: ownId, reason: "shim removed" }],
+        });
+        return fakeTurnResult(req);
+      });
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({ status: "done", summary: "repaired" });
+        return fakeTurnResult(req);
+      });
+      const repaired = await runAgentTurn(runtime, {
+        target: resolveTurn(runtime, "implementer", "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+      expect(ownId).not.toBe("");
+      expect(fake.calls).toHaveLength(2);
+      expect(fake.calls[1]!.prompt).toContain(
+        `- unknown debt id: ${ownId}: no ingested debt concern has that id`,
+      );
+      expect(repaired.outcome?.summary).toBe("repaired");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("omits the verdict and decision lines when a bare done delivers", async () => {
     const { root, fake, runtime } = await setup();
     try {
@@ -1138,6 +1257,7 @@ function packFixture(): string {
     setup: [],
     gates: [{ id: "test", command: "bun test" }],
     forwarded: [],
+    debts: [],
   });
 }
 

@@ -802,6 +802,25 @@ describe("architect horizon", () => {
   });
 });
 
+describe("outcome protocol in prompts", () => {
+  it("renders the typed protocol fields from the schema and never asks for a forward line", () => {
+    for (const role of ["architect", "pm"]) {
+      const rendered = library().render(role, ROLES[role]!);
+      expect(rendered, `${role} lost debtClosed`).toContain(
+        "debtClosed: [{id, reason}]",
+      );
+      expect(rendered, `${role} lost steerAnswers`).toContain(
+        "steerAnswers: [{steer, answer}]",
+      );
+      expect(rendered, `${role} still asks for a forward line`).not.toContain(
+        "forward:",
+      );
+      // The skeleton renders the same schema the parser validates.
+      expect(rendered).toContain(OUTCOME_SCHEMA);
+    }
+  });
+});
+
 describe("prompt structure", () => {
   it("gives every role one H1, ordered headings, and nothing after the turn block", () => {
     const promptsDir = path.join(packageRoot, "prompts");

@@ -1,7 +1,7 @@
 import path from "node:path";
 import { recordedBaseGates } from "./baseline.js";
 import { summaryRelPath } from "./context-pack.js";
-import { derive, openDebts } from "./derive.js";
+import { derive, materialOpenDebts } from "./derive.js";
 import {
   costText,
   DEFAULT_ROLE_BY_STEP,
@@ -164,7 +164,9 @@ export async function writeIterationSummary(
       cancelled.push(slug);
     }
   }
-  const open = openDebts(input.records);
+  // Distance counts what still blocks the goal: material debt left open after
+  // every recorded closure, not fyi notes and not debts already retired.
+  const open = materialOpenDebts(input.records);
 
   const ownerRemarkable = recs.flatMap((rec) =>
     (rec.outcome?.concerns ?? [])
@@ -204,12 +206,15 @@ export async function writeIterationSummary(
     "choice",
   );
   const debtOpened = concernLines(recs, "debt");
-  const debtClosed = recs.flatMap((rec) =>
-    (rec.outcome?.forward ?? [])
+  const debtClosed = recs.flatMap((rec) => [
+    ...(rec.outcome?.forward ?? [])
       .map((forward) => /^debt closed:\s*(.+)$/i.exec(forward)?.[1]?.trim())
       .filter((text): text is string => Boolean(text))
       .map((text) => `- ${text}`),
-  );
+    ...(rec.outcome?.debtClosed ?? []).map(
+      (entry) => `- ${entry.id}: ${entry.reason.trim()}`,
+    ),
+  ]);
 
   const roleByStep = { ...DEFAULT_ROLE_BY_STEP, ...(input.roleByStep ?? {}) };
   const computed = iterationMetrics(
@@ -276,7 +281,7 @@ export async function writeIterationSummary(
           `- open debt (${open.length}):`,
           ...open.map(
             (debt) =>
-              `  - ${debt.source}: ${debt.text}${debt.evidence ? ` (${debt.evidence})` : ""}`,
+              `  - ${debt.id ? `${debt.id} ` : ""}${debt.source}: ${debt.text}${debt.evidence ? ` (${debt.evidence})` : ""}`,
           ),
         ];
   const lines = [

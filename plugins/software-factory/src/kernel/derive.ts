@@ -1,6 +1,8 @@
 import { DEFAULT_FLOWS, reduceTask } from "./derive-task.js";
 
 import type {
+  Concern,
+  ConcernId,
   FlowDefinition,
   GoalDecision,
   GoalStatus,
@@ -50,10 +52,13 @@ function isRecoveryCrash(rec: StepRecord): boolean {
   return true;
 }
 
-/** One debt-kind concern that no `debt closed:` forward has retired. */
+/** One debt-kind concern the kernel recorded, with the id ingest assigned it. */
 export interface OpenDebt {
+  /** `<recordId>#<n>` of the first record that raised the debt; absent on a hand-built record. */
+  id?: ConcernId;
   text: string;
   evidence?: string;
+  calibration: Concern["calibration"];
   /** `slug step rN` of the first record that raised it. */
   source: string;
   iteration: number;
@@ -64,24 +69,52 @@ function normalizeDebtText(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function debtClosedTexts(records: readonly StepRecord[]): string[] {
-  const closed = new Set<string>();
+/** Every ingested debt concern's normalized text, by the id ingest assigned it. */
+function debtTextsById(records: readonly StepRecord[]): Map<ConcernId, string> {
+  const byId = new Map<ConcernId, string>();
   for (const rec of records) {
-    for (const forward of rec.outcome?.forward ?? []) {
-      const text = /^debt closed:\s*(.+)$/i.exec(forward)?.[1]?.trim();
-      if (text) closed.add(normalizeDebtText(text));
+    for (const concern of rec.outcome?.concerns ?? []) {
+      if (concern.kind !== "debt" || !concern.id) continue;
+      byId.set(concern.id, normalizeDebtText(concern.text));
     }
   }
-  return [...closed];
+  return byId;
 }
 
 /**
- * Open (material) debt: debt-kind concerns with architect/owner calibration,
- * deduplicated by text, minus those a `debt closed:` forward quotes. FYI
- * entries are notes, not blockers. A close matches when it equals the debt or
- * quotes it (either direction contains the other); short fragments (<24 chars
- * on the shorter side) never match, so `debt closed: tests` cannot retire an
- * unrelated paragraph. The architect closes by quoting the opened text.
+ * The normalized texts retired so far, by two strengths. `cited` holds the
+ * debt a `debtClosed` id names, resolved through ingest's ids: that id closes
+ * exactly that debt, however many rounds raised it. `quoted` holds legacy
+ * `debt closed: <text>` forward lines, where a close matches when it equals
+ * the debt or quotes it (either direction contains the other) and short
+ * fragments (<24 chars on the shorter side) never match, so
+ * `debt closed: tests` cannot retire an unrelated paragraph.
+ */
+function closedDebtTexts(records: readonly StepRecord[]): {
+  cited: Set<string>;
+  quoted: Set<string>;
+} {
+  const byId = debtTextsById(records);
+  const cited = new Set<string>();
+  const quoted = new Set<string>();
+  for (const rec of records) {
+    for (const forward of rec.outcome?.forward ?? []) {
+      const text = /^debt closed:\s*(.+)$/i.exec(forward)?.[1]?.trim();
+      if (text) quoted.add(normalizeDebtText(text));
+    }
+    for (const entry of rec.outcome?.debtClosed ?? []) {
+      const text = byId.get(entry.id.trim());
+      if (text) cited.add(text);
+    }
+  }
+  return { cited, quoted };
+}
+
+/**
+ * Every open debt-kind concern, any calibration, deduplicated by text and
+ * carrying the id of the record that first raised it. FYI entries are notes
+ * for the architect's register, not blockers: `materialOpenDebts` is the
+ * done-detection view.
  */
 export function openDebts(records: readonly StepRecord[]): OpenDebt[] {
   const byText = new Map<string, OpenDebt>();
@@ -89,21 +122,23 @@ export function openDebts(records: readonly StepRecord[]): OpenDebt[] {
     if (!rec.outcome) continue;
     for (const concern of rec.outcome.concerns) {
       if (concern.kind !== "debt") continue;
-      if (concern.calibration === "fyi") continue;
       const key = normalizeDebtText(concern.text);
       if (byText.has(key)) continue;
       byText.set(key, {
+        ...(concern.id ? { id: concern.id } : {}),
         text: concern.text,
         ...(concern.evidence ? { evidence: concern.evidence } : {}),
+        calibration: concern.calibration,
         source: `${rec.slug ?? "goal"} ${rec.step} r${rec.round}`,
         iteration: rec.iteration,
         seq: rec.seq,
       });
     }
   }
-  const closed = debtClosedTexts(records);
+  const { cited, quoted } = closedDebtTexts(records);
   const isClosed = (norm: string): boolean =>
-    closed.some((c) => {
+    cited.has(norm) ||
+    [...quoted].some((c) => {
       if (c === norm) return true;
       const shorter = Math.min(c.length, norm.length);
       if (shorter < 24) return false;
@@ -115,9 +150,19 @@ export function openDebts(records: readonly StepRecord[]): OpenDebt[] {
     .sort((a, b) => a.seq - b.seq);
 }
 
+/** The open debts that block done: architect/owner calibration. */
+export function materialOpenDebts(records: readonly StepRecord[]): OpenDebt[] {
+  return openDebts(records).filter((debt) => debt.calibration !== "fyi");
+}
+
 /** True while any material debt is still open. */
 export function hasOpenDebt(records: readonly StepRecord[]): boolean {
-  return openDebts(records).length > 0;
+  return materialOpenDebts(records).length > 0;
+}
+
+/** The ids ingest assigned to debt concerns; a `debtClosed` id must name one. */
+export function knownDebtIds(records: readonly StepRecord[]): Set<ConcernId> {
+  return new Set(debtTextsById(records).keys());
 }
 
 /** The goal decision a completed record carries: the architect's, or the front path's stop. */

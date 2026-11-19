@@ -111,6 +111,64 @@ describe("outcome delivery", () => {
     ).toEqual([]);
   });
 
+  it("refuses a debtClosed id that no ingested concern has", () => {
+    const records = [
+      {
+        seq: 1,
+        iteration: 1,
+        slug: "a",
+        step: "review",
+        round: 1,
+        actor: "agent" as const,
+        startedAt: new Date(0).toISOString(),
+        outcome: {
+          status: "done" as const,
+          summary: "approved with debt",
+          concerns: [
+            {
+              kind: "debt" as const,
+              calibration: "architect" as const,
+              text: "cache invalidation needs a follow-up task",
+              id: "00001-i1-a-review-r1#1",
+            },
+          ],
+          forward: [],
+        },
+      },
+    ];
+    const close = (id: string) =>
+      parseOutcome(
+        `status: done\nsummary: closed\ndecision: continue\ndebtClosed: [{id: ${JSON.stringify(id)}, reason: "shim removed"}]\n`,
+      );
+
+    expect(
+      validateExpectation(close("00001-i1-a-review-r1#1"), "architect", {
+        records,
+      }),
+    ).toEqual([]);
+    // The id names no ingested debt concern: the close would be a silent no-op.
+    expect(
+      validateExpectation(close("00001-i1-a-review-r1#9"), "architect", {
+        records,
+      }),
+    ).toEqual([
+      "unknown debt id: 00001-i1-a-review-r1#9: no ingested debt concern has that id",
+    ]);
+    // The outcome's own record is in the tree once it is written, but its
+    // concerns get their ids at ingest: a debt cannot be closed before it is
+    // recorded, so the current record's ids stay unknown.
+    expect(
+      validateExpectation(close("00001-i1-a-review-r1#1"), "architect", {
+        records,
+        excludeRecordId: "00001-i1-a-review-r1",
+      }),
+    ).toEqual([
+      "unknown debt id: 00001-i1-a-review-r1#1: no ingested debt concern has that id",
+    ]);
+    // Without records the id cannot be resolved, so only the step contract runs.
+    expect(validateExpectation(close("anything"), "architect")).toEqual([]);
+  });
+
   it("maps steps to expectations from the flow catalog and kernel turn steps", () => {
     const flows = {
       "implement-review": {

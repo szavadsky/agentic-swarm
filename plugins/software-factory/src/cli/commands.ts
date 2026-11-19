@@ -355,25 +355,43 @@ function recordPlanPath(abs: string): string | undefined {
  * record's `started.yaml` supplies it otherwise. Without either, only the
  * schema is enforced and the caller reports the narrower check.
  */
-function outcomeResult(
+async function outcomeResult(
   abs: string,
   text: string,
   opts: ValidateFileOptions,
-): ValidateResult {
+): Promise<ValidateResult> {
   try {
     const outcome = parseOutcome(text);
     const started = startedMeta(abs);
     const step = opts.step ?? started?.step;
     if (!step) return { findings: [], stepIndependent: true };
-    const flows = processForValidation(path.dirname(abs), opts.repo).flows;
+    const process = processForValidation(path.dirname(abs), opts.repo);
+    const flows = process.flows;
     const expectation = expectationForStep(step, flows);
     const review = flowStepFor(step, flows);
     const lastCall =
       review?.review === true &&
       started?.step === step &&
       isLastReviewCall(review, started.round);
+    // The outcome sits in a record directory under a `records` tree: read the
+    // tree so a `debtClosed` id is checked against what ingest assigned. Any
+    // other file has no records to resolve an id against, so only the step
+    // contract runs.
+    const recordsDir = path.dirname(path.dirname(abs));
+    const recordId = path.basename(path.dirname(abs));
+    const records =
+      started &&
+      outcome.debtClosed?.length &&
+      path.basename(recordsDir) === "records"
+        ? await createFolderStore(
+            path.dirname(recordsDir),
+            undefined,
+            process.taskTypes ?? {},
+          ).listRecords()
+        : undefined;
     const findings = validateExpectation(outcome, expectation, {
       lastCall,
+      ...(records ? { records, excludeRecordId: recordId } : {}),
     });
     const plan = step === PLAN_CHECK_STEP ? recordPlanPath(abs) : undefined;
     if (plan) {
@@ -451,7 +469,7 @@ export async function validateFile(
     case "class":
       return { findings: zodFindings(text, abs, classSchema) };
     case "outcome":
-      return outcomeResult(abs, text, opts);
+      return await outcomeResult(abs, text, opts);
     case "hold":
       return { findings: holdFindings(text, abs) };
     case "repo":

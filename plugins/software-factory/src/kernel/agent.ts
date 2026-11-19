@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import type { z } from "zod";
 import {
   type ModelRef,
@@ -355,7 +356,7 @@ export async function runAgentTurn(
     runtime.configs.process.repairPrompt ??
     "delivery-repair";
 
-  const assess = (afterRepair: boolean): void => {
+  const assess = async (afterRepair: boolean): Promise<void> => {
     outcome = null;
     findings = [];
     try {
@@ -366,9 +367,21 @@ export async function runAgentTurn(
       );
       if (delivered) {
         outcome = delivered.outcome;
+        // A closure cites an id ingest assigned to an earlier record, so the
+        // check needs the record tree; without a closure there is nothing to
+        // resolve and no reason to read it.
+        const records = outcome.debtClosed?.length
+          ? await runtime.store.listRecords()
+          : undefined;
         findings = [
           ...validateExpectation(outcome, spec.expectation, {
             lastCall: spec.lastCall,
+            ...(records
+              ? {
+                  records,
+                  excludeRecordId: path.basename(started.dir),
+                }
+              : {}),
           }),
           ...(spec.validate?.(outcome) ?? []),
         ];
@@ -393,7 +406,7 @@ export async function runAgentTurn(
       if (planFinding) findings.push(planFinding);
     }
   };
-  assess(false);
+  await assess(false);
 
   const haltedNow = (): boolean =>
     stop.kind === "infra" ||
@@ -438,7 +451,7 @@ export async function runAgentTurn(
     session = repair.result.session ?? session;
     text = repair.result.text;
     tierIndex = repair.endIndex;
-    assess(true);
+    await assess(true);
   }
   if (needsRepair) {
     if (!outcome && haltedNow()) {

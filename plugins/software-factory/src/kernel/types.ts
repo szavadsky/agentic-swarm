@@ -24,6 +24,24 @@ export const concernSchema = z.object({
   evidence: z.string().optional(),
 });
 
+/** One ingested concern's kernel-assigned id: `<recordId>#<n>`, 1-based in the record's outcome. */
+export type ConcernId = string;
+
+/** A concern as the kernel read it back from a record: ingest assigns `id`, agents never write one. */
+export type RecordedConcern = Concern & { id?: ConcernId };
+
+/** One debt's closure: the id the kernel assigned, and what removed the debt. */
+export const debtClosedEntrySchema = z.object({
+  id: z.string().min(1),
+  reason: z.string().min(1),
+});
+
+/** One steer's answer: the pending steer's id, and the architect's answer. */
+export const steerAnswerSchema = z.object({
+  steer: z.string().min(1),
+  answer: z.string().min(1),
+});
+
 /** One fix turn's answer to a prior review finding, by its numbered position. */
 export const replySchema = z.object({
   finding: z.number().int().positive(),
@@ -124,7 +142,25 @@ export const outcomeSchema = z.object({
     .describe("upscope on task steps only"),
   summary: z.string().describe("one paragraph"),
   concerns: z.array(concernSchema).default([]),
+  // Parse-only: old records close debts and answer steers here, and no prompt
+  // asks for a line; `debtClosed` and `steerAnswers` are the protocol. Kept
+  // required because every delivery defaults it empty.
   forward: z.array(z.string()).default([]),
+  // Kernel-recorded debts are closed by the id the record ingest assigned, not
+  // by quoting the debt text.
+  debtClosed: z
+    .array(debtClosedEntrySchema)
+    .optional()
+    .describe(
+      "close one open debt by the id in the pack's debt register; reason says what removed it",
+    ),
+  // The architect answers every pending steer from its pack's steer list.
+  steerAnswers: z
+    .array(steerAnswerSchema)
+    .optional()
+    .describe(
+      "one {steer, answer} per pending steer, steer id from the steer list",
+    ),
   // A fix turn answers its prior review with one entry per numbered finding;
   // the summary stays free text. Derive parks an empty fix with no replies.
   replies: z
@@ -174,6 +210,10 @@ export const outcomeSchema = z.object({
 
 export type Concern = z.infer<typeof concernSchema>;
 export type Outcome = z.infer<typeof outcomeSchema>;
+/** One record's outcome as ingested: the same shape, its concerns carrying kernel ids. */
+export type RecordedOutcome = Omit<Outcome, "concerns"> & {
+  concerns: RecordedConcern[];
+};
 export type ReviewVerdict = NonNullable<Outcome["verdict"]>;
 export type GoalDecision = NonNullable<Outcome["decision"]>;
 /** Spike finishes with findings; development merges its branch. */
@@ -498,7 +538,7 @@ export interface StepRecord {
   testRuns?: number;
   /** Wall time in ms; checks/commit records stamp the gate/commit run itself. */
   wallMs?: number;
-  outcome?: Outcome;
+  outcome?: RecordedOutcome;
   ok?: boolean;
   cause?: string;
   startedAt: string;

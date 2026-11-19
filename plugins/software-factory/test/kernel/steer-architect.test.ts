@@ -90,7 +90,7 @@ describe("steer architect routing", () => {
           outcome({
             summary: "amended intent",
             decision: "continue",
-            forward: ["steer s1: intent amended verbatim"],
+            steerAnswers: [{ steer: "s1", answer: "intent amended verbatim" }],
           }),
         );
         return fakeTurnResult(req);
