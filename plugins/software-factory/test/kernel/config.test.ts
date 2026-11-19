@@ -91,6 +91,7 @@ describe("three config layers", () => {
     expect(configs.process.boundary.pm).toEqual({
       prompt: "pm",
       alias: "pm",
+      deliverable: "task files",
     });
     expect(configs.run.aliases.boss!.model).toBe("big");
     expect(
@@ -212,8 +213,13 @@ describe("three config layers", () => {
     expect(boundary.planreview).toEqual({
       prompt: "reviewer",
       alias: "plan-reviewer",
+      deliverable: "numbered plan-review findings",
     });
-    expect(boundary.front).toEqual({ prompt: "front", alias: "pm" });
+    expect(boundary.front).toEqual({
+      prompt: "front",
+      alias: "pm",
+      deliverable: "class, task, and pack",
+    });
     fs.rmSync(root, { recursive: true, force: true });
   });
 

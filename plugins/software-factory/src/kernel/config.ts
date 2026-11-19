@@ -62,7 +62,14 @@ export const repoConfigSchema = z
 
 /** One step's prompt template and run-config alias. */
 export const turnSchema = z
-  .object({ prompt: z.string().min(1), alias: z.string().min(1) })
+  .object({
+    prompt: z.string().min(1),
+    alias: z.string().min(1),
+    /** Prompt template for the missing-outcome repair ask; defaults to `delivery-repair`. */
+    repairPrompt: z.string().min(1).optional(),
+    /** Product the turn must deliver; defaults by expectation, else `outcome`. */
+    deliverable: z.string().min(1).optional(),
+  })
   .strict();
 
 /** One flow step; `review` marks the step that consumes a review round. */
@@ -77,6 +84,10 @@ export const flowStepSchema = z
       ),
     prompt: z.string().min(1).optional(),
     alias: z.string().min(1).optional(),
+    /** Prompt template for the missing-outcome repair ask; defaults to `delivery-repair`. */
+    repairPrompt: z.string().min(1).optional(),
+    /** Product the turn must deliver; defaults by expectation, else `outcome`. */
+    deliverable: z.string().min(1).optional(),
     review: z.boolean().default(false),
     /** Review and checks steps: change requests honored before the last call. */
     changeRequests: z.number().int().nonnegative().optional(),
@@ -159,6 +170,8 @@ export const processConfigSchema = z
     flows: z.record(z.string(), flowSchema).default({}),
     taskTypes: z.record(z.string(), taskTypeSchema).default({}),
     boundary: boundarySchema,
+    /** Repair template a step renders when it names none. */
+    repairPrompt: z.string().min(1).optional(),
     reminders: z.number().int().nonnegative().default(1),
     calibration: z.string().optional(),
     promptsDir: z.string().min(1).optional(),

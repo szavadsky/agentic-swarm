@@ -67,14 +67,21 @@ flows:
 taskTypes:
   development: { flow: implement-review, kind: development, schema: outcome }
 boundary:                       # the kernel turns outside any task flow
-  architect: { prompt: architect, alias: architect }
+  architect: { prompt: architect, alias: architect, repairPrompt: architect-repair, deliverable: "plan edit or stop decision" }
   digest: { prompt: digest, alias: digest }
-  front: { prompt: front, alias: pm }
-  plancheck: { prompt: plan-checker, alias: plan-checker }
-  planreview: { prompt: reviewer, alias: plan-reviewer }
-  pm: { prompt: pm, alias: pm }
-  steward: { prompt: steward, alias: steward }
+  front: { prompt: front, alias: pm, deliverable: "class, task, and pack" }
+  plancheck: { prompt: plan-checker, alias: plan-checker, deliverable: "plan verdict" }
+  planreview: { prompt: reviewer, alias: plan-reviewer, deliverable: "numbered plan-review findings" }
+  pm: { prompt: pm, alias: pm, deliverable: "task files" }
+  steward: { prompt: steward, alias: steward, deliverable: "merge resolution" }
 ```
+
+A step may name `repairPrompt` (the template its in-session repair ask
+renders) and `deliverable` (the product the ask and the missing-outcome finding
+name; default `outcome`, or `verdict` on a review step). A step that names no
+template renders the process-level `repairPrompt` (default `delivery-repair`).
+The architect names `architect-repair` because its ask also requires the plan
+edit on disk; the default template then carries no role branch.
 
 A flow step may name `alternates: [<alias>…]` to change the model on retry:
 the step's alias runs first, and after each failure-kind launch — no outcome

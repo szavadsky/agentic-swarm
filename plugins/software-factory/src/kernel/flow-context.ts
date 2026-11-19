@@ -26,6 +26,7 @@ import type {
   FlowDefinition,
   FlowStep,
   KernelRuntime,
+  RepairSpec,
   StepRecord,
   TaskFile,
   TaskState,
@@ -61,6 +62,10 @@ export interface TurnTarget {
   /** Prompt template the turn renders; the role the agent acts as. */
   prompt: string;
   alias: string;
+  /** Repair template the step named; absent renders `delivery-repair`. */
+  repairPrompt?: string;
+  /** Product the step named; absent derives from the turn's expectation. */
+  deliverable?: string;
   harness: Harness;
   model: ModelRef;
   effort?: string;
@@ -449,6 +454,16 @@ export function resolveTurn(
   return targetForAlias(runtime, prompt, override ?? aliasName, iteration);
 }
 
+/** A step's repair ask; absent fields stay absent so the kernel default applies. */
+function repairFields(
+  spec: RepairSpec,
+): Pick<TurnTarget, "repairPrompt" | "deliverable"> {
+  return {
+    repairPrompt: spec.repairPrompt,
+    deliverable: spec.deliverable,
+  };
+}
+
 /** Resolves one kernel boundary step from process config. */
 export function boundaryTarget(
   runtime: KernelRuntime,
@@ -458,13 +473,10 @@ export function boundaryTarget(
 ): TurnTarget {
   const spec: TurnSpec | undefined = runtime.configs.process.boundary[step];
   if (!spec) throw new Error(`process config has no boundary step "${step}"`);
-  return resolveTurn(
-    runtime,
-    spec.prompt,
-    spec.alias,
-    aliasOverride,
-    iteration,
-  );
+  return {
+    ...resolveTurn(runtime, spec.prompt, spec.alias, aliasOverride, iteration),
+    ...repairFields(spec),
+  };
 }
 
 /**
@@ -491,9 +503,19 @@ function stepTurn(
         `flow "${task.flow}": follow-up mode different-model needs an alias`,
       );
     }
-    return { prompt: step.prompt, alias: followUp.alias };
+    return {
+      prompt: step.prompt,
+      alias: followUp.alias,
+      repairPrompt: step.repairPrompt,
+      deliverable: step.deliverable,
+    };
   }
-  return { prompt: step.prompt, alias: step.alias };
+  return {
+    prompt: step.prompt,
+    alias: step.alias,
+    repairPrompt: step.repairPrompt,
+    deliverable: step.deliverable,
+  };
 }
 
 /** The front's configured boundary target. */
@@ -645,7 +667,11 @@ export function stepTarget(
     // The front's alias and model run the turn, but the prompt stays the
     // implementer's: the prompt names the role, not the agent's history.
     const turn = stepTurn(runtime, task, state, stepId);
-    return { ...frontTarget(runtime, iteration), prompt: turn.prompt };
+    return {
+      ...frontTarget(runtime, iteration),
+      ...repairFields(turn),
+      prompt: turn.prompt,
+    };
   }
   const flow = flowOf(runtime, task);
   const step = findStep(flow, stepId);
@@ -659,13 +685,16 @@ export function stepTarget(
   // producer, alternate or not.
   const alias =
     turn.alias === step.alias ? (alternate ?? turn.alias) : turn.alias;
-  return resolveTurn(
-    runtime,
-    turn.prompt,
-    alias,
-    step.review ? undefined : task.tier,
-    iteration,
-  );
+  return {
+    ...resolveTurn(
+      runtime,
+      turn.prompt,
+      alias,
+      step.review ? undefined : task.tier,
+      iteration,
+    ),
+    ...repairFields(turn),
+  };
 }
 
 /** Resume the last session for this alias when it is portable to the turn's harness. */

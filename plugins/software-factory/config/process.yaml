@@ -14,6 +14,7 @@ flows:
         alias: reviewer
         review: true
         changeRequests: 2
+        deliverable: verdict
   just-implement:
     steps:
       - id: implement
@@ -29,17 +30,21 @@ flows:
         alias: reviewer
         review: true
         changeRequests: 0
+        deliverable: verdict
 # The kernel turns outside any task flow. Each names its prompt and the alias
 # pre-flight requires; `front` runs on the PM alias, as before, and plan review
-# shares the reviewer prompt on its own alias.
+# shares the reviewer prompt on its own alias. A turn may also name the repair
+# ask its missing outcome renders and the product that ask calls for; the
+# process `repairPrompt` default and the turn's expectation cover steps that
+# name neither.
 boundary:
-  architect: { prompt: architect, alias: architect }
+  architect: { prompt: architect, alias: architect, repairPrompt: architect-repair, deliverable: "plan edit or stop decision" }
   digest: { prompt: digest, alias: digest }
-  front: { prompt: front, alias: pm }
-  plancheck: { prompt: plan-checker, alias: plan-checker }
-  planreview: { prompt: reviewer, alias: plan-reviewer }
-  pm: { prompt: pm, alias: pm }
-  steward: { prompt: steward, alias: steward }
+  front: { prompt: front, alias: pm, deliverable: "class, task, and pack" }
+  plancheck: { prompt: plan-checker, alias: plan-checker, deliverable: "plan verdict" }
+  planreview: { prompt: reviewer, alias: plan-reviewer, deliverable: "numbered plan-review findings" }
+  pm: { prompt: pm, alias: pm, deliverable: "task files" }
+  steward: { prompt: steward, alias: steward, deliverable: merge resolution }
 # A task file names one type; the type owns its flow, kind and output schema.
 # `development` merges, `spike` finishes with findings, `trivial` runs the
 # front's single-step path.
@@ -48,6 +53,8 @@ taskTypes:
   spike: { flow: spike, kind: spike, schema: outcome }
   trivial: { flow: just-implement, kind: development, schema: outcome }
 reminders: 1
+# The repair ask a step renders unless it names another template.
+repairPrompt: delivery-repair
 presets:
   autonomous: { calibration: "You are an autonomous agent with high agency." }
   principal: { calibration: "You are a principal engineer, focused on clarity and robustness." }

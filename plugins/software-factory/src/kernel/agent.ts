@@ -110,26 +110,14 @@ function overflowed(stop: Stop): boolean {
 
 /**
  * The product each turn must deliver, named in the repair ask and the failure
- * cause. The PM ladder and the front post-checks own file validity; the guard
- * names their deliverable when the outcome itself goes missing.
+ * cause. A step's process config owns the wording; a turn that names none
+ * delivers its expectation's product.
  */
-function deliverableFor(step: string, expectation: OutcomeExpectation): string {
-  switch (step) {
-    case "architect":
-      return "plan edit or stop decision";
-    case "pm":
-      return "task files";
-    case "front":
-      return "class, task, and pack";
-    case "steward":
-      return "merge resolution";
-    case "plancheck":
-      return "plan verdict";
-    case "planreview":
-      return "numbered plan-review findings";
-    default:
-      return expectation === "review" ? "verdict" : "outcome";
-  }
+function deliverableOf(spec: AgentTurnSpec): string {
+  return (
+    spec.target.deliverable ??
+    (spec.expectation === "review" ? "verdict" : "outcome")
+  );
 }
 
 function missingOutcomeFinding(
@@ -350,7 +338,11 @@ export async function runAgentTurn(
     tierIndex = retry.endIndex;
   }
 
-  const deliverable = deliverableFor(spec.meta.step, spec.expectation);
+  const deliverable = deliverableOf(spec);
+  const repairPrompt =
+    spec.target.repairPrompt ??
+    runtime.configs.process.repairPrompt ??
+    "delivery-repair";
 
   const assess = (afterRepair: boolean): void => {
     outcome = null;
@@ -405,12 +397,12 @@ export async function runAgentTurn(
   const repairFindings: string[] = [];
   while (findings.length > 0 && !haltedNow() && repairs < maxRepairs) {
     repairFindings.push(...findings);
-    // One in-session repair ask, rendered from the process-config prompt
-    // template so repos can reword it; a bare status:done only delivers
-    // when no verdict or decision is required.
+    // One in-session repair ask, rendered from the step's configured prompt
+    // template so repos can reword it or vary its shape per role; a bare
+    // status:done only delivers when no verdict or decision is required.
     const repair = await callChain(
       tierIndex,
-      runtime.prompts.render("delivery-repair", {
+      runtime.prompts.render(repairPrompt, {
         role: spec.target.prompt,
         deliverable,
         done_allowed: spec.expectation === "any" ? "true" : "false",

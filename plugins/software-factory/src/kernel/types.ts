@@ -294,8 +294,22 @@ export type Action =
   | { kind: "boundary" }
   | { kind: "exit"; reason: string };
 
+/** What a turn's missing-outcome repair ask renders from. */
+export interface RepairSpec {
+  /**
+   * Prompt template for the in-session repair ask. Absent renders the
+   * `delivery-repair` template.
+   */
+  repairPrompt?: string;
+  /**
+   * The product the turn must deliver, named in the repair ask and the failure
+   * finding. Absent names the outcome (or the verdict on a review turn).
+   */
+  deliverable?: string;
+}
+
 /** A step's prompt template and the run-config alias its turns run on. */
-export interface TurnSpec {
+export interface TurnSpec extends RepairSpec {
   /** Prompt template name under `prompts/`. */
   prompt: string;
   /** Run-config alias; pre-flight requires every named alias. */
@@ -317,7 +331,7 @@ export const BOUNDARY_STEPS = [
 ] as const;
 export type BoundaryStep = (typeof BOUNDARY_STEPS)[number];
 
-export interface FlowStep {
+export interface FlowStep extends RepairSpec {
   id: string;
   /** Non-script steps name their prompt and alias; script steps (`checks`) name neither. */
   prompt?: string;
@@ -590,6 +604,8 @@ export interface ProcessConfig {
   taskTypes: Record<string, TaskTypeDefinition>;
   /** Each kernel boundary step's prompt and alias; pre-flight requires these aliases. */
   boundary: Record<BoundaryStep, TurnSpec>;
+  /** Repair template a step renders when it names none; defaults to `delivery-repair`. */
+  repairPrompt?: string;
   /** Outcome reminders after the first attempt; a task file's `repairTurns` overrides it for that task's turns only. */
   reminders: number;
   calibration?: string;
