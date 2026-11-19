@@ -543,15 +543,19 @@ describe("script crash budget", () => {
       });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("a", { scope: ["a-area"] }));
+      const append = runtime.store.appendRecord.bind(runtime.store);
       let crashRecords = 0;
+      // Only the crash record's append fails: the wave-end steward record is
+      // not what this test is about.
       runtime.store.appendRecord = (async (
-        ...args: [
-          Parameters<typeof runtime.store.appendRecord>[0],
-          Parameters<typeof runtime.store.appendRecord>[1],
-        ]
+        meta: Parameters<typeof runtime.store.appendRecord>[0],
+        end: Parameters<typeof runtime.store.appendRecord>[1],
       ) => {
-        crashRecords += 1;
-        throw new Error("store boom");
+        if (meta.step === "implement") {
+          crashRecords += 1;
+          throw new Error("store boom");
+        }
+        return append(meta, end);
       }) as typeof runtime.store.appendRecord;
 
       const result = await runDispatch(runtime, { iteration: 1 });
@@ -589,9 +593,16 @@ describe("script crash budget", () => {
       });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("a", { scope: ["a-area"] }));
-      runtime.store.appendRecord = (async () => {
-        const failure: unknown = "store string boom";
-        throw failure;
+      const append = runtime.store.appendRecord.bind(runtime.store);
+      runtime.store.appendRecord = (async (
+        meta: Parameters<typeof runtime.store.appendRecord>[0],
+        end: Parameters<typeof runtime.store.appendRecord>[1],
+      ) => {
+        if (meta.step === "implement") {
+          const failure: unknown = "store string boom";
+          throw failure;
+        }
+        return append(meta, end);
       }) as typeof runtime.store.appendRecord;
 
       const result = await runDispatch(runtime, { iteration: 1 });

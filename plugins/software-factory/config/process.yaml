@@ -2,13 +2,15 @@
 #
 # Every step names the prompt it renders and the run-config alias it runs on.
 # The same prompt may run on another alias without declaring a new role: the
-# prompt is the role, the alias is the model choice.
+# prompt is the role, the alias is the model choice. A development implement
+# turn retries on `implementer-b` instead of repeating the model that failed.
 flows:
   implement-review:
     steps:
       - id: implement
         prompt: implementer
         alias: implementer
+        alternates: [implementer-b]
       - id: review
         prompt: reviewer
         alias: reviewer
@@ -20,6 +22,7 @@ flows:
       - id: implement
         prompt: implementer
         alias: implementer
+        alternates: [implementer-b]
   # A spike delivers a report, not a merge: it runs on the researcher alias and
   # retries on other task models instead of the one that failed.
   spike:

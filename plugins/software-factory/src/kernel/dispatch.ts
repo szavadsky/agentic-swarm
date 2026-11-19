@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { isTransientInfraCause } from "../harness/fallback.js";
 import { derive } from "./derive.js";
 import { executeTaskAction, type TaskActionResult } from "./flow.js";
 import { stepTarget } from "./flow-context.js";
@@ -53,6 +54,11 @@ export interface DispatchOptions {
    * ones finish their flow.
    */
   signals?: DrainController;
+  /**
+   * Sleeps out a transient fault's backoff before it is re-dispatched. Tests
+   * inject a recorder instead of waiting.
+   */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 interface Running {
@@ -111,13 +117,40 @@ export function iterationSpend(
   return usd;
 }
 
-function agentStop(
-  result: TaskActionResult | MergeResult,
-): { reason: "infra" | "cancelled"; cause?: string } | undefined {
-  if ("infra" in result && result.infra)
-    return { reason: "infra", cause: result.infra.cause };
+type EndedAction =
+  | { reason: "infra"; cause: string; details?: string }
+  | { reason: "cancelled" }
+  | undefined;
+
+function agentStop(result: TaskActionResult | MergeResult): EndedAction {
+  if ("infra" in result && result.infra) {
+    return {
+      reason: "infra",
+      cause: result.infra.cause,
+      ...(result.infra.details ? { details: result.infra.details } : {}),
+    };
+  }
   if ("cancelled" in result && result.cancelled) return { reason: "cancelled" };
   return undefined;
+}
+
+/**
+ * Re-dispatch delays for a task whose tiers all ended on transient infra, in
+ * order. The harness already retried each tier inside its own policy; these are
+ * the wave's remaining chances to keep the iteration alive before the fault
+ * names the launch stop.
+ */
+export const INFRA_REDISPATCH_DELAYS_MS: readonly number[] = [1_000, 2_000];
+
+interface InfraFault {
+  /** The last fault as the operator reads it: cause plus its details. */
+  cause: string;
+  /** Transient re-dispatches already granted; indexes the next delay. */
+  retries: number;
+  /** The next backoff was paid and one dispatch may run. */
+  due: boolean;
+  /** A re-dispatch is owed; false freezes the slug for the launch. */
+  retry: boolean;
 }
 
 function crashMessage(err: unknown): string {
@@ -263,10 +296,14 @@ function undecidedParked(
 /**
  * The dispatch loop: `next` proposes, this loop admits. Admission holds the
  * overall, per-subscription and per-model turn limits; within a wave, order
- * comes from `deps` only. On an optional iteration limit — turns, wall clock
- * or dollars — the loop drains: a task that has not started this iteration
- * gets no turn, tasks already started finish their flow, in-flight work
- * settles, then the caller ends the iteration normally.
+ * comes from `deps` only. A task whose tiers all ended on transient infra is
+ * re-dispatched after a backoff inside the same iteration, so a transport
+ * glitch never freezes it for the launch. On an optional iteration limit —
+ * turns, wall clock or dollars — the loop drains: a task that has not started
+ * this iteration gets no turn, tasks already started finish their flow,
+ * in-flight work settles, then the caller ends the iteration normally. Only
+ * when nothing is dispatchable does the wave run the steward, the stall PM and
+ * the plan check, and only then does an infra fault end it.
  */
 export async function runDispatch(
   runtime: KernelRuntime,
@@ -288,10 +325,38 @@ export async function runDispatch(
       .filter((r) => r.iteration === iteration && r.actor === "agent" && r.slug)
       .map((r) => r.slug!),
   );
-  // Infra stops are per slug for this iteration: the faulted task waits for the
-  // next launch, independent work keeps going, and only an iteration where
-  // nothing else is dispatchable ends as infra.
-  const infra = new Map<string, string | undefined>();
+  // Infra faults are per slug: a transient one is re-dispatched after its
+  // backoff, a fatal one waits for the next launch, independent work keeps
+  // going, and only an iteration where nothing else is dispatchable ends as
+  // infra.
+  const infra = new Map<string, InfraFault>();
+  const sleep =
+    opts.sleep ??
+    ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+
+  /**
+   * Records one fault for its slug. A transient cause earns the next backoff;
+   * once every delay is spent, or for auth/crash/timeout/overflow, the slug is
+   * frozen for the launch.
+   */
+  const noteInfra = (slug: string, cause: string, details?: string): void => {
+    const retries = infra.get(slug)?.retries ?? 0;
+    infra.set(slug, {
+      cause: details ? `${cause}: ${details}` : cause,
+      retries,
+      due: false,
+      retry:
+        isTransientInfraCause(cause) &&
+        retries < INFRA_REDISPATCH_DELAYS_MS.length,
+    });
+  };
+
+  /** A due retry is dispatchable; a frozen or unpaid backoff is not. */
+  const dispatchable = (slug: string): boolean => {
+    const fault = infra.get(slug);
+    return fault === undefined || fault.due;
+  };
+
   let cancelled = false;
   let drain: string | undefined;
   const usdLimit = runtime.limits.iterationUsd;
@@ -418,10 +483,12 @@ export async function runDispatch(
           taskState,
         );
         const ended = agentStop(result);
-        if (ended?.reason === "infra") infra.set(action.slug, ended.cause);
+        if (ended?.reason === "infra")
+          noteInfra(action.slug, ended.cause, ended.details);
         else if (ended?.reason === "cancelled") cancelled = true;
+        else infra.delete(action.slug);
       } catch (err) {
-        infra.set(
+        noteInfra(
           action.slug,
           await recordCrash(runtime, iteration, action, taskState, err),
         );
@@ -539,7 +606,7 @@ export async function runDispatch(
 
     for (const action of candidates) {
       if (runningAtRead.has(action.slug) || running.has(action.slug)) continue;
-      if (cancelled || infra.has(action.slug)) continue;
+      if (cancelled || !dispatchable(action.slug)) continue;
       // A signal raised while a turn was awaited must refuse the next start.
       // Draining here, per admission, closes the window a wave-top check misses.
       if (drain === undefined && opts.signals?.shouldStop()) {
@@ -622,10 +689,12 @@ export async function runDispatch(
           taskState,
         );
         const ended = agentStop(result);
-        if (ended?.reason === "infra") infra.set(action.slug, ended.cause);
+        if (ended?.reason === "infra")
+          noteInfra(action.slug, ended.cause, ended.details);
         else if (ended?.reason === "cancelled") cancelled = true;
+        else infra.delete(action.slug);
       } catch (err) {
-        infra.set(
+        noteInfra(
           action.slug,
           await recordCrash(runtime, iteration, action, taskState, err),
         );
@@ -644,19 +713,20 @@ export async function runDispatch(
           taskTurnsStarted,
           allReadyHeld: false,
         };
-      if (infra.size > 0) {
-        const causes = [...infra.entries()].map(([slug, cause]) =>
-          cause ? `${slug}: ${cause}` : slug,
-        );
-        return {
-          reason: "infra",
-          cause: causes.join("; "),
-          turns: turnsUsed,
-          taskTurnsStarted,
-          allReadyHeld: false,
-        };
+      // A transient fault's backoff belongs before the wave is declared over:
+      // the task is already ready on disk, so the same iteration runs it again.
+      // A drain starts nothing, and a due retry that did not start this pass
+      // would only spin.
+      const waiting = [...infra.values()].find(
+        (fault) => fault.retry && !fault.due,
+      );
+      if (waiting && drain === undefined && !opts.signals?.shouldStop()) {
+        await sleep(INFRA_REDISPATCH_DELAYS_MS[waiting.retries]!);
+        waiting.due = true;
+        waiting.retries += 1;
+        continue;
       }
-      if (drain)
+      if (drain && infra.size === 0)
         return {
           reason: "drained",
           cause: drain,
@@ -777,6 +847,21 @@ export async function runDispatch(
         }
       }
       const turns = settledTurns(await runtime.store.listRecords(), iteration);
+      // The wave is over and its recovery ran: a remaining fault names the
+      // stop, and only now — with nothing dispatchable left — does the launch
+      // end as infra.
+      if (infra.size > 0) {
+        const causes = [...infra.entries()].map(
+          ([slug, fault]) => `${slug}: ${fault.cause}`,
+        );
+        return {
+          reason: "infra",
+          cause: causes.join("; "),
+          turns,
+          taskTurnsStarted,
+          allReadyHeld: false,
+        };
+      }
       const heldCause = heldBoundaryCause(hold, state);
       return heldCause
         ? {

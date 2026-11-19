@@ -1,5 +1,6 @@
 import { exitDetails, stopDetails, withDetails } from "../details.js";
 import type { Stop, Usage } from "../types.js";
+import { isTransportFailure } from "../transport.js";
 import { reportsUsage } from "../usage.js";
 
 /** Error object omp attaches to `prompt_result.status === "error"`. */
@@ -17,13 +18,13 @@ const AUTH =
 const OVERFLOW =
   /context (length|window)|maximum context|too many tokens|token limit|prompt is too long|overflow/i;
 const REFUSAL = /refus|safety|content policy|blocked by|declined/i;
-const ABORTED = /abort|interrupted by user/i;
+// A word, not the `ECONNABORTED` substring; transport codes are matched above.
+const ABORTED = /\babort(?:ed)?\b|interrupted by user/i;
 const TIMEOUT = /timed out|timeout|deadline exceeded/i;
 const QUOTA =
   /free[- ]?limit|free usage limit|quota|usage limit|insufficient|billing|exceeded your/i;
 const RATE =
   /rate[\s_-]?limit|too many requests|overloaded|service unavailable|bad gateway/i;
-
 /**
  * Maps a provider error to the kernel's infra/task-side stop vocabulary.
  * HTTP 429 and free-tier limits are quota (LOG D8), even when the message also
@@ -41,6 +42,13 @@ export function classifyOmpError(error: OmpPromptError | undefined): Stop {
   }
   if (OVERFLOW.test(text)) {
     return withDetails({ kind: "infra", cause: "overflow" }, text);
+  }
+  // A transport loss or the provider's own retryable flag is transient: the
+  // retry policy backs off and fails over, never fails the task. It precedes
+  // the refusal/abort words because `ECONNREFUSED` and an aborted socket carry
+  // those words without being either.
+  if (isTransportFailure(text) || error?.retryable === true) {
+    return withDetails({ kind: "infra", cause: "network" }, text);
   }
   if (REFUSAL.test(text)) {
     return withDetails({ kind: "refusal" }, error?.message ?? text);
@@ -81,10 +89,13 @@ export function classifyOmpStopReason(
   }
 }
 
-/** omp exiting before the RPC ready frame: bad model/credential, or a launch crash. */
+/** omp exiting before the RPC ready frame: bad model/credential, a lost socket, or a launch crash. */
 export function classifyOmpLaunchFailure(stderr: string): Stop {
   if (AUTH.test(stderr) || /no api key|not authenticated|login/i.test(stderr)) {
     return { kind: "infra", cause: "auth", details: stopDetails(stderr) };
+  }
+  if (isTransportFailure(stderr)) {
+    return { kind: "infra", cause: "network", details: stopDetails(stderr) };
   }
   return { kind: "infra", cause: "crash", details: stopDetails(stderr) };
 }

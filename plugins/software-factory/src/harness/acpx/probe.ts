@@ -5,7 +5,7 @@ import path from "node:path";
 import { runProcess } from "../../core/proc.js";
 import { scrubSecrets } from "../details.js";
 import type { ModelProbe, ModelRef } from "../types.js";
-import type { AcpxConfig } from "./config.js";
+import type { AcpxRunConfig } from "./config.js";
 import { acpxModel } from "./model.js";
 import {
   acpxAgentSelection,
@@ -30,13 +30,14 @@ function commandLine(runtime: AcpxRuntime, args: string[]): string[] {
 
 async function runProbeCommand(
   runtime: AcpxRuntime,
-  config: AcpxConfig,
+  config: AcpxRunConfig,
   args: string[],
   cwd: string,
 ): Promise<ProbeProcessResult> {
   const result = await runProcess({
     cmd: commandLine(runtime, args),
     cwd,
+    envAllowlist: runtime.envAllowlist,
     env: config.env,
     timeoutSec: PROBE_TIMEOUT_SEC,
     maxOutputBytes: MAX_OUTPUT_BYTES,
@@ -162,7 +163,7 @@ function failure(
  */
 export async function probeAcpxModel(
   runtime: AcpxRuntime,
-  config: AcpxConfig,
+  config: AcpxRunConfig,
   model: ModelRef,
 ): Promise<ModelProbe> {
   const selection = acpxModel(config, model);

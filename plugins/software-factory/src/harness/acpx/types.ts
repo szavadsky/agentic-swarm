@@ -7,8 +7,12 @@ export interface AcpxHarnessOptions {
   id: string;
   /** Explicit acpx executable (tests and `harnesses.<id>.binary`); defaults to PATH, then `bunx acpx`. */
   binary?: string;
-  /** Run-config `acpx` block; a per-turn opaque replaces it. */
+  /** Run-config `acpx` block; a per-turn opaque overrides it. */
   acpx: AcpxConfig;
+  /** Harness-entry `options`: `args`/`env`, validated then passed to the acpx child. */
+  options?: Record<string, unknown>;
+  /** Run-config names this harness's children may inherit on top of the base set. */
+  envAllowlist?: readonly string[];
   retry?: Partial<RetryPolicy>;
 }
 

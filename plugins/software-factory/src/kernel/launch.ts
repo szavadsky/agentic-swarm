@@ -36,6 +36,7 @@ import {
   tmpHeadroom,
 } from "./preflight.js";
 import { loadPrompts } from "./prompts.js";
+import { loadPoolResets } from "./quota-pools.js";
 import { scriptMeta } from "./record.js";
 import { recoverLaunch } from "./recovery.js";
 import { RESUME_REFUSED_STEP, RESUME_STEP, resumeVerdict } from "./resume.js";
@@ -71,6 +72,8 @@ export interface HarnessFactoryContext {
   harnesses?: Record<string, HarnessConfig>;
   /** Provider cache window from `sessions.retention`; omp overlay and session stamp share it. */
   retention?: "short" | "long";
+  /** Run-config `envAllowlist`: names a harness child inherits on top of the base set. */
+  envAllowlist?: readonly string[];
   /** Artifact LSP enabled by the run config: the canonical config each omp turn installs. */
   lsp?: { config: string };
 }
@@ -381,6 +384,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         : undefined,
       harnesses: configs.run.harnesses,
       retention: configs.run.sessions.retention,
+      envAllowlist: configs.run.envAllowlist,
       ...(configs.run.lsp
         ? { lsp: { config: artifactLspConfigPath(paths.goalDir) } }
         : {}),
@@ -412,7 +416,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
       run: configs.run,
     }),
     limits: toLimits(configs),
-    exhaustedPools: new Set(),
+    exhaustedPools: await loadPoolResets(paths),
     priceSource: opts.priceSource,
   };
 

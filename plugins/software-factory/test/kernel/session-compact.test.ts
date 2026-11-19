@@ -10,8 +10,8 @@ import {
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import {
   compactSession,
-  resumeSessionFor,
-  reviewSession,
+  followUpSession,
+  type TurnTarget,
 } from "../../src/kernel/flow-context.js";
 import { iterationMetrics } from "../../src/kernel/metrics.js";
 import { sessionCacheHot } from "../../src/kernel/sessions.js";
@@ -59,10 +59,79 @@ class FailingCompactHarness extends FakeHarness {
   }
 }
 
+/** The implement step's fix switches to a second harness and keeps the transcript. */
+const crossHarnessFlow = {
+  process: {
+    flows: {
+      "implement-review": {
+        steps: [
+          {
+            id: "implement",
+            prompt: "implementer",
+            alias: "implementer",
+            followUp: {
+              mode: "different-model",
+              alias: "implementer-strong",
+              keepSession: true,
+            },
+          },
+          {
+            id: "review",
+            prompt: "reviewer",
+            alias: "reviewer",
+            review: true,
+            changeRequests: 2,
+            deliverable: "verdict",
+          },
+        ],
+      },
+    },
+  },
+  aliases: {
+    architect: { harness: "fake", model: "fake-architect" },
+    pm: { harness: "fake", model: "fake-pm" },
+    implementer: { harness: "fake", model: "fake-impl" },
+    reviewer: { harness: "fake", model: "fake-review" },
+    steward: { harness: "fake", model: "fake-steward" },
+    "plan-checker": { harness: "fake", model: "fake-check" },
+    "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+    "implementer-strong": { harness: "other", model: "fake-strong" },
+  },
+};
+
+/** Implement and both reviews on `fake`; the fix runs on `other`. */
+function scriptCrossHarness(fake: FakeHarness, other: FakeHarness): void {
+  fake.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "v1" }));
+    return fakeTurnResult(req);
+  });
+  fake.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "needs a fix", verdict: "changes" }));
+    return fakeTurnResult(req);
+  });
+  other.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v2\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "v2" }));
+    return fakeTurnResult(req);
+  });
+  fake.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+    return fakeTurnResult(req);
+  });
+}
+
 describe("session portability", () => {
-  it("admits only same-harness resume edges", () => {
+  it("admits only same-harness resume edges when none are declared", () => {
     expect(portable("omp", "omp")).toBe(true);
     expect(portable("omp", "opencode")).toBe(false);
+  });
+
+  it("admits a declared edge in its direction only", () => {
+    const edges = [{ from: "opencode", to: "omp" }];
+    expect(portable("opencode", "omp", edges)).toBe(true);
+    expect(portable("omp", "opencode", edges)).toBe(false);
+    expect(portable("omp", "omp", edges)).toBe(true);
   });
 
   it("resumes the recording harness and refuses a session the alias no longer routes to", async () => {
@@ -78,10 +147,8 @@ describe("session portability", () => {
         ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
         return fakeTurnResult(req);
       });
-      const runtime = await makeRuntime(repo, goal, {
-        fake,
-        other: new FakeHarness({ id: "other" }),
-      });
+      const other = new FakeHarness({ id: "other" });
+      const runtime = await makeRuntime(repo, goal, { fake, other });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
 
@@ -95,10 +162,19 @@ describe("session portability", () => {
       )!.session!;
       expect(recorded.compacted).toBe(true);
 
-      const resumed = await resumeSessionFor(
+      const target = (harness: FakeHarness): TurnTarget => ({
+        prompt: "implementer",
+        alias: "implementer",
+        harness,
+        model: { id: "fake-impl" },
+        tiers: [{ harness, model: { id: "fake-impl" } }],
+        tierOffset: 0,
+      });
+      const resumed = await followUpSession(
         runtime,
         taskFile,
-        "implementer",
+        target(fake),
+        "implement",
         records,
         worktree,
       );
@@ -107,14 +183,30 @@ describe("session portability", () => {
       // Rotation: the same alias now routes to a different harness.
       runtime.configs.run.aliases.implementer!.harness = "other";
       expect(
-        await resumeSessionFor(
+        await followUpSession(
           runtime,
           taskFile,
-          "implementer",
+          target(other),
+          "implement",
           records,
           worktree,
         ),
       ).toBeUndefined();
+
+      // A declared edge admits that crossing; the session resumes.
+      runtime.configs.run.portability = [{ from: "fake", to: "other" }];
+      expect(
+        (
+          await followUpSession(
+            runtime,
+            taskFile,
+            target(other),
+            "implement",
+            records,
+            worktree,
+          )
+        )?.id,
+      ).toBe(recorded.id);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -520,7 +612,7 @@ describe("review session resume", () => {
       expect(review[1]!.session?.id).not.toBe(review[0]!.session?.id);
       expect(review[1]!.cachedPrefix).toBeUndefined();
       expect(warnings.join("\n")).toContain("starts de novo");
-      expect(warnings.join("\n")).toContain("not portable");
+      expect(warnings.join("\n")).toContain("is not portable to");
     } finally {
       console.warn = originalWarn;
       cleanupFlowRepo(repo);
@@ -555,12 +647,30 @@ describe("review session resume", () => {
     }
   }, 60_000);
 
-  it("resumes reviews under different-model follow-up while the fix stays de novo", async () => {
+  it("resumes reviews while an implement different-model follow-up starts de novo", async () => {
     const { repo, goal } = setupFlowRepo({
       process: {
         flows: {
           "implement-review": {
-            followUp: { mode: "different-model", alias: "implementer-strong" },
+            steps: [
+              {
+                id: "implement",
+                prompt: "implementer",
+                alias: "implementer",
+                followUp: {
+                  mode: "different-model",
+                  alias: "implementer-strong",
+                },
+              },
+              {
+                id: "review",
+                prompt: "reviewer",
+                alias: "reviewer",
+                review: true,
+                changeRequests: 2,
+                deliverable: "verdict",
+              },
+            ],
           },
         },
       },
@@ -597,6 +707,73 @@ describe("review session resume", () => {
       expect(harness.calls[3]!.session?.id).toBe(review[0]!.session!.id);
       expect(review.map((r) => r.session?.compacted)).toEqual([true, true]);
     } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("keeps the compacted transcript across a declared cross-harness switch", async () => {
+    const { repo, goal } = setupFlowRepo(crossHarnessFlow);
+    try {
+      const fake = new FakeHarness({ id: "fake" });
+      const other = new FakeHarness({ id: "other" });
+      scriptCrossHarness(fake, other);
+      const runtime = await makeRuntime(repo, goal, { fake, other });
+      runtime.configs.run.portability = [{ from: "fake", to: "other" }];
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+
+      const implement = (await runtime.store.listRecords())
+        .filter((r) => r.slug === "task" && r.step === "implement")
+        .sort((a, b) => a.seq - b.seq);
+      expect(implement.map((r) => r.alias)).toEqual([
+        "implementer",
+        "implementer-strong",
+      ]);
+      expect(other.calls).toHaveLength(1);
+      expect(other.calls[0]!.model.id).toBe("fake-strong");
+      // The declared edge admits the compacted session; the fix continues it.
+      expect(other.calls[0]!.session?.id).toBe(implement[0]!.session!.id);
+      expect(other.calls[0]!.session?.compacted).toBe(true);
+      // A resumed ref keeps the harness that recorded it.
+      expect(implement[1]!.session?.id).toBe(implement[0]!.session!.id);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("starts de novo with the reason logged on an undeclared harness edge", async () => {
+    const { repo, goal } = setupFlowRepo(crossHarnessFlow);
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
+      const fake = new FakeHarness({ id: "fake" });
+      const other = new FakeHarness({ id: "other" });
+      scriptCrossHarness(fake, other);
+      const runtime = await makeRuntime(repo, goal, { fake, other });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+
+      const implement = (await runtime.store.listRecords())
+        .filter((r) => r.slug === "task" && r.step === "implement")
+        .sort((a, b) => a.seq - b.seq);
+      expect(implement.map((r) => r.alias)).toEqual([
+        "implementer",
+        "implementer-strong",
+      ]);
+      expect(other.calls).toHaveLength(1);
+      expect(other.calls[0]!.session).toBeUndefined();
+      // No session crosses: the fix records a fresh session on the new harness.
+      expect(implement[1]!.session?.harness).toBe("other");
+      expect(implement[1]!.session?.compacted).toBe(true);
+      expect(warnings.join("\n")).toContain("starts de novo");
+      expect(warnings.join("\n")).toContain(
+        'harness "fake" is not portable to "other"',
+      );
+    } finally {
+      console.warn = originalWarn;
       cleanupFlowRepo(repo);
     }
   }, 60_000);
@@ -639,7 +816,7 @@ describe("review session resume", () => {
           session: session("impl-fix-session"),
         }),
       ];
-      const resumed = await reviewSession(
+      const resumed = await followUpSession(
         runtime,
         taskFile,
         {
@@ -701,7 +878,7 @@ describe("review session resume", () => {
         }),
       ];
       expect(
-        await reviewSession(
+        await followUpSession(
           runtime,
           taskFile,
           {
@@ -718,7 +895,7 @@ describe("review session resume", () => {
         ),
       ).toBeUndefined();
       expect(
-        await reviewSession(
+        await followUpSession(
           runtime,
           taskFile,
           {

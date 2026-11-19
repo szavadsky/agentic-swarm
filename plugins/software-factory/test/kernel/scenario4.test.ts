@@ -1,7 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
+import {
+  FakeHarness,
+  fakeTurnIdentity,
+  fakeTurnResult,
+} from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import {
@@ -19,6 +23,7 @@ import {
   makeRuntime,
   outcome,
   setupFlowRepo,
+  whenTurn,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -43,32 +48,35 @@ describe("KERNEL0 scenario 4 — infra stops and item turns", () => {
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
 
-      const first = await runDispatch(runtime, { iteration: 1 });
-      expect(first.reason).toBe("infra");
-      let state = derive(
-        await runtime.store.listTasks(),
-        await runtime.store.listRecords(),
-        runtime.configs.process.flows,
-      );
-      expect(state.tasks.task!.status).toBe("ready");
-      expect(state.tasks.task!.turns).toBe(0);
-      expect(state.tasks.task!.round).toBe(1);
-      expect(state.tasks.task!.phase).toBe("implement");
-
-      const second = await runDispatch(runtime, { iteration: 1 });
-      expect(second.reason).toBe("boundary");
-      state = derive(
+      // The rate stop is transient: the same dispatch backs off and retries
+      // the turn instead of freezing the slug for the launch.
+      const result = await runDispatch(runtime, {
+        iteration: 1,
+        sleep: async () => {},
+      });
+      expect(result.reason).toBe("boundary");
+      const state = derive(
         await runtime.store.listTasks(),
         await runtime.store.listRecords(),
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("merged");
+      // Only the delivered turn and the review count: the rate stop is free.
       expect(state.tasks.task!.turns).toBe(2);
       expect(state.tasks.task!.round).toBe(1);
       expect(state.tasks.task!.park).toBeUndefined();
 
       const records = await runtime.store.listRecords();
-      expect(records.filter((r) => r.step === "implement").length).toBe(2);
+      const implementRecords = records.filter(
+        (r) => r.slug === "task" && r.step === "implement",
+      );
+      expect(implementRecords).toHaveLength(2);
+      expect(implementRecords[0]!.stop).toEqual({
+        kind: "infra",
+        cause: "rate",
+      });
+      expect(implementRecords[0]!.outcome).toBeUndefined();
+      expect(implementRecords[1]!.stop).toEqual({ kind: "done" });
       expect(
         records.filter((r) => r.slug === "task" && r.step === "park").length,
       ).toBe(0);
@@ -81,27 +89,55 @@ describe("KERNEL0 scenario 4 — infra stops and item turns", () => {
     const { repo, goal } = setupFlowRepo();
     try {
       const harness = new FakeHarness({ id: "fake" });
-      harness.script((req) =>
-        fakeTurnResult(req, { stop: { kind: "infra", cause: "rate" } }),
+      // Alpha's transport loss outlasts every re-dispatch; beta lands while it
+      // is still faulting, so the slug is confined and the fault is named last.
+      harness.script(
+        (req) =>
+          fakeTurnResult(req, {
+            stop: { kind: "infra", cause: "network", details: "ECONNRESET" },
+          }),
+        {
+          when: whenTurn({ slug: "alpha", step: "implement" }),
+          fallback: true,
+        },
       );
-      harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "beta implemented" }));
-        return fakeTurnResult(req);
-      });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
-        return fakeTurnResult(req);
-      });
+      harness.script(
+        (req, ctx) => {
+          fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
+          ctx.writeOutcome(outcome({ summary: "beta implemented" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "beta", step: "implement" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({ summary: "approved", verdict: "approve" }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "beta", step: "review" }) },
+      );
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
 
-      const result = await runDispatch(runtime, { iteration: 1 });
+      const sleeps: number[] = [];
+      const result = await runDispatch(runtime, {
+        iteration: 1,
+        sleep: async (ms) => {
+          sleeps.push(ms);
+        },
+      });
       expect(result.reason).toBe("infra");
       expect(result.cause).toContain("alpha");
-      expect(result.cause).toContain("rate");
+      expect(result.cause).toContain("network");
+      // The bounded backoffs, then the fault is named: never an endless spin.
+      expect(sleeps).toEqual([1_000, 2_000]);
+      expect(
+        harness.calls.filter((call) => fakeTurnIdentity(call).slug === "alpha"),
+      ).toHaveLength(3);
 
       const records = await runtime.store.listRecords();
       const state = derive(
@@ -120,7 +156,6 @@ describe("KERNEL0 scenario 4 — infra stops and item turns", () => {
       expect(
         records.filter((r) => r.slug === "alpha" && r.step === "park"),
       ).toHaveLength(0);
-      expect(harness.calls.length).toBe(3);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -145,8 +180,12 @@ describe("KERNEL0 scenario 4 — infra stops and item turns", () => {
         ctx.writeOutcome(outcome({ summary: "filed alpha" }));
         return fakeTurnResult(req);
       });
-      harness.script((req) =>
-        fakeTurnResult(req, { stop: { kind: "infra", cause: "quota" } }),
+      // Every re-dispatch still draws quota: the launch ends infra only after
+      // the bounded retries are spent.
+      harness.script(
+        (req) =>
+          fakeTurnResult(req, { stop: { kind: "infra", cause: "quota" } }),
+        { when: whenTurn({ step: "implement" }), fallback: true },
       );
 
       await expectLaunch(1, goal.repo, harness, 2);

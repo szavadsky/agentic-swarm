@@ -21,6 +21,11 @@ aliases:
     model: opencode/deepseek-v4.1-flash-free
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
+  # The retry alternate is a different free model, so this shakedown keeps
+  # every role on opencode and at zero cost.
+  implementer-b:
+    harness: opencode
+    model: opencode/minimax-m3.1-flash-free
   researcher:
     harness: opencode
     model: opencode/deepseek-v4.1-flash-free

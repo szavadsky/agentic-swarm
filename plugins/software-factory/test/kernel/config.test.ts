@@ -44,6 +44,23 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("keeps declared portability edges and refuses an unknown edge key", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    const run = path.join(root, ".factory/run.yaml");
+    expect(loadConfigs(root).run.portability).toEqual([]);
+    fs.writeFileSync(run, "portability: [{ from: opencode, to: omp }]\n");
+    expect(loadConfigs(root).run.portability).toEqual([
+      { from: "opencode", to: "omp" },
+    ]);
+    fs.writeFileSync(
+      run,
+      "portability: [{ from: opencode, to: omp, how: quota }]\n",
+    );
+    expect(() => loadConfigs(root)).toThrow(ConfigError);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("refuses a task type kind outside spike and development", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
@@ -63,9 +80,24 @@ describe("three config layers", () => {
         id: "implement",
         prompt: "implementer",
         alias: "implementer",
+        alternates: ["implementer-b"],
         review: false,
       },
     ]);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("switches the development implementer on retry", () => {
+    const root = tmpRepo();
+    const configs = loadConfigs(root);
+    // Both development flows name the same second alias: a failed implement
+    // turn moves to another model instead of repeating the one that failed.
+    for (const flow of ["implement-review", "just-implement"] as const)
+      expect(configs.process.flows[flow]!.steps[0]).toMatchObject({
+        id: "implement",
+        alias: "implementer",
+        alternates: ["implementer-b"],
+      });
     fs.rmSync(root, { recursive: true, force: true });
   });
 
@@ -250,14 +282,50 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it("refuses a different-model follow-up that names no alias", () => {
+  it("refuses a step's different-model follow-up that names no alias", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
     fs.writeFileSync(
       path.join(root, ".factory/process.yaml"),
-      "flows:\n  custom:\n    followUp: { mode: different-model }\n    steps:\n      - id: implement\n        prompt: implementer\n        alias: implementer\n",
+      "flows:\n  custom:\n    steps:\n      - id: implement\n        prompt: implementer\n        alias: implementer\n        followUp: { mode: different-model }\n",
     );
-    expect(() => loadConfigs(root)).toThrow(/different-model needs an alias/);
+    expect(() => loadConfigs(root)).toThrow(
+      /different-model follow-up needs an alias/,
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("refuses a flow-level follow-up: the mode belongs to each step", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      "flows:\n  custom:\n    followUp: { mode: de-novo }\n    steps:\n      - id: implement\n        prompt: implementer\n        alias: implementer\n",
+    );
+    expect(() => loadConfigs(root)).toThrow(ConfigError);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("reads a step's follow-up mode, alias and keepSession", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    const process = path.join(root, ".factory/process.yaml");
+    fs.writeFileSync(
+      process,
+      "flows:\n  custom:\n    steps:\n      - id: implement\n        prompt: implementer\n        alias: implementer\n        followUp: { mode: different-model, alias: implementer-b, keepSession: true }\n",
+    );
+    expect(loadConfigs(root).process.flows.custom!.steps[0]!.followUp).toEqual({
+      mode: "different-model",
+      alias: "implementer-b",
+      keepSession: true,
+    });
+    fs.writeFileSync(
+      process,
+      "flows:\n  custom:\n    steps:\n      - id: implement\n        prompt: implementer\n        alias: implementer\n        followUp: { keepSession: true }\n",
+    );
+    expect(() => loadConfigs(root)).toThrow(
+      /keepSession needs a different-model/,
+    );
     fs.rmSync(root, { recursive: true, force: true });
   });
 
@@ -493,6 +561,18 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("parses the harness env allowlist and defaults it empty", () => {
+    const root = tmpRepo();
+    expect(loadConfigs(root).run.envAllowlist).toEqual([]);
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/run.yaml"),
+      ["envAllowlist:", "  - ANTHROPIC_API_KEY", ""].join("\n"),
+    );
+    expect(loadConfigs(root).run.envAllowlist).toEqual(["ANTHROPIC_API_KEY"]);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("reports an invalid sessions.retention as a finding", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
@@ -512,6 +592,45 @@ describe("three config layers", () => {
         (finding) => finding.key === "sessions.retention",
       ),
     ).toBe(true);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("accepts a native harness entry that carries only opaque options", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/run.yaml"),
+      [
+        "harnesses:",
+        "  omp:",
+        "    options:",
+        "      memory: { backend: off }",
+        "",
+      ].join("\n"),
+    );
+    expect(loadConfigs(root).run.harnesses!.omp!.options).toEqual({
+      memory: { backend: "off" },
+    });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("refuses a harness entry with no binding, binary or options", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/run.yaml"),
+      ["harnesses:", "  omp: {}", ""].join("\n"),
+    );
+    let error: unknown;
+    try {
+      loadConfigs(root);
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(ConfigError);
+    expect((error as ConfigError).report).toContain(
+      "needs an acpx binding, a binary override or options",
+    );
     fs.rmSync(root, { recursive: true, force: true });
   });
 

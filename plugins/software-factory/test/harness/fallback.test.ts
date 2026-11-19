@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   type AttemptOutput,
+  isRetryableInfra,
   modelChain,
   runWithFallbacks,
 } from "../../src/harness/fallback.js";
@@ -53,6 +54,44 @@ describe("runWithFallbacks", () => {
     expect(sleeps).toEqual([10]);
     expect(result.outcome.stop).toEqual(done);
     expect(result.attempts.map((a) => a.model.id)).toEqual([A.id, A.id]);
+  });
+
+  it("treats a transport loss as retryable for every adapter", () => {
+    expect(
+      isRetryableInfra({
+        kind: "infra",
+        cause: "network",
+        details: "ECONNRESET",
+      }),
+    ).toBe(true);
+    expect(isRetryableInfra({ kind: "infra", cause: "auth" })).toBe(false);
+    expect(isRetryableInfra({ kind: "infra", cause: "crash" })).toBe(false);
+    expect(isRetryableInfra({ kind: "done" })).toBe(false);
+  });
+
+  it("backs off and retries a transient network stop before falling back", async () => {
+    const calls: string[] = [];
+    const sleeps: number[] = [];
+    const reset: Stop = {
+      kind: "infra",
+      cause: "network",
+      details: "fetch failed",
+    };
+    const result = await runWithFallbacks({
+      primary: A,
+      fallbacks: [B],
+      retry: { retries: 1, baseDelayMs: 10, maxDelayMs: 10 },
+      run: async (model) => {
+        calls.push(model.id);
+        return calls.length === 1 ? output(reset) : output(done, model.id);
+      },
+      sleep: async (ms) => {
+        sleeps.push(ms);
+      },
+    });
+    expect(calls).toEqual([A.id, A.id]);
+    expect(sleeps).toEqual([10]);
+    expect(result.outcome.stop).toEqual(done);
   });
 
   it("walks the chain after the retry budget is spent and keeps every hop", async () => {

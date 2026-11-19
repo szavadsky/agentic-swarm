@@ -7,6 +7,8 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { executeTaskAction } from "../../src/kernel/flow.js";
+import { appendFinish } from "../../src/kernel/record.js";
+import { spikeReportPath } from "../../src/kernel/spike-report.js";
 import { sealRecord, unsealRecord } from "../../src/kernel/store.js";
 import type { Action } from "../../src/kernel/types.js";
 import {
@@ -595,6 +597,61 @@ describe("agent containment", () => {
           snapshot,
         ),
       ).toBeUndefined();
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+  it("ignores another spike's finish landing inside a turn's window", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const running = task("task", { scope: ["task.txt"] });
+      await writeTask(runtime, running);
+      const ensured = await ensureTaskWorktree(runtime, running);
+      const probe = task("probe", {
+        kind: "spike",
+        flow: "spike",
+        scope: ["spike area"],
+      });
+      await writeTask(runtime, probe);
+      const probeTree = await ensureTaskWorktree(runtime, probe);
+      const snapshot = await containmentSnapshot(runtime, ensured.path);
+
+      // A sibling spike commits its report and finishes while this turn runs.
+      const report = "# Finding\nOne copy.\n";
+      const reportFile = path.join(probeTree.path, spikeReportPath("probe"));
+      fs.mkdirSync(path.dirname(reportFile), { recursive: true });
+      fs.writeFileSync(reportFile, report, "utf8");
+      repo.git(["add", "-A"], { cwd: probeTree.path });
+      repo.git(["commit", "-m", "spike report"], { cwd: probeTree.path });
+      const commit = repo
+        .git(["rev-parse", "HEAD"], { cwd: probeTree.path })
+        .stdout.trim();
+      await appendFinish(
+        runtime.store,
+        { iteration: 1, slug: "probe", round: 1 },
+        probe,
+        commit,
+      );
+
+      expect(
+        await containmentViolation(
+          runtime,
+          ensured.path,
+          ensured.branch,
+          snapshot,
+        ),
+      ).toBeUndefined();
+      const finish = (await runtime.store.listRecords()).find(
+        (r) => r.slug === "probe" && r.step === "finish",
+      )!;
+      expect(finish.report).toBe(`${commit}:${spikeReportPath("probe")}`);
+      expect(
+        fs.existsSync(
+          path.join(runtime.store.goalDir, "finish/probe/report.md"),
+        ),
+      ).toBe(false);
     } finally {
       cleanupFlowRepo(repo);
     }

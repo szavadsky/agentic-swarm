@@ -97,11 +97,20 @@ alternate; a turn that delivered after its reminder did not fail. An alternate
 resolves its own fallbacks and quota pool, and a task `tier` still escalates
 the producer.
 
+A step may name `followUp` to decide how its later turn follows the one it
+repairs — the productive step's fix turn, or a review round after the first.
+`same-session` (the default) continues the step's own compacted session on its
+alias; `de-novo` starts fresh; `different-model` runs the later turn on
+`alias` without a session, or with `keepSession: true` continues the step's
+compacted session across the switch when the portability graph admits it (the
+same harness always, another harness only along a declared edge). The prompt
+stays the step's: the retry changes the model, not the role.
+
 **Run** — transient, passed with `--run-config`:
 
 ```yaml
 aliases:
-  architect: { harness: opencode, model: opencode/minimax-m3.1-flash-free, effort: highest }
+  architect: { harness: opencode, model: opencode/minimax-m3.1-flash-free, effort: high }
   implementer: { harness: opencode, model: opencode/deepseek-v4.1-flash-free }
 prices:
   opencode/minimax-m3.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
@@ -112,10 +121,16 @@ limits:
   iterations: 1
   iterationUsd: 5
 sessions: { dir: ~/.local/share/factory/sessions, keepRuns: 5, retention: short }
+quota: { resetMinutes: 300 }                         # pool cooldown after a quota stop
 worktreeRoot: ~/.local/share/factory/worktrees
 lsp: true                                             # artifact LSP on omp
 scouts: { model: opencode-go/deepseek-v4.1-flash }   # omp architect subagents
+portability: [{ from: opencode, to: omp }]           # sessions cross only declared edges
 ```
+
+A task session resumes on the harness that recorded it. `portability: [{from, to}]`
+declares further directional edges: a session recorded on `from` may resume on
+`to`, while every other pair starts de novo with the rendered prompt.
 
 `lsp: true` enables artifact diagnostics where the harness supports them. At
 launch the factory writes every kernel schema as JSON Schema and one omp LSP
@@ -141,6 +156,13 @@ names another alias (`{ alias: backup }`) and reuses that alias's whole ladder,
 each of its tiers keeping its own quota pool; pre-flight refuses a missing alias
 or a fallback cycle. A turn that lands on a tier keeps the launch on it, and
 dispatch throttles each pool and model within the overall limit.
+
+A tier that answers quota latches its pool. The launch stores the pool's reset
+time in the goal's session store (`quota-pools.yaml` beside the launch
+directories, so rotation keeps it), and a relaunch before that time skips the
+pool and starts on the next tier. `quota.resetMinutes` sets the cooldown
+(default 300); the harness contract carries no provider reset, so the stored
+time is a cooldown from the stop, not the provider's own schedule.
 
 An alias may carry `rotate: [{ harness, model, effort }]` to change its primary
 per iteration: iteration N resolves `rotate[N % rotate.length]`, so iteration 1
@@ -192,12 +214,28 @@ no task turn, ends on `architect`, or ends with nothing left open does not
 consume the `iterations` budget: the boundary runs next in the same launch.
 
 Pre-flight resolves every alias (and fallback) through the harness, checks the
-model list, `effort: highest` (highest level the model accepts), binaries, the
-base branch, and that session/worktree roots are writable and outside the repo.
-An omp `@` alias is the exception: omp resolves it inside its own chain, so
-there is no catalog entry and no per-model effort list. `effort: highest` is
-refused there, and the effort must be one omp's `--thinking` flag parses
-(`off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, `auto`) — or absent.
+model list, the effort level, binaries, the base branch, and that
+session/worktree roots are writable and outside the repo. `effort` names a
+literal level the model accepts, `auto`, or `harness-default` (omit the level);
+`effort: highest` is refused. An omp `@` alias is the exception: omp resolves
+it inside its own chain, so there is no catalog entry and no per-model effort
+list; its effort must be one omp's `--thinking` flag parses (`off`, `minimal`,
+`low`, `medium`, `high`, `xhigh`, `max`, `auto`) — or absent.
+
+`harnesses.<id>` binds an adapter (`acpx:`) or executable and carries
+`options` passed untouched: acpx reads `args`/`env`, omp merges the keys into
+its launch overlay (`sessions.retention` still owns
+`providers.cacheRetention`). The shipped `bootstrap/run/self.yaml` keeps the
+unattended omp policy there — memory/auto-learn/skills off, approval, disabled
+providers, retry — so no policy is compiled in.
+
+Every child a launch spawns runs on a fixed base environment (`PATH`, `HOME`,
+temp dirs, bun/node caches, git's optional locks, locale) instead of the
+factory's own, so provider keys and unrelated operator state never reach gates,
+setup, git or harness processes. A run config adds names for harness and agent
+children with `envAllowlist: [ANTHROPIC_API_KEY]`; a value set in an acpx
+harness entry's `options.env` always reaches that child.
+
 Gates run once on the base; a red base is recorded and warned once, not fatal.
 
 ## Goal directory
@@ -232,15 +270,16 @@ Stop the rollout and consult me.
 
 ## Summary and metrics
 
-Each iteration writes exactly one `iterations/<n>/summary.md` (also copied to
-the outbox): status, merged/finished/parked tasks, remarkable concerns,
-assumptions and debt. `metrics.yaml` is rebuilt from the usage records:
-architect launches, architect cost and token share, cost and list cost per
-merged task, incident counts (infra retries, fallback hops, outcome-repair
-turns, merge conflicts, merged-gate failures, and round-limit, no-progress,
-empty-diff and overflow parks), loop incidents (no-progress and
-empty-diff parks; a spike's empty finish and overflow parks are not loop
-incidents), human interventions (processed steers) and the observable
+Each iteration writes exactly one `iterations/<n>/summary.md` (the outbox entry
+references it): status, merged/finished/parked tasks, remarkable concerns,
+assumptions and debt. `metrics.yaml` is rebuilt from the usage records;
+`mailbox/outbox/metrics.yaml` references it: architect launches, architect
+cost and token share, cost and list cost per merged task, incident counts
+(infra retries, fallback hops, outcome-repair turns, merge conflicts,
+merged-gate failures, and round-limit, no-progress, empty-diff and overflow
+parks), loop incidents (no-progress and empty-diff parks; a spike's empty
+finish and overflow parks are not loop incidents), human interventions
+(processed steers) and the observable
 operator-act counter (steers plus containment outside-changes and
 integration-moved merges), gate and commit wall time, and turns, tokens, cost
 and work (committed files/lines) by role, alias and model, with gate runs

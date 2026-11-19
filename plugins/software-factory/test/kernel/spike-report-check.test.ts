@@ -8,7 +8,6 @@ import { runDispatch } from "../../src/kernel/dispatch.js";
 import {
   checkSpikeReport,
   spikeFinding,
-  spikeReport,
   SPIKE_REPORT_CHECK,
   spikeReportPath,
 } from "../../src/kernel/spike-report.js";
@@ -17,6 +16,7 @@ import type {
   KernelRuntime,
   StepRecord,
 } from "../../src/kernel/types.js";
+import { createTmpRepo } from "../helpers/tmp-repo.js";
 import { rec, task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -183,7 +183,7 @@ describe("spike report check", () => {
     }
   }, 60_000);
 
-  it("seals the report in the finish record", async () => {
+  it("references the report's commit in the finish record and copies nothing", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -194,27 +194,19 @@ describe("spike report check", () => {
       await writeTask(runtime, spike("sealed"));
       await runDispatch(runtime, { iteration: 1 });
 
-      const content = await spikeReport(runtime.store, "sealed");
-      expect(content).toBe(report);
-      const stats = fs.statSync(
-        path.join(runtime.store.goalDir, "finish/sealed/report.md"),
+      const records = await stepsOf(runtime, "sealed");
+      const finish = records.find((r) => r.step === "finish")!;
+      expect(finish.report).toBe(
+        `${finish.commit}:${spikeReportPath("sealed")}`,
       );
-      expect(stats.mode & 0o777).toBe(0o444);
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 60_000);
-
-  it("spikeReport returns null for a legacy spike with no report.md", async () => {
-    const { repo, goal } = setupFlowRepo();
-    try {
-      const harness = new FakeHarness({ id: "fake" });
-      approveTurn(harness);
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, spike("legacy"));
-      await runDispatch(runtime, { iteration: 1 });
-
-      expect(await spikeReport(runtime.store, "legacy")).toBe(null);
+      expect(await spikeFinding(runtime.store, records, "sealed")).toBe(
+        report.trim(),
+      );
+      expect(
+        fs.existsSync(
+          path.join(runtime.store.goalDir, "finish/sealed/report.md"),
+        ),
+      ).toBe(false);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -277,6 +269,9 @@ describe("spikeFinding", () => {
   const withOutcome = (summary: string): StepRecord[] => [
     rec(1, { slug: "probe", step: "implement", outcome: outcome({ summary }) }),
   ];
+  const withReport = (ref: string): StepRecord[] => [
+    rec(2, { slug: "probe", step: "finish", actor: "script", report: ref }),
+  ];
   const storeWith = (report?: string) => {
     const goalDir = fs.mkdtempSync(path.join(os.tmpdir(), "spike-finding-"));
     if (report !== undefined) {
@@ -285,12 +280,69 @@ describe("spikeFinding", () => {
     }
     return { goalDir } as ArtifactStore;
   };
+  const refOf = (commit: string) => `${commit}:${spikeReportPath("probe")}`;
 
-  it("prefers the sealed report over the outcome summary", async () => {
+  it("reads the report its finish record references through the commit", async () => {
+    const repo = createTmpRepo();
+    try {
+      const report = "# Finding\nCursor wins.\n";
+      repo.writeFile(spikeReportPath("probe"), report);
+      const commit = repo.commit("report");
+      // Only the commit carries the finding; the working tree lost it.
+      fs.rmSync(path.join(repo.dir, spikeReportPath("probe")));
+      const store = { goalDir: repo.dir } as ArtifactStore;
+
+      expect(
+        await spikeFinding(store, withReport(refOf(commit)), "probe"),
+      ).toBe(report.trim());
+    } finally {
+      repo.cleanup();
+    }
+  });
+
+  it("prefers the finish record's reference over a legacy copy", async () => {
+    const repo = createTmpRepo();
+    try {
+      const committed = "# Finding\nBy commit.\n";
+      repo.writeFile(spikeReportPath("probe"), committed);
+      const commit = repo.commit("report");
+      fs.mkdirSync(path.join(repo.dir, "finish/probe"), { recursive: true });
+      fs.writeFileSync(
+        path.join(repo.dir, "finish/probe/report.md"),
+        "# Finding\nLegacy copy.\n",
+      );
+      const store = { goalDir: repo.dir } as ArtifactStore;
+
+      expect(
+        await spikeFinding(store, withReport(refOf(commit)), "probe"),
+      ).toBe(committed.trim());
+    } finally {
+      repo.cleanup();
+    }
+  });
+
+  it("reads a legacy finish/ copy for a spike that sealed none", async () => {
     const store = storeWith("# Finding\nCursor wins.\n");
     expect(await spikeFinding(store, withOutcome("short"), "probe")).toBe(
       "# Finding\nCursor wins.",
     );
+  });
+
+  it("falls back to the outcome summary when a reference's tree lacks the report", async () => {
+    const repo = createTmpRepo();
+    try {
+      const commit = repo.git(["rev-parse", "HEAD"]).stdout.trim();
+      const store = { goalDir: repo.dir } as ArtifactStore;
+      const records = [
+        ...withOutcome("legacy summary"),
+        ...withReport(refOf(commit)),
+      ];
+      expect(await spikeFinding(store, records, "probe")).toBe(
+        "legacy summary",
+      );
+    } finally {
+      repo.cleanup();
+    }
   });
 
   it("falls back to the implement outcome summary for a legacy spike", async () => {

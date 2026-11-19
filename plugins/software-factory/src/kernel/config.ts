@@ -7,6 +7,7 @@ import yaml from "yaml";
 import { z } from "zod";
 import { acpxConfigSchema } from "../harness/acpx/config.js";
 import { type Finding, formatFindings } from "./findings.js";
+import { DEFAULT_POOL_RESET_MINUTES } from "./quota-pools.js";
 import type {
   BoundaryStep,
   ConfigBundle,
@@ -72,6 +73,32 @@ export const turnSchema = z
   })
   .strict();
 
+export const followUpSchema = z
+  .object({
+    mode: z
+      .enum(["same-session", "de-novo", "different-model"])
+      .default("same-session"),
+    alias: z.string().min(1).optional(),
+    /** Resume the step's last session across a model switch when portable. */
+    keepSession: z.boolean().optional(),
+  })
+  .strict()
+  .refine(
+    (followUp) => followUp.mode !== "different-model" || !!followUp.alias,
+    {
+      message: "a different-model follow-up needs an alias",
+      path: ["alias"],
+    },
+  )
+  .refine(
+    (followUp) =>
+      followUp.keepSession === undefined || followUp.mode === "different-model",
+    {
+      message: "keepSession needs a different-model follow-up",
+      path: ["keepSession"],
+    },
+  );
+
 /** One flow step; `review` marks the step that consumes a review round. */
 export const flowStepSchema = z
   .object({
@@ -93,6 +120,8 @@ export const flowStepSchema = z
     changeRequests: z.number().int().nonnegative().optional(),
     /** Aliases later attempts run on after failure-kind launches, in order. */
     alternates: z.array(z.string().min(1)).optional(),
+    /** How this step's later turn follows the one it repairs. */
+    followUp: followUpSchema.optional(),
   })
   .strict()
   .refine(
@@ -109,27 +138,9 @@ export const flowStepSchema = z
     path: ["alternates"],
   });
 
-export const followUpSchema = z
-  .object({
-    mode: z
-      .enum(["same-session", "de-novo", "different-model"])
-      .default("same-session"),
-    alias: z.string().min(1).optional(),
-  })
-  .strict()
-  .default({ mode: "same-session" })
-  .refine(
-    (followUp) => followUp.mode !== "different-model" || !!followUp.alias,
-    {
-      message: "follow-up mode different-model needs an alias",
-      path: ["alias"],
-    },
-  );
-
 export const flowSchema = z
   .object({
     steps: z.array(flowStepSchema).min(1),
-    followUp: followUpSchema,
   })
   .strict();
 
@@ -254,8 +265,8 @@ export const aliasSchema = z
   .strict();
 
 /**
- * A harness entry binds an adapter (`acpx`) or overrides the executable a
- * native adapter runs (omp); neither alone is a binding.
+ * A harness entry binds an adapter (`acpx`), overrides the executable a native
+ * adapter runs (omp), or carries opaque adapter options; at least one is needed.
  */
 export const harnessEntrySchema = z
   .object({
@@ -266,11 +277,19 @@ export const harnessEntrySchema = z
      * Absent resolves through PATH.
      */
     binary: z.string().min(1).optional(),
+    /**
+     * Adapter-specific keys, never interpreted by the kernel: acpx reads
+     * `args`/`env`, omp merges the rest into its launch overlay.
+     */
+    options: z.record(z.string(), z.unknown()).optional(),
   })
   .strict()
   .refine(
-    (entry) => entry.acpx !== undefined || entry.binary !== undefined,
-    "harness entry needs an acpx binding or a binary override",
+    (entry) =>
+      entry.acpx !== undefined ||
+      entry.binary !== undefined ||
+      entry.options !== undefined,
+    "harness entry needs an acpx binding, a binary override or options",
   );
 
 const concurrencySchema = z
@@ -320,6 +339,13 @@ export const runConfigSchema = z
     /** Harness id -> adapter binding; a harness id is a config name. */
     harnesses: z.record(z.string(), harnessEntrySchema).default({}),
     /**
+     * Names a spawned harness or agent may inherit from the factory's own
+     * environment, on top of the base toolchain set (PATH, HOME, bun/node
+     * caches, temp dirs). Values set in a harness entry's `options.env` pass
+     * regardless; nothing else inherited reaches a child.
+     */
+    envAllowlist: z.array(z.string().min(1)).default([]),
+    /**
      * Harness model id -> OpenRouter model id, for ids matching cannot
      * resolve. Explicit wins over matching; ids across providers cannot be
      * derived, so an unmatchable live model is mapped here, not guessed.
@@ -336,6 +362,16 @@ export const runConfigSchema = z
       })
       .strict()
       .default(() => ({ dir: "", keepRuns: 5, retention: "short" as const })),
+    /**
+     * Quota-pool cooldown. The harness contract carries no provider reset, so
+     * an exhausted pool's stored reset time is this window from the stop.
+     */
+    quota: z
+      .object({
+        resetMinutes: z.number().positive().default(DEFAULT_POOL_RESET_MINUTES),
+      })
+      .strict()
+      .default(() => ({ resetMinutes: DEFAULT_POOL_RESET_MINUTES })),
     worktreeRoot: z.string().min(1).optional(),
     /**
      * Enable artifact LSP where the harness supports it. omp runs without
@@ -352,6 +388,12 @@ export const runConfigSchema = z
       .strict()
       .optional(),
     preset: z.string().min(1).optional(),
+    /** Directional harness edges across which a session may be resumed. */
+    portability: z
+      .array(
+        z.object({ from: z.string().min(1), to: z.string().min(1) }).strict(),
+      )
+      .default([]),
   })
   .strict();
 

@@ -28,5 +28,5 @@ You are the steward (merge agent): the one owner of cross-task merge state.
 - integration head: `{{integration_head}}`
 - conflicts: `{{conflicts}}`
 - gate commands: `{{gate_commands}}`
-- baseline: `{{baseline_checks}}`
+- base gates: {{base_gates}}
 - outcome path: `{{outcome_path}}`

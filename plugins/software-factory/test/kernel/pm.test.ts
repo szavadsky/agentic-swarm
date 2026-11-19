@@ -86,7 +86,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
       concurrency: { overall: 1, perSubscription: {}, perModel: {} },
       planCheckRounds: 2,
     },
-    exhaustedPools: new Set(),
+    exhaustedPools: new Map(),
     // Hermetic prices: the test-local cache, never the network.
     priceSource: {
       cachePath: path.join(root, "price-cache.json"),
@@ -959,6 +959,7 @@ describe("PM turn reconciliation", () => {
         "  escalation: { harness: fake, model: fake-escalated }",
         "  digest: { harness: fake, model: fake-digest }",
         "  implementer: { harness: fake, model: fake-impl }",
+        "  implementer-b: { harness: fake, model: fake-impl-b }",
         "  researcher: { harness: fake, model: fake-research }",
         "  reviewer: { harness: fake, model: fake-review }",
         "  steward: { harness: fake, model: fake-steward }",
@@ -1027,6 +1028,7 @@ describe("PM turn reconciliation", () => {
         "  deeper: { harness: fake, model: fake-deeper }",
         "  digest: { harness: fake, model: fake-digest }",
         "  implementer: { harness: fake, model: fake-impl }",
+        "  implementer-b: { harness: fake, model: fake-impl-b }",
         "  researcher: { harness: fake, model: fake-research }",
         "  reviewer: { harness: fake, model: fake-review }",
         "  steward: { harness: fake, model: fake-steward }",

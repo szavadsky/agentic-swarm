@@ -27,7 +27,13 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
               model: { provider: "provider", id: "good" } });
   } else if (frame.type === "prompt") {
     prompted = true;
-    if (model === "provider/bad") {
+    if (model === "provider/reset") {
+      process.stdout.write(JSON.stringify({
+        type: "prompt_result", id: frame.id, agentInvoked: true, status: "error",
+        sessionSettled: true,
+        error: { message: "fetch failed", code: "ECONNRESET", retryable: true },
+      }) + "\\n");
+    } else if (model === "provider/bad") {
       process.stdout.write(JSON.stringify({
         type: "prompt_result", id: frame.id, agentInvoked: true, status: "error",
         sessionSettled: true,
@@ -85,6 +91,43 @@ describe("OmpHarness fallback chain", () => {
       expect(result.usage.out).toBe(2);
       expect(result.usage.cacheRead).toBe(2);
       expect(result.usage.costUsd).toBe(0.02);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("backs off and fails over when the backend resets the socket", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-reset-"));
+    try {
+      const binary = path.join(tmp, "fake-omp.js");
+      fs.writeFileSync(binary, FAKE_OMP, { mode: 0o755 });
+      const harness = new OmpHarness({
+        binary,
+        sessionDir: path.join(tmp, "sessions"),
+        retry: { retries: 1, baseDelayMs: 0, maxDelayMs: 0 },
+      });
+
+      const result = await harness.turn({
+        model: { id: "provider/reset" },
+        fallbacks: [{ id: "provider/good" }],
+        cwd: tmp,
+        prompt: "go",
+        timeouts: { idleMs: 10_000, wallMs: 20_000 },
+      });
+
+      expect(result.stop).toEqual({ kind: "done" });
+      expect(result.text).toBe("from good");
+      // One retry with the backoff, then the chain moves to the next model.
+      expect(result.attempts?.map((attempt) => attempt.model.id)).toEqual([
+        "provider/reset",
+        "provider/reset",
+        "provider/good",
+      ]);
+      expect(result.attempts?.[0]?.stop).toEqual({
+        kind: "infra",
+        cause: "network",
+        details: "fetch failed ECONNRESET",
+      });
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }

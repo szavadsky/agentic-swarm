@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { type FS, Liquid } from "liquidjs";
+import { BASE_GATES_NOT_RECORDED } from "./baseline.js";
 import { packageRoot } from "./config.js";
 import {
   outcomeSchemaVar,
@@ -221,8 +222,8 @@ export const CHECK_HANDOFF_DEFAULTS = {
  * process-config text. Schema and config names render as launch-wide defaults
  * so turn code never passes them: the outcome and task-frontmatter skeletons
  * from the kernel schemas, task type names from the process config, tier names
- * from the run-config aliases, and the checks handoff for renders with no
- * checks record.
+ * from the run-config aliases, and the checks and base-gate handoffs for
+ * renders whose turn carries no record.
  */
 export function loadPrompts(
   process: ProcessConfig,
@@ -260,6 +261,9 @@ export function loadPrompts(
       task_types: taskTypesVar(process.taskTypes),
       tiers: tierNamesVar(aliases),
       ...CHECK_HANDOFF_DEFAULTS,
+      // A render with no base record must never read as a clean base: the
+      // reviewer treats a "pre-existing" claim without a record as a finding.
+      base_gates: BASE_GATES_NOT_RECORDED,
     },
   });
 }

@@ -29,7 +29,6 @@ const PI_ACPX: AcpxConfig = {
 const AGY_ACPX: AcpxConfig = {
   agent: "agy acp",
   raw: true,
-  args: ["--approve-all"],
   usage: { cache: true },
 };
 
@@ -265,6 +264,7 @@ describe("AcpxHarness session compaction", () => {
       id: "agy",
       binary: stub.binary,
       acpx: AGY_ACPX,
+      options: { args: ["--approve-all"] },
     });
     try {
       const cwd = path.dirname(stub.binary);

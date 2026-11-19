@@ -18,11 +18,16 @@ export const DEFAULT_RETRY_POLICY: RetryPolicy = {
   maxDelayMs: 8_000,
 };
 
-/** Quota and rate are worth retrying; auth, overflow, timeout and crash are not. */
+/**
+ * Quota, provider saturation and transport loss are worth retrying; auth,
+ * overflow, timeout and crash are not.
+ */
+export function isTransientInfraCause(cause: string): boolean {
+  return cause === "quota" || cause === "rate" || cause === "network";
+}
+
 export function isRetryableInfra(stop: Stop): boolean {
-  return (
-    stop.kind === "infra" && (stop.cause === "quota" || stop.cause === "rate")
-  );
+  return stop.kind === "infra" && isTransientInfraCause(stop.cause);
 }
 
 export interface AttemptOutput<T> {
