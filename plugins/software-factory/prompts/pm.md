@@ -6,6 +6,8 @@ Four kinds of turns. When `steers`, `stalls` and `plan_checks` are all `none`, d
 
 For each task the plan yields, write one file in the tasks directory. A split yields one per observable; a merge yields one.
 
+A bullet deleted from the plan cancels nothing: its task stays open and dispatch keeps it. On a derive turn, retire a task only through the plan's `cancelled: <slug> — reason` line, which records the cancellation and spends the slug. Replace or split an open task with that line plus the new bullets.
+
 {% include 'task-frontmatter' %}
 
 - `slug` — keep the architect's slug; assign a short kebab-case one only when the bullet has none. Immutable, never reused, safe as a branch and file name, unique across the goal including dropped tasks.

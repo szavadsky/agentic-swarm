@@ -154,7 +154,7 @@ function scriptSecondIteration(harness: FakeHarness, goalDir: string): void {
 }
 
 describe("KERNEL0 scenario 7 — plan edit between iterations", () => {
-  it("re-reads a changed pending task, cancels a removed one, adds one, and restores frozen work", async () => {
+  it("re-reads a changed pending task, keeps a removed one open, adds one, and restores frozen work", async () => {
     const goal = makeGoal();
     try {
       const first = new FakeHarness({ id: "fake" });
@@ -175,7 +175,7 @@ describe("KERNEL0 scenario 7 — plan edit between iterations", () => {
       expect(state.tasks.alpha!.status).toBe("merged");
       expect(state.tasks.beta!.status).toBe("merged");
       expect(state.tasks.delta!.status).toBe("merged");
-      expect(state.tasks.gamma!.status).toBe("cancelled");
+      expect(state.tasks.gamma!.status).toBe("pending");
       expect(state.tasks.p!.status).toBe("parked");
       expect(
         fs.readFileSync(path.join(goal.goalDir, "tasks/alpha.md"), "utf8"),
@@ -183,10 +183,13 @@ describe("KERNEL0 scenario 7 — plan edit between iterations", () => {
 
       const store = createFolderStore(goal.goalDir, undefined, {});
       const records = await store.listRecords();
-      const cancel = records.find(
-        (r) => r.step === "cancel" && r.slug === "gamma",
+      // Dropping gamma's bullet says nothing: it stays open, with no cancel.
+      expect(
+        records.find((r) => r.step === "cancel" && r.slug === "gamma"),
+      ).toBeUndefined();
+      expect(fs.existsSync(path.join(goal.goalDir, "tasks/gamma.md"))).toBe(
+        true,
       );
-      expect(cancel?.cause).toContain("removed from the plan");
       const reconcile = records.find((r) => r.step === "pm-reconcile");
       expect(reconcile?.cause).toContain(
         'frozen task "alpha" was edited; restored',
@@ -196,7 +199,7 @@ describe("KERNEL0 scenario 7 — plan edit between iterations", () => {
         "utf8",
       );
       expect(summary).toContain("pm-reconcile");
-      expect(summary).toContain("cancelled");
+      expect(summary).toContain("- cancelled: none");
       expect(
         fs.existsSync(path.join(goal.goalDir, "iterations/2/digest.md")),
       ).toBe(true);

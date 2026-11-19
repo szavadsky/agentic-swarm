@@ -17,7 +17,7 @@ import {
   writeOutbox,
 } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
-import { appendCancel, appendPark, scriptMeta } from "./record.js";
+import { appendCancel, scriptMeta } from "./record.js";
 import {
   doneWhen,
   materialHash,
@@ -196,24 +196,19 @@ function cancelledSlugs(state: State): string[] {
     .sort();
 }
 
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 /**
- * Position carries no meaning in a task file; the plan's bullet names the slug.
- * A bullet that points at the file (`tasks/foo.md`) names the same task as the
- * bare slug (`foo`). A sentence-ending dot after the name is punctuation, not
- * part of the slug, so `tasks/foo.md.` still names `foo`; a dot that starts
- * another word (`foo.bar`) is a longer slug and does not.
+ * The plan's explicit leave decisions: a line `cancelled: <slug> — reason`
+ * retires that task. Absence of a bullet says nothing, so no cancellation is
+ * ever inferred from the plan mentioning a task less. A line without the em
+ * dash and a reason is prose, not a decision.
  */
-function planMentionsSlug(plan: string, slug: string): boolean {
-  const boundary = "(?![a-z0-9-]|\\.[a-z0-9])";
-  return [slug, `tasks/${slug}.md`].some((name) =>
-    new RegExp(`(?<![a-z0-9.-])${escapeRegExp(name)}${boundary}`, "i").test(
-      plan,
-    ),
-  );
+function planCancellations(plan: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const line of plan.split("\n")) {
+    const match = /^\s*cancelled:\s+(\S+)\s+—\s*(\S.*?)\s*$/u.exec(line);
+    if (match) out.set(match[1]!, match[2]!);
+  }
+  return out;
 }
 
 /**
@@ -284,14 +279,15 @@ async function reconcile(
     const steer = steerProvenance(source);
     const stall = steer ? undefined : stallProvenance(source);
     const check = steer || stall ? undefined : planCheckProvenance(source);
-    if (!steer && !stall && !check) continue;
     await writeTextAtomic(taskPath(runtime, slug), original);
     findings.push(
       steer
         ? `steer task "${slug}" was deleted; restored: a task with provenance steer ${steer} is not in the plan and the PM must leave it`
         : stall
           ? `stall task "${slug}" was deleted; restored: a task with provenance stall ${stall} is not in the plan and the PM must leave it`
-          : `plan-check task "${slug}" was deleted; restored: a task with provenance plan-check ${check} is not in the plan and the PM must leave it`,
+          : check
+            ? `plan-check task "${slug}" was deleted; restored: a task with provenance plan-check ${check} is not in the plan and the PM must leave it`
+            : `task "${slug}" was deleted; restored: a task leaves only through the plan's cancelled line or a PM decision`,
     );
   }
 
@@ -326,50 +322,30 @@ async function validate(
 }
 
 /**
- * A task the architect dropped from the plan becomes cancelled by a record, so
- * its slug stays spent and state needs no memory. A changed task that remains
- * in the plan needs nothing: dispatch re-reads the file. A dropped task that
- * already committed on its branch is parked instead: cancelling it would strand
- * work no record names, and its slug must stay reusable by a `base:` task. A
- * PM-created task with provenance `steer: <id>` is never in the plan and is
- * never cancelled here: its steer, not the plan, owns it. A stall
- * continuation (`stall: <iteration>`) is likewise owned by its stall, not the
- * plan, so the next boundary keeps it for the architect's pack. A plan-check
- * follow-up (`plan-check: <iteration>`) is likewise owned by its checker
- * round, not the plan.
+ * Applies the plan's explicit cancellations. A task whose bullet disappears
+ * stays open: only the architect's `cancelled:` line or a PM leave decision
+ * retires it, so dropping a bullet never silently strands a branch or spends a
+ * slug. A merged or finished task is history and a cancelled slug is spent, so
+ * neither is touched again.
  */
-async function cancelRemovedTasks(
+async function cancelPlanNamed(
   runtime: KernelRuntime,
   state: State,
   plan: string,
   iteration: number,
 ): Promise<void> {
-  const files = await runtime.store.listTasks();
-  const bySlug = new Map(files.map((file) => [file.slug, file]));
-  const provenance = new Map(files.map((file) => [file.slug, file.source]));
-  for (const [slug, task] of Object.entries(state.tasks)) {
-    if (task.status !== "pending" && task.status !== "ready") continue;
-    if (steerProvenance(provenance.get(slug) ?? "")) continue;
-    if (stallProvenance(provenance.get(slug) ?? "")) continue;
-    if (planCheckProvenance(provenance.get(slug) ?? "")) continue;
-    if (planMentionsSlug(plan, slug)) continue;
-    if (task.commit !== undefined) {
-      await appendPark(
-        runtime.store,
-        {
-          iteration,
-          slug,
-          round: task.round,
-          revision: bySlug.get(slug)?.revision ?? 0,
-        },
-        "dropped-with-commits",
-      );
+  for (const [slug, reason] of planCancellations(plan)) {
+    const task = state.tasks[slug];
+    if (
+      task === undefined ||
+      task.status === "cancelled" ||
+      isFrozenStatus(task.status)
+    )
       continue;
-    }
     await appendCancel(
       runtime.store,
       { iteration, slug, round: task.round },
-      `removed from the plan at iteration ${iteration}`,
+      reason,
     );
   }
 }
@@ -536,7 +512,7 @@ export async function runPm(
     const stop = result.record.stop;
 
     if (outcome?.status === "done" && findings.length === 0) {
-      await cancelRemovedTasks(runtime, opts.state, planBefore, opts.iteration);
+      await cancelPlanNamed(runtime, opts.state, planBefore, opts.iteration);
       return { status: "done", outcome, rungs };
     }
 

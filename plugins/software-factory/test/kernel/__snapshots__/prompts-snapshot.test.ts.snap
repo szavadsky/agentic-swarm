@@ -55,6 +55,8 @@ One section per milestone; one bullet per task. For each task, in this order:
 
 Each bullet starts with its slug: short kebab-case, unique across the goal, never renamed or reused. A merged task's bullet is history: do not edit it; collapse a merged milestone to one line. Rework is a new bullet with a new slug.
 
+A bullet you delete cancels nothing: its task stays open. Retire a task with a line \`cancelled: <slug> — reason\` on its own; replace or split one with that line plus the new bullets. A merged slug is history and needs no cancellation.
+
 Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
 Leave out: file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say.
@@ -262,6 +264,8 @@ Four kinds of turns. When \`steers\`, \`stalls\` and \`plan_checks\` are all \`n
 ## Derive
 
 For each task the plan yields, write one file in the tasks directory. A split yields one per observable; a merge yields one.
+
+A bullet deleted from the plan cancels nothing: its task stays open and dispatch keeps it. On a derive turn, retire a task only through the plan's \`cancelled: <slug> — reason\` line, which records the cancellation and spends the slug. Replace or split an open task with that line plus the new bullets.
 
 Every task file is \`---\` frontmatter plus a brief body:
 
@@ -947,6 +951,8 @@ One section per milestone; one bullet per task. For each task, in this order:
 
 Each bullet starts with its slug: short kebab-case, unique across the goal, never renamed or reused. A merged task's bullet is history: do not edit it; collapse a merged milestone to one line. Rework is a new bullet with a new slug.
 
+A bullet you delete cancels nothing: its task stays open. Retire a task with a line \`cancelled: <slug> — reason\` on its own; replace or split one with that line plus the new bullets. A merged slug is history and needs no cancellation.
+
 Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
 Leave out: file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say.
@@ -1034,6 +1040,8 @@ Four kinds of turns. When \`steers\`, \`stalls\` and \`plan_checks\` are all \`n
 ## Derive
 
 For each task the plan yields, write one file in the tasks directory. A split yields one per observable; a merge yields one.
+
+A bullet deleted from the plan cancels nothing: its task stays open and dispatch keeps it. On a derive turn, retire a task only through the plan's \`cancelled: <slug> — reason\` line, which records the cancellation and spends the slug. Replace or split an open task with that line plus the new bullets.
 
 Every task file is \`---\` frontmatter plus a brief body:
 
@@ -1241,6 +1249,8 @@ One section per milestone; one bullet per task. For each task, in this order:
 
 Each bullet starts with its slug: short kebab-case, unique across the goal, never renamed or reused. A merged task's bullet is history: do not edit it; collapse a merged milestone to one line. Rework is a new bullet with a new slug.
 
+A bullet you delete cancels nothing: its task stays open. Retire a task with a line \`cancelled: <slug> — reason\` on its own; replace or split one with that line plus the new bullets. A merged slug is history and needs no cancellation.
+
 Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
 Leave out: file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say.
@@ -1328,6 +1338,8 @@ Four kinds of turns. When \`steers\`, \`stalls\` and \`plan_checks\` are all \`n
 ## Derive
 
 For each task the plan yields, write one file in the tasks directory. A split yields one per observable; a merge yields one.
+
+A bullet deleted from the plan cancels nothing: its task stays open and dispatch keeps it. On a derive turn, retire a task only through the plan's \`cancelled: <slug> — reason\` line, which records the cancellation and spends the slug. Replace or split an open task with that line plus the new bullets.
 
 Every task file is \`---\` frontmatter plus a brief body:
 
@@ -1535,6 +1547,8 @@ One section per milestone; one bullet per task. For each task, in this order:
 
 Each bullet starts with its slug: short kebab-case, unique across the goal, never renamed or reused. A merged task's bullet is history: do not edit it; collapse a merged milestone to one line. Rework is a new bullet with a new slug.
 
+A bullet you delete cancels nothing: its task stays open. Retire a task with a line \`cancelled: <slug> — reason\` on its own; replace or split one with that line plus the new bullets. A merged slug is history and needs no cancellation.
+
 Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
 Leave out: file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say.
@@ -1622,6 +1636,8 @@ Four kinds of turns. When \`steers\`, \`stalls\` and \`plan_checks\` are all \`n
 ## Derive
 
 For each task the plan yields, write one file in the tasks directory. A split yields one per observable; a merge yields one.
+
+A bullet deleted from the plan cancels nothing: its task stays open and dispatch keeps it. On a derive turn, retire a task only through the plan's \`cancelled: <slug> — reason\` line, which records the cancellation and spends the slug. Replace or split an open task with that line plus the new bullets.
 
 Every task file is \`---\` frontmatter plus a brief body:
 
