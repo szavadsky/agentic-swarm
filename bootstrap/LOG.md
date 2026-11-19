@@ -832,3 +832,9 @@ Verbatim, newest last; each with what it changed.
 - Duplicate-land handoff risk REPEATED: owner adds delta-inbox steer before delta relaunch (cancel outcome-ids-land/gate-mutex-land/lint-ratchet-land; landed by friction 9b6cd065/4311aaa9/e1a43616).
 - Legs: opus 1t unpriced (21st shaping); deepseek 4t $0.23 (implement); hy4 7t $0. Cost $0.23 ($0.077/merge). Incidents: 4 infra retries, 2 fallback hops, 0 outcome-repairs, 0 conflicts, 0 flakes, 0 loops; impl 2 glitch, reviewer 1 change-request, 0 failures.
 - Goal NOT complete (no declaration; expected next). No stop pressure.
+
+### 2026-11-19 — friction-i3 landed: 1 merge (M5 plan-check-leave), all 18 merged, declaration next
+- Exit 3 (iteration-limit), 28min wall, status in-progress. factory/friction +1: plan-check-leave 64473eac (M5, the plan-check PM-ladder debt from the i2 steer, fixed+landed). 0 parks, pending 0, open debt 0. Inbox empty. All 18 tasks merged; M4 fixes verified holding (plan-check/fallback/quota-persist/schemas/resume-boundary/pm tests 82+57+4, 0 fail).
+- Duplicate-land handoff REPEATED verbatim (delta-inbox steer before delta relaunch: cancel outcome-ids-land/gate-mutex-land/lint-ratchet-land; landed-by 9b6cd065/4311aaa9/e1a43616). i2 retries thin, not a cluster.
+- Legs: opus 1t unpriced (22nd shaping); hy4 5t $0; deepseek 1t $0.03. Cost $0.03 ($0.03/merge). 6 agent + 5 script turns. 0 failures, 0 outcome-repairs, 0 conflicts, 0 flakes.
+- Goal NOT complete (architect: M5 just merged, declaration expected next i4). No stop pressure.
