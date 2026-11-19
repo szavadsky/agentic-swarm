@@ -844,3 +844,6 @@ Verbatim, newest last; each with what it changed.
 - Handoff verbatim: cancel outcome-ids-land/gate-mutex-land/lint-ratchet-land (landed-by 9b6cd065/4311aaa9/e1a43616) — delta-inbox steer before delta relaunch (owner default).
 - Branch empty (0-merge-because-done), inbox empty. Legs: digest hy4 $0 + architect opus unpriced (~$0.16 list); $0 cost. Incidents: ALL ZERO. No assumptions. Gates skipped (tree unchanged). DONE CLAUSE SATISFIED.
 - Operator: FULL STOP — no relaunch (owner order: once repair done, stop).
+
+### 2026-11-19 — goal `salvage` init (owner directive): recover parked-useful delta work
+- Fresh orchestration subfolder, factory iteration 1, fixed self-quota map, inbox EMPTY. Lean intent (status quo + work + done) so the front classification stays a genuine reaction (owner: "might be task, curious how factory will react"). Scope: parked content only (27 parks + branches), via normal flow; friction M3 already landed 4, rest assessed/dropped/re-queued. Loop till complete → STOP + report (no auto delta resume; dupe-cancel steer still queued for that landing).
