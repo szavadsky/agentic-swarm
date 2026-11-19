@@ -1080,6 +1080,36 @@ describe("AcpxHarness prompt result precedence", () => {
     }
   });
 
+  it("classifies a transport error frame as transient network", async () => {
+    const cases = [
+      { message: "fetch failed ECONNRESET", needle: "fetch failed ECONNRESET" },
+      {
+        message: "connect ECONNREFUSED 127.0.0.1:443",
+        needle: "connect ECONNREFUSED",
+      },
+      {
+        message: "ECONNABORTED: The operation was aborted",
+        needle: "ECONNABORTED",
+      },
+    ] as const;
+    for (const testCase of cases) {
+      const stub = createAcpxStub({
+        promptExitCode: 5,
+        errorAfterResult: { code: -32603, message: testCase.message },
+      });
+      try {
+        const result = await turnOn(stub, "Say [[text:COMPLETE]]");
+        expect(result.stop.kind).toBe("infra");
+        if (result.stop.kind !== "infra")
+          throw new Error("expected an infra stop");
+        expect(result.stop.cause).toBe("network");
+        expect(result.stop.details).toContain(testCase.needle);
+      } finally {
+        stub.cleanup();
+      }
+    }
+  }, 20_000);
+
   it("keeps a wall timeout over a parsed result", async () => {
     const stub = createAcpxStub({ hangAfterResult: true });
     try {

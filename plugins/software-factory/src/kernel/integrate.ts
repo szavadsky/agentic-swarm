@@ -37,7 +37,7 @@ import {
 } from "./worktree.js";
 
 export interface MergeResult {
-  infra?: { kind: "infra"; cause: string };
+  infra?: { kind: "infra"; cause: string; details?: string };
   cancelled?: boolean;
 }
 

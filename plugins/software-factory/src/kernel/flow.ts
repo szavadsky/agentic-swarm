@@ -2,7 +2,12 @@ import type { CheckResult } from "../core/checks/types.js";
 import { commitAll, isAncestor } from "../core/git/commit.js";
 import { git } from "../core/git/exec.js";
 import { hasConflictMarkers, unmergedFiles } from "../core/git/merge.js";
-import type { Harness, TurnRequest, TurnResult } from "../harness/types.js";
+import type {
+  Harness,
+  InfraCause,
+  TurnRequest,
+  TurnResult,
+} from "../harness/types.js";
 import { DEFAULT_TIMEOUTS, runAgentTurn } from "./agent.js";
 import { preexistingRed, recordedBaseGates } from "./baseline.js";
 import {
@@ -73,7 +78,8 @@ import {
 } from "./worktree.js";
 
 export interface TaskActionResult {
-  infra?: { kind: "infra"; cause: string };
+  /** The classified fault, unflattened so dispatch can judge its cause. */
+  infra?: { cause: InfraCause; details?: string };
   cancelled?: boolean;
 }
 
@@ -329,8 +335,8 @@ async function handleStepResult(
     stop?.kind === "infra"
       ? {
           infra: {
-            kind: "infra" as const,
-            cause: stop.details ? `${stop.cause}: ${stop.details}` : stop.cause,
+            cause: stop.cause,
+            ...(stop.details ? { details: stop.details } : {}),
           },
         }
       : undefined;

@@ -450,7 +450,8 @@ export function reduceTask(
     // crash on the same step: a throwing pre-harness step parks after two
     // repeats instead of redispatching forever. Only reported crashes on flow
     // steps count; bare recovery seals, script phases (checks, merge, park,
-    // finish), quota/rate/auth/overflow/glitch and drain (tasks never started) stay free.
+    // finish), quota/rate/network/auth/overflow/glitch and drain (tasks never
+    // started) stay free.
     if (rec.actor === "script") {
       const scriptStop = rec.stop;
       const scriptHasOutcome = !!rec.outcome?.status;

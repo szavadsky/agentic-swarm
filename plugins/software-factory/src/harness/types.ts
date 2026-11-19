@@ -49,12 +49,15 @@ export type Stop =
    * exit code and signal are kept outside the cut, followed by the last
    * non-banner stderr line, the last ACP error frame, or a synthetic cause.
    * Other crash paths use stderr or fall back to their exit facts.
+   * `network` is a transport loss (reset socket, failed fetch) or an error the
+   * provider itself marked retryable; `quota` and `rate` are retried alike.
    */
   | {
       kind: "infra";
       cause:
         | "quota"
         | "rate"
+        | "network"
         | "auth"
         | "crash"
         | "overflow"
@@ -62,6 +65,9 @@ export type Stop =
         | "glitch";
       details?: string;
     };
+
+/** Every infrastructure cause a stop can carry. */
+export type InfraCause = Extract<Stop, { kind: "infra" }>["cause"];
 
 export type Usage = {
   in: number;
