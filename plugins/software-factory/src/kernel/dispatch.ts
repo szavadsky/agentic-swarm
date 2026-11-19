@@ -734,12 +734,20 @@ export async function runDispatch(
           taskTurnsStarted,
           allReadyHeld: false,
         };
-      // Wave end: the steward owns remaining merge conflicts. A wave that did
-      // work re-derives (landed merges unblock deps); a skipped or held wave
-      // is the boundary.
+      // Wave end: the steward owns remaining merge conflicts. Its candidates
+      // run independently: one leg's infra death is booked against that slug
+      // and deferred like a task turn's, while the remaining candidates run. A
+      // wave that did work re-derives (landed merges unblock deps); a skipped
+      // or held wave is the boundary.
       let steward: Awaited<ReturnType<typeof runSteward>>;
       try {
-        steward = await runSteward(runtime, iteration);
+        steward = await runSteward(runtime, iteration, {
+          frozen: new Set(
+            [...infra.entries()]
+              .filter(([slug]) => !dispatchable(slug))
+              .map(([slug]) => slug),
+          ),
+        });
       } catch (err) {
         const cause = err instanceof Error ? err.message : String(err);
         const turns = settledTurns(
@@ -754,18 +762,11 @@ export async function runDispatch(
           allReadyHeld: false,
         };
       }
-      if (steward.infra) {
-        const turns = settledTurns(
-          await runtime.store.listRecords(),
-          iteration,
-        );
-        return {
-          reason: "infra",
-          cause: steward.infra.cause,
-          turns,
-          taskTurnsStarted,
-          allReadyHeld: false,
-        };
+      for (const dead of steward.dead)
+        noteInfra(dead.slug, dead.cause, dead.details);
+      for (const slug of steward.attempted) {
+        if (!steward.dead.some((dead) => dead.slug === slug))
+          infra.delete(slug);
       }
       if (steward.cancelled) {
         const turns = settledTurns(

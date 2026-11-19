@@ -8,7 +8,11 @@ import {
 } from "../../src/harness/fake/index.js";
 import { forwardedConcerns } from "../../src/kernel/context-pack.js";
 import { derive } from "../../src/kernel/derive.js";
-import { runDispatch } from "../../src/kernel/dispatch.js";
+import {
+  INFRA_REDISPATCH_DELAYS_MS,
+  runDispatch,
+} from "../../src/kernel/dispatch.js";
+import type { KernelRuntime } from "../../src/kernel/types.js";
 import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
 import type { TmpRepo } from "../helpers/tmp-repo.js";
 import { task } from "./helpers.js";
@@ -52,8 +56,60 @@ function landIntegrationChange(repo: TmpRepo, checkout: string): void {
   });
 }
 
+/** Scripts implement+review for two slugs; each writes the same conflicted file. */
+function scriptConflictPair(harness: FakeHarness): void {
+  for (const slug of ["alpha", "beta"]) {
+    harness.script(
+      (req, ctx) => {
+        fs.writeFileSync(
+          path.join(req.cwd!, "conflict.txt"),
+          `${slug}\n`,
+          "utf8",
+        );
+        ctx.writeOutcome(outcome({ summary: `${slug} side` }));
+        return fakeTurnResult(req);
+      },
+      { when: whenTurn({ slug, step: "implement" }) },
+    );
+    harness.script(
+      (req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+        return fakeTurnResult(req);
+      },
+      { when: whenTurn({ slug, step: "review" }) },
+    );
+  }
+}
+
+/** A steward turn that writes `text` over the conflicted file. */
+function scriptStewardResolve(slug: string, text: string): FakeTurnHandler {
+  return (req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "conflict.txt"), `${text}\n`, "utf8");
+    ctx.writeOutcome(outcome({ summary: `steward resolved ${slug}` }));
+    return fakeTurnResult(req);
+  };
+}
+
+/**
+ * Two task starts whose branches predate one integration change to the same
+ * file: both merges conflict, so the wave-end steward sees two candidates.
+ */
+async function twoParkedConflicts(
+  runtime: KernelRuntime,
+  repo: TmpRepo,
+  checkout: string,
+): Promise<void> {
+  const alpha = task("alpha", { scope: ["conflict.txt"] });
+  const beta = task("beta", { scope: ["conflict.txt"] });
+  await writeTask(runtime, alpha);
+  await writeTask(runtime, beta);
+  await ensureTaskWorktree(runtime, alpha);
+  await ensureTaskWorktree(runtime, beta);
+  landIntegrationChange(repo, checkout);
+}
+
 describe("merge conflicts", () => {
-  it("keeps a no-route infra stop's details when the steward turn stops", async () => {
+  it("defers a steward leg that stops on infra and names it at the stop", async () => {
     const { repo, goal } = setupFlowRepo();
     const checkout = goalCheckout(repo, goal);
     try {
@@ -69,6 +125,9 @@ describe("merge conflicts", () => {
           },
         }),
       );
+      // The dead leg leaves the conflict parked, so the wave-end stall PM
+      // still decides it before the launch reports the fault.
+      scriptStallLeave(harness, ["task"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const file = task("task", { scope: ["conflict.txt"] });
@@ -77,8 +136,10 @@ describe("merge conflicts", () => {
       landIntegrationChange(repo, checkout);
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("infra");
+      // The dead candidate is named: the launch stops for its slug, not for a
+      // bare cause that outlived the wave.
       expect(result.cause).toBe(
-        "auth: provider.no-route Model unavailable: opencode/does-not-exist-free",
+        "task: auth: provider.no-route Model unavailable: opencode/does-not-exist-free",
       );
       // Implement and review compacted; the infra-stopped steward turn did not.
       expect(harness.compactions).toHaveLength(2);
@@ -324,6 +385,141 @@ describe("steward", () => {
       expect(mergeChecks).toHaveLength(1);
       expect(mergeChecks[0]!.ok).toBe(true);
       expect(landed!.seq).toBeGreaterThan(mergeChecks[0]!.seq);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("keeps the wave going when one conflict candidate's steward leg dies", async () => {
+    const { repo, goal } = setupFlowRepo({
+      aliases: stewardAliases,
+      limits: { concurrency: { overall: 2 } },
+    });
+    const checkout = goalCheckout(repo, goal);
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      scriptConflictPair(harness);
+      harness.script(
+        (req) =>
+          fakeTurnResult(req, {
+            stop: { kind: "infra", cause: "auth", details: "no route" },
+          }),
+        { when: whenTurn({ slug: "alpha", step: "steward" }) },
+      );
+      harness.script(scriptStewardResolve("beta", "steward-resolved"), {
+        when: whenTurn({ slug: "beta", step: "steward" }),
+      });
+      scriptStallLeave(harness, ["alpha"]);
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await twoParkedConflicts(runtime, repo, checkout);
+      const result = await runDispatch(runtime, { iteration: 1 });
+
+      // Alpha's leg died first, but beta's conflict was still resolved and
+      // landed; only then does the launch stop, naming the dead candidate.
+      expect(result.reason).toBe("infra");
+      expect(result.cause).toBe("alpha: auth: no route");
+
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.alpha!.status).toBe("parked");
+      expect(state.tasks.alpha!.cause!.startsWith("conflict:")).toBe(true);
+      expect(state.tasks.beta!.status).toBe("merged");
+      expect(
+        repo.git(["show", "factory/demo:conflict.txt"]).stdout.trim(),
+      ).toBe("steward-resolved");
+
+      const deadTurn = records.find(
+        (r) =>
+          r.slug === "alpha" && r.step === "steward" && r.actor === "agent",
+      )!;
+      expect(deadTurn.stop).toEqual({
+        kind: "infra",
+        cause: "auth",
+        details: "no route",
+      });
+      const betaTurn = records.find(
+        (r) => r.slug === "beta" && r.step === "steward" && r.actor === "agent",
+      )!;
+      expect(betaTurn.seq).toBeGreaterThan(deadTurn.seq);
+      // A dead leg is a deferral, not an unresolvable hold: no pointer.
+      expect(
+        forwardedConcerns(records).filter((c) =>
+          c.text.startsWith("steward: alpha unmerged"),
+        ),
+      ).toHaveLength(0);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("retries a transiently dead steward leg after its backoff", async () => {
+    const { repo, goal } = setupFlowRepo({
+      aliases: stewardAliases,
+      limits: { concurrency: { overall: 2 } },
+    });
+    const checkout = goalCheckout(repo, goal);
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      scriptConflictPair(harness);
+      let alphaStewardCalls = 0;
+      harness.script(
+        (req, ctx) => {
+          alphaStewardCalls += 1;
+          if (alphaStewardCalls === 1)
+            return fakeTurnResult(req, {
+              stop: { kind: "infra", cause: "network", details: "ECONNRESET" },
+            });
+          return scriptStewardResolve("alpha", "alpha-resolved")(req, ctx);
+        },
+        {
+          when: whenTurn({ slug: "alpha", step: "steward" }),
+          fallback: true,
+        },
+      );
+      harness.script(scriptStewardResolve("beta", "beta-resolved"), {
+        when: whenTurn({ slug: "beta", step: "steward" }),
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await twoParkedConflicts(runtime, repo, checkout);
+      const sleeps: number[] = [];
+      const result = await runDispatch(runtime, {
+        iteration: 1,
+        sleep: async (ms) => {
+          sleeps.push(ms);
+        },
+      });
+
+      // The first leg died, beta still landed in that wave, and the re-dispatch
+      // spent the same bounded backoff a task turn would before resolving.
+      expect(result.reason).toBe("boundary");
+      expect(sleeps).toEqual([INFRA_REDISPATCH_DELAYS_MS[0]!]);
+      expect(alphaStewardCalls).toBe(2);
+
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.alpha!.status).toBe("merged");
+      expect(state.tasks.beta!.status).toBe("merged");
+      expect(
+        repo.git(["show", "factory/demo:conflict.txt"]).stdout.trim(),
+      ).toBe("alpha-resolved");
+      const alphaTurns = records.filter(
+        (r) =>
+          r.slug === "alpha" && r.step === "steward" && r.actor === "agent",
+      );
+      expect(alphaTurns.map((r) => r.stop)).toEqual([
+        { kind: "infra", cause: "network", details: "ECONNRESET" },
+        { kind: "done" },
+      ]);
     } finally {
       cleanupFlowRepo(repo);
     }

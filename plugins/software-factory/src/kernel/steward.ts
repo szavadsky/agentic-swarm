@@ -29,19 +29,40 @@ import {
   treeSha,
 } from "./worktree.js";
 
+/** One conflict candidate whose steward leg stopped on infra. */
+export interface StewardDead {
+  slug: string;
+  /** The stop's cause verbatim: dispatch classifies it for the backoff. */
+  cause: string;
+  details?: string;
+}
+
 export interface StewardResult {
   skipped: boolean;
   attempted: string[];
   landed: string[];
   unmerged: string[];
-  infra?: { kind: "infra"; cause: string };
+  /**
+   * Candidates whose leg stopped on infra. Dispatch books the fault against
+   * the slug; the remaining candidates still ran.
+   */
+  dead: StewardDead[];
   cancelled?: boolean;
+}
+
+export interface StewardOptions {
+  /**
+   * Slugs whose infra fault has no live leg this pass: a fatal cause, spent
+   * re-dispatches, or a backoff the loop will not spend (a drain or a stop
+   * request). Their work waits for the next launch, so the steward skips them.
+   */
+  frozen?: ReadonlySet<string>;
 }
 
 interface StewardAttempt {
   ok: boolean;
   cause?: string;
-  infra?: { kind: "infra"; cause: string };
+  infra?: { kind: "infra"; cause: string; details?: string };
   cancelled?: boolean;
   session?: SessionRef;
   outcome?: Outcome;
@@ -251,8 +272,15 @@ async function attemptStewardMerge(
   const stop = result.record.stop;
   if (stop?.kind === "infra") {
     await abortMerge(ensured.path);
-    const cause = stop.details ? `${stop.cause}: ${stop.details}` : stop.cause;
-    return { ok: false, infra: { kind: "infra", cause }, agentTurn: true };
+    return {
+      ok: false,
+      infra: {
+        kind: "infra",
+        cause: stop.cause,
+        ...(stop.details ? { details: stop.details } : {}),
+      },
+      agentTurn: true,
+    };
   }
   if (stop?.kind === "cancelled") {
     await abortMerge(ensured.path);
@@ -329,20 +357,30 @@ async function ensurePointer(
  * conflict. Each conflict gets one steward turn in the shared steward session
  * (compacted at settle), then the merge queue lands it with gates; failures
  * hold the task and leave an architect pointer (status, worktree, branch) as
- * a forwarded concern. Unmerged tasks relaunch via continuations on the new
- * head through the existing `base:` path.
+ * a forwarded concern. A candidate whose leg stops on infra is reported as
+ * dead and the remaining candidates still run; only a frozen slug (its bounded
+ * re-dispatches spent, or a fatal cause) is left for the next launch. Unmerged
+ * tasks relaunch via continuations on the new head through the existing
+ * `base:` path.
  */
 export async function runSteward(
   runtime: KernelRuntime,
   iteration: number,
+  opts: StewardOptions = {},
 ): Promise<StewardResult> {
   const tasks = await runtime.store.listTasks();
   const records = await runtime.store.listRecords();
   const state = derive(tasks, records, runtime.configs.process.flows);
+  // A turn that stopped on infra is not an attempt: its slug gets the
+  // task-turn backoff, so a later wave retries it instead of skipping it.
   const attemptedThisWave = new Set(
     records
       .filter(
-        (r) => r.iteration === iteration && r.step === "steward" && r.slug,
+        (r) =>
+          r.iteration === iteration &&
+          r.step === "steward" &&
+          r.slug &&
+          r.stop?.kind !== "infra",
       )
       .map((r) => r.slug!),
   );
@@ -352,7 +390,8 @@ export async function runSteward(
       return (
         s?.status === "parked" &&
         s.cause?.startsWith("conflict:") &&
-        !attemptedThisWave.has(t.slug)
+        !attemptedThisWave.has(t.slug) &&
+        !opts.frozen?.has(t.slug)
       );
     })
     .map((t) => t.slug)
@@ -367,12 +406,13 @@ export async function runSteward(
         cause: "skipped: no conflicts",
       });
     }
-    return { skipped: true, attempted: [], landed: [], unmerged: [] };
+    return { skipped: true, attempted: [], landed: [], unmerged: [], dead: [] };
   }
 
   const attempted: string[] = [];
   const landed: string[] = [];
   const unmerged: string[] = [];
+  const dead: StewardDead[] = [];
   let session: SessionRef | undefined;
 
   for (const slug of candidates) {
@@ -392,16 +432,23 @@ export async function runSteward(
       taskState,
       session,
     );
-    if (attempt.infra)
+    if (attempt.infra) {
+      dead.push({
+        slug,
+        cause: attempt.infra.cause,
+        ...(attempt.infra.details ? { details: attempt.infra.details } : {}),
+      });
+      continue;
+    }
+    if (attempt.cancelled)
       return {
         skipped: false,
         attempted,
         landed,
         unmerged,
-        infra: attempt.infra,
+        dead,
+        cancelled: true,
       };
-    if (attempt.cancelled)
-      return { skipped: false, attempted, landed, unmerged, cancelled: true };
     if (attempt.session) session = attempt.session;
 
     const branch = taskBranchName(runtime, slug);
@@ -452,16 +499,23 @@ export async function runSteward(
     const merged = await mergeTask(runtime, task, iteration, taskState, {
       keptLand: true,
     });
-    if (merged.infra)
+    if (merged.infra) {
+      dead.push({
+        slug,
+        cause: merged.infra.cause,
+        ...(merged.infra.details ? { details: merged.infra.details } : {}),
+      });
+      continue;
+    }
+    if (merged.cancelled)
       return {
         skipped: false,
         attempted,
         landed,
         unmerged,
-        infra: merged.infra,
+        dead,
+        cancelled: true,
       };
-    if (merged.cancelled)
-      return { skipped: false, attempted, landed, unmerged, cancelled: true };
     const after = await runtime.store.listRecords();
     const merge = after
       .filter((r) => r.slug === slug && r.step === "merge" && r.endedAt)
@@ -487,5 +541,5 @@ export async function runSteward(
     }
   }
 
-  return { skipped: false, attempted, landed, unmerged };
+  return { skipped: false, attempted, landed, unmerged, dead };
 }
