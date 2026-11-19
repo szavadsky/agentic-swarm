@@ -64,7 +64,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
       concurrency: { overall: 1, perSubscription: {}, perModel: {} },
       planCheckRounds: 2,
     },
-    exhaustedPools: new Set(),
+    exhaustedPools: new Map(),
     // Hermetic prices: the test-local cache, never the network.
     priceSource: {
       cachePath: path.join(root, "price-cache.json"),

@@ -12,6 +12,8 @@ import {
   resolveGoalPaths,
   runConfigSchema,
 } from "../../src/kernel/config.js";
+import { FakeHarness } from "../../src/harness/fake/index.js";
+import type { Harness } from "../../src/harness/types.js";
 import { preflight } from "../../src/kernel/preflight.js";
 import { matchPrice, type PriceTable } from "../../src/kernel/pricing.js";
 import { createFolderStore } from "../../src/kernel/store.js";
@@ -239,6 +241,100 @@ describe("shipped run-config coverage", () => {
       expect(run.aliases.researcher).toBeDefined();
       expect(run.aliases.implementer).toBeDefined();
       expect(run.aliases.reviewer).toBeDefined();
+    });
+
+    it(`carries the development implementer's retry alternate: ${name}.yaml`, () => {
+      const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
+      if (!fs.existsSync(runPath)) return;
+      const run = runConfigSchema.parse(
+        yaml.parse(fs.readFileSync(runPath, "utf8")),
+      );
+      // Both development flows name implementer-b; a retry must run a model
+      // other than the implementer primary that failed.
+      const alternate = run.aliases["implementer-b"];
+      expect(alternate).toBeDefined();
+      expect(alternate!.model).not.toBe(run.aliases.implementer!.model);
+    });
+
+    it(`carries the unattended omp policy when an alias uses omp: ${name}.yaml`, () => {
+      const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
+      if (!fs.existsSync(runPath)) return;
+      const run = runConfigSchema.parse(
+        yaml.parse(fs.readFileSync(runPath, "utf8")),
+      );
+      const usesOmp = Object.values(run.aliases).some(
+        (alias) => alias.harness === "omp",
+      );
+      if (!usesOmp) return;
+      // The compiled-in overlay is gone: the entry must carry the unattended
+      // policy, or an omp turn reverts to prompting and learning on its own.
+      expect(run.harnesses.omp?.options).toMatchObject({
+        memory: { backend: "off" },
+        autolearn: { enabled: false },
+        skills: { enabled: false },
+        tools: { approvalMode: "yolo" },
+        retry: { enabled: false, modelFallback: false },
+      });
+    });
+
+    it(`passes pre-flight: ${name}.yaml`, async () => {
+      const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
+      if (!fs.existsSync(runPath)) return;
+      const repo = createTmpRepo();
+      try {
+        repo.writeFile(
+          ".factory/repo.yaml",
+          "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n",
+        );
+        repo.commit("factory config");
+        const configs = loadConfigs(repo.dir, { runConfigPath: runPath });
+        // Keep the probe off the operator's real session/worktree roots.
+        const base = path.basename(repo.dir);
+        configs.run.sessions.dir = path.join(
+          path.dirname(repo.dir),
+          `${base}-preflight-sessions`,
+        );
+        configs.run.worktreeRoot = path.join(
+          path.dirname(repo.dir),
+          `${base}-preflight-wt`,
+        );
+        const paths = resolveGoalPaths(configs, repo.dir, "shipped");
+        fs.mkdirSync(paths.goalDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(paths.goalDir, "intent.md"),
+          "# Goal\n\nShipped pre-flight probe.\n",
+          "utf8",
+        );
+        const store = createFolderStore(paths.goalDir, undefined, {});
+        await store.ensureLayout();
+        // No catalog or binaries: the alias set, effort levels and roots are
+        // what the shipped config owns, and every harness is registered here.
+        const harnesses = new Map<string, Harness>();
+        for (const id of [
+          "agy",
+          "claude-code",
+          "codex",
+          "omp",
+          "opencode",
+          "pi",
+        ])
+          harnesses.set(
+            id,
+            new FakeHarness({
+              id,
+              caps: { effort: ["low", "medium", "high", "max"] },
+            }),
+          );
+        const result = await preflight({ configs, paths, store, harnesses });
+        // The alias was not merely present: pre-flight checked it and resolved
+        // the effort it names (none on shakedown's free alternate).
+        expect(result.aliases).toHaveProperty("implementer-b");
+        expect(result.aliases["implementer-b"]).toBe(
+          configs.run.aliases["implementer-b"]!.effort,
+        );
+      } finally {
+        repo.cleanup();
+      }
     });
 
     it(`resolves every model id: ${name}.yaml`, () => {

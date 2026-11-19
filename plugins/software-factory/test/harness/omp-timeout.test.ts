@@ -57,6 +57,9 @@ function fakeHarness(): {
   const harness = new OmpHarness({
     binary,
     sessionDir: path.join(tmp, "sessions"),
+    // The fake reports its pid and can delay stats through the parent env;
+    // names reach a child only when declared, like a run config's allowlist.
+    envAllowlist: ["FAKE_OMP_PID_FILE", "FAKE_OMP_SLOW_STATS"],
     readyTimeoutMs: 5_000,
   });
   return {

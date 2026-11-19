@@ -12,6 +12,6 @@ Commit the report at `{{ report_path }}` first, then refine it.
 - spike report: `{{report_path}}` — a spike commits its finding here; the spike-report check is red until the commit carries it non-empty. Empty on any other task
 - setup command: `{{setup_command}}`
 - gate commands: `{{gate_commands}}`
-- gate baseline: `{{baseline_checks}}` — failures here are pre-existing
+- base gates: {{base_gates}} — the base tree's recorded gate result; a failure it lists was red before any task, and any red it does not list is this task's to fix
 - previous review findings: `{{findings}}` — empty before the first review; each is answered by a change, a reply in `replies`, or both, and a reply-only round is `done`.
 - outcome path: `{{outcome_path}}`

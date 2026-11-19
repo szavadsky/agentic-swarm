@@ -41,9 +41,10 @@ export const acpxUsageSchema = z
   .strict();
 
 /**
- * One acpx harness from the run config: naming plus opaque run config, no code.
- * `agent` is the positional subcommand, or the raw `--agent` command when `raw`
- * is set. Justification: the owner's no-code rule.
+ * One acpx harness binding from the run config, no code. `agent` is the
+ * positional subcommand, or the raw `--agent` command when `raw` is set;
+ * process `args`/`env` ride the harness entry's opaque `options`.
+ * Justification: the owner's no-code rule.
  */
 export const acpxConfigSchema = z
   .object({
@@ -51,14 +52,11 @@ export const acpxConfigSchema = z
     raw: z.boolean().optional(),
     /**
      * The agent accepts `/compact` as an adapter slash command. Declared per
-     * harness because ACP has no compaction method and only pi, codex and
-     * opencode are verified to handle it (acpx probe §5).
+     * harness because ACP has no compaction method; pi, codex, opencode and
+     * claude-code are verified to handle it, agy is not — it forwards the text
+     * to the model (acpx probe §5, compaction-probe.md §0).
      */
     compact: z.boolean().optional(),
-    /** Extra global args, before the agent selection. */
-    args: z.array(z.string()).optional(),
-    /** Extra env for the acpx child processes. */
-    env: z.record(z.string(), z.string()).optional(),
     effort: acpxEffortSchema.optional(),
     usage: acpxUsageSchema.optional(),
   })
@@ -66,6 +64,15 @@ export const acpxConfigSchema = z
 
 export type AcpxUsageFields = z.infer<typeof acpxUsageFieldsSchema>;
 export type AcpxConfig = z.infer<typeof acpxConfigSchema>;
+
+/**
+ * Effective config after the harness entry's opaque `options` are merged in:
+ * `args` run before the agent selection, `env` is added to the acpx children.
+ */
+export type AcpxRunConfig = AcpxConfig & {
+  args?: string[];
+  env?: Record<string, string>;
+};
 
 /** Harness configuration carried through `TurnRequest.opaque`. */
 export type AcpxTurnOpaque = AcpxConfig;

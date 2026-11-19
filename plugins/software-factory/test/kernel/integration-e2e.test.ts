@@ -104,6 +104,7 @@ function runYaml(repoDir: string): string {
     "  architect: { harness: fake, model: fake-architect }",
     "  pm: { harness: fake, model: fake-pm }",
     "  implementer: { harness: fake, model: fake-impl }",
+    "  implementer-b: { harness: fake, model: fake-impl-b }",
     "  researcher: { harness: fake, model: fake-research }",
     "  reviewer: { harness: fake, model: fake-review }",
     "  steward: { harness: fake, model: fake-steward }",

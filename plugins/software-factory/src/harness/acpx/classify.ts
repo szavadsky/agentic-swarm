@@ -1,4 +1,5 @@
 import { exitWithDetails, lastNonBannerLine, withDetails } from "../details.js";
+import { isTransportFailure } from "../transport.js";
 import type { Stop } from "../types.js";
 import type { AcpxError, AcpxTurnSummary } from "./types.js";
 
@@ -62,6 +63,11 @@ export function classifyErrorText(
     )
   ) {
     return withDetails({ kind: "infra", cause: "overflow" }, text);
+  }
+  // Transport loss precedes refusal/abort: `ECONNREFUSED` and an aborted
+  // socket carry those words without being a model refusal or a user cancel.
+  if (isTransportFailure(text)) {
+    return withDetails({ kind: "infra", cause: "network" }, text);
   }
   if (/refus|safety|content policy|declined/i.test(text)) {
     return withDetails({ kind: "refusal" }, preferredDetails ?? text);

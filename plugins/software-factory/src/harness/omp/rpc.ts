@@ -1,4 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { childEnv } from "../../core/env.js";
 import {
   registerChildGroup,
   unregisterChildGroup,
@@ -20,6 +21,8 @@ export interface OmpRpcOptions {
   binary: string;
   args: string[];
   cwd: string;
+  /** Names the run config allows this child to inherit. */
+  envAllowlist?: readonly string[];
   /** Called for every retained frame; used for idle timers and usage fallback. */
   onFrame?: (frame: any) => void;
   maxStderrBytes?: number;
@@ -57,7 +60,7 @@ export class OmpRpc {
       cwd: opts.cwd,
       detached: true,
       stdio: ["pipe", "pipe", "pipe"],
-      env: process.env,
+      env: childEnv({ allow: opts.envAllowlist }),
     });
     this.pid = this.child.pid ?? 0;
     if (this.pid > 0) registerChildGroup(this.pid);

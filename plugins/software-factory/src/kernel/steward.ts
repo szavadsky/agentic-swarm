@@ -3,10 +3,9 @@ import { git } from "../core/git/exec.js";
 import { hasConflictMarkers, unmergedFiles } from "../core/git/merge.js";
 import type { SessionRef } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
-import { recordedBaseGates } from "./baseline.js";
+import { formatBaseGates, recordedBaseGates } from "./baseline.js";
 import { derive } from "./derive.js";
 import { boundaryTarget, compactSession } from "./flow-context.js";
-import { formatFailingChecks } from "./gates.js";
 import { mergeTask } from "./integrate.js";
 import { abortMerge } from "./merge-conflict.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
@@ -67,7 +66,7 @@ function stewardVars(
       runtime.configs.repo.gates
         .map((g) => `- ${g.id}: ${g.command}`)
         .join("\n") || "none",
-    baseline_checks: base ? formatFailingChecks(base.checks) || "none" : "none",
+    base_gates: formatBaseGates(base),
   };
 }
 

@@ -66,6 +66,9 @@ function fixture(lspConfig?: string): {
     harness: new OmpHarness({
       binary,
       sessionDir: path.join(dir, "sessions"),
+      // The fake records argv through the parent env; a child inherits a name
+      // only when declared, like a run config's allowlist.
+      envAllowlist: ["FAKE_OMP_ARGV"],
       readyTimeoutMs: 5_000,
       lspConfig,
     }),
@@ -121,6 +124,7 @@ describe("omp artifact LSP", () => {
       const harnesses = createRealHarnesses({
         sessionDir: path.join(f.dir, "factory-sessions"),
         harnesses: { omp: { binary: path.join(f.dir, "fake-omp.js") } },
+        envAllowlist: ["FAKE_OMP_ARGV"],
         lsp: { config: source },
       });
       const result = await harnesses.omp!.turn({

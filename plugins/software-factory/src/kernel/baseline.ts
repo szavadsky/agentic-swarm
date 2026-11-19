@@ -9,6 +9,7 @@ import { runProcess } from "../core/proc.js";
 import { resolveGoalPaths } from "./config.js";
 import {
   capGateOutput,
+  formatFailingChecks,
   GATE_OUTPUT_CAP,
   type GateInfra,
   gateSignatureKey,
@@ -71,6 +72,25 @@ export function recordedBaseGates(
     ok: latest.ok !== false,
     checks: latest.checks,
   };
+}
+
+/** What a prompt says when pre-flight recorded no trustworthy base run. */
+export const BASE_GATES_NOT_RECORDED = "not recorded";
+
+/**
+ * The base tree's recorded gate result for a prompt: the commit and colour,
+ * with the failing checks when red. `not recorded` is distinct from green — an
+ * absent record cannot support a "pre-existing" claim, so the reviewer needs
+ * that state named rather than rendered as a clean base.
+ */
+export function formatBaseGates(base: BaseGateState | undefined): string {
+  if (!base) return BASE_GATES_NOT_RECORDED;
+  const commit = base.commit.slice(0, 10);
+  if (base.ok) return `base ${commit}: green`;
+  const failures = formatFailingChecks(base.checks);
+  return failures
+    ? `base ${commit} was red before any task (pre-existing):\n${failures}`
+    : `base ${commit}: red`;
 }
 
 /**

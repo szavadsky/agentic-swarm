@@ -1,10 +1,13 @@
 import { spawn } from "node:child_process";
 import { createActiveTimer, detectSuspend, getClock } from "./clock.js";
+import { childEnv } from "./env.js";
 import { registerChildGroup, unregisterChildGroup } from "./shutdown.js";
 
 interface RunProcessOptions {
   cmd: string | string[];
   cwd: string;
+  /** Names the run config allows this child to inherit; `env` values land regardless. */
+  envAllowlist?: readonly string[];
   env?: Record<string, string>;
   timeoutSec?: number;
   maxOutputBytes?: number;
@@ -161,11 +164,10 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
       ? { TMPDIR: factoryTmp, TMP: factoryTmp, TEMP: factoryTmp }
       : {};
 
-    const mergedEnv = {
-      ...process.env,
-      ...tmpEnv,
-      ...env,
-    };
+    const mergedEnv = childEnv({
+      allow: options.envAllowlist,
+      set: { ...tmpEnv, ...env },
+    });
 
     // The ring must hold at least maxOutputBytes so end-capping stays meaningful.
     const ringCapacity =

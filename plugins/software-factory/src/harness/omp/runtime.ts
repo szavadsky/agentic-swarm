@@ -22,7 +22,8 @@ export class OmpRuntime {
   readonly binary: string;
   readonly sessionDir: string;
   readonly subagentModel?: string;
-  readonly overlayExtra?: Record<string, unknown>;
+  readonly options?: Record<string, unknown>;
+  readonly envAllowlist: readonly string[];
   readonly readyTimeoutMs: number;
   readonly retention: "short" | "long";
   /** Canonical artifact LSP config; when set, every turn cwd gets it and `--no-lsp` is dropped. */
@@ -33,7 +34,8 @@ export class OmpRuntime {
     this.binary = opts.binary ?? Bun.which("omp") ?? "omp";
     this.sessionDir = path.resolve(opts.sessionDir);
     this.subagentModel = selectorOf(opts.subagentModel);
-    this.overlayExtra = opts.overlayExtra;
+    this.options = opts.options;
+    this.envAllowlist = opts.envAllowlist ?? [];
     this.readyTimeoutMs = opts.readyTimeoutMs ?? 30_000;
     this.retention = opts.retention ?? "short";
     this.lspConfig = opts.lspConfig;
@@ -45,6 +47,7 @@ export class OmpRuntime {
         const result = await runProcess({
           cmd: [this.binary, "models", "--json"],
           cwd: process.cwd(),
+          envAllowlist: this.envAllowlist,
           timeoutSec: 60,
           maxOutputBytes: 4 * 1024 * 1024,
         });
@@ -77,8 +80,7 @@ export class OmpRuntime {
       {
         subagentModel: selectorOf(opaque?.subagentModel) ?? this.subagentModel,
         retention: this.retention,
-        approvalMode: opaque?.approvalMode,
-        extra: { ...this.overlayExtra, ...opaque?.overlayExtra },
+        options: { ...this.options, ...opaque?.overlayExtra },
       },
       this.dirs().base,
     );
@@ -111,7 +113,12 @@ export class OmpRuntime {
     if (model.effort) args.push("--thinking", model.effort);
     if (resumeId) args.push("--resume", resumeId);
     return OmpRpc.launch(
-      { binary: this.binary, args, cwd },
+      {
+        binary: this.binary,
+        args,
+        cwd,
+        envAllowlist: this.envAllowlist,
+      },
       this.readyTimeoutMs,
     );
   }

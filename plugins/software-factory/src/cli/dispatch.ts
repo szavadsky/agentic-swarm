@@ -252,15 +252,15 @@ async function runCommand(parsed: ParsedArgs, deps: CliDeps): Promise<number> {
   // harness ids, so it is loaded here as well as in the launch.
   const needBinaries = deps.binaries === undefined && !injected;
   const needCatalog = deps.modelCatalog === undefined && !injected;
-  const harnessConfigs =
+  const runSettings =
     needBinaries || needCatalog
       ? loadConfigs(path.resolve(parsed.repo), {
           runConfigPath: parsed.runConfig,
-        }).run.harnesses
+        }).run
       : undefined;
   const binaries =
     deps.binaries ??
-    (needBinaries ? resolveHarnessBinaries(harnessConfigs) : undefined);
+    (needBinaries ? resolveHarnessBinaries(runSettings?.harnesses) : undefined);
   const result = await runGoal({
     repo: parsed.repo,
     goal: parsed.goal,
@@ -271,7 +271,9 @@ async function runCommand(parsed: ParsedArgs, deps: CliDeps): Promise<number> {
       deps.harnessFactory ?? (injected ? undefined : createRealHarnesses),
     modelCatalog:
       deps.modelCatalog ??
-      (needCatalog ? createRealModelCatalog(binaries) : undefined),
+      (needCatalog
+        ? createRealModelCatalog(binaries, runSettings?.envAllowlist)
+        : undefined),
     binaries,
     signals: deps.signals,
     priceSource: deps.priceSource,

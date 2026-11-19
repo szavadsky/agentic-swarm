@@ -261,10 +261,8 @@ describe("acpx-zero-usage classification", () => {
     const harness = new AcpxHarness({
       id: "claude-code",
       binary: stub.binary,
-      acpx: {
-        agent: "claude-code",
-        args: ["--approve-all"],
-      },
+      acpx: { agent: "claude-code" },
+      options: { args: ["--approve-all"] },
       retry: FAST_RETRY,
     });
     try {

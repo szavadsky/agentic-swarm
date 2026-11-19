@@ -63,6 +63,81 @@ describe("classifyOmpError", () => {
       details: "provider overloaded",
     });
     expect(classifyOmpError({})).toEqual({ kind: "infra", cause: "crash" });
+    // No transport token, so the abort word still means a user cancel.
+    expect(classifyOmpError({ message: "Request aborted by user" })).toEqual({
+      kind: "cancelled",
+    });
+  });
+
+  it("classifies transport loss and a provider retryable flag as transient network", () => {
+    expect(
+      classifyOmpError({ message: "fetch failed", code: "ECONNRESET" }),
+    ).toEqual({
+      kind: "infra",
+      cause: "network",
+      details: "fetch failed ECONNRESET",
+    });
+    expect(classifyOmpError({ message: "socket closed" })).toEqual({
+      kind: "infra",
+      cause: "network",
+      details: "socket closed",
+    });
+    // `ECONNABORTED` is a transport code, not a user abort, whether it
+    // arrives alone or beside node's abort wording.
+    expect(classifyOmpError({ code: "ECONNABORTED" })).toEqual({
+      kind: "infra",
+      cause: "network",
+      details: "ECONNABORTED",
+    });
+    expect(
+      classifyOmpError({
+        code: "ECONNABORTED",
+        message: "The operation was aborted",
+      }),
+    ).toEqual({
+      kind: "infra",
+      cause: "network",
+      details: "The operation was aborted ECONNABORTED",
+    });
+    // A refused socket and a connect timeout are transport, not a model
+    // refusal and not the deliberately frozen `timeout` cause.
+    expect(
+      classifyOmpError({ message: "connect ECONNREFUSED 127.0.0.1:443" }),
+    ).toEqual({
+      kind: "infra",
+      cause: "network",
+      details: "connect ECONNREFUSED 127.0.0.1:443",
+    });
+    expect(classifyOmpError({ message: "connection refused" })).toEqual({
+      kind: "infra",
+      cause: "network",
+      details: "connection refused",
+    });
+    expect(
+      classifyOmpError({ message: "connect ETIMEDOUT 1.2.3.4:443" }),
+    ).toEqual({
+      kind: "infra",
+      cause: "network",
+      details: "connect ETIMEDOUT 1.2.3.4:443",
+    });
+    expect(
+      classifyOmpError({
+        message: "provider asked for another try",
+        retryable: true,
+      }),
+    ).toEqual({
+      kind: "infra",
+      cause: "network",
+      details: "provider asked for another try",
+    });
+    // The edge: a provider flag never overrides a fatal auth classification.
+    expect(
+      classifyOmpError({
+        httpStatus: 401,
+        message: "unauthorized",
+        retryable: true,
+      }),
+    ).toEqual({ kind: "infra", cause: "auth", details: "unauthorized" });
   });
 
   it("masks and truncates a refusal message that carries a token", () => {
@@ -134,6 +209,20 @@ describe("classifyOmpLaunchFailure", () => {
       cause: "crash",
       details: "boom",
     });
+  });
+
+  it("classifies a dead socket on launch as transient network", () => {
+    expect(
+      classifyOmpLaunchFailure("Error: fetch failed: read ECONNRESET"),
+    ).toEqual({
+      kind: "infra",
+      cause: "network",
+      details: "Error: fetch failed: read ECONNRESET",
+    });
+    // Auth keeps precedence over a transport-looking tail.
+    expect(
+      classifyOmpLaunchFailure("invalid api key; connection reset"),
+    ).toMatchObject({ kind: "infra", cause: "auth" });
   });
 });
 

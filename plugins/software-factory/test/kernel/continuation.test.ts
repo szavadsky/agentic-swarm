@@ -292,7 +292,9 @@ describe("kept-land", () => {
       expect((await stateOf(runtime)).tasks["kept-red"]!.status).toBe("parked");
 
       const records = await runtime.store.listRecords();
-      // Attempted (fresh merge-checks) but the red repeated on re-run.
+      // Attempted (fresh merge-checks) but the red repeated on re-run, so the
+      // failed attempt is observable as a kept-land record carrying the merge
+      // cause.
       expect(
         records.filter(
           (r) =>
@@ -301,9 +303,18 @@ describe("kept-land", () => {
             r.iteration === 2,
         ).length,
       ).toBeGreaterThan(0);
-      expect(
-        records.filter((r) => r.slug === "kept-red" && r.step === "kept-land"),
-      ).toHaveLength(0);
+      const merge = records.find(
+        (r) => r.slug === "kept-red" && r.step === "merge" && r.iteration === 2,
+      );
+      expect(merge?.ok).toBe(false);
+      const failed = records.filter(
+        (r) =>
+          r.slug === "kept-red" && r.step === "kept-land" && r.iteration === 2,
+      );
+      expect(failed).toHaveLength(1);
+      expect(failed[0]!.ok).toBe(false);
+      expect(failed[0]!.cause).toBe(merge!.cause!);
+      expect(failed[0]!.cause).toContain("gates: unit");
       expect(workCalls(harness)).toHaveLength(6);
       const pack = fs.readFileSync(
         path.join(runtime.store.goalDir, contextPackRelPath(2)),
@@ -331,6 +342,14 @@ describe("kept-land", () => {
             r.iteration === 3,
         ),
       ).toHaveLength(0);
+      // The skip is recorded, not silent: the red is deterministic on this tip.
+      const skipped = again.filter(
+        (r) =>
+          r.slug === "kept-red" && r.step === "kept-land" && r.iteration === 3,
+      );
+      expect(skipped).toHaveLength(1);
+      expect(skipped[0]!.ok).toBe(true);
+      expect(skipped[0]!.cause).toBe("skipped: deterministic-red");
       expect(workCalls(harness)).toHaveLength(8);
     } finally {
       cleanupFlowRepo(repo);

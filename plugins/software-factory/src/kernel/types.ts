@@ -350,21 +350,31 @@ export interface FlowStep extends RepairSpec {
    * The position derives from records, so a relaunch lands on the same alias.
    */
   alternates?: string[];
+  /** How this step's later turn follows the one it repairs; default same-session. */
+  followUp?: FollowUp;
 }
 
-/** How a fix turn follows the turn it repairs. */
+/**
+ * How a step's later turn follows the turn it repairs: a fix turn or a review
+ * round after the first.
+ */
 export interface FollowUp {
   mode: "same-session" | "de-novo" | "different-model";
   /**
-   * Run-config alias the fix turn runs on when mode is `different-model`; the
+   * Run-config alias the later turn runs on when mode is `different-model`; the
    * prompt stays the step's, so a retry changes the model, not the role.
    */
   alias?: string;
+  /**
+   * `different-model` only: resume the step's last session across the switch
+   * when the portability graph admits it; otherwise the turn starts de novo.
+   * Absent starts de novo, like a plain model switch.
+   */
+  keepSession?: boolean;
 }
 
 export interface FlowDefinition {
   steps: FlowStep[];
-  followUp?: FollowUp;
 }
 
 /** Limits the pure `next` needs; resolved from the three config layers. */
@@ -463,6 +473,8 @@ export interface StepRecord {
   compactUsage?: Usage;
   session?: SessionRef;
   commit?: string;
+  /** Spike finish only: `<commit>:<report path>`, the finding's one copy. */
+  report?: string;
   /** UTF-8 bytes of the rendered prompt sent to the harness (agent steps only). */
   promptBytes?: number;
   /** Boundary roles only: UTF-8 bytes of the iteration context pack. */
@@ -534,6 +546,8 @@ export interface RecordEnd {
   /** Incident launches only: why this launch ran again. */
   launchKind?: LaunchKind;
   commit?: string;
+  /** Spike finish only: `<commit>:<report path>`, the finding's one copy. */
+  report?: string;
   tree?: string;
   /** base-advance only: integration head tree at the creation advance. */
   headTree?: string;
@@ -660,18 +674,22 @@ export interface AliasConfig {
   timeouts?: Timeouts;
 }
 
-/** One run-config harness entry: an adapter binding or an executable override. */
+/** One run-config harness entry: an adapter binding, executable override or opaque options. */
 export interface HarnessConfig {
   /** Adapter binding; absent for a native adapter that only takes a binary. */
   acpx?: import("../harness/acpx/config.js").AcpxConfig;
   /** Executable override; absent resolves through PATH. */
   binary?: string;
+  /** Opaque adapter options: acpx `args`/`env`, omp overlay keys. */
+  options?: Record<string, unknown>;
 }
 
 export interface RunConfig {
   aliases: Record<string, AliasConfig>;
-  /** Harness id -> adapter or binary override; native omp takes only a binary. */
+  /** Harness id -> adapter binding, binary override or opaque options. */
   harnesses?: Record<string, HarnessConfig>;
+  /** Extra environment names a spawned harness or agent inherits. */
+  envAllowlist?: string[];
   /** Harness model id -> OpenRouter model id, for ids matching cannot resolve. */
   priceIds?: Record<string, string>;
   limits: {
@@ -697,12 +715,19 @@ export interface RunConfig {
     minTmpFreeBytes?: number;
   };
   sessions: { dir: string; keepRuns: number; retention: "short" | "long" };
+  /**
+   * Quota-pool cooldown: minutes a pool is skipped after a quota stop. Absent
+   * uses the 300-minute default.
+   */
+  quota?: { resetMinutes: number };
   worktreeRoot?: string;
   /** Enable artifact LSP where the harness supports it. */
   lsp?: boolean;
   /** Cheap model pinned for architect subagents. */
   scouts?: { model: string; effort?: string };
   preset?: string;
+  /** Directional harness edges across which a session may be resumed. */
+  portability?: { from: string; to: string }[];
 }
 
 /** Absolute paths of the three layers, for findings that must name the file. */
@@ -739,10 +764,12 @@ export interface KernelRuntime {
   prompts: PromptLibrary;
   limits: Limits;
   /**
-   * Quota pool keys (subscription, or harness+model when none) exhausted during
-   * this launch. Subsequent turns skip tiers drawing on these pools.
+   * Quota pool keys (subscription, or harness+model when none) latched by a
+   * quota stop, mapped to the epoch ms they may serve again. Loaded from the
+   * session store at launch, so a relaunch before a stored reset skips the
+   * pool; turns skip tiers drawing on a pool until its reset time.
    */
-  exhaustedPools: Set<string>;
+  exhaustedPools: Map<string, number>;
   /** Price cache and fetcher; undefined means the shared cache plus network. */
   priceSource?: PriceSource;
 }

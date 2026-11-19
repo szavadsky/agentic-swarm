@@ -86,7 +86,7 @@ describe("iteration summary", () => {
         path.join(store.goalDir, "mailbox/outbox/iteration-1-summary.md"),
         "utf8",
       );
-      expect(outbox).toBe(text);
+      expect(outbox).toBe(`${rel}\n`);
 
       expect(text).toContain("status: goal-met");
       expect(text).toContain("decision: done");

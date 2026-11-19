@@ -30,7 +30,7 @@ live("omp harness live smoke", () => {
     const harness = new OmpHarness({
       sessionDir: path.join(root, "sessions"),
       subagentModel: SUBAGENT,
-      overlayExtra: {
+      options: {
         compaction: {
           experimentalContextManagement: false,
           keepRecentTokens: 1,

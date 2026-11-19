@@ -97,6 +97,7 @@ describe("iteration metrics", () => {
           "  pm: { harness: fake, model: fake-pm }",
           "  digest: { harness: fake, model: fake-digest }",
           "  implementer: { harness: fake, model: fake-impl }",
+          "  implementer-b: { harness: fake, model: fake-impl-b }",
           "  researcher: { harness: fake, model: fake-research }",
           "  reviewer: { harness: fake, model: fake-review }",
           "  steward: { harness: fake, model: fake-steward }",
@@ -224,7 +225,7 @@ describe("iteration metrics", () => {
       ) as typeof one;
       expect(iterationFile).toEqual(one);
       expect(await store.readFile("mailbox/outbox/metrics.yaml")).toBe(
-        await store.readFile("metrics.yaml"),
+        "metrics.yaml\n",
       );
     } finally {
       repo.cleanup();
@@ -684,7 +685,7 @@ describe("record cost truth", () => {
         concurrency: { overall: 1, perSubscription: {}, perModel: {} },
         planCheckRounds: 2,
       },
-      exhaustedPools: new Set(),
+      exhaustedPools: new Map(),
       // Hermetic prices: the test-local cache, never the network.
       priceSource: {
         cachePath: path.join(root, "price-cache.json"),
@@ -719,7 +720,7 @@ describe("record cost truth", () => {
           resume_note: "",
           setup_command: "true",
           gate_commands: "true",
-          baseline_checks: "none",
+          base_gates: "not recorded",
           findings: "none",
         },
         expectation: "any",

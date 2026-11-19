@@ -40,6 +40,48 @@ function scriptFix(harness: FakeHarness): void {
   });
 }
 
+/** The packaged implement-review flow with per-step follow-up overrides. */
+function followUpFlow(
+  implement?: Record<string, unknown>,
+  review?: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    flows: {
+      "implement-review": {
+        steps: [
+          {
+            id: "implement",
+            prompt: "implementer",
+            alias: "implementer",
+            ...(implement ? { followUp: implement } : {}),
+          },
+          {
+            id: "review",
+            prompt: "reviewer",
+            alias: "reviewer",
+            review: true,
+            changeRequests: 2,
+            deliverable: "verdict",
+            ...(review ? { followUp: review } : {}),
+          },
+        ],
+      },
+    },
+  };
+}
+
+const strongAliases = {
+  architect: { harness: "fake", model: "fake-architect" },
+  pm: { harness: "fake", model: "fake-pm" },
+  implementer: { harness: "fake", model: "fake-impl" },
+  reviewer: { harness: "fake", model: "fake-review" },
+  steward: { harness: "fake", model: "fake-steward" },
+  "plan-checker": { harness: "fake", model: "fake-check" },
+  "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+  "implementer-strong": { harness: "fake", model: "fake-strong" },
+  "reviewer-strong": { harness: "fake", model: "fake-review-strong" },
+};
+
 describe("flow data drives the steps", () => {
   it("runs configured step ids in order and gates only before the review", async () => {
     const { repo, goal } = setupFlowRepo({
@@ -307,9 +349,7 @@ describe("fix-round follow-up modes", () => {
 
   it("de-novo starts the fix turn without the previous session", async () => {
     const { repo, goal } = setupFlowRepo({
-      process: {
-        flows: { "implement-review": { followUp: { mode: "de-novo" } } },
-      },
+      process: followUpFlow({ mode: "de-novo" }),
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -323,25 +363,13 @@ describe("fix-round follow-up modes", () => {
     }
   }, 60_000);
 
-  it("different-model runs the fix turn on another alias", async () => {
+  it("different-model runs the fix turn on another alias without a session", async () => {
     const { repo, goal } = setupFlowRepo({
-      process: {
-        flows: {
-          "implement-review": {
-            followUp: { mode: "different-model", alias: "implementer-strong" },
-          },
-        },
-      },
-      aliases: {
-        architect: { harness: "fake", model: "fake-architect" },
-        pm: { harness: "fake", model: "fake-pm" },
-        implementer: { harness: "fake", model: "fake-impl" },
-        reviewer: { harness: "fake", model: "fake-review" },
-        steward: { harness: "fake", model: "fake-steward" },
-        "plan-checker": { harness: "fake", model: "fake-check" },
-        "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
-        "implementer-strong": { harness: "fake", model: "fake-strong" },
-      },
+      process: followUpFlow({
+        mode: "different-model",
+        alias: "implementer-strong",
+      }),
+      aliases: strongAliases,
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -360,6 +388,92 @@ describe("fix-round follow-up modes", () => {
         "implementer",
         "implementer-strong",
       ]);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("different-model keepSession resumes the same-harness compacted transcript", async () => {
+    const { repo, goal } = setupFlowRepo({
+      process: followUpFlow({
+        mode: "different-model",
+        alias: "implementer-strong",
+        keepSession: true,
+      }),
+      aliases: strongAliases,
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      scriptFix(harness);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+
+      const records = await runtime.store.listRecords();
+      const implement = records
+        .filter((r) => r.slug === "task" && r.step === "implement")
+        .sort((a, b) => a.seq - b.seq);
+      const review = records
+        .filter((r) => r.slug === "task" && r.step === "review")
+        .sort((a, b) => a.seq - b.seq);
+      expect(implement.map((r) => r.alias)).toEqual([
+        "implementer",
+        "implementer-strong",
+      ]);
+      expect(harness.calls[2]!.model.id).toBe("fake-strong");
+      expect(harness.calls[2]!.session?.id).toBe(implement[0]!.session!.id);
+      expect(harness.calls[2]!.session?.compacted).toBe(true);
+      // The switch added no compaction: the resumed ref was compacted by the
+      // turn that ended it, and each turn still compacts its own session.
+      expect(harness.compactions.map((c) => c.id)).toEqual([
+        implement[0]!.session!.id,
+        review[0]!.session!.id,
+        implement[1]!.session!.id,
+        review[1]!.session!.id,
+      ]);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("honours followUp per step: the review switch leaves the fix on its alias", async () => {
+    const { repo, goal } = setupFlowRepo({
+      process: followUpFlow(undefined, {
+        mode: "different-model",
+        alias: "reviewer-strong",
+        keepSession: true,
+      }),
+      aliases: strongAliases,
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      scriptFix(harness);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+
+      const records = await runtime.store.listRecords();
+      const implement = records
+        .filter((r) => r.slug === "task" && r.step === "implement")
+        .sort((a, b) => a.seq - b.seq);
+      const review = records
+        .filter((r) => r.slug === "task" && r.step === "review")
+        .sort((a, b) => a.seq - b.seq);
+      // The implement step keeps the kernel default: the fix resumes the
+      // implementer session on its own alias.
+      expect(implement.map((r) => r.alias)).toEqual([
+        "implementer",
+        "implementer",
+      ]);
+      expect(harness.calls[2]!.session?.id).toBe(implement[0]!.session!.id);
+      // The review step switches model and keeps its own r1 session.
+      expect(review.map((r) => r.alias)).toEqual([
+        "reviewer",
+        "reviewer-strong",
+      ]);
+      expect(harness.calls[3]!.model.id).toBe("fake-review-strong");
+      expect(harness.calls[3]!.session?.id).toBe(review[0]!.session!.id);
+      expect(harness.calls[3]!.session?.compacted).toBe(true);
     } finally {
       cleanupFlowRepo(repo);
     }

@@ -28,7 +28,7 @@ const implementerVars = {
   resume_note: "",
   setup_command: "none",
   gate_commands: "none",
-  baseline_checks: "none",
+  base_gates: "not recorded",
   findings: "",
 };
 
@@ -74,6 +74,11 @@ async function tierRuntime(
 
 function quota() {
   return { stop: { kind: "infra", cause: "quota" } as const };
+}
+
+/** Latch a pool as if it answered quota a moment ago. */
+function latchPool(runtime: KernelRuntime, pool: string): void {
+  runtime.exhaustedPools.set(pool, Date.now() + 60_000);
 }
 
 describe("alias fallback tiers", () => {
@@ -137,7 +142,7 @@ describe("alias fallback tiers", () => {
       fallbacks: [{ harness: "b", model: "mb" }],
     });
     try {
-      t.runtime.exhaustedPools.add("a+ma");
+      latchPool(t.runtime, "a+ma");
       t.b.script((req, ctx) => {
         ctx.writeOutcome(outcome({ summary: "done on b" }));
         return fakeTurnResult(req);
@@ -224,6 +229,36 @@ describe("alias fallback tiers", () => {
       expect(t.a.calls[0]!.session?.id).toBe("prior-session");
       expect(t.b.calls).toHaveLength(1);
       expect(t.b.calls[0]!.session).toBeUndefined();
+    } finally {
+      cleanupFlowRepo(t.repo);
+    }
+  });
+
+  it("carries the session across a declared portability edge", async () => {
+    const t = await tierRuntime({
+      harness: "a",
+      model: "ma",
+      fallbacks: [{ harness: "b", model: "mb" }],
+    });
+    try {
+      t.a.scriptResult(quota());
+      t.b.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "done on b" }));
+        return fakeTurnResult(req);
+      });
+      t.runtime.configs.run.portability = [{ from: "a", to: "b" }];
+
+      await runAgentTurn(t.runtime, {
+        target: resolveTurn(t.runtime, "implementer", "implementer"),
+        cwd: t.repo.dir,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+        session: priorSession("a", t.repo.dir, "ma"),
+      });
+
+      expect(t.b.calls).toHaveLength(1);
+      expect(t.b.calls[0]?.session?.id).toBe("prior-session");
     } finally {
       cleanupFlowRepo(t.repo);
     }
@@ -500,12 +535,12 @@ describe("alias fallback tiers", () => {
       ]);
 
       // One pool covers the named alias's whole ladder: both its tiers drop.
-      t.runtime.exhaustedPools.add("inner");
+      latchPool(t.runtime, "inner");
       const withoutInner = resolveTurn(t.runtime, "implementer", "implementer");
       expect(withoutInner.harness.id).toBe("a");
       expect(withoutInner.tiers.map((tier) => tier.model.id)).toEqual(["ma"]);
 
-      t.runtime.exhaustedPools.add("outer");
+      latchPool(t.runtime, "outer");
       const withoutPools = resolveTurn(t.runtime, "implementer", "implementer");
       expect(withoutPools.model.id).toBe("mb2");
       expect(withoutPools.tierOffset).toBe(2);

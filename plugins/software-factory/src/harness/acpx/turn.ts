@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import { childEnv } from "../../core/env.js";
 import { runProcess } from "../../core/proc.js";
 import {
   registerChildGroup,
@@ -27,7 +28,7 @@ import { resolveRawAgentCommand } from "./command.js";
 import { acpxModel } from "./model.js";
 import { AcpxTranscriptParser, acpxErrors } from "./transcript.js";
 import { turnUsageFromTotals, usageFromAcpxSessionText } from "./usage.js";
-import type { AcpxConfig, AcpxTurnOpaque } from "./config.js";
+import type { AcpxConfig, AcpxRunConfig, AcpxTurnOpaque } from "./config.js";
 import type {
   AcpxCommand,
   AcpxCommandResult,
@@ -45,19 +46,24 @@ const COMMAND_TIMEOUTS: TurnRequest["timeouts"] = {
 export interface AcpxRuntime {
   id: string;
   command: AcpxCommand;
-  acpx: AcpxConfig;
+  acpx: AcpxRunConfig;
+  /** Run-config names this runtime's children may inherit on top of the base set. */
+  envAllowlist?: readonly string[];
 }
 
 function commandLine(runtime: AcpxRuntime, args: string[]): string[] {
   return [runtime.command.binary, ...runtime.command.prefix, ...args];
 }
 
-function turnConfig(runtime: AcpxRuntime, req: TurnRequest): AcpxConfig {
-  const opaque = (req.opaque as AcpxTurnOpaque | undefined) ?? runtime.acpx;
-  if (!opaque || typeof opaque.agent !== "string" || !opaque.agent) {
+function turnConfig(runtime: AcpxRuntime, req: TurnRequest): AcpxRunConfig {
+  const opaque = req.opaque as AcpxTurnOpaque | undefined;
+  // The per-turn block overrides the binding but never drops the harness
+  // entry's opaque process options.
+  const config = { ...runtime.acpx, ...opaque };
+  if (typeof config.agent !== "string" || !config.agent) {
     throw new Error(`acpx harness "${runtime.id}" has no agent configured`);
   }
-  return opaque;
+  return config;
 }
 
 /**
@@ -71,7 +77,7 @@ export function acpxAgentSelection(config: AcpxConfig): string[] {
     : [config.agent];
 }
 
-export function acpxGlobalArgs(config: AcpxConfig, cwd: string): string[] {
+export function acpxGlobalArgs(config: AcpxRunConfig, cwd: string): string[] {
   // acpx requires global flags before the agent subcommand (probe §0).
   return [
     "--format",
@@ -90,7 +96,7 @@ interface SetupFailure {
 
 async function runSetup(
   runtime: AcpxRuntime,
-  config: AcpxConfig,
+  config: AcpxRunConfig,
   args: string[],
   cwd: string,
   signal?: AbortSignal,
@@ -98,6 +104,7 @@ async function runSetup(
   const result = await runProcess({
     cmd: commandLine(runtime, args),
     cwd,
+    envAllowlist: runtime.envAllowlist,
     env: config.env,
     timeoutSec: SETUP_TIMEOUT_SEC,
     maxOutputBytes: 4 * 1024 * 1024,
@@ -144,7 +151,7 @@ interface PromptProcessResult {
 /** One prompt process: stream stdout into the parser, enforce idle and wall bounds. */
 function runPromptProcess(
   runtime: AcpxRuntime,
-  config: AcpxConfig,
+  config: AcpxRunConfig,
   args: string[],
   cwd: string,
   timeouts: TurnRequest["timeouts"],
@@ -218,7 +225,10 @@ function runPromptProcess(
           cwd,
           detached: true,
           stdio: ["ignore", "pipe", "pipe"],
-          env: { ...process.env, ...config.env },
+          env: childEnv({
+            allow: runtime.envAllowlist,
+            set: config.env,
+          }),
         },
       );
     } catch (error) {
@@ -286,7 +296,7 @@ function runPromptProcess(
  */
 export async function runAcpxCommand(
   runtime: AcpxRuntime,
-  config: AcpxConfig,
+  config: AcpxRunConfig,
   ref: Pick<SessionRef, "id" | "cwd">,
   command: string,
   signal?: AbortSignal,

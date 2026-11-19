@@ -79,7 +79,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
       concurrency: { overall: 1, perSubscription: {}, perModel: {} },
       planCheckRounds: 2,
     },
-    exhaustedPools: new Set(),
+    exhaustedPools: new Map(),
     // Hermetic prices: the test-local cache, never the network.
     priceSource: {
       cachePath: path.join(root, "price-cache.json"),
@@ -539,7 +539,7 @@ describe("delivery guard", () => {
     head_hash: "bbb",
     round: "1",
     max_rounds: "2",
-    baseline_checks: "none",
+    base_gates: "not recorded",
     prior_findings: "",
     upscope_ask: "",
     last_call: "false",
@@ -1061,7 +1061,7 @@ const implementerVars = {
   resume_note: "",
   setup_command: "none",
   gate_commands: "none",
-  baseline_checks: "none",
+  base_gates: "not recorded",
   findings: "",
 };
 
@@ -1473,7 +1473,7 @@ describe("repair findings and launch kinds", () => {
     head_hash: "bbb",
     round: "1",
     max_rounds: "2",
-    baseline_checks: "none",
+    base_gates: "not recorded",
     prior_findings: "",
     upscope_ask: "",
     last_call: "false",

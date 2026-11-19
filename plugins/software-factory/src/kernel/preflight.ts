@@ -197,9 +197,9 @@ function requiredAliases(process: ProcessConfig): Map<string, string> {
       for (const alternate of step.alternates ?? []) {
         note(alternate, `flow "${name}" step "${step.id}" alternates`);
       }
-    }
-    if (flow.followUp?.mode === "different-model" && flow.followUp.alias) {
-      note(flow.followUp.alias, `flow "${name}" follow-up`);
+      if (step.followUp?.mode === "different-model" && step.followUp.alias) {
+        note(step.followUp.alias, `flow "${name}" step "${step.id}" follow-up`);
+      }
     }
   }
   return refs;
