@@ -78,6 +78,7 @@ flows:
     steps:
       - { id: implement, prompt: implementer, alias: implementer }
       - { id: review, prompt: reviewer, alias: reviewer, review: true, changeRequests: 2 }
+      - { id: resolve, prompt: steward, alias: steward }   # merge-conflict turn only
 taskTypes:
   development: { flow: implement-review, kind: development, schema: outcome }
 boundary:                       # the kernel turns outside any task flow
@@ -92,7 +93,12 @@ boundary:                       # the kernel turns outside any task flow
 
 A step may name `repairPrompt` (the template its in-session repair ask
 renders) and `deliverable` (the product the ask and the missing-outcome finding
-name; default `outcome`, or `verdict` on a review step). A step that names no
+name; default `outcome`, or `verdict` on a review step). The `resolve` step is
+outside the normal agent sequence: a squash merge that conflicts runs one turn
+that merges the head into the task branch and resolves it, then the task checks
+and the merge retries. A second conflict parks, the wave-end steward remains the
+fallback, and a resolution that changed files outside the conflict set goes
+through review before it lands. A step that names no
 template renders the process-level `repairPrompt` (default `delivery-repair`).
 The architect names `architect-repair` because its ask also requires the plan
 edit on disk; the default template then carries no role branch.

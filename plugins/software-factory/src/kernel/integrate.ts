@@ -43,8 +43,9 @@ export interface MergeResult {
 
 export interface MergeOptions {
   /**
-   * Kept-land mode: one flake re-run on red merge gates. Conflicts park the
-   * branch in every mode; no boundary merge starts an agent turn.
+   * Kept-land mode: one flake re-run on red merge gates. A kept-land conflict
+   * parks in every mode: the wave-end steward owns it, because a boundary merge
+   * has no task flow to run a resolve turn in.
    */
   keptLand?: boolean;
 }
@@ -272,8 +273,10 @@ export async function mergeTask(
       allowFail: true,
     });
     if (squash.code !== 0) {
-      // No agent turn at the merge boundary: the conflict parks the branch and
-      // the wave-end steward owns it (or a continuation ports the work).
+      // The record is the signal, not a park: the task's resolve step merges
+      // the head into the branch and resolves it, then checks and re-merges. A
+      // second conflict, a flow with no resolve step, or a kept-land merge
+      // parks the branch and leaves it to the wave-end steward.
       const paths = await unmergedFiles(scratch);
       await removeMergeScratch(runtime);
       await recordMerge(runtime, task, iteration, round, {

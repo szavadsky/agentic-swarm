@@ -83,6 +83,12 @@ describe("three config layers", () => {
         alternates: ["implementer-b"],
         review: false,
       },
+      {
+        id: "resolve",
+        prompt: "steward",
+        alias: "steward",
+        review: false,
+      },
     ]);
     fs.rmSync(root, { recursive: true, force: true });
   });

@@ -62,6 +62,10 @@ export function next(
       actions.push({ kind: "merge", slug });
       continue;
     }
+    if (task.phase === "resolve") {
+      actions.push({ kind: "step", slug, step: "resolve", round: task.round });
+      continue;
+    }
     if (task.phase === "finish") {
       actions.push({ kind: "finish", slug });
       continue;

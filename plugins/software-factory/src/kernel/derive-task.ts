@@ -33,10 +33,14 @@ export const DEFAULT_FLOWS: Record<string, FlowDefinition> = {
         review: true,
         changeRequests: DEFAULT_CHANGE_REQUESTS,
       },
+      { id: "resolve", prompt: "steward", alias: "steward" },
     ],
   },
   "just-implement": {
-    steps: [{ id: "implement", prompt: "implementer", alias: "implementer" }],
+    steps: [
+      { id: "implement", prompt: "implementer", alias: "implementer" },
+      { id: "resolve", prompt: "steward", alias: "steward" },
+    ],
   },
   spike: {
     steps: [
@@ -304,9 +308,43 @@ export function reduceTask(
   let creationAdvance: { tree: string; headTree: string } | null = null;
   let seenCountedTurn = false;
   let turns = 0;
+  /** The current merge attempt already spent its one resolve turn. */
+  let resolveRan = false;
   const seen = new Map<string, { step: string; round: number }>();
   let lastInfraStep: string | undefined;
   let infraRepeatCount = 0;
+
+  /**
+   * A settled resolve turn sends the task back to the flow: review when it
+   * changed files the conflict did not cover, otherwise straight to checks and
+   * the re-merge. The resolve turn is not a flow step, so it lands here rather
+   * than through the agent-step sequence.
+   */
+  const routeResolve = (rec: StepRecord): void => {
+    resolveRan = true;
+    commit = rec.commit ?? commit;
+    const outside = rec.outside ?? [];
+    const reviewIndex = steps.findIndex((step) => step.review === true);
+    if (outside.length > 0) {
+      if (reviewIndex < 0) {
+        // No review step to judge the un-reviewed work: never land it silently.
+        park = `review: resolve changed files outside the conflict set: ${outside.join(", ")}`;
+        phase = "parked";
+      } else {
+        round = Math.max(round, rec.round + 1);
+        stepIndex = reviewIndex;
+        phase = steps[reviewIndex]!.id;
+        pendingChecks = null;
+      }
+    } else {
+      pendingChecks = { nextIndex: steps.length, mergeAfter: true };
+      phase = "checks";
+    }
+    gateFix = false;
+    gateLastCall = false;
+    mergeFix = false;
+    changesPending = false;
+  };
 
   for (const rec of owned) {
     if (!rec.endedAt) continue;
@@ -431,10 +469,22 @@ export function reduceTask(
             gateFix = false;
             gateLastCall = false;
           }
-        } else if (
-          cause.startsWith("conflict:") ||
-          cause.startsWith("no-progress:")
-        ) {
+        } else if (cause.startsWith("conflict:")) {
+          const resolveStep = flow.steps.some((step) => step.id === "resolve");
+          if (resolveRan || !resolveStep) {
+            // The one resolve turn already ran for this merge attempt, or the
+            // flow config has no resolve step: the conflict is the park.
+            park = cause;
+            phase = "parked";
+          } else {
+            gateFix = false;
+            gateLastCall = false;
+            mergeFix = false;
+            changesPending = false;
+            pendingChecks = null;
+            phase = "resolve";
+          }
+        } else if (cause.startsWith("no-progress:")) {
           park = cause;
           phase = "parked";
         } else {
@@ -444,6 +494,11 @@ export function reduceTask(
           phase = "parked";
         }
       }
+      continue;
+    }
+    if (rec.step === "resolve" && rec.actor === "script") {
+      // A clean head merge needed no turn but still settles the conflict.
+      routeResolve(rec);
       continue;
     }
     // A crash the script reports (dispatch `recordCrash`) counts like a harness
@@ -580,10 +635,18 @@ export function reduceTask(
         seen.set(fp, { step: rec.step, round: rec.round });
       }
     }
+    if (rec.step === "resolve") {
+      // The in-flow resolve turn is a real task turn, not a flow step.
+      routeResolve(rec);
+      continue;
+    }
     if (!flowIndex.has(rec.step)) {
       // Merge-conflict implementer attempts are real turns but not flow steps.
       continue;
     }
+    // A productive turn starts a new merge attempt: a later conflict gets its
+    // own single resolve.
+    resolveRan = false;
 
     round = Math.max(round, rec.round);
     commit = rec.commit ?? commit;

@@ -190,6 +190,9 @@ The digest scout appends loops, failures and interventions; it does not restate 
 | `validate_cmd`     | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                              |
 | `outcome_schema`   | outcome YAML skeleton from the kernel schema; renderer default                                                |
 
+The flow's `resolve` step renders this same prompt with the same variables: the
+wave-end steward and the in-flow resolve turn own one conflict ask.
+
 ## plan-checker.md
 
 | variable           | meaning                                                                                                                      |

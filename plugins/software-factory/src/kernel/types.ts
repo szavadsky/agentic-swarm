@@ -485,6 +485,12 @@ export interface StepRecord {
   tree?: string;
   /** base-advance only: integration head tree at the creation advance. */
   headTree?: string;
+  /**
+   * Resolve only: tracked paths the turn changed outside the conflict set.
+   * Non-empty sends the reviewable change through the flow's review step
+   * before the merge retries; empty lands the resolution on its checks.
+   */
+  outside?: string[];
   checks?: CheckResult[];
   /** Files and lines the turn's commit changed, measured at commit time. */
   edits?: WorkEdits;
@@ -551,6 +557,8 @@ export interface RecordEnd {
   tree?: string;
   /** base-advance only: integration head tree at the creation advance. */
   headTree?: string;
+  /** Resolve only: paths the turn changed outside the conflict set. */
+  outside?: string[];
   checks?: CheckResult[];
   edits?: WorkEdits;
   testRuns?: number;

@@ -1,20 +1,18 @@
 import { commitAll } from "../core/git/commit.js";
 import { git } from "../core/git/exec.js";
-import { hasConflictMarkers, unmergedFiles } from "../core/git/merge.js";
+import { unmergedFiles } from "../core/git/merge.js";
 import type { SessionRef } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
-import { formatBaseGates, recordedBaseGates } from "./baseline.js";
 import { derive } from "./derive.js";
 import { boundaryTarget, compactSession } from "./flow-context.js";
 import { mergeTask } from "./integrate.js";
-import { abortMerge } from "./merge-conflict.js";
+import { abortMerge, resolveVars, settleMergeTurn } from "./merge-conflict.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
-import { commitEdits, scriptMeta } from "./record.js";
+import { scriptMeta } from "./record.js";
 import { materialHash } from "./tasks.js";
 import type {
   KernelRuntime,
   Outcome,
-  RecordEnd,
   StepRecord,
   TaskFile,
   TaskState,
@@ -26,7 +24,6 @@ import {
   headSha,
   integrationHead,
   taskBranchName,
-  treeSha,
 } from "./worktree.js";
 
 /** One conflict candidate whose steward leg stopped on infra. */
@@ -67,28 +64,6 @@ interface StewardAttempt {
   session?: SessionRef;
   outcome?: Outcome;
   agentTurn: boolean;
-}
-
-function stewardVars(
-  runtime: KernelRuntime,
-  worktree: string,
-  branch: string,
-  head: string,
-  conflicts: string[],
-  records: StepRecord[],
-): Record<string, string> {
-  const base = recordedBaseGates(records);
-  return {
-    worktree,
-    branch,
-    integration_head: head,
-    conflicts: conflicts.join(", ") || "none",
-    gate_commands:
-      runtime.configs.repo.gates
-        .map((g) => `- ${g.id}: ${g.command}`)
-        .join("\n") || "none",
-    base_gates: formatBaseGates(base),
-  };
 }
 
 function pointerConcern(
@@ -132,35 +107,6 @@ async function commitMerge(
       cause: `merge commit failed: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
-}
-
-/**
- * Commits the steward turn's conflict resolution. A file still carrying
- * conflict markers is not settled: the empty end leaves the worktree for the
- * caller's no-commit path to abort.
- */
-async function settleStewardMerge(
-  runtime: KernelRuntime,
-  meta: { iteration: number; slug: string; round: number },
-  cwd: string,
-  message: string,
-): Promise<RecordEnd> {
-  await git(cwd, ["add", "-A"]);
-  const flagged = await hasConflictMarkers(cwd);
-  if (flagged.length > 0) return {};
-  const turn = await runtime.store.startRecord(
-    scriptMeta(meta.iteration, "commit", meta),
-  );
-  const started = Date.parse(turn.meta.startedAt);
-  const commit = await commitAll(runtime.repo, cwd, message);
-  const head = await headSha(cwd);
-  const tree = await treeSha(cwd);
-  const edits = await commitEdits(cwd, commit);
-  const wallMs = Number.isFinite(started)
-    ? Math.max(0, Date.now() - started)
-    : 0;
-  await turn.finish({ ok: true, commit: head, tree, edits, wallMs });
-  return { commit: commit ?? head, tree, edits };
 }
 
 async function attemptStewardMerge(
@@ -216,7 +162,7 @@ async function attemptStewardMerge(
   const base = records
     .filter((r) => r.slug === task.slug && r.actor === "agent" && r.base)
     .sort((a, b) => a.seq - b.seq)[0]?.base;
-  const vars = stewardVars(
+  const vars = resolveVars(
     runtime,
     ensured.path,
     ensured.branch,
@@ -248,7 +194,7 @@ async function attemptStewardMerge(
         contained,
       );
       if (breach) return { ok: false, cause: `containment: ${breach}` };
-      const settled = await settleStewardMerge(
+      const settled = await settleMergeTurn(
         runtime,
         { iteration, slug: task.slug, round: state.round },
         ensured.path,

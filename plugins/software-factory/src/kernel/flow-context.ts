@@ -255,6 +255,9 @@ export function findStep(flow: FlowDefinition, id: string): FlowStep {
 
 /** Gates run after the last productive step, immediately before a review (or the end). */
 export function checksDue(flow: FlowDefinition, id: string): boolean {
+  // The resolve step is outside the agent sequence: its commit is the branch's
+  // new tip, so the gates that decide the re-merge always run after it.
+  if (id === "resolve") return true;
   const steps = agentSteps(flow);
   const next = steps[steps.findIndex((s) => s.id === id) + 1];
   return !next || next.review === true;

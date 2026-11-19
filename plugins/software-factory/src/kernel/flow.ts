@@ -39,8 +39,14 @@ import { type MergeResult, mergeTask } from "./integrate.js";
 import { taskOutcomeSchema } from "./outcome-schemas.js";
 import {
   abortMerge,
+  type ConflictSnapshot,
   mergeConflictAsk,
   mergeHeadSha,
+  outsideConflictChanges,
+  prepareResolve,
+  resolveVars,
+  settleMergeTurn,
+  unresolvedResolve,
 } from "./merge-conflict.js";
 import {
   appendDebt,
@@ -166,7 +172,7 @@ async function runTaskGates(
   worktree: string,
   preexisting: ReadonlySet<string>,
   prior: readonly StepRecord[],
-): Promise<void> {
+): Promise<CheckResult[]> {
   const tree = await treeSha(worktree);
   const gate = await startChecks(runtime.store, meta);
   let checks = await runGates(runtime, worktree);
@@ -225,6 +231,65 @@ async function runTaskGates(
     );
   }
   await finishChecks(gate, checks, { preexisting, tree });
+  return checks;
+}
+
+/** The park cause for actionable red checks, or undefined when every red is infra. */
+function redGateCause(
+  checks: CheckResult[],
+  preexisting: ReadonlySet<string>,
+): string | undefined {
+  const red = newGateFailures(checks, preexisting).filter(
+    (check) => !isInfraCheck(check),
+  );
+  return red.length > 0
+    ? `gates: ${red.map((check) => check.name).join(", ")}`
+    : undefined;
+}
+
+/**
+ * A resolve step whose head merged cleanly needs no turn: commit the merge,
+ * gate its tree, and park when a gate is red. The record still settles the
+ * conflict, so derive consumes the merge and retries it.
+ */
+async function finishCleanResolve(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  meta: { iteration: number; slug: string; round: number; revision: number },
+  worktree: string,
+  preexisting: ReadonlySet<string>,
+  prior: readonly StepRecord[],
+): Promise<TaskActionResult> {
+  const before = await headSha(worktree);
+  const committed = await commitAll(
+    runtime.repo,
+    worktree,
+    `factory: ${task.slug} merge integration head`,
+  );
+  const commit = committed ?? before;
+  const tree = await treeSha(worktree);
+  await runtime.store.appendRecord(
+    scriptMeta(meta.iteration, "resolve", meta),
+    {
+      ok: true,
+      commit,
+      tree,
+      cause: committed
+        ? "auto-merged the integration head without a turn"
+        : "the integration head was already merged",
+    },
+  );
+  const checks = await runTaskGates(
+    runtime,
+    task,
+    meta,
+    worktree,
+    preexisting,
+    prior,
+  );
+  const red = redGateCause(checks, preexisting);
+  if (red) await appendPark(runtime.store, meta, red);
+  return {};
 }
 
 /** A tree with no tracked edits and no merge in flight; untracked files count as dirty. */
@@ -403,7 +468,21 @@ async function handleStepResult(
     return infraResult ?? cancelledResult ?? {};
   }
   if (checksDue(flow, step.id)) {
-    await runTaskGates(runtime, task, meta, worktree, preexisting, prior);
+    const checks = await runTaskGates(
+      runtime,
+      task,
+      meta,
+      worktree,
+      preexisting,
+      prior,
+    );
+    if (step.id === "resolve") {
+      // One resolve, then the checks own the verdict: a resolution that
+      // breaks a gate parks instead of spending a blind fix loop on a branch
+      // that already passed review.
+      const red = redGateCause(checks, preexisting);
+      if (red) await appendPark(runtime.store, meta, red);
+    }
   }
   return infraResult ?? cancelledResult ?? {};
 }
@@ -463,6 +542,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     revision: task.revision,
   };
   const fix = isFixTurn(flow, state, step.id);
+  const resolveStep = step.id === "resolve";
   // A first-turn `base:` conflict resolves in the turn instead of parking: the
   // merge stays in progress and the ask rides the counted turn. An amended
   // task's first turn gets the same treatment on its own kept branch, so a
@@ -476,7 +556,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   let pendingResolve: { head: string; paths: string[] } | null = null;
   let resolveIsCreation = false;
   let resolveIsFirstTurn = false;
-  if (ensured.mergeConflict) {
+  if (!resolveStep && ensured.mergeConflict) {
     if (step.review || fix) {
       const named =
         ensured.mergeConflict.paths.join(", ") ||
@@ -521,6 +601,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   // because a merge over uncommitted work is not the agent's to resolve.
   let startPoint = ensured.startPoint;
   if (
+    !resolveStep &&
     !pendingResolve &&
     keptBranch &&
     !(ensured.created && task.base !== undefined) &&
@@ -563,7 +644,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       }
     }
   }
-  if (!pendingResolve && keptBranch && !step.review) {
+  if (!resolveStep && !pendingResolve && keptBranch && !step.review) {
     const inFlight = await mergeHeadSha(ensured.path);
     if (inFlight) {
       let paths = await unmergedFiles(ensured.path);
@@ -590,6 +671,31 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     return {};
   }
   const preexisting = preexistingRed(recordedBaseGates(records));
+  let resolve:
+    | { head: string; conflicts: string[]; snapshot: ConflictSnapshot }
+    | undefined;
+  if (resolveStep) {
+    const prepared = await prepareResolve(
+      runtime,
+      ensured.path,
+      ensured.mergeConflict,
+    );
+    if (prepared.kind === "error") {
+      await appendPark(runtime.store, meta, `conflict: ${prepared.cause}`);
+      return {};
+    }
+    if (prepared.kind === "clean") {
+      return finishCleanResolve(
+        runtime,
+        task,
+        meta,
+        ensured.path,
+        preexisting,
+        records,
+      );
+    }
+    resolve = prepared;
+  }
   const target = stepTarget(runtime, task, state, step.id, iteration, records);
   // A trivial goal implements in the front's own session: the turn resumes it
   // with the session's recorded cwd, and the prompt names the absolute
@@ -634,6 +740,19 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     flow,
     state,
   );
+  if (resolve) {
+    Object.assign(
+      vars,
+      resolveVars(
+        runtime,
+        ensured.path,
+        ensured.branch,
+        resolve.head,
+        resolve.conflicts,
+        records,
+      ),
+    );
+  }
   const baseHash = amendedFirstTurn
     ? startPoint
     : (revisionBase(records, task.slug, task.revision) ??
@@ -735,6 +854,22 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
         contained,
       );
       if (breach) return { ok: false, cause: `containment: ${breach}` };
+      if (resolve) {
+        const settled = await settleMergeTurn(
+          runtime,
+          meta,
+          ensured.path,
+          `factory: ${task.slug} merge integration head`,
+        );
+        if (!settled.commit) return settled;
+        const outside = await outsideConflictChanges(
+          ensured.path,
+          resolve.snapshot,
+          resolve.conflicts,
+          settled.commit,
+        );
+        return { ...settled, outside };
+      }
       if (pendingResolve) {
         // Stage first so edited files leave the unmerged set; markers in the
         // content still flag below and never reach a commit.
@@ -776,9 +911,39 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     );
   }
   if (breach) {
-    if (pendingResolve) await abortMerge(ensured.path);
+    if (pendingResolve || resolve) await abortMerge(ensured.path);
     await appendPark(runtime.store, meta, `containment: ${breach}`);
     return {};
+  }
+  if (resolve && !tracked.timedOut()) {
+    const stop = result.record.stop;
+    const status = result.outcome?.status;
+    if (!status && stop?.kind === "infra") {
+      // The merge stays in flight: a retry resumes the partial resolution.
+      return {
+        infra: {
+          cause: stop.cause,
+          ...(stop.details ? { details: stop.details } : {}),
+        },
+      };
+    }
+    if (!status && stop?.kind === "cancelled") return { cancelled: true };
+    if (status === "done") {
+      const problem = await unresolvedResolve(
+        ensured.path,
+        resolve.head,
+        resolve.conflicts,
+      );
+      if (problem) {
+        await abortMerge(ensured.path);
+        await appendPark(runtime.store, meta, `conflict: ${problem}`);
+        return {};
+      }
+    } else if (status || stop?.kind === "refusal") {
+      // The turn reported the conflict unresolvable: never leave the merge in
+      // flight for the next turn to inherit.
+      await abortMerge(ensured.path);
+    }
   }
   if (pendingResolve && !tracked.timedOut()) {
     const stop = result.record.stop;
