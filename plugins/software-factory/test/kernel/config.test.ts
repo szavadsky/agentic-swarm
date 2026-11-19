@@ -63,9 +63,24 @@ describe("three config layers", () => {
         id: "implement",
         prompt: "implementer",
         alias: "implementer",
+        alternates: ["implementer-b"],
         review: false,
       },
     ]);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("switches the development implementer on retry", () => {
+    const root = tmpRepo();
+    const configs = loadConfigs(root);
+    // Both development flows name the same second alias: a failed implement
+    // turn moves to another model instead of repeating the one that failed.
+    for (const flow of ["implement-review", "just-implement"] as const)
+      expect(configs.process.flows[flow]!.steps[0]).toMatchObject({
+        id: "implement",
+        alias: "implementer",
+        alternates: ["implementer-b"],
+      });
     fs.rmSync(root, { recursive: true, force: true });
   });
 

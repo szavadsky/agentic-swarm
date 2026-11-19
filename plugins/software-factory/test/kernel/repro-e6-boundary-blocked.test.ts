@@ -85,6 +85,7 @@ const PM_CHAIN_YAML = [
   "  pm: { harness: fake, model: fake-pm, escalateTo: pm-strong }",
   "  pm-strong: { harness: fake, model: fake-pm-strong }",
   "  implementer: { harness: fake, model: fake-impl }",
+  "  implementer-b: { harness: fake, model: fake-impl-b }",
   "  researcher: { harness: fake, model: fake-research }",
   "  reviewer: { harness: fake, model: fake-review }",
   "  steward: { harness: fake, model: fake-steward }",

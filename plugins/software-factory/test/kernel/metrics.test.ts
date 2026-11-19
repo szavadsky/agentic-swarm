@@ -97,6 +97,7 @@ describe("iteration metrics", () => {
           "  pm: { harness: fake, model: fake-pm }",
           "  digest: { harness: fake, model: fake-digest }",
           "  implementer: { harness: fake, model: fake-impl }",
+          "  implementer-b: { harness: fake, model: fake-impl-b }",
           "  researcher: { harness: fake, model: fake-research }",
           "  reviewer: { harness: fake, model: fake-review }",
           "  steward: { harness: fake, model: fake-steward }",

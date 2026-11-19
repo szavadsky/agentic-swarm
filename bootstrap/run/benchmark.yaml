@@ -26,6 +26,12 @@ aliases:
     model: opencode/deepseek-v4.1-flash-free
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
+  # The retry alternate leaves the free tier: one paid Go turn, at the same
+  # effort the self run uses, instead of repeating the model that failed.
+  implementer-b:
+    harness: omp
+    model: opencode-go/deepseek-v4.1-flash
+    effort: max
   researcher:
     harness: opencode
     model: opencode/deepseek-v4.1-flash-free

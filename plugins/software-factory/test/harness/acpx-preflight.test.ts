@@ -41,6 +41,7 @@ function runConfig(spec: RunSpec = {}): string {
   pm: { harness: opencode, model: ${pmModel}${spec.pmEffort ? `, effort: ${spec.pmEffort}` : ""} }
   digest: { harness: opencode, model: model-a }
   implementer: { harness: opencode, model: model-a }
+  implementer-b: { harness: opencode, model: model-a }
   researcher: { harness: opencode, model: model-a }
   reviewer: { harness: opencode, model: model-a${spec.reviewerEffort ? `, effort: ${spec.reviewerEffort}` : ""} }
   steward: { harness: opencode, model: model-a }
@@ -214,6 +215,7 @@ describe("acpx live pre-flight", () => {
   pm: { harness: opencode, model: model-a, fallbacks: [{ model: model-b, effort: highest }] }
   digest: { harness: opencode, model: model-a }
   implementer: { harness: opencode, model: model-a }
+  implementer-b: { harness: opencode, model: model-b }
   researcher: { harness: opencode, model: model-a }
   reviewer: { harness: opencode, model: model-a }
   steward: { harness: opencode, model: model-a }

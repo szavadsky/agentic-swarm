@@ -26,6 +26,7 @@ const RUN_HEAD = `aliases:
   pm: { harness: fake, model: pm }
   digest: { harness: fake, model: digest }
   implementer: { harness: fake, model: impl }
+  implementer-b: { harness: fake, model: impl-b }
   researcher: { harness: fake, model: research }
   reviewer: { harness: fake, model: rev }
   steward: { harness: fake, model: steward }
