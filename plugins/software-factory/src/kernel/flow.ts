@@ -24,7 +24,6 @@ import {
   priorStepCommit,
   promptVars,
   revisionBase,
-  reviewSession,
   stepTarget,
   trivialResumeNote,
   trivialResumeSession,
@@ -595,20 +594,19 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   // A trivial goal implements in the front's own session: the turn resumes it
   // with the session's recorded cwd, and the prompt names the absolute
   // worktree and branch. No session, or a harness that cannot resume, parks
-  // with a cause — never a silent de-novo run. Other first turns are de novo;
-  // other fix turns resume the implement session in this worktree, and later
-  // review rounds resume the review session on its own step.
+  // with a cause — never a silent de-novo run. A review turn and a fix turn
+  // resume their own step's session as the step's follow-up configures;
+  // other first turns start de novo.
   const trivial = isTrivialImplementTurn(runtime, task, state, step.id);
-  let session = step.review
-    ? await reviewSession(runtime, task, target, step.id, records, ensured.path)
-    : fix && !trivial
+  let session =
+    step.review || (fix && !trivial)
       ? await followUpSession(
           runtime,
           task,
           target,
+          step.id,
           records,
           ensured.path,
-          iteration,
         )
       : undefined;
   let turnCwd = ensured.path;

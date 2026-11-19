@@ -302,6 +302,26 @@ describe("pre-flight", () => {
     }
   });
 
+  it("refuses a different-model follow-up alias the step names", async () => {
+    const f = await fixture();
+    try {
+      f.configs.process.flows["implement-review"]!.steps[0]!.followUp = {
+        mode: "different-model",
+        alias: "implementer-backup",
+        keepSession: true,
+      };
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual({
+        file: path.join(f.repo.dir, ".factory/run.yaml"),
+        key: "aliases.implementer-backup",
+        message:
+          'required by flow "implement-review" step "implement" follow-up but missing',
+      });
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
   for (const [step, alias] of [
     ["plancheck", "plan-checker"],
     ["planreview", "plan-reviewer"],

@@ -73,6 +73,32 @@ export const turnSchema = z
   })
   .strict();
 
+export const followUpSchema = z
+  .object({
+    mode: z
+      .enum(["same-session", "de-novo", "different-model"])
+      .default("same-session"),
+    alias: z.string().min(1).optional(),
+    /** Resume the step's last session across a model switch when portable. */
+    keepSession: z.boolean().optional(),
+  })
+  .strict()
+  .refine(
+    (followUp) => followUp.mode !== "different-model" || !!followUp.alias,
+    {
+      message: "a different-model follow-up needs an alias",
+      path: ["alias"],
+    },
+  )
+  .refine(
+    (followUp) =>
+      followUp.keepSession === undefined || followUp.mode === "different-model",
+    {
+      message: "keepSession needs a different-model follow-up",
+      path: ["keepSession"],
+    },
+  );
+
 /** One flow step; `review` marks the step that consumes a review round. */
 export const flowStepSchema = z
   .object({
@@ -94,6 +120,8 @@ export const flowStepSchema = z
     changeRequests: z.number().int().nonnegative().optional(),
     /** Aliases later attempts run on after failure-kind launches, in order. */
     alternates: z.array(z.string().min(1)).optional(),
+    /** How this step's later turn follows the one it repairs. */
+    followUp: followUpSchema.optional(),
   })
   .strict()
   .refine(
@@ -110,27 +138,9 @@ export const flowStepSchema = z
     path: ["alternates"],
   });
 
-export const followUpSchema = z
-  .object({
-    mode: z
-      .enum(["same-session", "de-novo", "different-model"])
-      .default("same-session"),
-    alias: z.string().min(1).optional(),
-  })
-  .strict()
-  .default({ mode: "same-session" })
-  .refine(
-    (followUp) => followUp.mode !== "different-model" || !!followUp.alias,
-    {
-      message: "follow-up mode different-model needs an alias",
-      path: ["alias"],
-    },
-  );
-
 export const flowSchema = z
   .object({
     steps: z.array(flowStepSchema).min(1),
-    followUp: followUpSchema,
   })
   .strict();
 

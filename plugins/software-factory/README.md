@@ -97,6 +97,15 @@ alternate; a turn that delivered after its reminder did not fail. An alternate
 resolves its own fallbacks and quota pool, and a task `tier` still escalates
 the producer.
 
+A step may name `followUp` to decide how its later turn follows the one it
+repairs — the productive step's fix turn, or a review round after the first.
+`same-session` (the default) continues the step's own compacted session on its
+alias; `de-novo` starts fresh; `different-model` runs the later turn on
+`alias` without a session, or with `keepSession: true` continues the step's
+compacted session across the switch when the portability graph admits it (the
+same harness always, another harness only along a declared edge). The prompt
+stays the step's: the retry changes the model, not the role.
+
 **Run** — transient, passed with `--run-config`:
 
 ```yaml

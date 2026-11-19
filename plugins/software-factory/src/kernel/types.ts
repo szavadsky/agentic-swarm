@@ -350,21 +350,31 @@ export interface FlowStep extends RepairSpec {
    * The position derives from records, so a relaunch lands on the same alias.
    */
   alternates?: string[];
+  /** How this step's later turn follows the one it repairs; default same-session. */
+  followUp?: FollowUp;
 }
 
-/** How a fix turn follows the turn it repairs. */
+/**
+ * How a step's later turn follows the turn it repairs: a fix turn or a review
+ * round after the first.
+ */
 export interface FollowUp {
   mode: "same-session" | "de-novo" | "different-model";
   /**
-   * Run-config alias the fix turn runs on when mode is `different-model`; the
+   * Run-config alias the later turn runs on when mode is `different-model`; the
    * prompt stays the step's, so a retry changes the model, not the role.
    */
   alias?: string;
+  /**
+   * `different-model` only: resume the step's last session across the switch
+   * when the portability graph admits it; otherwise the turn starts de novo.
+   * Absent starts de novo, like a plain model switch.
+   */
+  keepSession?: boolean;
 }
 
 export interface FlowDefinition {
   steps: FlowStep[];
-  followUp?: FollowUp;
 }
 
 /** Limits the pure `next` needs; resolved from the three config layers. */

@@ -282,14 +282,50 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it("refuses a different-model follow-up that names no alias", () => {
+  it("refuses a step's different-model follow-up that names no alias", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
     fs.writeFileSync(
       path.join(root, ".factory/process.yaml"),
-      "flows:\n  custom:\n    followUp: { mode: different-model }\n    steps:\n      - id: implement\n        prompt: implementer\n        alias: implementer\n",
+      "flows:\n  custom:\n    steps:\n      - id: implement\n        prompt: implementer\n        alias: implementer\n        followUp: { mode: different-model }\n",
     );
-    expect(() => loadConfigs(root)).toThrow(/different-model needs an alias/);
+    expect(() => loadConfigs(root)).toThrow(
+      /different-model follow-up needs an alias/,
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("refuses a flow-level follow-up: the mode belongs to each step", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      "flows:\n  custom:\n    followUp: { mode: de-novo }\n    steps:\n      - id: implement\n        prompt: implementer\n        alias: implementer\n",
+    );
+    expect(() => loadConfigs(root)).toThrow(ConfigError);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("reads a step's follow-up mode, alias and keepSession", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    const process = path.join(root, ".factory/process.yaml");
+    fs.writeFileSync(
+      process,
+      "flows:\n  custom:\n    steps:\n      - id: implement\n        prompt: implementer\n        alias: implementer\n        followUp: { mode: different-model, alias: implementer-b, keepSession: true }\n",
+    );
+    expect(loadConfigs(root).process.flows.custom!.steps[0]!.followUp).toEqual({
+      mode: "different-model",
+      alias: "implementer-b",
+      keepSession: true,
+    });
+    fs.writeFileSync(
+      process,
+      "flows:\n  custom:\n    steps:\n      - id: implement\n        prompt: implementer\n        alias: implementer\n        followUp: { keepSession: true }\n",
+    );
+    expect(() => loadConfigs(root)).toThrow(
+      /keepSession needs a different-model/,
+    );
     fs.rmSync(root, { recursive: true, force: true });
   });
 

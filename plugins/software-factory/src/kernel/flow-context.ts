@@ -30,6 +30,7 @@ import type {
   BoundaryStep,
   FlowDefinition,
   FlowStep,
+  FollowUp,
   KernelRuntime,
   RepairSpec,
   StepRecord,
@@ -268,6 +269,21 @@ export function isFixTurn(
   return steps[0]?.id === stepId && (state.round > 1 || state.gateFix === true);
 }
 
+/**
+ * Whether this turn repeats its step: the productive step's fix turn, or a
+ * review round after the first. The step's follow-up mode applies here; a
+ * failure-kind retry in the same round belongs to `alternates` instead.
+ */
+function isFollowUpTurn(
+  flow: FlowDefinition,
+  state: TaskState,
+  stepId: string,
+): boolean {
+  return findStep(flow, stepId).review === true
+    ? state.round > 1
+    : isFixTurn(flow, state, stepId);
+}
+
 /** Counts red gate runs that requested a fix for the slug. */
 export function countRedGateRequests(
   records: readonly StepRecord[],
@@ -448,20 +464,6 @@ function resolveChain(
   return out.tiers;
 }
 
-/** The harness a turn on this alias would actually start on. */
-function effectiveAliasHarness(
-  runtime: KernelRuntime,
-  alias: string,
-  iteration?: number,
-): string {
-  const chain = resolveChain(runtime, alias, iteration);
-  const available = chain.filter(
-    (tier) => !poolExhausted(runtime.exhaustedPools, tierPoolKey(tier)),
-  );
-  const first = available[0] ?? chain[chain.length - 1]!;
-  return first.harness.id;
-}
-
 /**
  * Resolves a configured prompt and alias for an iteration. `aliasOverride` is
  * a task tier or a PM rung (`default` means no override); flows branch on the
@@ -507,8 +509,8 @@ export function boundaryTarget(
 }
 
 /**
- * The prompt and alias that actually run this step: a `different-model` fix
- * turn keeps the step's prompt and moves to the follow-up alias.
+ * The prompt and alias that actually run this step: a `different-model`
+ * follow-up turn keeps the step's prompt and moves to the follow-up alias.
  */
 function stepTurn(
   runtime: KernelRuntime,
@@ -523,11 +525,14 @@ function stepTurn(
       `flow "${task.flow}": step "${stepId}" needs a prompt and an alias`,
     );
   }
-  const followUp = flow.followUp ?? { mode: "same-session" as const };
-  if (followUp.mode === "different-model" && isFixTurn(flow, state, stepId)) {
+  const followUp = step.followUp;
+  if (
+    followUp?.mode === "different-model" &&
+    isFollowUpTurn(flow, state, stepId)
+  ) {
     if (!followUp.alias) {
       throw new Error(
-        `flow "${task.flow}": follow-up mode different-model needs an alias`,
+        `flow "${task.flow}": step "${stepId}" different-model follow-up needs an alias`,
       );
     }
     return {
@@ -724,44 +729,6 @@ export function stepTarget(
   };
 }
 
-/** Resume the last session for this alias when it is portable to the turn's harness. */
-export async function resumeSessionFor(
-  runtime: KernelRuntime,
-  task: TaskFile,
-  alias: string,
-  records: StepRecord[],
-  worktree: string,
-  iteration?: number,
-): Promise<SessionRef | undefined> {
-  const prior = records
-    .filter(
-      (r) =>
-        r.slug === task.slug &&
-        r.actor === "agent" &&
-        r.endedAt &&
-        r.session &&
-        r.alias === alias,
-    )
-    .sort(bySeq)
-    .at(-1)?.session;
-  if (!prior) return undefined;
-  if (path.resolve(prior.cwd) !== path.resolve(worktree)) return undefined;
-  // The alias may route elsewhere now (a working fallback tier, a changed run
-  // config): a session is only portable to the harness that recorded it.
-  // Compaction is not done here — a session is compacted by the turn that ended it.
-  if (!runtime.configs.run.aliases[alias])
-    throw new Error(`run config has no alias "${alias}"`);
-  if (
-    !portable(
-      prior.harness,
-      effectiveAliasHarness(runtime, alias, iteration),
-      runtime.configs.run.portability,
-    )
-  )
-    return undefined;
-  return prior;
-}
-
 /** Compaction is cache hygiene, not a gate; a failure keeps the uncompacted ref. */
 export async function compactSession(
   runtime: KernelRuntime,
@@ -779,35 +746,25 @@ export async function compactSession(
   }
 }
 
-export async function followUpSession(
-  runtime: KernelRuntime,
-  task: TaskFile,
-  target: TurnTarget,
-  records: StepRecord[],
-  worktree: string,
-  iteration?: number,
-): Promise<SessionRef | undefined> {
-  const flow = flowOf(runtime, task);
-  const followUp = flow.followUp ?? { mode: "same-session" as const };
-  if (followUp.mode !== "same-session") return undefined;
-  return resumeSessionFor(
-    runtime,
-    task,
-    target.alias,
-    records,
-    worktree,
-    iteration,
-  );
+/** The follow-up a step names; the kernel default continues the same session. */
+function followUpOf(step: FlowStep): FollowUp {
+  return step.followUp ?? { mode: "same-session" };
 }
+
 /**
- * Resume the last review session for this review step on this alias. Keyed on
- * the step, as `followUpSession` is keyed on the implement alias: the reviewer
- * resumes only its own session, never the implementer's, even when both roles
- * share one alias. A first round has no prior and starts de novo silently; a
- * prior that cannot be resumed (alias change, harness rotation, cwd mismatch,
- * a harness that cannot resume) starts de novo with the reason logged (R2).
+ * The session a later turn of a step resumes, or undefined when it starts de
+ * novo. `same-session` continues the step's own session on its alias;
+ * `de-novo` never resumes; `different-model` runs the configured alias and
+ * keeps the session across the switch only with `keepSession`, and only when
+ * the portability graph admits the prior harness's session. Keyed on the step,
+ * so an implementer and a reviewer sharing one alias never resume each other's
+ * session. A first turn has no prior and starts de novo silently; a prior that
+ * cannot be resumed (alias changed, cwd mismatch, a harness that cannot resume,
+ * a non-portable crossing) starts de novo with the reason logged. Compaction
+ * belongs to the turn that ended the session, so a resumed ref arrives
+ * compacted unless that compaction failed.
  */
-export async function reviewSession(
+export async function followUpSession(
   runtime: KernelRuntime,
   task: TaskFile,
   target: TurnTarget,
@@ -815,6 +772,13 @@ export async function reviewSession(
   records: StepRecord[],
   worktree: string,
 ): Promise<SessionRef | undefined> {
+  const followUp = followUpOf(findStep(flowOf(runtime, task), stepId));
+  if (followUp.mode === "de-novo") return undefined;
+  const keepsAcrossSwitch =
+    followUp.mode === "different-model" && followUp.keepSession === true;
+  if (followUp.mode === "different-model" && !keepsAcrossSwitch)
+    return undefined;
+
   const priors = records
     .filter(
       (r) =>
@@ -826,16 +790,18 @@ export async function reviewSession(
     )
     .sort(bySeq);
   if (priors.length === 0) return undefined;
-  const onAlias = priors.filter((r) => r.alias === target.alias).at(-1);
-  if (!onAlias?.session) {
+  const prior = (
+    keepsAcrossSwitch ? priors : priors.filter((r) => r.alias === target.alias)
+  ).at(-1);
+  if (!prior?.session) {
     const priorAlias = priors.at(-1)?.alias ?? "unknown";
     console.warn(
-      `[factory] review "${task.slug}" step "${stepId}" starts de novo: ` +
+      `[factory] follow-up "${task.slug}" step "${stepId}" starts de novo: ` +
         `alias changed from "${priorAlias}" to "${target.alias}"`,
     );
     return undefined;
   }
-  const prior = onAlias.session;
+  const session = prior.session;
   let resumable = false;
   try {
     resumable = (await target.harness.caps(target.model)).resume;
@@ -844,27 +810,32 @@ export async function reviewSession(
   }
   if (!resumable) {
     console.warn(
-      `[factory] review "${task.slug}" step "${stepId}" starts de novo: ` +
+      `[factory] follow-up "${task.slug}" step "${stepId}" starts de novo: ` +
         `harness "${target.harness.id}" cannot resume sessions`,
     );
     return undefined;
   }
-  if (path.resolve(prior.cwd) !== path.resolve(worktree)) {
+  if (path.resolve(session.cwd) !== path.resolve(worktree)) {
     console.warn(
-      `[factory] review "${task.slug}" step "${stepId}" starts de novo: ` +
-        `session cwd "${prior.cwd}" does not match worktree "${worktree}"`,
+      `[factory] follow-up "${task.slug}" step "${stepId}" starts de novo: ` +
+        `session cwd "${session.cwd}" does not match worktree "${worktree}"`,
     );
     return undefined;
   }
-  const current = target.harness.id;
-  if (!portable(prior.harness, current, runtime.configs.run.portability)) {
+  if (
+    !portable(
+      session.harness,
+      target.harness.id,
+      runtime.configs.run.portability,
+    )
+  ) {
     console.warn(
-      `[factory] review "${task.slug}" step "${stepId}" starts de novo: ` +
-        `harness "${prior.harness}" is not the portable alias harness "${current}"`,
+      `[factory] follow-up "${task.slug}" step "${stepId}" starts de novo: ` +
+        `harness "${session.harness}" is not portable to "${target.harness.id}"`,
     );
     return undefined;
   }
-  return prior;
+  return session;
 }
 
 /** The head the last turn of this step left; a resumed review diffs since it. */
@@ -893,7 +864,7 @@ export type TrivialResume = { session: SessionRef } | { cause: string };
 /**
  * The front's own session for a trivial implement turn: the front record's
  * session on a first turn, the last session on the front alias on a fix turn.
- * Unlike `resumeSessionFor` there is no worktree-cwd match — the turn resumes
+ * Unlike `followUpSession` there is no worktree-cwd match — the turn resumes
  * with the session's recorded cwd and the prompt names the absolute worktree
  * instead (harness sessions are cwd-bound). A harness whose probe reports no
  * resume, or no session on record, parks with a cause: a trivial turn never
