@@ -434,7 +434,8 @@ async function rerunRedKeptGates(
 /**
  * A red that already proved itself deterministic on this exact branch tip:
  * two merge-gate runs since the tip commit failed the same gates. Head moves
- * and flake re-runs cannot cure it, so kept-land never attempts it.
+ * and flake re-runs cannot cure it, so kept-land skips it before any attempt
+ * and records the skip.
  */
 function deterministicRed(
   records: StepRecord[],
@@ -474,7 +475,8 @@ function deterministicRed(
  * Whether the parked kept branch still carries reviewable work: an approve
  * covering the branch's current head commit (a later commit voids it), or
  * green branch checks on the current tree under a review-less flow. Review
- * rejections and deterministic reds never qualify.
+ * rejections never qualify; a deterministic red is the caller's skip to
+ * record.
  */
 async function qualifiesForKeptLand(
   runtime: KernelRuntime,
@@ -511,7 +513,7 @@ async function qualifiesForKeptLand(
     );
     if (!green) return false;
   }
-  return !deterministicRed(records, task.slug, tip);
+  return true;
 }
 
 export interface KeptLandResult {
@@ -525,12 +527,13 @@ export interface KeptLandResult {
  * R10: a kept green branch lands without a new task and without an agent
  * turn. Every parked task whose kept branch still carries its approve (or
  * green checks under a review-less flow) gets one end-of-wave merge attempt;
- * a conflict or a repeated red leaves it parked. A landing writes a
- * `kept-land` record: the landing has no task flow records of its own, and
- * the evidence needs one. Spikes never land (their product is the finding,
- * not a merge), and neither does a `base` another task continues: the
- * continuation already carries the work, and PM validation reads a landed
- * base as a broken continuation.
+ * a conflict or a repeated red leaves it parked. Deterministic reds are
+ * skipped before the attempt. A landing, a failed attempt and a
+ * deterministic-red skip each write a `kept-land` record: the landing has no
+ * task flow records of its own, and the evidence needs one. Spikes never land
+ * (their product is the finding, not a merge), and neither does a `base`
+ * another task continues: the continuation already carries the work, and PM
+ * validation reads a landed base as a broken continuation.
  */
 export async function runKeptLand(
   runtime: KernelRuntime,
@@ -549,23 +552,47 @@ export async function runKeptLand(
     if (!taskState || taskState.status !== "parked") continue;
     if (task.kind !== "development") continue;
     if (continued.has(task.slug)) continue;
-    // One attempt per branch per boundary; the merge record is the ledger.
-    if (
-      records.some(
+    const lastMerge = records
+      .filter(
         (r) =>
           r.slug === task.slug &&
           r.iteration === iteration &&
           (r.step === "merge" || r.step === "kept-land") &&
           r.endedAt,
       )
-    )
-      continue;
+      .sort(bySeq)
+      .at(-1);
+    if (lastMerge && lastMerge.ok === true) continue;
+    if (lastMerge && lastMerge.step === "kept-land") continue;
     const branch = taskBranchName(runtime, task.slug);
-    if (!(await branchExists(runtime, branch))) continue;
+    if (!(await branchExists(runtime, branch))) {
+      attempted.push(task.slug);
+      await runtime.store.appendRecord(
+        scriptMeta(iteration, "kept-land", {
+          slug: task.slug,
+          round: taskState.round,
+        }),
+        {
+          ok: false,
+          cause: `kept-land failed: branch "${branch}" does not exist`,
+        },
+      );
+      continue;
+    }
     const tip = (
       await git(runtime.paths.repoRoot, ["rev-parse", branch])
     ).stdout.trim();
     if (!(await qualifiesForKeptLand(runtime, task, records, tip))) continue;
+    if (deterministicRed(records, task.slug, tip)) {
+      await runtime.store.appendRecord(
+        scriptMeta(iteration, "kept-land", {
+          slug: task.slug,
+          round: taskState.round,
+        }),
+        { ok: true, cause: "skipped: deterministic-red" },
+      );
+      continue;
+    }
     attempted.push(task.slug);
     try {
       await mergeTask(runtime, task, iteration, taskState, { keptLand: true });
@@ -583,19 +610,39 @@ export async function runKeptLand(
       .filter((r) => r.slug === task.slug && r.step === "merge" && r.endedAt)
       .sort(bySeq)
       .at(-1);
-    if (merge?.ok === true && merge.iteration === iteration) {
-      landed.push(task.slug);
-      await runtime.store.appendRecord(
-        scriptMeta(iteration, "kept-land", {
-          slug: task.slug,
-          round: taskState.round,
-        }),
-        {
-          ok: true,
-          commit: merge.commit,
-          cause: `approved ${tip} landed as ${merge.commit}`,
-        },
-      );
+    if (merge && merge.iteration === iteration) {
+      if (merge.ok === true) {
+        landed.push(task.slug);
+        await runtime.store.appendRecord(
+          scriptMeta(iteration, "kept-land", {
+            slug: task.slug,
+            round: taskState.round,
+          }),
+          {
+            ok: true,
+            commit: merge.commit,
+            cause: `approved ${tip} landed as ${merge.commit}`,
+          },
+        );
+      } else {
+        const records = await runtime.store.listRecords();
+        if (
+          !records.some(
+            (r) =>
+              r.slug === task.slug &&
+              r.step === "kept-land" &&
+              r.iteration === iteration,
+          )
+        ) {
+          await runtime.store.appendRecord(
+            scriptMeta(iteration, "kept-land", {
+              slug: task.slug,
+              round: taskState.round,
+            }),
+            { ok: false, cause: merge.cause ?? "merge failed" },
+          );
+        }
+      }
     }
   }
   return { landed, attempted };
