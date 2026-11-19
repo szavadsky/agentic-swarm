@@ -2,7 +2,10 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import yaml from "yaml";
+import { z } from "zod";
 import { dispatch } from "../../src/cli/dispatch.js";
+import { loadRunConfig } from "../../src/kernel/config.js";
 
 const FILES = [
   "class.schema.json",
@@ -57,6 +60,8 @@ interface JsonSchema {
   additionalProperties?: boolean;
 }
 
+const SHIPPED_RUN_DIR = shippedRunDir();
+
 describe("factory schemas", () => {
   it(
     "writes every kernel schema as JSON Schema into a new directory",
@@ -92,9 +97,123 @@ describe("factory schemas", () => {
     }),
   );
 
+  it(
+    "exports the authored run layer while the loader stays resolved and strict",
+    withTmp(async (root) => {
+      const out = path.join(root, "schemas");
+      expect((await runSchemas(["--out", out])).code).toBe(0);
+      expectAuthoredRunLayer(out, root);
+    }),
+  );
+
   it("requires an output directory", async () => {
     const result = await runSchemas([]);
     expect(result.code).toBe(1);
     expect(result.err).toContain("schemas requires --out <dir>");
   });
 });
+
+describe.skipIf(!SHIPPED_RUN_DIR)(
+  "factory schemas: shipped run configs",
+  () => {
+    it(
+      "validates every shipped run config against the exported run schema",
+      withTmp(async (root) => {
+        const out = path.join(root, "schemas");
+        expect((await runSchemas(["--out", out])).code).toBe(0);
+        // The written file, not the schema it came from: an editor reads this.
+        const validator = z.fromJSONSchema(exportedRunSchema(out));
+        const configs = fs
+          .readdirSync(SHIPPED_RUN_DIR!)
+          .filter((name) => name.endsWith(".yaml"))
+          .sort();
+        expect(configs.length).toBeGreaterThan(0);
+        const failures: string[] = [];
+        for (const name of configs) {
+          const config = yaml.parse(
+            fs.readFileSync(path.join(SHIPPED_RUN_DIR!, name), "utf8"),
+          );
+          const result = validator.safeParse(config);
+          if (!result.success) {
+            const issue = result.error.issues[0]!;
+            failures.push(
+              `${name}: ${issue.path.join(".") || "(root)"}: ${issue.message}`,
+            );
+          }
+        }
+        expect(failures).toEqual([]);
+      }),
+    );
+  },
+);
+
+type ExportedSchema = Parameters<typeof z.fromJSONSchema>[0];
+
+/** The run schema parsed back from the file `factory schemas` wrote. */
+function exportedRunSchema(out: string): ExportedSchema {
+  return JSON.parse(
+    fs.readFileSync(path.join(out, "run.schema.json"), "utf8"),
+  ) as ExportedSchema;
+}
+
+/**
+ * A run file is one layer: it names its base, may state only what it changes,
+ * and deletes an inherited key with `null`. The loader still validates the
+ * merged config, so the export never loosens a launch.
+ */
+function expectAuthoredRunLayer(out: string, root: string): void {
+  const validator = z.fromJSONSchema(exportedRunSchema(out));
+  const accepts = (value: unknown): boolean =>
+    validator.safeParse(value).success;
+
+  expect(accepts({ extends: "base.yaml" })).toBe(true);
+  expect(accepts({ aliases: { pm: { model: "m" } } })).toBe(true);
+  expect(
+    accepts({ aliases: { pm: { harness: "fake", fallbacks: null } } }),
+  ).toBe(true);
+  expect(accepts({ aliases: { pm: null }, scouts: null })).toBe(true);
+
+  // Strict everywhere: an unknown key is a typo, not an inherited value.
+  expect(accepts({ bogus: true })).toBe(false);
+  expect(accepts({ aliases: { pm: { bogus: true } } })).toBe(false);
+  // `null` removes a key; it is not an array entry.
+  expect(accepts({ aliases: { pm: { fallbacks: [null] } } })).toBe(false);
+  expect(accepts({ extends: "" })).toBe(false);
+  expect(accepts({ extends: 7 })).toBe(false);
+
+  // Without a base the layer above is no config: the loader names the field.
+  const partial = path.join(root, "partial.yaml");
+  fs.writeFileSync(partial, "aliases:\n  pm: { model: m }\n", "utf8");
+  expect(() => loadRunConfig(partial)).toThrow(/aliases\.pm\.harness/);
+
+  // A typo in an overlay still fails the merged config's strict schema.
+  fs.writeFileSync(
+    path.join(root, "base.yaml"),
+    "aliases:\n  pm: { harness: fake, model: base }\n",
+    "utf8",
+  );
+  const unknown = path.join(root, "unknown.yaml");
+  fs.writeFileSync(
+    unknown,
+    [
+      "extends: base.yaml",
+      "aliases:",
+      "  pm: { harness: fake, model: m, bogus: true }",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  expect(() => loadRunConfig(unknown)).toThrow(/Unrecognized key/);
+}
+
+/**
+ * The shipped run library lives outside this package. The gate export names
+ * the tree under test; a package-only checkout ships no configs to validate.
+ */
+function shippedRunDir(): string | undefined {
+  const tree = process.env.FACTORY_TREE_ROOT;
+  return [
+    ...(tree ? [path.join(tree, "bootstrap", "run")] : []),
+    path.resolve(import.meta.dir, "../../../../bootstrap/run"),
+  ].find((dir) => fs.existsSync(dir));
+}

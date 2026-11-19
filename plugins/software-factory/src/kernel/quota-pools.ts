@@ -4,6 +4,7 @@ import yaml from "yaml";
 import { z } from "zod";
 import { KeyedMutex } from "../core/mutex.js";
 import { writeYamlAtomic } from "../core/records/io.js";
+import { statedWaitMs } from "../harness/stated-wait.js";
 import type { GoalPaths, RunConfig } from "./types.js";
 
 /** Pool key -> epoch ms at which the pool may serve again. */
@@ -16,10 +17,6 @@ export type PoolResets = Map<string, number>;
  * shortest common subscription window and the fallback.
  */
 export const DEFAULT_POOL_RESET_MINUTES = 300;
-
-/** "Resets in 130h19m23s" / "Resets in 33m53s": the provider's stated window. */
-const RESET_TEXT =
-  /resets?\s+in\s+(?:(\d+(?:\.\d+)?)\s*h)?\s*(?:(\d+(?:\.\d+)?)\s*m)?/i;
 
 const QUOTA_POOLS_FILE = "quota-pools.yaml";
 
@@ -113,35 +110,25 @@ export function poolExhausted(
 }
 
 /**
- * The reset time a quota stop stores: the provider's stated window when the
- * stop text names one, capped by `quota.maxResetMinutes` when the run config
- * sets a cap; otherwise the run config's `resetMinutes`. An unparseable text
- * falls back like no text at all.
+ * The reset time a quota stop stores: the provider's stated wait when the
+ * stop text names one (`Resets in 130h19m23s` or `retry-after-ms=38240413`),
+ * capped by `quota.maxResetMinutes` when the run config sets a cap; otherwise
+ * the run config's `resetMinutes`. An unparseable text falls back like no text
+ * at all.
  */
 export function poolResetAt(
   run: Pick<RunConfig, "quota">,
   now = Date.now(),
   resetText?: string,
 ): number {
-  const stated = resetMinutesFromText(resetText);
+  const stated = statedWaitMs(resetText);
   if (stated !== undefined) {
     const cap = run.quota?.maxResetMinutes;
-    const minutes = cap === undefined ? stated : Math.min(stated, cap);
-    return now + minutes * 60_000;
+    const wait = cap === undefined ? stated : Math.min(stated, cap * 60_000);
+    return now + wait;
   }
   const minutes = run.quota?.resetMinutes ?? DEFAULT_POOL_RESET_MINUTES;
   return now + minutes * 60_000;
-}
-
-/** The provider's stated reset in minutes; undefined when the text names none. */
-function resetMinutesFromText(text: string | undefined): number | undefined {
-  if (!text) return undefined;
-  const match = RESET_TEXT.exec(text);
-  if (!match) return undefined;
-  const hours = match[1] === undefined ? 0 : Number(match[1]);
-  const minutes = match[2] === undefined ? 0 : Number(match[2]);
-  const total = hours * 60 + minutes;
-  return Number.isFinite(total) && total > 0 ? total : undefined;
 }
 
 /**

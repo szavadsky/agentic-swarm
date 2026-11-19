@@ -7,6 +7,7 @@ import { boundaryTarget } from "./flow-context.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import {
   existingTasks,
+  type PlanCheckPmResult,
   restoreTurn,
   runPlanCheckPm,
   snapshotTurn,
@@ -280,6 +281,10 @@ export interface PlanCheckRound {
   turn: PlanCheckTurn;
   /** Follow-up slugs the PM continued; non-empty means dispatch has work. */
   continued: string[];
+  /** `checked` when no follow-up PM turn ran; otherwise that ladder's exit. */
+  status: PlanCheckPmResult["status"] | "checked";
+  /** Baseline findings the PM could not fix; `architect` only. */
+  findings: string[];
 }
 
 /**
@@ -287,7 +292,9 @@ export interface PlanCheckRound {
  * shared by the boundary gate and dispatch, so one `planCheckRounds` budget
  * covers both: a round is spent whether the PM continued a slug or left it
  * for the architect. An infra stop, an `architect` verdict and an empty
- * follow-up list stop here; only continued work resumes dispatch.
+ * follow-up list stop here; a follow-up PM exit is carried in `status` and
+ * `findings`, so the caller can hand its unfixed findings to the next
+ * consult. Only continued work resumes dispatch.
  */
 export async function runPlanCheckRound(
   runtime: KernelRuntime,
@@ -295,14 +302,19 @@ export async function runPlanCheckRound(
 ): Promise<PlanCheckRound> {
   const turn = await runPlanCheck(runtime, opts);
   if (turn.infra || turn.verdict !== "progress" || turn.followUps.length === 0)
-    return { turn, continued: [] };
+    return { turn, continued: [], status: "checked", findings: [] };
   const followed = await runPlanCheckPm(runtime, {
     iteration: opts.iteration,
     state: opts.state,
     followUps: turn.followUps,
     cwd: runtime.paths.goalCheckout,
   });
-  return { turn, continued: followed.continued };
+  return {
+    turn,
+    continued: followed.continued,
+    status: followed.status,
+    findings: followed.status === "architect" ? followed.findings : [],
+  };
 }
 
 /**
