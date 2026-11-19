@@ -41,6 +41,7 @@ export function createRealHarnesses(
       binary: context.harnesses?.[OMP_ID]?.binary,
       lspConfig: context.lsp?.config,
       options: context.harnesses?.[OMP_ID]?.options,
+      envAllowlist: context.envAllowlist,
     }),
   };
   for (const [id, entry] of Object.entries(context.harnesses ?? {})) {
@@ -50,6 +51,7 @@ export function createRealHarnesses(
       binary: entry.binary,
       acpx: entry.acpx,
       options: entry.options,
+      envAllowlist: context.envAllowlist,
     });
   }
   return harnesses;
@@ -57,10 +59,14 @@ export function createRealHarnesses(
 
 const MODEL_TIMEOUT_SEC = 60;
 
-async function ompModels(binary: string): Promise<Set<string>> {
+async function ompModels(
+  binary: string,
+  envAllowlist?: readonly string[],
+): Promise<Set<string>> {
   const res = await runProcess({
     cmd: [binary, "models", "--json"],
     cwd: process.cwd(),
+    envAllowlist,
     timeoutSec: MODEL_TIMEOUT_SEC,
     maxOutputBytes: 4 * 1024 * 1024,
   });
@@ -83,6 +89,7 @@ async function ompModels(binary: string): Promise<Set<string>> {
 /** Real model lists, cached per process; used only by pre-flight. */
 export function createRealModelCatalog(
   binaries: Record<string, string | undefined> = resolveHarnessBinaries(),
+  envAllowlist?: readonly string[],
 ): ModelCatalog {
   const cache = new Map<string, Promise<Set<string>>>();
   const models = (harness: string): Promise<Set<string>> => {
@@ -93,7 +100,7 @@ export function createRealModelCatalog(
       return Promise.reject(
         new Error(`harness "${harness}" binary is not available`),
       );
-    pending = ompModels(binary);
+    pending = ompModels(binary, envAllowlist);
     cache.set(harness, pending);
     pending.catch(() => cache.delete(harness));
     return pending;

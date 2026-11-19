@@ -100,6 +100,8 @@ export interface AcpxStubOptions {
   };
   /** Per-model option overrides when invocation includes --model */
   modelBehaviors?: Record<string, AcpxStubBehavior>;
+  /** Prompt-phase child writes its environment here as JSON; env-filter tests read it. */
+  envFile?: string;
 }
 
 /**
@@ -133,6 +135,7 @@ export function createAcpxStub(opts: AcpxStubOptions = {}): AcpxStub {
   const hangAfterResultJs = JSON.stringify(opts.hangAfterResult ?? false);
   const sessionInfoErrorJs = JSON.stringify(opts.sessionInfoError ?? null);
   const modelBehaviorsJs = JSON.stringify(opts.modelBehaviors ?? null);
+  const envFileJs = JSON.stringify(opts.envFile ?? null);
 
   const script = `#!/usr/bin/env bun
 import fs from "node:fs";
@@ -142,6 +145,7 @@ const args = process.argv.slice(2);
 const logPath = ${JSON.stringify(logPath)};
 const readyPath = ${JSON.stringify(readyPath)};
 const stateDir = ${JSON.stringify(stateDir)};
+const envFile = ${envFileJs};
 fs.mkdirSync(stateDir, { recursive: true });
 fs.appendFileSync(logPath, JSON.stringify(args) + "\\n");
 fs.writeFileSync(readyPath, "ready");
@@ -293,6 +297,7 @@ if (args.includes("set")) {
 }
 
 // Only prompt-phase invocations reach here; setup commands exited above.
+if (envFile) fs.writeFileSync(envFile, JSON.stringify(process.env));
 if (process.env.ACPX_STUB_PID_FILE) fs.writeFileSync(process.env.ACPX_STUB_PID_FILE, String(process.pid));
 
 if (mode === "no_session" || !session || !fs.existsSync(sessionFile(session))) {

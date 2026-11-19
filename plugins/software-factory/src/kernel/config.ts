@@ -328,6 +328,13 @@ export const runConfigSchema = z
     /** Harness id -> adapter binding; a harness id is a config name. */
     harnesses: z.record(z.string(), harnessEntrySchema).default({}),
     /**
+     * Names a spawned harness or agent may inherit from the factory's own
+     * environment, on top of the base toolchain set (PATH, HOME, bun/node
+     * caches, temp dirs). Values set in a harness entry's `options.env` pass
+     * regardless; nothing else inherited reaches a child.
+     */
+    envAllowlist: z.array(z.string().min(1)).default([]),
+    /**
      * Harness model id -> OpenRouter model id, for ids matching cannot
      * resolve. Explicit wins over matching; ids across providers cannot be
      * derived, so an unmatchable live model is mapped here, not guessed.

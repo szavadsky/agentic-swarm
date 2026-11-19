@@ -37,6 +37,7 @@ async function runProbeCommand(
   const result = await runProcess({
     cmd: commandLine(runtime, args),
     cwd,
+    envAllowlist: runtime.envAllowlist,
     env: config.env,
     timeoutSec: PROBE_TIMEOUT_SEC,
     maxOutputBytes: MAX_OUTPUT_BYTES,

@@ -921,14 +921,16 @@ describe("AcpxHarness", () => {
 
   it("abort kills the prompt child and reports cancelled", async () => {
     const stub = createAcpxStub();
+    const cwd = path.dirname(stub.binary);
+    const pidFile = path.join(cwd, "child.pid");
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
       acpx: PI_ACPX,
+      // The stub reports its pid through this entry env; no parent variable
+      // reaches a child unless the harness entry names it.
+      options: { env: { ACPX_STUB_PID_FILE: pidFile } },
     });
-    const cwd = path.dirname(stub.binary);
-    const pidFile = path.join(cwd, "child.pid");
-    process.env.ACPX_STUB_PID_FILE = pidFile;
     try {
       const controller = new AbortController();
       const pending = harness.turn(
@@ -944,21 +946,20 @@ describe("AcpxHarness", () => {
       expect(result.attempts).toHaveLength(1);
       expectDead(pid);
     } finally {
-      delete process.env.ACPX_STUB_PID_FILE;
       stub.cleanup();
     }
   });
 
   it("abort after resolve is a no-op", async () => {
     const stub = createAcpxStub();
+    const cwd = path.dirname(stub.binary);
+    const pidFile = path.join(cwd, "child.pid");
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
       acpx: PI_ACPX,
+      options: { env: { ACPX_STUB_PID_FILE: pidFile } },
     });
-    const cwd = path.dirname(stub.binary);
-    const pidFile = path.join(cwd, "child.pid");
-    process.env.ACPX_STUB_PID_FILE = pidFile;
     try {
       const controller = new AbortController();
       const result = await harness.turn(
@@ -974,7 +975,6 @@ describe("AcpxHarness", () => {
       controller.abort();
       expect(result.stop).toEqual({ kind: "done" });
     } finally {
-      delete process.env.ACPX_STUB_PID_FILE;
       stub.cleanup();
     }
   });

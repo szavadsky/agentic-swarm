@@ -11,6 +11,8 @@ export interface AcpxHarnessOptions {
   acpx: AcpxConfig;
   /** Harness-entry `options`: `args`/`env`, validated then passed to the acpx child. */
   options?: Record<string, unknown>;
+  /** Run-config names this harness's children may inherit on top of the base set. */
+  envAllowlist?: readonly string[];
   retry?: Partial<RetryPolicy>;
 }
 

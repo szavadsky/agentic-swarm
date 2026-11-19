@@ -674,6 +674,8 @@ export interface RunConfig {
   aliases: Record<string, AliasConfig>;
   /** Harness id -> adapter binding, binary override or opaque options. */
   harnesses?: Record<string, HarnessConfig>;
+  /** Extra environment names a spawned harness or agent inherits. */
+  envAllowlist?: string[];
   /** Harness model id -> OpenRouter model id, for ids matching cannot resolve. */
   priceIds?: Record<string, string>;
   limits: {

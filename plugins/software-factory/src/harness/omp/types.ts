@@ -21,6 +21,8 @@ export interface OmpHarnessOptions {
   retry?: Partial<RetryPolicy>;
   /** Harness-entry `options`: omp overlay keys, passed through untouched. */
   options?: Record<string, unknown>;
+  /** Run-config names this harness's children may inherit on top of the base set. */
+  envAllowlist?: readonly string[];
   readyTimeoutMs?: number;
   /**
    * Canonical artifact LSP config. When set, each turn installs it into the

@@ -207,6 +207,13 @@ its launch overlay (`sessions.retention` still owns
 unattended omp policy there — memory/auto-learn/skills off, approval, disabled
 providers, retry — so no policy is compiled in.
 
+Every child a launch spawns runs on a fixed base environment (`PATH`, `HOME`,
+temp dirs, bun/node caches, git's optional locks, locale) instead of the
+factory's own, so provider keys and unrelated operator state never reach gates,
+setup, git or harness processes. A run config adds names for harness and agent
+children with `envAllowlist: [ANTHROPIC_API_KEY]`; a value set in an acpx
+harness entry's `options.env` always reaches that child.
+
 Gates run once on the base; a red base is recorded and warned once, not fatal.
 
 ## Goal directory

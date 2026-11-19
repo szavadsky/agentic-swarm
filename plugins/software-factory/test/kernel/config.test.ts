@@ -508,6 +508,18 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("parses the harness env allowlist and defaults it empty", () => {
+    const root = tmpRepo();
+    expect(loadConfigs(root).run.envAllowlist).toEqual([]);
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/run.yaml"),
+      ["envAllowlist:", "  - ANTHROPIC_API_KEY", ""].join("\n"),
+    );
+    expect(loadConfigs(root).run.envAllowlist).toEqual(["ANTHROPIC_API_KEY"]);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("reports an invalid sessions.retention as a finding", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });

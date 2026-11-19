@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import { childEnv } from "../../core/env.js";
 import { runProcess } from "../../core/proc.js";
 import {
   registerChildGroup,
@@ -46,6 +47,8 @@ export interface AcpxRuntime {
   id: string;
   command: AcpxCommand;
   acpx: AcpxRunConfig;
+  /** Run-config names this runtime's children may inherit on top of the base set. */
+  envAllowlist?: readonly string[];
 }
 
 function commandLine(runtime: AcpxRuntime, args: string[]): string[] {
@@ -101,6 +104,7 @@ async function runSetup(
   const result = await runProcess({
     cmd: commandLine(runtime, args),
     cwd,
+    envAllowlist: runtime.envAllowlist,
     env: config.env,
     timeoutSec: SETUP_TIMEOUT_SEC,
     maxOutputBytes: 4 * 1024 * 1024,
@@ -221,7 +225,10 @@ function runPromptProcess(
           cwd,
           detached: true,
           stdio: ["ignore", "pipe", "pipe"],
-          env: { ...process.env, ...config.env },
+          env: childEnv({
+            allow: runtime.envAllowlist,
+            set: config.env,
+          }),
         },
       );
     } catch (error) {
