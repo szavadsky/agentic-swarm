@@ -241,6 +241,24 @@ describe("pre-flight", () => {
     }
   });
 
+  it("refuses an alternate alias the flow step names", async () => {
+    const f = await fixture();
+    try {
+      f.configs.process.flows["implement-review"]!.steps[0]!.alternates = [
+        "implementer-backup",
+      ];
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual({
+        file: path.join(f.repo.dir, ".factory/run.yaml"),
+        key: "aliases.implementer-backup",
+        message:
+          'required by flow "implement-review" step "implement" alternates but missing',
+      });
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
   for (const [step, alias] of [
     ["plancheck", "plan-checker"],
     ["planreview", "plan-reviewer"],

@@ -6,6 +6,7 @@ import yaml from "yaml";
 import type { Stop, Usage } from "../../src/harness/types.js";
 import { derive } from "../../src/kernel/derive.js";
 import {
+  deriveLaunchKind,
   type GoalMetrics,
   type IncidentCounts,
   writeMetrics,
@@ -526,5 +527,33 @@ describe("iteration metrics incidents and spend tables", () => {
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it("counts an undelivered reminder as an incident, never one that delivered", () => {
+    // Legacy records carry no stored launch kind: the delivery decides.
+    const delivered = rec(1, {
+      outcome: {
+        status: "done",
+        summary: "repaired",
+        concerns: [],
+        forward: [],
+      },
+      repairFindings: ["no outcome written to the outcome path"],
+      attempts: [
+        attempt("model-a", OK, usage(0.01, 10, 1)),
+        attempt("model-a", OK, usage(0.01, 10, 1)),
+      ],
+    });
+    expect(deriveLaunchKind(delivered)).toBeUndefined();
+
+    const undelivered = rec(2, {
+      stop: { kind: "refusal", details: "declined" },
+      repairFindings: ["no outcome written to the outcome path"],
+      attempts: [
+        attempt("model-a", OK, usage(0.01, 10, 1)),
+        attempt("model-a", { kind: "refusal", details: "declined" }),
+      ],
+    });
+    expect(deriveLaunchKind(undelivered)).toBe("unknown");
   });
 });

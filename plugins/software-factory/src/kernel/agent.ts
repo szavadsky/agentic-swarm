@@ -14,7 +14,7 @@ import { addUsage, reportsUsage, zeroUsage } from "../harness/usage.js";
 import { missingPlanFinding, snapshotPlan } from "./architect-session.js";
 import { contextPackRelPath } from "./context-pack.js";
 import { type TurnTarget, tierPoolKey } from "./flow-context.js";
-import { hasFallbackHop } from "./metrics.js";
+import { launchKindOf } from "./metrics.js";
 import { loadPriceTable } from "./openrouter.js";
 import {
   failedOutcome,
@@ -485,18 +485,12 @@ export async function runAgentTurn(
         priceIds,
       }).usage
     : undefined;
-  const launchKind: LaunchKind | undefined =
-    stop.kind === "infra"
-      ? "glitch"
-      : hasFallbackHop(attempts)
-        ? "glitch"
-        : outcome?.verdict === "changes"
-          ? "change-request"
-          : outcome?.status === "failed" || outcome?.status === "blocked"
-            ? "failure"
-            : repairFindings.length > 0
-              ? "failure"
-              : undefined;
+  const launchKind: LaunchKind | undefined = launchKindOf({
+    stop,
+    outcome: outcome ?? undefined,
+    attempts,
+    repairFindings,
+  });
   const record = await started.finish({
     ...settled,
     promptBytes,

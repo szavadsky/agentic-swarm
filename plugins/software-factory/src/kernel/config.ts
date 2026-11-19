@@ -80,6 +80,8 @@ export const flowStepSchema = z
     review: z.boolean().default(false),
     /** Review and checks steps: change requests honored before the last call. */
     changeRequests: z.number().int().nonnegative().optional(),
+    /** Aliases later attempts run on after failure-kind launches, in order. */
+    alternates: z.array(z.string().min(1)).optional(),
   })
   .strict()
   .refine(
@@ -90,7 +92,11 @@ export const flowStepSchema = z
       message: "a step other than checks needs a prompt and an alias",
       path: ["prompt"],
     },
-  );
+  )
+  .refine((step) => step.alternates === undefined || step.alias !== undefined, {
+    message: "alternates need a step alias to alternate with",
+    path: ["alternates"],
+  });
 
 export const followUpSchema = z
   .object({

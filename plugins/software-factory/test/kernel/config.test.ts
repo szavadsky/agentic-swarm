@@ -160,6 +160,42 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("parses a step's alternates and refuses them on the checks script step", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      [
+        "flows:",
+        "  custom:",
+        "    steps:",
+        "      - id: implement",
+        "        prompt: implementer",
+        "        alias: implementer",
+        "        alternates: [implementer-backup, implementer-last]",
+        "",
+      ].join("\n"),
+    );
+    const steps = loadConfigs(root).process.flows.custom!.steps;
+    expect(steps[0]!.alternates).toEqual([
+      "implementer-backup",
+      "implementer-last",
+    ]);
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      [
+        "flows:",
+        "  custom:",
+        "    steps:",
+        "      - id: checks",
+        "        alternates: [implementer-backup]",
+        "",
+      ].join("\n"),
+    );
+    expect(() => loadConfigs(root)).toThrow(/alternates need a step alias/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("names a prompt and alias for every boundary step, plan review included", () => {
     const root = tmpRepo();
     const boundary = loadConfigs(root).process.boundary;

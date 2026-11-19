@@ -72,6 +72,16 @@ boundary:                       # the kernel turns outside any task flow
   steward: { prompt: steward, alias: steward }
 ```
 
+A flow step may name `alternates: [<alias>…]` to change the model on retry:
+the step's alias runs first, and after each failure-kind launch — no outcome
+after the reminders, an agent-declared `failed`/`blocked`, or fix rounds
+exhausted on red gates — the next attempt at that step runs on the next
+alternate, staying on the last one once the list is spent. The position is
+derived from the step records, so an amend or a relaunch lands on the same
+alternate; a turn that delivered after its reminder did not fail. An alternate
+resolves its own fallbacks and quota pool, and a task `tier` still escalates
+the producer.
+
 **Run** — transient, passed with `--run-config`:
 
 ```yaml

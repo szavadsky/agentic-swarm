@@ -537,6 +537,7 @@ export async function runDispatch(
           taskState,
           action.step,
           iteration,
+          records,
         );
         if (target.subscription !== undefined) {
           const poolLimit =

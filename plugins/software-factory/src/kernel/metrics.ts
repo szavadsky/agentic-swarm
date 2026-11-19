@@ -1,5 +1,5 @@
 import yaml from "yaml";
-import type { TurnAttempt, Usage } from "../harness/types.js";
+import type { Stop, TurnAttempt, Usage } from "../harness/types.js";
 import { addUsage, zeroUsage } from "../harness/usage.js";
 import { type PriceTable, pricedRecord } from "./pricing.js";
 import type { SummaryStatus } from "./summary.js";
@@ -7,6 +7,7 @@ import type {
   ArtifactStore,
   FlowDefinition,
   LaunchKind,
+  Outcome,
   State,
   StepRecord,
 } from "./types.js";
@@ -322,6 +323,31 @@ export function countOutcomeRepairs(
 }
 
 /**
+ * The launch kind a turn's own facts give, none for a normal turn. A turn that
+ * delivered after a reminder delivered: its repair finding is recorded, so it
+ * is no failure. A cancellation is the operator stopping the turn, not the
+ * model failing.
+ */
+export function launchKindOf(rec: {
+  stop?: Stop;
+  outcome?: Outcome;
+  attempts?: readonly TurnAttempt[];
+  repairFindings?: readonly string[];
+}): LaunchKind | undefined {
+  if (rec.stop?.kind === "infra") return "glitch";
+  if (hasFallbackHop(rec.attempts)) return "glitch";
+  if (rec.outcome?.verdict === "changes") return "change-request";
+  if (rec.outcome?.status === "failed" || rec.outcome?.status === "blocked") {
+    return "failure";
+  }
+  if (rec.stop?.kind === "cancelled") return undefined;
+  if (rec.outcome === undefined && (rec.repairFindings?.length ?? 0) > 0) {
+    return "failure";
+  }
+  return undefined;
+}
+
+/**
  * One record's launch kind for the per-agent counts. A stored kind wins; an
  * old incident record without one counts as unknown; a normal turn counts
  * nowhere. Parks are incidents with stored kinds; other script records are not
@@ -335,14 +361,10 @@ export function deriveLaunchKind(
     return rec.step === "park" && rec.endedAt ? "unknown" : undefined;
   }
   if (!rec.endedAt) return undefined;
-  if (rec.stop?.kind === "infra") return "unknown";
-  if (hasFallbackHop(rec.attempts)) return "unknown";
-  if (rec.outcome?.verdict === "changes") return "unknown";
-  if (rec.outcome?.status === "failed" || rec.outcome?.status === "blocked") {
-    return "unknown";
-  }
-  if ((rec.repairFindings?.length ?? 0) > 0) return "unknown";
-  if (countOutcomeRepairs(rec.attempts) > 0) return "unknown";
+  // A launch that left a kind was an incident; an old record never stored it.
+  if (launchKindOf(rec)) return "unknown";
+  // Older still: a repair turn whose record carries no finding text.
+  if (!rec.outcome && countOutcomeRepairs(rec.attempts) > 0) return "unknown";
   return undefined;
 }
 

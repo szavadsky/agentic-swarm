@@ -329,6 +329,13 @@ export interface FlowStep {
    * its call is the last one. Absent means the default (two).
    */
   changeRequests?: number;
+  /**
+   * Run-config aliases the step's later attempts run on after failure-kind
+   * launches, in order: the first alternate after the first failure, the
+   * second after the second, and the last one for every attempt beyond.
+   * The position derives from records, so a relaunch lands on the same alias.
+   */
+  alternates?: string[];
 }
 
 /** How a fix turn follows the turn it repairs. */

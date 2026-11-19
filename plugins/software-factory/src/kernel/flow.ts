@@ -570,7 +570,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     return {};
   }
   const preexisting = preexistingRed(recordedBaseGates(records));
-  const target = stepTarget(runtime, task, state, step.id, iteration);
+  const target = stepTarget(runtime, task, state, step.id, iteration, records);
   const fix = isFixTurn(flow, state, step.id);
   // A trivial goal implements in the front's own session: the turn resumes it
   // with the session's recorded cwd, and the prompt names the absolute
