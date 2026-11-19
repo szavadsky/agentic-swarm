@@ -18,7 +18,7 @@ The shared definitions exist once as partials: `scope` (the predicted-area rule:
 
 `calibration` is the default calibration partial. The process config may replace its content per repo; the prompt template does not change.
 
-Renderer defaults live outside any `This turn` block and the renderer supplies them, so turn code does not pass them: `validate_cmd` (the running build's absolute `bun <build>/bin/factory.ts validate`, stable only within one checkout), `outcome_schema` (the outcome YAML skeleton rendered from the task type's kernel output schema, in the `outcome` partial), `task_frontmatter` (the frontmatter YAML skeleton rendered from the kernel task schema, in the `task-frontmatter` partial), `task_types` (configured task type names in config order with the flow, kind and output schema each supplies, from the process config), `tiers` (run-config alias names in config order; `default` is kernel vocabulary for no tier override and stays literal), `author` (the reviewer's author role; it selects the `<role>-body` and `review-<role>` fragments) and `checks_result`/`checks_tree`/`checks_log` (the latest checks record's result, tree and log; a render with no checks record gets `no checks run`, `unknown` and `unknown`). `author` defaults to `implementer`; the plan-review turn overrides it with `architect`. `class_types` is a turn-supplied variable above the block: the front turn renders its class-to-task-type mapping from the same kernel mapping the validator enforces. The delivery-repair ask also supplies its own narrowed `outcome_schema`; it has no role prompt, so its shape must match the turn it repairs.
+Renderer defaults live outside any `This turn` block and the renderer supplies them, so turn code does not pass them: `validate_cmd` (the running build's absolute `bun <build>/bin/factory.ts validate`, stable only within one checkout), `outcome_schema` (the outcome YAML skeleton rendered from the task type's kernel output schema, in the `outcome` partial), `task_frontmatter` (the frontmatter YAML skeleton rendered from the kernel task schema, in the `task-frontmatter` partial), `task_types` (configured task type names in config order with the flow, kind and output schema each supplies, from the process config), `tiers` (run-config alias names in config order; `default` is kernel vocabulary for no tier override and stays literal), `author` (the reviewer's author role; it selects the `<role>-body` and `review-<role>` fragments) and `checks_result`/`checks_tree`/`checks_log` (the latest checks record's result, tree and log; a render with no checks record gets `no checks run`, `unknown` and `unknown`), and `base_gates` (the base tree's recorded gate result; a render with no base record gets `not recorded`, never a clean base). `author` defaults to `implementer`; the plan-review turn overrides it with `architect`. `class_types` is a turn-supplied variable above the block: the front turn renders its class-to-task-type mapping from the same kernel mapping the validator enforces. The delivery-repair ask also supplies its own narrowed `outcome_schema`; it has no role prompt, so its shape must match the turn it repairs.
 
 ## architect.md
 
@@ -82,20 +82,20 @@ Renderer defaults live outside any `This turn` block and the renderer supplies t
 
 ## implementer.md
 
-| variable          | meaning                                                                                                                                                                                                                                       |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `task_path`       | path to this task's file: frontmatter plus brief                                                                                                                                                                                              |
-| `front_pack`      | path to the front's context pack for a front-classified trivial or task goal; empty string when no front classified this task                                                                                                                 |
-| `worktree`        | path to the task worktree to edit                                                                                                                                                                                                             |
-| `resume_note`     | follow-up notice for a turn resumed in the front's session: the task branch plus the absolute-path rules; empty string on a de-novo turn                                                                                                      |
-| `report_path`     | repo-relative path a spike commits its finding to (`.factory/spikes/<slug>.md`); empty string on a development task; when set, it also opens the prompt with the commit-first sentence                                                        |
-| `setup_command`   | worktree bootstrap command (dependencies etc.); `none` when not needed                                                                                                                                                                        |
-| `gate_commands`   | configured compile/lint/test commands as `- id: command` lines; `none` when empty                                                                                                                                                             |
-| `baseline_checks` | gate failures recorded before this turn, same format; `none` when the baseline is green                                                                                                                                                       |
-| `findings`        | previous review round's summary, concerns and forward for this task (summary first); gate failures when the latest record is red checks; empty string before the first review. Each numbered finding is answered by a change, a reply or both |
-| `outcome_path`    | path where the outcome file must be written when the harness asks for a file                                                                                                                                                                  |
-| `validate_cmd`    | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                                                                                                                                              |
-| `outcome_schema`  | outcome YAML skeleton from the kernel schema; renderer default                                                                                                                                                                                |
+| variable         | meaning                                                                                                                                                                                                                                       |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `task_path`      | path to this task's file: frontmatter plus brief                                                                                                                                                                                              |
+| `front_pack`     | path to the front's context pack for a front-classified trivial or task goal; empty string when no front classified this task                                                                                                                 |
+| `worktree`       | path to the task worktree to edit                                                                                                                                                                                                             |
+| `resume_note`    | follow-up notice for a turn resumed in the front's session: the task branch plus the absolute-path rules; empty string on a de-novo turn                                                                                                      |
+| `report_path`    | repo-relative path a spike commits its finding to (`.factory/spikes/<slug>.md`); empty string on a development task; when set, it also opens the prompt with the commit-first sentence                                                        |
+| `setup_command`  | worktree bootstrap command (dependencies etc.); `none` when not needed                                                                                                                                                                        |
+| `gate_commands`  | configured compile/lint/test commands as `- id: command` lines; `none` when empty                                                                                                                                                             |
+| `base_gates`     | the base tree's recorded gate result: commit plus `green`, or the pre-existing failing checks; `not recorded` when pre-flight has no trustworthy base run                                                                                     |
+| `findings`       | previous review round's summary, concerns and forward for this task (summary first); gate failures when the latest record is red checks; empty string before the first review. Each numbered finding is answered by a change, a reply or both |
+| `outcome_path`   | path where the outcome file must be written when the harness asks for a file                                                                                                                                                                  |
+| `validate_cmd`   | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                                                                                                                                              |
+| `outcome_schema` | outcome YAML skeleton from the kernel schema; renderer default                                                                                                                                                                                |
 
 ## reviewer.md
 
@@ -135,17 +135,17 @@ It contains no turn variables.
 
 ## review-implementer-turn.md
 
-| variable           | meaning                                                                                                                                                |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `task_path`        | path to the task file the diff is judged against                                                                                                       |
-| `base_hash`        | commit hash before this task's first turn; the range spans every round                                                                                 |
-| `head_hash`        | commit hash after the latest implementer turn                                                                                                          |
-| `round`            | 1-based review round                                                                                                                                   |
-| `max_rounds`       | this review step's total review calls: its change-request bound plus the last call                                                                     |
-| `baseline_checks`  | gate failures recorded on the base before any task; pre-existing, not findings against this diff                                                       |
-| `prior_findings`   | previous round's numbered summary, concerns and forward (summary first); empty string in round 1                                                       |
-| `upscope_ask`      | escalation ask for a standalone task review, answered as `upscope: yes\|no` with the verdict; empty string when this task is part of an architect plan |
-| `fix_dispositions` | the current fix round's summary plus one numbered reply per prior finding; empty string in round 1; renderer default                                   |
+| variable           | meaning                                                                                                                                                                                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `task_path`        | path to the task file the diff is judged against                                                                                                                                                                                           |
+| `base_hash`        | commit hash before this task's first turn; the range spans every round                                                                                                                                                                     |
+| `head_hash`        | commit hash after the latest implementer turn                                                                                                                                                                                              |
+| `round`            | 1-based review round                                                                                                                                                                                                                       |
+| `max_rounds`       | this review step's total review calls: its change-request bound plus the last call                                                                                                                                                         |
+| `base_gates`       | the base tree's recorded gate result, and the only evidence a red gate predates the task: commit plus `green`, the pre-existing failing checks, or `not recorded`; a claimed pre-existing failure is a finding unless this record lists it |
+| `prior_findings`   | previous round's numbered summary, concerns and forward (summary first); empty string in round 1                                                                                                                                           |
+| `upscope_ask`      | escalation ask for a standalone task review, answered as `upscope: yes\|no` with the verdict; empty string when this task is part of an architect plan                                                                                     |
+| `fix_dispositions` | the current fix round's summary plus one numbered reply per prior finding; empty string in round 1; renderer default                                                                                                                       |
 
 ## review-architect.md
 
@@ -178,17 +178,17 @@ The digest scout appends loops, failures and interventions; it does not restate 
 
 ## steward.md
 
-| variable           | meaning                                                                          |
-| ------------------ | -------------------------------------------------------------------------------- |
-| `worktree`         | path to the task worktree holding the conflicted merge                           |
-| `branch`           | task branch the integration head merges into                                     |
-| `integration_head` | integration head sha the branch must absorb                                      |
-| `conflicts`        | conflicted files, comma-separated; `none` when the merge needs no resolution     |
-| `gate_commands`    | configured gate commands as `- id: command` lines; `none` when empty             |
-| `baseline_checks`  | gate failures recorded on the base before any task; pre-existing, not findings   |
-| `outcome_path`     | path where the outcome file must be written when the harness asks for a file     |
-| `validate_cmd`     | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default |
-| `outcome_schema`   | outcome YAML skeleton from the kernel schema; renderer default                   |
+| variable           | meaning                                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `worktree`         | path to the task worktree holding the conflicted merge                                                        |
+| `branch`           | task branch the integration head merges into                                                                  |
+| `integration_head` | integration head sha the branch must absorb                                                                   |
+| `conflicts`        | conflicted files, comma-separated; `none` when the merge needs no resolution                                  |
+| `gate_commands`    | configured gate commands as `- id: command` lines; `none` when empty                                          |
+| `base_gates`       | the base tree's recorded gate result: commit plus `green`, the pre-existing failing checks, or `not recorded` |
+| `outcome_path`     | path where the outcome file must be written when the harness asks for a file                                  |
+| `validate_cmd`     | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                              |
+| `outcome_schema`   | outcome YAML skeleton from the kernel schema; renderer default                                                |
 
 ## plan-checker.md
 

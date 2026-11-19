@@ -109,7 +109,7 @@ const ROLES: Record<string, Record<string, string>> = {
     report_path: ".factory/spikes/alpha.md",
     setup_command: "bun install",
     gate_commands: "- test: bun test\n- typecheck: bun run typecheck",
-    baseline_checks: "- test: 2 failing",
+    base_gates: "base abc1234def: green",
     findings: "- src/x.ts:41 needs a null check",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
@@ -124,7 +124,7 @@ const ROLES: Record<string, Record<string, string>> = {
     round: "1",
     max_rounds: "3",
     last_call: "false",
-    baseline_checks: "- test: 2 failing",
+    base_gates: "base abc1234def: green",
     checks_result: "pass",
     checks_tree: "3ba247e47772a8ba5874d089990419f572432df8",
     checks_log: "/goal/records/1/alpha/checks",
@@ -151,7 +151,7 @@ const ROLES: Record<string, Record<string, string>> = {
     integration_head: "abc1234def5678",
     conflicts: "conflict.txt",
     gate_commands: "- test: bun test",
-    baseline_checks: "none",
+    base_gates: "base abc1234def: green",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: OUTCOME_SCHEMA,
@@ -210,6 +210,20 @@ describe("role prompts", () => {
     expect(rendered).toContain("- checks: `no checks run`");
     expect(rendered).toContain("- checks tree: `unknown`");
     expect(rendered).toContain("- checks log: `unknown`");
+  });
+
+  it("renders a review with no base record as `not recorded`, never as green", () => {
+    const lib = loadPrompts(processConfig(), os.tmpdir(), {
+      run: {} as RunConfig,
+    });
+    const vars = { ...ROLES.reviewer! };
+    delete vars.base_gates;
+    const rendered = lib.render("reviewer", vars);
+    expect(rendered).toContain("- base gates: not recorded —");
+    expect(rendered).toContain(
+      "when it is `not recorded`, every such claim is a finding",
+    );
+    expect(rendered).not.toContain("base abc1234def");
   });
 
   it("keeps role text out of a separate system channel", () => {
@@ -589,9 +603,9 @@ describe("prompt debloat", () => {
       ["pm", "Write one hold file per steer"],
       ["pm", "Only an escalated ask may put a question"],
       ["implementer", "Do not commit, amend, push"],
-      ["implementer", "failures here are pre-existing"],
+      ["implementer", "a failure it lists was red before any task"],
       ["reviewer", "Write them as a numbered list in your outcome `summary`"],
-      ["reviewer", "not findings against this diff"],
+      ["reviewer", 'a claimed "pre-existing" failure is a finding'],
       ["digest", "at most 80 lines"],
       ["plan-checker", "MUST report honestly"],
       ["steward", "Never rebase"],

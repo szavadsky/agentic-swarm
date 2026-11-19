@@ -28,7 +28,7 @@ const implementerVars = {
   resume_note: "",
   setup_command: "none",
   gate_commands: "none",
-  baseline_checks: "none",
+  base_gates: "not recorded",
   findings: "",
 };
 

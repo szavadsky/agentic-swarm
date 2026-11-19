@@ -9,7 +9,11 @@ import {
   portable,
   type SessionRef,
 } from "../harness/types.js";
-import { preexistingRed, recordedBaseGates } from "./baseline.js";
+import {
+  formatBaseGates,
+  preexistingRed,
+  recordedBaseGates,
+} from "./baseline.js";
 import { contextPackRelPath } from "./context-pack.js";
 import { formatFailingChecks, newGateFailures } from "./gates.js";
 import { launchKindOf } from "./metrics.js";
@@ -1020,7 +1024,7 @@ export function promptVars(
       runtime.configs.repo.gates
         .map((g) => `- ${g.id}: ${g.command}`)
         .join("\n") || "none",
-    baseline_checks: base ? formatFailingChecks(base.checks) || "none" : "none",
+    base_gates: formatBaseGates(base),
     findings,
     checks_result: checks?.checks
       ? formatFailingChecks(checks.checks) || "pass"

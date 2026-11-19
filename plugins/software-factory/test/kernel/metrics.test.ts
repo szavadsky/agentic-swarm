@@ -719,7 +719,7 @@ describe("record cost truth", () => {
           resume_note: "",
           setup_command: "true",
           gate_commands: "true",
-          baseline_checks: "none",
+          base_gates: "not recorded",
           findings: "none",
         },
         expectation: "any",
