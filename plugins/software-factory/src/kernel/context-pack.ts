@@ -3,6 +3,7 @@ import { concernFingerprint } from "../core/concerns.js";
 import type { BaseGateState } from "./baseline.js";
 import type { OpenDebt } from "./derive.js";
 import type { Steer } from "./mailbox.js";
+import { BOUNDARY_STEPS } from "./types.js";
 import type {
   PlanCheckEvidence,
   State,
@@ -40,6 +41,30 @@ export interface PlanReviewPack {
 export interface SpikeFinding {
   slug: string;
   finding: string;
+}
+
+/**
+ * A ready task that started no task turn in the segment before this pack, and
+ * what withheld it. Dispatch decides admission from these facts; the pack only
+ * reports them, so an aging task cannot stay invisible across boundaries.
+ */
+export interface ReadyAgingTask {
+  slug: string;
+  /** Causes in the pack's reporting order; empty when none is recorded. */
+  causes: string[];
+}
+
+export interface ReadyAgingInput {
+  tasks: readonly TaskFile[];
+  state: State;
+  records: readonly StepRecord[];
+  /** The segment whose turns are counted; the pack that reports it follows. */
+  segment: number;
+  /** Steers still pending: a processed steer's hold no longer decides admission. */
+  pendingSteers: readonly string[];
+  holds: readonly { steer: string; slugs: readonly string[] }[];
+  /** Ready tasks whose next agent step has no live tier, by slug. */
+  unavailableAliases?: ReadonlyMap<string, string>;
 }
 
 export interface ContextPackInput {
@@ -82,6 +107,8 @@ export interface ContextPackInput {
   planCheck?: PlanCheckPack;
   /** The latest plan-review findings; absent when the reviewer never ran. */
   planReview?: PlanReviewPack;
+  /** Ready tasks with no turn in the previous segment; absent before one exists. */
+  agedReady?: ReadyAgingTask[];
 }
 
 const CODE_MAP_ENTRIES = 40;
@@ -120,9 +147,11 @@ function formatDebt(debt: OpenDebt): string {
 
 /**
  * Deterministic index, never pasted content (KERNEL0 §5): status, hashes,
- * rounds, infra commands and paths the architect can drill into. No clock,
- * no timestamps, so the same derived state renders the same pack. Uncapped:
- * the status table and every pointer section render whole on every pack.
+ * rounds, infra commands and paths the architect can drill into. The render
+ * reads no clock; volatile admission facts (a pending hold, a pool's reset
+ * time) arrive through the input, so the same input renders the same pack.
+ * Uncapped: the status table and every pointer section render whole on every
+ * pack.
  */
 export function renderContextPack(input: ContextPackInput): string {
   const lines: string[] = [
@@ -182,6 +211,25 @@ export function renderContextPack(input: ContextPackInput): string {
       return `- ${t.slug}: ${waiting.length > 0 ? `waits on ${waiting.join(", ")}` : "ready"}`;
     });
   if (pending.length > 0) lines.push("", "## Pending", ...pending);
+
+  if (input.agedReady !== undefined) {
+    lines.push("", "## Ready, no turn in the last segment");
+    if (input.agedReady.length === 0) {
+      lines.push("- none");
+    } else {
+      for (const task of [...input.agedReady].sort((a, b) =>
+        a.slug.localeCompare(b.slug),
+      )) {
+        lines.push(
+          `- ${task.slug}: ${
+            task.causes.length > 0
+              ? task.causes.join("; ")
+              : "no blocking cause recorded"
+          }`,
+        );
+      }
+    }
+  }
 
   if (input.planCheck) {
     lines.push(
@@ -291,6 +339,100 @@ export function renderContextPack(input: ContextPackInput): string {
   }
 
   return lines.join("\n") + "\n";
+}
+
+/** Boundary roles run between segments and never start a task turn. */
+const BOUNDARY_STEP_IDS: ReadonlySet<string> = new Set(BOUNDARY_STEPS);
+
+/** The agent turns a segment started, per slug, and the deps it landed. */
+function segmentStarts(
+  records: readonly StepRecord[],
+  segment: number,
+): {
+  started: Set<string>;
+  terminal: Map<string, string>;
+} {
+  const started = new Set<string>();
+  const terminal = new Map<string, string>();
+  for (const record of records) {
+    if (record.iteration !== segment) continue;
+    if (
+      record.actor === "agent" &&
+      record.slug &&
+      !BOUNDARY_STEP_IDS.has(record.step)
+    ) {
+      started.add(record.slug);
+    }
+    if (record.actor === "script" && record.slug && record.endedAt) {
+      if (record.step === "merge" && record.ok === true)
+        terminal.set(record.slug, "merged");
+      else if (record.step === "finish" && record.ok === true)
+        terminal.set(record.slug, "finished");
+    }
+  }
+  return { started, terminal };
+}
+
+function sharedAreas(a: readonly string[], b: readonly string[]): string[] {
+  const left = new Set(
+    a.map((area) => area.trim()).filter((area) => area !== ""),
+  );
+  if (left.size === 0) return [];
+  const shared = new Set<string>();
+  for (const raw of b) {
+    const area = raw.trim();
+    if (area !== "" && left.has(area)) shared.add(area);
+  }
+  return [...shared].sort();
+}
+
+/**
+ * The ready tasks that started no task turn in `segment`, with what withheld
+ * them: a pending steer's hold, a dep that only landed in that segment, a
+ * declared-area clash with live work, or a next step whose alias has no live
+ * tier. Reporting only: the hold deadlock itself is derived elsewhere.
+ */
+export function readyAging(input: ReadyAgingInput): ReadyAgingTask[] {
+  const { started, terminal } = segmentStarts(input.records, input.segment);
+  const ready = new Set(
+    input.tasks
+      .filter((task) => input.state.tasks[task.slug]?.status === "ready")
+      .map((task) => task.slug),
+  );
+  const pending = new Set(input.pendingSteers);
+  const heldBy = new Map<string, string[]>();
+  for (const hold of input.holds) {
+    if (!pending.has(hold.steer)) continue;
+    for (const slug of hold.slugs)
+      heldBy.set(slug, [...(heldBy.get(slug) ?? []), hold.steer]);
+  }
+  // A live-area clash is either a task that ran in the segment or one still
+  // ready beside this one; a merged task's area is history.
+  const active = new Set([...started, ...ready]);
+  const ordered = [...input.tasks].sort((a, b) => a.slug.localeCompare(b.slug));
+  const aged: ReadyAgingTask[] = [];
+  for (const task of ordered) {
+    if (!ready.has(task.slug) || started.has(task.slug)) continue;
+    const causes: string[] = [];
+    const steers = [...new Set(heldBy.get(task.slug) ?? [])].sort();
+    if (steers.length > 0)
+      causes.push(
+        `${steers.length === 1 ? "held by steer" : "held by steers"} ${steers.join(", ")}`,
+      );
+    for (const dep of [...new Set(task.deps)].sort()) {
+      const end = terminal.get(dep);
+      if (end) causes.push(`dep ${dep} ${end} in iteration ${input.segment}`);
+    }
+    for (const other of ordered) {
+      if (other.slug === task.slug || !active.has(other.slug)) continue;
+      for (const area of sharedAreas(task.scope, other.scope))
+        causes.push(`area "${area}" clashes with ${other.slug}`);
+    }
+    const alias = input.unavailableAliases?.get(task.slug);
+    if (alias !== undefined) causes.push(alias);
+    aged.push({ slug: task.slug, causes });
+  }
+  return aged;
 }
 
 /**

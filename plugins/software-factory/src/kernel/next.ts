@@ -7,7 +7,7 @@ function park(slug: string, cause: string): Action {
 
 /**
  * Pure dispatch decision. Actions are ordered by slug; the dispatcher admits
- * them against concurrency, scope and drain limits and re-derives after every
+ * them against concurrency and drain limits and re-derives after every
  * record. `running` guards against dispatching a task twice.
  */
 export function next(
