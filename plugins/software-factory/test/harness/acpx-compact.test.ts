@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, setDefaultTimeout } from "bun:test";
 import path from "node:path";
 import type { AcpxConfig } from "../../src/harness/acpx/config.js";
 import { AcpxHarness } from "../../src/harness/acpx/harness.js";
@@ -14,6 +14,9 @@ import { installFakeClock } from "../helpers/fake-clock.js";
 import { createAcpxStub, type AcpxStub } from "./acpx-stub.js";
 
 const TIMEOUTS = { idleMs: 10_000, wallMs: 30_000 };
+// Above `TIMEOUTS.wallMs`: a stuck acpx command then fails on the harness's own
+// diagnostic instead of racing bun's 5s default under parallel load.
+setDefaultTimeout(60_000);
 
 const PI_ACPX: AcpxConfig = {
   agent: "pi",
@@ -28,6 +31,15 @@ const AGY_ACPX: AcpxConfig = {
   raw: true,
   args: ["--approve-all"],
   usage: { cache: true },
+};
+
+// A config that declares `usage` measures the turn. A stub that reports none is
+// classified as a zero-usage infra/rate stop, and the fallback chain then retries
+// the turn twice, which is what pushed these tests near bun's 5s default.
+const AGENT_USAGE = {
+  totalTokens: 120,
+  inputTokens: 100,
+  outputTokens: 20,
 };
 
 function request(
@@ -57,16 +69,6 @@ function compactRuntime(harness: Harness): KernelRuntime {
   return {
     harnesses: new Map([[harness.id, harness]]),
   } as unknown as KernelRuntime;
-}
-
-async function waitForPrompt(stub: AcpxStub, marker: string): Promise<void> {
-  for (let attempt = 0; attempt < 500; attempt += 1) {
-    if (stub.invocations().some((args) => args.at(-1)?.includes(marker))) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error(`timed out waiting for acpx prompt containing ${marker}`);
 }
 
 describe("AcpxHarness session compaction", () => {
@@ -153,7 +155,7 @@ describe("AcpxHarness session compaction", () => {
   });
 
   it("runs /compact on the raw route's named session after the prompt verb", async () => {
-    const stub = createAcpxStub();
+    const stub = createAcpxStub({ usage: AGENT_USAGE });
     const acpx: AcpxConfig = {
       agent: "opencode acp",
       raw: true,
@@ -258,7 +260,7 @@ describe("AcpxHarness session compaction", () => {
   });
 
   it("never sends /compact to an agent without declared support", async () => {
-    const stub = createAcpxStub();
+    const stub = createAcpxStub({ usage: AGENT_USAGE });
     const harness = new AcpxHarness({
       id: "agy",
       binary: stub.binary,
@@ -296,7 +298,7 @@ describe("AcpxHarness session compaction", () => {
       const cwd = path.dirname(stub.binary);
       const turnStartedAt = Date.now();
       const pending = harness.turn(request(cwd, "long turn"));
-      await waitForPrompt(stub, "long turn");
+      await stub.waitForReady();
       clock.advance(10 * 60_000);
       const first = await pending;
 

@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   FakeHarness,
   type FakeTurnHandler,
+  fakeTurnIdentity,
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
 import { runBoundary } from "../../src/kernel/boundary.js";
@@ -14,6 +15,9 @@ import {
   latestPlanCheck,
   PLAN_CHECK_STEP,
   planCheckBrief,
+  planSlugs,
+  runPlanCheck,
+  validatePlanCheck,
 } from "../../src/kernel/plan-check.js";
 import { PLAN_CHECK_ROUTES_STEP, runPlanCheckPm } from "../../src/kernel/pm.js";
 import { appendCancel, scriptMeta } from "../../src/kernel/record.js";
@@ -23,6 +27,7 @@ import {
   cleanupFlowRepo,
   makeRuntime,
   outcome,
+  scriptStallLeave,
   setupFlowRepo,
   whenTurn,
   writeTask,
@@ -94,6 +99,7 @@ describe("plan checker", () => {
         { when: whenTurn({ step: PLAN_CHECK_STEP }) },
       );
 
+      scriptStallLeave(harness, ["beta"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       harness.script((req, ctx) => {
         const cont = task("beta-2", {
@@ -150,7 +156,7 @@ describe("plan checker", () => {
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
       fs.writeFileSync(
         path.join(runtime.store.goalDir, "plan.md"),
-        "# Plan\n\n- alpha\n- beta\n",
+        "# Plan\n\n- alpha — Alpha.\n- beta — Beta.\n",
         "utf8",
       );
 
@@ -221,12 +227,13 @@ describe("plan checker", () => {
         { when: whenTurn({ step: PLAN_CHECK_STEP }) },
       );
 
+      scriptStallLeave(harness, ["beta"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
       fs.writeFileSync(
         path.join(runtime.store.goalDir, "plan.md"),
-        "# Plan\n\n- alpha\n- beta\n",
+        "# Plan\n\n- alpha — Alpha.\n- beta — Beta.\n",
         "utf8",
       );
 
@@ -294,6 +301,7 @@ describe("plan checker", () => {
         { when: whenTurn({ step: PLAN_CHECK_STEP }) },
       );
 
+      scriptStallLeave(harness, ["beta"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       harness.script((req, ctx) => {
         const cont = task("beta-2", {
@@ -328,7 +336,7 @@ describe("plan checker", () => {
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
       fs.writeFileSync(
         path.join(runtime.store.goalDir, "plan.md"),
-        "# Plan\n\n- alpha\n- beta\n",
+        "# Plan\n\n- alpha — Alpha.\n- beta — Beta.\n",
         "utf8",
       );
 
@@ -344,7 +352,7 @@ describe("plan checker", () => {
     }
   }, 60_000);
 
-  it("still opens a relaunch with the architect under stale progress evidence", async () => {
+  it("re-checks a relaunch instead of trusting stale progress evidence, then consults", async () => {
     const { repo, goal } = setupFlowRepo({ aliases: ALIASES });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -352,7 +360,7 @@ describe("plan checker", () => {
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       fs.writeFileSync(
         path.join(runtime.store.goalDir, "plan.md"),
-        "# Plan\n\n- alpha\n",
+        "# Plan\n\n- alpha — Alpha.\n",
         "utf8",
       );
       await runtime.store.appendRecord(
@@ -397,6 +405,28 @@ describe("plan checker", () => {
         },
       );
 
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({
+              summary: "fresh check",
+              planCheck: {
+                verdict: "architect",
+                evidence: [
+                  {
+                    item: "alpha",
+                    status: "missing",
+                    evidence: "fresh check after the relaunch",
+                  },
+                ],
+                followUps: [],
+              },
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: PLAN_CHECK_STEP }) },
+      );
       harness.script((req, ctx) => {
         ctx.writeOutcome(
           outcome({ summary: "debt reviewed", decision: "done" }),
@@ -408,14 +438,22 @@ describe("plan checker", () => {
         iteration: 2,
       });
       expect(boundary.decision).toBe("done");
+      const records = await runtime.store.listRecords();
       expect(
-        (await runtime.store.listRecords()).some(
-          (r) => r.step === "architect" && r.iteration === 2,
-        ),
+        records.some((r) => r.step === "architect" && r.iteration === 2),
       ).toBe(true);
+      // The dead launch's progress claim is not the evidence the consult
+      // acts on: the gate checked again, and the fresh architect verdict
+      // opened the consult.
+      expect(
+        records.filter(
+          (r) => r.step === PLAN_CHECK_STEP && r.iteration === 2 && r.endedAt,
+        ),
+      ).toHaveLength(1);
       const pack = await runtime.store.readFile(contextPackRelPath(2));
-      expect(pack).toContain("iteration 1, verdict progress");
-      expect(pack).toContain("stale claim from the dead launch");
+      expect(pack).toContain("iteration 2, verdict architect");
+      expect(pack).toContain("fresh check after the relaunch");
+      expect(pack).not.toContain("stale claim from the dead launch");
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -439,9 +477,14 @@ describe("plan checker", () => {
         return fakeTurnResult(req);
       });
 
+      scriptStallLeave(harness, ["beta"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const planPath = path.join(runtime.store.goalDir, "plan.md");
-      fs.writeFileSync(planPath, "# Plan\n\n- alpha\n- beta\n", "utf8");
+      fs.writeFileSync(
+        planPath,
+        "# Plan\n\n- alpha — Alpha.\n- beta — Beta.\n",
+        "utf8",
+      );
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
       const betaBefore = fs.readFileSync(
@@ -527,7 +570,7 @@ describe("plan checker", () => {
       );
       fs.writeFileSync(
         path.join(runtime.store.goalDir, "plan.md"),
-        "# Plan\n\n- app\n",
+        "# Plan\n\n- app — App works.\n",
         "utf8",
       );
       await appendCancel(
@@ -765,6 +808,7 @@ describe("plan checker", () => {
         { when: whenTurn({ step: PLAN_CHECK_STEP }) },
       );
       // Both ladder rungs answer without routes; the writes roll back.
+      scriptStallLeave(harness, ["beta"]);
       harness.script((req, ctx) => {
         ctx.writeOutcome(outcome({ summary: "no routes" }));
         return fakeTurnResult(req);
@@ -779,7 +823,7 @@ describe("plan checker", () => {
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
       fs.writeFileSync(
         path.join(runtime.store.goalDir, "plan.md"),
-        "# Plan\n\n- alpha\n- beta\n",
+        "# Plan\n\n- alpha — Alpha.\n- beta — Beta.\n",
         "utf8",
       );
 
@@ -817,6 +861,7 @@ describe("plan checker", () => {
         return fakeTurnResult(req);
       });
 
+      scriptStallLeave(harness, ["beta"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
@@ -899,4 +944,353 @@ describe("plan checker", () => {
     expect(latestPlanCheck([silent])).toBeUndefined();
     expect(latestPlanCheck([])).toBeUndefined();
   });
+
+  it("bounds follow-up slugs by plan bullets and exempts a dead dep", () => {
+    const plan = [
+      "# Plan",
+      "",
+      "- app — App works.",
+      "- beta — Beta works.",
+      "",
+      "Retired: gamma was merged.",
+    ].join("\n");
+    expect([...planSlugs(plan)].sort()).toEqual(["app", "beta"]);
+    const check = outcome({
+      planCheck: {
+        verdict: "progress",
+        evidence: [],
+        followUps: [
+          {
+            kind: "missing-dep",
+            slug: "app",
+            dep: "ghost",
+            reason: "ghost is gone",
+          },
+          { kind: "amend", slug: "gamma", reason: "retry the old slug" },
+        ],
+      },
+    });
+    expect(validatePlanCheck(plan, check)).toEqual([
+      'follow-up slug "gamma" has no "- gamma —" bullet in the plan; merged and retired slugs are history',
+    ]);
+  });
+
+  it("repairs a follow-up outside the plan and briefs the PM with the rest", async () => {
+    const { repo, goal } = setupFlowRepo({ aliases: ALIASES });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
+      fs.writeFileSync(
+        path.join(runtime.store.goalDir, "plan.md"),
+        "# Plan\n\n- beta — Beta.\n",
+        "utf8",
+      );
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
+
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({
+              summary: "beta can continue",
+              planCheck: {
+                verdict: "progress",
+                evidence: [],
+                followUps: [
+                  {
+                    kind: "cancel",
+                    slug: "beta",
+                    reason: "no longer worth it",
+                  },
+                  { kind: "amend", slug: "retired", reason: "old slug" },
+                ],
+              },
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: PLAN_CHECK_STEP }) },
+      );
+      let repairPrompt = "";
+      harness.script(
+        (req, ctx) => {
+          repairPrompt = req.prompt;
+          ctx.writeOutcome(
+            outcome({
+              summary: "beta can continue",
+              planCheck: {
+                verdict: "progress",
+                evidence: [],
+                followUps: [
+                  {
+                    kind: "cancel",
+                    slug: "beta",
+                    reason: "no longer worth it",
+                  },
+                ],
+              },
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: PLAN_CHECK_STEP }) },
+      );
+
+      const checked = await runPlanCheck(runtime, {
+        iteration: 1,
+        round: 1,
+        state,
+      });
+      expect(checked.verdict).toBe("progress");
+      expect(checked.followUps.map((item) => item.slug)).toEqual(["beta"]);
+      expect(repairPrompt).toContain(
+        'follow-up slug "retired" has no "- retired —" bullet in the plan',
+      );
+      expect(repairPrompt).not.toContain('follow-up slug "beta"');
+
+      let pmPrompt = "";
+      harness.script(
+        (req, ctx) => {
+          pmPrompt = req.prompt;
+          ctx.writeOutcome(
+            outcome({
+              summary: "left beta",
+              planCheckRoutes: [
+                {
+                  slug: "beta",
+                  action: "leave",
+                  reason: "needs the architect",
+                },
+              ],
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
+      const followed = await runPlanCheckPm(runtime, {
+        iteration: 1,
+        state,
+        followUps: checked.followUps,
+        cwd: runtime.paths.goalCheckout,
+      });
+      expect(followed.left).toEqual(["beta"]);
+      expect(pmPrompt).toContain("- beta (cancel)");
+      expect(pmPrompt).not.toContain("retired");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("checks before the architect at a boundary, resumes dispatch on progress, and consults at the bound", async () => {
+    const { repo, goal } = setupFlowRepo({
+      aliases: ALIASES,
+      limits: { planCheckRounds: 1 },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
+      await runtime.store.appendRecord(
+        scriptMeta(1, "park", { slug: "beta", round: 1, revision: 0 }),
+        { ok: true, cause: "failed: runner crashed mid-turn" },
+      );
+      fs.writeFileSync(
+        path.join(runtime.store.goalDir, "plan.md"),
+        "# Plan\n\n- beta — Beta.\n",
+        "utf8",
+      );
+
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({
+              summary: "beta can continue",
+              planCheck: {
+                verdict: "progress",
+                evidence: [],
+                followUps: [
+                  {
+                    kind: "replace",
+                    slug: "beta",
+                    reason: "mechanical park",
+                  },
+                ],
+              },
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: PLAN_CHECK_STEP }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          fs.writeFileSync(
+            path.join(runtime.store.tasksDir, "beta-2.md"),
+            renderTaskFile(
+              task("beta-2", {
+                scope: ["beta.txt"],
+                source: "plan-check: 1",
+              }),
+            ),
+            "utf8",
+          );
+          ctx.writeOutcome(
+            outcome({
+              summary: "continued beta",
+              planCheckRoutes: [
+                {
+                  slug: "beta",
+                  action: "continue",
+                  reason: "mechanical park",
+                },
+              ],
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
+
+      scriptStallLeave(harness, ["beta"]);
+      // Boundary 1: the checker runs first; its progress resumes dispatch
+      // through the PM without an architect turn.
+      const first = await runBoundary(runtime, {
+        relaunch: false,
+        iteration: 1,
+      });
+      expect(first.decision).toBe("continue");
+      expect(
+        harness.calls.some(
+          (call) => fakeTurnIdentity(call).step === "architect",
+        ),
+      ).toBe(false);
+      expect(
+        fs.existsSync(path.join(runtime.store.tasksDir, "beta-2.md")),
+      ).toBe(true);
+
+      harness.script(
+        (req, ctx) => {
+          fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
+          ctx.writeOutcome(outcome({ summary: "beta-2 implemented" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "beta-2", step: "implement" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({ summary: "beta-2 approved", verdict: "approve" }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "beta-2", step: "review" }) },
+      );
+      const dispatched = await runDispatch(runtime, { iteration: 1 });
+      expect(dispatched.reason).toBe("boundary");
+      expect(
+        derive(
+          await runtime.store.listTasks(),
+          await runtime.store.listRecords(),
+          runtime.configs.process.flows,
+        ).tasks["beta-2"]!.status,
+      ).toBe("merged");
+
+      // Boundary 2: the single allowed round is spent, so the architect runs.
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "nothing to file" }));
+        return fakeTurnResult(req);
+      });
+      const second = await runBoundary(runtime, {
+        relaunch: false,
+        iteration: 2,
+      });
+      expect(second.decision).toBe("done");
+      expect(
+        harness.calls.filter(
+          (call) => fakeTurnIdentity(call).step === "architect",
+        ),
+      ).toHaveLength(1);
+      // One checker turn: the gate's. The bound stopped dispatch re-checking.
+      expect(
+        harness.calls.filter(
+          (call) => fakeTurnIdentity(call).step === PLAN_CHECK_STEP,
+        ),
+      ).toHaveLength(1);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 90_000);
+
+  it("hands the checker the last gate record and no gate command", async () => {
+    const { repo, goal } = setupFlowRepo({ aliases: ALIASES });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
+      const checks = (summary: string) => [
+        {
+          name: "readme",
+          ok: true,
+          summary,
+          output: "",
+          fingerprint: "abc123",
+        },
+      ];
+      await runtime.store.appendRecord(
+        scriptMeta(1, "checks", { slug: "alpha", round: 1 }),
+        { ok: true, checks: checks("pass") },
+      );
+      const last = await runtime.store.appendRecord(
+        scriptMeta(1, "merge-checks", { slug: "alpha", round: 1 }),
+        { ok: true, checks: checks("pass on the merged tree") },
+      );
+      let prompt = "";
+      harness.script(
+        (req, ctx) => {
+          prompt = req.prompt;
+          ctx.writeOutcome(
+            outcome({
+              summary: "nothing to add",
+              planCheck: {
+                verdict: "architect",
+                evidence: [],
+                followUps: [],
+              },
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: PLAN_CHECK_STEP }) },
+      );
+
+      await runPlanCheck(runtime, { iteration: 1, round: 1, state });
+
+      const record = path.join(
+        runtime.store.recordsDir,
+        `00002-i1-alpha-merge-checks-r1`,
+        "end.yaml",
+      );
+      expect(prompt).toContain(record);
+      expect(last.seq).toBe(2);
+      // The checker reads the record; the configured gate commands stay out.
+      expect(prompt).not.toContain("test -f README.md");
+      expect(prompt).not.toContain("Run the gate commands");
+      expect(prompt).toContain("never run a gate, test or lint command");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
 });

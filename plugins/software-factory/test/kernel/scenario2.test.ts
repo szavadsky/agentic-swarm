@@ -11,6 +11,7 @@ import {
   cleanupFlowRepo,
   makeRuntime,
   outcome,
+  scriptStallLeave,
   setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
@@ -38,6 +39,9 @@ describe("KERNEL0 scenario 2 — last-call review decisions", () => {
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
+      // alpha parks on its last-call rejection while beta merges: the
+      // wave-end stall gets the park.
+      scriptStallLeave(harness, ["alpha"]);
       harness.script((req, ctx) => {
         fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "v1\n", "utf8");
         ctx.writeOutcome(outcome({ summary: "alpha v1" }));

@@ -8,13 +8,34 @@ import type {
 
 /** Boundary prompts and aliases the direct-runtime fixtures wire their run config for. */
 export const TEST_BOUNDARY: Record<BoundaryStep, TurnSpec> = {
-  architect: { prompt: "architect", alias: "architect" },
+  architect: {
+    prompt: "architect",
+    alias: "architect",
+    repairPrompt: "architect-repair",
+    deliverable: "plan edit or stop decision",
+  },
   digest: { prompt: "digest", alias: "digest" },
-  front: { prompt: "front", alias: "front" },
-  plancheck: { prompt: "plan-checker", alias: "plan-checker" },
-  planreview: { prompt: "reviewer", alias: "plan-reviewer" },
-  pm: { prompt: "pm", alias: "pm" },
-  steward: { prompt: "steward", alias: "steward" },
+  front: {
+    prompt: "front",
+    alias: "front",
+    deliverable: "class, task, and pack",
+  },
+  plancheck: {
+    prompt: "plan-checker",
+    alias: "plan-checker",
+    deliverable: "plan verdict",
+  },
+  planreview: {
+    prompt: "reviewer",
+    alias: "plan-reviewer",
+    deliverable: "numbered plan-review findings",
+  },
+  pm: { prompt: "pm", alias: "pm", deliverable: "task files" },
+  steward: {
+    prompt: "steward",
+    alias: "steward",
+    deliverable: "merge resolution",
+  },
 };
 
 export function task(slug: string, patch: Partial<TaskFile> = {}): TaskFile {

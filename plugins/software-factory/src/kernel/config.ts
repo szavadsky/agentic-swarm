@@ -50,12 +50,26 @@ export const repoConfigSchema = z
     identity: identitySchema.optional(),
     setup: z.array(z.string().min(1)).default([]),
     gates: z.array(gateSchema).default([]),
+    cleanliness: z
+      .object({
+        maxFileSizeBytes: z.number().int().positive().optional(),
+        allowedExtensions: z.array(z.string().min(1)).optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
 /** One step's prompt template and run-config alias. */
 export const turnSchema = z
-  .object({ prompt: z.string().min(1), alias: z.string().min(1) })
+  .object({
+    prompt: z.string().min(1),
+    alias: z.string().min(1),
+    /** Prompt template for the missing-outcome repair ask; defaults to `delivery-repair`. */
+    repairPrompt: z.string().min(1).optional(),
+    /** Product the turn must deliver; defaults by expectation, else `outcome`. */
+    deliverable: z.string().min(1).optional(),
+  })
   .strict();
 
 /** One flow step; `review` marks the step that consumes a review round. */
@@ -70,9 +84,15 @@ export const flowStepSchema = z
       ),
     prompt: z.string().min(1).optional(),
     alias: z.string().min(1).optional(),
+    /** Prompt template for the missing-outcome repair ask; defaults to `delivery-repair`. */
+    repairPrompt: z.string().min(1).optional(),
+    /** Product the turn must deliver; defaults by expectation, else `outcome`. */
+    deliverable: z.string().min(1).optional(),
     review: z.boolean().default(false),
     /** Review and checks steps: change requests honored before the last call. */
     changeRequests: z.number().int().nonnegative().optional(),
+    /** Aliases later attempts run on after failure-kind launches, in order. */
+    alternates: z.array(z.string().min(1)).optional(),
   })
   .strict()
   .refine(
@@ -83,7 +103,11 @@ export const flowStepSchema = z
       message: "a step other than checks needs a prompt and an alias",
       path: ["prompt"],
     },
-  );
+  )
+  .refine((step) => step.alternates === undefined || step.alias !== undefined, {
+    message: "alternates need a step alias to alternate with",
+    path: ["alternates"],
+  });
 
 export const followUpSchema = z
   .object({
@@ -146,6 +170,8 @@ export const processConfigSchema = z
     flows: z.record(z.string(), flowSchema).default({}),
     taskTypes: z.record(z.string(), taskTypeSchema).default({}),
     boundary: boundarySchema,
+    /** Repair template a step renders when it names none. */
+    repairPrompt: z.string().min(1).optional(),
     reminders: z.number().int().nonnegative().default(1),
     calibration: z.string().optional(),
     promptsDir: z.string().min(1).optional(),
@@ -260,13 +286,18 @@ const concurrencySchema = z
   .strict()
   .default(() => ({ overall: 2, perSubscription: {}, perModel: {} }));
 
+/** Amends one parked slug may receive per iteration when the run config says nothing. */
+export const DEFAULT_PARK_AMENDS = 1;
+
 const limitsSchema = z
   .object({
     concurrency: concurrencySchema,
     iterations: z.number().int().positive().default(1),
-    /** Plan-checker re-runs per iteration; exhausted rounds consult the architect. */
+    /** Plan-checker rounds one consult owns; exhausted rounds consult the architect. */
     planCheckRounds: z.number().int().positive().default(2),
     resumeAttempts: z.number().int().nonnegative().optional(),
+    /** Amends one parked slug may receive per iteration; a further amend is refused. */
+    parkAmends: z.number().int().nonnegative().optional(),
     /** Optional drain limits for one iteration. */
     turns: z.number().int().positive().optional(),
     wallMinutes: z.number().positive().optional(),
@@ -667,6 +698,7 @@ export function toLimits(configs: ConfigBundle): Limits {
     concurrency: runLimits.concurrency,
     planCheckRounds: runLimits.planCheckRounds,
     resumeAttempts: runLimits.resumeAttempts ?? 2,
+    parkAmends: runLimits.parkAmends ?? DEFAULT_PARK_AMENDS,
     iterationTurns: runLimits.turns,
     iterationWallMs:
       runLimits.iterationMinutes !== undefined

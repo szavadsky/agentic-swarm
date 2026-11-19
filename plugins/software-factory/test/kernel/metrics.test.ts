@@ -97,6 +97,7 @@ describe("iteration metrics", () => {
           "  pm: { harness: fake, model: fake-pm }",
           "  digest: { harness: fake, model: fake-digest }",
           "  implementer: { harness: fake, model: fake-impl }",
+          "  researcher: { harness: fake, model: fake-research }",
           "  reviewer: { harness: fake, model: fake-review }",
           "  steward: { harness: fake, model: fake-steward }",
           "  plan-checker: { harness: fake, model: fake-check }",
@@ -155,7 +156,7 @@ describe("iteration metrics", () => {
       const turns = records.filter(
         (r) => r.iteration === 1 && r.endedAt && r.actor === "agent",
       );
-      expect(turns).toHaveLength(6);
+      expect(turns).toHaveLength(5);
       const part = (u: Usage | undefined): number =>
         (u?.in ?? 0) +
         (u?.cacheRead ?? 0) +
@@ -183,7 +184,8 @@ describe("iteration metrics", () => {
       expect(one.n).toBe(1);
       expect(one.tokens).toBe(fromRecords);
       // 473 scripted turn tokens plus three recorded compactions (architect,
-      // implement, review); the mandatory plan turns report zero usage.
+      // implement, review); the mandatory plan review reports zero usage, and
+      // nothing was open, so the plan checker did not turn.
       expect(one.tokens).toBe(25_673);
       expect(one.usage.costUsd).toBeCloseTo(costFromRecords, 10);
       expect(one.usage.costUsd).toBeCloseTo(0.43, 10);
@@ -212,7 +214,7 @@ describe("iteration metrics", () => {
       expect(one.architect.tokenShare).toBeCloseTo(8_510 / 25_673, 10);
 
       expect(metrics.totals.iterations).toBe(1);
-      expect(metrics.totals.turns).toBe(6);
+      expect(metrics.totals.turns).toBe(5);
       expect(metrics.totals.tokens).toBe(25_673);
       expect(metrics.totals.merged).toEqual(["alpha"]);
       expect(metrics.totals.usage.costUsd).toBeCloseTo(0.43, 10);
@@ -503,9 +505,11 @@ describe("record cost truth", () => {
       expect(one.models["mystery/model"]!.turns).toBe(1);
       expect(one.models["mystery/model"]!.unpricedTurns).toBe(1);
 
-      // Work: edits from agent commits, test runs attributed to the b turn.
+      // Work: edits from agent commits; gate runs are credited to the script
+      // role, not the b turn.
       expect(one.models["paid/one"]!.edits).toBe(3);
-      expect(one.models["paid/one"]!.testRuns).toBe(2);
+      expect(one.models["paid/one"]!.testRuns).toBe(0);
+      expect(one.roles["script"]!.testRuns).toBe(2);
       expect(one.edits).toBe(3);
       expect(one.testRuns).toBe(2);
       expect(one.gateRuns).toBe(1);

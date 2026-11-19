@@ -6,3 +6,4 @@
 - Errors: fail loudly at the boundary, contain them where the direction says; never swallow, never `catch {}`.
 - No TODO, stub, placeholder, mock fallback, fake success, unused parameter, unused export, or unused file.
 - Add a dependency only when the standard library and existing dependencies cannot do it; need, not preference.
+- Clean up: remove scaffolds, debug output, temporary files, and dead code you introduced.

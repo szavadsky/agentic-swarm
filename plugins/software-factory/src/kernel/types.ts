@@ -294,8 +294,22 @@ export type Action =
   | { kind: "boundary" }
   | { kind: "exit"; reason: string };
 
+/** What a turn's missing-outcome repair ask renders from. */
+export interface RepairSpec {
+  /**
+   * Prompt template for the in-session repair ask. Absent renders the
+   * `delivery-repair` template.
+   */
+  repairPrompt?: string;
+  /**
+   * The product the turn must deliver, named in the repair ask and the failure
+   * finding. Absent names the outcome (or the verdict on a review turn).
+   */
+  deliverable?: string;
+}
+
 /** A step's prompt template and the run-config alias its turns run on. */
-export interface TurnSpec {
+export interface TurnSpec extends RepairSpec {
   /** Prompt template name under `prompts/`. */
   prompt: string;
   /** Run-config alias; pre-flight requires every named alias. */
@@ -317,7 +331,7 @@ export const BOUNDARY_STEPS = [
 ] as const;
 export type BoundaryStep = (typeof BOUNDARY_STEPS)[number];
 
-export interface FlowStep {
+export interface FlowStep extends RepairSpec {
   id: string;
   /** Non-script steps name their prompt and alias; script steps (`checks`) name neither. */
   prompt?: string;
@@ -329,6 +343,13 @@ export interface FlowStep {
    * its call is the last one. Absent means the default (two).
    */
   changeRequests?: number;
+  /**
+   * Run-config aliases the step's later attempts run on after failure-kind
+   * launches, in order: the first alternate after the first failure, the
+   * second after the second, and the last one for every attempt beyond.
+   * The position derives from records, so a relaunch lands on the same alias.
+   */
+  alternates?: string[];
 }
 
 /** How a fix turn follows the turn it repairs. */
@@ -369,6 +390,8 @@ export interface Limits {
   planCheckRounds: number;
   /** Resume attempts limit; default 2. */
   resumeAttempts?: number;
+  /** Amends one parked slug may receive per iteration; default 1. */
+  parkAmends?: number;
   /** Minimum free bytes in the temporary directory. */
   minTmpFreeBytes?: number;
 }
@@ -568,6 +591,10 @@ export interface RepoConfig {
     command: string;
     format?: { junit?: string; pattern?: "pytest" | "jest" | "cargo" };
   }[];
+  cleanliness?: {
+    maxFileSizeBytes?: number;
+    allowedExtensions?: string[];
+  };
 }
 
 export interface ProcessConfig {
@@ -579,6 +606,8 @@ export interface ProcessConfig {
   taskTypes: Record<string, TaskTypeDefinition>;
   /** Each kernel boundary step's prompt and alias; pre-flight requires these aliases. */
   boundary: Record<BoundaryStep, TurnSpec>;
+  /** Repair template a step renders when it names none; defaults to `delivery-repair`. */
+  repairPrompt?: string;
   /** Outcome reminders after the first attempt; a task file's `repairTurns` overrides it for that task's turns only. */
   reminders: number;
   calibration?: string;

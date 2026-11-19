@@ -7,16 +7,12 @@ import type { MergeResult } from "./integrate.js";
 import { type Hold, readHolds, type Steer, scanInbox } from "./mailbox.js";
 import { next } from "./next.js";
 import {
-  latestPlanCheck,
+  openWork,
   PLAN_CHECK_STEP,
-  runPlanCheck,
+  planChecksSinceConsult,
+  runPlanCheckRound,
 } from "./plan-check.js";
-import {
-  runPlanCheckPm,
-  runStallPm,
-  runSteerPm,
-  STALL_ROUTES_STEP,
-} from "./pm.js";
+import { runStallPm, runSteerPm, STALL_ROUTES_STEP } from "./pm.js";
 import { loadPriceTable } from "./openrouter.js";
 import { type PriceTable, pricedRecord } from "./pricing.js";
 import { scriptMeta } from "./record.js";
@@ -223,6 +219,45 @@ function heldBoundaryCause(
         `steer: ${steer} holds ${[...slugs].sort().join(", ")}`,
     )
     .join("; ");
+}
+
+/**
+ * This iteration's parked slugs that no stall turn has answered yet: the
+ * first stall-routes record written after a park owns its decision. A failed
+ * ladder attempt counts too — the park then goes to the architect — so each
+ * park costs at most one PM turn. A slug that parks again after an amended
+ * rerun is a new park and gets its own decision; `limits.parkAmends` bounds
+ * how many of those decisions may amend it.
+ */
+function undecidedParked(
+  records: readonly StepRecord[],
+  state: State,
+  iteration: number,
+): string[] {
+  const attempts = records
+    .filter(
+      (record) =>
+        record.iteration === iteration &&
+        record.step === STALL_ROUTES_STEP &&
+        record.endedAt,
+    )
+    .map((record) => record.seq);
+  const last = attempts.length > 0 ? Math.max(...attempts) : -1;
+  return [
+    ...new Set(
+      records
+        .filter(
+          (record) =>
+            record.iteration === iteration &&
+            record.step === "park" &&
+            record.endedAt &&
+            record.slug !== undefined &&
+            record.seq > last &&
+            state.tasks[record.slug]?.status === "parked",
+        )
+        .map((record) => record.slug!),
+    ),
+  ].sort();
 }
 
 /**
@@ -537,6 +572,7 @@ export async function runDispatch(
           taskState,
           action.step,
           iteration,
+          records,
         );
         if (target.subscription !== undefined) {
           const poolLimit =
@@ -674,11 +710,11 @@ export async function runDispatch(
         };
       }
       if (!steward.skipped) continue;
-      // Zero-merge stall: the dispatch set ran out with no merges and fresh
-      // parks, and no drain caused it. The PM owns the dispatch sets, so one
-      // stall turn resolves it in this iteration; a second stall, an
-      // all-left turn, or any drain falls through to the boundary as today.
-      // Owner ruling 2.
+      // Wave-end stall: the dispatch set ran out with parks no stall turn has
+      // decided. The PM owns the dispatch sets, so each park gets one decision
+      // in this iteration whether or not the wave merged something; a
+      // continued route resumes dispatch and a later park gets its own turn.
+      // An all-left, failed or bounded-out turn falls through to the boundary.
       if (!opts.signals?.shouldStop()) {
         const stallTasks = await runtime.store.listTasks();
         const stallRecords = await runtime.store.listRecords();
@@ -687,54 +723,27 @@ export async function runDispatch(
           stallRecords,
           runtime.configs.process.flows,
         );
-        const merges = stallRecords.filter(
-          (record) =>
-            record.iteration === iteration &&
-            record.step === "merge" &&
-            record.ok === true &&
-            record.endedAt,
-        ).length;
-        const attempted = stallRecords.some(
-          (record) =>
-            record.iteration === iteration &&
-            record.step === STALL_ROUTES_STEP &&
-            record.endedAt,
-        );
-        if (merges === 0 && !attempted) {
-          const slugs = [
-            ...new Set(
-              stallRecords
-                .filter(
-                  (record) =>
-                    record.iteration === iteration &&
-                    record.step === "park" &&
-                    record.endedAt &&
-                    record.slug &&
-                    stallState.tasks[record.slug]?.status === "parked",
-                )
-                .map((record) => record.slug!),
-            ),
-          ].sort();
-          if (slugs.length > 0) {
-            const stalled = await runStallPm(runtime, {
-              iteration,
-              state: stallState,
-              slugs,
-              cwd: runtime.paths.goalCheckout,
-            });
-            if (stalled.continued.length > 0) continue;
-          }
+        const slugs = undecidedParked(stallRecords, stallState, iteration);
+        if (slugs.length > 0) {
+          const stalled = await runStallPm(runtime, {
+            iteration,
+            state: stallState,
+            slugs,
+            cwd: runtime.paths.goalCheckout,
+          });
+          if (stalled.continued.length > 0) continue;
         }
       }
-      // Plan check: the dispatch set ran out short of terminal. A task-tier
-      // checker verifies the plan against the repo; on `progress` the PM
-      // writes the follow-ups and dispatch resumes in this iteration, and
-      // the checker re-runs after. `architect`, an empty follow-up list, a
-      // failed PM turn, or exhausted rounds fall through to the boundary,
-      // whose pack carries the checker's evidence per plan item. Without a
-      // plan there is nothing to verify, so the front path dispatches as
-      // before instead of spending a checker turn. The alias is required by
-      // pre-flight, so only the plan's presence gates this step.
+      // Plan check: the dispatch set ran out short of terminal with open work
+      // left. A task-tier checker verifies the plan against the repo; on
+      // `progress` the PM writes the follow-ups and dispatch resumes in this
+      // iteration. `architect`, an empty follow-up list, a failed PM turn, or
+      // the repeated-round bound fall through to the boundary, whose pack
+      // carries the checker's evidence per plan item. With no open work there
+      // is nothing mechanical left to name: the boundary consults directly.
+      // Without a plan there is nothing to verify, so the front path dispatches
+      // as before instead of spending a checker turn. The alias is required by
+      // pre-flight, so only the plan's presence gates the turn itself.
       const planPath = path.join(runtime.store.goalDir, "plan.md");
       if (!opts.signals?.shouldStop() && fs.existsSync(planPath)) {
         const checkTasks = await runtime.store.listTasks();
@@ -751,31 +760,20 @@ export async function runDispatch(
             record.actor === "agent" &&
             record.endedAt,
         ).length;
-        if (rounds < runtime.limits.planCheckRounds) {
-          const checked = await runPlanCheck(runtime, {
+        const checked = planChecksSinceConsult(checkRecords);
+        if (
+          openWork(checkState).length > 0 &&
+          checked.length < runtime.limits.planCheckRounds
+        ) {
+          const round = await runPlanCheckRound(runtime, {
             iteration,
             round: rounds + 1,
             state: checkState,
           });
-          planCheck = checked.verdict;
-          if (
-            !checked.infra &&
-            checked.verdict === "progress" &&
-            checked.followUps.length > 0
-          ) {
-            const followed = await runPlanCheckPm(runtime, {
-              iteration,
-              state: checkState,
-              followUps: checked.followUps,
-              cwd: runtime.paths.goalCheckout,
-            });
-            if (followed.continued.length > 0) continue;
-          }
-        } else {
-          planCheck = latestPlanCheck(checkRecords)?.verdict as
-            | "progress"
-            | "architect"
-            | undefined;
+          planCheck = round.turn.verdict;
+          if (round.continued.length > 0) continue;
+        } else if (openWork(checkState).length > 0) {
+          planCheck = checked.at(-1)?.outcome?.planCheck?.verdict;
         }
       }
       const turns = settledTurns(await runtime.store.listRecords(), iteration);

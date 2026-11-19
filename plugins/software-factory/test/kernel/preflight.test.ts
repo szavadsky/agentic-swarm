@@ -26,6 +26,7 @@ const RUN_HEAD = `aliases:
   pm: { harness: fake, model: pm }
   digest: { harness: fake, model: digest }
   implementer: { harness: fake, model: impl }
+  researcher: { harness: fake, model: research }
   reviewer: { harness: fake, model: rev }
   steward: { harness: fake, model: steward }
   plan-checker: { harness: fake, model: check }
@@ -236,6 +237,24 @@ describe("pre-flight", () => {
       expect(err.report).toContain("aliases.boss");
       expect(err.report).toContain('boundary step "architect"');
       expect(err.report).toContain(".factory/run.yaml");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("refuses an alternate alias the flow step names", async () => {
+    const f = await fixture();
+    try {
+      f.configs.process.flows["implement-review"]!.steps[0]!.alternates = [
+        "implementer-backup",
+      ];
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual({
+        file: path.join(f.repo.dir, ".factory/run.yaml"),
+        key: "aliases.implementer-backup",
+        message:
+          'required by flow "implement-review" step "implement" alternates but missing',
+      });
     } finally {
       f.repo.cleanup();
     }

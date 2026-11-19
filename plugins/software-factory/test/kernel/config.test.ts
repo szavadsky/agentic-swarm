@@ -69,6 +69,22 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("runs a spike's implement turn on researcher with task-model alternates", () => {
+    const root = tmpRepo();
+    const configs = loadConfigs(root);
+    // The interface `park-history-spike` and `saga-omp-spike-v2` rely on: a
+    // spike does not run its implement turn on the task implementer alias, and
+    // a failed attempt moves to another task model.
+    expect(configs.process.flows.spike!.steps[0]).toEqual({
+      id: "implement",
+      prompt: "implementer",
+      alias: "researcher",
+      alternates: ["implementer", "reviewer"],
+      review: false,
+    });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("merges the package process default with a repo override", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
@@ -91,6 +107,7 @@ describe("three config layers", () => {
     expect(configs.process.boundary.pm).toEqual({
       prompt: "pm",
       alias: "pm",
+      deliverable: "task files",
     });
     expect(configs.run.aliases.boss!.model).toBe("big");
     expect(
@@ -160,6 +177,42 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("parses a step's alternates and refuses them on the checks script step", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      [
+        "flows:",
+        "  custom:",
+        "    steps:",
+        "      - id: implement",
+        "        prompt: implementer",
+        "        alias: implementer",
+        "        alternates: [implementer-backup, implementer-last]",
+        "",
+      ].join("\n"),
+    );
+    const steps = loadConfigs(root).process.flows.custom!.steps;
+    expect(steps[0]!.alternates).toEqual([
+      "implementer-backup",
+      "implementer-last",
+    ]);
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      [
+        "flows:",
+        "  custom:",
+        "    steps:",
+        "      - id: checks",
+        "        alternates: [implementer-backup]",
+        "",
+      ].join("\n"),
+    );
+    expect(() => loadConfigs(root)).toThrow(/alternates need a step alias/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("names a prompt and alias for every boundary step, plan review included", () => {
     const root = tmpRepo();
     const boundary = loadConfigs(root).process.boundary;
@@ -176,8 +229,13 @@ describe("three config layers", () => {
     expect(boundary.planreview).toEqual({
       prompt: "reviewer",
       alias: "plan-reviewer",
+      deliverable: "numbered plan-review findings",
     });
-    expect(boundary.front).toEqual({ prompt: "front", alias: "pm" });
+    expect(boundary.front).toEqual({
+      prompt: "front",
+      alias: "pm",
+      deliverable: "class, task, and pack",
+    });
     fs.rmSync(root, { recursive: true, force: true });
   });
 
@@ -275,6 +333,19 @@ describe("three config layers", () => {
     expect(toLimits(loadConfigs(root)).iterationUsd).toBeUndefined();
     fs.writeFileSync(runYaml, "limits: { iterations: 1, iterationUsd: 0 }\n");
     expect(() => loadConfigs(root)).toThrow(/iterationUsd/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("bounds per-slug amends with limits.parkAmends, default 1", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    const runYaml = path.join(root, ".factory/run.yaml");
+    fs.writeFileSync(runYaml, "limits: { iterations: 1 }\n");
+    expect(toLimits(loadConfigs(root)).parkAmends).toBe(1);
+    fs.writeFileSync(runYaml, "limits: { iterations: 1, parkAmends: 2 }\n");
+    expect(toLimits(loadConfigs(root)).parkAmends).toBe(2);
+    fs.writeFileSync(runYaml, "limits: { iterations: 1, parkAmends: -1 }\n");
+    expect(() => loadConfigs(root)).toThrow(/parkAmends/);
     fs.rmSync(root, { recursive: true, force: true });
   });
 

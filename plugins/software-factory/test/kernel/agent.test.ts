@@ -1511,7 +1511,8 @@ describe("repair findings and launch kinds", () => {
       expect(result.record.repairFindings?.join("\n")).toMatch(
         /line \d+, column \d+/,
       );
-      expect(result.record.launchKind).toBe("failure");
+      // The reminder delivered: the repair finding stays, the launch did not fail.
+      expect(result.record.launchKind).toBeUndefined();
       const reread = await runtime.store.listRecords();
       expect(
         reread.find((r) => r.seq === result.record.seq)?.repairFindings,

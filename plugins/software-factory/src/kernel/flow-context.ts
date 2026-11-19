@@ -12,9 +12,10 @@ import {
 import { preexistingRed, recordedBaseGates } from "./baseline.js";
 import { contextPackRelPath } from "./context-pack.js";
 import { formatFailingChecks, newGateFailures } from "./gates.js";
+import { launchKindOf } from "./metrics.js";
 import { taskOutcomeSchema } from "./outcome-schemas.js";
 import { outcomeSchemaVar } from "./prompt-schema.js";
-import { GATE_LAST_CALL_ASK } from "./prompts.js";
+import { CHECK_HANDOFF_DEFAULTS, GATE_LAST_CALL_ASK } from "./prompts.js";
 import { formatFixDispositions, formatReviewFindings } from "./record.js";
 import { agentSteps, isLastChecksFixCall } from "./review.js";
 import { sessionCacheHot } from "./sessions.js";
@@ -25,6 +26,7 @@ import type {
   FlowDefinition,
   FlowStep,
   KernelRuntime,
+  RepairSpec,
   StepRecord,
   TaskFile,
   TaskState,
@@ -60,6 +62,10 @@ export interface TurnTarget {
   /** Prompt template the turn renders; the role the agent acts as. */
   prompt: string;
   alias: string;
+  /** Repair template the step named; absent renders `delivery-repair`. */
+  repairPrompt?: string;
+  /** Product the step named; absent derives from the turn's expectation. */
+  deliverable?: string;
   harness: Harness;
   model: ModelRef;
   effort?: string;
@@ -204,6 +210,28 @@ export function firstBase(
 ): string | undefined {
   return records
     .filter((r) => r.slug === slug && r.actor === "agent" && r.base)
+    .sort(bySeq)[0]?.base;
+}
+
+/**
+ * The commit the task's current revision started from: the first agent record
+ * stamped with that revision. Records without the field read as revision 0,
+ * as derive treats them. An amend's first turn stamps the integration head it
+ * merged, which is the range a review of the revised branch should judge.
+ */
+export function revisionBase(
+  records: StepRecord[],
+  slug: string,
+  revision: number,
+): string | undefined {
+  return records
+    .filter(
+      (r) =>
+        r.slug === slug &&
+        r.actor === "agent" &&
+        (r.revision ?? 0) === revision &&
+        r.base,
+    )
     .sort(bySeq)[0]?.base;
 }
 
@@ -448,6 +476,16 @@ export function resolveTurn(
   return targetForAlias(runtime, prompt, override ?? aliasName, iteration);
 }
 
+/** A step's repair ask; absent fields stay absent so the kernel default applies. */
+function repairFields(
+  spec: RepairSpec,
+): Pick<TurnTarget, "repairPrompt" | "deliverable"> {
+  return {
+    repairPrompt: spec.repairPrompt,
+    deliverable: spec.deliverable,
+  };
+}
+
 /** Resolves one kernel boundary step from process config. */
 export function boundaryTarget(
   runtime: KernelRuntime,
@@ -457,13 +495,10 @@ export function boundaryTarget(
 ): TurnTarget {
   const spec: TurnSpec | undefined = runtime.configs.process.boundary[step];
   if (!spec) throw new Error(`process config has no boundary step "${step}"`);
-  return resolveTurn(
-    runtime,
-    spec.prompt,
-    spec.alias,
-    aliasOverride,
-    iteration,
-  );
+  return {
+    ...resolveTurn(runtime, spec.prompt, spec.alias, aliasOverride, iteration),
+    ...repairFields(spec),
+  };
 }
 
 /**
@@ -490,9 +525,19 @@ function stepTurn(
         `flow "${task.flow}": follow-up mode different-model needs an alias`,
       );
     }
-    return { prompt: step.prompt, alias: followUp.alias };
+    return {
+      prompt: step.prompt,
+      alias: followUp.alias,
+      repairPrompt: step.repairPrompt,
+      deliverable: step.deliverable,
+    };
   }
-  return { prompt: step.prompt, alias: step.alias };
+  return {
+    prompt: step.prompt,
+    alias: step.alias,
+    repairPrompt: step.repairPrompt,
+    deliverable: step.deliverable,
+  };
 }
 
 /** The front's configured boundary target. */
@@ -588,29 +633,90 @@ export function isTrivialImplementTurn(
   );
 }
 
+/**
+ * How many failure-kind launches the step has ended for this task: its
+ * alternate position. An agent turn counts when its launch kind is `failure`, and
+ * an exhausted gate-fix loop counts for the flow's productive step (the fix
+ * step the checks sent back). Records are the only input, so a relaunch derives
+ * the same position.
+ */
+export function alternatePosition(
+  records: readonly StepRecord[],
+  slug: string,
+  stepId: string,
+  flow: FlowDefinition,
+): number {
+  const fixStep = agentSteps(flow)[0]?.id;
+  let failures = 0;
+  for (const rec of records) {
+    if (rec.slug !== slug || !rec.endedAt) continue;
+    if (rec.step === stepId) {
+      if (rec.actor === "agent" && launchKindOf(rec) === "failure")
+        failures += 1;
+    } else if (
+      stepId === fixStep &&
+      rec.step === "park" &&
+      rec.cause?.startsWith("gates:")
+    ) {
+      // Fix rounds exhausted on red gates: the fix turn ran out of rounds, so
+      // the next attempt at the productive step starts on the next alternate.
+      failures += 1;
+    }
+  }
+  return failures;
+}
+
+/**
+ * The alias a step runs on at this position: its own alias at zero, then the
+ * alternates in order, staying on the last one once the list is spent so a
+ * later amend cannot cycle back to a model that already failed.
+ */
+function alternateAlias(step: FlowStep, position: number): string | undefined {
+  const alternates = step.alternates ?? [];
+  if (position <= 0 || alternates.length === 0) return undefined;
+  return alternates[Math.min(position, alternates.length) - 1];
+}
+
 export function stepTarget(
   runtime: KernelRuntime,
   task: TaskFile,
   state: TaskState,
   stepId: string,
   iteration: number,
+  records: readonly StepRecord[] = [],
 ): TurnTarget {
   if (isTrivialImplementTurn(runtime, task, state, stepId)) {
     // The front's alias and model run the turn, but the prompt stays the
     // implementer's: the prompt names the role, not the agent's history.
     const turn = stepTurn(runtime, task, state, stepId);
-    return { ...frontTarget(runtime, iteration), prompt: turn.prompt };
+    return {
+      ...frontTarget(runtime, iteration),
+      ...repairFields(turn),
+      prompt: turn.prompt,
+    };
   }
-  const step = findStep(flowOf(runtime, task), stepId);
+  const flow = flowOf(runtime, task);
+  const step = findStep(flow, stepId);
   const turn = stepTurn(runtime, task, state, stepId);
-  // A task tier escalates the producer; review keeps the reviewer alias.
-  return resolveTurn(
-    runtime,
-    turn.prompt,
-    turn.alias,
-    step.review ? undefined : task.tier,
-    iteration,
+  const alternate = alternateAlias(
+    step,
+    alternatePosition(records, task.slug, stepId, flow),
   );
+  // A `different-model` follow-up names the fix turn's own alias: it is more
+  // specific than the step's alternates. A task tier still escalates the
+  // producer, alternate or not.
+  const alias =
+    turn.alias === step.alias ? (alternate ?? turn.alias) : turn.alias;
+  return {
+    ...resolveTurn(
+      runtime,
+      turn.prompt,
+      alias,
+      step.review ? undefined : task.tier,
+      iteration,
+    ),
+    ...repairFields(turn),
+  };
 }
 
 /** Resume the last session for this alias when it is portable to the turn's harness. */
@@ -757,10 +863,16 @@ export function priorStepCommit(
   records: StepRecord[],
   slug: string,
   stepId: string,
+  revision: number,
 ): string | undefined {
   return records
     .filter(
-      (r) => r.slug === slug && r.step === stepId && r.endedAt && r.commit,
+      (r) =>
+        r.slug === slug &&
+        r.step === stepId &&
+        r.endedAt &&
+        r.commit &&
+        (r.revision ?? 0) === revision,
     )
     .sort(bySeq)
     .at(-1)?.commit;
@@ -910,6 +1022,18 @@ export function promptVars(
         .join("\n") || "none",
     baseline_checks: base ? formatFailingChecks(base.checks) || "none" : "none",
     findings,
+    checks_result: checks?.checks
+      ? formatFailingChecks(checks.checks) || "pass"
+      : CHECK_HANDOFF_DEFAULTS.checks_result,
+    checks_tree: checks?.tree ?? CHECK_HANDOFF_DEFAULTS.checks_tree,
+    checks_log: checks
+      ? path.join(
+          runtime.store.recordsDir,
+          checks.iteration.toString(),
+          checks.slug ?? "unknown",
+          checks.step,
+        )
+      : CHECK_HANDOFF_DEFAULTS.checks_log,
     round: String(round),
     base_hash: "",
     head_hash: "",

@@ -1,6 +1,6 @@
 # Prompt variables
 
-Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable = render error; unknown filter = render error). `{{ name }}` interpolates one value; `{% include 'partial-name' %}` inlines `prompts/partial-name.md`. Every prompt is stable text up to its final `## This turn` block; all turn variables live there so providers can cache the prefix. Renderer defaults also appear above the block, so the prefix is stable only within one checkout and launch.
+Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable = render error; unknown filter = render error). `{{ name }}` interpolates one value; `{% include 'partial-name' %}` inlines `prompts/partial-name.md`. Every prompt is stable text up to its final `## This turn` block; turn variables live there so providers can cache the prefix, except the implementer's spike opening sentence, which names `report_path` before the body so the commit-first instruction is read first. Renderer defaults also appear above the block, so the prefix is stable only within one checkout and launch.
 
 | prompt                 | partials                                                                                                                   |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
@@ -18,7 +18,7 @@ The shared definitions exist once as partials: `scope` (the predicted-area rule:
 
 `calibration` is the default calibration partial. The process config may replace its content per repo; the prompt template does not change.
 
-Renderer defaults live outside any `This turn` block and the renderer supplies them, so turn code does not pass them: `validate_cmd` (the running build's absolute `bun <build>/bin/factory.ts validate`, stable only within one checkout), `outcome_schema` (the outcome YAML skeleton rendered from the task type's kernel output schema, in the `outcome` partial), `task_frontmatter` (the frontmatter YAML skeleton rendered from the kernel task schema, in the `task-frontmatter` partial), `task_types` (configured task type names in config order with the flow, kind and output schema each supplies, from the process config), `tiers` (run-config alias names in config order; `default` is kernel vocabulary for no tier override and stays literal) and `author` (the reviewer's author role; it selects the `<role>-body` and `review-<role>` fragments). `author` defaults to `implementer`; the plan-review turn overrides it with `architect`. `class_types` is a turn-supplied variable above the block: the front turn renders its class-to-task-type mapping from the same kernel mapping the validator enforces. The delivery-repair ask also supplies its own narrowed `outcome_schema`; it has no role prompt, so its shape must match the turn it repairs.
+Renderer defaults live outside any `This turn` block and the renderer supplies them, so turn code does not pass them: `validate_cmd` (the running build's absolute `bun <build>/bin/factory.ts validate`, stable only within one checkout), `outcome_schema` (the outcome YAML skeleton rendered from the task type's kernel output schema, in the `outcome` partial), `task_frontmatter` (the frontmatter YAML skeleton rendered from the kernel task schema, in the `task-frontmatter` partial), `task_types` (configured task type names in config order with the flow, kind and output schema each supplies, from the process config), `tiers` (run-config alias names in config order; `default` is kernel vocabulary for no tier override and stays literal), `author` (the reviewer's author role; it selects the `<role>-body` and `review-<role>` fragments) and `checks_result`/`checks_tree`/`checks_log` (the latest checks record's result, tree and log; a render with no checks record gets `no checks run`, `unknown` and `unknown`). `author` defaults to `implementer`; the plan-review turn overrides it with `architect`. `class_types` is a turn-supplied variable above the block: the front turn renders its class-to-task-type mapping from the same kernel mapping the validator enforces. The delivery-repair ask also supplies its own narrowed `outcome_schema`; it has no role prompt, so its shape must match the turn it repairs.
 
 ## architect.md
 
@@ -70,8 +70,8 @@ Renderer defaults live outside any `This turn` block and the renderer supplies t
 | `existing_tasks`   | existing task files as `- slug \| status \| hash \| deps: a,b` lines (`none` when empty); merged/finished lines end `frozen (read-only)`, cancelled `read-only (spent)`, steer tasks `steer <id>`, stall continuations `stall <n>`, plan-check follow-ups `plan-check <n>` |
 | `repair`           | the script validator's findings from the previous ask; empty string on the first ask and on steer turns                                                                                                                                                                    |
 | `steers`           | pending steers as `- id (file):` plus indented full text; `none` on a derive, stall or plan-check turn                                                                                                                                                                     |
-| `stalls`           | stalled parks as one entry per parked slug (cause, record paths, kept branch, spent turns, done-when); `none` except on a stall turn                                                                                                                                       |
-| `plan_checks`      | checker follow-ups as one entry per slug (kind, reason, cause, record paths, kept branch, spent turns, done-when); `none` except on a plan-check turn                                                                                                                      |
+| `stalls`           | this iteration's undecided parks as one entry per slug (cause, record paths, kept branch, spent turns, amends used of the limit, the cause's default action, done-when); `none` except on a stall turn                                                                     |
+| `plan_checks`      | checker follow-ups as one entry per slug (kind, reason, cause, record paths, kept branch, spent turns, amends used of the limit, the cause's default action, done-when); `none` except on a plan-check turn                                                                |
 | `holds_dir`        | directory for one `<steer-id>.yaml` hold file per structured steer                                                                                                                                                                                                         |
 | `outcome_path`     | path where the outcome file must be written when the harness asks for a file                                                                                                                                                                                               |
 | `validate_cmd`     | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                                                                                                                                                                           |
@@ -88,7 +88,7 @@ Renderer defaults live outside any `This turn` block and the renderer supplies t
 | `front_pack`      | path to the front's context pack for a front-classified trivial or task goal; empty string when no front classified this task                                                                                                                 |
 | `worktree`        | path to the task worktree to edit                                                                                                                                                                                                             |
 | `resume_note`     | follow-up notice for a turn resumed in the front's session: the task branch plus the absolute-path rules; empty string on a de-novo turn                                                                                                      |
-| `report_path`     | repo-relative path a spike commits its finding to (`.factory/spikes/<slug>.md`); empty string on a development task                                                                                                                           |
+| `report_path`     | repo-relative path a spike commits its finding to (`.factory/spikes/<slug>.md`); empty string on a development task; when set, it also opens the prompt with the commit-first sentence                                                        |
 | `setup_command`   | worktree bootstrap command (dependencies etc.); `none` when not needed                                                                                                                                                                        |
 | `gate_commands`   | configured compile/lint/test commands as `- id: command` lines; `none` when empty                                                                                                                                                             |
 | `baseline_checks` | gate failures recorded before this turn, same format; `none` when the baseline is green                                                                                                                                                       |
@@ -108,13 +108,16 @@ which selects `implementer-body`, `review-implementer` and
 `review-implementer-turn`. All turn variables stay in the final `## This turn`
 block.
 
-| variable         | meaning                                                                            |
-| ---------------- | ---------------------------------------------------------------------------------- |
-| `worktree`       | task worktree for a task review; goal checkout for a plan review                   |
-| `author`         | role whose body the reviewer includes (`implementer` by default); renderer default |
-| `outcome_path`   | path where the outcome file must be written when the harness asks for a file       |
-| `validate_cmd`   | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default   |
-| `outcome_schema` | outcome YAML skeleton from the kernel schema; renderer default                     |
+| variable         | meaning                                                                                                                                  |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `worktree`       | task worktree for a task review; goal checkout for a plan review                                                                         |
+| `author`         | role whose body the reviewer includes (`implementer` by default); renderer default                                                       |
+| `checks_result`  | latest checks record's failing-check text, or `pass` when green; `no checks run` when the render has no checks record (renderer default) |
+| `checks_tree`    | the checked tree's hash; `unknown` without a checks record (renderer default)                                                            |
+| `checks_log`     | the checks record's directory; `unknown` without a checks record (renderer default)                                                      |
+| `outcome_path`   | path where the outcome file must be written when the harness asks for a file                                                             |
+| `validate_cmd`   | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                                         |
+| `outcome_schema` | outcome YAML skeleton from the kernel schema; renderer default                                                                           |
 
 ## review-implementer.md
 
@@ -189,28 +192,33 @@ The digest scout appends loops, failures and interventions; it does not restate 
 
 ## plan-checker.md
 
-| variable         | meaning                                                                                                                      |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `iteration`      | 1-based iteration number of this launch                                                                                      |
-| `intent_path`    | path to the goal's `intent.md`, for resolving wording only                                                                   |
-| `plan_path`      | path to the plan to verify against the repo; read-only to the checker                                                        |
-| `checkout`       | path to the stable goal checkout (integration worktree)                                                                      |
-| `tasks_dir`      | directory holding one `<slug>.md` task file per task                                                                         |
-| `existing_tasks` | existing task files as `- slug \| status \| hash \| deps: a,b` lines (`none` when empty), then parked slugs with their cause |
-| `outcome_path`   | path where the outcome file must be written when the harness asks for a file                                                 |
-| `validate_cmd`   | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                             |
-| `outcome_schema` | outcome YAML skeleton from the kernel schema; renderer default                                                               |
+| variable           | meaning                                                                                                                      |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `iteration`        | 1-based iteration number of this launch                                                                                      |
+| `intent_path`      | path to the goal's `intent.md`, for resolving wording only                                                                   |
+| `plan_path`        | path to the plan to verify against the repo; read-only to the checker                                                        |
+| `checkout`         | path to the stable goal checkout (integration worktree)                                                                      |
+| `tasks_dir`        | directory holding one `<slug>.md` task file per task                                                                         |
+| `existing_tasks`   | existing task files as `- slug \| status \| hash \| deps: a,b` lines (`none` when empty), then parked slugs with their cause |
+| `gate_record_path` | `end.yaml` of the newest record that ran gates, to read instead of running them; `none recorded` when no gate has run        |
+| `outcome_path`     | path where the outcome file must be written when the harness asks for a file                                                 |
+| `validate_cmd`     | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                             |
+| `outcome_schema`   | outcome YAML skeleton from the kernel schema; renderer default                                                               |
 
 ## delivery-repair.md
 
-The one in-session repair ask, rendered by the kernel when a turn delivers no outcome, no verdict or decision, or (architect) no plan. A repo may shadow it like any template. It is not a role prompt: it is rendered directly, never included. It includes `outcome` for the contract and, unless a bare done delivers, `verdict` for the verdict/decision usage line. Its `outcome_schema` is narrowed to the fields that turn delivers — the base shape, the prompt's reporting fields, and the one field its expectation gates — so a bare done is never asked for a verdict.
+The default in-session repair ask, rendered by the kernel when a turn delivers no outcome, no verdict or decision, or (architect) no plan. Process config names the template per step (`repairPrompt`); a step that names none renders this one. A repo may shadow it like any template. It is not a role prompt: it is rendered directly, never included by another prompt, and it includes `repair-ask` for the header, findings and outcome contract, then adds its closing instruction. It includes `outcome` for the contract and, unless a bare done delivers, `verdict` for the verdict/decision usage line. Its `outcome_schema` is narrowed to the fields that turn delivers — the base shape, the prompt's reporting fields, and the one field its expectation gates — so a bare done is never asked for a verdict.
 
 | variable         | meaning                                                                                                             |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `role`           | the prompt (the role) whose turn missed its deliverable                                                             |
-| `deliverable`    | the product the turn must deliver: plan edit or stop decision, outcome, verdict, task files, class/task/pack        |
+| `deliverable`    | the product the turn must deliver; process config names it, else a review turn's verdict, else the outcome          |
 | `done_allowed`   | `true` when a bare `status: done` delivers (no verdict or decision required), else `false`                          |
 | `findings`       | the missing or invalid findings as `- ` bullet lines                                                                |
 | `outcome_path`   | path where the corrected outcome must be written                                                                    |
 | `validate_cmd`   | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                    |
 | `outcome_schema` | outcome YAML skeleton from the kernel schema, narrowed to the fields this turn delivers; supplied by the repair ask |
+
+## architect-repair.md
+
+The architect's repair ask, named by the architect boundary step's `repairPrompt`. Same variables as `delivery-repair.md`; it adds that a continued turn must have its plan edit on disk, so the generic template stays free of role branches.

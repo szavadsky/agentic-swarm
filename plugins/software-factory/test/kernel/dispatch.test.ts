@@ -148,6 +148,34 @@ describe("dispatch admission", () => {
         harness.script(handler, { when: whenTurn({ step: "review" }) });
       }
       const runtime = await makeRuntime(repo, goal, { fake: harness });
+      // The second merge parks as a no-progress empty diff; which one is
+      // second is the merge queue's verdict, so the stall routes whatever is
+      // parked now.
+      harness.script(
+        async (req, ctx) => {
+          const tasks = await runtime.store.listTasks();
+          const state = derive(
+            tasks,
+            await runtime.store.listRecords(),
+            runtime.configs.process.flows,
+          );
+          const slugs = Object.keys(state.tasks)
+            .filter((slug) => state.tasks[slug]!.status === "parked")
+            .sort();
+          ctx.writeOutcome(
+            outcome({
+              summary: "left the park for the architect",
+              stallRoutes: slugs.map((slug) => ({
+                slug,
+                action: "leave",
+                reason: "merge queue parked it",
+              })),
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
       await writeTask(runtime, task("alpha", { scope: ["alpha-area"] }));
       await writeTask(runtime, task("beta", { scope: ["beta-area"] }));
       const result = await runDispatch(runtime, { iteration: 1 });
@@ -699,6 +727,12 @@ describe("dispatch pass signals", () => {
         runtime,
         task("probe", { kind: "spike", flow: "spike", scope: ["probe.txt"] }),
       );
+      // A pending task behind a missing dep keeps open work at exhaustion, so
+      // the checker has something to judge.
+      await writeTask(
+        runtime,
+        task("beta", { deps: ["ghost"], scope: ["beta.txt"] }),
+      );
 
       const result = await runDispatch(runtime, { iteration: 1 });
 
@@ -722,6 +756,92 @@ describe("dispatch pass signals", () => {
         ),
       ).toHaveLength(4);
       expect(result.taskTurnsStarted).toBe(4);
+      // A spike's implement turn opens with the report commit: the kernel
+      // hands the implementer prompt the task's report path.
+      const probeTurn = harness.calls.find((call) => {
+        const identity = fakeTurnIdentity(call);
+        return identity.slug === "probe" && identity.step === "implement";
+      });
+      expect(probeTurn?.prompt).toStartWith(
+        "Commit the report at `.factory/spikes/probe.md` first, then refine it.\n",
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("spends no checker turn when every task landed", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 }, planCheckRounds: 2 },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      scriptWork(harness);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      fs.writeFileSync(
+        path.join(runtime.store.goalDir, "plan.md"),
+        PLAN,
+        "utf8",
+      );
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+
+      expect(result.reason).toBe("boundary");
+      expect(stepsCalled(harness, "plancheck")).toBe(0);
+      expect(result.planCheck).toBeUndefined();
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("stalls a park that shares its iteration with a merge", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      scriptWork(harness);
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(
+            outcome({ status: "failed", summary: "runner crashed mid-turn" }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "beta", step: "implement" }) },
+      );
+      scriptStallLeave(harness, ["beta"]);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      fs.writeFileSync(
+        path.join(runtime.store.goalDir, "plan.md"),
+        "# Plan\n\n- alpha — Alpha.\n- beta — Beta.\n",
+        "utf8",
+      );
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+
+      expect(result.reason).toBe("boundary");
+      const records = await runtime.store.listRecords();
+      expect(
+        records.some(
+          (r) => r.step === "merge" && r.slug === "alpha" && r.ok === true,
+        ),
+      ).toBe(true);
+      // The wave merged alpha and still parked beta; the stall turn owns it.
+      const stalls = records.filter(
+        (r) => r.step === "stall-routes" && r.endedAt,
+      );
+      expect(stalls).toHaveLength(1);
+      expect(stalls[0]!.outcome?.stallRoutes).toEqual([
+        {
+          slug: "beta",
+          action: "leave",
+          reason: "left for the architect",
+        },
+      ]);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -755,6 +875,12 @@ describe("dispatch pass signals", () => {
         path.join(runtime.store.goalDir, "plan.md"),
         PLAN,
         "utf8",
+      );
+      // Open work: without it the checker is not called and there is no
+      // verdict to carry.
+      await writeTask(
+        runtime,
+        task("beta", { deps: ["ghost"], scope: ["beta.txt"] }),
       );
       for (const verdict of ["architect", "progress"] as const) {
         await runtime.store.appendRecord(

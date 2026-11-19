@@ -386,7 +386,7 @@ describe("steer architect routing", () => {
         expect(req.prompt).toContain("s1 (mailbox/inbox/s1.md)");
         fs.writeFileSync(
           path.join(runtime.store.goalDir, "plan.md"),
-          "# Milestone 1 — files\n\n## beta\nReworked beta.txt for new intent.\n",
+          "# Milestone 1 — files\n\n## beta\nReworked beta.txt for new intent.\n\ncancelled: alpha — the steer voids it\n",
           "utf8",
         );
         ctx.writeOutcome(
@@ -413,6 +413,7 @@ describe("steer architect routing", () => {
       );
       const after = await stateOf(runtime);
       expect(after.tasks.alpha!.status).toBe("cancelled");
+      expect(after.tasks.alpha!.cause).toBe("the steer voids it");
       expect(after.tasks.beta!.status).toBe("ready");
       expect(
         fs.readFileSync(path.join(runtime.store.tasksDir, "beta.md"), "utf8"),

@@ -36,6 +36,9 @@ describe("parked continuation", () => {
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
+      // beta continues the parked alpha and merges, so the wave-end stall gets
+      // the park even though the iteration merged.
+      scriptStallLeave(harness, ["alpha"]);
       harness.script((req, ctx) => {
         fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
         ctx.writeOutcome(outcome({ summary: "alpha implemented" }));
