@@ -1680,12 +1680,22 @@ export const PLAN_CHECK_ROUTES_STEP = "plan-check-routes";
 
 /**
  * Which follow-up slugs a plan-check turn resumed; a cancel spends its slug
- * and a leave keeps it for the architect.
+ * and a leave keeps it for the architect. `architect` is the exit for a clean
+ * turn the graph still contradicts: its routes are committed, and the findings
+ * no rung introduced travel to the architect like the other PM ladders.
  */
-export interface PlanCheckPmResult {
-  continued: string[];
-  left: string[];
-}
+export type PlanCheckPmResult =
+  | { status: "routed"; continued: string[]; left: string[] }
+  | {
+      status: "architect";
+      continued: string[];
+      left: string[];
+      findings: string[];
+    }
+  /** A rung ended on an infra stop; the writes are rolled back for the boundary. */
+  | { status: "infra"; continued: []; left: string[] }
+  /** Every tier failed both of its turns; the boundary reads the attempts. */
+  | { status: "exhausted"; continued: []; left: string[] };
 
 /**
  * One brief entry per checker follow-up: its kind, slug, dead dep and reason,
@@ -1961,6 +1971,12 @@ async function validatePlanCheckTurn(
  * the ladder or stops on infra falls back to the boundary as today: the writes
  * are rolled back, the attempt is recorded so the round counts once, and the
  * evidence still reaches the architect through the pack.
+ *
+ * The untouched graph is validated once before rung 1: a rung fails only on
+ * findings its turn introduced, because a pre-existing finding is not the PM's
+ * to derive away. A turn that introduces none while the baseline still stands
+ * is kept — its valid routes and cancels apply — and the ladder ends
+ * `architect` with the baseline findings for the next consult.
  */
 export async function runPlanCheckPm(
   runtime: KernelRuntime,
@@ -1977,6 +1993,13 @@ export async function runPlanCheckPm(
   const snapshot = await snapshotTurn(runtime, planPath);
   const planBefore = snapshot.plan;
   const taskSnapshot = snapshot.tasks;
+  const baseline = await graphFindings(
+    runtime,
+    { ...opts, planPath, round: 1 },
+    planBefore,
+    taskSnapshot,
+  );
+  const baselineKeys = new Set(baseline.map(findingKey));
   const brief = await planCheckPmBrief(runtime, opts);
   let failure: string[] = [];
 
@@ -2013,7 +2036,8 @@ export async function runPlanCheckPm(
       taskSnapshot,
       outcome,
     );
-    if (outcome?.status === "done" && findings.length === 0) {
+    const introduced = introducedFindings(findings, baselineKeys);
+    if (outcome?.status === "done" && introduced.length === 0) {
       const accepted: PlanCheckRouteEntry[] = [
         ...(outcome.planCheckRoutes ?? []),
       ].sort((a, b) => a.slug.localeCompare(b.slug));
@@ -2047,21 +2071,27 @@ export async function runPlanCheckPm(
           },
         },
       );
-      return {
-        continued: accepted
-          .filter(
-            (entry) =>
-              entry.action === "continue" &&
-              kindOf.get(entry.slug) !== "cancel",
-          )
-          .map((entry) => entry.slug),
-        left: accepted
-          .filter((entry) => entry.action === "leave")
-          .map((entry) => entry.slug),
-      };
+      const continued = accepted
+        .filter(
+          (entry) =>
+            entry.action === "continue" && kindOf.get(entry.slug) !== "cancel",
+        )
+        .map((entry) => entry.slug);
+      const leftSlugs = accepted
+        .filter((entry) => entry.action === "leave")
+        .map((entry) => entry.slug);
+      const remaining = unfixedBaseline(baseline, findings);
+      return remaining.length > 0
+        ? {
+            status: "architect",
+            continued,
+            left: leftSlugs,
+            findings: remaining,
+          }
+        : { status: "routed", continued, left: leftSlugs };
     }
 
-    const reasons = failureReasons(outcome, findings, result.record);
+    const reasons = failureReasons(outcome, introduced, result.record);
     await runtime.store.appendRecord(
       scriptMeta(opts.iteration, "pm-validate", { round }),
       { ok: false, cause: reasons.join("; ") },
@@ -2072,7 +2102,7 @@ export async function runPlanCheckPm(
         scriptMeta(opts.iteration, PLAN_CHECK_ROUTES_STEP, { round }),
         { ok: false, cause: reasons.join("; ") },
       );
-      return { continued: [], left };
+      return { status: "infra", continued: [], left };
     }
     failure = reasons;
   }
@@ -2083,5 +2113,5 @@ export async function runPlanCheckPm(
       cause: failure.join("; ") || "plan-check PM ladder exhausted",
     },
   );
-  return { continued: [], left };
+  return { status: "exhausted", continued: [], left };
 }

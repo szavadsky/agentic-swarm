@@ -20,6 +20,14 @@ const quota: Stop = { kind: "infra", cause: "quota" };
 const auth: Stop = { kind: "infra", cause: "auth" };
 const done: Stop = { kind: "done" };
 
+// The recorded quota stops that clustered retries: a provider-stated wait in
+// hours/minutes and the millisecond header a 429 carries. Both exceed any
+// backoff the policy would sleep.
+const statedQuotaDetails = [
+  "⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 129h55m29s.",
+  "429 Rate limit exceeded: free-models-per-day-high-balance. retry-after-ms=38240413",
+];
+
 describe("runWithFallbacks", () => {
   it("returns the primary result without touching fallbacks", async () => {
     const calls: string[] = [];
@@ -55,6 +63,57 @@ describe("runWithFallbacks", () => {
     expect(sleeps).toEqual([10]);
     expect(result.outcome.stop).toEqual(done);
     expect(result.attempts.map((a) => a.model.id)).toEqual([A.id, A.id]);
+  });
+
+  it("advances without retrying when a quota stop states a wait beyond the window", async () => {
+    for (const details of statedQuotaDetails) {
+      const calls: string[] = [];
+      const stop: Stop = { kind: "infra", cause: "quota", details };
+      const result = await runWithFallbacks({
+        primary: A,
+        fallbacks: [B],
+        retry: { retries: 2, baseDelayMs: 10, maxDelayMs: 8_000 },
+        run: async (model) => {
+          calls.push(model.id);
+          return output(stop, model.id);
+        },
+        sleep: async () => {
+          throw new Error("must not sleep");
+        },
+      });
+      // One call per dead leg: no retry on the primary, straight to the next.
+      expect(calls).toEqual([A.id, B.id]);
+      expect(result.attempts.map((a) => a.model.id)).toEqual([A.id, B.id]);
+      expect(result.outcome.stop).toEqual(stop);
+    }
+  });
+
+  it("keeps the bounded retries within the window and for other causes", async () => {
+    const cases = [
+      { cause: "quota", details: "retry-after-ms=8000" },
+      { cause: "rate", details: "retry-after-ms=38240413" },
+      { cause: "network", details: "retry-after-ms=38240413" },
+    ] as const;
+    for (const { cause, details } of cases) {
+      const calls: string[] = [];
+      const sleeps: number[] = [];
+      const result = await runWithFallbacks({
+        primary: A,
+        retry: { retries: 1, baseDelayMs: 10, maxDelayMs: 8_000 },
+        run: async (model) => {
+          calls.push(model.id);
+          return calls.length === 1
+            ? output({ kind: "infra", cause, details })
+            : output(done, model.id);
+        },
+        sleep: async (ms) => {
+          sleeps.push(ms);
+        },
+      });
+      expect(calls).toEqual([A.id, A.id]);
+      expect(sleeps).toEqual([10]);
+      expect(result.outcome.stop).toEqual(done);
+    }
   });
 
   it("treats a transport loss as retryable for every adapter", () => {

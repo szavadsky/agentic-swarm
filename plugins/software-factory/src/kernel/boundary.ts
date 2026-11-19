@@ -290,6 +290,13 @@ export async function runBoundary(
       round,
       state,
     });
+    if (checked.status === "architect")
+      return {
+        iteration,
+        decision: "continue",
+        cause: `PM ladder routed to the architect: ${checked.findings.join("; ")}`,
+        seenSteers: [],
+      };
     if (checked.continued.length > 0)
       return { iteration, decision: "continue", seenSteers: [] };
     records = await runtime.store.listRecords();

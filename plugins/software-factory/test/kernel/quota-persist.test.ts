@@ -43,6 +43,13 @@ const implementerVars = {
 
 const FIVE_HOURS_MS = 300 * 60_000;
 
+// The recorded quota stops: a provider-stated reset in hours/minutes and the
+// millisecond figure a 429 carries.
+const RESET_IN_TEXT =
+  "⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 129h55m29s.";
+const RETRY_AFTER_TEXT =
+  "429 Rate limit exceeded: free-models-per-day-high-balance. retry-after-ms=38240413";
+
 describe("pool reset window", () => {
   const now = 1_000_000;
 
@@ -53,16 +60,25 @@ describe("pool reset window", () => {
     expect(poolResetAt({}, now, "limit reached. Resets in 33m53s.")).toBe(
       now + 33 * 60_000,
     );
+    expect(poolResetAt({}, now, RESET_IN_TEXT)).toBe(
+      now + (129 * 60 + 55) * 60_000,
+    );
+  });
+
+  it("takes a retry-after-ms header as the stated wait", () => {
+    expect(poolResetAt({}, now, RETRY_AFTER_TEXT)).toBe(now + 38_240_413);
   });
 
   it("caps the stated reset at the run config's cap", () => {
-    expect(
-      poolResetAt(
-        { quota: { resetMinutes: 45, maxResetMinutes: 600 } },
-        now,
-        "Resets in 130h19m23s.",
-      ),
-    ).toBe(now + 600 * 60_000);
+    for (const text of [RESET_IN_TEXT, RETRY_AFTER_TEXT]) {
+      expect(
+        poolResetAt(
+          { quota: { resetMinutes: 45, maxResetMinutes: 600 } },
+          now,
+          text,
+        ),
+      ).toBe(now + 600 * 60_000);
+    }
   });
 
   it("falls back to the configured window when the text names no reset", () => {
@@ -74,6 +90,9 @@ describe("pool reset window", () => {
     ).toBe(now + 45 * 60_000);
     expect(
       poolResetAt({ quota: { resetMinutes: 45 } }, now, "Resets in 0m"),
+    ).toBe(now + 45 * 60_000);
+    expect(
+      poolResetAt({ quota: { resetMinutes: 45 } }, now, "retry-after-ms=0"),
     ).toBe(now + 45 * 60_000);
     expect(poolResetAt({}, now)).toBe(
       now + DEFAULT_POOL_RESET_MINUTES * 60_000,
@@ -212,7 +231,7 @@ describe("exhausted-pool persistence", () => {
         stop: {
           kind: "infra",
           cause: "quota",
-          details: "Individual quota reached. Resets in 1h05m.",
+          details: RETRY_AFTER_TEXT,
         },
       });
       first.script((req, ctx) => {
@@ -229,12 +248,12 @@ describe("exhausted-pool persistence", () => {
       const before = Date.now();
       await expectLaunch(3, goal.repo, first);
 
-      // Launch 1 stored the provider's stated 65-minute reset, not the
-      // configured 45-minute fallback.
+      // Launch 1 stored the provider's stated 38,240,413 ms, not the configured
+      // 45-minute fallback.
       const stored = yaml.parse(fs.readFileSync(quotaPoolsPath(paths), "utf8"));
       const resetAt = Date.parse(stored.pools["fake+fake-impl"].resetAt);
-      expect(resetAt).toBeGreaterThanOrEqual(before + 65 * 60_000);
-      expect(resetAt).toBeLessThanOrEqual(Date.now() + 65 * 60_000);
+      expect(resetAt).toBeGreaterThanOrEqual(before + 38_240_413);
+      expect(resetAt).toBeLessThanOrEqual(Date.now() + 38_240_413);
 
       // Launch 2: a fresh process would read the session store; a fresh runtime does the same.
       const second = new FakeHarness({ id: "fake" });
