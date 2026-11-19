@@ -319,7 +319,13 @@ export async function runDispatch(
   );
   const iteration = opts.iteration ?? Math.max(1, initial.iteration);
   let taskTurnsStarted = 0;
-  let planCheck: "progress" | "architect" | undefined;
+  let planCheckVerdict: "progress" | "architect" | undefined;
+  const planCheckFindings: string[] = [];
+  /** The plan-check PM's unfixed findings, once, as the summary cause. */
+  const planCheckCause = (): string | undefined =>
+    planCheckFindings.length > 0
+      ? `PM ladder routed to the architect: ${[...new Set(planCheckFindings)].join("; ")}`
+      : undefined;
   const running = new Map<string, Running>();
   const started = new Set(
     initialRecords
@@ -734,14 +740,16 @@ export async function runDispatch(
         waiting.retries += 1;
         continue;
       }
-      if (drain && infra.size === 0)
+      if (drain && infra.size === 0) {
+        const checked = planCheckCause();
         return {
           reason: "drained",
-          cause: drain,
+          cause: checked ? `${drain}; ${checked}` : drain,
           turns: turnsUsed,
           taskTurnsStarted,
           allReadyHeld: false,
         };
+      }
       // Wave end: the steward owns remaining merge conflicts. Its candidates
       // run independently: one leg's infra death is booked against that slug
       // and deferred like a task turn's, while the remaining candidates run. A
@@ -849,10 +857,12 @@ export async function runDispatch(
             round: rounds + 1,
             state: checkState,
           });
-          planCheck = round.turn.verdict;
+          if (round.status === "architect")
+            planCheckFindings.push(...round.findings);
+          planCheckVerdict = round.turn.verdict;
           if (round.continued.length > 0) continue;
         } else if (openWork(checkState).length > 0) {
-          planCheck = checked.at(-1)?.outcome?.planCheck?.verdict;
+          planCheckVerdict = checked.at(-1)?.outcome?.planCheck?.verdict;
         }
       }
       const turns = settledTurns(await runtime.store.listRecords(), iteration);
@@ -872,22 +882,18 @@ export async function runDispatch(
         };
       }
       const heldCause = heldBoundaryCause(hold, state);
-      return heldCause
-        ? {
-            reason: "boundary",
-            cause: heldCause,
-            turns,
-            taskTurnsStarted,
-            planCheck,
-            allReadyHeld: true,
-          }
-        : {
-            reason: "boundary",
-            turns,
-            taskTurnsStarted,
-            planCheck,
-            allReadyHeld: false,
-          };
+      const planCheckFinding = planCheckCause();
+      const causes = [heldCause, planCheckFinding].filter(
+        (cause): cause is string => cause !== undefined,
+      );
+      return {
+        reason: "boundary",
+        ...(causes.length > 0 ? { cause: causes.join("; ") } : {}),
+        turns,
+        taskTurnsStarted,
+        planCheck: planCheckVerdict,
+        allReadyHeld: heldCause !== undefined,
+      };
     }
     await Promise.race([...running.values()].map((r) => r.promise));
   }

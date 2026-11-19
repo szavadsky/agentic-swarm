@@ -12,6 +12,7 @@ import { runBoundary } from "../../src/kernel/boundary.js";
 import { contextPackRelPath } from "../../src/kernel/context-pack.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
+import { runGoal } from "../../src/kernel/launch.js";
 import {
   latestPlanCheck,
   PLAN_CHECK_STEP,
@@ -23,6 +24,7 @@ import {
 import { PLAN_CHECK_ROUTES_STEP, runPlanCheckPm } from "../../src/kernel/pm.js";
 import { appendCancel, scriptMeta } from "../../src/kernel/record.js";
 import { parseTaskFile, renderTaskFile } from "../../src/kernel/tasks.js";
+import { testPriceSource } from "../helpers/price-source.js";
 import { rec, task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -42,6 +44,14 @@ const ALIASES = {
   steward: { harness: "fake", model: "fake-steward" },
   "plan-checker": { harness: "fake", model: "fake-check" },
   "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+};
+
+/** `ALIASES` plus the roles launch pre-flight demands but this goal never runs. */
+const LAUNCH_ALIASES = {
+  ...ALIASES,
+  digest: { harness: "fake", model: "fake-digest" },
+  "implementer-b": { harness: "fake", model: "fake-impl-b" },
+  researcher: { harness: "fake", model: "fake-research" },
 };
 
 function writeFileTurn(file: string, summary: string): FakeTurnHandler {
@@ -764,6 +774,364 @@ describe("plan checker", () => {
       );
       expect(validations[0]!.cause).toContain("amend is refused");
       expect(fs.readFileSync(betaPath, "utf8")).toBe(before);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  /** The graph finding a task file raises when it names a dep nothing declares. */
+  const missingDepFinding = (slug: string, dep: string): string =>
+    `task "${slug}" depends on missing task "${dep}"`;
+
+  /** A checker report that routes beta to the PM over its dead dep. */
+  const scriptPlanCheckProgress = (harness: FakeHarness): void => {
+    harness.script(
+      (req, ctx) => {
+        ctx.writeOutcome(
+          outcome({
+            summary: "beta's dep is dead",
+            planCheck: {
+              verdict: "progress",
+              evidence: [
+                {
+                  item: "beta",
+                  status: "missing",
+                  evidence: "beta depends on gone, which no task declares",
+                },
+              ],
+              followUps: [
+                {
+                  kind: "cancel",
+                  slug: "beta",
+                  reason: "the dead dep is not derivable from the plan",
+                },
+              ],
+            },
+          }),
+        );
+        return fakeTurnResult(req);
+      },
+      { when: whenTurn({ step: PLAN_CHECK_STEP }) },
+    );
+  };
+
+  /** The PM's clean turn: leave beta, write nothing, keep the ladder's exit. */
+  const scriptPlanCheckLeave = (harness: FakeHarness): void => {
+    harness.script(
+      (req, ctx) => {
+        ctx.writeOutcome(
+          outcome({
+            summary: "left beta for the architect",
+            planCheckRoutes: [
+              {
+                slug: "beta",
+                action: "leave",
+                reason: "the dead dep is not the plan's to derive",
+              },
+            ],
+          }),
+        );
+        return fakeTurnResult(req);
+      },
+      { when: whenTurn({ step: "pm" }) },
+    );
+  };
+
+  it("surfaces the architect exit from a dispatch-lane plan check", async () => {
+    const { repo, goal, goalDir } = setupFlowRepo({
+      aliases: ALIASES,
+      limits: { planCheckRounds: 1 },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(
+        runtime,
+        task("beta", { scope: ["beta.txt"], deps: ["gone"] }),
+      );
+      fs.writeFileSync(
+        path.join(goalDir, "plan.md"),
+        "# Plan\n\n- beta — Beta.\n",
+        "utf8",
+      );
+      scriptPlanCheckProgress(harness);
+      scriptPlanCheckLeave(harness);
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+      expect(result.cause).toBe(
+        `PM ladder routed to the architect: ${missingDepFinding("beta", "gone")}`,
+      );
+      expect(
+        harness.calls.filter((call) => fakeTurnIdentity(call).step === "pm"),
+      ).toHaveLength(1);
+      const records = await runtime.store.listRecords();
+      expect(records.some((record) => record.step === "pm-validate")).toBe(
+        false,
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("carries the boundary lane's architect finding into the next consult", async () => {
+    const { repo, goal, goalDir } = setupFlowRepo({
+      aliases: LAUNCH_ALIASES,
+      limits: { iterations: 2, planCheckRounds: 1 },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(
+        runtime,
+        task("beta", { scope: ["beta.txt"], deps: ["gone"] }),
+      );
+      fs.writeFileSync(
+        path.join(goalDir, "plan.md"),
+        "# Plan\n\n- beta — Beta.\n",
+        "utf8",
+      );
+      scriptPlanCheckProgress(harness);
+      scriptPlanCheckLeave(harness);
+      harness.script(
+        (req, ctx) => {
+          const summary = fs.readFileSync(
+            path.join(goalDir, "iterations/1/summary.md"),
+            "utf8",
+          );
+          expect(summary).toContain(
+            `PM ladder routed to the architect: ${missingDepFinding("beta", "gone")}`,
+          );
+          const pack = fs.readFileSync(
+            path.join(goalDir, contextPackRelPath(2)),
+            "utf8",
+          );
+          expect(pack).toContain("previous iteration summary");
+          ctx.writeOutcome(
+            outcome({ summary: "read the finding", decision: "done" }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "architect" }) },
+      );
+
+      const result = await runGoal({
+        repo: repo.dir,
+        goal,
+        iterations: 2,
+        harnesses: { fake: harness },
+        priceSource: testPriceSource(repo.dir),
+      });
+      expect(result.stop).toBe("done");
+      expect(
+        harness.calls.filter(
+          (call) => fakeTurnIdentity(call).step === "architect",
+        ),
+      ).toHaveLength(1);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 90_000);
+
+  it("keeps a clean plan-check turn and routes a pre-existing finding to the architect", async () => {
+    const { repo, goal } = setupFlowRepo({ aliases: ALIASES });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(
+        runtime,
+        task("beta", { scope: ["beta.txt"], deps: ["gone"] }),
+      );
+      await runtime.store.appendRecord(
+        scriptMeta(1, "park", { slug: "beta", round: 1, revision: 0 }),
+        { ok: true, cause: "failed: runner crashed mid-turn" },
+      );
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.beta!.status).toBe("parked");
+      const betaPath = path.join(runtime.store.tasksDir, "beta.md");
+      harness.script(
+        (req, ctx) => {
+          const current = parseTaskFile(
+            fs.readFileSync(betaPath, "utf8"),
+            "beta",
+          );
+          fs.writeFileSync(
+            betaPath,
+            renderTaskFile({
+              ...current,
+              revision: 1,
+              body: "Amended brief.\nDone when: beta.txt holds beta.",
+            }),
+            "utf8",
+          );
+          ctx.writeOutcome(
+            outcome({
+              summary: "amended beta; the dead dep is not the plan's to derive",
+              planCheckRoutes: [
+                {
+                  slug: "beta",
+                  action: "continue",
+                  reason: "the brief was too vague to retry",
+                },
+              ],
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
+
+      const result = await runPlanCheckPm(runtime, {
+        iteration: 1,
+        state,
+        followUps: [
+          {
+            kind: "amend",
+            slug: "beta",
+            reason: "the brief was too vague to retry",
+          },
+        ],
+        cwd: runtime.paths.goalCheckout,
+      });
+      expect(result.status).toBe("architect");
+      if (result.status === "architect")
+        expect(result.findings).toEqual([missingDepFinding("beta", "gone")]);
+      expect(result.continued).toEqual(["beta"]);
+      expect(
+        harness.calls.filter((call) => fakeTurnIdentity(call).step === "pm"),
+      ).toHaveLength(1);
+      // The amend stands: only a finding no rung can fix stopped the ladder.
+      expect(
+        parseTaskFile(fs.readFileSync(betaPath, "utf8"), "beta").revision,
+      ).toBe(1);
+      const records = await runtime.store.listRecords();
+      expect(records.some((record) => record.step === "pm-validate")).toBe(
+        false,
+      );
+      expect(
+        records.some(
+          (record) =>
+            record.step === PLAN_CHECK_ROUTES_STEP && record.ok === true,
+        ),
+      ).toBe(true);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("still escalates on a finding a plan-check turn introduced", async () => {
+    const { repo, goal } = setupFlowRepo({
+      aliases: {
+        ...ALIASES,
+        pm: { ...ALIASES.pm, escalateTo: "pm-2" },
+        "pm-2": { harness: "fake", model: "fake-pm-2" },
+      },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(
+        runtime,
+        task("beta", { scope: ["beta.txt"], deps: ["gone"] }),
+      );
+      await runtime.store.appendRecord(
+        scriptMeta(1, "park", { slug: "beta", round: 1, revision: 0 }),
+        { ok: true, cause: "failed: runner crashed mid-turn" },
+      );
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
+      for (const summary of ["wrote a self dep", "wrote it again"]) {
+        harness.script(
+          (req, ctx) => {
+            fs.writeFileSync(
+              path.join(runtime.store.tasksDir, "beta-2.md"),
+              renderTaskFile(
+                task("beta-2", {
+                  base: "beta",
+                  scope: ["beta.txt"],
+                  deps: ["beta-2"],
+                  source: "plan-check: 1",
+                }),
+              ),
+              "utf8",
+            );
+            ctx.writeOutcome(
+              outcome({
+                summary,
+                planCheckRoutes: [
+                  {
+                    slug: "beta",
+                    action: "continue",
+                    reason: "retry on a fresh branch",
+                  },
+                ],
+              }),
+            );
+            return fakeTurnResult(req);
+          },
+          { when: whenTurn({ step: "pm" }) },
+        );
+      }
+      harness.script(
+        (req, ctx) => {
+          expect(req.model.id).toBe("fake-pm-2");
+          ctx.writeOutcome(
+            outcome({
+              summary: "left beta",
+              planCheckRoutes: [
+                {
+                  slug: "beta",
+                  action: "leave",
+                  reason: "needs the architect",
+                },
+              ],
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
+
+      const result = await runPlanCheckPm(runtime, {
+        iteration: 1,
+        state,
+        followUps: [
+          {
+            kind: "cancel",
+            slug: "beta",
+            reason: "the architect must rule on the dead dep",
+          },
+        ],
+        cwd: runtime.paths.goalCheckout,
+      });
+      expect(harness.calls.map((call) => call.model.id)).toEqual([
+        "fake-pm",
+        "fake-pm",
+        "fake-pm-2",
+      ]);
+      expect(result.status).toBe("architect");
+      if (result.status === "architect")
+        expect(result.findings).toEqual([missingDepFinding("beta", "gone")]);
+      expect(result.continued).toEqual([]);
+      expect(result.left).toEqual(["beta"]);
+      const validations = (await runtime.store.listRecords()).filter(
+        (record) => record.step === "pm-validate",
+      );
+      expect(validations).toHaveLength(2);
+      for (const record of validations) {
+        expect(record.cause).toContain('task "beta-2" depends on itself');
+        expect(record.cause).not.toContain(missingDepFinding("beta", "gone"));
+      }
+      expect(
+        fs.existsSync(path.join(runtime.store.tasksDir, "beta-2.md")),
+      ).toBe(false);
     } finally {
       cleanupFlowRepo(repo);
     }
