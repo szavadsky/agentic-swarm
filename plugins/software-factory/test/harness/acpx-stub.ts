@@ -3,6 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import { removeAtFileEnd } from "../setup/tmp-cleanup.js";
 
+/** Bound on the stub's startup wait, so a failed spawn reports instead of hanging. */
+const READY_TIMEOUT_MS = 30_000;
+
 export interface AcpxStub {
   binary: string;
   cleanup(): void;
@@ -12,6 +15,8 @@ export interface AcpxStub {
   sessionNames(): string[];
   /** Forgets a named record, like acpx's TTL or `sessions close`. */
   closeSession(name: string): void;
+  /** Waits until the stub process has started, failing with a diagnostic. */
+  waitForReady(): Promise<void>;
 }
 
 export interface AcpxStubModel {
@@ -107,6 +112,7 @@ export interface AcpxStubOptions {
 export function createAcpxStub(opts: AcpxStubOptions = {}): AcpxStub {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acpx-stub-"));
   const logPath = path.join(dir, "invocations.ndjson");
+  const readyPath = path.join(dir, "ready");
   const stateDir = path.join(dir, "state");
   const binary = path.join(dir, "acpx-stub.js");
   const usageJs = JSON.stringify(opts.usage ?? null);
@@ -134,9 +140,11 @@ import path from "node:path";
 
 const args = process.argv.slice(2);
 const logPath = ${JSON.stringify(logPath)};
+const readyPath = ${JSON.stringify(readyPath)};
 const stateDir = ${JSON.stringify(stateDir)};
 fs.mkdirSync(stateDir, { recursive: true });
 fs.appendFileSync(logPath, JSON.stringify(args) + "\\n");
+fs.writeFileSync(readyPath, "ready");
 
 // Synchronous: process.exit() right after an async pipe write can drop the frame.
 const emit = (frame) => fs.writeSync(1, JSON.stringify(frame) + "\\n");
@@ -439,6 +447,18 @@ process.exit(promptExitCode);
     },
     closeSession: (name: string) =>
       fs.rmSync(path.join(stateDir, `session-${name}`), { force: true }),
+    waitForReady: async () => {
+      // Monotonic: the cache test's fake clock freezes Date.
+      const start = performance.now();
+      while (!fs.existsSync(readyPath)) {
+        if (performance.now() - start > READY_TIMEOUT_MS) {
+          throw new Error(
+            `acpx-stub did not start within ${READY_TIMEOUT_MS}ms`,
+          );
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+    },
     invocations: () => {
       if (!fs.existsSync(logPath)) return [];
       return fs
