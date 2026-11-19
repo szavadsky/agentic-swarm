@@ -1,12 +1,16 @@
 # Software Factory
 
 The factory runs one goal as bounded iterations. An iteration is one
-architect consult (plan) plus the task dispatch it starts. When open work
-remains, the boundary runs the plan checker first: a `progress` verdict resumes
-dispatch without a consult, bounded by `limits.planCheckRounds`; the consult
-runs on `architect`, when nothing is open, or when the bound is hit. State is
-derived from task files and append-only records; there is no state file to
-repair.
+architect consult (plan) plus the task dispatch it starts. When the dispatch
+set runs out with fresh parks, the PM decides each one in the same iteration —
+amend on its kept branch with the park's evidence, replace, split, cancel, or
+leave for the architect — whether or not the wave merged anything. An amended
+task reruns on its kept branch, after merging a moved head in its first turn,
+and on its step's next alternate. When open work remains, the boundary runs
+the plan checker first: a `progress` verdict resumes dispatch without a
+consult, bounded by `limits.planCheckRounds`; the consult runs on `architect`,
+when nothing is open, or when the bound is hit. State is derived from task
+files and append-only records; there is no state file to repair.
 
 ## Commands
 
@@ -166,6 +170,11 @@ split is the cached prefix.
 reaches it, dispatch drains — no new task starts; tasks already started finish
 their remaining steps and merge, and the summary records the cause and how many
 turns the brake could not price.
+
+`limits.parkAmends` (default 1) bounds how many times one parked slug may be
+amended in a single iteration. The PM's stall brief lists the amends already
+spent (`amends: <used> of <limit>`); at the limit an amend is refused and the
+park must be replaced, split, cancelled or left for the architect.
 
 `limits.minTmpFreeBytes` (default 2 GiB) is the free space the temp directory
 (`os.tmpdir()`, so `TMPDIR` is respected) must hold. Below it, `run` exits 1

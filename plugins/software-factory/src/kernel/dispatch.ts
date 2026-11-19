@@ -222,6 +222,45 @@ function heldBoundaryCause(
 }
 
 /**
+ * This iteration's parked slugs that no stall turn has answered yet: the
+ * first stall-routes record written after a park owns its decision. A failed
+ * ladder attempt counts too — the park then goes to the architect — so each
+ * park costs at most one PM turn. A slug that parks again after an amended
+ * rerun is a new park and gets its own decision; `limits.parkAmends` bounds
+ * how many of those decisions may amend it.
+ */
+function undecidedParked(
+  records: readonly StepRecord[],
+  state: State,
+  iteration: number,
+): string[] {
+  const attempts = records
+    .filter(
+      (record) =>
+        record.iteration === iteration &&
+        record.step === STALL_ROUTES_STEP &&
+        record.endedAt,
+    )
+    .map((record) => record.seq);
+  const last = attempts.length > 0 ? Math.max(...attempts) : -1;
+  return [
+    ...new Set(
+      records
+        .filter(
+          (record) =>
+            record.iteration === iteration &&
+            record.step === "park" &&
+            record.endedAt &&
+            record.slug !== undefined &&
+            record.seq > last &&
+            state.tasks[record.slug]?.status === "parked",
+        )
+        .map((record) => record.slug!),
+    ),
+  ].sort();
+}
+
+/**
  * The dispatch loop: `next` proposes, this loop admits. Admission holds the
  * overall, per-subscription and per-model turn limits; within a wave, order
  * comes from `deps` only. On an optional iteration limit — turns, wall clock
@@ -671,10 +710,11 @@ export async function runDispatch(
         };
       }
       if (!steward.skipped) continue;
-      // Wave-end stall: the dispatch set ran out with fresh parks. The PM owns
-      // the dispatch sets, so one stall turn resolves them in this iteration
-      // whether or not the wave merged something; a second stall, an all-left
-      // turn, or any drain falls through to the boundary as today.
+      // Wave-end stall: the dispatch set ran out with parks no stall turn has
+      // decided. The PM owns the dispatch sets, so each park gets one decision
+      // in this iteration whether or not the wave merged something; a
+      // continued route resumes dispatch and a later park gets its own turn.
+      // An all-left, failed or bounded-out turn falls through to the boundary.
       if (!opts.signals?.shouldStop()) {
         const stallTasks = await runtime.store.listTasks();
         const stallRecords = await runtime.store.listRecords();
@@ -683,36 +723,15 @@ export async function runDispatch(
           stallRecords,
           runtime.configs.process.flows,
         );
-        const attempted = stallRecords.some(
-          (record) =>
-            record.iteration === iteration &&
-            record.step === STALL_ROUTES_STEP &&
-            record.endedAt,
-        );
-        if (!attempted) {
-          const slugs = [
-            ...new Set(
-              stallRecords
-                .filter(
-                  (record) =>
-                    record.iteration === iteration &&
-                    record.step === "park" &&
-                    record.endedAt &&
-                    record.slug &&
-                    stallState.tasks[record.slug]?.status === "parked",
-                )
-                .map((record) => record.slug!),
-            ),
-          ].sort();
-          if (slugs.length > 0) {
-            const stalled = await runStallPm(runtime, {
-              iteration,
-              state: stallState,
-              slugs,
-              cwd: runtime.paths.goalCheckout,
-            });
-            if (stalled.continued.length > 0) continue;
-          }
+        const slugs = undecidedParked(stallRecords, stallState, iteration);
+        if (slugs.length > 0) {
+          const stalled = await runStallPm(runtime, {
+            iteration,
+            state: stallState,
+            slugs,
+            cwd: runtime.paths.goalCheckout,
+          });
+          if (stalled.continued.length > 0) continue;
         }
       }
       // Plan check: the dispatch set ran out short of terminal with open work

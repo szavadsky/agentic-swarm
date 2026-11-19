@@ -336,6 +336,19 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("bounds per-slug amends with limits.parkAmends, default 1", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    const runYaml = path.join(root, ".factory/run.yaml");
+    fs.writeFileSync(runYaml, "limits: { iterations: 1 }\n");
+    expect(toLimits(loadConfigs(root)).parkAmends).toBe(1);
+    fs.writeFileSync(runYaml, "limits: { iterations: 1, parkAmends: 2 }\n");
+    expect(toLimits(loadConfigs(root)).parkAmends).toBe(2);
+    fs.writeFileSync(runYaml, "limits: { iterations: 1, parkAmends: -1 }\n");
+    expect(() => loadConfigs(root)).toThrow(/parkAmends/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("maps the optional turn/iteration minute knobs into the limits", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });

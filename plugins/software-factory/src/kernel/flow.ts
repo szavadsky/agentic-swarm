@@ -18,6 +18,7 @@ import {
   isTrivialImplementTurn,
   priorStepCommit,
   promptVars,
+  revisionBase,
   reviewSession,
   stepTarget,
   trivialResumeNote,
@@ -166,8 +167,11 @@ async function runTaskGates(
   let checks = await runGates(runtime, worktree);
   markInfraGates(checks);
 
+  const gatesRecords = await runtime.store.listRecords();
   const base =
-    firstBase(await runtime.store.listRecords(), meta.slug) ?? "HEAD";
+    revisionBase(gatesRecords, meta.slug, task.revision) ??
+    firstBase(gatesRecords, meta.slug) ??
+    "HEAD";
   const cleanliness = await runCleanlinessCheck(runtime, worktree, base);
   if (!cleanliness.ok) {
     checks.push(cleanliness);
@@ -453,14 +457,22 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     round: state.round,
     revision: task.revision,
   };
+  const fix = isFixTurn(flow, state, step.id);
   // A first-turn `base:` conflict resolves in the turn instead of parking: the
-  // merge stays in progress and the ask rides the counted turn. Fix turns and
-  // reviews keep the park; a resumed MERGE_HEAD (crash mid-resolve) always
-  // resumes so partial work is not lost.
+  // merge stays in progress and the ask rides the counted turn. An amended
+  // task's first turn gets the same treatment on its own kept branch, so a
+  // head that moved while it was parked is merged and resolved there, not
+  // parked as a `base-conflict`. Fix turns and reviews keep the park; a
+  // resumed MERGE_HEAD (crash mid-resolve) always resumes so partial work is
+  // not lost.
+  const amendedFirstTurn = task.revision > 0 && state.turns === 0 && !fix;
+  /** The kept branch may trail the head: a continuation or an amended slug. */
+  const keptBranch = task.base !== undefined || amendedFirstTurn;
   let pendingResolve: { head: string; paths: string[] } | null = null;
   let resolveIsCreation = false;
+  let resolveIsFirstTurn = false;
   if (ensured.mergeConflict) {
-    if (step.review || isFixTurn(flow, state, step.id)) {
+    if (step.review || fix) {
       const named =
         ensured.mergeConflict.paths.join(", ") ||
         "git reported no unmerged paths";
@@ -473,6 +485,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       paths: ensured.mergeConflict.paths,
     };
     resolveIsCreation = true;
+    resolveIsFirstTurn = true;
   } else if (task.base && ensured.created) {
     // The creation merge in ensureTaskWorktree moved the branch without the
     // agent; derive needs the post-advance tree as the empty-diff baseline.
@@ -496,15 +509,16 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       { ok: true, commit, tree, headTree },
     );
   }
-  // A reused `base:` worktree advances to the current integration head before
-  // the turn, the same advance a created one gets (B6); a created worktree
+  // A reused kept branch advances to the current integration head before the
+  // turn, the same advance a created one gets (B6); a created continuation
   // moved inside ensureTaskWorktree. A clean tree merges the head with the
-  // creation conflict path; a dirty tree keeps the state the last turn left.
+  // creation conflict path; a dirty tree keeps the state the last turn left,
+  // because a merge over uncommitted work is not the agent's to resolve.
   let startPoint = ensured.startPoint;
   if (
     !pendingResolve &&
-    task.base &&
-    !ensured.created &&
+    keptBranch &&
+    !(ensured.created && task.base !== undefined) &&
     !step.review &&
     (await worktreeClean(ensured.path))
   ) {
@@ -517,7 +531,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       { leaveConflict: true },
     );
     if (!attempt.ok) {
-      if (isFixTurn(flow, state, step.id)) {
+      if (fix) {
         const named =
           attempt.paths.join(", ") || "git reported no unmerged paths";
         await abortMerge(ensured.path);
@@ -525,6 +539,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
         return {};
       }
       pendingResolve = { head, paths: attempt.paths };
+      resolveIsFirstTurn = amendedFirstTurn;
       startPoint = head;
     } else {
       startPoint = head;
@@ -543,7 +558,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       }
     }
   }
-  if (!pendingResolve && task.base && !step.review) {
+  if (!pendingResolve && keptBranch && !step.review) {
     const inFlight = await mergeHeadSha(ensured.path);
     if (inFlight) {
       let paths = await unmergedFiles(ensured.path);
@@ -562,7 +577,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       pendingResolve = { head: inFlight, paths };
     }
   }
-  if (task.base && step.review && (await mergeHeadSha(ensured.path))) {
+  if (keptBranch && step.review && (await mergeHeadSha(ensured.path))) {
     const paths = await unmergedFiles(ensured.path);
     const named = paths.join(", ") || "git reported no unmerged paths";
     await abortMerge(ensured.path);
@@ -571,7 +586,6 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   }
   const preexisting = preexistingRed(recordedBaseGates(records));
   const target = stepTarget(runtime, task, state, step.id, iteration, records);
-  const fix = isFixTurn(flow, state, step.id);
   // A trivial goal implements in the front's own session: the turn resumes it
   // with the session's recorded cwd, and the prompt names the absolute
   // worktree and branch. No session, or a harness that cannot resume, parks
@@ -616,7 +630,12 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     flow,
     state,
   );
-  vars.base_hash = firstBase(records, task.slug) ?? startPoint;
+  const baseHash = amendedFirstTurn
+    ? startPoint
+    : (revisionBase(records, task.slug, task.revision) ??
+      firstBase(records, task.slug) ??
+      startPoint);
+  vars.base_hash = baseHash;
   vars.head_hash = await headSha(ensured.path);
   const lastCall = step.review && isLastReviewCall(step, state.round);
   if (step.review) {
@@ -628,7 +647,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   if (step.review && session) {
     // A resumed review already holds the prior rounds: the range carries the
     // delta since the last turn of this step, with the fix dispositions.
-    const delta = priorStepCommit(records, task.slug, step.id);
+    const delta = priorStepCommit(records, task.slug, step.id, task.revision);
     if (delta) vars.base_hash = delta;
   }
   if (trivial && session) {
@@ -687,7 +706,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     meta: {
       ...meta,
       step: step.id,
-      base: firstBase(records, task.slug) ?? startPoint,
+      base: baseHash,
       taskHash: materialHash(task),
     },
     vars,
@@ -788,6 +807,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       const tree = await treeSha(ensured.path);
       const needsHeadTree =
         resolveIsCreation ||
+        resolveIsFirstTurn ||
         !records.some(
           (r) => r.slug === task.slug && r.step === "base-advance" && r.endedAt,
         );

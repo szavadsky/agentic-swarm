@@ -213,6 +213,28 @@ export function firstBase(
     .sort(bySeq)[0]?.base;
 }
 
+/**
+ * The commit the task's current revision started from: the first agent record
+ * stamped with that revision. Records without the field read as revision 0,
+ * as derive treats them. An amend's first turn stamps the integration head it
+ * merged, which is the range a review of the revised branch should judge.
+ */
+export function revisionBase(
+  records: StepRecord[],
+  slug: string,
+  revision: number,
+): string | undefined {
+  return records
+    .filter(
+      (r) =>
+        r.slug === slug &&
+        r.actor === "agent" &&
+        (r.revision ?? 0) === revision &&
+        r.base,
+    )
+    .sort(bySeq)[0]?.base;
+}
+
 export function flowOf(runtime: KernelRuntime, task: TaskFile): FlowDefinition {
   const flow = runtime.configs.process.flows[task.flow];
   if (!flow) throw new Error(`flow "${task.flow}" is not configured`);
@@ -841,10 +863,16 @@ export function priorStepCommit(
   records: StepRecord[],
   slug: string,
   stepId: string,
+  revision: number,
 ): string | undefined {
   return records
     .filter(
-      (r) => r.slug === slug && r.step === stepId && r.endedAt && r.commit,
+      (r) =>
+        r.slug === slug &&
+        r.step === stepId &&
+        r.endedAt &&
+        r.commit &&
+        (r.revision ?? 0) === revision,
     )
     .sort(bySeq)
     .at(-1)?.commit;

@@ -4,6 +4,7 @@ import yaml from "yaml";
 import { writeTextAtomic } from "../core/records/io.js";
 import type { Stop } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
+import { DEFAULT_PARK_AMENDS } from "./config.js";
 import { boundaryTarget, type TurnTarget } from "./flow-context.js";
 import {
   expireHold,
@@ -17,6 +18,8 @@ import {
   writeOutbox,
 } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
+import { formatParkDefault } from "./park-route.js";
+import { PLAN_CHECK_STEP } from "./plan-check.js";
 import { appendCancel, scriptMeta } from "./record.js";
 import {
   doneWhen,
@@ -946,7 +949,7 @@ export async function runSteerPm(
   }
 }
 
-/** Script step committing a stall turn's routes; its presence marks the iteration's one stall turn spent. */
+/** Script step committing a stall turn's routes; one record per park-decision turn. */
 export const STALL_ROUTES_STEP = "stall-routes";
 
 /**
@@ -966,7 +969,7 @@ async function stallBrief(
   runtime: KernelRuntime,
   opts: { iteration: number; state: State; slugs: string[] },
 ): Promise<string> {
-  const facts = await briefFacts(runtime);
+  const facts = await briefFacts(runtime, opts.iteration);
   const lines: string[] = [];
   for (const slug of [...opts.slugs].sort()) {
     lines.push(`- ${slug}`, ...slugFactLines(runtime, facts, opts, slug));
@@ -975,15 +978,57 @@ async function stallBrief(
   return lines.join("\n");
 }
 
+/**
+ * Amends one iteration has already spent per slug: an accepted stall route or
+ * a plan-check `continue` on the checker's amend follow-up. A failed turn's
+ * routes are rolled back, so only committed decisions count.
+ */
+function amendsUsed(
+  records: readonly StepRecord[],
+  iteration: number,
+): Map<string, number> {
+  const used = new Map<string, number>();
+  const spend = (slug: string): void => {
+    used.set(slug, (used.get(slug) ?? 0) + 1);
+  };
+  let kinds = new Map<string, PlanCheckFollowUp["kind"]>();
+  for (const rec of [...records].sort((a, b) => a.seq - b.seq)) {
+    if (!rec.endedAt || rec.iteration !== iteration) continue;
+    if (rec.step === PLAN_CHECK_STEP) {
+      kinds = new Map(
+        (rec.outcome?.planCheck?.followUps ?? []).map((item) => [
+          item.slug,
+          item.kind,
+        ]),
+      );
+    } else if (rec.step === PLAN_CHECK_ROUTES_STEP) {
+      for (const entry of rec.outcome?.planCheckRoutes ?? []) {
+        if (entry.action === "continue" && kinds.get(entry.slug) === "amend")
+          spend(entry.slug);
+      }
+    } else if (rec.step === STALL_ROUTES_STEP) {
+      for (const entry of rec.outcome?.stallRoutes ?? []) {
+        if (entry.action === "amend") spend(entry.slug);
+      }
+    }
+  }
+  return used;
+}
+
 /** Everything a per-slug brief entry needs, read once per PM turn. */
 interface BriefFacts {
   records: StepRecord[];
   bySlug: Map<string, TaskFile>;
   dirs: Map<number, string>;
   head: string;
+  /** Amends already spent this iteration, per slug. */
+  amends: Map<string, number>;
 }
 
-async function briefFacts(runtime: KernelRuntime): Promise<BriefFacts> {
+async function briefFacts(
+  runtime: KernelRuntime,
+  iteration: number,
+): Promise<BriefFacts> {
   const tasks = await runtime.store.listTasks();
   const records = await runtime.store.listRecords();
   const bySlug = new Map(tasks.map((task) => [task.slug, task]));
@@ -993,13 +1038,20 @@ async function briefFacts(runtime: KernelRuntime): Promise<BriefFacts> {
     if (match) dirs.set(Number(match[1]), name);
   }
   const head = await integrationHead(runtime);
-  return { records, bySlug, dirs, head };
+  return {
+    records,
+    bySlug,
+    dirs,
+    head,
+    amends: amendsUsed(records, iteration),
+  };
 }
 
 /**
  * The indented fact lines under one `- slug` brief entry: the cause, this
- * iteration's record paths, the kept branch, spent turns and the
- * done-when. Shared by the stall and plan-check briefs.
+ * iteration's record paths, the kept branch, spent turns, the amend budget,
+ * the cause's default action and the done-when. Shared by the stall and
+ * plan-check briefs.
  */
 function slugFactLines(
   runtime: KernelRuntime,
@@ -1008,6 +1060,7 @@ function slugFactLines(
   slug: string,
 ): string[] {
   const parked = opts.state.tasks[slug];
+  const cause = parked?.cause ?? "no recorded cause";
   const paths = facts.records
     .filter(
       (record) =>
@@ -1019,11 +1072,15 @@ function slugFactLines(
     .map((record) => facts.dirs.get(record.seq))
     .filter((dir): dir is string => dir !== undefined)
     .map((dir) => path.join(runtime.store.recordsDir, dir));
+  const used = facts.amends.get(slug) ?? 0;
+  const bound = runtime.limits.parkAmends ?? DEFAULT_PARK_AMENDS;
   return [
-    `  cause: ${parked?.cause ?? "no recorded cause"}`,
+    `  cause: ${cause}`,
     `  records: ${paths.length > 0 ? paths.join(", ") : "none"}`,
     `  branch: ${taskBranchName(runtime, slug)}`,
     `  turns: ${parked?.turns ?? 0} spent`,
+    `  amends: ${used} of ${bound} this iteration${used >= bound ? " (amend refused; replace, split, cancel or leave)" : ""}`,
+    `  default: ${formatParkDefault(cause)}`,
     `  done-when: ${doneWhen(facts.bySlug.get(slug)?.body ?? "") || "(none)"}`,
   ];
 }
@@ -1045,7 +1102,7 @@ function stallLadderNote(
     );
   }
   notes.push(
-    "Restated PM stall contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Route every parked slug in stallRoutes, then write the outcome: `amend` rewrites the slug's own file and bumps `revision` by one, `cancel` writes no task file, `replace` writes one task with a new slug, `base:` naming the parked slug and the same done-when, `split` writes one task per separable outcome, `leave` writes nothing.",
+    "Restated PM stall contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Route every parked slug in stallRoutes, then write the outcome: `amend` rewrites the slug's own file and bumps `revision` by one (refused past the brief's `amends:` limit), `cancel` writes no task file, `replace` writes one task with a new slug, `base:` naming the parked slug and the same done-when, `split` writes one task per separable outcome, `leave` writes nothing.",
   );
   if (failure.length > 0)
     notes.push("", "Findings:", ...failure.map((reason) => `- ${reason}`));
@@ -1102,9 +1159,14 @@ function decisionFindings(input: {
   credits: ReadonlyMap<string, readonly string[]>;
   /** Slugs whose file edit a credit owns: the dead-dep drop. */
   fixed: ReadonlySet<string>;
+  /** Amends this iteration already spent, per slug. */
+  amendsUsed: ReadonlyMap<string, number>;
+  /** `limits.parkAmends`: amends one slug may spend per iteration. */
+  parkAmends: number;
 }): string[] {
   const { turn, slugs, decisionOf, bySlug, created, credits, fixed } = input;
   const findings: string[] = [];
+  const overBound = new Set<string>();
   for (const slug of slugs) {
     const decision = decisionOf.get(slug);
     if (decision !== "amend" && decision !== "cancel") continue;
@@ -1113,6 +1175,15 @@ function decisionFindings(input: {
       findings.push(
         `slug "${slug}" is ${status}; ${decision} is refused: merged or finished work is history and a cancelled slug is spent`,
       );
+    if (decision === "amend") {
+      const used = input.amendsUsed.get(slug) ?? 0;
+      if (used >= input.parkAmends) {
+        overBound.add(slug);
+        findings.push(
+          `slug "${slug}" already spent ${used} of ${input.parkAmends} amend(s) this iteration (limits.parkAmends); amend is refused: leave it for the architect, or replace, split or cancel it`,
+        );
+      }
+    }
   }
   for (const [slug, original] of input.before) {
     if (input.texts.get(slug) === original) continue;
@@ -1139,7 +1210,7 @@ function decisionFindings(input: {
     }
   }
   for (const slug of slugs) {
-    if (decisionOf.get(slug) !== "amend") continue;
+    if (decisionOf.get(slug) !== "amend" || overBound.has(slug)) continue;
     if (input.texts.get(slug) === input.before.get(slug))
       findings.push(
         `slug "${slug}" is amended but its file is unchanged; write the amended brief and bump "revision"`,
@@ -1261,6 +1332,7 @@ async function validateStallTurn(
     ),
   );
   findings.push(...validateTaskGraph(tasks, { parked }));
+  const used = amendsUsed(await runtime.store.listRecords(), opts.iteration);
 
   const routes = outcome?.stallRoutes;
   if (!routes) {
@@ -1332,6 +1404,8 @@ async function validateStallTurn(
           .filter((task): task is TaskFile => task !== undefined),
         credits: new Map(),
         fixed: new Set(),
+        amendsUsed: used,
+        parkAmends: runtime.limits.parkAmends ?? DEFAULT_PARK_AMENDS,
       }),
     );
   }
@@ -1355,14 +1429,16 @@ async function cancelRoutes(
 }
 
 /**
- * PM ladder for a zero-merge stall mid-iteration. Each parked slug of the
- * stall gets one route: `amend` rewrites its own file and bumps its revision,
- * so dispatch resumes the slug on its kept branch; `replace` writes one task
- * under a new slug with `base:` naming the parked one (a fresh task when the
- * kept branch conflicts with the head); `split` writes one per separable
- * outcome, each with `base:` and its own done-when; `cancel` spends the slug;
- * `leave` keeps it parked with a reason the next boundary sees. Amend, replace
- * and split resume dispatch in the same iteration. The record uses the PM
+ * PM ladder for the parks dispatch leaves undecided mid-iteration, whether
+ * or not that wave merged anything. Each park gets one route: `amend`
+ * rewrites its own file and bumps its revision, so dispatch resumes the slug
+ * on its kept branch (bounded per slug and iteration by `limits.parkAmends`);
+ * `replace` writes one task under a new slug with `base:` naming the parked
+ * one (a fresh task when the kept branch conflicts with the head); `split`
+ * writes one per separable outcome, each with `base:` and its own done-when;
+ * `cancel` spends the slug; `leave` keeps it parked with a reason the next
+ * boundary sees. Amend, replace and split resume dispatch in the same
+ * iteration. The record uses the PM
  * step, so it stays out of the item's turn count and prices into the
  * iteration's spend like every other PM turn.
  *
@@ -1515,7 +1591,7 @@ async function planCheckPmBrief(
   runtime: KernelRuntime,
   opts: { iteration: number; state: State; followUps: PlanCheckFollowUp[] },
 ): Promise<string> {
-  const facts = await briefFacts(runtime);
+  const facts = await briefFacts(runtime, opts.iteration);
   const lines: string[] = [];
   for (const followUp of [...opts.followUps].sort((a, b) =>
     a.slug.localeCompare(b.slug),
@@ -1549,7 +1625,7 @@ function planCheckLadderNote(
     );
   }
   notes.push(
-    "Restated PM plan-check contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Route every follow-up in planCheckRoutes, then write the outcome: `continue` carries the checker's kind — `amend` rewrites the slug's own file and bumps `revision` by one, `cancel` writes no task file, `replace` writes one task with a new slug, `base:` naming the parked slug and the same done-when, `split` writes one task per separable outcome, a dead dep is written as the dep task or dropped from the slug's list, `unmerged` work continues its branch; `leave` writes nothing.",
+    "Restated PM plan-check contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Route every follow-up in planCheckRoutes, then write the outcome: `continue` carries the checker's kind — `amend` rewrites the slug's own file and bumps `revision` by one (refused past the brief's `amends:` limit), `cancel` writes no task file, `replace` writes one task with a new slug, `base:` naming the parked slug and the same done-when, `split` writes one task per separable outcome, a dead dep is written as the dep task or dropped from the slug's list, `unmerged` work continues its branch; `leave` writes nothing.",
   );
   if (failure.length > 0)
     notes.push("", "Findings:", ...failure.map((reason) => `- ${reason}`));
@@ -1609,6 +1685,7 @@ async function validatePlanCheckTurn(
     ),
   );
   findings.push(...validateTaskGraph(tasks, { parked }));
+  const used = amendsUsed(await runtime.store.listRecords(), opts.iteration);
 
   const routes = outcome?.planCheckRoutes;
   const slugs = [...new Set(opts.followUps.map((item) => item.slug))].sort();
@@ -1754,6 +1831,8 @@ async function validatePlanCheckTurn(
           .filter((task): task is TaskFile => task !== undefined),
         credits,
         fixed: depFixed,
+        amendsUsed: used,
+        parkAmends: runtime.limits.parkAmends ?? DEFAULT_PARK_AMENDS,
       }),
     );
   }

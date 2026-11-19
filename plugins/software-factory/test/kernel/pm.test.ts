@@ -1527,7 +1527,7 @@ describe("stall PM — zero-merge stall in the running iteration", () => {
     }
   }, 60_000);
 
-  it("runs no second stall turn when the continuation parks again in the same iteration", async () => {
+  it("runs a second stall when the continuation parks again in the same iteration", async () => {
     const { repo, goal, harness } = stallSetup();
     try {
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -1578,12 +1578,45 @@ describe("stall PM — zero-merge stall in the running iteration", () => {
         },
         { when: whenTurn({ slug: "alpha-2", step: "implement" }) },
       );
+      let secondBrief = "";
+      harness.script(
+        (req, ctx) => {
+          secondBrief = req.prompt;
+          ctx.writeOutcome(
+            outcome({
+              summary: "leave alpha-2 for the architect",
+              stallRoutes: [
+                {
+                  slug: "alpha-2",
+                  action: "leave",
+                  reason: "the continuation hit the same blocker",
+                },
+              ],
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
-      expect(pmCalls(harness)).toBe(1);
+      // Each park gets one decision: alpha was replaced, and the new park of
+      // alpha-2 got its own turn before the boundary.
+      expect(pmCalls(harness)).toBe(2);
       const records = await runtime.store.listRecords();
-      expect(records.filter((r) => r.step === "stall-routes")).toHaveLength(1);
+      const routes = records.filter((r) => r.step === "stall-routes");
+      expect(routes.map((r) => r.outcome?.stallRoutes)).toEqual([
+        [{ slug: "alpha", action: "replace", reason: "retry" }],
+        [
+          {
+            slug: "alpha-2",
+            action: "leave",
+            reason: "the continuation hit the same blocker",
+          },
+        ],
+      ]);
+      expect(secondBrief).toContain("cause: blocked: alpha-2 stuck too");
       const state = derive(
         await runtime.store.listTasks(),
         records,

@@ -286,6 +286,9 @@ const concurrencySchema = z
   .strict()
   .default(() => ({ overall: 2, perSubscription: {}, perModel: {} }));
 
+/** Amends one parked slug may receive per iteration when the run config says nothing. */
+export const DEFAULT_PARK_AMENDS = 1;
+
 const limitsSchema = z
   .object({
     concurrency: concurrencySchema,
@@ -293,6 +296,8 @@ const limitsSchema = z
     /** Plan-checker rounds one consult owns; exhausted rounds consult the architect. */
     planCheckRounds: z.number().int().positive().default(2),
     resumeAttempts: z.number().int().nonnegative().optional(),
+    /** Amends one parked slug may receive per iteration; a further amend is refused. */
+    parkAmends: z.number().int().nonnegative().optional(),
     /** Optional drain limits for one iteration. */
     turns: z.number().int().positive().optional(),
     wallMinutes: z.number().positive().optional(),
@@ -693,6 +698,7 @@ export function toLimits(configs: ConfigBundle): Limits {
     concurrency: runLimits.concurrency,
     planCheckRounds: runLimits.planCheckRounds,
     resumeAttempts: runLimits.resumeAttempts ?? 2,
+    parkAmends: runLimits.parkAmends ?? DEFAULT_PARK_AMENDS,
     iterationTurns: runLimits.turns,
     iterationWallMs:
       runLimits.iterationMinutes !== undefined

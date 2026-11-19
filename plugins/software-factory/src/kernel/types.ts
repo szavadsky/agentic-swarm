@@ -390,6 +390,8 @@ export interface Limits {
   planCheckRounds: number;
   /** Resume attempts limit; default 2. */
   resumeAttempts?: number;
+  /** Amends one parked slug may receive per iteration; default 1. */
+  parkAmends?: number;
   /** Minimum free bytes in the temporary directory. */
   minTmpFreeBytes?: number;
 }
