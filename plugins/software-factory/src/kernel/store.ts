@@ -11,6 +11,7 @@ import { terminalFactFromRecords } from "./derive-task.js";
 import { parseTaskFile, renderTaskFile, TaskFileError } from "./tasks.js";
 import {
   ArtifactStore,
+  DeclaredWrite,
   RecordEnd,
   RecordStart,
   StepRecord,
@@ -129,6 +130,8 @@ class FolderStore implements ArtifactStore {
   private readonly taskTypes: Record<string, TaskTypeDefinition>;
   /** Concurrent dispatches allocate sequence numbers; one allocator per store. */
   private readonly seqLock = new AsyncMutex();
+  /** Goal-dir writes declared by the kernel, so containment can tell them from a turn's. */
+  private readonly writes: DeclaredWrite[] = [];
 
   constructor(
     goalDir: string,
@@ -190,8 +193,29 @@ class FolderStore implements ArtifactStore {
     }
   }
 
+  /**
+   * Declares a goal-dir write before its bytes land and stamps its end when
+   * the attempt settles. A declaration is the kernel's claim on the path: a
+   * change the ledger explains is never the turn's, and a change it does not
+   * explain still is.
+   */
+  private declare(rel: string): DeclaredWrite {
+    const write: DeclaredWrite = { rel: rel.split(path.sep).join("/") };
+    this.writes.push(write);
+    return write;
+  }
+
+  declaredWrites(): readonly DeclaredWrite[] {
+    return this.writes;
+  }
+
   async writeFile(rel: string, text: string): Promise<void> {
-    await writeTextAtomic(path.join(this.goalDir, rel), text);
+    const write = this.declare(rel);
+    try {
+      await writeTextAtomic(path.join(this.goalDir, rel), text);
+    } finally {
+      write.endedAt = new Date().toISOString();
+    }
   }
 
   async listDir(rel: string): Promise<string[]> {
@@ -295,12 +319,22 @@ class FolderStore implements ArtifactStore {
     for (let copy = 2; fs.existsSync(target); copy++) {
       target = path.join(dir, `${stem}-${copy}.md`);
     }
+    // The rename is a kernel write on both ends: the file leaves `tasks/` and
+    // lands under the quarantine dir.
+    const removed = this.declare(
+      path.relative(this.goalDir, path.join(this.tasksDir, name)),
+    );
+    const created = this.declare(path.relative(this.goalDir, target));
     try {
       await fs.promises.rename(path.join(this.tasksDir, name), target);
     } catch (err) {
       // A concurrent listing already quarantined it; nothing left to report.
       if (isENOENT(err)) return;
       throw err;
+    } finally {
+      const endedAt = new Date().toISOString();
+      removed.endedAt = endedAt;
+      created.endedAt = endedAt;
     }
     const destination = path.relative(this.goalDir, target);
     await this.appendRecord(
@@ -359,10 +393,15 @@ class FolderStore implements ArtifactStore {
   }
 
   async writeTask(task: TaskFile): Promise<void> {
-    await writeTextAtomic(
-      path.join(this.tasksDir, `${task.slug}.md`),
-      renderTaskFile(task),
-    );
+    const write = this.declare(`tasks/${task.slug}.md`);
+    try {
+      await writeTextAtomic(
+        path.join(this.tasksDir, `${task.slug}.md`),
+        renderTaskFile(task),
+      );
+    } finally {
+      write.endedAt = new Date().toISOString();
+    }
   }
 
   private async nextSeq(): Promise<number> {

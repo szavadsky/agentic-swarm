@@ -10,7 +10,7 @@ import { executeTaskAction } from "../../src/kernel/flow.js";
 import { appendFinish } from "../../src/kernel/record.js";
 import { spikeReportPath } from "../../src/kernel/spike-report.js";
 import { sealRecord, unsealRecord } from "../../src/kernel/store.js";
-import type { Action } from "../../src/kernel/types.js";
+import type { Action, KernelRuntime } from "../../src/kernel/types.js";
 import {
   containmentSnapshot,
   containmentViolation,
@@ -652,6 +652,127 @@ describe("agent containment", () => {
           path.join(runtime.store.goalDir, "finish/probe/report.md"),
         ),
       ).toBe(false);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+  it("ignores a sibling kernel write under the goal dir during a turn", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      let runtime!: KernelRuntime;
+      harness.script(async (req, ctx) => {
+        // 00728: a sibling kernel step wrote finish/<slug>/report.md while a
+        // qa turn ran, and containment blamed the turn. The kernel's writer
+        // declares the path; a declared write is never the turn's.
+        await runtime.store.writeFile(
+          "finish/probe/report.md",
+          "# Finding\nOne copy.\n",
+        );
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "task\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "implemented" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+        return fakeTurnResult(req);
+      });
+
+      runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.task!.status).toBe("merged");
+      expect(
+        fs.existsSync(
+          path.join(runtime.store.goalDir, "finish/probe/report.md"),
+        ),
+      ).toBe(true);
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "park"),
+      ).toHaveLength(0);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+  it("parks a turn whose undeclared write to the same goal path lands during the turn", async () => {
+    const { repo, goal, goalDir } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.mkdirSync(path.join(goalDir, "finish/probe"), { recursive: true });
+        fs.writeFileSync(
+          path.join(goalDir, "finish/probe/report.md"),
+          "# Forged\n",
+          "utf8",
+        );
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "task\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "implemented" }));
+        return fakeTurnResult(req);
+      });
+
+      scriptStallLeave(harness, ["task"]);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.task!.status).toBe("parked");
+      expect(state.tasks.task!.cause).toContain(
+        "goal artifacts changed outside the worktree",
+      );
+      expect(state.tasks.task!.cause).toContain(
+        "created finish/probe/report.md",
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+  it("parks a turn that rewrites a goal file the kernel wrote before the turn", async () => {
+    const { repo, goal, goalDir } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(
+          path.join(goalDir, "iterations/1/summary.md"),
+          "# Forged summary\n",
+          "utf8",
+        );
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "task\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "implemented" }));
+        return fakeTurnResult(req);
+      });
+
+      scriptStallLeave(harness, ["task"]);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await runtime.store.writeFile(
+        "iterations/1/summary.md",
+        "# Summary\nengine wrote this\n",
+      );
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+
+      const records = await runtime.store.listRecords();
+      const state = derive(
+        await runtime.store.listTasks(),
+        records,
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.task!.status).toBe("parked");
+      expect(state.tasks.task!.cause).toContain(
+        "changed iterations/1/summary.md",
+      );
     } finally {
       cleanupFlowRepo(repo);
     }

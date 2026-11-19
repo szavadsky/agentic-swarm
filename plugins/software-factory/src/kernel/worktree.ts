@@ -6,7 +6,12 @@ import { isAncestor } from "../core/git/commit.js";
 import { GitError, git } from "../core/git/exec.js";
 import { parseWorktreeList } from "../core/git/status.js";
 import { sealedRecordDirs } from "./store.js";
-import type { KernelRuntime, StepRecord, TaskFile } from "./types.js";
+import type {
+  DeclaredWrite,
+  KernelRuntime,
+  StepRecord,
+  TaskFile,
+} from "./types.js";
 
 /** Task branches and worktrees are goal-scoped and disposable. */
 export function taskBranchName(runtime: KernelRuntime, slug: string): string {
@@ -541,6 +546,26 @@ function pmOwned(rel: string): boolean {
 }
 
 /**
+ * A kernel write is declared before its bytes land. It explains a change only
+ * when its bytes landed at or after the snapshot: one that finished before the
+ * turn started is already in the before state, so a later change to the same
+ * path is the turn's. A write still in flight at the check has no end yet and
+ * is the kernel's half-written file. The atomic writer leaves its temporary
+ * sibling beside the target; both names are the declared path.
+ */
+function kernelDeclared(
+  rel: string,
+  writes: readonly DeclaredWrite[],
+  at: string,
+): boolean {
+  return writes.some(
+    (write) =>
+      (write.endedAt === undefined || write.endedAt >= at) &&
+      (write.rel === rel || rel.startsWith(`${write.rel}.tmp.`)),
+  );
+}
+
+/**
  * A turn may write only its own outcome file. A record directory that belongs
  * to a record the snapshot never saw (this turn's own included) or still open
  * at the snapshot is the script's or another turn's; a directory no record
@@ -553,16 +578,19 @@ function artifactBreaches(
   before: ReadonlyMap<string, string>,
   after: ReadonlyMap<string, string>,
   opts: {
+    at: string;
     maxSeq: number;
     inFlight: ReadonlySet<number>;
     sealed: ReadonlySet<string>;
     records: readonly StepRecord[];
+    declared: readonly DeclaredWrite[];
     pmActive: boolean;
   },
 ): string[] {
   const live = new Map<number, StepRecord>();
   for (const record of opts.records) live.set(record.seq, record);
   const ignored = (rel: string): boolean => {
+    if (kernelDeclared(rel, opts.declared, opts.at)) return true;
     if (opts.pmActive && pmOwned(rel)) return true;
     const dir = recordDirOf(rel);
     if (dir !== undefined && opts.sealed.has(dir)) return true;
@@ -690,10 +718,12 @@ export async function containmentViolation(
 
   const settledAt = new Date().toISOString();
   const changedArtifacts = artifactBreaches(snapshot.artifacts, artifacts, {
+    at: snapshot.at,
     maxSeq: snapshot.maxSeq,
     inFlight: snapshot.inFlight,
     sealed: snapshot.sealed,
     records,
+    declared: runtime.store.declaredWrites(),
     pmActive: pmWroteDuring(records, snapshot.at, settledAt),
   });
   if (changedArtifacts.length > 0) {

@@ -570,6 +570,18 @@ export interface TurnRecord {
   finish(end: RecordEnd): Promise<StepRecord>;
 }
 
+/**
+ * One kernel write under the goal dir, declared before its bytes land. The
+ * kernel's store is the declaration point: a goal artifact change the ledger
+ * does not explain belongs to the turn in flight, never to the kernel.
+ */
+export interface DeclaredWrite {
+  /** Goal-relative path with `/` separators. */
+  rel: string;
+  /** When the write settled; absent while it is in flight at the check. */
+  endedAt?: string;
+}
+
 export interface ArtifactStore {
   readonly goalDir: string;
   readonly tasksDir: string;
@@ -579,6 +591,7 @@ export interface ArtifactStore {
   ensureLayout(): Promise<void>;
   /** Goal-relative read; null when absent. */
   readFile(rel: string): Promise<string | null>;
+  /** Goal-relative write; declares the path in the kernel write ledger. */
   writeFile(rel: string, text: string): Promise<void>;
   /** Goal-relative directory listing, sorted; empty when absent. */
   listDir(rel: string): Promise<string[]>;
@@ -591,6 +604,12 @@ export interface ArtifactStore {
   appendRecord(meta: RecordStart, end: RecordEnd): Promise<StepRecord>;
   /** Includes unfinished records (started, no end); sorted by seq. */
   listRecords(): Promise<StepRecord[]>;
+  /**
+   * Every goal-dir write this process's kernel declared, in order. Process
+   * local: one launch owns a goal (the run lock), so no other process writes
+   * its artifacts while a turn is contained.
+   */
+  declaredWrites(): readonly DeclaredWrite[];
 }
 
 export interface RepoConfig {
