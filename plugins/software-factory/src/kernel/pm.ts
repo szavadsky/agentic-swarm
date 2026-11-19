@@ -1891,8 +1891,15 @@ async function validatePlanCheckTurn(
       }
     }
     const decisionOf = new Map<string, StallDecision>();
+    // A leave route writes nothing whatever the checker asked for, so the
+    // route decides the slug before the follow-up kind does.
     for (const item of opts.followUps)
-      decisionOf.set(item.slug, planCheckDecision(item.kind));
+      decisionOf.set(
+        item.slug,
+        actionOf.get(item.slug) === "leave"
+          ? "leave"
+          : planCheckDecision(item.kind),
+      );
     const created = [...texts.keys()].filter((slug) => !taskSnapshot.has(slug));
     const credits = new Map<string, string[]>();
     const credit = (slug: string, by: string): void => {
