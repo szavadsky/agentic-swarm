@@ -3,12 +3,13 @@
 # plan roles move off agy onto working legs (hy4 primary $0, deepseek
 # fallback). Implementer primary stays agy (OWNER CALL pending to flip;
 # deepseek fallback carries 100% meanwhile). Rest of map unchanged
-# (implementer-b/researcher from alternates-default kept).
+# (implementer-b/researcher from alternates-default kept). base.yaml supplies
+# the omp/opencode bindings, limits, session store and worktree root.
+extends: base.yaml
 aliases:
   architect:
     harness: claude-code
     model: opus
-    effort: high
     subscription: claude
     timeouts:
       wallMs: 14400000 # 4 h: single turns must not die on the 1 h default
@@ -21,9 +22,7 @@ aliases:
   pm:
     harness: omp
     model: openrouter/baidu/ernie-5.5-flash-preview:free
-    effort: high
     subscription: openrouter-free
-    escalateTo: escalation
     fallbacks:
       - harness: opencode
         model: opencode/hy4-flash-free
@@ -32,6 +31,7 @@ aliases:
   digest:
     harness: omp
     model: "@free"
+    effort: null
     subscription: openrouter-free
     fallbacks:
       - harness: opencode
@@ -51,18 +51,12 @@ aliases:
         effort: max
         subscription: opencode-go
   implementer-b:
-    harness: omp
-    model: opencode-go/deepseek-v4.1-flash
-    effort: max
     subscription: opencode-go
     fallbacks:
       - model: opencode-go/muse-spark-1.3-contributor
         effort: max
         subscription: opencode-go
   researcher:
-    harness: omp
-    model: opencode-go/deepseek-v4.1-flash
-    effort: max
     subscription: opencode-go
     fallbacks:
       - model: opencode-go/muse-spark-1.3-contributor
@@ -117,8 +111,6 @@ aliases:
         effort: max
         subscription: opencode-go
   escalation:
-    harness: omp
-    model: anthropic/claude-sonnet-5-5
     effort: high
     subscription: claude
     timeouts:
@@ -138,18 +130,6 @@ aliases:
         subscription: opencode-go
 
 harnesses:
-  # omp is native; the unattended policy is opaque overlay keys here, not code.
-  omp:
-    options:
-      defaultThinkingLevel: low
-      memory: { backend: off }
-      autolearn: { enabled: false }
-      skills: { enabled: false }
-      features: { unexpectedStopDetection: false }
-      tools: { approvalMode: yolo, xdev: false }
-      compaction: { experimentalContextManagement: false }
-      disabledProviders: [native, claude, codex, gemini, opencode, cursor, agents-md]
-      retry: { enabled: false, modelFallback: false }
   # No `compact`: agy submits `/compact` to the model as a prompt, compacts
   # nothing and still answers end_turn (compaction-probe.md §2).
   agy:
@@ -182,28 +162,15 @@ harnesses:
       compact: true
       effort: { configId: effort }
     options: { args: [--approve-all] }
-  # The built-in `acpx opencode` route resolves 1.19.5 and fails on the 2.2.7
-  # data dir; the raw `opencode acp` route runs the installed CLI (probe §0).
-  # Live effort options are none/high/default (`set effort max` rejected,
-  # probed 2026-11-16) — high is this harness's real max.
-  opencode:
-    acpx:
-      agent: opencode acp
-      compact: true
-      raw: true
-      effort: { configId: effort }
-      usage: { cache: true }
 
 scouts:
   model: openrouter/baidu/ernie-5.5-flash-preview:free
   effort: high
-
 # Harness model id -> OpenRouter model id, only where matching cannot resolve.
 # @free maps to its primary's $0 row (ernie-free); omp-internal Go hops are
 # invisible to pricing — limitation journaled, steered as observation.
 priceIds:
   "@free": baidu/ernie-5.5-flash-preview:free
-  opencode/beam-free: reflection/beam-1.0-501b-a23b
   opencode-go/beam-free: reflection/beam-1.0-501b-a23b
   opencode/hy4-flash-free: reflection/beam-1.0-501b-a23b
   opencode-go/hy4-flash-free: reflection/beam-1.0-501b-a23b
@@ -212,10 +179,3 @@ priceIds:
 
 limits:
   concurrency: { overall: 3, perSubscription: { opencode-go: 2, openrouter-free: 1, claude: 1, antigravity: 2, opencode-free: 1 } }
-  iterations: 1
-
-sessions:
-  dir: ~/.local/share/factory/sessions
-  keepRuns: 5
-
-worktreeRoot: ~/.local/share/factory/worktrees

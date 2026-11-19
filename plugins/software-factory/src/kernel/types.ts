@@ -24,6 +24,24 @@ export const concernSchema = z.object({
   evidence: z.string().optional(),
 });
 
+/** One ingested concern's kernel-assigned id: `<recordId>#<n>`, 1-based in the record's outcome. */
+export type ConcernId = string;
+
+/** A concern as the kernel read it back from a record: ingest assigns `id`, agents never write one. */
+export type RecordedConcern = Concern & { id?: ConcernId };
+
+/** One debt's closure: the id the kernel assigned, and what removed the debt. */
+export const debtClosedEntrySchema = z.object({
+  id: z.string().min(1),
+  reason: z.string().min(1),
+});
+
+/** One steer's answer: the pending steer's id, and the architect's answer. */
+export const steerAnswerSchema = z.object({
+  steer: z.string().min(1),
+  answer: z.string().min(1),
+});
+
 /** One fix turn's answer to a prior review finding, by its numbered position. */
 export const replySchema = z.object({
   finding: z.number().int().positive(),
@@ -124,7 +142,25 @@ export const outcomeSchema = z.object({
     .describe("upscope on task steps only"),
   summary: z.string().describe("one paragraph"),
   concerns: z.array(concernSchema).default([]),
+  // Parse-only: old records close debts and answer steers here, and no prompt
+  // asks for a line; `debtClosed` and `steerAnswers` are the protocol. Kept
+  // required because every delivery defaults it empty.
   forward: z.array(z.string()).default([]),
+  // Kernel-recorded debts are closed by the id the record ingest assigned, not
+  // by quoting the debt text.
+  debtClosed: z
+    .array(debtClosedEntrySchema)
+    .optional()
+    .describe(
+      "close one open debt by the id in the pack's debt register; reason says what removed it",
+    ),
+  // The architect answers every pending steer from its pack's steer list.
+  steerAnswers: z
+    .array(steerAnswerSchema)
+    .optional()
+    .describe(
+      "one {steer, answer} per pending steer, steer id from the steer list",
+    ),
   // A fix turn answers its prior review with one entry per numbered finding;
   // the summary stays free text. Derive parks an empty fix with no replies.
   replies: z
@@ -174,6 +210,10 @@ export const outcomeSchema = z.object({
 
 export type Concern = z.infer<typeof concernSchema>;
 export type Outcome = z.infer<typeof outcomeSchema>;
+/** One record's outcome as ingested: the same shape, its concerns carrying kernel ids. */
+export type RecordedOutcome = Omit<Outcome, "concerns"> & {
+  concerns: RecordedConcern[];
+};
 export type ReviewVerdict = NonNullable<Outcome["verdict"]>;
 export type GoalDecision = NonNullable<Outcome["decision"]>;
 /** Spike finishes with findings; development merges its branch. */
@@ -453,6 +493,11 @@ export interface StepRecord {
   served?: ServedUsage[];
   /** Validator findings that triggered outcome reminders, in round order. */
   repairFindings?: string[];
+  /**
+   * Set when the turn delivered after its reminders: the final outcome passed
+   * the same checks, so every listed finding is closed.
+   */
+  repairFindingsResolved?: boolean;
   /** Incident launches only: why this launch ran again. */
   launchKind?: LaunchKind;
   /** Resumed turn: unsplit input is priced as the cached prefix. */
@@ -485,6 +530,12 @@ export interface StepRecord {
   tree?: string;
   /** base-advance only: integration head tree at the creation advance. */
   headTree?: string;
+  /**
+   * Resolve only: tracked paths the turn changed outside the conflict set.
+   * Non-empty sends the reviewable change through the flow's review step
+   * before the merge retries; empty lands the resolution on its checks.
+   */
+  outside?: string[];
   checks?: CheckResult[];
   /** Files and lines the turn's commit changed, measured at commit time. */
   edits?: WorkEdits;
@@ -492,7 +543,7 @@ export interface StepRecord {
   testRuns?: number;
   /** Wall time in ms; checks/commit records stamp the gate/commit run itself. */
   wallMs?: number;
-  outcome?: Outcome;
+  outcome?: RecordedOutcome;
   ok?: boolean;
   cause?: string;
   startedAt: string;
@@ -543,6 +594,11 @@ export interface RecordEnd {
   served?: ServedUsage[];
   /** Validator findings that triggered outcome reminders, in round order. */
   repairFindings?: string[];
+  /**
+   * Set when the turn delivered after its reminders: the final outcome passed
+   * the same checks, so every listed finding is closed.
+   */
+  repairFindingsResolved?: boolean;
   /** Incident launches only: why this launch ran again. */
   launchKind?: LaunchKind;
   commit?: string;
@@ -551,6 +607,8 @@ export interface RecordEnd {
   tree?: string;
   /** base-advance only: integration head tree at the creation advance. */
   headTree?: string;
+  /** Resolve only: paths the turn changed outside the conflict set. */
+  outside?: string[];
   checks?: CheckResult[];
   edits?: WorkEdits;
   testRuns?: number;
@@ -570,6 +628,18 @@ export interface TurnRecord {
   finish(end: RecordEnd): Promise<StepRecord>;
 }
 
+/**
+ * One kernel write under the goal dir, declared before its bytes land. The
+ * kernel's store is the declaration point: a goal artifact change the ledger
+ * does not explain belongs to the turn in flight, never to the kernel.
+ */
+export interface DeclaredWrite {
+  /** Goal-relative path with `/` separators. */
+  rel: string;
+  /** When the write settled; absent while it is in flight at the check. */
+  endedAt?: string;
+}
+
 export interface ArtifactStore {
   readonly goalDir: string;
   readonly tasksDir: string;
@@ -579,6 +649,7 @@ export interface ArtifactStore {
   ensureLayout(): Promise<void>;
   /** Goal-relative read; null when absent. */
   readFile(rel: string): Promise<string | null>;
+  /** Goal-relative write; declares the path in the kernel write ledger. */
   writeFile(rel: string, text: string): Promise<void>;
   /** Goal-relative directory listing, sorted; empty when absent. */
   listDir(rel: string): Promise<string[]>;
@@ -591,20 +662,39 @@ export interface ArtifactStore {
   appendRecord(meta: RecordStart, end: RecordEnd): Promise<StepRecord>;
   /** Includes unfinished records (started, no end); sorted by seq. */
   listRecords(): Promise<StepRecord[]>;
+  /**
+   * Every goal-dir write this process's kernel declared, in order. Process
+   * local: one launch owns a goal (the run lock), so no other process writes
+   * its artifacts while a turn is contained.
+   */
+  declaredWrites(): readonly DeclaredWrite[];
+}
+
+/** One repo gate command and the shared resources it needs to itself. */
+export interface GateConfig {
+  id: string;
+  command: string;
+  /**
+   * Mutex names held while this gate runs. Within one factory process, gates
+   * naming the same mutex never overlap, in one run or in concurrent runs in
+   * other worktrees; a gate that names none never waits for one.
+   */
+  serial: string[];
+  /**
+   * Environment variables mapped to worktree-relative directories. The kernel
+   * creates them and exports absolute paths, so two worktrees get two dirs.
+   */
+  env?: Record<string, string>;
+  format?: { junit?: string; pattern?: "pytest" | "jest" | "cargo" };
 }
 
 export interface RepoConfig {
   baseBranch: string;
   /** Goal directories live at <repo>/<artifactRoot>/<goal>. */
   artifactRoot: string;
-  worktreeRoot?: string;
   identity?: { name: string; email: string };
   setup: string[];
-  gates: {
-    id: string;
-    command: string;
-    format?: { junit?: string; pattern?: "pytest" | "jest" | "cargo" };
-  }[];
+  gates: GateConfig[];
   cleanliness?: {
     maxFileSizeBytes?: number;
     allowedExtensions?: string[];
@@ -716,10 +806,11 @@ export interface RunConfig {
   };
   sessions: { dir: string; keepRuns: number; retention: "short" | "long" };
   /**
-   * Quota-pool cooldown: minutes a pool is skipped after a quota stop. Absent
-   * uses the 300-minute default.
+   * Quota-pool cooldown: a quota stop's stated reset sets the pool's skip
+   * window, capped by `maxResetMinutes` when set; without a stated reset the
+   * window is `resetMinutes` from the stop (default 300).
    */
-  quota?: { resetMinutes: number };
+  quota?: { resetMinutes: number; maxResetMinutes?: number };
   worktreeRoot?: string;
   /** Enable artifact LSP where the harness supports it. */
   lsp?: boolean;

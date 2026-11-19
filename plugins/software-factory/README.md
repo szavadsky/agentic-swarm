@@ -57,7 +57,20 @@ gates:
   - id: typecheck
     command: bun run typecheck
     format: { junit: junit.xml }
+  - id: integration
+    command: bun run test:integration
+    serial: [database]                          # gates naming a mutex never overlap
+    env: { TMPDIR: .cache/gate }                # per-worktree scratch directory
 ```
+
+The tracked repo layer names no worktree root: checkouts, sessions and harness
+policy belong to the run layer, so one checkout never silently shadows another.
+
+Gate runs in different worktrees run in parallel. A gate waits only for the
+mutexes it names in `serial`: within one factory process, gates naming the same
+mutex are serialized, and a gate that names none never waits. `env` maps
+variable names to worktree-relative directories; the kernel creates them and
+exports absolute paths, so two worktrees get two directories.
 
 **Process** — package `config/process.yaml`, optionally overridden by
 `.factory/process.yaml`:
@@ -68,6 +81,7 @@ flows:
     steps:
       - { id: implement, prompt: implementer, alias: implementer }
       - { id: review, prompt: reviewer, alias: reviewer, review: true, changeRequests: 2 }
+      - { id: resolve, prompt: steward, alias: steward }   # merge-conflict turn only
 taskTypes:
   development: { flow: implement-review, kind: development, schema: outcome }
 boundary:                       # the kernel turns outside any task flow
@@ -82,7 +96,12 @@ boundary:                       # the kernel turns outside any task flow
 
 A step may name `repairPrompt` (the template its in-session repair ask
 renders) and `deliverable` (the product the ask and the missing-outcome finding
-name; default `outcome`, or `verdict` on a review step). A step that names no
+name; default `outcome`, or `verdict` on a review step). The `resolve` step is
+outside the normal agent sequence: a squash merge that conflicts runs one turn
+that merges the head into the task branch and resolves it, then the task checks
+and the merge retries. A second conflict parks, the wave-end steward remains the
+fallback, and a resolution that changed files outside the conflict set goes
+through review before it lands. A step that names no
 template renders the process-level `repairPrompt` (default `delivery-repair`).
 The architect names `architect-repair` because its ask also requires the plan
 edit on disk; the default template then carries no role branch.
@@ -121,12 +140,22 @@ limits:
   iterations: 1
   iterationUsd: 5
 sessions: { dir: ~/.local/share/factory/sessions, keepRuns: 5, retention: short }
-quota: { resetMinutes: 300 }                         # pool cooldown after a quota stop
+quota: { resetMinutes: 300 }                         # fallback cooldown; a stated reset wins; maxResetMinutes caps it
 worktreeRoot: ~/.local/share/factory/worktrees
 lsp: true                                             # artifact LSP on omp
 scouts: { model: opencode-go/deepseek-v4.1-flash }   # omp architect subagents
 portability: [{ from: opencode, to: omp }]           # sessions cross only declared edges
 ```
+
+`extends: <file>` composes the run layer from a base. The path resolves relative
+to the file that names it, a base may extend another, and the child's keys win.
+Objects merge key by key and arrays replace, so a variant restates only the
+alias field, harness entry or price row it changes; a `null` removes an
+inherited key (`scouts: null`, `fallbacks: null`). A missing base and an
+`extends` cycle are refused when the config loads, naming the file.
+`bootstrap/run/base.yaml` carries the shared self-run aliases, the unattended
+omp policy, the price rows and the roots; every other shipped file is a thin
+overlay.
 
 A task session resumes on the harness that recorded it. `portability: [{from, to}]`
 declares further directional edges: a session recorded on `from` may resume on
@@ -148,21 +177,29 @@ surface (opencode, pi, codex) ignore the flag and keep the validation command.
 An alias may carry `escalateTo: <alias>` to name the PM's next rung. A PM turn
 that is not usable gets a fresh retry on the same alias; after two failed turns
 the ladder climbs to `escalateTo`, which carries a broader mandate and may stop
-with one question for the architect. Without `escalateTo` the iteration blocks
-with every rung in the summary. `fallbacks` stay infrastructure-only (quota and
-crash), so escalation is model routing, not a retry. Each fallback tier either
+with one question for the architect. The untouched graph is validated before
+the first rung: a finding the graph already raised fails no rung, so a turn that
+introduces none keeps its valid writes and its plan cancellations and the
+ladder ends routing those findings to the architect instead of blocking the
+goal. Without `escalateTo` the iteration blocks with every rung in the summary.
+`fallbacks` stay infrastructure-only (quota and crash), so escalation is model
+routing, not a retry. Each fallback tier either
 names its own model, harness and effort, and the quota pool it draws on, or
 names another alias (`{ alias: backup }`) and reuses that alias's whole ladder,
 each of its tiers keeping its own quota pool; pre-flight refuses a missing alias
 or a fallback cycle. A turn that lands on a tier keeps the launch on it, and
 dispatch throttles each pool and model within the overall limit.
 
-A tier that answers quota latches its pool. The launch stores the pool's reset
-time in the goal's session store (`quota-pools.yaml` beside the launch
-directories, so rotation keeps it), and a relaunch before that time skips the
-pool and starts on the next tier. `quota.resetMinutes` sets the cooldown
-(default 300); the harness contract carries no provider reset, so the stored
-time is a cooldown from the stop, not the provider's own schedule.
+A tier that answers quota latches its pool. The stop's stated reset
+(`Resets in 130h19m23s`, `Resets in 33m53s`) sets that pool's cooldown, capped
+by `quota.maxResetMinutes` when the run config sets one; a stop whose text names
+no parseable reset falls back to `quota.resetMinutes` (default 300) from the
+stop. The launch stores the reset time in the goal's session store
+(`quota-pools.yaml` beside the launch directories, so rotation keeps it), and a
+relaunch before that time skips the pool and starts on the next tier. An alias
+whose every tier is exhausted is unavailable: no harness call is made, and
+dispatch defers that work under a cause naming the dead pools and their reset
+times instead of probing the last dead tier.
 
 An alias may carry `rotate: [{ harness, model, effort }]` to change its primary
 per iteration: iteration N resolves `rotate[N % rotate.length]`, so iteration 1
@@ -206,12 +243,15 @@ directory, the free bytes and `operator: purge <tmpdir>`.
 A relaunch into an interrupted iteration resumes it as a recorded attempt (a
 `resume` script record) bounded by `limits.resumeAttempts` (default 2). It
 refuses, with a `resume-refused` record naming the cause, when attempts are
-spent, the previous resume started no task turn, the iteration's latest
-plan-check is `architect`, every ready task is held by a pending steer, a hold
-file is unreadable, or a goal hold or iteration brake stands. A refused resume
-goes straight to the boundary at the next iteration. A resumed pass that starts
-no task turn, ends on `architect`, or ends with nothing left open does not
-consume the `iterations` budget: the boundary runs next in the same launch.
+spent, the previous resume started no task turn or architect ruling, the
+iteration's latest plan-check is `architect`, every ready task is held by a
+pending steer, a hold file is unreadable, or a goal hold or iteration brake
+stands. A refused resume goes straight to the boundary at the next iteration.
+An architect route (a stall waits for the architect too) or an underivable graph
+finding from the resume's steer turn runs the boundary before dispatch in the
+same iteration, and that ruling counts as the pass's progress. A resumed pass that starts no task turn and runs no
+boundary does not consume the `iterations` budget: the boundary runs next in the
+same launch.
 
 Pre-flight resolves every alias (and fallback) through the harness, checks the
 model list, the effort level, binaries, the base branch, and that
@@ -225,7 +265,7 @@ list; its effort must be one omp's `--thinking` flag parses (`off`, `minimal`,
 `harnesses.<id>` binds an adapter (`acpx:`) or executable and carries
 `options` passed untouched: acpx reads `args`/`env`, omp merges the keys into
 its launch overlay (`sessions.retention` still owns
-`providers.cacheRetention`). The shipped `bootstrap/run/self.yaml` keeps the
+`providers.cacheRetention`). The shipped `bootstrap/run/base.yaml` keeps the
 unattended omp policy there — memory/auto-learn/skills off, approval, disabled
 providers, retry — so no policy is compiled in.
 

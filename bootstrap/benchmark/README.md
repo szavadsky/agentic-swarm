@@ -34,9 +34,10 @@ is still live.
 ## Run
 
 Copy the printed line. `bootstrap/run/benchmark.yaml` is the cheap tier of
-`self.yaml`: the free implementer, reviewer, PM and digest aliases unchanged,
-the architect pinned to the subsidized deepseek tier, prices for the ids it can
-use, `limits.iterations: 1`, and both runtime dirs under `<dest>`.
+`base.yaml` (the layer `self.yaml` ships): the free implementer, reviewer, PM
+and digest aliases unchanged, the architect pinned to the subsidized deepseek
+tier, prices for the ids it can use, `limits.iterations: 1`, and both runtime
+dirs under `<dest>`.
 
 Runs are serial: one launch at a time reuses `<dest>/runtime` and the target's
 base branch. After the launch, `factory benchmark --repo <dest>/target --goal

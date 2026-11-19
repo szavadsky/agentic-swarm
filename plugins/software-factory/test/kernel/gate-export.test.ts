@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -189,6 +190,11 @@ describe("package-only export gate", () => {
       );
       const baseEnv = { ...process.env };
       delete baseEnv.FACTORY_TREE_ROOT;
+      // The ambient TMPDIR may itself sit inside a checkout (a repo gate can
+      // declare a worktree-relative TMPDIR), so stop git discovery at the
+      // fixture: this case is the one where the invoking directory is not in
+      // a repository.
+      baseEnv.GIT_CEILING_DIRECTORIES = path.dirname(root);
       const defaulted = spawnSync("bash", [GATES, pkg, "schema-validation"], {
         cwd: root,
         encoding: "utf8",

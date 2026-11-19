@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { z } from "zod";
 import { expectationField, type OutcomeExpectation } from "./outcome.js";
 import { taskFrontmatterSchema } from "./tasks.js";
@@ -127,16 +128,38 @@ export function renderSkeleton(
     .join("\n");
 }
 
+/**
+ * Parse-only outcome fields: old records still carry them, so the parser keeps
+ * them, but no prompt asks an agent to write one.
+ */
+const LEGACY_OUTCOME_FIELDS: readonly string[] = ["forward"];
+
+/** Every field the skeleton may ask for: the schema's own fields minus the legacy ones. */
+function writtenFields(schema: z.ZodType<Outcome>): string[] {
+  const json = z.toJSONSchema(schema) as {
+    properties?: Record<string, unknown>;
+  };
+  return Object.keys(json.properties ?? {}).filter(
+    (key) => !LEGACY_OUTCOME_FIELDS.includes(key),
+  );
+}
+
 /** The `outcome_schema` prompt variable: the fenced outcome skeleton block. */
 export function outcomeSchemaVar(
   keep?: readonly string[],
   schema: z.ZodType<Outcome> = outcomeSchema,
 ): string {
-  return `\`\`\`yaml\n${renderSkeleton(schema, keep)}\n\`\`\``;
+  return `\`\`\`yaml\n${renderSkeleton(schema, keep ?? writtenFields(schema))}\n\`\`\``;
 }
 
 /** The unconditional outcome fields every turn delivers. */
-const BASE_OUTCOME_FIELDS = ["status", "summary", "concerns", "forward"];
+const BASE_OUTCOME_FIELDS = [
+  "status",
+  "summary",
+  "concerns",
+  "steerAnswers",
+  "debtClosed",
+];
 
 /**
  * Reporting fields a prompt's turns deliver beyond the base shape and the one

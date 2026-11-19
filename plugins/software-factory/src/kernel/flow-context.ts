@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-flow-dispatch
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
@@ -78,10 +79,17 @@ export interface TurnTarget {
   subscription?: string;
   /**
    * Effective fallback chain, primary first: tiers whose quota pool is recorded
-   * in `exhaustedPools` are dropped, so `[0]` mirrors the fields above.
+   * in `exhaustedPools` are dropped, so `[0]` mirrors the fields above. Empty
+   * when every tier is exhausted: no call may run, and `unavailable` says why.
    */
   tiers: ResolvedTier[];
-  /** Chain index `tiers[0]` had in the alias's configured chain before exhausted tiers were dropped. */
+  /**
+   * Why no tier can serve this turn: every tier's quota pool is exhausted.
+   * `harness`, `model` and `opaque` name the chain's last tier for bookkeeping,
+   * but a turn must not call it; dispatch defers the work under this cause.
+   */
+  unavailable?: string;
+  /** Chain index `tiers[0]` had in the alias's configured chain before exhausted tiers were dropped; the chain length when none is left. */
   tierOffset: number;
   timeouts?: Timeouts;
   /** Harness configuration passed through `TurnRequest.opaque`. */
@@ -255,6 +263,9 @@ export function findStep(flow: FlowDefinition, id: string): FlowStep {
 
 /** Gates run after the last productive step, immediately before a review (or the end). */
 export function checksDue(flow: FlowDefinition, id: string): boolean {
+  // The resolve step is outside the agent sequence: its commit is the branch's
+  // new tip, so the gates that decide the re-merge always run after it.
+  if (id === "resolve") return true;
   const steps = agentSteps(flow);
   const next = steps[steps.findIndex((s) => s.id === id) + 1];
   return !next || next.review === true;
@@ -304,6 +315,27 @@ export function countRedGateRequests(
 }
 
 /**
+ * Names an alias whose every tier is exhausted, with each dead pool and the
+ * stored time it may serve again. Dispatch defers the work under this cause
+ * instead of calling a tier already known dead.
+ */
+function noLiveTierCause(
+  runtime: KernelRuntime,
+  aliasName: string,
+  chain: readonly ResolvedTier[],
+): string {
+  const pools = [...new Set(chain.map((tier) => tierPoolKey(tier)))].map(
+    (pool) => {
+      const resetAt = runtime.exhaustedPools.get(pool);
+      return resetAt === undefined
+        ? pool
+        : `${pool} resets at ${new Date(resetAt).toISOString()}`;
+    },
+  );
+  return `alias "${aliasName}" has no live tier: its quota pools are exhausted (${pools.join("; ")})`;
+}
+
+/**
  * A turn target on a named alias. `resolveTurn` takes the prompt from the
  * configured step; callers that already hold it use this directly.
  */
@@ -322,9 +354,9 @@ function targetForAlias(
   const available = chain.filter(
     (tier) => !poolExhausted(runtime.exhaustedPools, tierPoolKey(tier)),
   );
-  const tiers = available.length > 0 ? available : [chain[chain.length - 1]!];
-  const first = tiers[0]!;
-  const offset = chain.indexOf(first);
+  const exhausted = available.length === 0;
+  const first = available[0] ?? chain[chain.length - 1]!;
+  const offset = exhausted ? chain.length : chain.indexOf(first);
   return {
     prompt,
     alias: aliasName,
@@ -332,10 +364,13 @@ function targetForAlias(
     model: first.model,
     effort: first.effort,
     subscription: first.subscription,
-    tiers,
+    tiers: available,
     tierOffset: offset,
     timeouts: alias.timeouts,
     opaque: first.opaque,
+    ...(exhausted
+      ? { unavailable: noLiveTierCause(runtime, aliasName, chain) }
+      : {}),
   };
 }
 

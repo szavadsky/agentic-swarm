@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import type { Hold } from "../../src/kernel/mailbox.js";
 import { resumeVerdict } from "../../src/kernel/resume.js";
@@ -105,7 +106,7 @@ describe("resumeVerdict", () => {
   });
 
   it("refuses when the previous resume was followed by no task turn", () => {
-    // A turn before the resume, and boundary turns after it, do not count.
+    // A turn before the resume, and non-ruling turns after it, do not count.
     const records = [
       taskTurn(),
       resume(),
@@ -122,6 +123,17 @@ describe("resumeVerdict", () => {
     );
     expect(verdict.resume).toBe(false);
     expect(verdict.cause).toContain("no task turn");
+  });
+
+  it("resumes after a resume that only ruled at the boundary", () => {
+    const records = [
+      taskTurn(),
+      resume(),
+      record({ step: "architect", actor: "agent", slug: undefined }),
+    ];
+    expect(
+      resumeVerdict(state("alpha"), records, [], new Set(), LIMITS).resume,
+    ).toBe(true);
   });
 
   it("refuses when the latest plan-check is architect, resumes when a later one is progress", () => {

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -18,6 +19,7 @@ import {
   outcome,
   scriptStallLeave,
   setupFlowRepo,
+  whenTurn,
   writeTask,
 } from "./s2-helpers.js";
 import {
@@ -104,6 +106,72 @@ describe("steer PM routing", () => {
       );
       expect(pack).not.toContain("- s1: mailbox/inbox/s1.md");
       expect(pack).toContain("- s1 [task]: amended beta with edge X");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("does not fail a steer turn on a finding the graph already had", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      writePlan(runtime);
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
+      // A pre-existing, underivable graph finding: no steer turn can fix it.
+      await writeTask(
+        runtime,
+        task("stuck", { scope: ["stuck.txt"], deps: ["gone"] }),
+      );
+
+      harness.script(
+        implementer("alpha.txt", async () => {
+          await postSteer(runtime.store, "s1", "Beta needs edge W.");
+        }),
+      );
+      harness.script(
+        (req, ctx) => {
+          fs.appendFileSync(
+            path.join(runtime.store.tasksDir, "beta.md"),
+            "\nPM amended: edge W.\n",
+            "utf8",
+          );
+          writeHold(runtime, "s1", []);
+          ctx.writeOutcome(
+            outcome({
+              summary: "amended beta for s1",
+              steerRoutes: [
+                {
+                  steer: "s1",
+                  route: "task",
+                  answer: "amended beta with edge W",
+                },
+              ],
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
+      harness.script(approver("alpha is correct"));
+      harness.script(implementer("beta.txt"));
+      harness.script(approver("beta is correct"));
+
+      const dispatched = await runDispatch(runtime, { iteration: 1 });
+      expect(dispatched.reason).toBe("boundary");
+      expect(
+        fs.readFileSync(path.join(runtime.store.tasksDir, "beta.md"), "utf8"),
+      ).toContain("PM amended: edge W.");
+      expect(outboxOf(runtime, "s1")).toContain("amended beta with edge W");
+      expect(inboxHas(runtime, "s1")).toBe(false);
+      const records = await runtime.store.listRecords();
+      expect(
+        records.some((r) => r.step === "steer-routes" && r.ok === true),
+      ).toBe(true);
+      expect(records.some((r) => r.step === "pm-validate")).toBe(false);
     } finally {
       cleanupFlowRepo(repo);
     }

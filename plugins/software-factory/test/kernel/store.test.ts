@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -374,8 +375,61 @@ describe("createFolderStore", () => {
     expect(r1.outcome!.forward).toEqual([]);
 
     const r2 = records.find((r) => r.seq === turn2.meta.seq)!;
-    expect(r2.outcome!.concerns).toEqual(concernsOnlyOutcome.concerns);
+    expect(r2.outcome!.concerns).toEqual([
+      {
+        ...concernsOnlyOutcome.concerns[0]!,
+        id: `${path.basename(turn2.dir)}#1`,
+      },
+    ]);
     expect(r2.outcome!.forward).toEqual([]);
+  });
+
+  it("assigns every ingested concern the record id, overwriting one the agent wrote", async () => {
+    const store = createFolderStore(goalDir, undefined, {});
+    const turn = await store.startRecord(start());
+    await writeYamlAtomic(path.join(turn.dir, "outcome.yaml"), {
+      status: "done",
+      summary: "two concerns",
+      concerns: [
+        {
+          kind: "debt",
+          calibration: "architect",
+          text: "first",
+          id: "agent-written#7",
+        },
+        { kind: "risk", calibration: "owner", text: "second" },
+      ],
+      forward: [],
+    });
+
+    const [record] = await store.listRecords();
+    const recordId = path.basename(turn.dir);
+    expect(record!.outcome!.concerns.map((concern) => concern.id)).toEqual([
+      `${recordId}#1`,
+      `${recordId}#2`,
+    ]);
+  });
+
+  it("assigns ids to an outcome that rides on a script step's end.yaml", async () => {
+    const store = createFolderStore(goalDir, undefined, {});
+    const turn = await store.startRecord(
+      start({ actor: "script", step: "park" }),
+    );
+    await turn.finish({
+      ok: true,
+      cause: "round limit",
+      outcome: {
+        status: "done",
+        summary: "script outcome",
+        concerns: [{ kind: "debt", calibration: "fyi", text: "left a shim" }],
+        forward: [],
+      },
+    });
+
+    const [record] = await store.listRecords();
+    expect(record!.outcome!.concerns[0]!.id).toBe(
+      `${path.basename(turn.dir)}#1`,
+    );
   });
 
   it("verifies context pack, open debts and summary builder do not throw on seeded records", async () => {

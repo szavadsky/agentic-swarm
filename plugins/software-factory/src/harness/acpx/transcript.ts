@@ -1,3 +1,7 @@
+// biome-ignore-all lint/complexity: split-rest
+import fs from "node:fs";
+import path from "node:path";
+import { scrubSecrets } from "../details.js";
 import type { Usage } from "../types.js";
 import { zeroUsage } from "../usage.js";
 import type { AcpxUsageFields } from "./config.js";
@@ -140,6 +144,73 @@ function extractAdapterError(update: unknown): AcpxError | undefined {
     };
   }
   return undefined;
+}
+
+/** A config name used as one path segment; ids and session names are caller text. */
+function segment(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]/g, "_");
+}
+
+/**
+ * Where one named session's stdout stream is kept: under the launch's session
+ * store, never in a worktree. Every turn that reuses the name appends here, so
+ * the record's one path carries the whole chain, repairs included.
+ */
+export function acpxTranscriptPath(
+  sessionDir: string,
+  harness: string,
+  session: string,
+): string {
+  return path.join(
+    sessionDir,
+    "acpx",
+    segment(harness),
+    "transcripts",
+    `${segment(session)}.ndjson`,
+  );
+}
+
+/**
+ * One session's stdout stream, appended line by line as each turn's child
+ * emits it. Token-shaped secrets are scrubbed with the same rules as
+ * `Stop.details`, so an error frame cannot leave a key on disk; the child's
+ * env is filtered by `childEnv`, so provider keys never reach the stream.
+ */
+export class AcpxTranscriptFile {
+  readonly path: string;
+  private descriptor: number | undefined;
+  private failure: Error | undefined;
+
+  constructor(file: string) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    this.path = file;
+    this.descriptor = fs.openSync(file, "a");
+  }
+
+  /** Appends one complete stdout line; write failures are raised by `close`. */
+  line(text: string): void {
+    if (this.descriptor === undefined || this.failure) return;
+    try {
+      fs.writeSync(this.descriptor, `${scrubSecrets(text)}\n`);
+    } catch (error) {
+      this.failure = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  /** Closes the stream and returns its first failure for the caller to raise. */
+  close(): Error | undefined {
+    const descriptor = this.descriptor;
+    this.descriptor = undefined;
+    if (descriptor !== undefined) {
+      try {
+        fs.closeSync(descriptor);
+      } catch (error) {
+        this.failure ??=
+          error instanceof Error ? error : new Error(String(error));
+      }
+    }
+    return this.failure;
+  }
 }
 
 /**

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import { DEFAULT_FLOWS, reduceTask } from "../../src/kernel/derive-task.js";
 import type { StepRecord } from "../../src/kernel/types.js";

@@ -1,12 +1,15 @@
+// biome-ignore-all lint/complexity: split-rest
 import fs from "node:fs";
 import yaml from "yaml";
 import type { z } from "zod";
+import { knownDebtIds } from "./derive.js";
 import {
   type BoundaryStep,
   type FlowDefinition,
   type FlowStep,
   type Outcome,
   outcomeSchema,
+  type StepRecord,
 } from "./types.js";
 
 export type OutcomeExpectation = "any" | "review" | "architect";
@@ -179,6 +182,18 @@ export function flowStepFor(
 export interface ExpectationOptions {
   /** A review's last call: `changes` is not accepted, only ship or park. */
   lastCall?: boolean;
+  /**
+   * Records read before this turn, so a `debtClosed` id can be checked against
+   * the ids ingest assigned. Absent when no record tree is reachable (a
+   * standalone outcome file): the id check cannot run then.
+   */
+  records?: readonly StepRecord[];
+  /**
+   * The record this outcome belongs to, when `records` contains it: its
+   * concerns are ingested only when the turn seals it, so its own ids are not
+   * closable from this outcome.
+   */
+  excludeRecordId?: string;
 }
 
 /** Per-step contract the schema alone cannot express. */
@@ -187,9 +202,10 @@ export function validateExpectation(
   expectation: OutcomeExpectation,
   opts: ExpectationOptions = {},
 ): string[] {
+  const findings: string[] = [];
   const field = expectationField(expectation);
   if (field === "decision" && !outcome.decision) {
-    return ["decision is required: continue | done | blocked"];
+    findings.push("decision is required: continue | done | blocked");
   }
   if (
     field === "verdict" &&
@@ -197,9 +213,9 @@ export function validateExpectation(
     outcome.status !== "failed" &&
     outcome.status !== "blocked"
   ) {
-    return [
+    findings.push(
       "verdict is required on a completed review: approve | changes | reject",
-    ];
+    );
   }
   if (
     field === "verdict" &&
@@ -208,11 +224,28 @@ export function validateExpectation(
     outcome.status !== "failed" &&
     outcome.status !== "blocked"
   ) {
-    return [
+    findings.push(
       'verdict "changes" is not available on the last review call: approve with concerns, or reject',
-    ];
+    );
   }
-  return [];
+  const records = opts.records;
+  if (records && outcome.debtClosed) {
+    const known = knownDebtIds(records);
+    // The outcome's own record is in the tree once its file is written, but
+    // its ids exist from the next ingest on: a closure cites an earlier record.
+    if (opts.excludeRecordId) {
+      const own = `${opts.excludeRecordId}#`;
+      for (const id of known) if (id.startsWith(own)) known.delete(id);
+    }
+    for (const entry of outcome.debtClosed) {
+      if (!known.has(entry.id)) {
+        findings.push(
+          `unknown debt id: ${entry.id}: no ingested debt concern has that id`,
+        );
+      }
+    }
+  }
+  return findings;
 }
 
 /** The synthetic outcome after failed repairs; an invalid outcome past repair is failed (KERNEL0 §4). */

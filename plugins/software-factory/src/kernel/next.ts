@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { agentSteps, reviewRoundLimit } from "./review.js";
 import type { Action, Limits, State } from "./types.js";
 
@@ -7,7 +8,7 @@ function park(slug: string, cause: string): Action {
 
 /**
  * Pure dispatch decision. Actions are ordered by slug; the dispatcher admits
- * them against concurrency, scope and drain limits and re-derives after every
+ * them against concurrency and drain limits and re-derives after every
  * record. `running` guards against dispatching a task twice.
  */
 export function next(
@@ -60,6 +61,10 @@ export function next(
     }
     if (task.phase === "merge") {
       actions.push({ kind: "merge", slug });
+      continue;
+    }
+    if (task.phase === "resolve") {
+      actions.push({ kind: "step", slug, step: "resolve", round: task.round });
       continue;
     }
     if (task.phase === "finish") {

@@ -10,12 +10,16 @@ import type { GoalPaths, RunConfig } from "./types.js";
 export type PoolResets = Map<string, number>;
 
 /**
- * Minutes a pool stays skipped after a quota stop when the run config names no
- * window. The harness contract carries no provider reset, so the stored time
- * is a cooldown from the stop, not the provider's own schedule; five hours is
- * the shortest common subscription window.
+ * Minutes a pool stays skipped after a quota stop when neither the stop's
+ * reset text nor the run config names a window. The harness contract carries a
+ * provider reset only when the provider states one, so five hours is the
+ * shortest common subscription window and the fallback.
  */
 export const DEFAULT_POOL_RESET_MINUTES = 300;
+
+/** "Resets in 130h19m23s" / "Resets in 33m53s": the provider's stated window. */
+const RESET_TEXT =
+  /resets?\s+in\s+(?:(\d+(?:\.\d+)?)\s*h)?\s*(?:(\d+(?:\.\d+)?)\s*m)?/i;
 
 const QUOTA_POOLS_FILE = "quota-pools.yaml";
 
@@ -108,13 +112,36 @@ export function poolExhausted(
   return resetAt !== undefined && resetAt > now;
 }
 
-/** The reset time a quota stop stores: now plus the run config's window. */
+/**
+ * The reset time a quota stop stores: the provider's stated window when the
+ * stop text names one, capped by `quota.maxResetMinutes` when the run config
+ * sets a cap; otherwise the run config's `resetMinutes`. An unparseable text
+ * falls back like no text at all.
+ */
 export function poolResetAt(
   run: Pick<RunConfig, "quota">,
   now = Date.now(),
+  resetText?: string,
 ): number {
+  const stated = resetMinutesFromText(resetText);
+  if (stated !== undefined) {
+    const cap = run.quota?.maxResetMinutes;
+    const minutes = cap === undefined ? stated : Math.min(stated, cap);
+    return now + minutes * 60_000;
+  }
   const minutes = run.quota?.resetMinutes ?? DEFAULT_POOL_RESET_MINUTES;
   return now + minutes * 60_000;
+}
+
+/** The provider's stated reset in minutes; undefined when the text names none. */
+function resetMinutesFromText(text: string | undefined): number | undefined {
+  if (!text) return undefined;
+  const match = RESET_TEXT.exec(text);
+  if (!match) return undefined;
+  const hours = match[1] === undefined ? 0 : Number(match[1]);
+  const minutes = match[2] === undefined ? 0 : Number(match[2]);
+  const total = hours * 60 + minutes;
+  return Number.isFinite(total) && total > 0 ? total : undefined;
 }
 
 /**

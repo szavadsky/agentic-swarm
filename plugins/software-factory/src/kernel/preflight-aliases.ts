@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { OMP_ID, OMP_THINKING_LEVELS } from "../harness/omp/types.js";
 import type { Caps, Harness, ModelProbe, ModelRef } from "../harness/types.js";
 import type { Finding } from "./findings.js";

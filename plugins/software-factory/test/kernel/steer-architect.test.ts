@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -90,7 +91,7 @@ describe("steer architect routing", () => {
           outcome({
             summary: "amended intent",
             decision: "continue",
-            forward: ["steer s1: intent amended verbatim"],
+            steerAnswers: [{ steer: "s1", answer: "intent amended verbatim" }],
           }),
         );
         return fakeTurnResult(req);

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -199,6 +200,72 @@ describe("validate_cmd", () => {
       }
     });
   }
+
+  it("checks a debtClosed id against the record tree beside the outcome", () => {
+    const worktree = fs.mkdtempSync(
+      path.join(os.tmpdir(), "validate-cmd-debt-"),
+    );
+    try {
+      const records = path.join(worktree, "goal", "records");
+      const raise = path.join(records, "00001-i1-alpha-review-r1");
+      fs.mkdirSync(raise, { recursive: true });
+      fs.writeFileSync(
+        path.join(raise, "started.yaml"),
+        "seq: 1\niteration: 1\nstep: review\nround: 1\nactor: agent\n",
+      );
+      fs.writeFileSync(
+        path.join(raise, "outcome.yaml"),
+        `${VALID_OUTCOME}verdict: approve\nconcerns: [{kind: debt, calibration: architect, text: shim in the writer}]\n`,
+      );
+      const close = path.join(records, "00002-i1-alpha-architect-r1");
+      fs.mkdirSync(close, { recursive: true });
+      fs.writeFileSync(
+        path.join(close, "started.yaml"),
+        "seq: 2\niteration: 1\nstep: architect\nround: 1\nactor: agent\n",
+      );
+      const outcome = path.join(close, "outcome.yaml");
+      const cmd = extractCommand(renderPrompt("architect"));
+      const run = () =>
+        spawnSync("sh", ["-c", `${cmd} "${outcome}"`], {
+          cwd: worktree,
+          encoding: "utf8",
+        });
+      const closeWith = (id: string) =>
+        fs.writeFileSync(
+          outcome,
+          `status: done\nsummary: closed\ndecision: continue\ndebtClosed: [{id: "${id}", reason: "shim removed"}]\n`,
+        );
+
+      closeWith("00001-i1-alpha-review-r1#1");
+      const known = run();
+      expect(known.status).toBe(0);
+      expect(known.stdout).toContain("valid");
+
+      closeWith("00001-i1-alpha-review-r1#2");
+      const unknown = run();
+      expect(unknown.status).not.toBe(0);
+      expect(unknown.stderr).toContain("unknown debt id");
+
+      // A debt raised in this very record has no id yet: ingest assigns it
+      // when the record seals, so closing it here is unknown, not a no-op.
+      fs.writeFileSync(
+        outcome,
+        [
+          "status: done",
+          "summary: closed its own debt",
+          "decision: continue",
+          "concerns: [{kind: debt, calibration: fyi, text: shim in the reader}]",
+          'debtClosed: [{id: "00002-i1-alpha-architect-r1#1", reason: "shim removed"}]',
+          "",
+        ].join("\n"),
+      );
+      const own = run();
+      expect(own.status).not.toBe(0);
+      expect(own.stderr).toContain("unknown debt id");
+    } finally {
+      fs.rmSync(worktree, { recursive: true, force: true });
+    }
+  });
 
   it("checks a review record's outcome with the step from started.yaml", () => {
     const worktree = fs.mkdtempSync(

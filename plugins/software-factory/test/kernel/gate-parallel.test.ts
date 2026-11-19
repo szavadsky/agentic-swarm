@@ -1,0 +1,227 @@
+// biome-ignore-all lint/complexity: split-rest
+import { describe, expect, it } from "bun:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { FakeHarness } from "../../src/harness/fake/index.js";
+import { isInfraCheck, runGates } from "../../src/kernel/gates.js";
+import type { KernelRuntime } from "../../src/kernel/types.js";
+import { cleanupFlowRepo, makeRuntime, setupFlowRepo } from "./s2-helpers.js";
+
+/** Shell single-quotes a path, so a temp dir with a quote cannot break a gate. */
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
+/**
+ * A gate that leaves its worktree marked active in `shared` and waits for a
+ * peer. Two runs that are not serialized both reach the wait, so the overlap
+ * file appears deterministically; a serialized pair never sees a peer.
+ */
+function overlapGate(shared: string): string {
+  return [
+    `shared=${shellQuote(shared)}`,
+    'marker="$shared/active.$(basename "$PWD")"',
+    'touch "$marker"',
+    "for _ in $(seq 1 40); do",
+    '  others=$(find "$shared" -maxdepth 1 -name \'active.*\' ! -name "$(basename "$marker")" | wc -l)',
+    '  if [ "$others" -ge 1 ]; then touch "$shared/overlap"; break; fi',
+    "  sleep 0.05",
+    "done",
+    'rm -f "$marker"',
+  ].join("\n");
+}
+
+/** A gate that names its worktree and holds its place in the shared log. */
+function timedGate(log: string): string {
+  const file = shellQuote(log);
+  const stamp = `"$(basename "$PWD")"`;
+  return `printf 'start %s\\n' ${stamp} >> ${file}; sleep 0.4; printf 'end %s\\n' ${stamp} >> ${file}`;
+}
+
+/** A shared scratch dir outside both worktrees; removed by the caller. */
+function sharedDir(kind: string): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), `gate-${kind}-`));
+}
+
+function logKinds(log: string): string[] {
+  return fs
+    .readFileSync(log, "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => line.split(" ")[0] ?? "");
+}
+
+describe("gate runs across worktrees", () => {
+  it("runs two worktrees' gates concurrently when no gate declares a mutex", async () => {
+    const shared = sharedDir("parallel");
+    const { repo, goal } = setupFlowRepo({
+      gates: [{ id: "probe", command: overlapGate(shared) }],
+    });
+    try {
+      const runtime = await makeRuntime(repo, goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      const first = repo.createWorktree("probe-a");
+      const second = repo.createWorktree("probe-b");
+
+      const [a, b] = await Promise.all([
+        runGates(runtime, first),
+        runGates(runtime, second),
+      ]);
+
+      expect(a.map((check) => check.ok)).toEqual([true]);
+      expect(b.map((check) => check.ok)).toEqual([true]);
+      expect(fs.existsSync(path.join(shared, "overlap"))).toBe(true);
+    } finally {
+      cleanupFlowRepo(repo);
+      fs.rmSync(shared, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("serializes gates that name the same mutex, across worktrees", async () => {
+    const shared = sharedDir("serial");
+    const log = path.join(shared, "order.log");
+    const { repo, goal } = setupFlowRepo({
+      gates: [
+        { id: "probe", command: timedGate(log), serial: ["shared-port"] },
+      ],
+    });
+    try {
+      const runtime = await makeRuntime(repo, goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      const first = repo.createWorktree("probe-a");
+      const second = repo.createWorktree("probe-b");
+
+      const started = performance.now();
+      const [a, b] = await Promise.all([
+        runGates(runtime, first),
+        runGates(runtime, second),
+      ]);
+      const elapsedMs = performance.now() - started;
+
+      expect(a.map((check) => check.ok)).toEqual([true]);
+      expect(b.map((check) => check.ok)).toEqual([true]);
+      // Each gate sleeps 400ms, so overlapping runs finish in about that; a
+      // serialized pair cannot finish under 800ms.
+      expect(elapsedMs).toBeGreaterThan(800);
+      expect(logKinds(log)).toEqual(["start", "end", "start", "end"]);
+    } finally {
+      cleanupFlowRepo(repo);
+      fs.rmSync(shared, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("gives each worktree its own declared env dirs", async () => {
+    const { repo, goal } = setupFlowRepo({
+      gates: [
+        {
+          id: "probe",
+          command:
+            'printf \'%s\\n%s\\n\' "$GATE_SCRATCH" "$PWD" > "$GATE_SCRATCH/where"',
+          env: { GATE_SCRATCH: ".cache/gate-scratch" },
+        },
+      ],
+    });
+    try {
+      const runtime = await makeRuntime(repo, goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      const trees = [repo.createWorktree("probe-a")];
+      trees.push(repo.createWorktree("probe-b"));
+
+      const runs = await Promise.all(
+        trees.map((tree) => runGates(runtime, tree)),
+      );
+      expect(runs.map((checks) => checks[0]?.ok)).toEqual([true, true]);
+
+      for (const tree of trees) {
+        const scratch = path.join(tree, ".cache/gate-scratch");
+        expect(fs.existsSync(scratch)).toBe(true);
+        const [reportedDir, reportedCwd = ""] = fs
+          .readFileSync(path.join(scratch, "where"), "utf8")
+          .trim()
+          .split("\n");
+        expect(reportedDir).toBe(scratch);
+        expect(fs.realpathSync(reportedCwd)).toBe(fs.realpathSync(tree));
+      }
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 30_000);
+
+  it("reports an uncreatable env dir as infra, not a rejected run", async () => {
+    const { repo, goal } = setupFlowRepo({
+      gates: [
+        {
+          id: "probe",
+          command: "printf ran > gate-ran.txt",
+          env: { GATE_SCRATCH: "blocked" },
+        },
+      ],
+    });
+    try {
+      const runtime = await makeRuntime(repo, goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      const tree = repo.createWorktree("probe-blocked");
+      fs.writeFileSync(path.join(tree, "blocked"), "not a directory");
+
+      const checks = await runGates(runtime, tree);
+
+      expect(checks).toHaveLength(1);
+      expect(checks[0]?.ok).toBe(false);
+      expect(isInfraCheck(checks[0]!)).toBe(true);
+      expect(checks[0]?.summary).toBe("exit 126");
+      expect(checks[0]?.output).toContain("GATE_SCRATCH");
+      expect(checks[0]?.output).toContain("blocked");
+      // The failing directory must not run the gate's command.
+      expect(fs.existsSync(path.join(tree, "gate-ran.txt"))).toBe(false);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 10_000);
+
+  it("holds mutexes in name order, so opposite declarations cannot deadlock", async () => {
+    const shared = sharedDir("order");
+    const log = path.join(shared, "order.log");
+    const { repo, goal } = setupFlowRepo({
+      gates: [
+        { id: "probe", command: timedGate(log), serial: ["alpha", "beta"] },
+      ],
+    });
+    try {
+      const runtime = await makeRuntime(repo, goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      const reversed: KernelRuntime = {
+        ...runtime,
+        configs: {
+          ...runtime.configs,
+          repo: {
+            ...runtime.configs.repo,
+            gates: runtime.configs.repo.gates.map((gate) => ({
+              ...gate,
+              serial: [...gate.serial].reverse(),
+            })),
+          },
+        },
+      };
+      const first = repo.createWorktree("probe-a");
+      const second = repo.createWorktree("probe-b");
+
+      const [a, b] = await Promise.all([
+        runGates(runtime, first),
+        runGates(reversed, second),
+      ]);
+
+      expect(a[0]?.ok).toBe(true);
+      expect(b[0]?.ok).toBe(true);
+      expect(logKinds(log)).toEqual(["start", "end", "start", "end"]);
+    } finally {
+      cleanupFlowRepo(repo);
+      fs.rmSync(shared, { recursive: true, force: true });
+    }
+  }, 10_000);
+});

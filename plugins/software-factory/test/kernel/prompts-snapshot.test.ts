@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -799,6 +800,25 @@ describe("architect horizon", () => {
     expect(rendered).toContain("not one iteration's slice");
     expect(rendered).toContain("details after spike X / task Y lands");
     expect(rendered).not.toContain("plan the whole iteration");
+  });
+});
+
+describe("outcome protocol in prompts", () => {
+  it("renders the typed protocol fields from the schema and never asks for a forward line", () => {
+    for (const role of ["architect", "pm"]) {
+      const rendered = library().render(role, ROLES[role]!);
+      expect(rendered, `${role} lost debtClosed`).toContain(
+        "debtClosed: [{id, reason}]",
+      );
+      expect(rendered, `${role} lost steerAnswers`).toContain(
+        "steerAnswers: [{steer, answer}]",
+      );
+      expect(rendered, `${role} still asks for a forward line`).not.toContain(
+        "forward:",
+      );
+      // The skeleton renders the same schema the parser validates.
+      expect(rendered).toContain(OUTCOME_SCHEMA);
+    }
   });
 });
 

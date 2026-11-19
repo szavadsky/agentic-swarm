@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-flow-dispatch
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -21,6 +22,7 @@ import { runFront } from "./front.js";
 import {
   type Hold,
   type Steer,
+  collectSteerRoutes,
   readHolds,
   scanInbox,
   sweepHolds,
@@ -28,7 +30,7 @@ import {
 import { rolesByStep, writeMetrics } from "./metrics.js";
 import type { PriceSource } from "./openrouter.js";
 import { loadPriceTable } from "./openrouter.js";
-import { runSteerPm } from "./pm.js";
+import { runSteerPm, type SteerPmRun } from "./pm.js";
 import {
   DEFAULT_MIN_TMP_FREE_BYTES,
   type ModelCatalog,
@@ -201,6 +203,24 @@ async function processedSteers(store: KernelRuntime["store"]): Promise<number> {
  */
 async function steersWaiting(store: KernelRuntime["store"]): Promise<boolean> {
   return (await scanInbox(store)).length > 0;
+}
+
+/**
+ * A pending steer a PM turn already routed to the architect (directly or via a
+ * stall) has no other consumer. A resumed pass never runs a front turn, so
+ * without the boundary that route would wait for a consult the launch does not
+ * reach.
+ */
+async function architectRouteWaiting(
+  store: KernelRuntime["store"],
+): Promise<boolean> {
+  const pending = await scanInbox(store);
+  if (pending.length === 0) return false;
+  const routes = collectSteerRoutes(await store.listRecords());
+  return pending.some((steer) => {
+    const route = routes.get(steer.id)?.route;
+    return route === "architect" || route === "stall";
+  });
 }
 
 /** Tasks a front path dispatched that did not land, as `slug status`. */
@@ -527,6 +547,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
       await sweepHolds(store, iteration, Object.keys(before.tasks));
       let humanInterventions = 0;
       let digestSteer: Steer | null = null;
+      let resumeSteerPm: SteerPmRun | undefined;
       try {
         // A resume skips the architect turn but not the digest: the digest is
         // delivered to the PM as a steer, and that one turn routes the evidence
@@ -539,7 +560,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           );
           if (digestSteer) {
             const tasks = await store.listTasks();
-            await runSteerPm(runtime, {
+            resumeSteerPm = await runSteerPm(runtime, {
               iteration,
               state: derive(
                 tasks,
@@ -555,9 +576,16 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         const processedBefore = await processedSteers(store);
         let front: Awaited<ReturnType<typeof runFront>>;
         if (resume) {
-          front = { action: "dispatch" };
+          // A resume has no front turn. The architect is the only consumer of
+          // an architect route or an underivable finding, so that is the one
+          // case where dispatch must not be forced: the boundary runs first in
+          // the same iteration.
+          const boundaryWaiting =
+            resumeSteerPm?.status === "architect" ||
+            (await architectRouteWaiting(store));
+          front = { action: boundaryWaiting ? "boundary" : "dispatch" };
         } else {
-          front = await runFront(runtime, { iteration });
+          front = await runFront(runtime, { iteration, state: before });
           if (front.action === "blocked") {
             const cause = `front turn ended the launch as blocked: ${
               front.cause ?? "unknown cause"
@@ -620,6 +648,9 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         if (front.action === "boundary") {
           boundary = await runBoundary(runtime, {
             relaunch: relaunch && i === 0 && !resumeForcedOff,
+            // The resume path already wrote this iteration's digest and posted
+            // it as a steer; a second scout turn would duplicate that evidence.
+            ...(resume ? { digest: false } : {}),
             iteration,
             frontPack: front.packPath,
             runConfigPath: runtime.configs.files?.run,
@@ -742,13 +773,16 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           );
         if (
           resume &&
+          boundary === undefined &&
           dispatched !== undefined &&
           (dispatched.taskTurnsStarted === 0 ||
             dispatched.planCheck === "architect" ||
             settledResume)
         ) {
-          // An empty, architect-summoning, or fully landed resume is not a
-          // pass: give the budget back and go straight to the boundary.
+          // An empty, architect-summoning, or fully landed resume that ran no
+          // boundary is not a pass: give the budget back and go straight to the
+          // boundary. A resume that did rule already made this iteration's
+          // progress, so it keeps the pass and never loops back into a consult.
           resumeForcedOff = true;
           iterations -= 1;
           i -= 1;

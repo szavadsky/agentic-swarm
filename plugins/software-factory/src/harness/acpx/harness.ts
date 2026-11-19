@@ -1,3 +1,4 @@
+import path from "node:path";
 import { type RetryPolicy, runWithFallbacks } from "../fallback.js";
 import type {
   Caps,
@@ -185,6 +186,7 @@ function runtimeOf(opts: AcpxHarnessOptions): AcpxRuntime {
   return {
     id: opts.id,
     command: resolveAcpxCommand(opts.binary),
+    sessionDir: path.resolve(opts.sessionDir),
     envAllowlist: opts.envAllowlist,
     // The entry's opaque options win over the structured block; the adapter
     // reads only `args` and `env` from the result.

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import fs from "node:fs";
 import path from "node:path";
 import { AsyncMutex } from "../core/mutex.js";
@@ -11,6 +12,7 @@ import { terminalFactFromRecords } from "./derive-task.js";
 import { parseTaskFile, renderTaskFile, TaskFileError } from "./tasks.js";
 import {
   ArtifactStore,
+  DeclaredWrite,
   RecordEnd,
   RecordStart,
   StepRecord,
@@ -20,7 +22,7 @@ import {
   TaskTypeDefinition,
   TurnRecord,
 } from "./types.js";
-import type { Outcome } from "./types.js";
+import type { RecordedOutcome } from "./types.js";
 
 const RECORD_DIR = /^(\d{5})-/;
 
@@ -32,7 +34,13 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function normalizeOutcome(raw: unknown): Outcome {
+/**
+ * One record's stored outcome, read for the kernel: missing arrays defaulted
+ * and every concern given its kernel id `<recordId>#<n>`. The id is assigned
+ * here, at ingest, and always overwrites anything the agent wrote: the record
+ * directory names the record, and the concern's position in it is stable.
+ */
+function normalizeOutcome(raw: unknown, recordId: string): RecordedOutcome {
   if (!isPlainObject(raw)) {
     return {
       status: "failed",
@@ -45,7 +53,13 @@ function normalizeOutcome(raw: unknown): Outcome {
   const outcome = { ...raw } as any;
 
   // Normalize
-  outcome.concerns = Array.isArray(outcome.concerns) ? outcome.concerns : [];
+  const concerns: unknown[] = Array.isArray(outcome.concerns)
+    ? outcome.concerns
+    : [];
+  outcome.concerns = concerns.map((concern, index) => ({
+    ...(isPlainObject(concern) ? concern : {}),
+    id: `${recordId}#${index + 1}`,
+  }));
   outcome.forward = Array.isArray(outcome.forward) ? outcome.forward : [];
   outcome.status =
     typeof outcome.status === "string" ? outcome.status : "failed";
@@ -129,6 +143,8 @@ class FolderStore implements ArtifactStore {
   private readonly taskTypes: Record<string, TaskTypeDefinition>;
   /** Concurrent dispatches allocate sequence numbers; one allocator per store. */
   private readonly seqLock = new AsyncMutex();
+  /** Goal-dir writes declared by the kernel, so containment can tell them from a turn's. */
+  private readonly writes: DeclaredWrite[] = [];
 
   constructor(
     goalDir: string,
@@ -190,8 +206,29 @@ class FolderStore implements ArtifactStore {
     }
   }
 
+  /**
+   * Declares a goal-dir write before its bytes land and stamps its end when
+   * the attempt settles. A declaration is the kernel's claim on the path: a
+   * change the ledger explains is never the turn's, and a change it does not
+   * explain still is.
+   */
+  private declare(rel: string): DeclaredWrite {
+    const write: DeclaredWrite = { rel: rel.split(path.sep).join("/") };
+    this.writes.push(write);
+    return write;
+  }
+
+  declaredWrites(): readonly DeclaredWrite[] {
+    return this.writes;
+  }
+
   async writeFile(rel: string, text: string): Promise<void> {
-    await writeTextAtomic(path.join(this.goalDir, rel), text);
+    const write = this.declare(rel);
+    try {
+      await writeTextAtomic(path.join(this.goalDir, rel), text);
+    } finally {
+      write.endedAt = new Date().toISOString();
+    }
   }
 
   async listDir(rel: string): Promise<string[]> {
@@ -295,12 +332,22 @@ class FolderStore implements ArtifactStore {
     for (let copy = 2; fs.existsSync(target); copy++) {
       target = path.join(dir, `${stem}-${copy}.md`);
     }
+    // The rename is a kernel write on both ends: the file leaves `tasks/` and
+    // lands under the quarantine dir.
+    const removed = this.declare(
+      path.relative(this.goalDir, path.join(this.tasksDir, name)),
+    );
+    const created = this.declare(path.relative(this.goalDir, target));
     try {
       await fs.promises.rename(path.join(this.tasksDir, name), target);
     } catch (err) {
       // A concurrent listing already quarantined it; nothing left to report.
       if (isENOENT(err)) return;
       throw err;
+    } finally {
+      const endedAt = new Date().toISOString();
+      removed.endedAt = endedAt;
+      created.endedAt = endedAt;
     }
     const destination = path.relative(this.goalDir, target);
     await this.appendRecord(
@@ -359,10 +406,15 @@ class FolderStore implements ArtifactStore {
   }
 
   async writeTask(task: TaskFile): Promise<void> {
-    await writeTextAtomic(
-      path.join(this.tasksDir, `${task.slug}.md`),
-      renderTaskFile(task),
-    );
+    const write = this.declare(`tasks/${task.slug}.md`);
+    try {
+      await writeTextAtomic(
+        path.join(this.tasksDir, `${task.slug}.md`),
+        renderTaskFile(task),
+      );
+    } finally {
+      write.endedAt = new Date().toISOString();
+    }
   }
 
   private async nextSeq(): Promise<number> {
@@ -462,12 +514,9 @@ class FolderStore implements ArtifactStore {
         )
           throw err;
       }
-      let outcome: Outcome | undefined;
+      let delivered: unknown;
       try {
-        const raw = await readYaml(path.join(dir, "outcome.yaml"));
-        if (raw) {
-          outcome = normalizeOutcome(raw);
-        }
+        delivered = await readYaml(path.join(dir, "outcome.yaml"));
       } catch (err) {
         if (
           !isENOENT(err) &&
@@ -475,7 +524,14 @@ class FolderStore implements ArtifactStore {
         )
           throw err;
       }
-      records.push({ ...base, ...end, ...(outcome ? { outcome } : {}) });
+      const record: StepRecord = { ...base, ...end };
+      // Script steps carry their outcome in end.yaml; an agent's own
+      // outcome.yaml wins when both exist.
+      const stored = delivered ?? record.outcome;
+      if (stored !== undefined) {
+        record.outcome = normalizeOutcome(stored, entry.name);
+      }
+      records.push(record);
     }
     return records.sort((a, b) => a.seq - b.seq);
   }

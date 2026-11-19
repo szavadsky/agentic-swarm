@@ -18,9 +18,13 @@ export function isLastReviewCall(step: FlowStep, round: number): boolean {
   return round > changeRequestBound(step);
 }
 
-/** Configured flow steps that dispatch to agents, filtering out the checks script step. */
+/**
+ * Configured flow steps that dispatch to agents, filtering out the script
+ * steps. `checks` is the gate phase; `resolve` runs only after a merge
+ * conflicts, never in the normal sequence.
+ */
 export function agentSteps(flow: FlowDefinition): FlowStep[] {
-  return flow.steps.filter((s) => s.id !== "checks");
+  return flow.steps.filter((s) => s.id !== "checks" && s.id !== "resolve");
 }
 
 /** Checks step in flow definition, if configured. */

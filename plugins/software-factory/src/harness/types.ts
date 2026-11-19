@@ -51,6 +51,8 @@ export type Stop =
    * Other crash paths use stderr or fall back to their exit facts.
    * `network` is a transport loss (reset socket, failed fetch) or an error the
    * provider itself marked retryable; `quota` and `rate` are retried alike.
+   * `unavailable` means the turn never reached a harness: its alias had no live
+   * tier, and `details` names the exhausted pools and their stored resets.
    */
   | {
       kind: "infra";
@@ -62,6 +64,7 @@ export type Stop =
         | "crash"
         | "overflow"
         | "timeout"
+        | "unavailable"
         | "glitch";
       details?: string;
     };

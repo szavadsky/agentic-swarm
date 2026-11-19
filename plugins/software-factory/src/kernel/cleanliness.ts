@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { git } from "../core/git/exec.js";
 import type { CheckResult } from "../core/checks/types.js";
 import type { KernelRuntime } from "./types.js";

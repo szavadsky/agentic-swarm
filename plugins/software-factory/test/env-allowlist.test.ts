@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -184,6 +185,7 @@ describe("spawned child environments", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
     });
     process.env[PLANTED] = "s3cret";
@@ -213,6 +215,7 @@ describe("spawned child environments", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
       envAllowlist: [PLANTED],
     });

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -198,6 +199,81 @@ describe("iteration summary", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+  it("keeps the distance on open material debt only and records an id closure", async () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "factory-summary-debt-closed-"),
+    );
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
+    try {
+      await store.ensureLayout();
+      const tasks = [task("open1")];
+      const records = [
+        rec(1, {
+          slug: "open1",
+          step: "review",
+          outcome: {
+            status: "done",
+            summary: "approved with debt",
+            concerns: [
+              {
+                kind: "debt",
+                calibration: "architect",
+                text: "retry window drops head names",
+                id: "00001#1",
+              },
+              {
+                kind: "debt",
+                calibration: "fyi",
+                text: "nit: rename the helper",
+                id: "00001#2",
+              },
+            ],
+            forward: [],
+            verdict: "approve",
+          },
+        }),
+        rec(2, {
+          slug: undefined,
+          step: "architect",
+          outcome: {
+            status: "done",
+            summary: "closed the retry debt",
+            concerns: [],
+            forward: [],
+            debtClosed: [
+              { id: "00001#1", reason: "head names reconciled at the writer" },
+            ],
+            decision: "continue",
+          },
+        }),
+      ];
+      const state = derive(tasks, records);
+      await writeIterationSummary(store, {
+        iteration: 1,
+        state,
+        records,
+        status: "in-progress",
+      });
+      const text = fs.readFileSync(
+        path.join(store.goalDir, "iterations/1/summary.md"),
+        "utf8",
+      );
+      // The material debt is closed; the open fyi note is not distance.
+      const distance = text.slice(
+        text.indexOf("## Distance"),
+        text.indexOf("## Architect"),
+      );
+      expect(distance).toContain("- open debt (0): none");
+      expect(distance).not.toContain("retry window drops head names");
+      expect(distance).not.toContain("nit: rename the helper");
+      expect(text).toContain(
+        "## Debt closed\n- 00001#1: head names reconciled at the writer",
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("lists parks of its own iteration while the distance keeps the total", async () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), "factory-summary-parks-"),

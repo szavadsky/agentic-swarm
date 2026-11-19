@@ -49,6 +49,7 @@ export function createRealHarnesses(
     harnesses[id] = new AcpxHarness({
       id,
       binary: entry.binary,
+      sessionDir: context.sessionDir,
       acpx: entry.acpx,
       options: entry.options,
       envAllowlist: context.envAllowlist,

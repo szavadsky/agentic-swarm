@@ -25,10 +25,29 @@ const packageRoot = fileURLToPath(new URL("../..", import.meta.url));
 const identitySchema = z
   .object({ name: z.string().min(1), email: z.string().min(1) })
   .strict();
+/**
+ * A gate's scratch directory: relative to its worktree, so the same declaration
+ * gives every worktree its own directory. Absolute, `~` and `..` paths would
+ * let two concurrent gate runs share one, which is what `env` exists to prevent.
+ */
+const gateEnvDirSchema = z
+  .string()
+  .min(1)
+  .refine(
+    (value) =>
+      !path.isAbsolute(value) &&
+      !value.startsWith("~") &&
+      !value.split(/[\\/]/).includes(".."),
+    { message: "env dirs must be worktree-relative (no absolute, ~ or ..)" },
+  );
 const gateSchema = z
   .object({
     id: z.string().min(1),
     command: z.string().min(1),
+    serial: z.array(z.string().min(1)).default([]),
+    env: z
+      .record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), gateEnvDirSchema)
+      .optional(),
     format: z
       .object({
         junit: z.string().min(1).optional(),
@@ -47,7 +66,6 @@ export const repoConfigSchema = z
   .object({
     baseBranch: z.string().min(1).default("main"),
     artifactRoot: z.string().min(1).default(".factory/artifacts"),
-    worktreeRoot: z.string().min(1).optional(),
     identity: identitySchema.optional(),
     setup: z.array(z.string().min(1)).default([]),
     gates: z.array(gateSchema).default([]),
@@ -363,12 +381,14 @@ export const runConfigSchema = z
       .strict()
       .default(() => ({ dir: "", keepRuns: 5, retention: "short" as const })),
     /**
-     * Quota-pool cooldown. The harness contract carries no provider reset, so
-     * an exhausted pool's stored reset time is this window from the stop.
+     * Quota-pool cooldown. A quota stop's stated reset ("Resets in 130h") sets
+     * the pool's cooldown, capped by `maxResetMinutes` when set; without a
+     * stated reset the window is `resetMinutes` from the stop.
      */
     quota: z
       .object({
         resetMinutes: z.number().positive().default(DEFAULT_POOL_RESET_MINUTES),
+        maxResetMinutes: z.number().positive().optional(),
       })
       .strict()
       .default(() => ({ resetMinutes: DEFAULT_POOL_RESET_MINUTES })),
@@ -480,8 +500,17 @@ function parseLayer<T>(
   return undefined;
 }
 
-/** Arrays replace; plain objects merge key by key. */
-function deepMerge(base: unknown, override: unknown): unknown {
+interface MergeOptions {
+  /** A `null` in the overlay removes the inherited key instead of replacing it. */
+  nullDeletes?: boolean;
+}
+
+/** Arrays replace; plain objects merge key by key; null deletes when asked. */
+function deepMerge(
+  base: unknown,
+  override: unknown,
+  opts: MergeOptions = {},
+): unknown {
   if (override === undefined) return base;
   if (Array.isArray(base) || Array.isArray(override)) return override;
   if (
@@ -496,7 +525,11 @@ function deepMerge(base: unknown, override: unknown): unknown {
     for (const [key, value] of Object.entries(
       override as Record<string, unknown>,
     )) {
-      out[key] = deepMerge(out[key], value);
+      if (value === null && opts.nullDeletes) {
+        delete out[key];
+        continue;
+      }
+      out[key] = deepMerge(out[key], value, opts);
     }
     return out;
   }
@@ -556,6 +589,138 @@ function processLayer(
 }
 
 /**
+ * The run layer is one file or an `extends` chain: the file itself, its base,
+ * the base's base. `null` in a child removes an inherited key, so a variant
+ * states its differences instead of restating a whole alias, harness entry or
+ * price row.
+ */
+interface RunSource {
+  file: string;
+  /** The file's own data, `extends` removed. */
+  data: unknown;
+}
+
+/**
+ * The run-layer files that make one config, outermost first. A missing file
+ * contributes nothing (schema defaults stand in); an unreadable file, a
+ * missing base or a cycle returns undefined with a finding naming the file.
+ */
+function resolveRunSources(
+  file: string,
+  findings: Finding[],
+  chain: string[] = [],
+): RunSource[] | undefined {
+  const visited = [...chain, file];
+  const layer = readLayer(file);
+  findings.push(...layer.findings);
+  if (layer.data === undefined) return [];
+  if (
+    layer.data === null ||
+    typeof layer.data !== "object" ||
+    Array.isArray(layer.data)
+  ) {
+    findings.push({
+      file,
+      key: "(root)",
+      message: "expected a run config mapping",
+    });
+    return undefined;
+  }
+  const { extends: parent, ...own } = layer.data as Record<string, unknown>;
+  const sources: RunSource[] = [{ file, data: own }];
+  if (parent === undefined) return sources;
+  if (typeof parent !== "string" || parent.trim() === "") {
+    findings.push({
+      file,
+      key: "extends",
+      message: "expected a non-empty run-config path",
+    });
+    return undefined;
+  }
+  const parentFile = path.resolve(path.dirname(file), expandHome(parent));
+  if (visited.includes(parentFile)) {
+    findings.push({
+      file,
+      key: "extends",
+      message: `extends cycle: ${[...visited, parentFile].join(" -> ")}`,
+    });
+    return undefined;
+  }
+  if (!fs.existsSync(parentFile)) {
+    findings.push({
+      file,
+      key: "extends",
+      message: `base run config not found: ${parentFile}`,
+    });
+    return undefined;
+  }
+  const base = resolveRunSources(parentFile, findings, visited);
+  if (!base) return undefined;
+  return [...sources, ...base];
+}
+
+/** Root base first, overlay last; later files win and `null` removes a key. */
+function mergeRunSources(sources: RunSource[]): unknown {
+  let merged: Record<string, unknown> = {};
+  for (const source of [...sources].reverse()) {
+    merged = deepMerge(merged, source.data, {
+      nullDeletes: true,
+    }) as Record<string, unknown>;
+  }
+  return merged;
+}
+
+/**
+ * The file an issue belongs to: the outermost file that declares the issue's
+ * first path segment, else the root base. A typo in an overlay is blamed on
+ * the overlay, not on the base it did not touch.
+ */
+function runFileFor(
+  sources: RunSource[],
+  issue: { path: PropertyKey[]; keys?: PropertyKey[] },
+  fallback: string,
+): string {
+  const named = issue.path.length > 0 ? [issue.path[0]] : (issue.keys ?? []);
+  for (const source of sources) {
+    // Every source passed resolveRunSources' mapping check.
+    const data = source.data as Record<string, unknown>;
+    if (named.some((key) => typeof key === "string" && key in data)) {
+      return source.file;
+    }
+  }
+  return sources[sources.length - 1]?.file ?? fallback;
+}
+
+/** One run layer: its `extends` chain resolved, then validated as a whole. */
+function runLayer(file: string, findings: Finding[]): RunConfig | undefined {
+  const sources = resolveRunSources(file, findings);
+  if (!sources) return undefined;
+  return parseLayer(
+    runConfigSchema,
+    mergeRunSources(sources),
+    (issue) => runFileFor(sources, issue, file),
+    findings,
+  );
+}
+
+/**
+ * Resolves and validates one run config, base chain included. The operator
+ * entry point: `--validate` and the schema gate read a file the same way the
+ * launch does.
+ */
+export function loadRunConfig(file: string): RunConfig {
+  const resolved = path.resolve(file);
+  const findings: Finding[] = [];
+  if (!fs.existsSync(resolved)) {
+    findings.push({ file: resolved, key: "(file)", message: "no such file" });
+    throw new ConfigError(findings);
+  }
+  const run = runLayer(resolved, findings);
+  if (!run || findings.length > 0) throw new ConfigError(findings);
+  return run;
+}
+
+/**
  * Loads the three layers into one report. Missing files take schema defaults;
  * a missing run config leaves aliases empty so pre-flight names the aliases
  * the process config requires instead of inventing a harness.
@@ -567,8 +732,7 @@ export function loadConfigs(
   const files = configFilePaths(repoRoot, opts);
   const findings: Finding[] = [];
   const repoLayer = readLayer(files.repo);
-  const runLayer = readLayer(files.run);
-  findings.push(...repoLayer.findings, ...runLayer.findings);
+  findings.push(...repoLayer.findings);
 
   const repo = parseLayer(
     repoConfigSchema,
@@ -577,7 +741,7 @@ export function loadConfigs(
     findings,
   );
   const processData = processLayer(files, findings);
-  const run = parseLayer(runConfigSchema, runLayer.data, files.run, findings);
+  const run = runLayer(files.run, findings);
   if (processData && run?.preset && processData.presets) {
     if (
       Object.keys(processData.presets).length > 0 &&
@@ -702,10 +866,8 @@ export function resolveGoalPaths(
     );
   }
   const root = path.resolve(repoRoot);
-  const configuredWorktree =
-    configs.run.worktreeRoot ?? configs.repo.worktreeRoot;
-  const baseRoot = configuredWorktree
-    ? fromRoot(root, configuredWorktree)
+  const baseRoot = configs.run.worktreeRoot
+    ? fromRoot(root, configs.run.worktreeRoot)
     : path.resolve(root, "..", ".factory-worktrees", path.basename(root));
   const worktreeRoot = path.join(baseRoot, repositoryId(root));
   return {

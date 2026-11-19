@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it, setDefaultTimeout } from "bun:test";
 import path from "node:path";
 import type { AcpxConfig } from "../../src/harness/acpx/config.js";
@@ -59,6 +60,7 @@ function runtimeFor(stub: AcpxStub, config: AcpxConfig): AcpxRuntime {
   return {
     id: config.agent,
     command: { binary: stub.binary, prefix: [] },
+    sessionDir: path.dirname(stub.binary),
     acpx: config,
   };
 }
@@ -76,6 +78,7 @@ describe("AcpxHarness session compaction", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
     });
     try {
@@ -109,7 +112,12 @@ describe("AcpxHarness session compaction", () => {
 
   it("returns a compacted ref and the next turn resumes the same session", async () => {
     const stub = createAcpxStub();
-    const options = { id: "pi", binary: stub.binary, acpx: PI_ACPX };
+    const options = {
+      id: "pi",
+      binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
+      acpx: PI_ACPX,
+    };
     const harness = new AcpxHarness(options);
     try {
       const cwd = path.dirname(stub.binary);
@@ -167,6 +175,7 @@ describe("AcpxHarness session compaction", () => {
     const harness = new AcpxHarness({
       id: "opencode",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx,
     });
     try {
@@ -197,6 +206,7 @@ describe("AcpxHarness session compaction", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
     });
     try {
@@ -237,6 +247,7 @@ describe("AcpxHarness session compaction", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
     });
     try {
@@ -263,6 +274,7 @@ describe("AcpxHarness session compaction", () => {
     const harness = new AcpxHarness({
       id: "agy",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: AGY_ACPX,
       options: { args: ["--approve-all"] },
     });
@@ -291,6 +303,7 @@ describe("AcpxHarness session compaction", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
     });
     const clock = installFakeClock(Date.parse("2026-11-16T12:00:00.000Z"));

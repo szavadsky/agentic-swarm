@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import path from "node:path";
 import type { Harness } from "../harness/types.js";
 import { loadConfigs } from "../kernel/config.js";

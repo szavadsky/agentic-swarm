@@ -1,0 +1,114 @@
+# Base run config: the shared self-run aliases, the unattended omp policy,
+# price rows, limits, session store and worktree root. A run config names
+# `extends: base.yaml` and states only what it changes; `null` in the child
+# removes an inherited key, so a variant never restates a whole alias, harness
+# entry or price row.
+#
+# The run layer is the only layer that names a worktree root: the repo layer
+# is tracked and shared by every run, so a checkout location there would be a
+# second, silently overridden source.
+aliases:
+  architect:
+    harness: omp
+    model: anthropic/claude-opus-5-5
+    effort: high
+    fallbacks:
+      - model: opencode-go/deepseek-v4.1-flash
+  pm:
+    harness: opencode
+    model: opencode-go/deepseek-v4.1-flash
+    effort: high
+    escalateTo: escalation
+    fallbacks:
+      - model: opencode/deepseek-v4.1-flash-free
+  digest:
+    harness: opencode
+    model: opencode/beam-free
+    effort: max
+    fallbacks:
+      - model: opencode-go/deepseek-v4.1-flash
+  implementer:
+    harness: opencode
+    model: opencode/deepseek-v4.1-flash-free
+    fallbacks:
+      - model: opencode-go/deepseek-v4.1-flash
+  implementer-b:
+    harness: omp
+    model: opencode-go/deepseek-v4.1-flash
+    effort: max
+    fallbacks:
+      - harness: opencode
+        model: opencode/deepseek-v4.1-flash-free
+  researcher:
+    harness: omp
+    model: opencode-go/deepseek-v4.1-flash
+    effort: max
+    fallbacks:
+      - harness: opencode
+        model: opencode/deepseek-v4.1-flash-free
+  reviewer:
+    harness: opencode
+    model: opencode/minimax-m3.1-flash-free
+    fallbacks:
+      - model: opencode-go/deepseek-v4.1-flash
+  plan-reviewer:
+    harness: opencode
+    model: opencode/minimax-m3.1-flash-free
+    fallbacks:
+      - model: opencode-go/deepseek-v4.1-flash
+  steward:
+    harness: opencode
+    model: opencode/deepseek-v4.1-flash-free
+    fallbacks:
+      - model: opencode-go/deepseek-v4.1-flash
+  plan-checker:
+    harness: opencode
+    model: opencode/deepseek-v4.1-flash-free
+    fallbacks:
+      - model: opencode-go/deepseek-v4.1-flash
+  escalation:
+    harness: omp
+    model: anthropic/claude-sonnet-5-5
+
+# The built-in `acpx opencode` route resolves 1.19.5 and fails on the 2.2.7
+# data dir; the raw `opencode acp` route runs the installed CLI (probe §0).
+harnesses:
+  # omp is native; the unattended policy is opaque overlay keys here, not code.
+  omp:
+    options:
+      defaultThinkingLevel: low
+      memory: { backend: off }
+      autolearn: { enabled: false }
+      skills: { enabled: false }
+      features: { unexpectedStopDetection: false }
+      tools: { approvalMode: yolo, xdev: false }
+      compaction: { experimentalContextManagement: false }
+      disabledProviders: [native, claude, codex, gemini, opencode, cursor, agents-md]
+      retry: { enabled: false, modelFallback: false }
+  opencode:
+    acpx:
+      agent: opencode acp
+      compact: true
+      raw: true
+      effort: { configId: effort }
+      usage: { cache: true }
+
+scouts:
+  model: opencode-go/deepseek-v4.1-flash
+# Prices come from the harness or OpenRouter's model list (cached locally);
+# nothing is hardcoded here. Every model above matches by normalized id except
+# beam, which has no beam-suffixed OpenRouter id and is mapped explicitly to
+# the only beam-family entry (free-tier turns stay a known $0 actual with the
+# paid equivalent as their list price).
+priceIds:
+  opencode/beam-free: reflection/beam-1.0-501b-a23b
+
+limits:
+  concurrency: { overall: 3 }
+  iterations: 1
+
+sessions:
+  dir: ~/.local/share/factory/sessions
+  keepRuns: 5
+
+worktreeRoot: ~/.local/share/factory/worktrees
