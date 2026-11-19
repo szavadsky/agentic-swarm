@@ -63,6 +63,9 @@ gates:
     env: { TMPDIR: .cache/gate }                # per-worktree scratch directory
 ```
 
+The tracked repo layer names no worktree root: checkouts, sessions and harness
+policy belong to the run layer, so one checkout never silently shadows another.
+
 Gate runs in different worktrees run in parallel. A gate waits only for the
 mutexes it names in `serial`: within one factory process, gates naming the same
 mutex are serialized, and a gate that names none never waits. `env` maps
@@ -143,6 +146,16 @@ lsp: true                                             # artifact LSP on omp
 scouts: { model: opencode-go/deepseek-v4.1-flash }   # omp architect subagents
 portability: [{ from: opencode, to: omp }]           # sessions cross only declared edges
 ```
+
+`extends: <file>` composes the run layer from a base. The path resolves relative
+to the file that names it, a base may extend another, and the child's keys win.
+Objects merge key by key and arrays replace, so a variant restates only the
+alias field, harness entry or price row it changes; a `null` removes an
+inherited key (`scouts: null`, `fallbacks: null`). A missing base and an
+`extends` cycle are refused when the config loads, naming the file.
+`bootstrap/run/base.yaml` carries the shared self-run aliases, the unattended
+omp policy, the price rows and the roots; every other shipped file is a thin
+overlay.
 
 A task session resumes on the harness that recorded it. `portability: [{from, to}]`
 declares further directional edges: a session recorded on `from` may resume on
@@ -248,7 +261,7 @@ list; its effort must be one omp's `--thinking` flag parses (`off`, `minimal`,
 `harnesses.<id>` binds an adapter (`acpx:`) or executable and carries
 `options` passed untouched: acpx reads `args`/`env`, omp merges the keys into
 its launch overlay (`sessions.retention` still owns
-`providers.cacheRetention`). The shipped `bootstrap/run/self.yaml` keeps the
+`providers.cacheRetention`). The shipped `bootstrap/run/base.yaml` keeps the
 unattended omp policy there — memory/auto-learn/skills off, approval, disabled
 providers, retry — so no policy is compiled in.
 

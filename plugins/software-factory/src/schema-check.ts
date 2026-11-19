@@ -3,11 +3,12 @@ import path from "node:path";
 import yaml from "yaml";
 import type { z } from "zod";
 import {
+  ConfigError,
   loadProcessConfig,
+  loadRunConfig,
   processConfigSchema,
   processOverrideSchema,
   repoConfigSchema,
-  runConfigSchema,
 } from "./kernel/config.js";
 import { classSchema } from "./kernel/flow-context.js";
 import { holdFileSchema } from "./kernel/mailbox.js";
@@ -40,6 +41,26 @@ function validateYamlFile(file: string, schema: z.ZodType<unknown>): void {
   if (!result.success) {
     for (const issue of result.error.issues) {
       report(file, `${issue.path.join(".") || "(root)"}: ${issue.message}`);
+    }
+    return;
+  }
+  noteChecked();
+}
+
+/**
+ * A run config is validated through its `extends` chain, exactly as a launch
+ * reads it: the merged layer, with findings naming the file that owns the key.
+ */
+function validateRunConfigFile(file: string): void {
+  try {
+    loadRunConfig(file);
+  } catch (err) {
+    if (err instanceof ConfigError) {
+      for (const finding of err.findings) {
+        report(finding.file, `${finding.key}: ${finding.message}`);
+      }
+    } else {
+      report(file, (err as Error).message);
     }
     return;
   }
@@ -91,8 +112,7 @@ if (fs.existsSync(treeFactoryDir)) {
     validateYamlFile(treeFiles.repo, repoConfigSchema);
   else missing.push(treeFiles.repo);
 
-  if (fs.existsSync(treeFiles.run))
-    validateYamlFile(treeFiles.run, runConfigSchema);
+  if (fs.existsSync(treeFiles.run)) validateRunConfigFile(treeFiles.run);
   else missing.push(treeFiles.run);
 
   if (fs.existsSync(treeFiles.processOverride))
@@ -194,7 +214,7 @@ const runConfigs = walk(
   (f) => f.endsWith(".yaml") || f.endsWith(".yml"),
 );
 if (runConfigs.length > 0) {
-  for (const file of runConfigs.sort()) validateYamlFile(file, runConfigSchema);
+  for (const file of runConfigs.sort()) validateRunConfigFile(file);
 }
 
 // The kernel's explicit run-config path, when the operator set one.
@@ -204,7 +224,7 @@ if (envRunConfig) {
   if (runConfigs.includes(file)) {
     // Already validated by the bootstrap/run walk.
   } else if (fs.existsSync(file)) {
-    validateYamlFile(file, runConfigSchema);
+    validateRunConfigFile(file);
   } else {
     missing.push(`${file} (FACTORY_RUN_CONFIG)`);
   }

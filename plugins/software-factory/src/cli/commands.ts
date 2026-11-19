@@ -6,13 +6,14 @@ import type { ZodType } from "zod";
 import { git } from "../core/git/exec.js";
 import { writeTextAtomic } from "../core/records/io.js";
 import {
+  ConfigError,
   configFilePaths,
   loadConfigs,
+  loadRunConfig,
   processConfigSchema,
   processOverrideSchema,
   repoConfigSchema,
   resolveGoalPaths,
-  runConfigSchema,
 } from "../kernel/config.js";
 import { summaryRelPath } from "../kernel/context-pack.js";
 import { derive } from "../kernel/derive.js";
@@ -221,6 +222,24 @@ function inferValidateKind(absPath: string): ValidateKind | null {
   if (segments.includes("holds") && /\.ya?ml$/i.test(base)) return "hold";
   if (segments.includes("tasks") && base.endsWith(".md")) return "task";
   return null;
+}
+
+/**
+ * A run config through its `extends` chain: its findings already name the
+ * file that owns each key, base included.
+ */
+function runFindings(file: string): string[] {
+  try {
+    loadRunConfig(file);
+    return [];
+  } catch (err) {
+    if (err instanceof ConfigError) {
+      return err.findings.map(
+        (finding) => `${finding.file}: ${finding.key}: ${finding.message}`,
+      );
+    }
+    return [`${file}: ${(err as Error).message}`];
+  }
 }
 
 /** Same report shape as the schema-validation gate: `file: key: message`. */
@@ -475,7 +494,7 @@ export async function validateFile(
     case "repo":
       return { findings: zodFindings(text, abs, repoConfigSchema) };
     case "run":
-      return { findings: zodFindings(text, abs, runConfigSchema) };
+      return { findings: runFindings(abs) };
     case "process":
       return { findings: zodFindings(text, abs, processOverrideSchema) };
   }

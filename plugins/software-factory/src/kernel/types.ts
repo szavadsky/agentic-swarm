@@ -682,7 +682,6 @@ export interface RepoConfig {
   baseBranch: string;
   /** Goal directories live at <repo>/<artifactRoot>/<goal>. */
   artifactRoot: string;
-  worktreeRoot?: string;
   identity?: { name: string; email: string };
   setup: string[];
   gates: GateConfig[];

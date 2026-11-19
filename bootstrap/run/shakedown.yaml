@@ -1,24 +1,22 @@
-# Zero-cost shakedown: every role through opencode, fallbacks through paid plans.
+# Zero-cost shakedown: every role through opencode, fallbacks through paid
+# plans. base.yaml's omp binding, escalation alias and scout pin are unused
+# here and removed.
+extends: base.yaml
 aliases:
   architect:
     harness: opencode
     model: opencode/minimax-m3.1-flash-free
-    effort: high
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
   pm:
-    harness: opencode
     model: opencode/beam-free
+    effort: null
+    escalateTo: null
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
   digest:
-    harness: opencode
     model: opencode/beam-free
-    fallbacks:
-      - model: opencode-go/deepseek-v4.1-flash
-  implementer:
-    harness: opencode
-    model: opencode/deepseek-v4.1-flash-free
+    effort: null
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
   # The retry alternate is a different free model, so this shakedown keeps
@@ -26,55 +24,15 @@ aliases:
   implementer-b:
     harness: opencode
     model: opencode/minimax-m3.1-flash-free
+    effort: null
+    fallbacks: null
   researcher:
     harness: opencode
     model: opencode/deepseek-v4.1-flash-free
+    effort: null
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
-  reviewer:
-    harness: opencode
-    model: opencode/minimax-m3.1-flash-free
-    fallbacks:
-      - model: opencode-go/deepseek-v4.1-flash
-  plan-reviewer:
-    harness: opencode
-    model: opencode/minimax-m3.1-flash-free
-    fallbacks:
-      - model: opencode-go/deepseek-v4.1-flash
-  steward:
-    harness: opencode
-    model: opencode/deepseek-v4.1-flash-free
-    fallbacks:
-      - model: opencode-go/deepseek-v4.1-flash
-  plan-checker:
-    harness: opencode
-    model: opencode/deepseek-v4.1-flash-free
-    fallbacks:
-      - model: opencode-go/deepseek-v4.1-flash
-
-# The built-in `acpx opencode` route resolves 1.19.5 and fails on the 2.2.7
-# data dir; the raw `opencode acp` route runs the installed CLI (probe §0).
+  escalation: null
 harnesses:
-  opencode:
-    acpx:
-      agent: opencode acp
-      compact: true
-      raw: true
-      effort: { configId: effort }
-      usage: { cache: true }
-
-# Prices come from the harness or OpenRouter's model list; beam has no
-# beam-suffixed OpenRouter id and is mapped explicitly to the only
-# beam-family entry.
-priceIds:
-  opencode/beam-free: reflection/beam-1.0-501b-a23b
-
-limits:
-  concurrency: { overall: 3 }
-  iterations: 1
-
-sessions:
-  dir: ~/.local/share/factory/sessions
-  keepRuns: 5
-
-worktreeRoot: ~/.local/share/factory/worktrees
+  omp: null
+scouts: null
