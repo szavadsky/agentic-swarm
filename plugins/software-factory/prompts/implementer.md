@@ -1,3 +1,7 @@
+{%- if report_path != '' -%}
+Commit the report at `{{ report_path }}` first, then refine it.
+
+{% endif -%}
 {%- include 'implementer-body' -%}
 
 ## This turn

@@ -756,6 +756,15 @@ describe("dispatch pass signals", () => {
         ),
       ).toHaveLength(4);
       expect(result.taskTurnsStarted).toBe(4);
+      // A spike's implement turn opens with the report commit: the kernel
+      // hands the implementer prompt the task's report path.
+      const probeTurn = harness.calls.find((call) => {
+        const identity = fakeTurnIdentity(call);
+        return identity.slug === "probe" && identity.step === "implement";
+      });
+      expect(probeTurn?.prompt).toStartWith(
+        "Commit the report at `.factory/spikes/probe.md` first, then refine it.\n",
+      );
     } finally {
       cleanupFlowRepo(repo);
     }

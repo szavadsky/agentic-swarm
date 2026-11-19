@@ -227,6 +227,20 @@ describe("shipped run-config coverage", () => {
       }
     });
 
+    it(`carries the spike flow's researcher alias: ${name}.yaml`, () => {
+      const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
+      if (!fs.existsSync(runPath)) return;
+      const run = runConfigSchema.parse(
+        yaml.parse(fs.readFileSync(runPath, "utf8")),
+      );
+      // The spike flow's implement step alternates researcher with the task
+      // implementer and reviewer aliases; pre-flight refuses the launch when
+      // any of the three is missing.
+      expect(run.aliases.researcher).toBeDefined();
+      expect(run.aliases.implementer).toBeDefined();
+      expect(run.aliases.reviewer).toBeDefined();
+    });
+
     it(`resolves every model id: ${name}.yaml`, () => {
       const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
       // A package-only export has no bootstrap/ sibling.

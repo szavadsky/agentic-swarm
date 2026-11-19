@@ -20,11 +20,14 @@ flows:
       - id: implement
         prompt: implementer
         alias: implementer
+  # A spike delivers a report, not a merge: it runs on the researcher alias and
+  # retries on other task models instead of the one that failed.
   spike:
     steps:
       - id: implement
         prompt: implementer
-        alias: implementer
+        alias: researcher
+        alternates: [implementer, reviewer]
       - id: review
         prompt: reviewer
         alias: reviewer

@@ -69,6 +69,22 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("runs a spike's implement turn on researcher with task-model alternates", () => {
+    const root = tmpRepo();
+    const configs = loadConfigs(root);
+    // The interface `park-history-spike` and `saga-omp-spike-v2` rely on: a
+    // spike does not run its implement turn on the task implementer alias, and
+    // a failed attempt moves to another task model.
+    expect(configs.process.flows.spike!.steps[0]).toEqual({
+      id: "implement",
+      prompt: "implementer",
+      alias: "researcher",
+      alternates: ["implementer", "reviewer"],
+      review: false,
+    });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("merges the package process default with a repo override", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });

@@ -24,6 +24,13 @@ aliases:
     model: opencode/deepseek-v4.1-flash-free
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
+  researcher:
+    harness: omp
+    model: opencode-go/deepseek-v4.1-flash
+    effort: max
+    fallbacks:
+      - harness: opencode
+        model: opencode/deepseek-v4.1-flash-free
   reviewer:
     harness: opencode
     model: opencode/minimax-m3.1-flash-free

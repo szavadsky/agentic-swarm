@@ -220,16 +220,33 @@ describe("role prompts", () => {
   });
 });
 
-describe("reviewer includes its author's body", () => {
-  function body(role: keyof typeof ROLES): string {
-    const rendered = library().render(role, ROLES[role]!);
-    const at = rendered.indexOf("## This turn");
-    expect(at, `${role} has no turn block`).toBeGreaterThan(0);
-    return rendered.slice(0, at);
-  }
+describe("spike prompt", () => {
+  it("adds the report commit only to a spike's implementer turn", () => {
+    const lib = library();
+    const spike = {
+      ...ROLES.implementer!,
+      report_path: ".factory/spikes/alpha.md",
+    };
+    expect(lib.render("implementer", spike)).toStartWith(
+      "Commit the report at `.factory/spikes/alpha.md` first, then refine it.\n\n",
+    );
+    expect(
+      lib.render("implementer", { ...ROLES.implementer!, report_path: "" }),
+    ).toStartWith("You implement one task in one worktree.");
+  });
+});
 
+describe("reviewer includes its author's body", () => {
   it("is an author-neutral intro, the implementer's body verbatim, then its duties", () => {
-    const implementerBody = body("implementer");
+    // The author body is the development variant: a reviewer has no report to
+    // commit, so the spike opening is not part of it.
+    const implementer = library().render("implementer", {
+      ...ROLES.implementer!,
+      report_path: "",
+    });
+    const at = implementer.indexOf("## This turn");
+    expect(at, "implementer has no turn block").toBeGreaterThan(0);
+    const implementerBody = implementer.slice(0, at);
     const reviewer = library().render("reviewer", ROLES.reviewer!);
     const intro = reviewer.slice(0, reviewer.indexOf("\n\n"));
     expect(intro.startsWith("You review one author's work.")).toBe(true);
