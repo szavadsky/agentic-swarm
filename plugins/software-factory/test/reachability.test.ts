@@ -135,8 +135,9 @@ const PROMPT_DOCS: Record<string, string> = {
 const INCLUDE_SPECIFIER = /\{%\s*include\s*['"]([^'"]+)['"]/g;
 /** Matches direct fragment renders in src: `.render("name"` and `.placeholders("name"`. */
 const RENDER_SPECIFIER = /\.(?:render|placeholders)\(\s*["']([^"']+)["']/g;
-/** Matches role prompt entries in config/process.yaml: `prompt: fragment`. */
-const ROLE_PROMPT_SPECIFIER = /prompt:\s*([A-Za-z0-9_][A-Za-z0-9_/.-]*)/g;
+/** Matches prompt and repair fragments named in config/process.yaml. */
+const PROMPT_SPECIFIER =
+  /(?:prompt|repairPrompt):\s*([A-Za-z0-9_][A-Za-z0-9_/.-]*)/g;
 
 /** Renderable prompt fragments: every .md under prompts without its extension, minus docs. */
 function promptFragments(): string[] {
@@ -213,7 +214,7 @@ function entryFragments(): Set<string> {
     path.join(PACKAGE_ROOT, "config", "process.yaml"),
     "utf8",
   );
-  for (const match of config.matchAll(ROLE_PROMPT_SPECIFIER)) {
+  for (const match of config.matchAll(PROMPT_SPECIFIER)) {
     entries.add(match[1]!);
   }
   const walk = (dir: string) => {

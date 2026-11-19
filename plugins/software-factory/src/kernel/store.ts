@@ -57,7 +57,8 @@ function normalizeOutcome(raw: unknown): Outcome {
   return outcome;
 }
 
-function recordDirName(seq: number, meta: RecordStart): string {
+/** One record directory's name: `NNNNN-i<iteration>[-<slug>]-<step>-r<round>`. */
+export function recordDirName(seq: number, meta: RecordStart): string {
   const slug = meta.slug ? `-${meta.slug}` : "";
   return `${String(seq).padStart(5, "0")}-i${meta.iteration}${slug}-${meta.step}-r${meta.round}`;
 }

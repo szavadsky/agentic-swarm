@@ -1,10 +1,17 @@
+import fs from "node:fs";
 import path from "node:path";
 import { runAgentTurn } from "./agent.js";
 import type { PlanCheckPack } from "./context-pack.js";
 import { boundaryTarget } from "./flow-context.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
-import { existingTasks, restoreTurn, snapshotTurn } from "./pm.js";
+import {
+  existingTasks,
+  restoreTurn,
+  runPlanCheckPm,
+  snapshotTurn,
+} from "./pm.js";
 import { scriptMeta } from "./record.js";
+import { recordDirName } from "./store.js";
 import type {
   KernelRuntime,
   Outcome,
@@ -15,10 +22,143 @@ import type {
   State,
   StepRecord,
   TaskFile,
+  TaskStatus,
 } from "./types.js";
 
 /** Agent step of a plan-checker turn; slug-less, so it stays out of the item's turn count. */
 export const PLAN_CHECK_STEP = "plancheck";
+
+/** Statuses that still owe the goal work: parked and ready/pending are the checker's business. */
+const OPEN_STATUSES: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
+  "pending",
+  "ready",
+  "running",
+  "parked",
+]);
+
+/** A top-level plan bullet: `- <slug> — <title>` (the em dash is the plan's). */
+const PLAN_BULLET = /^-\s+(\S+)\s+—/u;
+
+/**
+ * The slugs the plan names as task bullets. Prose mentions and nested bullets
+ * (`  - done: …`) name no task, so a follow-up cannot hide behind them.
+ * `plan-scopes` generalizes this parser once every scope has its own plan.
+ */
+export function planSlugs(plan: string): Set<string> {
+  const slugs = new Set<string>();
+  for (const line of plan.split(/\r?\n/)) {
+    const match = PLAN_BULLET.exec(line);
+    if (match) slugs.add(match[1]!);
+  }
+  return slugs;
+}
+
+/**
+ * Findings for a plan-check report whose follow-ups reach outside the plan:
+ * each follow-up's own slug must be a `- <slug> —` bullet. A `missing-dep`
+ * follow-up's dead dependency may be absent from the plan; it is the dep, not
+ * the slug acted on. Only a `done` outcome carries a report to check.
+ */
+export function validatePlanCheck(plan: string, outcome: Outcome): string[] {
+  if (outcome.status !== "done" || !outcome.planCheck) return [];
+  const named = planSlugs(plan);
+  const outside = [
+    ...new Set(
+      outcome.planCheck.followUps
+        .map((followUp) => followUp.slug)
+        .filter((slug) => !named.has(slug)),
+    ),
+  ];
+  return outside.map(
+    (slug) =>
+      `follow-up slug "${slug}" has no "- ${slug} —" bullet in the plan; merged and retired slugs are history`,
+  );
+}
+
+/** Non-terminal task slugs, sorted: the work a boundary still owes the goal. */
+export function openWork(state: State): string[] {
+  return Object.entries(state.tasks)
+    .filter(([, task]) => OPEN_STATUSES.has(task.status))
+    .map(([slug]) => slug)
+    .sort();
+}
+
+/**
+ * Closed plan-check turns since the last architect turn. One consult owns at
+ * most `planCheckRounds` of them, so this is the repeat count whether the
+ * rounds ran inside dispatch or at the boundary gate.
+ */
+export function planChecksSinceConsult(records: StepRecord[]): StepRecord[] {
+  const lastArchitect = records
+    .filter(
+      (record) =>
+        record.actor === "agent" &&
+        record.step === "architect" &&
+        record.endedAt,
+    )
+    .sort((a, b) => a.seq - b.seq)
+    .at(-1);
+  return records
+    .filter(
+      (record) =>
+        record.actor === "agent" &&
+        record.step === PLAN_CHECK_STEP &&
+        record.endedAt &&
+        (lastArchitect === undefined || record.seq > lastArchitect.seq),
+    )
+    .sort((a, b) => a.seq - b.seq);
+}
+
+/**
+ * Whether a boundary spends a checker round before the architect. The
+ * checker runs only on open work, so a goal whose tasks all landed consults
+ * directly (the plan is complete or needs a direction the checker cannot
+ * give). `architect`, an exhausted repeat bound and a steer only the architect
+ * can answer also skip the check: the consult is their resolver.
+ */
+export function consultGate(input: {
+  /** A plan exists to verify. */
+  plan: boolean;
+  /** `openWork(state)`. */
+  open: string[];
+  /** An unprocessed inbox steer waits: the architect is its consumer. */
+  steerWaiting: boolean;
+  records: StepRecord[];
+  /** `limits.planCheckRounds`: checker turns allowed before one consult. */
+  bound: number;
+}): "check" | "consult" {
+  if (!input.plan) return "consult";
+  if (input.open.length === 0) return "consult";
+  if (input.steerWaiting) return "consult";
+  const checks = planChecksSinceConsult(input.records);
+  if (checks.length >= input.bound) return "consult";
+  if (checks.at(-1)?.outcome?.planCheck?.verdict === "architect")
+    return "consult";
+  return "check";
+}
+
+/**
+ * The last closed record that ran gates, as its `end.yaml` path. A merge
+ * record copies the checks it merged from, so only a real run counts. The
+ * checker reads this instead of re-running the suite.
+ */
+export function lastGateRecord(
+  records: StepRecord[],
+  recordsDir: string,
+): string | undefined {
+  const last = records
+    .filter(
+      (record) =>
+        record.endedAt &&
+        record.step !== "merge" &&
+        record.checks !== undefined,
+    )
+    .sort((a, b) => a.seq - b.seq)
+    .at(-1);
+  return last
+    ? path.join(recordsDir, recordDirName(last.seq, last), "end.yaml")
+    : undefined;
+}
 
 /**
  * The checker's brief: every task file with status, then parked slugs with
@@ -50,9 +190,9 @@ export interface PlanCheckTurn {
 
 /**
  * One plan-checker turn: a task-tier, read-only check of the plan against
- * the repo at dispatch exhaustion. Writes outside the outcome are discarded
- * and recorded; a missing verdict, a refusal, or an infra stop reports
- * `architect`, so the checker can only add progress, never block the
+ * the repo at a boundary or dispatch exhaustion. Writes outside the outcome
+ * are discarded and recorded; a missing verdict, a refusal, or an infra stop
+ * reports `architect`, so the checker can only add progress, never block the
  * iteration on its own failure.
  */
 export async function runPlanCheck(
@@ -60,8 +200,15 @@ export async function runPlanCheck(
   opts: { iteration: number; round: number; state: State },
 ): Promise<PlanCheckTurn> {
   const planPath = path.join(runtime.store.goalDir, "plan.md");
+  const plan = fs.existsSync(planPath)
+    ? await fs.promises.readFile(planPath, "utf8")
+    : "";
   const snapshot = await snapshotTurn(runtime, planPath);
   const tasks = await runtime.store.listTasks();
+  const gateRecord = lastGateRecord(
+    await runtime.store.listRecords(),
+    runtime.store.recordsDir,
+  );
   const result = await runAgentTurn(runtime, {
     target: boundaryTarget(runtime, "plancheck", opts.iteration),
     cwd: runtime.paths.goalCheckout,
@@ -77,8 +224,10 @@ export async function runPlanCheck(
       checkout: runtime.paths.goalCheckout,
       tasks_dir: runtime.store.tasksDir,
       existing_tasks: planCheckBrief(opts.state, tasks),
+      gate_record_path: gateRecord ?? "none recorded",
     },
     expectation: KERNEL_TURN_STEPS[PLAN_CHECK_STEP],
+    validate: (outcome) => validatePlanCheck(plan, outcome),
   });
   const restored = await restoreTurn(runtime, snapshot);
   const touched = [
@@ -124,6 +273,35 @@ export async function runPlanCheck(
     followUps: check.followUps,
     outcome: result.outcome,
   };
+}
+
+export interface PlanCheckRound {
+  turn: PlanCheckTurn;
+  /** Follow-up slugs the PM continued; non-empty means dispatch has work. */
+  continued: string[];
+}
+
+/**
+ * One checker round and, on `progress`, its follow-up PM turn. The round is
+ * shared by the boundary gate and dispatch, so one `planCheckRounds` budget
+ * covers both: a round is spent whether the PM continued a slug or left it
+ * for the architect. An infra stop, an `architect` verdict and an empty
+ * follow-up list stop here; only continued work resumes dispatch.
+ */
+export async function runPlanCheckRound(
+  runtime: KernelRuntime,
+  opts: { iteration: number; round: number; state: State },
+): Promise<PlanCheckRound> {
+  const turn = await runPlanCheck(runtime, opts);
+  if (turn.infra || turn.verdict !== "progress" || turn.followUps.length === 0)
+    return { turn, continued: [] };
+  const followed = await runPlanCheckPm(runtime, {
+    iteration: opts.iteration,
+    state: opts.state,
+    followUps: turn.followUps,
+    cwd: runtime.paths.goalCheckout,
+  });
+  return { turn, continued: followed.continued };
 }
 
 /**

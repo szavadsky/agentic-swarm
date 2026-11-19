@@ -467,14 +467,28 @@ describe("PM turn reconciliation", () => {
     }
   });
 
-  it("parks a dropped task that has commits and cancels one without, matching plan paths to slugs", async () => {
+  it("keeps a dropped task open and cancels only the slug the plan names cancelled", async () => {
     const { root, runtime, fake, planPath } = await setup();
     try {
       fs.writeFileSync(
         planPath,
-        // alpha is named only by its file path, with a sentence dot after it;
-        // beta only by its bare slug. Each alternative must stand alone.
-        "# Plan\n\nKeep tasks/alpha.md.\n\n## beta\nUse beta.\n\n## work\nWork.\n",
+        [
+          "# Plan",
+          "",
+          "Keep tasks/alpha.md.",
+          "",
+          "## beta",
+          "Use beta.",
+          "",
+          "## work",
+          "Work.",
+          "",
+          "cancelled: stuck — superseded by work",
+          "cancelled: old — merged history cannot be rewritten",
+          // No em dash and no reason: prose, not a decision.
+          "cancelled: typo",
+          "",
+        ].join("\n"),
         "utf8",
       );
       for (const text of [
@@ -483,6 +497,8 @@ describe("PM turn reconciliation", () => {
         simpleTask("work", "work.txt"),
         simpleTask("ghost", "ghost.txt", { deps: ["work"] }),
         simpleTask("stuck", "stuck.txt", { deps: ["work"] }),
+        simpleTask("typo", "typo.txt"),
+        simpleTask("old", "old.txt"),
       ]) {
         await runtime.store.writeTask(
           parseTaskFile(text, /^slug:\s*(\S+)/m.exec(text)![1]!),
@@ -508,13 +524,23 @@ describe("PM turn reconciliation", () => {
           },
         },
       );
+      await runtime.store.appendRecord(
+        {
+          iteration: 1,
+          slug: "old",
+          step: "merge",
+          round: 1,
+          actor: "script",
+        },
+        { ok: true, commit: "abc1234" },
+      );
       const state = derive(
         await runtime.store.listTasks(),
         await runtime.store.listRecords(),
       );
       expect(state.tasks.ghost!.status).toBe("pending");
-      expect(state.tasks.ghost!.commit).toBe("c0ffee");
       expect(state.tasks.stuck!.status).toBe("pending");
+      expect(state.tasks.old!.status).toBe("merged");
 
       fake.script((req, ctx) => {
         ctx.writeOutcome(outcome({ summary: "kept the plan" }));
@@ -532,12 +558,78 @@ describe("PM turn reconciliation", () => {
         await runtime.store.listTasks(),
         await runtime.store.listRecords(),
       );
-      expect(after.tasks.alpha!.status).not.toBe("cancelled");
-      expect(after.tasks.beta!.status).not.toBe("cancelled");
-      expect(after.tasks.ghost!.status).toBe("parked");
-      expect(after.tasks.ghost!.cause).toBe("dropped-with-commits");
+      // The dropped bullet says nothing: ghost stays open with its commit.
+      expect(after.tasks.ghost!.status).toBe("pending");
+      expect(after.tasks.ghost!.commit).toBe("c0ffee");
+      // Only the explicit line cancels, and its reason is the cause.
       expect(after.tasks.stuck!.status).toBe("cancelled");
-      expect(after.tasks.stuck!.cause).toContain("removed from the plan");
+      expect(after.tasks.stuck!.cause).toBe("superseded by work");
+      // A frozen slug is history; a line missing the em dash is prose.
+      expect(after.tasks.old!.status).toBe("merged");
+      expect(after.tasks.typo!.status).not.toBe("cancelled");
+      for (const slug of ["alpha", "beta", "work"]) {
+        expect(after.tasks[slug]!.status).not.toBe("cancelled");
+      }
+      const cancels = (await runtime.store.listRecords()).filter(
+        (record) => record.step === "cancel",
+      );
+      expect(cancels.map((record) => record.slug)).toEqual(["stuck"]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("restores an open task file the PM deletes and rejects the turn", async () => {
+    const { root, runtime, fake, planPath } = await setup();
+    try {
+      const alpha = simpleTask("alpha", "alpha.txt");
+      await runtime.store.writeTask(
+        parseTaskFile(alpha, /^slug:\s*(\S+)/m.exec(alpha)![1]!),
+      );
+      const before = fs.readFileSync(
+        path.join(runtime.store.tasksDir, "alpha.md"),
+        "utf8",
+      );
+      fake.script((req, ctx) => {
+        fs.rmSync(path.join(runtime.store.tasksDir, "alpha.md"));
+        ctx.writeOutcome(outcome({ summary: "dropped alpha by deleting it" }));
+        return fakeTurnResult(req);
+      });
+      fake.script((req, ctx) => {
+        expect(req.prompt).toContain(
+          'task "alpha" was deleted; restored: a task leaves only through the plan\'s cancelled line or a PM decision',
+        );
+        expect(
+          fs.readFileSync(
+            path.join(runtime.store.tasksDir, "alpha.md"),
+            "utf8",
+          ),
+        ).toBe(before);
+        ctx.writeOutcome(outcome({ summary: "left alpha open" }));
+        return fakeTurnResult(req);
+      });
+
+      const result = await runPm(runtime, {
+        iteration: 1,
+        state: derive(
+          await runtime.store.listTasks(),
+          await runtime.store.listRecords(),
+        ),
+        planPath,
+        cwd: root,
+      });
+      expect(result.status).toBe("done");
+      expect(fake.calls).toHaveLength(2);
+      const after = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+      );
+      expect(after.tasks.alpha!.status).not.toBe("cancelled");
+      expect(
+        (await runtime.store.listRecords()).some(
+          (record) => record.step === "cancel",
+        ),
+      ).toBe(false);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -867,6 +959,7 @@ describe("PM turn reconciliation", () => {
         "  escalation: { harness: fake, model: fake-escalated }",
         "  digest: { harness: fake, model: fake-digest }",
         "  implementer: { harness: fake, model: fake-impl }",
+        "  researcher: { harness: fake, model: fake-research }",
         "  reviewer: { harness: fake, model: fake-review }",
         "  steward: { harness: fake, model: fake-steward }",
         "  plan-checker: { harness: fake, model: fake-check }",
@@ -934,6 +1027,7 @@ describe("PM turn reconciliation", () => {
         "  deeper: { harness: fake, model: fake-deeper }",
         "  digest: { harness: fake, model: fake-digest }",
         "  implementer: { harness: fake, model: fake-impl }",
+        "  researcher: { harness: fake, model: fake-research }",
         "  reviewer: { harness: fake, model: fake-review }",
         "  steward: { harness: fake, model: fake-steward }",
         "  plan-checker: { harness: fake, model: fake-check }",
@@ -1094,7 +1188,7 @@ describe("PM turn reconciliation", () => {
           round: 1,
           actor: "script",
         },
-        { ok: true, cause: "removed from the plan at iteration 1" },
+        { ok: true, cause: "superseded by the new plan" },
       );
       const state = derive(
         await runtime.store.listTasks(),
@@ -1433,7 +1527,7 @@ describe("stall PM — zero-merge stall in the running iteration", () => {
     }
   }, 60_000);
 
-  it("runs no second stall turn when the continuation parks again in the same iteration", async () => {
+  it("runs a second stall when the continuation parks again in the same iteration", async () => {
     const { repo, goal, harness } = stallSetup();
     try {
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -1484,12 +1578,45 @@ describe("stall PM — zero-merge stall in the running iteration", () => {
         },
         { when: whenTurn({ slug: "alpha-2", step: "implement" }) },
       );
+      let secondBrief = "";
+      harness.script(
+        (req, ctx) => {
+          secondBrief = req.prompt;
+          ctx.writeOutcome(
+            outcome({
+              summary: "leave alpha-2 for the architect",
+              stallRoutes: [
+                {
+                  slug: "alpha-2",
+                  action: "leave",
+                  reason: "the continuation hit the same blocker",
+                },
+              ],
+            }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
-      expect(pmCalls(harness)).toBe(1);
+      // Each park gets one decision: alpha was replaced, and the new park of
+      // alpha-2 got its own turn before the boundary.
+      expect(pmCalls(harness)).toBe(2);
       const records = await runtime.store.listRecords();
-      expect(records.filter((r) => r.step === "stall-routes")).toHaveLength(1);
+      const routes = records.filter((r) => r.step === "stall-routes");
+      expect(routes.map((r) => r.outcome?.stallRoutes)).toEqual([
+        [{ slug: "alpha", action: "replace", reason: "retry" }],
+        [
+          {
+            slug: "alpha-2",
+            action: "leave",
+            reason: "the continuation hit the same blocker",
+          },
+        ],
+      ]);
+      expect(secondBrief).toContain("cause: blocked: alpha-2 stuck too");
       const state = derive(
         await runtime.store.listTasks(),
         records,
@@ -2372,7 +2499,7 @@ describe("stall PM validation", () => {
           body: "Retry.\nDone when: alpha works.",
         }),
       );
-      // Control: ready, unplanned, no stall provenance — the boundary cancels it.
+      // Unplanned and ready: no bullet means no cancellation; it stays open.
       await runtime.store.writeTask(
         task("gamma", {
           scope: ["gamma.txt"],
@@ -2408,7 +2535,7 @@ describe("stall PM validation", () => {
       ).toBe(false);
       expect(
         records.some((r) => r.step === "cancel" && r.slug === "gamma"),
-      ).toBe(true);
+      ).toBe(false);
     } finally {
       cleanupFlowRepo(repo);
     }

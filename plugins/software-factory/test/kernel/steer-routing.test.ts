@@ -16,6 +16,7 @@ import {
   cleanupFlowRepo,
   makeRuntime,
   outcome,
+  scriptStallLeave,
   setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
@@ -166,6 +167,9 @@ describe("steer PM routing", () => {
         return fakeTurnResult(req);
       });
       harness.script(approver("beta is correct"));
+      // beta merged and both alpha and its branch-less retry parked: the
+      // wave-end stall leaves them for the boundary.
+      scriptStallLeave(harness, ["alpha", "alpha-retry"]);
 
       const dispatched = await runDispatch(runtime, { iteration: 1 });
       expect(dispatched.reason).toBe("boundary");

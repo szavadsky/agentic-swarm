@@ -107,6 +107,9 @@ describe("front prompt handoff", () => {
       );
       expect(fixTarget.alias).toBe("front");
       expect(fixTarget.model.id).toBe("fake-front");
+      // The turn is the implementer's, so the front's repair ask must not leak.
+      expect(fixTarget.repairPrompt).toBeUndefined();
+      expect(fixTarget.deliverable).toBeUndefined();
     } finally {
       cleanupFlowRepo(repo);
     }

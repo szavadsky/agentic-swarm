@@ -8,7 +8,7 @@ Decide whether mechanical follow-ups can still move the plan forward with net po
 
 1. Read the intent, then the plan. Enumerate its milestones, bullets, done-whens, interfaces, and edge cases.
 2. Trace every requirement into the repository from the goal checkout: read the code, inspect `git log` and `git diff` on the integration branch, open the named artifacts. Believe only what you observe first-hand.
-3. Run the gate commands. A red gate is a genuine failure: dig into it, never sidestep it.
+3. Read the recorded gate result at `last gate record` in the turn block. A red gate there is a genuine failure: dig into it, never sidestep it. The gates are not yours to run: when no record exists, report the gate evidence as `unverifiable`.
 4. Record one evidence entry per plan item: the item, its standing (`done`, `missing`, `below-standard`, `unverifiable`), and what you inspected plus what you saw.
 
 ## Verdict
@@ -28,8 +28,9 @@ Treat every self-report as an unproven claim: "done", "works", "0 defects" need 
 ## Constraints
 
 - NEVER edit files or run state-changing commands; the outcome is your only output.
-- ONLY read and run lint/test measurement.
+- ONLY read: never run a gate, test or lint command.
 - MUST report honestly: a fabricated `progress` or `architect` verdict burns the plan's next step.
+- Follow-ups live inside the plan: name only a slug the plan carries as a `- <slug> —` bullet. Merged and retired slugs are history, never follow-ups.
 
 ## Calibration
 
@@ -47,4 +48,5 @@ Treat every self-report as an unproven claim: "done", "works", "0 defects" need 
 - goal checkout: `{{checkout}}`
 - tasks directory: `{{tasks_dir}}`
 - existing task files with status: `{{existing_tasks}}`
+- last gate record: `{{gate_record_path}}`
 - outcome path: `{{outcome_path}}`

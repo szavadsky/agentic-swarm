@@ -11,7 +11,7 @@ import { derive } from "../../src/kernel/derive.js";
 import { createDrainController } from "../../src/kernel/signals.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { type TmpRepo } from "../helpers/tmp-repo.js";
-import { whenTurn } from "./s2-helpers.js";
+import { scriptStallLeave, whenTurn } from "./s2-helpers.js";
 import {
   outcome,
   setupRepo,
@@ -175,7 +175,7 @@ Create delta.txt.
       };
     }
 
-    it("repairs a damaged task file with one PM turn, then the checker's round, and dispatch continues", async () => {
+    it("repairs a damaged task file with one PM turn and dispatch continues", async () => {
       const { repo, goalDir, taskDir } = await interruptedAfterAlpha();
       try {
         // A damaged task file: the store quarantines beta at launch, so gamma's
@@ -232,9 +232,6 @@ Create delta.txt.
         second.script(digestScoutTurn(goalDir, 1), {
           when: whenTurn({ step: "digest" }),
         });
-        second.script(checkerTurn("architect"), {
-          when: whenTurn({ step: "plancheck" }),
-        });
         queueTask(second, "beta-2", "beta.txt");
         queueTask(second, "gamma", "gamma.txt");
         queueTask(second, "delta", "delta.txt");
@@ -268,7 +265,8 @@ Create delta.txt.
           ).length,
         ).toBe(1);
         // One PM repair turn (the digest steer turn) on top of the first launch's
-        // derive PM turn; the checker's round follows it.
+        // derive PM turn. Every task landed, so no open work remained for the
+        // checker: the boundary consulted directly.
         expect(
           records.filter(
             (r) => r.actor === "agent" && r.step === "pm" && r.iteration === 1,
@@ -277,13 +275,8 @@ Create delta.txt.
         const repair = records.find(
           (r) => r.step === "steer-routes" && r.iteration === 1,
         );
-        const check = records.find(
-          (r) =>
-            r.actor === "agent" && r.step === "plancheck" && r.iteration === 1,
-        );
-        expect(check).toBeDefined();
         expect(repair).toBeDefined();
-        expect(repair!.seq).toBeLessThan(check!.seq);
+        expect(records.filter((r) => r.step === "plancheck")).toHaveLength(0);
 
         // Dispatch continued: the repaired continuation and its dependents landed.
         expect(state.tasks["beta-2"]!.status).toBe("merged");
@@ -345,6 +338,7 @@ Create delta.txt.
           },
           { when: whenTurn({ step: "architect" }) },
         );
+        scriptStallLeave(second, ["beta"]);
         second.script(
           (req, ctx) => {
             ctx.writeOutcome(outcome({ summary: "nothing to file" }));

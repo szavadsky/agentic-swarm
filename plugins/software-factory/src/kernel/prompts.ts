@@ -205,12 +205,24 @@ export function validateCmd(
 }
 
 /**
+ * A render with no checks record still names the handoff: the reviewer prompt
+ * always carries where the checks result, tree and log would be. Turns that do
+ * have a checks record override these with the record's own values.
+ */
+export const CHECK_HANDOFF_DEFAULTS = {
+  checks_result: "no checks run",
+  checks_tree: "unknown",
+  checks_log: "unknown",
+} as const;
+
+/**
  * Templates live in the package `prompts/` dir; a repo may shadow any
  * template under `.factory/prompts/` and replace the calibration partial with
  * process-config text. Schema and config names render as launch-wide defaults
  * so turn code never passes them: the outcome and task-frontmatter skeletons
  * from the kernel schemas, task type names from the process config, tier names
- * from the run-config aliases.
+ * from the run-config aliases, and the checks handoff for renders with no
+ * checks record.
  */
 export function loadPrompts(
   process: ProcessConfig,
@@ -247,6 +259,7 @@ export function loadPrompts(
       task_frontmatter: taskFrontmatterVar(),
       task_types: taskTypesVar(process.taskTypes),
       tiers: tierNamesVar(aliases),
+      ...CHECK_HANDOFF_DEFAULTS,
     },
   });
 }

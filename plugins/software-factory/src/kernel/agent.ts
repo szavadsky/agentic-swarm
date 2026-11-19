@@ -14,7 +14,7 @@ import { addUsage, reportsUsage, zeroUsage } from "../harness/usage.js";
 import { missingPlanFinding, snapshotPlan } from "./architect-session.js";
 import { contextPackRelPath } from "./context-pack.js";
 import { type TurnTarget, tierPoolKey } from "./flow-context.js";
-import { hasFallbackHop } from "./metrics.js";
+import { launchKindOf } from "./metrics.js";
 import { loadPriceTable } from "./openrouter.js";
 import {
   failedOutcome,
@@ -46,6 +46,11 @@ export interface AgentTurnSpec {
   meta: Omit<RecordStart, "actor" | "alias" | "model">;
   vars: Record<string, string>;
   expectation: OutcomeExpectation;
+  /**
+   * The step's contract beyond the outcome schema: findings that send the
+   * delivered outcome back for repair, like a schema failure.
+   */
+  validate?: (outcome: Outcome) => string[];
   /**
    * The task type's output schema; defaults to the kernel outcome schema for
    * kernel turns and legacy tasks.
@@ -105,26 +110,14 @@ function overflowed(stop: Stop): boolean {
 
 /**
  * The product each turn must deliver, named in the repair ask and the failure
- * cause. The PM ladder and the front post-checks own file validity; the guard
- * names their deliverable when the outcome itself goes missing.
+ * cause. A step's process config owns the wording; a turn that names none
+ * delivers its expectation's product.
  */
-function deliverableFor(step: string, expectation: OutcomeExpectation): string {
-  switch (step) {
-    case "architect":
-      return "plan edit or stop decision";
-    case "pm":
-      return "task files";
-    case "front":
-      return "class, task, and pack";
-    case "steward":
-      return "merge resolution";
-    case "plancheck":
-      return "plan verdict";
-    case "planreview":
-      return "numbered plan-review findings";
-    default:
-      return expectation === "review" ? "verdict" : "outcome";
-  }
+function deliverableOf(spec: AgentTurnSpec): string {
+  return (
+    spec.target.deliverable ??
+    (spec.expectation === "review" ? "verdict" : "outcome")
+  );
 }
 
 function missingOutcomeFinding(
@@ -345,7 +338,11 @@ export async function runAgentTurn(
     tierIndex = retry.endIndex;
   }
 
-  const deliverable = deliverableFor(spec.meta.step, spec.expectation);
+  const deliverable = deliverableOf(spec);
+  const repairPrompt =
+    spec.target.repairPrompt ??
+    runtime.configs.process.repairPrompt ??
+    "delivery-repair";
 
   const assess = (afterRepair: boolean): void => {
     outcome = null;
@@ -358,9 +355,12 @@ export async function runAgentTurn(
       );
       if (delivered) {
         outcome = delivered.outcome;
-        findings = validateExpectation(outcome, spec.expectation, {
-          lastCall: spec.lastCall,
-        });
+        findings = [
+          ...validateExpectation(outcome, spec.expectation, {
+            lastCall: spec.lastCall,
+          }),
+          ...(spec.validate?.(outcome) ?? []),
+        ];
       }
     } catch (err) {
       if (!(err instanceof OutcomeInvalidError)) throw err;
@@ -397,12 +397,12 @@ export async function runAgentTurn(
   const repairFindings: string[] = [];
   while (findings.length > 0 && !haltedNow() && repairs < maxRepairs) {
     repairFindings.push(...findings);
-    // One in-session repair ask, rendered from the process-config prompt
-    // template so repos can reword it; a bare status:done only delivers
-    // when no verdict or decision is required.
+    // One in-session repair ask, rendered from the step's configured prompt
+    // template so repos can reword it or vary its shape per role; a bare
+    // status:done only delivers when no verdict or decision is required.
     const repair = await callChain(
       tierIndex,
-      runtime.prompts.render("delivery-repair", {
+      runtime.prompts.render(repairPrompt, {
         role: spec.target.prompt,
         deliverable,
         done_allowed: spec.expectation === "any" ? "true" : "false",
@@ -477,18 +477,12 @@ export async function runAgentTurn(
         priceIds,
       }).usage
     : undefined;
-  const launchKind: LaunchKind | undefined =
-    stop.kind === "infra"
-      ? "glitch"
-      : hasFallbackHop(attempts)
-        ? "glitch"
-        : outcome?.verdict === "changes"
-          ? "change-request"
-          : outcome?.status === "failed" || outcome?.status === "blocked"
-            ? "failure"
-            : repairFindings.length > 0
-              ? "failure"
-              : undefined;
+  const launchKind: LaunchKind | undefined = launchKindOf({
+    stop,
+    outcome: outcome ?? undefined,
+    attempts,
+    repairFindings,
+  });
   const record = await started.finish({
     ...settled,
     promptBytes,

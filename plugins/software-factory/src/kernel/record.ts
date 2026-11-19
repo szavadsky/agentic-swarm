@@ -226,7 +226,7 @@ export async function appendFinish(
   });
 }
 
-/** A pending task the architect dropped from the plan; the slug stays spent. */
+/** A task an explicit leave decision cancels; the slug stays spent. */
 export async function appendCancel(
   store: ArtifactStore,
   meta: { iteration: number; slug: string; round: number },

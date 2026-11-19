@@ -1,5 +1,5 @@
 import yaml from "yaml";
-import type { TurnAttempt, Usage } from "../harness/types.js";
+import type { Stop, TurnAttempt, Usage } from "../harness/types.js";
 import { addUsage, zeroUsage } from "../harness/usage.js";
 import { type PriceTable, pricedRecord } from "./pricing.js";
 import type { SummaryStatus } from "./summary.js";
@@ -7,6 +7,7 @@ import type {
   ArtifactStore,
   FlowDefinition,
   LaunchKind,
+  Outcome,
   State,
   StepRecord,
 } from "./types.js";
@@ -32,7 +33,7 @@ export interface GroupMetrics {
   edits: number;
   addedLines: number;
   removedLines: number;
-  /** Gates run by checks records attributed to these turns. */
+  /** Gate runs credited to this group; every gate run lands on the script role. */
   testRuns: number;
   /** Incident launches for these turns, per kind. */
   launches: LaunchCounts;
@@ -322,6 +323,31 @@ export function countOutcomeRepairs(
 }
 
 /**
+ * The launch kind a turn's own facts give, none for a normal turn. A turn that
+ * delivered after a reminder delivered: its repair finding is recorded, so it
+ * is no failure. A cancellation is the operator stopping the turn, not the
+ * model failing.
+ */
+export function launchKindOf(rec: {
+  stop?: Stop;
+  outcome?: Outcome;
+  attempts?: readonly TurnAttempt[];
+  repairFindings?: readonly string[];
+}): LaunchKind | undefined {
+  if (rec.stop?.kind === "infra") return "glitch";
+  if (hasFallbackHop(rec.attempts)) return "glitch";
+  if (rec.outcome?.verdict === "changes") return "change-request";
+  if (rec.outcome?.status === "failed" || rec.outcome?.status === "blocked") {
+    return "failure";
+  }
+  if (rec.stop?.kind === "cancelled") return undefined;
+  if (rec.outcome === undefined && (rec.repairFindings?.length ?? 0) > 0) {
+    return "failure";
+  }
+  return undefined;
+}
+
+/**
  * One record's launch kind for the per-agent counts. A stored kind wins; an
  * old incident record without one counts as unknown; a normal turn counts
  * nowhere. Parks are incidents with stored kinds; other script records are not
@@ -335,14 +361,10 @@ export function deriveLaunchKind(
     return rec.step === "park" && rec.endedAt ? "unknown" : undefined;
   }
   if (!rec.endedAt) return undefined;
-  if (rec.stop?.kind === "infra") return "unknown";
-  if (hasFallbackHop(rec.attempts)) return "unknown";
-  if (rec.outcome?.verdict === "changes") return "unknown";
-  if (rec.outcome?.status === "failed" || rec.outcome?.status === "blocked") {
-    return "unknown";
-  }
-  if ((rec.repairFindings?.length ?? 0) > 0) return "unknown";
-  if (countOutcomeRepairs(rec.attempts) > 0) return "unknown";
+  // A launch that left a kind was an incident; an old record never stored it.
+  if (launchKindOf(rec)) return "unknown";
+  // Older still: a repair turn whose record carries no finding text.
+  if (!rec.outcome && countOutcomeRepairs(rec.attempts) > 0) return "unknown";
   return undefined;
 }
 
@@ -500,43 +522,11 @@ export function iterationMetrics(
   const tokens = tokenTotal(usage);
 
   // Gate/commit wall and test runs come from the script records' own stamps;
-  // test runs attribute to the latest preceding agent turn for the same slug.
+  // a gate's test runs are the script's work, not the agent turn it verifies.
   let gateWallMs = 0;
   let commitWallMs = 0;
   let gateRuns = 0;
   let testRuns = 0;
-  const bySlug = new Map<string, StepRecord[]>();
-  for (const rec of recs) {
-    if (!rec.slug) continue;
-    const list = bySlug.get(rec.slug) ?? [];
-    list.push(rec);
-    bySlug.set(rec.slug, list);
-  }
-  for (const list of bySlug.values()) list.sort((a, b) => a.seq - b.seq);
-  const agentBySeq = [...recs].sort((a, b) => a.seq - b.seq);
-  const attributeTestRuns = (gate: StepRecord, runs: number): void => {
-    const pool = gate.slug ? (bySlug.get(gate.slug) ?? []) : agentBySeq;
-    let owner: StepRecord | undefined;
-    for (const candidate of pool) {
-      if (candidate.seq < gate.seq) owner = candidate;
-      else break;
-    }
-    owner ??= agentBySeq.filter((r) => r.seq < gate.seq).at(-1);
-    const key = owner?.model?.id ?? "unknown";
-    const entry = models[key] ?? { model: key, ...emptyGroup() };
-    entry.testRuns += runs;
-    models[key] = entry;
-    if (owner) {
-      const role =
-        roleByStep[owner.step] ??
-        DEFAULT_ROLE_BY_STEP[owner.step] ??
-        owner.step;
-      const roleEntry = roles[role];
-      if (roleEntry) roleEntry.testRuns += runs;
-      const aliasEntry = aliases[owner.alias ?? role];
-      if (aliasEntry) aliasEntry.testRuns += runs;
-    }
-  };
   for (const rec of all) {
     if (!rec.endedAt) continue;
     if (rec.step === "checks" || rec.step === "merge-checks") {
@@ -544,7 +534,12 @@ export function iterationMetrics(
       gateRuns += 1;
       const runs = rec.testRuns ?? rec.checks?.length ?? 0;
       testRuns += runs;
-      attributeTestRuns(rec, runs);
+      const scriptRole = roles["script"] ?? {
+        role: "script",
+        ...emptyGroup(),
+      };
+      scriptRole.testRuns += runs;
+      roles["script"] = scriptRole;
     } else if (rec.step === "commit") {
       commitWallMs += wallMsOf(rec);
     }

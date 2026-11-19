@@ -24,6 +24,7 @@ import {
   parseOutcome,
   validateExpectation,
 } from "../kernel/outcome.js";
+import { PLAN_CHECK_STEP, validatePlanCheck } from "../kernel/plan-check.js";
 import { isLastReviewCall } from "../kernel/review.js";
 import { createFolderStore } from "../kernel/store.js";
 import {
@@ -339,6 +340,17 @@ export interface ValidateResult {
 }
 
 /**
+ * The plan a record outcome was delivered against. Records live at
+ * `<goal>/records/<record>/outcome.yaml`, the goal's plan at `<goal>/plan.md`;
+ * a file outside a goal layout has no plan to check against.
+ */
+function recordPlanPath(abs: string): string | undefined {
+  const recordDir = path.dirname(abs);
+  const plan = path.join(path.dirname(path.dirname(recordDir)), "plan.md");
+  return fs.existsSync(plan) ? plan : undefined;
+}
+
+/**
  * One outcome's findings for the step it was given for: `--step` wins, the
  * record's `started.yaml` supplies it otherwise. Without either, only the
  * schema is enforced and the caller reports the narrower check.
@@ -360,11 +372,16 @@ function outcomeResult(
       review?.review === true &&
       started?.step === step &&
       isLastReviewCall(review, started.round);
-    return {
-      findings: validateExpectation(outcome, expectation, {
-        lastCall,
-      }).map((finding) => `${abs}: ${finding}`),
-    };
+    const findings = validateExpectation(outcome, expectation, {
+      lastCall,
+    });
+    const plan = step === PLAN_CHECK_STEP ? recordPlanPath(abs) : undefined;
+    if (plan) {
+      findings.push(
+        ...validatePlanCheck(fs.readFileSync(plan, "utf8"), outcome),
+      );
+    }
+    return { findings: findings.map((finding) => `${abs}: ${finding}`) };
   } catch (err) {
     return { findings: [`${abs}: ${(err as Error).message}`] };
   }

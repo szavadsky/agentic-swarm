@@ -125,6 +125,9 @@ const ROLES: Record<string, Record<string, string>> = {
     max_rounds: "3",
     last_call: "false",
     baseline_checks: "- test: 2 failing",
+    checks_result: "pass",
+    checks_tree: "3ba247e47772a8ba5874d089990419f572432df8",
+    checks_log: "/goal/records/1/alpha/checks",
     prior_findings: "",
     upscope_ask: "",
     fix_dispositions: "",
@@ -160,6 +163,7 @@ const ROLES: Record<string, Record<string, string>> = {
     checkout: "/worktrees/demo",
     tasks_dir: "/goal/tasks",
     existing_tasks: "- alpha | merged | abcdef1234 | deps: none | frozen",
+    gate_record_path: "/goal/records/00007-i3-alpha-checks-r1/end.yaml",
     outcome_path: "/goal/records/00045-i3-plan-check-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: OUTCOME_SCHEMA,
@@ -195,6 +199,19 @@ describe("role prompts", () => {
     });
   }
 
+  it("defaults the checks handoff when a render has no checks record", () => {
+    const lib = loadPrompts(processConfig(), os.tmpdir(), {
+      run: {} as RunConfig,
+    });
+    const vars = { ...ROLES.reviewer! };
+    for (const name of ["checks_result", "checks_tree", "checks_log"])
+      delete vars[name];
+    const rendered = lib.render("reviewer", vars);
+    expect(rendered).toContain("- checks: `no checks run`");
+    expect(rendered).toContain("- checks tree: `unknown`");
+    expect(rendered).toContain("- checks log: `unknown`");
+  });
+
   it("keeps role text out of a separate system channel", () => {
     // The harness contract has `system`, but OpenCode has no system flag; role
     // identity must therefore live in the rendered prompt itself (KERNEL0 S3).
@@ -203,16 +220,33 @@ describe("role prompts", () => {
   });
 });
 
-describe("reviewer includes its author's body", () => {
-  function body(role: keyof typeof ROLES): string {
-    const rendered = library().render(role, ROLES[role]!);
-    const at = rendered.indexOf("## This turn");
-    expect(at, `${role} has no turn block`).toBeGreaterThan(0);
-    return rendered.slice(0, at);
-  }
+describe("spike prompt", () => {
+  it("adds the report commit only to a spike's implementer turn", () => {
+    const lib = library();
+    const spike = {
+      ...ROLES.implementer!,
+      report_path: ".factory/spikes/alpha.md",
+    };
+    expect(lib.render("implementer", spike)).toStartWith(
+      "Commit the report at `.factory/spikes/alpha.md` first, then refine it.\n\n",
+    );
+    expect(
+      lib.render("implementer", { ...ROLES.implementer!, report_path: "" }),
+    ).toStartWith("You implement one task in one worktree.");
+  });
+});
 
+describe("reviewer includes its author's body", () => {
   it("is an author-neutral intro, the implementer's body verbatim, then its duties", () => {
-    const implementerBody = body("implementer");
+    // The author body is the development variant: a reviewer has no report to
+    // commit, so the spike opening is not part of it.
+    const implementer = library().render("implementer", {
+      ...ROLES.implementer!,
+      report_path: "",
+    });
+    const at = implementer.indexOf("## This turn");
+    expect(at, "implementer has no turn block").toBeGreaterThan(0);
+    const implementerBody = implementer.slice(0, at);
     const reviewer = library().render("reviewer", ROLES.reviewer!);
     const intro = reviewer.slice(0, reviewer.indexOf("\n\n"));
     expect(intro.startsWith("You review one author's work.")).toBe(true);

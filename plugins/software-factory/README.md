@@ -1,8 +1,16 @@
 # Software Factory
 
-The factory runs one goal as bounded iterations. Each iteration is one
-architect consult (plan) plus the task dispatch it starts. State is derived from
-task files and append-only records; there is no state file to repair.
+The factory runs one goal as bounded iterations. An iteration is one
+architect consult (plan) plus the task dispatch it starts. When the dispatch
+set runs out with fresh parks, the PM decides each one in the same iteration —
+amend on its kept branch with the park's evidence, replace, split, cancel, or
+leave for the architect — whether or not the wave merged anything. An amended
+task reruns on its kept branch, after merging a moved head in its first turn,
+and on its step's next alternate. When open work remains, the boundary runs
+the plan checker first: a `progress` verdict resumes dispatch without a
+consult, bounded by `limits.planCheckRounds`; the consult runs on `architect`,
+when nothing is open, or when the bound is hit. State is derived from task
+files and append-only records; there is no state file to repair.
 
 ## Commands
 
@@ -63,14 +71,31 @@ flows:
 taskTypes:
   development: { flow: implement-review, kind: development, schema: outcome }
 boundary:                       # the kernel turns outside any task flow
-  architect: { prompt: architect, alias: architect }
+  architect: { prompt: architect, alias: architect, repairPrompt: architect-repair, deliverable: "plan edit or stop decision" }
   digest: { prompt: digest, alias: digest }
-  front: { prompt: front, alias: pm }
-  plancheck: { prompt: plan-checker, alias: plan-checker }
-  planreview: { prompt: reviewer, alias: plan-reviewer }
-  pm: { prompt: pm, alias: pm }
-  steward: { prompt: steward, alias: steward }
+  front: { prompt: front, alias: pm, deliverable: "class, task, and pack" }
+  plancheck: { prompt: plan-checker, alias: plan-checker, deliverable: "plan verdict" }
+  planreview: { prompt: reviewer, alias: plan-reviewer, deliverable: "numbered plan-review findings" }
+  pm: { prompt: pm, alias: pm, deliverable: "task files" }
+  steward: { prompt: steward, alias: steward, deliverable: "merge resolution" }
 ```
+
+A step may name `repairPrompt` (the template its in-session repair ask
+renders) and `deliverable` (the product the ask and the missing-outcome finding
+name; default `outcome`, or `verdict` on a review step). A step that names no
+template renders the process-level `repairPrompt` (default `delivery-repair`).
+The architect names `architect-repair` because its ask also requires the plan
+edit on disk; the default template then carries no role branch.
+
+A flow step may name `alternates: [<alias>…]` to change the model on retry:
+the step's alias runs first, and after each failure-kind launch — no outcome
+after the reminders, an agent-declared `failed`/`blocked`, or fix rounds
+exhausted on red gates — the next attempt at that step runs on the next
+alternate, staying on the last one once the list is spent. The position is
+derived from the step records, so an amend or a relaunch lands on the same
+alternate; a turn that delivered after its reminder did not fail. An alternate
+resolves its own fallbacks and quota pool, and a task `tier` still escalates
+the producer.
 
 **Run** — transient, passed with `--run-config`:
 
@@ -146,6 +171,11 @@ reaches it, dispatch drains — no new task starts; tasks already started finish
 their remaining steps and merge, and the summary records the cause and how many
 turns the brake could not price.
 
+`limits.parkAmends` (default 1) bounds how many times one parked slug may be
+amended in a single iteration. The PM's stall brief lists the amends already
+spent (`amends: <used> of <limit>`); at the limit an amend is refused and the
+park must be replaced, split, cancelled or left for the architect.
+
 `limits.minTmpFreeBytes` (default 2 GiB) is the free space the temp directory
 (`os.tmpdir()`, so `TMPDIR` is respected) must hold. Below it, `run` exits 1
 before it writes any session, lock or record, with a cause naming the
@@ -158,8 +188,8 @@ spent, the previous resume started no task turn, the iteration's latest
 plan-check is `architect`, every ready task is held by a pending steer, a hold
 file is unreadable, or a goal hold or iteration brake stands. A refused resume
 goes straight to the boundary at the next iteration. A resumed pass that starts
-no task turn or ends on `architect` does not consume the `iterations` budget:
-the boundary runs next in the same launch.
+no task turn, ends on `architect`, or ends with nothing left open does not
+consume the `iterations` budget: the boundary runs next in the same launch.
 
 Pre-flight resolves every alias (and fallback) through the harness, checks the
 model list, `effort: highest` (highest level the model accepts), binaries, the
@@ -213,8 +243,9 @@ empty-diff parks; a spike's empty finish and overflow parks are not loop
 incidents), human interventions (processed steers) and the observable
 operator-act counter (steers plus containment outside-changes and
 integration-moved merges), gate and commit wall time, and turns, tokens, cost
-and work (committed files/lines, attributed gate runs) by role, alias and
-model. Costs come from the price table, and every retry or fallback call the
+and work (committed files/lines) by role, alias and model, with gate runs
+credited to the script role.
+Costs come from the price table, and every retry or fallback call the
 harness reports in `attempts` is priced too, each call once. A turn whose
 harness resolved its model inside one call (an omp `@` alias, which can hop
 natively) records each served model with its own tokens and prices each at its

@@ -21,3 +21,11 @@ live repo, with evidence pointers (files, records, gate runs) for every
 requirement. A 0-merge iteration with a "nothing remains" rationale is the
 success signal; a 0-merge iteration caused by failures or conflicts is not
 done — recover and continue.
+
+## Standing principle (owner-ordered): statistics start investigations, never end them
+It is the factory's job to agentically inspect to the bottom of things:
+when metrics, counts, or aggregates surface anything surprising — or
+whenever a turn, task, or gate fails without an obvious cause — inspect
+transcripts, prompts, detector logic, and timing. Sample individual
+cases; verify detection against reality; never close a friction item on
+a number alone.
