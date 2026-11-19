@@ -554,6 +554,20 @@ export async function runBoundary(
       seenSteers,
     };
   }
+  if (pm.status === "architect") {
+    // The PM's usable writes stay and dispatch may start them; the findings
+    // no rung can fix travel as this iteration's cause, which the next
+    // consult's architect reads in the previous summary. The goal stays
+    // active, so no operator block is recorded.
+    return {
+      iteration,
+      decision: "continue",
+      cause: `PM ladder routed to the architect: ${pm.findings.join("; ")}`,
+      outcome: result.outcome,
+      packPath: packRel,
+      seenSteers,
+    };
+  }
   if (pm.status === "infra") {
     const rung = pm.rungs.at(-1);
     const where = rung

@@ -304,7 +304,13 @@ async function reconcile(
   return findings;
 }
 
-async function validate(
+/**
+ * What the task graph itself raises, before any turn's outcome is read: the
+ * reconcile findings, the parse findings and the graph validation. The PM
+ * ladder takes it once as the baseline, so a finding no rung can fix never
+ * costs a rung.
+ */
+async function graphFindings(
   runtime: KernelRuntime,
   opts: { iteration: number; state: State; planPath: string; round: number },
   planBefore: string,
@@ -320,6 +326,25 @@ async function validate(
     ...validateTaskGraph(tasks, { status: taskStatuses(opts.state) }),
   );
   return [...new Set(findings)];
+}
+
+/** A finding's identity: the baseline compare ignores order and whitespace. */
+function findingKey(text: string): string {
+  return text.trim().replace(/\s+/g, " ");
+}
+
+/** The findings present now that the baseline did not already raise. */
+function introducedFindings(
+  findings: string[],
+  baselineKeys: ReadonlySet<string>,
+): string[] {
+  return findings.filter((finding) => !baselineKeys.has(findingKey(finding)));
+}
+
+/** The baseline findings the graph still raises: the ones no rung can fix. */
+function unfixedBaseline(baseline: string[], findings: string[]): string[] {
+  const present = new Set(findings.map(findingKey));
+  return baseline.filter((finding) => present.has(findingKey(finding)));
 }
 
 /**
@@ -372,6 +397,11 @@ export type PmRun =
   | { status: "done"; outcome: Outcome; rungs: PmRung[] }
   /** An escalated rung stopped the ladder with a question for the architect. */
   | { status: "asked"; outcome: Outcome; rungs: PmRung[] }
+  /**
+   * The graph still raises findings the turn did not introduce; no rung can
+   * fix them, so the ladder stops and the findings go to the architect.
+   */
+  | { status: "architect"; findings: string[]; rungs: PmRung[] }
   /** A rung ended on an infra stop; a stronger model would not cure it, so the ladder stops. */
   | { status: "infra"; stop: PmInfraStop; rungs: PmRung[] }
   /** Every tier failed both of its turns. */
@@ -467,6 +497,12 @@ function ladderNote(
  * not cure quota or crash trouble the fallbacks already absorbed. Only an
  * escalated `blocked` stops with a question, and an exhausted ladder reports
  * every rung as alias, model and failure.
+ *
+ * The untouched graph is validated once before rung 1: a rung fails only on
+ * findings its turn introduced, because a pre-existing finding is not the PM's
+ * to derive away. A turn that introduces none while the baseline still stands
+ * is kept — its valid writes apply and the plan's cancellations run — and the
+ * ladder ends `architect` with the baseline findings for the next consult.
  */
 export async function runPm(
   runtime: KernelRuntime,
@@ -475,6 +511,13 @@ export async function runPm(
   const snapshot = await snapshotTurn(runtime, opts.planPath);
   const planBefore = snapshot.plan;
   const taskSnapshot = snapshot.tasks;
+  const baseline = await graphFindings(
+    runtime,
+    { ...opts, round: 1 },
+    planBefore,
+    taskSnapshot,
+  );
+  const baselineKeys = new Set(baseline.map(findingKey));
   const rungs: PmRung[] = [];
   let failure: string[] = [];
 
@@ -503,21 +546,27 @@ export async function runPm(
       },
       expectation: KERNEL_TURN_STEPS.pm,
     });
-    const findings = await validate(
+    const findings = await graphFindings(
       runtime,
       { ...opts, round },
       planBefore,
       taskSnapshot,
     );
+    const introduced = introducedFindings(findings, baselineKeys);
     const outcome = result.outcome;
     const stop = result.record.stop;
 
-    if (outcome?.status === "done" && findings.length === 0) {
+    if (outcome?.status === "done" && introduced.length === 0) {
+      // The turn's writes are usable: keep them and run the plan's
+      // cancellations. Only a finding the turn did not introduce remains.
       await cancelPlanNamed(runtime, opts.state, planBefore, opts.iteration);
+      const remaining = unfixedBaseline(baseline, findings);
+      if (remaining.length > 0)
+        return { status: "architect", findings: remaining, rungs };
       return { status: "done", outcome, rungs };
     }
 
-    const reasons = failureReasons(outcome, findings, result.record);
+    const reasons = failureReasons(outcome, introduced, result.record);
     const failureText = reasons.join("; ");
     rungs.push({
       round,
@@ -819,7 +868,9 @@ function ensureSteerHold(
  * write is restored and the steer reaches the architect. A routed turn that
  * exhausts the ladder or stops on infra falls back the same way: the writes
  * are rolled back and the steer still reaches the architect, so a steer turn
- * never blocks dispatch.
+ * never blocks dispatch. Findings the graph already raised before the first
+ * rung do not fail a rung: routing a steer is independent of a plan the PM
+ * cannot derive.
  */
 export async function runSteerPm(
   runtime: KernelRuntime,
@@ -835,6 +886,16 @@ export async function runSteerPm(
   const snapshot = await snapshotTurn(runtime, planPath);
   const planBefore = snapshot.plan;
   const taskSnapshot = snapshot.tasks;
+  const baselineKeys = new Set(
+    (
+      await graphFindings(
+        runtime,
+        { iteration: opts.iteration, state: opts.state, planPath, round: 1 },
+        planBefore,
+        taskSnapshot,
+      )
+    ).map(findingKey),
+  );
   const claim = new Map(opts.steers.map((steer) => [steer.id, steer]));
   let failure: string[] = [];
 
@@ -882,18 +943,21 @@ export async function runSteerPm(
       return;
     }
 
-    const findings = await validateSteerTurn(
-      runtime,
-      {
-        iteration: opts.iteration,
-        state: opts.state,
-        planPath,
-        round,
-        claim: opts.steers,
-      },
-      planBefore,
-      taskSnapshot,
-      outcome,
+    const findings = introducedFindings(
+      await validateSteerTurn(
+        runtime,
+        {
+          iteration: opts.iteration,
+          state: opts.state,
+          planPath,
+          round,
+          claim: opts.steers,
+        },
+        planBefore,
+        taskSnapshot,
+        outcome,
+      ),
+      baselineKeys,
     );
     if (outcome?.status === "done" && findings.length === 0) {
       const accepted = [...(outcome.steerRoutes ?? [])].sort((a, b) =>
@@ -1439,7 +1503,9 @@ async function cancelRoutes(
  * die with its rollback. A turn that exhausts the ladder or stops on infra
  * falls back to the boundary as today: the writes are rolled back, the
  * attempt is recorded so dispatch does not retry it, and the stall still
- * reaches the architect.
+ * reaches the architect. Findings the graph already raised before the first
+ * rung do not fail a rung: deciding a park is independent of a plan the PM
+ * cannot derive.
  */
 export async function runStallPm(
   runtime: KernelRuntime,
@@ -1455,6 +1521,16 @@ export async function runStallPm(
   const snapshot = await snapshotTurn(runtime, planPath);
   const planBefore = snapshot.plan;
   const taskSnapshot = snapshot.tasks;
+  const baselineKeys = new Set(
+    (
+      await graphFindings(
+        runtime,
+        { iteration: opts.iteration, state: opts.state, planPath, round: 1 },
+        planBefore,
+        taskSnapshot,
+      )
+    ).map(findingKey),
+  );
   const brief = await stallBrief(runtime, opts);
   let failure: string[] = [];
 
@@ -1484,12 +1560,15 @@ export async function runStallPm(
       expectation: KERNEL_TURN_STEPS.pm,
     });
     const outcome = result.outcome;
-    const findings = await validateStallTurn(
-      runtime,
-      { ...opts, planPath, round },
-      planBefore,
-      taskSnapshot,
-      outcome,
+    const findings = introducedFindings(
+      await validateStallTurn(
+        runtime,
+        { ...opts, planPath, round },
+        planBefore,
+        taskSnapshot,
+        outcome,
+      ),
+      baselineKeys,
     );
     if (outcome?.status === "done" && findings.length === 0) {
       const accepted: StallRouteEntry[] = [...(outcome.stallRoutes ?? [])].sort(

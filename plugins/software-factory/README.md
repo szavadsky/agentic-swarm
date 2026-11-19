@@ -158,9 +158,13 @@ surface (opencode, pi, codex) ignore the flag and keep the validation command.
 An alias may carry `escalateTo: <alias>` to name the PM's next rung. A PM turn
 that is not usable gets a fresh retry on the same alias; after two failed turns
 the ladder climbs to `escalateTo`, which carries a broader mandate and may stop
-with one question for the architect. Without `escalateTo` the iteration blocks
-with every rung in the summary. `fallbacks` stay infrastructure-only (quota and
-crash), so escalation is model routing, not a retry. Each fallback tier either
+with one question for the architect. The untouched graph is validated before
+the first rung: a finding the graph already raised fails no rung, so a turn that
+introduces none keeps its valid writes and its plan cancellations and the
+ladder ends routing those findings to the architect instead of blocking the
+goal. Without `escalateTo` the iteration blocks with every rung in the summary.
+`fallbacks` stay infrastructure-only (quota and crash), so escalation is model
+routing, not a retry. Each fallback tier either
 names its own model, harness and effort, and the quota pool it draws on, or
 names another alias (`{ alias: backup }`) and reuses that alias's whole ladder,
 each of its tiers keeping its own quota pool; pre-flight refuses a missing alias
