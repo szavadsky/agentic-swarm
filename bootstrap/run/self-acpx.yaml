@@ -101,6 +101,8 @@ harnesses:
       compact: true
       effort: { configId: reasoning_effort }
       usage: { cache: true }
+  # No `compact`: agy submits `/compact` to the model as a prompt, compacts
+  # nothing and still answers end_turn (compaction-probe.md §2).
   agy:
     acpx:
       agent: agy acp

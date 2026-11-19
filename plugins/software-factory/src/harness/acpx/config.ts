@@ -52,8 +52,9 @@ export const acpxConfigSchema = z
     raw: z.boolean().optional(),
     /**
      * The agent accepts `/compact` as an adapter slash command. Declared per
-     * harness because ACP has no compaction method and only pi, codex and
-     * opencode are verified to handle it (acpx probe §5).
+     * harness because ACP has no compaction method; pi, codex, opencode and
+     * claude-code are verified to handle it, agy is not — it forwards the text
+     * to the model (acpx probe §5, compaction-probe.md §0).
      */
     compact: z.boolean().optional(),
     effort: acpxEffortSchema.optional(),
