@@ -5,6 +5,8 @@ import type { AcpxConfig } from "./config.js";
 export interface AcpxHarnessOptions {
   /** Harness id: a run-config name bound to the acpx adapter. */
   id: string;
+  /** Caller-given session store; turn transcripts live here, never in a worktree. */
+  sessionDir: string;
   /** Explicit acpx executable (tests and `harnesses.<id>.binary`); defaults to PATH, then `bunx acpx`. */
   binary?: string;
   /** Run-config `acpx` block; a per-turn opaque overrides it. */

@@ -54,6 +54,7 @@ describe("AcpxHarness opencode raw route", () => {
     const harness = new AcpxHarness({
       id: "opencode",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: OPENCODE_ACPX,
     });
     try {
@@ -143,6 +144,7 @@ describe("AcpxHarness opencode raw route", () => {
     const options = {
       id: "opencode",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: OPENCODE_ACPX,
     };
     try {
@@ -195,6 +197,7 @@ describe("AcpxHarness opencode raw route", () => {
     const harness = new AcpxHarness({
       id: "opencode",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: OPENCODE_ACPX,
     });
     try {

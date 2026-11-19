@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Repo } from "../../src/core/git/repo.js";
+import { AcpxHarness } from "../../src/harness/acpx/harness.js";
 import {
   emptyUsage,
   FakeHarness,
@@ -26,6 +27,7 @@ import type {
   RepoConfig,
   RunConfig,
 } from "../../src/kernel/types.js";
+import { createAcpxStub } from "../harness/acpx-stub.js";
 import { TEST_BOUNDARY, task } from "./helpers.js";
 
 function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
@@ -140,6 +142,59 @@ describe("agent turn outcome delivery", () => {
     expect(result.outcome?.decision).toBe("continue");
     expect(result.record.usage?.in).toBe(13);
     fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("records the acpx turn's persisted stdout transcript", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-acpx-"));
+    const stub = createAcpxStub({
+      modelBehaviors: {
+        "opencode-go/beam-free": {
+          reply:
+            "```yaml\nstatus: done\nsummary: observed\ndecision: done\n```",
+        },
+      },
+    });
+    const sessionDir = path.join(root, "sessions");
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      sessionDir,
+      acpx: { agent: "pi" },
+    });
+    const runtime = runtimeFor(new FakeHarness({ id: "fake" }), root);
+    runtime.harnesses = new Map([["pi", harness]]);
+    runtime.configs.run.aliases.architect = {
+      harness: "pi",
+      model: "opencode-go/beam-free",
+    };
+    await runtime.store.ensureLayout();
+    const planPath = path.join(runtime.store.goalDir, "plan.md");
+    fs.writeFileSync(planPath, "# Plan\n", "utf8");
+    try {
+      const result = await runAgentTurn(runtime, {
+        target: boundaryTarget(runtime, "architect"),
+        cwd: root,
+        meta: { iteration: 1, step: "architect", round: 1 },
+        vars: { ...vars, plan_path: planPath },
+        expectation: "architect",
+      });
+
+      expect(result.outcome?.status).toBe("done");
+      const transcript = result.record.transcript;
+      expect(transcript).toBeDefined();
+      expect(transcript!.startsWith(`${sessionDir}${path.sep}`)).toBe(true);
+      expect(fs.existsSync(transcript!)).toBe(true);
+      // The record file, not only the in-memory result, carries the path.
+      const records = await runtime.store.listRecords();
+      expect(records.at(-1)?.transcript).toBe(transcript);
+      // The recorded file is the prompt process's event stream.
+      expect(fs.readFileSync(transcript!, "utf8")).toContain(
+        '"method":"session/prompt"',
+      );
+    } finally {
+      stub.cleanup();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("records the models a call served and prices each at its own row", async () => {

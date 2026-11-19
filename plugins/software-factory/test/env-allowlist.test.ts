@@ -184,6 +184,7 @@ describe("spawned child environments", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
     });
     process.env[PLANTED] = "s3cret";
@@ -213,6 +214,7 @@ describe("spawned child environments", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
       envAllowlist: [PLANTED],
     });

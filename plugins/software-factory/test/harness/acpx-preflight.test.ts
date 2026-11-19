@@ -96,6 +96,7 @@ async function fixture(
       new AcpxHarness({
         id: "opencode",
         binary: stub.binary,
+        sessionDir: path.dirname(stub.binary),
         acpx: configs.run.harnesses!.opencode!.acpx!,
       }),
     ],

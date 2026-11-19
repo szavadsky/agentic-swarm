@@ -77,6 +77,7 @@ describe("AcpxHarness", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
     });
     try {
@@ -142,6 +143,77 @@ describe("AcpxHarness", () => {
     }
   });
 
+  it("persists the stdout stream and appends a resumed turn to the same path", async () => {
+    const stub = createAcpxStub({ usage: { totalTokens: 10 } });
+    const sessionDir = path.join(path.dirname(stub.binary), "sessions");
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      sessionDir,
+      acpx: PI_ACPX,
+    });
+    try {
+      const cwd = path.dirname(stub.binary);
+      const first = await harness.turn(request(cwd, "first [[text:ONE]]"));
+      expect(first.transcript).toBeDefined();
+      expect(first.transcript!.startsWith(`${sessionDir}${path.sep}`)).toBe(
+        true,
+      );
+      expect(first.transcript!.endsWith(".ndjson")).toBe(true);
+      const frames = fs
+        .readFileSync(first.transcript!, "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      expect(frames.some((frame) => frame.method === "session/prompt")).toBe(
+        true,
+      );
+      expect(
+        frames.some(
+          (frame) => frame.result?.stopReason === "end_turn" && frame.id === 7,
+        ),
+      ).toBe(true);
+
+      // A resumed named session is the same acpx record; its next turn appends
+      // to the same transcript instead of replacing the first stream.
+      const second = await harness.turn(
+        request(cwd, "second [[text:TWO]]", { session: first.session }),
+      );
+      expect(second.transcript).toBe(first.transcript);
+      const prompts = fs
+        .readFileSync(second.transcript!, "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))
+        .filter((frame) => frame.method === "session/prompt");
+      expect(prompts).toHaveLength(2);
+    } finally {
+      stub.cleanup();
+    }
+  });
+
+  it("scrubs token-shaped secrets before the stream reaches disk", async () => {
+    const stub = createAcpxStub();
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      sessionDir: path.join(path.dirname(stub.binary), "sessions"),
+      acpx: PI_ACPX,
+    });
+    try {
+      const result = await harness.turn(
+        request(path.dirname(stub.binary), "[[mode:bad_model]]"),
+      );
+      expect(result.stop.kind).toBe("infra");
+      expect(result.transcript).toBeDefined();
+      const stream = fs.readFileSync(result.transcript!, "utf8");
+      expect(stream).not.toContain("sk-abcdefghijklmnop");
+      expect(stream).toContain("[redacted]");
+    } finally {
+      stub.cleanup();
+    }
+  });
+
   it("passes harness-entry options to the acpx child as args and env", async () => {
     const stub = createAcpxStub();
     const cwd = path.dirname(stub.binary);
@@ -149,6 +221,7 @@ describe("AcpxHarness", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
       options: {
         args: ["--approve-all"],
@@ -176,6 +249,7 @@ describe("AcpxHarness", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
       options: {
         args: ["--approve-all"],
@@ -206,6 +280,7 @@ describe("AcpxHarness", () => {
         new AcpxHarness({
           id: "pi",
           binary: "/bin/true",
+          sessionDir: path.dirname("/bin/true"),
           acpx: PI_ACPX,
           options: { args: "--approve-all" },
         }),
@@ -215,6 +290,7 @@ describe("AcpxHarness", () => {
         new AcpxHarness({
           id: "pi",
           binary: "/bin/true",
+          sessionDir: path.dirname("/bin/true"),
           acpx: PI_ACPX,
           options: { args: ["--approve-all", 1] },
         }),
@@ -229,6 +305,7 @@ describe("AcpxHarness", () => {
         new AcpxHarness({
           id: "pi",
           binary: "/bin/true",
+          sessionDir: path.dirname("/bin/true"),
           acpx: PI_ACPX,
           options: { env: "ACPX_STUB_PID_FILE=/tmp/x" },
         }),
@@ -240,6 +317,7 @@ describe("AcpxHarness", () => {
         new AcpxHarness({
           id: "pi",
           binary: "/bin/true",
+          sessionDir: path.dirname("/bin/true"),
           acpx: PI_ACPX,
           options: { env: { ACPX_STUB_PID_FILE: 1 } },
         }),
@@ -253,6 +331,7 @@ describe("AcpxHarness", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
       options: {
         args: ["--approve-all"],
@@ -275,7 +354,12 @@ describe("AcpxHarness", () => {
 
   it("resumes the same named session from a second process without creating a new one", async () => {
     const stub = createAcpxStub();
-    const options = { id: "pi", binary: stub.binary, acpx: PI_ACPX };
+    const options = {
+      id: "pi",
+      binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
+      acpx: PI_ACPX,
+    };
     const harness = new AcpxHarness(options);
     try {
       const cwd = path.dirname(stub.binary);
@@ -309,6 +393,7 @@ describe("AcpxHarness", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
     });
     try {
@@ -361,6 +446,7 @@ describe("AcpxHarness", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
     });
     try {
@@ -422,6 +508,7 @@ describe("AcpxHarness", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
     });
     try {
@@ -483,6 +570,7 @@ describe("AcpxHarness", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
     });
     try {
@@ -517,6 +605,7 @@ describe("AcpxHarness", () => {
     const harness = new AcpxHarness({
       id: "codex",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: CODEX_ACPX,
     });
     try {
@@ -571,6 +660,7 @@ describe("AcpxHarness", () => {
     const harness = new AcpxHarness({
       id: "agy",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: agyAcpx(`${AGY_BIN} acp`),
       options: AGY_OPTIONS,
     });
@@ -653,6 +743,7 @@ describe("AcpxHarness", () => {
     const options = {
       id: "agy",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: agyAcpx(`${AGY_BIN} acp`),
       options: AGY_OPTIONS,
     };
@@ -703,6 +794,7 @@ describe("AcpxHarness", () => {
     const harness = new AcpxHarness({
       id: "agy",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: agyAcpx(`${AGY_BIN} acp`),
       options: AGY_OPTIONS,
     });
@@ -728,6 +820,7 @@ describe("AcpxHarness", () => {
     const harness = new AcpxHarness({
       id: "agy",
       binary: "/nonexistent/agy",
+      sessionDir: path.dirname("/nonexistent/agy"),
       acpx: agyAcpx("/nonexistent/agy acp"),
       options: AGY_OPTIONS,
     });
@@ -748,6 +841,7 @@ describe("AcpxHarness", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
     });
     try {
@@ -786,6 +880,7 @@ describe("AcpxHarness", () => {
     const harness = new AcpxHarness({
       id: "nova",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: {
         agent: "nova",
         effort: { configId: "nova_level" },
@@ -861,6 +956,7 @@ describe("AcpxHarness", () => {
       const harness = new AcpxHarness({
         id: "pi",
         binary: stub.binary,
+        sessionDir: path.dirname(stub.binary),
         acpx: PI_ACPX,
         // The quota case retries; default backoff would sleep 1s + 2s.
         retry: { baseDelayMs: 1, maxDelayMs: 1 },
@@ -881,6 +977,7 @@ describe("AcpxHarness", () => {
     const harness = new AcpxHarness({
       id: "codex",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: CODEX_ACPX,
     });
     try {
@@ -898,6 +995,7 @@ describe("AcpxHarness", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
     });
     try {
@@ -926,6 +1024,7 @@ describe("AcpxHarness", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
       // The stub reports its pid through this entry env; no parent variable
       // reaches a child unless the harness entry names it.
@@ -957,6 +1056,7 @@ describe("AcpxHarness", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
       options: { env: { ACPX_STUB_PID_FILE: pidFile } },
     });
@@ -984,6 +1084,7 @@ describe("AcpxHarness", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
     });
     try {
@@ -1011,6 +1112,7 @@ describe("AcpxHarness prompt result precedence", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
     });
     return harness.turn(request(path.dirname(stub.binary), prompt, extra));

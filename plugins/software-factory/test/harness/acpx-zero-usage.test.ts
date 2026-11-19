@@ -53,6 +53,7 @@ describe("acpx-zero-usage classification", () => {
     const harness = new AcpxHarness({
       id: "codex",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: CODEX_ACPX,
       retry: FAST_RETRY,
     });
@@ -80,6 +81,7 @@ describe("acpx-zero-usage classification", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
       retry: FAST_RETRY,
     });
@@ -122,6 +124,7 @@ describe("acpx-zero-usage classification", () => {
     const codexHarness = new AcpxHarness({
       id: "codex",
       binary: codexStub.binary,
+      sessionDir: path.dirname(codexStub.binary),
       acpx: CODEX_ACPX,
       retry: { retries: 0 },
     });
@@ -164,6 +167,7 @@ describe("acpx-zero-usage classification", () => {
     const piHarness = new AcpxHarness({
       id: "pi",
       binary: piStub.binary,
+      sessionDir: path.dirname(piStub.binary),
       acpx: PI_ACPX,
       retry: { retries: 0 },
     });
@@ -202,6 +206,7 @@ describe("acpx-zero-usage classification", () => {
     const harness = new AcpxHarness({
       id: "codex",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: CODEX_ACPX,
       retry: FAST_RETRY,
     });
@@ -230,6 +235,7 @@ describe("acpx-zero-usage classification", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
       retry: FAST_RETRY,
     });
@@ -261,6 +267,7 @@ describe("acpx-zero-usage classification", () => {
     const harness = new AcpxHarness({
       id: "claude-code",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: { agent: "claude-code" },
       options: { args: ["--approve-all"] },
       retry: FAST_RETRY,
@@ -294,6 +301,7 @@ describe("acpx-zero-usage classification", () => {
     const harness = new AcpxHarness({
       id: "codex",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: CODEX_ACPX,
       retry: FAST_RETRY,
     });
@@ -328,6 +336,7 @@ describe("acpx-zero-usage classification", () => {
     const harness = new AcpxHarness({
       id: "codex",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: CODEX_ACPX,
       retry: FAST_RETRY,
     });
@@ -364,6 +373,7 @@ describe("acpx-zero-usage classification", () => {
     const harness = new AcpxHarness({
       id: "codex",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: CODEX_ACPX,
       retry: FAST_RETRY,
     });
@@ -396,6 +406,7 @@ describe("acpx-zero-usage classification", () => {
     const harness = new AcpxHarness({
       id: "codex",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: CODEX_ACPX,
       retry: FAST_RETRY,
     });
@@ -425,6 +436,7 @@ describe("acpx-zero-usage classification", () => {
     const harness = new AcpxHarness({
       id: "codex",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: CODEX_ACPX,
       retry: FAST_RETRY,
     });
@@ -451,6 +463,7 @@ describe("acpx-zero-usage classification", () => {
     const harness1 = new AcpxHarness({
       id: "codex",
       binary: initialStub.binary,
+      sessionDir: path.dirname(initialStub.binary),
       acpx: CODEX_ACPX,
       retry: FAST_RETRY,
     });
@@ -491,6 +504,7 @@ describe("acpx-zero-usage classification", () => {
       const harness2 = new AcpxHarness({
         id: "codex",
         binary: repairStub.binary,
+        sessionDir: path.dirname(repairStub.binary),
         acpx: CODEX_ACPX,
         retry: { retries: 0 },
       });
@@ -528,6 +542,7 @@ describe("acpx-zero-usage classification", () => {
     const harness1 = new AcpxHarness({
       id: "pi",
       binary: initialStub.binary,
+      sessionDir: path.dirname(initialStub.binary),
       acpx: PI_ACPX,
       retry: FAST_RETRY,
     });
@@ -581,6 +596,7 @@ describe("acpx-zero-usage classification", () => {
       const harness2 = new AcpxHarness({
         id: "pi",
         binary: repairStub.binary,
+        sessionDir: path.dirname(repairStub.binary),
         acpx: PI_ACPX,
         retry: { retries: 0 },
       });
@@ -616,6 +632,7 @@ describe("acpx-zero-usage classification", () => {
     const harness = new AcpxHarness({
       id: "codex",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: CODEX_ACPX,
       retry: FAST_RETRY,
     });
@@ -649,6 +666,7 @@ describe("acpx-zero-usage classification", () => {
     const harness = new AcpxHarness({
       id: "codex",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: CODEX_ACPX,
       retry: FAST_RETRY,
     });
@@ -680,6 +698,7 @@ describe("acpx-zero-usage classification", () => {
     const harness = new AcpxHarness({
       id: "pi-no-command",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: {
         agent: "pi",
         usage: { cache: true },

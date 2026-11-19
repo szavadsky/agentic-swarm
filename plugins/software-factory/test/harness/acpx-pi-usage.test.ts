@@ -34,7 +34,12 @@ function request(
 describe("AcpxHarness pi usage command", () => {
   it("records /session totals and deltas a resumed turn against the ref", async () => {
     const stub = createAcpxStub({ sessionUsage: PER_PROMPT });
-    const options = { id: "pi", binary: stub.binary, acpx: PI_ACPX };
+    const options = {
+      id: "pi",
+      binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
+      acpx: PI_ACPX,
+    };
     try {
       const cwd = path.dirname(stub.binary);
       const first = await new AcpxHarness(options).turn(
@@ -107,6 +112,7 @@ describe("AcpxHarness pi usage command", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
     });
     try {
@@ -159,6 +165,7 @@ describe("AcpxHarness pi usage command", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: { ...PI_ACPX, compact: true },
     });
     try {
@@ -209,6 +216,7 @@ describe("AcpxHarness pi usage command", () => {
     const harness = new AcpxHarness({
       id: "pi",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: PI_ACPX,
     });
     try {
