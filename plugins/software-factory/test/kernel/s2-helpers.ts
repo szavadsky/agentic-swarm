@@ -30,6 +30,8 @@ export interface FlowRepoOptions {
   gates?: {
     id: string;
     command: string;
+    serial?: string[];
+    env?: Record<string, string>;
     format?: { junit?: string; pattern?: "pytest" | "jest" | "cargo" };
   }[];
   setup?: string[];
@@ -120,6 +122,8 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
       gates: gates.map((g) => ({
         id: g.id,
         command: g.command,
+        ...(g.serial ? { serial: g.serial } : {}),
+        ...(g.env ? { env: g.env } : {}),
         ...(g.format ? { format: g.format } : {}),
       })),
       ...(opts.identity ? { identity: opts.identity } : {}),

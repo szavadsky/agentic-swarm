@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -7,8 +8,10 @@ import { runAgentTurn } from "../../src/kernel/agent.js";
 import { loadConfigs, resolveGoalPaths } from "../../src/kernel/config.js";
 import { resolveTurn } from "../../src/kernel/flow-context.js";
 import {
+  DEFAULT_POOL_RESET_MINUTES,
   loadPoolResets,
   poolExhausted,
+  poolResetAt,
   quotaPoolsPath,
 } from "../../src/kernel/quota-pools.js";
 import {
@@ -39,6 +42,44 @@ const implementerVars = {
 };
 
 const FIVE_HOURS_MS = 300 * 60_000;
+
+describe("pool reset window", () => {
+  const now = 1_000_000;
+
+  it("takes the provider's stated reset in hours and minutes", () => {
+    expect(poolResetAt({}, now, "Resets in 130h19m23s.")).toBe(
+      now + (130 * 60 + 19) * 60_000,
+    );
+    expect(poolResetAt({}, now, "limit reached. Resets in 33m53s.")).toBe(
+      now + 33 * 60_000,
+    );
+  });
+
+  it("caps the stated reset at the run config's cap", () => {
+    expect(
+      poolResetAt(
+        { quota: { resetMinutes: 45, maxResetMinutes: 600 } },
+        now,
+        "Resets in 130h19m23s.",
+      ),
+    ).toBe(now + 600 * 60_000);
+  });
+
+  it("falls back to the configured window when the text names no reset", () => {
+    expect(poolResetAt({ quota: { resetMinutes: 45 } }, now)).toBe(
+      now + 45 * 60_000,
+    );
+    expect(
+      poolResetAt({ quota: { resetMinutes: 45 } }, now, "quota exceeded"),
+    ).toBe(now + 45 * 60_000);
+    expect(
+      poolResetAt({ quota: { resetMinutes: 45 } }, now, "Resets in 0m"),
+    ).toBe(now + 45 * 60_000);
+    expect(poolResetAt({}, now)).toBe(
+      now + DEFAULT_POOL_RESET_MINUTES * 60_000,
+    );
+  });
+});
 
 describe("exhausted-pool persistence", () => {
   it("stores a quota stop with its reset time in the session store", async () => {
@@ -167,7 +208,13 @@ describe("exhausted-pool persistence", () => {
         ctx.writeOutcome(outcome({ summary: "filed alpha" }));
         return fakeTurnResult(req);
       });
-      first.scriptResult({ stop: { kind: "infra", cause: "quota" } });
+      first.scriptResult({
+        stop: {
+          kind: "infra",
+          cause: "quota",
+          details: "Individual quota reached. Resets in 1h05m.",
+        },
+      });
       first.script((req, ctx) => {
         fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
         ctx.writeOutcome(outcome({ summary: "alpha on the fallback tier" }));
@@ -182,11 +229,12 @@ describe("exhausted-pool persistence", () => {
       const before = Date.now();
       await expectLaunch(3, goal.repo, first);
 
-      // Launch 1 stored the pool with the configured 45-minute window.
+      // Launch 1 stored the provider's stated 65-minute reset, not the
+      // configured 45-minute fallback.
       const stored = yaml.parse(fs.readFileSync(quotaPoolsPath(paths), "utf8"));
       const resetAt = Date.parse(stored.pools["fake+fake-impl"].resetAt);
-      expect(resetAt).toBeGreaterThanOrEqual(before + 45 * 60_000);
-      expect(resetAt).toBeLessThanOrEqual(Date.now() + 45 * 60_000);
+      expect(resetAt).toBeGreaterThanOrEqual(before + 65 * 60_000);
+      expect(resetAt).toBeLessThanOrEqual(Date.now() + 65 * 60_000);
 
       // Launch 2: a fresh process would read the session store; a fresh runtime does the same.
       const second = new FakeHarness({ id: "fake" });

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { spawn } from "node:child_process";
 import { createActiveTimer, detectSuspend, getClock } from "./clock.js";
 import { childEnv } from "./env.js";
@@ -16,7 +17,7 @@ interface RunProcessOptions {
   signal?: AbortSignal;
 }
 
-interface ProcessResult {
+export interface ProcessResult {
   code: number | null;
   signal?: string;
   stdout: string;

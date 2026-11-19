@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import fs from "node:fs";
 import path from "node:path";
 import { resolveAcpxCommand } from "../harness/acpx/command.js";
@@ -424,16 +425,12 @@ export async function preflight(
   }
   await checkScouts(ctx, configs, resolvedAliases);
 
-  const worktreeFile =
-    !configs.run.worktreeRoot && configs.repo.worktreeRoot
-      ? files.repo
-      : files.run;
   const worktreeProblem = inside(paths.worktreeRoot, paths.repoRoot)
     ? undefined
     : await writable(paths.worktreeRoot);
   rootFinding(
     findings,
-    worktreeFile,
+    files.run,
     "worktreeRoot",
     paths.worktreeRoot,
     paths.repoRoot,

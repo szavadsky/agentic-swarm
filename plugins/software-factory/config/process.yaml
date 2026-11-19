@@ -17,12 +17,21 @@ flows:
         review: true
         changeRequests: 2
         deliverable: verdict
+      # Runs only after a merge-step conflict: one turn merges the head into
+      # the task branch and resolves it, then checks and re-merges. It is not
+      # part of the normal agent sequence.
+      - id: resolve
+        prompt: steward
+        alias: steward
   just-implement:
     steps:
       - id: implement
         prompt: implementer
         alias: implementer
         alternates: [implementer-b]
+      - id: resolve
+        prompt: steward
+        alias: steward
   # A spike delivers a report, not a merge: it runs on the researcher alias and
   # retries on other task models instead of the one that failed.
   spike:

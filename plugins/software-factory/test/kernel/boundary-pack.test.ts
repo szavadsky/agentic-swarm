@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -13,9 +14,10 @@ import {
   PLAN_REVIEW_STEP,
 } from "../../src/kernel/plan-review.js";
 import type { Outcome } from "../../src/kernel/types.js";
-import { rec } from "./helpers.js";
+import { postSteer } from "../../src/kernel/mailbox.js";
+import { rec, task } from "./helpers.js";
 import { scriptMeta } from "../../src/kernel/record.js";
-import { createFolderStore } from "../../src/kernel/store.js";
+import { createFolderStore, recordDirName } from "../../src/kernel/store.js";
 import {
   cleanup,
   launch,
@@ -31,8 +33,10 @@ import {
   cleanupFlowRepo,
   makeRuntime,
   setupFlowRepo,
+  writeTask as writeRuntimeTask,
   whenTurn,
 } from "./s2-helpers.js";
+import { writeHold } from "./steer-helpers.js";
 
 const PLAN = `# Milestone 1
 
@@ -133,7 +137,7 @@ describe("boundary context pack", () => {
         `- previous-launch digest: ${path.join(goal.goalDir, "iterations/2/digest.md")}`,
       );
       expect(pack).toContain(
-        "## Debt register (debt-kind concerns; drill into the source records)\n- none recorded",
+        "## Debt register (open debt-kind concerns; own one by citing its id in a plan bullet, or close it with `debtClosed: [{id, reason}]`)\n- none open",
       );
       expect(pack).toContain("## Open records (started, no end)\n- none");
       expect(pack).toContain(
@@ -207,6 +211,68 @@ describe("boundary context pack", () => {
     }
   }, 90_000);
 
+  it("drops an owned debt from the pack the architect receives", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const meta = {
+        iteration: 1,
+        slug: "alpha",
+        step: "review",
+        round: 1,
+        actor: "agent",
+      } as const;
+      const debtText =
+        "env allowlist v2 is dead config and needs a removal task";
+      const debtId = `${recordDirName(1, meta)}#1`;
+      await runtime.store.appendRecord(meta, {
+        ok: true,
+        outcome: {
+          status: "done",
+          summary: "approved with debt",
+          concerns: [
+            { kind: "debt", calibration: "architect", text: debtText },
+          ],
+          forward: [],
+          verdict: "approve",
+        },
+      });
+      const planPath = path.join(runtime.store.goalDir, "plan.md");
+      fs.writeFileSync(
+        planPath,
+        `# Plan\n\n- env-allowlist-v2 — Remove the dead allowlist (${debtId})\n`,
+        "utf8",
+      );
+      harness.script((req, ctx) => {
+        fs.appendFileSync(planPath, "\n## next\n", "utf8");
+        ctx.writeOutcome(
+          outcome({ summary: "filed the remover", decision: "continue" }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "no new tasks" }));
+        return fakeTurnResult(req);
+      });
+
+      const boundary = await runBoundary(runtime, { relaunch: false });
+      const pack = fs.readFileSync(
+        path.join(
+          runtime.store.goalDir,
+          contextPackRelPath(boundary.iteration),
+        ),
+        "utf8",
+      );
+      const register = pack.slice(pack.indexOf("## Debt register"));
+      expect(register).toContain("- none open");
+      expect(register).not.toContain(debtId);
+      expect(register).not.toContain(debtText);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 90_000);
+
   it("lists legacy records whose end.yaml still carries packTruncated", async () => {
     const goal = makeGoal();
     try {
@@ -241,6 +307,111 @@ describe("boundary context pack", () => {
       cleanup(goal);
     }
   });
+});
+
+describe("boundary ready aging", () => {
+  it("names a ready spike held by its own steer at the next boundary", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeRuntimeTask(
+        runtime,
+        task("landed", { scope: ["alpha-area"] }),
+      );
+      await writeRuntimeTask(
+        runtime,
+        task("no-outcome-forensics-spike", {
+          kind: "spike",
+          flow: "spike",
+          scope: ["outcome detector"],
+        }),
+      );
+      // Segment 1 landed a sibling task; the spike started no turn in it.
+      await runtime.store.appendRecord(
+        scriptMeta(1, "merge", { slug: "landed" }),
+        { ok: true },
+      );
+      await postSteer(
+        runtime.store,
+        "no-outcome-forensics",
+        "Hold the spike until I answer.",
+      );
+      writeHold(runtime, "no-outcome-forensics", [
+        "no-outcome-forensics-spike",
+      ]);
+
+      const planPath = path.join(runtime.store.goalDir, "plan.md");
+      fs.writeFileSync(planPath, "# Plan\n\n## landed\n", "utf8");
+      harness.script((req, ctx) => {
+        fs.appendFileSync(planPath, "\n## next\n", "utf8");
+        ctx.writeOutcome(
+          outcome({ summary: "saw the held spike", decision: "continue" }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "no new tasks" }));
+        return fakeTurnResult(req);
+      });
+
+      const boundary = await runBoundary(runtime, { relaunch: false });
+      expect(boundary.iteration).toBe(2);
+      const pack = fs.readFileSync(
+        path.join(runtime.store.goalDir, contextPackRelPath(2)),
+        "utf8",
+      );
+      expect(pack).toContain(
+        "## Ready, no turn in the last segment\n- no-outcome-forensics-spike: held by steer no-outcome-forensics\n",
+      );
+      expect(pack).not.toContain("- landed: held");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 90_000);
+
+  it("names a ready task whose next alias has no live tier", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeRuntimeTask(runtime, task("landed"));
+      await writeRuntimeTask(runtime, task("starved"));
+      await runtime.store.appendRecord(
+        scriptMeta(1, "merge", { slug: "landed" }),
+        { ok: true },
+      );
+      // The implementer's only tier sits in a quota cooldown.
+      runtime.exhaustedPools.set("fake+fake-impl", Date.now() + 60_000);
+      await postSteer(runtime.store, "note", "Take a look at the plan.");
+
+      const planPath = path.join(runtime.store.goalDir, "plan.md");
+      fs.writeFileSync(planPath, "# Plan\n\n## landed\n", "utf8");
+      harness.script((req, ctx) => {
+        fs.appendFileSync(planPath, "\n## next\n", "utf8");
+        ctx.writeOutcome(
+          outcome({ summary: "named the dead tier", decision: "continue" }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "no new tasks" }));
+        return fakeTurnResult(req);
+      });
+
+      const boundary = await runBoundary(runtime, { relaunch: false });
+      expect(boundary.iteration).toBe(2);
+      const pack = fs.readFileSync(
+        path.join(runtime.store.goalDir, contextPackRelPath(2)),
+        "utf8",
+      );
+      expect(pack).toContain(
+        '- starved: alias "implementer" has no live tier:',
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 90_000);
 });
 
 const PLAN_REVIEW_ALIASES = {

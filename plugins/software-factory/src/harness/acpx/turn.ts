@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -26,7 +27,12 @@ import {
 } from "./classify.js";
 import { resolveRawAgentCommand } from "./command.js";
 import { acpxModel } from "./model.js";
-import { AcpxTranscriptParser, acpxErrors } from "./transcript.js";
+import {
+  AcpxTranscriptParser,
+  AcpxTranscriptFile,
+  acpxErrors,
+  acpxTranscriptPath,
+} from "./transcript.js";
 import { turnUsageFromTotals, usageFromAcpxSessionText } from "./usage.js";
 import type { AcpxConfig, AcpxRunConfig, AcpxTurnOpaque } from "./config.js";
 import type {
@@ -47,6 +53,8 @@ export interface AcpxRuntime {
   id: string;
   command: AcpxCommand;
   acpx: AcpxRunConfig;
+  /** Caller-given session store; turn transcripts live here, never in a worktree. */
+  sessionDir: string;
   /** Run-config names this runtime's children may inherit on top of the base set. */
   envAllowlist?: readonly string[];
 }
@@ -146,6 +154,10 @@ interface PromptProcessResult {
   aborted: boolean;
   /** Local receipt time of the last non-empty stdout line; absent when none arrived. */
   lastEventAt?: string;
+  /** Persisted stdout stream, once the process ran. */
+  transcript?: string;
+  /** First failure opening or writing the transcript; the caller raises it. */
+  transcriptError?: Error;
 }
 
 /** One prompt process: stream stdout into the parser, enforce idle and wall bounds. */
@@ -156,6 +168,7 @@ function runPromptProcess(
   cwd: string,
   timeouts: TurnRequest["timeouts"],
   parser: AcpxTranscriptParser,
+  transcriptPath: string | undefined,
   signal?: AbortSignal,
 ): Promise<PromptProcessResult> {
   if (signal?.aborted) {
@@ -168,6 +181,23 @@ function runPromptProcess(
     });
   }
   return new Promise((resolve) => {
+    let transcript: AcpxTranscriptFile | undefined;
+    if (transcriptPath) {
+      try {
+        transcript = new AcpxTranscriptFile(transcriptPath);
+      } catch (error) {
+        resolve({
+          code: null,
+          signal: null,
+          stderr: "",
+          timedOut: false,
+          aborted: false,
+          transcriptError:
+            error instanceof Error ? error : new Error(String(error)),
+        });
+        return;
+      }
+    }
     let stderr = "";
     let idleTimer: ReturnType<typeof setTimeout> | undefined;
     let wallTimer: ReturnType<typeof setTimeout> | undefined;
@@ -238,6 +268,8 @@ function runPromptProcess(
         stderr: (error as Error).message,
         timedOut: false,
         aborted,
+        transcript: transcript?.path,
+        transcriptError: transcript?.close(),
       });
       return;
     }
@@ -258,7 +290,9 @@ function runPromptProcess(
       while (true) {
         index = buffer.indexOf("\n");
         if (index < 0) break;
-        parser.feedLine(buffer.slice(0, index));
+        const line = buffer.slice(0, index);
+        parser.feedLine(line);
+        transcript?.line(line);
         lastEventAt = new Date().toISOString();
         buffer = buffer.slice(index + 1);
       }
@@ -272,18 +306,36 @@ function runPromptProcess(
       clearTimers();
       clearSignal();
       if (pid > 0) unregisterChildGroup(pid);
-      resolve({ code: null, signal: null, stderr, timedOut, aborted });
+      resolve({
+        code: null,
+        signal: null,
+        stderr,
+        timedOut,
+        aborted,
+        transcript: transcript?.path,
+        transcriptError: transcript?.close(),
+      });
     });
     child.on("close", (code, signal) => {
       closed = true;
       if (buffer.trim()) {
         parser.feedLine(buffer);
+        transcript?.line(buffer);
         lastEventAt = new Date().toISOString();
       }
       clearTimers();
       clearSignal();
       if (pid > 0) unregisterChildGroup(pid);
-      resolve({ code, signal, stderr, timedOut, aborted, lastEventAt });
+      resolve({
+        code,
+        signal,
+        stderr,
+        timedOut,
+        aborted,
+        lastEventAt,
+        transcript: transcript?.path,
+        transcriptError: transcript?.close(),
+      });
     });
   });
 }
@@ -315,6 +367,7 @@ export async function runAcpxCommand(
     ref.cwd,
     COMMAND_TIMEOUTS,
     parser,
+    undefined,
     signal,
   );
   return {
@@ -479,6 +532,11 @@ export async function runAcpxTurn(
       name,
       req.prompt,
     ];
+    const transcriptPath = acpxTranscriptPath(
+      runtime.sessionDir,
+      runtime.id,
+      name,
+    );
     const processResult = await runPromptProcess(
       runtime,
       config,
@@ -486,8 +544,14 @@ export async function runAcpxTurn(
       req.cwd,
       req.timeouts,
       parser,
+      transcriptPath,
       req.signal,
     );
+    if (processResult.transcriptError) {
+      throw new Error(
+        `acpx transcript write failed: ${processResult.transcriptError.message}`,
+      );
+    }
     const summary: AcpxTurnSummary = parser.result();
     const lost = summary.errors.some(isNoSessionError);
     // ACP `usage_update.cost` is cumulative for the session, so a resumed one
@@ -588,6 +652,9 @@ export async function runAcpxTurn(
       session: storedSession,
       model,
       attempts,
+      ...(processResult.transcript
+        ? { transcript: processResult.transcript }
+        : {}),
     };
   }
 }

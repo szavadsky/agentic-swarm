@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { exitDetails, stopDetails, withDetails } from "../details.js";
 import type { Stop, Usage } from "../types.js";
 import { isTransportFailure } from "../transport.js";

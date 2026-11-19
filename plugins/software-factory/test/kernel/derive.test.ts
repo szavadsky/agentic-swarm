@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import { derive, hasOpenDebt, openDebts } from "../../src/kernel/derive.js";
 import type { StepRecord } from "../../src/kernel/types.js";
@@ -1211,6 +1212,184 @@ describe("derive", () => {
     const state = derive([task("a")], [debt, done]);
     expect(state.goal).toBe("done");
     expect(state.terminal).toBe(true);
+  });
+
+  it("closes a debt by the id ingest assigned, and lands done", () => {
+    const debt = rec(1, {
+      slug: "a",
+      step: "review",
+      outcome: {
+        status: "done",
+        summary: "approved with debt",
+        concerns: [
+          {
+            kind: "debt",
+            calibration: "architect",
+            text: "cache invalidation needs a follow-up task",
+            id: "00001-i1-a-review-r1#1",
+          },
+        ],
+        forward: [],
+        verdict: "approve",
+      },
+    });
+    const done = rec(2, {
+      slug: undefined,
+      step: "architect",
+      iteration: 1,
+      outcome: {
+        status: "done",
+        summary: "goal met",
+        concerns: [],
+        forward: [],
+        debtClosed: [
+          {
+            id: "00001-i1-a-review-r1#1",
+            reason: "moved the invalidation into the writer",
+          },
+        ],
+        decision: "done",
+      },
+    });
+    expect(openDebts([debt, done])).toEqual([]);
+    const state = derive([task("a")], [debt, done]);
+    expect(state.goal).toBe("done");
+    expect(state.terminal).toBe(true);
+  });
+
+  it("closes every round that raised the debt from one id", () => {
+    const text = "retry window drops head names";
+    const first = rec(1, {
+      slug: "a",
+      step: "review",
+      outcome: {
+        status: "done",
+        summary: "approved with debt",
+        concerns: [
+          { kind: "debt", calibration: "architect", text, id: "00001#1" },
+        ],
+        forward: [],
+        verdict: "approve",
+      },
+    });
+    const again = rec(2, {
+      slug: "a",
+      step: "review",
+      outcome: {
+        status: "done",
+        summary: "approved with debt",
+        concerns: [
+          { kind: "debt", calibration: "architect", text, id: "00002#1" },
+        ],
+        forward: [],
+        verdict: "approve",
+      },
+    });
+    const close = rec(3, {
+      slug: undefined,
+      step: "architect",
+      outcome: {
+        status: "done",
+        summary: "closed",
+        concerns: [],
+        forward: [],
+        debtClosed: [{ id: "00001#1", reason: "head names reconciled" }],
+        decision: "continue",
+      },
+    });
+    expect(openDebts([first, again, close])).toEqual([]);
+  });
+
+  it("closes only the debt the id names, not a longer one that quotes it", () => {
+    const short = "rename the writer helper";
+    const long = "rename the writer helper and the reader helper too";
+    const first = rec(1, {
+      slug: "a",
+      step: "review",
+      outcome: {
+        status: "done",
+        summary: "approved with debt",
+        concerns: [
+          {
+            kind: "debt",
+            calibration: "architect",
+            text: short,
+            id: "00001#1",
+          },
+          { kind: "debt", calibration: "architect", text: long, id: "00001#2" },
+        ],
+        forward: [],
+        verdict: "approve",
+      },
+    });
+    const close = rec(2, {
+      slug: undefined,
+      step: "architect",
+      outcome: {
+        status: "done",
+        summary: "closed the short one",
+        concerns: [],
+        forward: [],
+        debtClosed: [{ id: "00001#1", reason: "writer helper renamed" }],
+        decision: "continue",
+      },
+    });
+    expect(openDebts([first, close])).toEqual([
+      {
+        id: "00001#2",
+        text: long,
+        calibration: "architect",
+        source: "a review r1",
+        iteration: 1,
+        seq: 1,
+      },
+    ]);
+  });
+
+  it("lists an open fyi debt with its id and closes it without blocking done", () => {
+    const fyi = rec(1, {
+      slug: "a",
+      step: "review",
+      outcome: {
+        status: "done",
+        summary: "note",
+        concerns: [
+          {
+            kind: "debt",
+            calibration: "fyi",
+            text: "nit: rename the helper",
+            id: "00001#1",
+          },
+        ],
+        forward: [],
+        verdict: "approve",
+      },
+    });
+    expect(hasOpenDebt([fyi])).toBe(false);
+    expect(openDebts([fyi])).toEqual([
+      {
+        id: "00001#1",
+        text: "nit: rename the helper",
+        calibration: "fyi",
+        source: "a review r1",
+        iteration: 1,
+        seq: 1,
+      },
+    ]);
+
+    const closed = rec(2, {
+      slug: "a",
+      step: "review",
+      outcome: {
+        status: "done",
+        summary: "renamed",
+        concerns: [],
+        forward: [],
+        debtClosed: [{ id: "00001#1", reason: "helper renamed" }],
+        verdict: "approve",
+      },
+    });
+    expect(openDebts([fyi, closed])).toEqual([]);
   });
 
   it("ignores fyi debt and short close fragments for done", () => {

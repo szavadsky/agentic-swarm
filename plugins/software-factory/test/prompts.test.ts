@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -18,6 +19,7 @@ import { parseTaskFile, taskFrontmatterSchema } from "../src/kernel/tasks.js";
 import type { ProcessConfig, RunConfig } from "../src/kernel/types.js";
 import {
   concernSchema,
+  debtClosedEntrySchema,
   outcomeSchema,
   planCheckEvidenceSchema,
   planCheckFollowUpSchema,
@@ -26,6 +28,7 @@ import {
   planReviewMarkSchema,
   replySchema,
   stallRouteEntrySchema,
+  steerAnswerSchema,
   steerRouteEntrySchema,
 } from "../src/kernel/types.js";
 import { TEST_BOUNDARY } from "./kernel/helpers.js";
@@ -142,16 +145,20 @@ function skeletonComment(skeleton: string, key: string): string {
 }
 
 describe("prompts: schema skeletons", () => {
-  it("renders every outcome schema field, so a new field cannot go missing", () => {
+  it("renders every outcome field a turn writes, so a new field cannot go missing", () => {
     expect(skeletonKeys(outcomeSchemaVar())).toEqual(
-      Object.keys(outcomeSchema.shape),
+      Object.keys(outcomeSchema.shape).filter((key) => key !== "forward"),
     );
+    // `forward` is parse-only: old records still carry it, no turn writes one.
+    expect(outcomeSchemaVar()).not.toContain("forward:");
   });
 
   it("renders every nested outcome key in its own field's shape", () => {
     const skeleton = outcomeSchemaVar();
     const nested: [string, { shape: Record<string, unknown> }][] = [
       ["concerns", concernSchema],
+      ["debtClosed", debtClosedEntrySchema],
+      ["steerAnswers", steerAnswerSchema],
       ["replies", replySchema],
       ["steerRoutes", steerRouteEntrySchema],
       ["stallRoutes", stallRouteEntrySchema],
@@ -233,7 +240,8 @@ describe("prompts: schema skeletons", () => {
         "status: done | blocked | failed | upscope  # upscope on task steps only",
         "summary: one paragraph",
         "concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner",
-        "forward: []",
+        "debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it",
+        "steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list",
         "replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position",
         "verdict: approve | changes | reject  # optional; review steps only",
         "decision: continue | done | blocked  # optional; architect step only",
@@ -340,8 +348,9 @@ describe("prompts: repair skeleton", () => {
         skeletonKeys(outcomeRepairSchemaVar(role, expectation)),
       ),
     );
+    // `forward` is parse-only for old records; no repair ask can deliver it.
     const ungated = Object.keys(outcomeSchema.shape).filter(
-      (key) => key !== "verdict" && key !== "decision",
+      (key) => key !== "verdict" && key !== "decision" && key !== "forward",
     );
     expect(ungated.filter((key) => !rendered.has(key))).toEqual([]);
   });
@@ -352,7 +361,8 @@ describe("prompts: repair skeleton", () => {
       "status",
       "summary",
       "concerns",
-      "forward",
+      "debtClosed",
+      "steerAnswers",
       "replies",
     ]);
     expect(implementer).not.toContain("verdict:");
@@ -389,6 +399,13 @@ describe("prompts: repair skeleton", () => {
     expect(outcomeRepairSchemaVar("architect", "architect")).toContain(
       "planReviewMarks:",
     );
+    // Debt closure and steer answers are protocol fields on every role's ask.
+    for (const role of ["architect", "pm", "implementer"]) {
+      const rendered = outcomeRepairSchemaVar(role, "any");
+      expect(rendered).toContain("debtClosed:");
+      expect(rendered).toContain("steerAnswers:");
+    }
+    expect(outcomeRepairSchemaVar("pm", "any")).not.toContain("forward:");
   });
 });
 

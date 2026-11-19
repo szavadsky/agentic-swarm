@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -216,6 +217,35 @@ describe("factory validate", () => {
       const result = await runValidate(file);
       expect(result.code).toBe(1);
       expect(result.err).toContain("aliases");
+    }),
+  );
+
+  it(
+    "accepts a run file through its base",
+    withTmp(async (root) => {
+      writeFile(
+        root,
+        "base.yaml",
+        "aliases:\n  architect: { harness: fake, model: base-model }\n",
+      );
+      const file = writeFile(
+        root,
+        "run.yaml",
+        "extends: base.yaml\naliases:\n  architect: { model: overlay-model }\n",
+      );
+      const result = await runValidate(file);
+      expect(result.code).toBe(0);
+      expect(result.out).toContain(": valid");
+    }),
+  );
+
+  it(
+    "names the missing base of a run file",
+    withTmp(async (root) => {
+      const file = writeFile(root, "run.yaml", "extends: absent.yaml\n");
+      const result = await runValidate(file);
+      expect(result.code).toBe(1);
+      expect(result.err).toContain("base run config not found");
     }),
   );
 

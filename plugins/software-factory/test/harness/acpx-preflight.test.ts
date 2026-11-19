@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -96,6 +97,7 @@ async function fixture(
       new AcpxHarness({
         id: "opencode",
         binary: stub.binary,
+        sessionDir: path.dirname(stub.binary),
         acpx: configs.run.harnesses!.opencode!.acpx!,
       }),
     ],

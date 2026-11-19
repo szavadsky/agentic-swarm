@@ -1,4 +1,4 @@
-import type { Usage } from "./types.js";
+import type { TurnAttempt, Usage } from "./types.js";
 
 export function zeroUsage(): Usage {
   return {
@@ -54,4 +54,20 @@ export function reportsUsage(usage: Usage): boolean {
       0 ||
     (usage.costUsd !== undefined && usage.costUsd !== 0)
   );
+}
+
+/**
+ * Retries, fallbacks and outcome repairs all live in one `attempts` array.
+ * Inside a harness turn attempts continue only after an infra stop; a call
+ * that follows any other stop is the separate repair turn `agent.ts` appends.
+ */
+export function countOutcomeRepairs(
+  attempts: readonly TurnAttempt[] | undefined,
+): number {
+  if (!attempts) return 0;
+  let repairs = 0;
+  for (let i = 1; i < attempts.length; i += 1) {
+    if (attempts[i - 1]!.stop.kind !== "infra") repairs += 1;
+  }
+  return repairs;
 }

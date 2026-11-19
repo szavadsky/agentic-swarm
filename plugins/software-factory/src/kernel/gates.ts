@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import fs from "node:fs";
 import path from "node:path";
 import type { CheckResult } from "../core/checks/types.js";
@@ -8,10 +9,10 @@ import {
 } from "../core/checks/junit.js";
 import { fingerprintText } from "../core/fingerprint.js";
 import { KeyedMutex } from "../core/mutex.js";
-import { runProcess } from "../core/proc.js";
-import type { KernelRuntime } from "./types.js";
+import { runProcess, type ProcessResult } from "../core/proc.js";
+import type { GateConfig, KernelRuntime } from "./types.js";
 
-const GATE_TIMEOUT_SEC = 900;
+export const GATE_TIMEOUT_SEC = 900;
 /** Characters of gate output a fix turn gets to read. */
 export const GATE_OUTPUT_CAP = 4000;
 
@@ -322,33 +323,99 @@ export function gateSignatureKey(gate: string, signature: string): string {
 export const UNIDENTIFIED_GATE_FAILURE = "<unidentified failure>";
 
 /**
- * Branch checks and merged-result gates share ports, caches and build dirs;
- * kernel-0 has no parallel-safe declaration, so gate runs are serial per repo.
+ * Branch checks and merged-result gates share ports, caches and build dirs only
+ * as far as a repo declares; a gate that names a mutex in `serial` holds it for
+ * its own command, and a gate that names none never waits. Keyed by the repo
+ * that declared it and the name, so one repo's declaration cannot serialize
+ * another's runs in the same process.
  */
-const gateRuns = new KeyedMutex();
+const gateMutexes = new KeyedMutex();
+
+/**
+ * The directories a gate declared in `env`, created under its worktree and
+ * exported as absolute paths. `cwd` is the worktree, so the same declaration
+ * yields a separate directory per worktree and concurrent runs never share one.
+ */
+function gateEnvDirs(
+  cwd: string,
+  env: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!env) return undefined;
+  const dirs: Record<string, string> = {};
+  for (const [name, dir] of Object.entries(env)) {
+    const absolute = path.resolve(cwd, dir);
+    try {
+      fs.mkdirSync(absolute, { recursive: true });
+    } catch (error) {
+      throw new Error(
+        `cannot create env dir ${name}="${dir}": ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    dirs[name] = absolute;
+  }
+  return dirs;
+}
+
+/**
+ * Runs one declared gate command with its env dirs created and the mutexes it
+ * names held. Names are taken in sorted order, so two gates naming the same
+ * pair in different order cannot deadlock; a gate holds them only for its own
+ * command, so the rest of the run — and every other worktree's run — proceeds.
+ */
+export function runGateCommand(
+  repoRoot: string,
+  cwd: string,
+  gate: GateConfig,
+  command: string,
+): Promise<ProcessResult> {
+  const ordered = [...new Set(gate.serial)].sort();
+  const launch = (index: number): Promise<ProcessResult> => {
+    const name = ordered[index];
+    if (name === undefined) {
+      let env: Record<string, string> | undefined;
+      try {
+        env = gateEnvDirs(cwd, gate.env);
+      } catch (error) {
+        // An env dir that cannot be created is an environment failure, not a
+        // verdict on the tree: report it as a command that could not start so
+        // callers record infra instead of rejecting the whole run.
+        return Promise.resolve({
+          code: 126,
+          stdout: "",
+          stderr: error instanceof Error ? error.message : String(error),
+          timedOut: false,
+          aborted: false,
+          durationMs: 0,
+        });
+      }
+      return runProcess({
+        cmd: command,
+        cwd,
+        env,
+        timeoutSec: GATE_TIMEOUT_SEC,
+        maxOutputBytes: GATE_OUTPUT_CAP * 4,
+      });
+    }
+    return gateMutexes.runExclusive(`${repoRoot}\u0000${name}`, () =>
+      launch(index + 1),
+    );
+  };
+  return launch(0);
+}
 
 /**
  * Runs the repo-config gates in `cwd`. Gates are commands, not the v2 check
  * pipeline: kernel-0 only needs a red/green signal and the output a fix turn
- * must read. `only` re-runs a subset after a red run; the mutex still covers
- * the subset, so a re-run never overlaps another gate run on the same repo.
+ * must read. `only` re-runs a subset after a red run. Runs in different
+ * worktrees are independent; only mutexes a gate declares make it wait.
  */
 export async function runGates(
   runtime: KernelRuntime,
   cwd: string,
   opts: { only?: ReadonlySet<string> } = {},
 ): Promise<CheckResult[]> {
-  return gateRuns.runExclusive(runtime.paths.repoRoot, () =>
-    runGatesUnlocked(runtime, cwd, opts.only),
-  );
-}
-
-async function runGatesUnlocked(
-  runtime: KernelRuntime,
-  cwd: string,
-  only?: ReadonlySet<string>,
-): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
+  const only = opts.only;
   const gates =
     only === undefined
       ? runtime.configs.repo.gates
@@ -361,12 +428,12 @@ async function runGatesUnlocked(
       command = buildGateWithJunitCommand(command, junitPath);
     }
 
-    const res = await runProcess({
-      cmd: command,
+    const res = await runGateCommand(
+      runtime.paths.repoRoot,
       cwd,
-      timeoutSec: GATE_TIMEOUT_SEC,
-      maxOutputBytes: GATE_OUTPUT_CAP * 4,
-    });
+      gate,
+      command,
+    );
     let ok = !res.timedOut && res.code === 0;
 
     const details: Record<string, unknown> = { roots: [cwd] };

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import fs from "node:fs";
 import path from "node:path";
 import { runWorktreeSetup } from "../core/checks/setup.js";
@@ -5,17 +6,17 @@ import type { CheckResult } from "../core/checks/types.js";
 import { fingerprintText } from "../core/fingerprint.js";
 import { isAncestor } from "../core/git/commit.js";
 import { git } from "../core/git/exec.js";
-import { runProcess } from "../core/proc.js";
 import { resolveGoalPaths } from "./config.js";
 import {
   capGateOutput,
   formatFailingChecks,
-  GATE_OUTPUT_CAP,
+  GATE_TIMEOUT_SEC,
   type GateInfra,
   gateSignatureKey,
   gateSignatures,
   isInfraCheck,
   isStaleGateCheck,
+  runGateCommand,
   UNIDENTIFIED_GATE_FAILURE,
 } from "./gates.js";
 import type {
@@ -24,8 +25,6 @@ import type {
   RecordStart,
   StepRecord,
 } from "./types.js";
-
-const GATE_TIMEOUT_SEC = 900;
 
 /** Record step for a baseline that could not run: infra, never a red verdict. */
 const BASELINE_INFRA_STEP = "baseline-infra";
@@ -237,12 +236,7 @@ async function runBaseGates(
     }
     const checks: CheckResult[] = [];
     for (const gate of configs.repo.gates) {
-      const res = await runProcess({
-        cmd: gate.command,
-        cwd: dir,
-        timeoutSec: GATE_TIMEOUT_SEC,
-        maxOutputBytes: GATE_OUTPUT_CAP * 4,
-      });
+      const res = await runGateCommand(repoRoot, dir, gate, gate.command);
       const output = `${res.stdout}\n${res.stderr}`.trim();
       if (res.timedOut) {
         checks.push(

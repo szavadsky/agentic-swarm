@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -67,7 +68,12 @@ async function opencodeTurn(binary: string, dir: string) {
     },
     usage: { cache: true },
   };
-  const harness = new AcpxHarness({ id: "opencode", binary, acpx });
+  const harness = new AcpxHarness({
+    id: "opencode",
+    binary,
+    sessionDir: path.join(dir, "sessions"),
+    acpx,
+  });
   return harness.turn({
     model: { id: "opencode/fake-model" },
     cwd: dir,

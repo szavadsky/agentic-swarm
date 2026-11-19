@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -9,8 +10,8 @@ import {
 } from "../../src/cli/harnesses.js";
 import {
   loadConfigs,
+  loadRunConfig,
   resolveGoalPaths,
-  runConfigSchema,
 } from "../../src/kernel/config.js";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import type { Harness } from "../../src/harness/types.js";
@@ -199,12 +200,10 @@ describe("shipped run-config coverage", () => {
     it(`routes opencode through the acpx raw route: ${name}.yaml`, () => {
       const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
       if (!fs.existsSync(runPath)) return;
-      const run = runConfigSchema.parse(
-        yaml.parse(fs.readFileSync(runPath, "utf8")),
-      );
+      const run = loadRunConfig(runPath);
       // The built-in acpx opencode route runs 1.19.5; the raw `opencode acp`
       // route runs the installed CLI (acpx-probe §0).
-      expect(run.harnesses.opencode?.acpx).toMatchObject({
+      expect(run.harnesses!.opencode?.acpx).toMatchObject({
         agent: "opencode acp",
         raw: true,
         effort: { configId: "effort" },
@@ -214,9 +213,7 @@ describe("shipped run-config coverage", () => {
     it(`carries the required plan role aliases: ${name}.yaml`, () => {
       const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
       if (!fs.existsSync(runPath)) return;
-      const run = runConfigSchema.parse(
-        yaml.parse(fs.readFileSync(runPath, "utf8")),
-      );
+      const run = loadRunConfig(runPath);
       expect(run.aliases["plan-checker"]).toBeDefined();
       expect(run.aliases["plan-reviewer"]).toBeDefined();
       if (name === "self-quota") {
@@ -232,9 +229,7 @@ describe("shipped run-config coverage", () => {
     it(`carries the spike flow's researcher alias: ${name}.yaml`, () => {
       const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
       if (!fs.existsSync(runPath)) return;
-      const run = runConfigSchema.parse(
-        yaml.parse(fs.readFileSync(runPath, "utf8")),
-      );
+      const run = loadRunConfig(runPath);
       // The spike flow's implement step alternates researcher with the task
       // implementer and reviewer aliases; pre-flight refuses the launch when
       // any of the three is missing.
@@ -246,9 +241,7 @@ describe("shipped run-config coverage", () => {
     it(`carries the development implementer's retry alternate: ${name}.yaml`, () => {
       const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
       if (!fs.existsSync(runPath)) return;
-      const run = runConfigSchema.parse(
-        yaml.parse(fs.readFileSync(runPath, "utf8")),
-      );
+      const run = loadRunConfig(runPath);
       // Both development flows name implementer-b; a retry must run a model
       // other than the implementer primary that failed.
       const alternate = run.aliases["implementer-b"];
@@ -259,16 +252,14 @@ describe("shipped run-config coverage", () => {
     it(`carries the unattended omp policy when an alias uses omp: ${name}.yaml`, () => {
       const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
       if (!fs.existsSync(runPath)) return;
-      const run = runConfigSchema.parse(
-        yaml.parse(fs.readFileSync(runPath, "utf8")),
-      );
+      const run = loadRunConfig(runPath);
       const usesOmp = Object.values(run.aliases).some(
         (alias) => alias.harness === "omp",
       );
       if (!usesOmp) return;
       // The compiled-in overlay is gone: the entry must carry the unattended
       // policy, or an omp turn reverts to prompting and learning on its own.
-      expect(run.harnesses.omp?.options).toMatchObject({
+      expect(run.harnesses!.omp?.options).toMatchObject({
         memory: { backend: "off" },
         autolearn: { enabled: false },
         skills: { enabled: false },
@@ -341,15 +332,13 @@ describe("shipped run-config coverage", () => {
       const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
       // A package-only export has no bootstrap/ sibling.
       if (!fs.existsSync(runPath)) return;
-      const run = runConfigSchema.parse(
-        yaml.parse(fs.readFileSync(runPath, "utf8")),
-      );
+      const run = loadRunConfig(runPath);
       expect(run.priceIds).toBeDefined();
       const ids = new Set<string>();
       for (const alias of Object.values(run.aliases)) {
         ids.add(alias.model);
-        for (const entry of alias.rotate) ids.add(entry.model);
-        for (const fb of alias.fallbacks) {
+        for (const entry of alias.rotate!) ids.add(entry.model);
+        for (const fb of alias.fallbacks!) {
           if ("model" in fb) ids.add(fb.model);
         }
       }
@@ -357,12 +346,12 @@ describe("shipped run-config coverage", () => {
       expect(ids.size).toBeGreaterThan(0);
       for (const id of [...ids].sort()) {
         expect(
-          matchPrice(OPENROUTER_IDS, id, run.priceIds),
+          matchPrice(OPENROUTER_IDS, id, run.priceIds!),
           `${name}.yaml: ${id} matches no OpenRouter id`,
         ).toBeDefined();
       }
       // No dangling mappings: every priceIds target is a catalog id.
-      for (const [from, to] of Object.entries(run.priceIds)) {
+      for (const [from, to] of Object.entries(run.priceIds!)) {
         expect(
           OPENROUTER_IDS[to],
           `${name}.yaml: priceIds ${from} -> ${to} names no catalog id`,
@@ -372,17 +361,49 @@ describe("shipped run-config coverage", () => {
   }
 });
 
+/**
+ * The extends split must not change what a shipped run config resolves to:
+ * each file keeps the layer it had before base plus overlay composition.
+ * The fixtures were frozen from the pre-split files.
+ */
+const FROZEN_RUN_CONFIGS = [
+  "benchmark",
+  "self",
+  "self-acpx",
+  "self-quota",
+  "self-rotate",
+  "shakedown",
+  "shakedown-plan",
+] as const;
+const FROZEN_DIR = path.resolve(import.meta.dir, "../fixtures/run-configs");
+
+describe("shipped run-config composition", () => {
+  for (const name of FROZEN_RUN_CONFIGS) {
+    it(`resolves ${name}.yaml to its frozen layer`, () => {
+      const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
+      const frozenPath = path.join(FROZEN_DIR, `${name}.yaml`);
+      if (!fs.existsSync(runPath) || !fs.existsSync(frozenPath)) return;
+      expect(loadRunConfig(runPath)).toEqual(
+        yaml.parse(fs.readFileSync(frozenPath, "utf8")),
+      );
+    });
+  }
+
+  it("keeps self.yaml an empty overlay on the shared base", () => {
+    const basePath = path.join(BOOTSTRAP_RUN, "base.yaml");
+    const selfPath = path.join(BOOTSTRAP_RUN, "self.yaml");
+    if (!fs.existsSync(basePath) || !fs.existsSync(selfPath)) return;
+    expect(loadRunConfig(selfPath)).toEqual(loadRunConfig(basePath));
+  });
+});
+
 describe("self-rotate run config", () => {
   it("is self.yaml with only the implementer rotating across the probe harnesses", () => {
     const selfPath = path.join(BOOTSTRAP_RUN, "self.yaml");
     const rotatePath = path.join(BOOTSTRAP_RUN, "self-rotate.yaml");
     if (!fs.existsSync(selfPath) || !fs.existsSync(rotatePath)) return;
-    const self = runConfigSchema.parse(
-      yaml.parse(fs.readFileSync(selfPath, "utf8")),
-    );
-    const rotating = runConfigSchema.parse(
-      yaml.parse(fs.readFileSync(rotatePath, "utf8")),
-    );
+    const self = loadRunConfig(selfPath);
+    const rotating = loadRunConfig(rotatePath);
     const { implementer: selfImplementer, ...selfAliases } = self.aliases;
     const { implementer: rotatingImplementer, ...rotatingAliases } =
       rotating.aliases;
@@ -391,7 +412,7 @@ describe("self-rotate run config", () => {
       harness: selfImplementer!.harness,
       model: selfImplementer!.model,
     });
-    expect(rotatingImplementer!.rotate.map((entry) => entry.harness)).toEqual([
+    expect(rotatingImplementer!.rotate!.map((entry) => entry.harness)).toEqual([
       "opencode",
       "pi",
       "codex",

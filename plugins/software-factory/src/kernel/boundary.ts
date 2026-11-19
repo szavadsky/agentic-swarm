@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-flow-dispatch
 import fs from "node:fs";
 import path from "node:path";
 import { git } from "../core/git/exec.js";
@@ -12,14 +13,15 @@ import { recordedBaseGates } from "./baseline.js";
 import {
   contextPackRelPath,
   forwardedConcerns,
+  readyAging,
   renderContextPack,
   type SpikeFinding,
   shallowCodeMap,
   summaryRelPath,
 } from "./context-pack.js";
-import { derive } from "./derive.js";
+import { derive, openDebts } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
-import { boundaryTarget, compactSession } from "./flow-context.js";
+import { boundaryTarget, compactSession, stepTarget } from "./flow-context.js";
 import { runKeptLand } from "./integrate.js";
 import {
   collectSteerRoutes,
@@ -34,6 +36,7 @@ import {
   steerResponses,
   writeOutbox,
 } from "./mailbox.js";
+import { next } from "./next.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import {
   consultGate,
@@ -77,6 +80,11 @@ export interface BoundaryOptions {
   frontPack?: string;
   /** Absolute path of the run config the launch loaded; the pack names it. */
   runConfigPath?: string;
+  /**
+   * Write this consult's launch digest. Defaults to `relaunch`; a resume that
+   * already ran its digest passes false so the evidence is not gathered twice.
+   */
+  digest?: boolean;
 }
 
 function previousSummary(
@@ -204,6 +212,39 @@ async function spikeFindings(
 }
 
 /**
+ * The dead-alias cause for every ready task whose next action is an agent
+ * step. Tier selection is admission's own predicate, so the pack names the
+ * cause dispatch would book instead of guessing it from the alias config.
+ */
+function unavailableAliases(
+  runtime: KernelRuntime,
+  tasks: readonly TaskFile[],
+  state: State,
+  records: readonly StepRecord[],
+  iteration: number,
+): Map<string, string> {
+  const causes = new Map<string, string>();
+  const bySlug = new Map(tasks.map((task) => [task.slug, task]));
+  for (const action of next(state, runtime.limits, new Set())) {
+    if (action.kind !== "step") continue;
+    const task = bySlug.get(action.slug);
+    const taskState = state.tasks[action.slug];
+    if (!task || !taskState) continue;
+    const target = stepTarget(
+      runtime,
+      task,
+      taskState,
+      action.step,
+      iteration,
+      records,
+    );
+    if (target.unavailable !== undefined)
+      causes.set(action.slug, target.unavailable);
+  }
+  return causes;
+}
+
+/**
  * One architect consult: digest on a relaunch, inbox, deterministic pack,
  * architect turn (plan edited in place), steer answers, then the PM turn and
  * its validation. A boundary with open work runs the plan checker first and
@@ -261,7 +302,7 @@ export async function runBoundary(
 
   fs.mkdirSync(runtime.paths.sessionsDir, { recursive: true });
   const digestRel =
-    opts.relaunch && records.length > 0
+    (opts.digest ?? opts.relaunch) && records.length > 0
       ? await writeLaunchDigest(runtime, iteration, records)
       : null;
   const digestPath = digestRel
@@ -324,6 +365,30 @@ export async function runBoundary(
       );
       return { holds: [] };
     });
+    // The first iteration has no segment to report on. Later packs list every
+    // ready task that started no turn in the segment just ended, so the
+    // architect sees a starved or deadlocked task instead of a bare "ready".
+    const aged =
+      iteration > 1
+        ? readyAging({
+            tasks,
+            state,
+            records,
+            segment: iteration - 1,
+            pendingSteers: steers.map((steer) => steer.id),
+            holds,
+            unavailableAliases: unavailableAliases(
+              runtime,
+              tasks,
+              state,
+              records,
+              iteration,
+            ),
+          })
+        : undefined;
+    const planText = fs.existsSync(planPath)
+      ? fs.readFileSync(planPath, "utf8")
+      : "";
     const pack = renderContextPack({
       goal: path.basename(runtime.paths.goalDir),
       iteration,
@@ -347,10 +412,12 @@ export async function runBoundary(
       gates: runtime.configs.repo.gates,
       baseGates: recordedBaseGates(records),
       forwarded: forwardedConcerns(records),
+      debts: openDebts(records, planText),
       runConfigPath: opts.runConfigPath,
       openRecords: await openRecords(runtime.store),
       planCheck: latestPlanCheck(records),
       planReview: latestPlanReview(records),
+      agedReady: aged,
     });
     await runtime.store.writeFile(packRel, pack);
   }
@@ -549,6 +616,20 @@ export async function runBoundary(
       iteration,
       decision: "blocked",
       cause: `PM escalated and asked: ${pm.outcome.summary}`,
+      outcome: result.outcome,
+      packPath: packRel,
+      seenSteers,
+    };
+  }
+  if (pm.status === "architect") {
+    // The PM's usable writes stay and dispatch may start them; the findings
+    // no rung can fix travel as this iteration's cause, which the next
+    // consult's architect reads in the previous summary. The goal stays
+    // active, so no operator block is recorded.
+    return {
+      iteration,
+      decision: "continue",
+      cause: `PM ladder routed to the architect: ${pm.findings.join("; ")}`,
       outcome: result.outcome,
       packPath: packRel,
       seenSteers,

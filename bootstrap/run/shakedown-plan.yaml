@@ -1,93 +1,57 @@
-# Shakedown while the free tier is exhausted: primaries on opencode-go subsidy (deepseek-v4.1), mechanical on beam-free. No alibaba except qwen-max (D16).
+# Shakedown while the free tier is exhausted: primaries on the opencode-go
+# subsidy (deepseek-v4.1), mechanical turns on beam-free. No alibaba except
+# qwen-max (D16). base.yaml carries the omp and opencode bindings, limits and
+# roots; this overlay moves the roles and the beam price row.
+extends: base.yaml
 aliases:
   architect:
     harness: opencode
     model: opencode-go/deepseek-v4.1-flash
-    effort: high
     fallbacks:
       - model: opencode-go/muse-spark-1.3-contributor
   pm:
-    harness: opencode
     model: opencode-go/beam-free
+    effort: null
+    escalateTo: null
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
   digest:
-    harness: opencode
     model: opencode-go/beam-free
+    effort: null
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
   implementer:
-    harness: opencode
     model: opencode-go/deepseek-v4.1-flash
     fallbacks:
       - model: opencode-go/muse-spark-1.3-contributor
   # The implementer primary is already the Go deepseek model; the retry
   # alternate is the subscription's other allowed model.
   implementer-b:
-    harness: omp
     model: opencode-go/muse-spark-1.3-contributor
-    effort: max
+    fallbacks: null
   researcher:
     harness: opencode
-    model: opencode-go/deepseek-v4.1-flash
+    effort: null
     fallbacks:
       - model: opencode-go/muse-spark-1.3-contributor
   reviewer:
-    harness: opencode
     model: opencode-go/deepseek-v4.1-flash
     fallbacks:
       - model: opencode-go/muse-spark-1.3-contributor
   plan-reviewer:
-    harness: opencode
     model: opencode-go/deepseek-v4.1-flash
     fallbacks:
       - model: opencode-go/muse-spark-1.3-contributor
   steward:
-    harness: opencode
     model: opencode-go/deepseek-v4.1-flash
     fallbacks:
       - model: opencode-go/muse-spark-1.3-contributor
   plan-checker:
-    harness: opencode
     model: opencode-go/deepseek-v4.1-flash
     fallbacks:
       - model: opencode-go/muse-spark-1.3-contributor
-
-# The built-in `acpx opencode` route resolves 1.19.5 and fails on the 2.2.7
-# data dir; the raw `opencode acp` route runs the installed CLI (probe §0).
-harnesses:
-  # omp is native; the unattended policy is opaque overlay keys here, not code.
-  omp:
-    options:
-      defaultThinkingLevel: low
-      memory: { backend: off }
-      autolearn: { enabled: false }
-      skills: { enabled: false }
-      features: { unexpectedStopDetection: false }
-      tools: { approvalMode: yolo, xdev: false }
-      compaction: { experimentalContextManagement: false }
-      disabledProviders: [native, claude, codex, gemini, opencode, cursor, agents-md]
-      retry: { enabled: false, modelFallback: false }
-  opencode:
-    acpx:
-      agent: opencode acp
-      compact: true
-      raw: true
-      effort: { configId: effort }
-      usage: { cache: true }
-
-# Prices come from the harness or OpenRouter's model list; beam has no
-# beam-suffixed OpenRouter id and is mapped explicitly to the only
-# beam-family entry.
+  escalation: null
 priceIds:
+  opencode/beam-free: null
   opencode-go/beam-free: reflection/beam-1.0-501b-a23b
-
-limits:
-  concurrency: { overall: 3 }
-  iterations: 1
-
-sessions:
-  dir: ~/.local/share/factory/sessions
-  keepRuns: 5
-
-worktreeRoot: ~/.local/share/factory/worktrees
+scouts: null

@@ -11,7 +11,7 @@
     "test:gate": "bun scripts/run-tests.ts",
     "typecheck": "tsc --noEmit",
     "format": "biome format .",
-    "lint": "biome lint . && knip",
+    "lint": "bun scripts/lint.ts && bun scripts/check-file-size.ts",
     "schema-validation": "bun src/schema-check.ts"
   },
   "dependencies": {

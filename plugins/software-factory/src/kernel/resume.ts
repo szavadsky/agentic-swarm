@@ -26,10 +26,22 @@ function isTaskTurn(record: StepRecord): boolean {
 }
 
 /**
+ * What a resume can leave behind as progress: a task turn, or the boundary's
+ * architect ruling. A resume that only ruled still moved the goal, so the next
+ * relaunch may resume the iteration instead of refusing it as idle.
+ */
+function isProgress(record: StepRecord): boolean {
+  return (
+    isTaskTurn(record) ||
+    (record.actor === "agent" && record.step === "architect")
+  );
+}
+
+/**
  * Whether a relaunch may resume the interrupted iteration. A resume is a
  * standing predicate the resumed pass itself keeps true, so each refusal is a
- * condition that a resume cannot change: it only dispatches runnable ready
- * work, and the boundary is what resolves the rest.
+ * condition that a resume cannot change. Its progress is a task turn or the
+ * boundary's architect ruling; the boundary resolves the rest.
  */
 export function resumeVerdict(
   state: State,
@@ -53,11 +65,11 @@ export function resumeVerdict(
   const lastResumeSeq = Math.max(0, ...resumes.map((r) => r.seq));
   if (
     resumes.length > 0 &&
-    !inIteration.some((r) => r.seq > lastResumeSeq && isTaskTurn(r))
+    !inIteration.some((r) => r.seq > lastResumeSeq && isProgress(r))
   ) {
     return {
       resume: false,
-      cause: `the previous resume of iteration ${iteration} started no task turn`,
+      cause: `the previous resume of iteration ${iteration} started no task turn or architect ruling`,
     };
   }
 

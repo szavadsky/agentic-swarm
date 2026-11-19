@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";

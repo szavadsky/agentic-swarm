@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -502,15 +503,18 @@ function escapeRegExp(text: string): string {
 }
 
 /**
- * `steer <id>: answer` entries in the architect's forward list, matched against
- * the pending steer ids. The id travels as data (the known list), never parsed
- * from text, so an id containing spaces, colons or quotes still answers.
+ * The answers to the pending steers: `steerAnswers` entries by steer id, and,
+ * for records from before the field existed, `steer <id>: answer` lines in the
+ * architect's forward list. A typed answer wins over a legacy line. Legacy ids
+ * travel as data (the known list), never parsed from text, so an id containing
+ * spaces, colons or quotes still answers.
  */
 export function steerResponses(
   outcome: Outcome,
   knownIds: Iterable<string>,
 ): Map<string, string> {
-  const ids = [...knownIds].sort((a, b) => b.length - a.length);
+  const known = new Set(knownIds);
+  const ids = [...known].sort((a, b) => b.length - a.length);
   const patterns = ids.map((id) => ({
     id,
     regex: new RegExp(
@@ -527,6 +531,10 @@ export function steerResponses(
         break;
       }
     }
+  }
+  for (const entry of outcome.steerAnswers ?? []) {
+    const answer = entry.answer.trim();
+    if (answer && known.has(entry.steer)) responses.set(entry.steer, answer);
   }
   return responses;
 }

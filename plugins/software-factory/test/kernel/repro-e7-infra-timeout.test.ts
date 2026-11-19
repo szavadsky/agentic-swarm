@@ -1,6 +1,5 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
-import fs from "node:fs";
-import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
@@ -8,7 +7,6 @@ import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
-  outcome,
   setupFlowRepo,
   scriptStallLeave,
   whenTurn,
@@ -89,42 +87,25 @@ describe("E7 inverted — infra timeouts and crashes count as turn repeats", () 
     }, 60_000);
   }
 
-  it("re-dispatches an infra quota stop without spending the budget", async () => {
+  it("defers a quota stop without spending the turn budget", async () => {
     const { repo, goal } = setupFlowRepo({
       limits: { concurrency: { overall: 1 } },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
-      let attempts = 0;
       harness.script(
-        (req, ctx) => {
-          attempts += 1;
-          if (attempts <= 2) {
-            return fakeTurnResult(req, {
-              stop: {
-                kind: "infra",
-                cause: "quota",
-                details: "quota exceeded",
-              },
-            });
-          }
-          fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
-          ctx.writeOutcome(outcome({ summary: "alpha implemented" }));
-          return fakeTurnResult(req);
-        },
+        (req) =>
+          fakeTurnResult(req, {
+            stop: {
+              kind: "infra",
+              cause: "quota",
+              details: "quota exceeded",
+            },
+          }),
         {
           when: whenTurn({ slug: "alpha", step: "implement" }),
           fallback: true,
         },
-      );
-      harness.script(
-        (req, ctx) => {
-          ctx.writeOutcome(
-            outcome({ summary: "approved", verdict: "approve" }),
-          );
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ slug: "alpha", step: "review" }) },
       );
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
@@ -133,12 +114,19 @@ describe("E7 inverted — infra timeouts and crashes count as turn repeats", () 
         iteration: 1,
         sleep: async () => {},
       });
-      expect(result.reason).toBe("boundary");
+      // The only implementer tier answered quota: the alias is unavailable, so
+      // dispatch defers the task and names the dead alias instead of spending
+      // a re-dispatch on it.
+      expect(result.reason).toBe("infra");
+      expect(result.cause).toContain('alias "implementer" has no live tier');
+      expect(result.cause).toContain("fake+fake-impl resets at");
+      expect(harness.calls).toHaveLength(1);
+
       const records = await runtime.store.listRecords();
       const implementRecords = records.filter(
         (r) => r.slug === "alpha" && r.step === "implement",
       );
-      expect(implementRecords).toHaveLength(3);
+      expect(implementRecords).toHaveLength(1);
       expect(implementRecords[0]!.stop).toEqual({
         kind: "infra",
         cause: "quota",
@@ -149,10 +137,9 @@ describe("E7 inverted — infra timeouts and crashes count as turn repeats", () 
         records,
         runtime.configs.process.flows,
       );
-      // Only the delivered implement and its review count; both quota stops
-      // spent nothing.
-      expect(state.tasks.alpha!.turns).toBe(2);
-      expect(state.tasks.alpha!.status).toBe("merged");
+      // A quota stop spends no turn, and the deferred task waits unscheduled.
+      expect(state.tasks.alpha!.turns).toBe(0);
+      expect(state.tasks.alpha!.status).toBe("ready");
       expect(state.tasks.alpha!.park).toBeUndefined();
     } finally {
       cleanupFlowRepo(repo);

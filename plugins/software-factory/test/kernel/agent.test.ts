@@ -1,20 +1,22 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Repo } from "../../src/core/git/repo.js";
+import { AcpxHarness } from "../../src/harness/acpx/harness.js";
 import {
   emptyUsage,
   FakeHarness,
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
 import type { SessionRef } from "../../src/harness/types.js";
-import { runAgentTurn } from "../../src/kernel/agent.js";
+import { countOutcomeRepairs } from "../../src/harness/usage.js";
+import { OUTCOME_SETTLE_MS, runAgentTurn } from "../../src/kernel/agent.js";
 import { renderContextPack } from "../../src/kernel/context-pack.js";
 import { derive } from "../../src/kernel/derive.js";
 import { boundaryTarget, resolveTurn } from "../../src/kernel/flow-context.js";
 import { frontClassTypesVar } from "../../src/kernel/front.js";
-import { countOutcomeRepairs } from "../../src/kernel/metrics.js";
 import { writePriceCache } from "../../src/kernel/openrouter.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import { appendPark, parkLaunchKind } from "../../src/kernel/record.js";
@@ -26,6 +28,7 @@ import type {
   RepoConfig,
   RunConfig,
 } from "../../src/kernel/types.js";
+import { createAcpxStub } from "../harness/acpx-stub.js";
 import { TEST_BOUNDARY, task } from "./helpers.js";
 
 function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
@@ -142,6 +145,59 @@ describe("agent turn outcome delivery", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("records the acpx turn's persisted stdout transcript", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-acpx-"));
+    const stub = createAcpxStub({
+      modelBehaviors: {
+        "opencode-go/beam-free": {
+          reply:
+            "```yaml\nstatus: done\nsummary: observed\ndecision: done\n```",
+        },
+      },
+    });
+    const sessionDir = path.join(root, "sessions");
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      sessionDir,
+      acpx: { agent: "pi" },
+    });
+    const runtime = runtimeFor(new FakeHarness({ id: "fake" }), root);
+    runtime.harnesses = new Map([["pi", harness]]);
+    runtime.configs.run.aliases.architect = {
+      harness: "pi",
+      model: "opencode-go/beam-free",
+    };
+    await runtime.store.ensureLayout();
+    const planPath = path.join(runtime.store.goalDir, "plan.md");
+    fs.writeFileSync(planPath, "# Plan\n", "utf8");
+    try {
+      const result = await runAgentTurn(runtime, {
+        target: boundaryTarget(runtime, "architect"),
+        cwd: root,
+        meta: { iteration: 1, step: "architect", round: 1 },
+        vars: { ...vars, plan_path: planPath },
+        expectation: "architect",
+      });
+
+      expect(result.outcome?.status).toBe("done");
+      const transcript = result.record.transcript;
+      expect(transcript).toBeDefined();
+      expect(transcript!.startsWith(`${sessionDir}${path.sep}`)).toBe(true);
+      expect(fs.existsSync(transcript!)).toBe(true);
+      // The record file, not only the in-memory result, carries the path.
+      const records = await runtime.store.listRecords();
+      expect(records.at(-1)?.transcript).toBe(transcript);
+      // The recorded file is the prompt process's event stream.
+      expect(fs.readFileSync(transcript!, "utf8")).toContain(
+        '"method":"session/prompt"',
+      );
+    } finally {
+      stub.cleanup();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("records the models a call served and prices each at its own row", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
     const fake = new FakeHarness({ id: "fake" });
@@ -215,6 +271,7 @@ describe("agent turn outcome delivery", () => {
     expect(fake.calls).toHaveLength(2);
     expect(result.outcome?.status).toBe("failed");
     expect(result.outcome?.summary).toContain("invalid outcome");
+    expect(result.record.repairFindingsResolved).toBeUndefined();
     expect(derive([], await runtime.store.listRecords()).iteration).toBe(1);
     fs.rmSync(root, { recursive: true, force: true });
   });
@@ -665,6 +722,125 @@ describe("delivery guard", () => {
     }
   });
 
+  it("resolves a debtClosed id against the records and repairs an unknown one", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      const seed = await runtime.store.startRecord({
+        iteration: 1,
+        slug: "a",
+        step: "review",
+        round: 1,
+        actor: "agent",
+        alias: "reviewer",
+        model: { id: "fake" },
+      });
+      await seed.finish({
+        stop: { kind: "done" },
+        outcome: {
+          status: "done",
+          summary: "raised a debt",
+          concerns: [
+            {
+              kind: "debt",
+              calibration: "architect",
+              text: "shim in the writer",
+            },
+          ],
+          forward: [],
+          verdict: "approve",
+        },
+      });
+      const debtId = `${path.basename(seed.dir)}#1`;
+
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({
+          status: "done",
+          summary: "closed",
+          debtClosed: [{ id: debtId, reason: "shim removed" }],
+        });
+        return fakeTurnResult(req);
+      });
+      await runAgentTurn(runtime, {
+        target: resolveTurn(runtime, "implementer", "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "b", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+      expect(fake.calls).toHaveLength(1);
+
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({
+          status: "done",
+          summary: "closed the wrong id",
+          debtClosed: [{ id: "nope#1", reason: "shim removed" }],
+        });
+        return fakeTurnResult(req);
+      });
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({ status: "done", summary: "repaired" });
+        return fakeTurnResult(req);
+      });
+      const repaired = await runAgentTurn(runtime, {
+        target: resolveTurn(runtime, "implementer", "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "c", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+      expect(fake.calls).toHaveLength(3);
+      expect(fake.calls[2]!.prompt).toContain(
+        "- unknown debt id: nope#1: no ingested debt concern has that id",
+      );
+      expect(repaired.outcome?.summary).toBe("repaired");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a debt raised and closed in the same record", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      let ownId = "";
+      fake.script((req, ctx) => {
+        if (!req.outcomePath) throw new Error("turn has no outcome path");
+        ownId = `${path.basename(path.dirname(req.outcomePath))}#1`;
+        ctx.writeOutcome({
+          status: "done",
+          summary: "raised and closed its own debt",
+          concerns: [
+            {
+              kind: "debt",
+              calibration: "fyi",
+              text: "shim in the reader",
+            },
+          ],
+          debtClosed: [{ id: ownId, reason: "shim removed" }],
+        });
+        return fakeTurnResult(req);
+      });
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({ status: "done", summary: "repaired" });
+        return fakeTurnResult(req);
+      });
+      const repaired = await runAgentTurn(runtime, {
+        target: resolveTurn(runtime, "implementer", "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+      expect(ownId).not.toBe("");
+      expect(fake.calls).toHaveLength(2);
+      expect(fake.calls[1]!.prompt).toContain(
+        `- unknown debt id: ${ownId}: no ingested debt concern has that id`,
+      );
+      expect(repaired.outcome?.summary).toBe("repaired");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("omits the verdict and decision lines when a bare done delivers", async () => {
     const { root, fake, runtime } = await setup();
     try {
@@ -1083,6 +1259,7 @@ function packFixture(): string {
     setup: [],
     gates: [{ id: "test", command: "bun test" }],
     forwarded: [],
+    debts: [],
   });
 }
 
@@ -1268,6 +1445,70 @@ describe("bounded repairs", () => {
       expect(fake.calls).toHaveLength(1);
       expect(result.outcome?.summary).toBe("clean");
       expect(countOutcomeRepairs(result.record.attempts)).toBe(0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("accepts an outcome written just after the harness returns", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      fake.script((req) => {
+        const outcomePath = req.outcomePath!;
+        // The write lands after the turn returned, like a tool's flush racing
+        // the harness's own exit.
+        setTimeout(() => {
+          fs.mkdirSync(path.dirname(outcomePath), { recursive: true });
+          fs.writeFileSync(
+            outcomePath,
+            "status: done\nsummary: written late\n",
+            "utf8",
+          );
+        }, 10);
+        return fakeTurnResult(req, { text: "done" });
+      });
+
+      const result = await runAgentTurn(runtime, {
+        target: resolveTurn(runtime, "implementer", "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+
+      expect(fake.calls).toHaveLength(1);
+      expect(result.outcome?.status).toBe("done");
+      expect(result.outcome?.summary).toBe("written late");
+      expect(result.record.repairFindings).toBeUndefined();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("settles a missing outcome once for the whole turn", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
+      fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+      fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+      const waits: number[] = [];
+
+      const result = await runAgentTurn(runtime, {
+        target: resolveTurn(runtime, "implementer", "implementer"),
+        cwd: root,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+        repairTurns: 2,
+        sleep: async (ms) => {
+          waits.push(ms);
+        },
+      });
+
+      expect(fake.calls).toHaveLength(3);
+      expect(waits).toEqual([OUTCOME_SETTLE_MS]);
+      expect(result.outcome?.status).toBe("failed");
+      expect(result.record.repairFindingsResolved).toBeUndefined();
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -1479,7 +1720,7 @@ describe("repair findings and launch kinds", () => {
     last_call: "false",
   };
 
-  it("stores validator findings that triggered the reminder on the record", async () => {
+  it("marks repair findings resolved when the repair delivers", async () => {
     const { root, fake, runtime } = await setup();
     try {
       fake.script((req) => {
@@ -1511,12 +1752,14 @@ describe("repair findings and launch kinds", () => {
       expect(result.record.repairFindings?.join("\n")).toMatch(
         /line \d+, column \d+/,
       );
-      // The reminder delivered: the repair finding stays, the launch did not fail.
+      // The reminder delivered: the finding stays for the incident count and
+      // reads as resolved, so the launch did not fail.
+      expect(result.record.repairFindingsResolved).toBe(true);
       expect(result.record.launchKind).toBeUndefined();
       const reread = await runtime.store.listRecords();
-      expect(
-        reread.find((r) => r.seq === result.record.seq)?.repairFindings,
-      ).toEqual(result.record.repairFindings);
+      const stored = reread.find((r) => r.seq === result.record.seq);
+      expect(stored?.repairFindings).toEqual(result.record.repairFindings);
+      expect(stored?.repairFindingsResolved).toBe(true);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

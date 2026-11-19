@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -1356,6 +1357,239 @@ describe("PM turn reconciliation", () => {
   });
 });
 
+/** The graph finding a task file raises when it names a dep nothing declares. */
+const baselineFinding = (slug: string, dep: string): string =>
+  `task "${slug}" depends on missing task "${dep}"`;
+
+function writeTaskText(runtime: KernelRuntime, text: string): void {
+  fs.writeFileSync(
+    path.join(runtime.store.tasksDir, `${/^slug:\s*(\S+)/m.exec(text)![1]}.md`),
+    text,
+    "utf8",
+  );
+}
+
+describe("PM ladder baseline", () => {
+  it("charges one turn for a pre-existing finding and keeps the turn's writes", async () => {
+    const { root, runtime, fake, planPath } = await setup();
+    try {
+      fs.writeFileSync(
+        planPath,
+        "# Plan\n\n## alpha\nCreate alpha.\n\ncancelled: spent — folded into alpha\n",
+        "utf8",
+      );
+      writeTaskText(runtime, simpleTask("b", "b.txt", { deps: ["missing"] }));
+      writeTaskText(runtime, simpleTask("spent", "spent.txt"));
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+      );
+
+      fake.script((req, ctx) => {
+        writeTaskText(runtime, simpleTask("alpha", "alpha.txt"));
+        ctx.writeOutcome(outcome({ summary: "filed alpha; b is history" }));
+        return fakeTurnResult(req);
+      });
+
+      const result = await runPm(runtime, {
+        iteration: 1,
+        state,
+        planPath,
+        cwd: root,
+      });
+      expect(result.status).toBe("architect");
+      if (result.status === "architect")
+        expect(result.findings).toEqual([baselineFinding("b", "missing")]);
+      expect(fake.calls).toHaveLength(1);
+      // The usable write stands and the plan's cancellation still runs.
+      expect(fs.existsSync(path.join(runtime.store.tasksDir, "alpha.md"))).toBe(
+        true,
+      );
+      const records = await runtime.store.listRecords();
+      expect(
+        records.some(
+          (record) => record.slug === "spent" && record.step === "cancel",
+        ),
+      ).toBe(true);
+      expect(records.some((record) => record.step === "pm-validate")).toBe(
+        false,
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("escalates on a finding the turn introduced", async () => {
+    const { root, runtime, fake, planPath } = await ladderSetup(["escalation"]);
+    try {
+      writeTaskText(runtime, simpleTask("b", "b.txt", { deps: ["missing"] }));
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+      );
+
+      for (const summary of ["introduced a cycle", "introduced it again"]) {
+        fake.script((req, ctx) => {
+          writeTaskText(runtime, simpleTask("c", "c.txt", { deps: ["c"] }));
+          ctx.writeOutcome(outcome({ summary }));
+          return fakeTurnResult(req);
+        });
+      }
+      fake.script((req, ctx) => {
+        expect(req.model.id).toBe("fake-escalation");
+        writeTaskText(runtime, simpleTask("alpha", "alpha.txt"));
+        ctx.writeOutcome(outcome({ summary: "filed alpha" }));
+        return fakeTurnResult(req);
+      });
+
+      const result = await runPm(runtime, {
+        iteration: 1,
+        state,
+        planPath,
+        cwd: root,
+      });
+      expect(fake.calls.map((call) => call.model.id)).toEqual([
+        "fake-pm",
+        "fake-pm",
+        "fake-escalation",
+      ]);
+      expect(result.status).toBe("architect");
+      if (result.status === "architect")
+        expect(result.findings).toEqual([baselineFinding("b", "missing")]);
+      // The introduced finding failed the rung; the pre-existing one did not.
+      expect(result.rungs[0]!.failure).toContain('task "c" depends on itself');
+      expect(result.rungs[0]!.failure).not.toContain(
+        baselineFinding("b", "missing"),
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("routes only the baseline findings a clean rung left standing", async () => {
+    const { root, runtime, fake, planPath } = await setup();
+    try {
+      writeTaskText(runtime, simpleTask("b", "b.txt", { deps: ["gone-one"] }));
+      writeTaskText(runtime, simpleTask("z", "z.txt", { deps: ["gone-two"] }));
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+      );
+
+      fake.script((req, ctx) => {
+        // Fix one baseline finding; the other is not derivable from the plan.
+        writeTaskText(runtime, simpleTask("b", "b.txt"));
+        ctx.writeOutcome(outcome({ summary: "fixed b, z remains" }));
+        return fakeTurnResult(req);
+      });
+
+      const result = await runPm(runtime, {
+        iteration: 1,
+        state,
+        planPath,
+        cwd: root,
+      });
+      expect(result.status).toBe("architect");
+      if (result.status === "architect")
+        expect(result.findings).toEqual([baselineFinding("z", "gone-two")]);
+      expect(fake.calls).toHaveLength(1);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("routes the findings to the architect instead of blocking the goal", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      fs.writeFileSync(
+        path.join(runtime.store.goalDir, "plan.md"),
+        "# Plan\n\n## alpha\nCreate alpha.txt.\n",
+        "utf8",
+      );
+      writeTaskText(runtime, simpleTask("b", "b.txt", { deps: ["missing"] }));
+      // Merged: the finding is history and no open work summons the checker.
+      await runtime.store.appendRecord(
+        { iteration: 1, slug: "b", step: "merge", round: 1, actor: "script" },
+        { ok: true },
+      );
+      harness.script((req, ctx) => {
+        fs.appendFileSync(
+          path.join(runtime.store.goalDir, "plan.md"),
+          "\n## alpha note\n",
+          "utf8",
+        );
+        ctx.writeOutcome(
+          outcome({ summary: "planned alpha", decision: "continue" }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        writeTaskText(runtime, simpleTask("alpha", "alpha.txt"));
+        ctx.writeOutcome(outcome({ summary: "filed alpha" }));
+        return fakeTurnResult(req);
+      });
+
+      const boundary = await runBoundary(runtime, { relaunch: false });
+      expect(boundary.decision).toBe("continue");
+      expect(boundary.cause).toBe(
+        `PM ladder routed to the architect: ${baselineFinding("b", "missing")}`,
+      );
+      expect(fs.existsSync(path.join(runtime.store.tasksDir, "alpha.md"))).toBe(
+        true,
+      );
+      expect(
+        harness.calls.filter((call) => fakeTurnIdentity(call).step === "pm"),
+      ).toHaveLength(1);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("ends the launch in progress, not blocked-by-user, when the route reaches it", async () => {
+    const goal = makeGoal();
+    try {
+      const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
+      writeGoalTask(
+        goal.goalDir,
+        simpleTask("b", "b.txt", { deps: ["missing"] }),
+      );
+      harness.script((req, ctx) => {
+        writePlan(goal.goalDir, "# Plan\n\n## alpha\nCreate alpha.txt.\n");
+        ctx.writeOutcome(
+          outcome({ summary: "planned alpha", decision: "continue" }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "no task to file for b" }));
+        return fakeTurnResult(req);
+      });
+
+      const result = await runGoal({
+        repo: goal.repo.dir,
+        goal: "demo",
+        iterations: 1,
+        harnesses: { fake: harness },
+        priceSource: testPriceSource(goal.repo.dir),
+      });
+      expect(result.stop).toBe("iteration-limit");
+      const summary = fs.readFileSync(
+        path.join(goal.goalDir, "iterations/1/summary.md"),
+        "utf8",
+      );
+      expect(summary).toContain("status: in-progress");
+      expect(summary).not.toContain("blocked-by-user");
+      expect(summary).toContain(
+        `PM ladder routed to the architect: ${baselineFinding("b", "missing")}`,
+      );
+    } finally {
+      cleanup(goal);
+    }
+  }, 60_000);
+});
+
 describe("stall PM — zero-merge stall in the running iteration", () => {
   const ALPHA_BODY = "Write alpha.txt.\nDone when: alpha.txt holds alpha.";
 
@@ -2164,6 +2398,34 @@ describe("stall PM validation", () => {
     );
     return { repo, runtime, harness, state };
   }
+
+  it("commits the routes a turn wrote past a finding the graph already had", async () => {
+    const { repo, runtime, harness, state } = await stallFixture(["alpha"]);
+    try {
+      // A pre-existing, underivable graph finding: no stall route can fix it.
+      await runtime.store.writeTask(
+        task("stuck", { scope: ["stuck.txt"], deps: ["gone"] }),
+      );
+      scriptStallLeave(harness, ["alpha"]);
+
+      const result = await runStallPm(runtime, {
+        iteration: 1,
+        state,
+        slugs: ["alpha"],
+        cwd: runtime.paths.goalCheckout,
+      });
+      expect(result.left).toEqual(["alpha"]);
+      const records = await runtime.store.listRecords();
+      expect(
+        records.some((record) => record.step === "stall-routes" && record.ok),
+      ).toBe(true);
+      expect(records.some((record) => record.step === "pm-validate")).toBe(
+        false,
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
 
   it("rejects a replace that changes the done-when", async () => {
     const { repo, runtime, harness, state } = await stallFixture(["alpha"]);

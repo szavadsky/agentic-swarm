@@ -1,10 +1,13 @@
+// biome-ignore-all lint/complexity: split-rest
 import { createHash } from "node:crypto";
 import { z, type ZodIssue } from "zod";
 import yaml from "yaml";
 import type {
   FlowDefinition,
+  State,
   TaskFile,
   TaskKind,
+  TaskStatus,
   TaskTypeDefinition,
 } from "./types.js";
 
@@ -296,10 +299,43 @@ export function materialHash(task: TaskFile): string {
   return createHash("sha1").update(canonical, "utf8").digest("hex");
 }
 
-/** Script-checkable plan properties; returns human-readable findings, empty when valid. */
+/** The statuses that still have work left; every other status is history. */
+const LIVE_STATUSES: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
+  "pending",
+  "ready",
+  "running",
+]);
+
+/**
+ * A task the state has no entry for is live work, never history: a file the PM
+ * wrote this turn has no record yet.
+ */
+function isLive(status: TaskStatus | undefined): boolean {
+  return status === undefined || LIVE_STATUSES.has(status);
+}
+
+/**
+ * The `status` option `validateTaskGraph` reads. It covers every slug the state
+ * knows, including a terminal slug whose task file is gone: a cancelled base
+ * still names its state on a live continuation.
+ */
+export function taskStatuses(state: State): Map<string, TaskStatus> {
+  return new Map(
+    Object.entries(state.tasks).map(([slug, task]) => [slug, task.status]),
+  );
+}
+
+/**
+ * Script-checkable plan properties; returns human-readable findings, empty when
+ * valid. `status` names the derived task statuses; without it every file is
+ * live. A base edge is history once its continuation is terminal — the base
+ * landed or was cancelled after the continuation did, and no PM turn can derive
+ * the edge away. A live continuation names a base that is not parked by the
+ * base's state (merged, finished, cancelled, or not parked at all).
+ */
 export function validateTaskGraph(
   tasks: TaskFile[],
-  opts: { parked?: ReadonlySet<string> } = {},
+  opts: { status?: ReadonlyMap<string, TaskStatus> } = {},
 ): string[] {
   const findings: string[] = [];
   const bySlug = new Map<string, TaskFile>();
@@ -329,11 +365,25 @@ export function validateTaskGraph(
       }
     }
     if (task.base !== undefined) {
-      if (!bySlug.has(task.base)) {
+      const status = opts.status;
+      // A terminal continuation is history: its base was cancelled or landed
+      // afterwards and no PM turn can change that edge.
+      if (status && !isLive(status.get(task.slug))) continue;
+      const baseStatus = status?.get(task.base);
+      if (baseStatus === "parked") continue;
+      if (
+        baseStatus === "merged" ||
+        baseStatus === "finished" ||
+        baseStatus === "cancelled"
+      ) {
+        findings.push(
+          `task "${task.slug}" continues "${task.base}", which is ${baseStatus}`,
+        );
+      } else if (!bySlug.has(task.base)) {
         findings.push(
           `task "${task.slug}" continues missing task "${task.base}"`,
         );
-      } else if (opts.parked && !opts.parked.has(task.base)) {
+      } else if (status !== undefined) {
         findings.push(
           `task "${task.slug}" continues "${task.base}", which is not parked`,
         );

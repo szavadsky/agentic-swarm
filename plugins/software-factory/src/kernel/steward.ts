@@ -1,20 +1,19 @@
+// biome-ignore-all lint/complexity: split-rest
 import { commitAll } from "../core/git/commit.js";
 import { git } from "../core/git/exec.js";
-import { hasConflictMarkers, unmergedFiles } from "../core/git/merge.js";
+import { unmergedFiles } from "../core/git/merge.js";
 import type { SessionRef } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
-import { formatBaseGates, recordedBaseGates } from "./baseline.js";
 import { derive } from "./derive.js";
 import { boundaryTarget, compactSession } from "./flow-context.js";
 import { mergeTask } from "./integrate.js";
-import { abortMerge } from "./merge-conflict.js";
+import { abortMerge, resolveVars, settleMergeTurn } from "./merge-conflict.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
-import { commitEdits, scriptMeta } from "./record.js";
+import { scriptMeta } from "./record.js";
 import { materialHash } from "./tasks.js";
 import type {
   KernelRuntime,
   Outcome,
-  RecordEnd,
   StepRecord,
   TaskFile,
   TaskState,
@@ -26,48 +25,46 @@ import {
   headSha,
   integrationHead,
   taskBranchName,
-  treeSha,
 } from "./worktree.js";
+
+/** One conflict candidate whose steward leg stopped on infra. */
+export interface StewardDead {
+  slug: string;
+  /** The stop's cause verbatim: dispatch classifies it for the backoff. */
+  cause: string;
+  details?: string;
+}
 
 export interface StewardResult {
   skipped: boolean;
   attempted: string[];
   landed: string[];
   unmerged: string[];
-  infra?: { kind: "infra"; cause: string };
+  /**
+   * Candidates whose leg stopped on infra. Dispatch books the fault against
+   * the slug; the remaining candidates still ran.
+   */
+  dead: StewardDead[];
   cancelled?: boolean;
+}
+
+export interface StewardOptions {
+  /**
+   * Slugs whose infra fault has no live leg this pass: a fatal cause, spent
+   * re-dispatches, or a backoff the loop will not spend (a drain or a stop
+   * request). Their work waits for the next launch, so the steward skips them.
+   */
+  frozen?: ReadonlySet<string>;
 }
 
 interface StewardAttempt {
   ok: boolean;
   cause?: string;
-  infra?: { kind: "infra"; cause: string };
+  infra?: { kind: "infra"; cause: string; details?: string };
   cancelled?: boolean;
   session?: SessionRef;
   outcome?: Outcome;
   agentTurn: boolean;
-}
-
-function stewardVars(
-  runtime: KernelRuntime,
-  worktree: string,
-  branch: string,
-  head: string,
-  conflicts: string[],
-  records: StepRecord[],
-): Record<string, string> {
-  const base = recordedBaseGates(records);
-  return {
-    worktree,
-    branch,
-    integration_head: head,
-    conflicts: conflicts.join(", ") || "none",
-    gate_commands:
-      runtime.configs.repo.gates
-        .map((g) => `- ${g.id}: ${g.command}`)
-        .join("\n") || "none",
-    base_gates: formatBaseGates(base),
-  };
 }
 
 function pointerConcern(
@@ -87,7 +84,7 @@ function pointerConcern(
         evidence: `records steward ${slug}`,
       },
     ],
-    forward: [`steward held ${slug}: relaunch on the new branch state`],
+    forward: [],
   };
 }
 
@@ -111,35 +108,6 @@ async function commitMerge(
       cause: `merge commit failed: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
-}
-
-/**
- * Commits the steward turn's conflict resolution. A file still carrying
- * conflict markers is not settled: the empty end leaves the worktree for the
- * caller's no-commit path to abort.
- */
-async function settleStewardMerge(
-  runtime: KernelRuntime,
-  meta: { iteration: number; slug: string; round: number },
-  cwd: string,
-  message: string,
-): Promise<RecordEnd> {
-  await git(cwd, ["add", "-A"]);
-  const flagged = await hasConflictMarkers(cwd);
-  if (flagged.length > 0) return {};
-  const turn = await runtime.store.startRecord(
-    scriptMeta(meta.iteration, "commit", meta),
-  );
-  const started = Date.parse(turn.meta.startedAt);
-  const commit = await commitAll(runtime.repo, cwd, message);
-  const head = await headSha(cwd);
-  const tree = await treeSha(cwd);
-  const edits = await commitEdits(cwd, commit);
-  const wallMs = Number.isFinite(started)
-    ? Math.max(0, Date.now() - started)
-    : 0;
-  await turn.finish({ ok: true, commit: head, tree, edits, wallMs });
-  return { commit: commit ?? head, tree, edits };
 }
 
 async function attemptStewardMerge(
@@ -195,7 +163,7 @@ async function attemptStewardMerge(
   const base = records
     .filter((r) => r.slug === task.slug && r.actor === "agent" && r.base)
     .sort((a, b) => a.seq - b.seq)[0]?.base;
-  const vars = stewardVars(
+  const vars = resolveVars(
     runtime,
     ensured.path,
     ensured.branch,
@@ -227,7 +195,7 @@ async function attemptStewardMerge(
         contained,
       );
       if (breach) return { ok: false, cause: `containment: ${breach}` };
-      const settled = await settleStewardMerge(
+      const settled = await settleMergeTurn(
         runtime,
         { iteration, slug: task.slug, round: state.round },
         ensured.path,
@@ -251,8 +219,15 @@ async function attemptStewardMerge(
   const stop = result.record.stop;
   if (stop?.kind === "infra") {
     await abortMerge(ensured.path);
-    const cause = stop.details ? `${stop.cause}: ${stop.details}` : stop.cause;
-    return { ok: false, infra: { kind: "infra", cause }, agentTurn: true };
+    return {
+      ok: false,
+      infra: {
+        kind: "infra",
+        cause: stop.cause,
+        ...(stop.details ? { details: stop.details } : {}),
+      },
+      agentTurn: true,
+    };
   }
   if (stop?.kind === "cancelled") {
     await abortMerge(ensured.path);
@@ -329,20 +304,30 @@ async function ensurePointer(
  * conflict. Each conflict gets one steward turn in the shared steward session
  * (compacted at settle), then the merge queue lands it with gates; failures
  * hold the task and leave an architect pointer (status, worktree, branch) as
- * a forwarded concern. Unmerged tasks relaunch via continuations on the new
- * head through the existing `base:` path.
+ * a forwarded concern. A candidate whose leg stops on infra is reported as
+ * dead and the remaining candidates still run; only a frozen slug (its bounded
+ * re-dispatches spent, or a fatal cause) is left for the next launch. Unmerged
+ * tasks relaunch via continuations on the new head through the existing
+ * `base:` path.
  */
 export async function runSteward(
   runtime: KernelRuntime,
   iteration: number,
+  opts: StewardOptions = {},
 ): Promise<StewardResult> {
   const tasks = await runtime.store.listTasks();
   const records = await runtime.store.listRecords();
   const state = derive(tasks, records, runtime.configs.process.flows);
+  // A turn that stopped on infra is not an attempt: its slug gets the
+  // task-turn backoff, so a later wave retries it instead of skipping it.
   const attemptedThisWave = new Set(
     records
       .filter(
-        (r) => r.iteration === iteration && r.step === "steward" && r.slug,
+        (r) =>
+          r.iteration === iteration &&
+          r.step === "steward" &&
+          r.slug &&
+          r.stop?.kind !== "infra",
       )
       .map((r) => r.slug!),
   );
@@ -352,7 +337,8 @@ export async function runSteward(
       return (
         s?.status === "parked" &&
         s.cause?.startsWith("conflict:") &&
-        !attemptedThisWave.has(t.slug)
+        !attemptedThisWave.has(t.slug) &&
+        !opts.frozen?.has(t.slug)
       );
     })
     .map((t) => t.slug)
@@ -367,12 +353,13 @@ export async function runSteward(
         cause: "skipped: no conflicts",
       });
     }
-    return { skipped: true, attempted: [], landed: [], unmerged: [] };
+    return { skipped: true, attempted: [], landed: [], unmerged: [], dead: [] };
   }
 
   const attempted: string[] = [];
   const landed: string[] = [];
   const unmerged: string[] = [];
+  const dead: StewardDead[] = [];
   let session: SessionRef | undefined;
 
   for (const slug of candidates) {
@@ -392,16 +379,23 @@ export async function runSteward(
       taskState,
       session,
     );
-    if (attempt.infra)
+    if (attempt.infra) {
+      dead.push({
+        slug,
+        cause: attempt.infra.cause,
+        ...(attempt.infra.details ? { details: attempt.infra.details } : {}),
+      });
+      continue;
+    }
+    if (attempt.cancelled)
       return {
         skipped: false,
         attempted,
         landed,
         unmerged,
-        infra: attempt.infra,
+        dead,
+        cancelled: true,
       };
-    if (attempt.cancelled)
-      return { skipped: false, attempted, landed, unmerged, cancelled: true };
     if (attempt.session) session = attempt.session;
 
     const branch = taskBranchName(runtime, slug);
@@ -452,16 +446,23 @@ export async function runSteward(
     const merged = await mergeTask(runtime, task, iteration, taskState, {
       keptLand: true,
     });
-    if (merged.infra)
+    if (merged.infra) {
+      dead.push({
+        slug,
+        cause: merged.infra.cause,
+        ...(merged.infra.details ? { details: merged.infra.details } : {}),
+      });
+      continue;
+    }
+    if (merged.cancelled)
       return {
         skipped: false,
         attempted,
         landed,
         unmerged,
-        infra: merged.infra,
+        dead,
+        cancelled: true,
       };
-    if (merged.cancelled)
-      return { skipped: false, attempted, landed, unmerged, cancelled: true };
     const after = await runtime.store.listRecords();
     const merge = after
       .filter((r) => r.slug === slug && r.step === "merge" && r.endedAt)
@@ -487,5 +488,5 @@ export async function runSteward(
     }
   }
 
-  return { skipped: false, attempted, landed, unmerged };
+  return { skipped: false, attempted, landed, unmerged, dead };
 }

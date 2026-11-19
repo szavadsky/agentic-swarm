@@ -142,6 +142,31 @@ export function queueDigestSteer(
   return harness.script(handler, { when: isDigestSteerTurn });
 }
 
+/** Routes the resumed launch's digest steer to a task (no architect route). */
+export function digestTaskTurn(taskDir: string, slug: string): FakeTurnHandler {
+  return (req, ctx) => {
+    const id = digestSteerId(req);
+    fs.appendFileSync(
+      path.join(taskDir, `${slug}.md`),
+      "\nDigest evidence noted; no scope change.\n",
+      "utf8",
+    );
+    ctx.writeOutcome(
+      outcome({
+        summary: `digest steer ${id} routed to task ${slug}`,
+        steerRoutes: [
+          {
+            steer: id,
+            route: "task",
+            answer: `Noted for ${slug}; scope unchanged.`,
+          },
+        ],
+      }),
+    );
+    return fakeTurnResult(req);
+  };
+}
+
 /** Scripts the digest scout a resumed launch runs before its PM steer turn. */
 export function digestScoutTurn(
   goalDir: string,

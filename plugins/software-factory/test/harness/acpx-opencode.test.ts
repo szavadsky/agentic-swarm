@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import path from "node:path";
 import type { AcpxConfig } from "../../src/harness/acpx/config.js";
@@ -54,6 +55,7 @@ describe("AcpxHarness opencode raw route", () => {
     const harness = new AcpxHarness({
       id: "opencode",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: OPENCODE_ACPX,
     });
     try {
@@ -143,6 +145,7 @@ describe("AcpxHarness opencode raw route", () => {
     const options = {
       id: "opencode",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: OPENCODE_ACPX,
     };
     try {
@@ -195,6 +198,7 @@ describe("AcpxHarness opencode raw route", () => {
     const harness = new AcpxHarness({
       id: "opencode",
       binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
       acpx: OPENCODE_ACPX,
     });
     try {
