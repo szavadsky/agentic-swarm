@@ -542,6 +542,71 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("keeps the pre-serial gates shape valid and defaults serial to empty", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/repo.yaml"),
+      ["gates:", "  - id: unit", "    command: echo unit", ""].join("\n"),
+    );
+    const configs = loadConfigs(root);
+    expect(configs.repo.gates).toEqual([
+      { id: "unit", command: "echo unit", serial: [] },
+    ]);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("parses declared serial mutexes and per-worktree env dirs", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/repo.yaml"),
+      [
+        "gates:",
+        "  - id: integration",
+        "    command: echo integration",
+        "    serial: [database, port]",
+        "    env: { TMPDIR: .cache/gate, CACHE_DIR: .cache/components }",
+        "",
+      ].join("\n"),
+    );
+    const configs = loadConfigs(root);
+    expect(configs.repo.gates).toEqual([
+      {
+        id: "integration",
+        command: "echo integration",
+        serial: ["database", "port"],
+        env: { TMPDIR: ".cache/gate", CACHE_DIR: ".cache/components" },
+      },
+    ]);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("rejects an env dir outside the worktree and a name that is not a variable", () => {
+    const cases = [
+      ["{ TMPDIR: /tmp/shared }", /worktree-relative/],
+      ["{ TMPDIR: ../shared }", /worktree-relative/],
+      ["{ TMPDIR: ~/shared }", /worktree-relative/],
+      ["{ 1BAD: .cache }", /gates\.0\.env/],
+    ] as const;
+    for (const [env, message] of cases) {
+      const root = tmpRepo();
+      fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+      fs.writeFileSync(
+        path.join(root, ".factory/repo.yaml"),
+        [
+          "gates:",
+          "  - id: unit",
+          "    command: echo unit",
+          `    env: ${env}`,
+          "",
+        ].join("\n"),
+      );
+      expect(() => loadConfigs(root)).toThrow(message);
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("defaults sessions.retention to short with no run file", () => {
     const root = tmpRepo();
     const configs = loadConfigs(root);

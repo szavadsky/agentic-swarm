@@ -3,13 +3,20 @@ artifactRoot: .factory/artifacts
 setup:
   - bun install --cwd plugins/software-factory --frozen-lockfile --silent
 gates:
+  # Each gate export and its test temps live under its own worktree, so gate
+  # runs in two worktrees never share a scratch root.
   - id: typecheck
     command: plugins/software-factory/scripts/gates.sh plugins/software-factory typecheck
+    env: { TMPDIR: .cache/gate }
   - id: tests
     command: plugins/software-factory/scripts/gates.sh plugins/software-factory tests
+    env: { TMPDIR: .cache/gate }
   - id: format
     command: plugins/software-factory/scripts/gates.sh plugins/software-factory format
+    env: { TMPDIR: .cache/gate }
   - id: lint
     command: plugins/software-factory/scripts/gates.sh plugins/software-factory lint
+    env: { TMPDIR: .cache/gate }
   - id: schema-validation
     command: plugins/software-factory/scripts/gates.sh plugins/software-factory schema-validation
+    env: { TMPDIR: .cache/gate }

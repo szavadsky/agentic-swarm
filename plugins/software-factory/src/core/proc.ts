@@ -16,7 +16,7 @@ interface RunProcessOptions {
   signal?: AbortSignal;
 }
 
-interface ProcessResult {
+export interface ProcessResult {
   code: number | null;
   signal?: string;
   stdout: string;

@@ -57,7 +57,17 @@ gates:
   - id: typecheck
     command: bun run typecheck
     format: { junit: junit.xml }
+  - id: integration
+    command: bun run test:integration
+    serial: [database]                          # gates naming a mutex never overlap
+    env: { TMPDIR: .cache/gate }                # per-worktree scratch directory
 ```
+
+Gate runs in different worktrees run in parallel. A gate waits only for the
+mutexes it names in `serial`: within one factory process, gates naming the same
+mutex are serialized, and a gate that names none never waits. `env` maps
+variable names to worktree-relative directories; the kernel creates them and
+exports absolute paths, so two worktrees get two directories.
 
 **Process** — package `config/process.yaml`, optionally overridden by
 `.factory/process.yaml`:

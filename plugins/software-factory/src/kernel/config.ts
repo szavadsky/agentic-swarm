@@ -25,10 +25,29 @@ const packageRoot = fileURLToPath(new URL("../..", import.meta.url));
 const identitySchema = z
   .object({ name: z.string().min(1), email: z.string().min(1) })
   .strict();
+/**
+ * A gate's scratch directory: relative to its worktree, so the same declaration
+ * gives every worktree its own directory. Absolute, `~` and `..` paths would
+ * let two concurrent gate runs share one, which is what `env` exists to prevent.
+ */
+const gateEnvDirSchema = z
+  .string()
+  .min(1)
+  .refine(
+    (value) =>
+      !path.isAbsolute(value) &&
+      !value.startsWith("~") &&
+      !value.split(/[\\/]/).includes(".."),
+    { message: "env dirs must be worktree-relative (no absolute, ~ or ..)" },
+  );
 const gateSchema = z
   .object({
     id: z.string().min(1),
     command: z.string().min(1),
+    serial: z.array(z.string().min(1)).default([]),
+    env: z
+      .record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), gateEnvDirSchema)
+      .optional(),
     format: z
       .object({
         junit: z.string().min(1).optional(),

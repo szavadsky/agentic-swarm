@@ -612,6 +612,24 @@ export interface ArtifactStore {
   declaredWrites(): readonly DeclaredWrite[];
 }
 
+/** One repo gate command and the shared resources it needs to itself. */
+export interface GateConfig {
+  id: string;
+  command: string;
+  /**
+   * Mutex names held while this gate runs. Within one factory process, gates
+   * naming the same mutex never overlap, in one run or in concurrent runs in
+   * other worktrees; a gate that names none never waits for one.
+   */
+  serial: string[];
+  /**
+   * Environment variables mapped to worktree-relative directories. The kernel
+   * creates them and exports absolute paths, so two worktrees get two dirs.
+   */
+  env?: Record<string, string>;
+  format?: { junit?: string; pattern?: "pytest" | "jest" | "cargo" };
+}
+
 export interface RepoConfig {
   baseBranch: string;
   /** Goal directories live at <repo>/<artifactRoot>/<goal>. */
@@ -619,11 +637,7 @@ export interface RepoConfig {
   worktreeRoot?: string;
   identity?: { name: string; email: string };
   setup: string[];
-  gates: {
-    id: string;
-    command: string;
-    format?: { junit?: string; pattern?: "pytest" | "jest" | "cargo" };
-  }[];
+  gates: GateConfig[];
   cleanliness?: {
     maxFileSizeBytes?: number;
     allowedExtensions?: string[];
