@@ -736,7 +736,8 @@ export interface MetricsInput {
 /**
  * Rebuilds every iteration entry from records (status and steer counts are the
  * only facts records cannot carry for past iterations, so they are preserved).
- * Writes `iterations/<n>/metrics.yaml`, root `metrics.yaml` and the outbox copy.
+ * Writes `iterations/<n>/metrics.yaml`, root `metrics.yaml` and the outbox
+ * reference to it.
  */
 export async function writeMetrics(
   store: ArtifactStore,
@@ -789,5 +790,6 @@ export async function writeMetrics(
   }
   const text = yaml.stringify(metrics);
   await store.writeFile("metrics.yaml", text);
-  await store.writeFile("mailbox/outbox/metrics.yaml", text);
+  // The outbox notifies the owner; the metrics themselves have one copy above.
+  await store.writeFile("mailbox/outbox/metrics.yaml", "metrics.yaml\n");
 }

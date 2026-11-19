@@ -388,10 +388,10 @@ export async function writeIterationSummary(
   const rel = summaryRelPath(iteration);
   const text = lines.join("\n");
   await store.writeFile(rel, text);
-  // The outbox is how the owner sees the guaranteed remarkable without reading the goal dir.
+  // The outbox notifies the owner; the summary itself has one copy above.
   await store.writeFile(
     `mailbox/outbox/iteration-${iteration}-summary.md`,
-    text,
+    `${rel}\n`,
   );
   return rel;
 }

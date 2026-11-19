@@ -225,7 +225,7 @@ describe("iteration metrics", () => {
       ) as typeof one;
       expect(iterationFile).toEqual(one);
       expect(await store.readFile("mailbox/outbox/metrics.yaml")).toBe(
-        await store.readFile("metrics.yaml"),
+        "metrics.yaml\n",
       );
     } finally {
       repo.cleanup();
