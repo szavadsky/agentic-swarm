@@ -752,7 +752,11 @@ export async function resumeSessionFor(
   if (!runtime.configs.run.aliases[alias])
     throw new Error(`run config has no alias "${alias}"`);
   if (
-    !portable(prior.harness, effectiveAliasHarness(runtime, alias, iteration))
+    !portable(
+      prior.harness,
+      effectiveAliasHarness(runtime, alias, iteration),
+      runtime.configs.run.portability,
+    )
   )
     return undefined;
   return prior;
@@ -853,10 +857,10 @@ export async function reviewSession(
     return undefined;
   }
   const current = target.harness.id;
-  if (!portable(prior.harness, current)) {
+  if (!portable(prior.harness, current, runtime.configs.run.portability)) {
     console.warn(
       `[factory] review "${task.slug}" step "${stepId}" starts de novo: ` +
-        `harness "${prior.harness}" is not portable to alias harness "${current}"`,
+        `harness "${prior.harness}" is not the portable alias harness "${current}"`,
     );
     return undefined;
   }
@@ -918,7 +922,9 @@ export async function trivialResumeSession(
   }
   const current = target.harness.id;
   const kept = (ref: SessionRef | undefined): SessionRef | undefined =>
-    ref && portable(ref.harness, current) ? ref : undefined;
+    ref && portable(ref.harness, current, runtime.configs.run.portability)
+      ? ref
+      : undefined;
   if (isFix) {
     const own = records
       .filter(
@@ -947,7 +953,7 @@ export async function trivialResumeSession(
         `the front turn left no session record`,
     };
   }
-  if (!portable(front.harness, current)) {
+  if (!portable(front.harness, current, runtime.configs.run.portability)) {
     return {
       cause:
         `trivial task "${task.slug}" cannot resume its front session: ` +

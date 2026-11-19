@@ -234,6 +234,36 @@ describe("alias fallback tiers", () => {
     }
   });
 
+  it("carries the session across a declared portability edge", async () => {
+    const t = await tierRuntime({
+      harness: "a",
+      model: "ma",
+      fallbacks: [{ harness: "b", model: "mb" }],
+    });
+    try {
+      t.a.scriptResult(quota());
+      t.b.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "done on b" }));
+        return fakeTurnResult(req);
+      });
+      t.runtime.configs.run.portability = [{ from: "a", to: "b" }];
+
+      await runAgentTurn(t.runtime, {
+        target: resolveTurn(t.runtime, "implementer", "implementer"),
+        cwd: t.repo.dir,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+        session: priorSession("a", t.repo.dir, "ma"),
+      });
+
+      expect(t.b.calls).toHaveLength(1);
+      expect(t.b.calls[0]?.session?.id).toBe("prior-session");
+    } finally {
+      cleanupFlowRepo(t.repo);
+    }
+  });
+
   it("returns the last infra stop when every tier fails on transient error and retries the primary next", async () => {
     const t = await tierRuntime({
       harness: "a",

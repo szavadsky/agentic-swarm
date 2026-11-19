@@ -116,7 +116,12 @@ quota: { resetMinutes: 300 }                         # pool cooldown after a quo
 worktreeRoot: ~/.local/share/factory/worktrees
 lsp: true                                             # artifact LSP on omp
 scouts: { model: opencode-go/deepseek-v4.1-flash }   # omp architect subagents
+portability: [{ from: opencode, to: omp }]           # sessions cross only declared edges
 ```
+
+A task session resumes on the harness that recorded it. `portability: [{from, to}]`
+declares further directional edges: a session recorded on `from` may resume on
+`to`, while every other pair starts de novo with the rendered prompt.
 
 `lsp: true` enables artifact diagnostics where the harness supports them. At
 launch the factory writes every kernel schema as JSON Schema and one omp LSP

@@ -44,6 +44,23 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("keeps declared portability edges and refuses an unknown edge key", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    const run = path.join(root, ".factory/run.yaml");
+    expect(loadConfigs(root).run.portability).toEqual([]);
+    fs.writeFileSync(run, "portability: [{ from: opencode, to: omp }]\n");
+    expect(loadConfigs(root).run.portability).toEqual([
+      { from: "opencode", to: "omp" },
+    ]);
+    fs.writeFileSync(
+      run,
+      "portability: [{ from: opencode, to: omp, how: quota }]\n",
+    );
+    expect(() => loadConfigs(root)).toThrow(ConfigError);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("refuses a task type kind outside spike and development", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });

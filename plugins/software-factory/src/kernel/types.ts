@@ -712,6 +712,8 @@ export interface RunConfig {
   /** Cheap model pinned for architect subagents. */
   scouts?: { model: string; effort?: string };
   preset?: string;
+  /** Directional harness edges across which a session may be resumed. */
+  portability?: { from: string; to: string }[];
 }
 
 /** Absolute paths of the three layers, for findings that must name the file. */

@@ -378,6 +378,12 @@ export const runConfigSchema = z
       .strict()
       .optional(),
     preset: z.string().min(1).optional(),
+    /** Directional harness edges across which a session may be resumed. */
+    portability: z
+      .array(
+        z.object({ from: z.string().min(1), to: z.string().min(1) }).strict(),
+      )
+      .default([]),
   })
   .strict();
 

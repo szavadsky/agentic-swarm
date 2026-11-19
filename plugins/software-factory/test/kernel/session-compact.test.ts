@@ -60,9 +60,16 @@ class FailingCompactHarness extends FakeHarness {
 }
 
 describe("session portability", () => {
-  it("admits only same-harness resume edges", () => {
+  it("admits only same-harness resume edges when none are declared", () => {
     expect(portable("omp", "omp")).toBe(true);
     expect(portable("omp", "opencode")).toBe(false);
+  });
+
+  it("admits a declared edge in its direction only", () => {
+    const edges = [{ from: "opencode", to: "omp" }];
+    expect(portable("opencode", "omp", edges)).toBe(true);
+    expect(portable("omp", "opencode", edges)).toBe(false);
+    expect(portable("omp", "omp", edges)).toBe(true);
   });
 
   it("resumes the recording harness and refuses a session the alias no longer routes to", async () => {
@@ -115,6 +122,20 @@ describe("session portability", () => {
           worktree,
         ),
       ).toBeUndefined();
+
+      // A declared edge admits that crossing; the session resumes.
+      runtime.configs.run.portability = [{ from: "fake", to: "other" }];
+      expect(
+        (
+          await resumeSessionFor(
+            runtime,
+            taskFile,
+            "implementer",
+            records,
+            worktree,
+          )
+        )?.id,
+      ).toBe(recorded.id);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -520,7 +541,7 @@ describe("review session resume", () => {
       expect(review[1]!.session?.id).not.toBe(review[0]!.session?.id);
       expect(review[1]!.cachedPrefix).toBeUndefined();
       expect(warnings.join("\n")).toContain("starts de novo");
-      expect(warnings.join("\n")).toContain("not portable");
+      expect(warnings.join("\n")).toContain("not the portable alias harness");
     } finally {
       console.warn = originalWarn;
       cleanupFlowRepo(repo);

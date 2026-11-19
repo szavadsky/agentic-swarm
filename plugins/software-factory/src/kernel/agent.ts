@@ -254,7 +254,12 @@ export async function runAgentTurn(
         ...(tier.effort ? { effort: tier.effort } : {}),
         cwd: spec.cwd,
         prompt: ask,
-        ...(current && portable(current.harness, tier.harness.id)
+        ...(current &&
+        portable(
+          current.harness,
+          tier.harness.id,
+          runtime.configs.run.portability,
+        )
           ? { session: current }
           : {}),
         outcomePath,
