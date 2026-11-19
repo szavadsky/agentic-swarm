@@ -56,6 +56,18 @@ aliases:
 # The built-in `acpx opencode` route resolves 1.19.5 and fails on the 2.2.7
 # data dir; the raw `opencode acp` route runs the installed CLI (probe §0).
 harnesses:
+  # omp is native; the unattended policy is opaque overlay keys here, not code.
+  omp:
+    options:
+      defaultThinkingLevel: low
+      memory: { backend: off }
+      autolearn: { enabled: false }
+      skills: { enabled: false }
+      features: { unexpectedStopDetection: false }
+      tools: { approvalMode: yolo, xdev: false }
+      compaction: { experimentalContextManagement: false }
+      disabledProviders: [native, claude, codex, gemini, opencode, cursor, agents-md]
+      retry: { enabled: false, modelFallback: false }
   opencode:
     acpx:
       agent: opencode acp

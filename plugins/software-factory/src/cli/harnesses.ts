@@ -40,6 +40,7 @@ export function createRealHarnesses(
       retention: context.retention,
       binary: context.harnesses?.[OMP_ID]?.binary,
       lspConfig: context.lsp?.config,
+      options: context.harnesses?.[OMP_ID]?.options,
     }),
   };
   for (const [id, entry] of Object.entries(context.harnesses ?? {})) {
@@ -48,6 +49,7 @@ export function createRealHarnesses(
       id,
       binary: entry.binary,
       acpx: entry.acpx,
+      options: entry.options,
     });
   }
   return harnesses;

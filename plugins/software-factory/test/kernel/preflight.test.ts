@@ -21,8 +21,22 @@ import { createFolderStore } from "../../src/kernel/store.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { task } from "./helpers.js";
 
-const RUN_HEAD = `aliases:
+const RUN_HEAD_NO_HIGHEST_WITH_HIGHEST = `aliases:
   architect: { harness: fake, model: arch, effort: highest }
+  pm: { harness: fake, model: pm }
+  digest: { harness: fake, model: digest }
+  implementer: { harness: fake, model: impl }
+  implementer-b: { harness: fake, model: impl-b }
+  researcher: { harness: fake, model: research }
+  reviewer: { harness: fake, model: rev }
+  steward: { harness: fake, model: steward }
+  plan-checker: { harness: fake, model: check }
+  plan-reviewer: { harness: fake, model: plan-review }
+limits: { concurrency: { overall: 2 }, iterations: 1 }
+`;
+
+const RUN_HEAD_NO_HIGHEST = `aliases:
+  architect: { harness: fake, model: arch, effort: max }
   pm: { harness: fake, model: pm }
   digest: { harness: fake, model: digest }
   implementer: { harness: fake, model: impl }
@@ -43,8 +57,8 @@ interface Fixture {
 }
 
 /** Architect and implementer on different harnesses; omp is the scouts consumer. */
-const SPLIT_HARNESSES = RUN_HEAD.replace(
-  "architect: { harness: fake, model: arch, effort: highest }",
+const SPLIT_HARNESSES = RUN_HEAD_NO_HIGHEST.replace(
+  "architect: { harness: fake, model: arch, effort: max }",
   "architect: { harness: claude-code, model: arch }",
 ).replace(
   "implementer: { harness: fake, model: impl }",
@@ -58,7 +72,7 @@ function splitHarnesses(f: Fixture): Map<string, Harness> {
     "omp",
     new FakeHarness({
       id: "omp",
-      caps: { effort: ["low", "medium", "high"] },
+      caps: { effort: ["low", "medium", "high", "max"] },
     }),
   );
   return harnesses;
@@ -69,7 +83,7 @@ function withScouts(runYaml: string, scouts: string): string {
 }
 
 async function fixture(
-  runYaml = RUN_HEAD,
+  runYaml = RUN_HEAD_NO_HIGHEST,
   repoYaml?: string,
   processYaml?: string,
 ): Promise<Fixture> {
@@ -116,8 +130,22 @@ async function refusal(input: PreflightInput): Promise<PreflightError> {
 }
 
 describe("pre-flight", () => {
-  it("resolves effort: highest to the last level the model accepts", async () => {
-    const f = await fixture();
+  it("refuses effort: highest", async () => {
+    const f = await fixture(RUN_HEAD_NO_HIGHEST_WITH_HIGHEST);
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "aliases.architect.effort",
+        }),
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("resolves effort: max to max", async () => {
+    const f = await fixture(RUN_HEAD_NO_HIGHEST);
     try {
       const result = await preflight(f.input);
       expect(result.aliases.architect).toBe("max");
@@ -129,7 +157,7 @@ describe("pre-flight", () => {
 
   it("reports a task type naming an unconfigured flow", async () => {
     const f = await fixture(
-      RUN_HEAD,
+      RUN_HEAD_NO_HIGHEST,
       undefined,
       "taskTypes:\n  odd: { flow: no-such-flow, kind: development, schema: outcome }\n",
     );
@@ -147,9 +175,22 @@ describe("pre-flight", () => {
     }
   });
 
+  it("passes harness-default as no effort override", async () => {
+    const f = await fixture(
+      RUN_HEAD_NO_HIGHEST.replace("effort: max", "effort: harness-default"),
+    );
+    try {
+      const result = await preflight(f.input);
+      expect(result.aliases.architect).toBeUndefined();
+      expect(f.configs.run.aliases.architect!.effort).toBeUndefined();
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
   it("reports a task type naming a prototype-key flow", async () => {
     const f = await fixture(
-      RUN_HEAD,
+      RUN_HEAD_NO_HIGHEST,
       undefined,
       "taskTypes:\n  odd: { flow: toString, kind: development, schema: outcome }\n",
     );
@@ -169,7 +210,7 @@ describe("pre-flight", () => {
 
   it("reports a task type naming an unknown output schema", async () => {
     const f = await fixture(
-      RUN_HEAD,
+      RUN_HEAD_NO_HIGHEST,
       undefined,
       "taskTypes:\n  odd: { flow: implement-review, kind: development, schema: nope }\n",
     );
@@ -189,7 +230,7 @@ describe("pre-flight", () => {
 
   it("reports a task type naming a prototype-key output schema", async () => {
     const f = await fixture(
-      RUN_HEAD,
+      RUN_HEAD_NO_HIGHEST,
       undefined,
       "taskTypes:\n  odd: { flow: implement-review, kind: development, schema: constructor }\n",
     );
@@ -210,7 +251,7 @@ describe("pre-flight", () => {
 
   it("accepts a task type whose flow and schema exist", async () => {
     const f = await fixture(
-      RUN_HEAD,
+      RUN_HEAD_NO_HIGHEST,
       undefined,
       "taskTypes:\n  docs: { flow: just-implement, kind: development, schema: outcome }\n",
     );
@@ -305,7 +346,7 @@ describe("pre-flight", () => {
 
   it("refuses an effort level the model does not accept", async () => {
     const f = await fixture(
-      RUN_HEAD.replace("effort: highest", "effort: ultra"),
+      RUN_HEAD_NO_HIGHEST.replace("effort: max", "effort: ultra"),
     );
     try {
       const err = await refusal(f.input);
@@ -324,7 +365,7 @@ describe("pre-flight", () => {
 
   it("refuses a model the harness does not list and a missing fallback", async () => {
     const f = await fixture(
-      RUN_HEAD.replace("model: pm", "model: ghost").replace(
+      RUN_HEAD_NO_HIGHEST.replace("model: pm", "model: ghost").replace(
         "model: arch",
         "model: arch, fallbacks: [{ model: gone/model }]",
       ),
@@ -343,7 +384,7 @@ describe("pre-flight", () => {
 
   it("validates a cross-harness fallback against its own harness", async () => {
     const f = await fixture(
-      RUN_HEAD.replace(
+      RUN_HEAD_NO_HIGHEST.replace(
         "implementer: { harness: fake, model: impl }",
         "implementer: { harness: fake, model: impl, fallbacks: [{ harness: other, model: far }] }",
       ),
@@ -387,11 +428,11 @@ describe("pre-flight", () => {
     }
   });
 
-  it("passes an explicit omp level on an @-prefixed omp alias", async () => {
+  it("passes auto on an @-prefixed omp alias", async () => {
     const f = await fixture(
       SPLIT_HARNESSES.replace(
         "model: impl }",
-        'model: "@free", effort: high }',
+        'model: "@free", effort: auto }',
       ),
     );
     try {
@@ -402,7 +443,7 @@ describe("pre-flight", () => {
         harnesses: splitHarnesses(f),
         catalog,
       });
-      expect(result.aliases.implementer).toBe("high");
+      expect(result.aliases.implementer).toBe("auto");
     } finally {
       f.repo.cleanup();
     }
@@ -451,12 +492,9 @@ describe("pre-flight", () => {
     }
   });
 
-  it("resolves effort: highest on a plain omp model through the catalog", async () => {
+  it("validates a literal level on a plain omp model through the catalog", async () => {
     const f = await fixture(
-      SPLIT_HARNESSES.replace(
-        "model: impl }",
-        "model: impl, effort: highest }",
-      ),
+      SPLIT_HARNESSES.replace("model: impl }", "model: impl, effort: max }"),
     );
     try {
       const seen: string[] = [];
@@ -470,8 +508,25 @@ describe("pre-flight", () => {
         catalog,
       });
       expect(seen).toContain("omp/impl");
-      expect(result.aliases.implementer).toBe("high");
-      expect(f.configs.run.aliases.implementer?.effort).toBe("high");
+      expect(result.aliases.implementer).toBe("max");
+      expect(f.configs.run.aliases.implementer?.effort).toBe("max");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("accepts auto on a plain omp model whose caps do not list it", async () => {
+    const f = await fixture(
+      SPLIT_HARNESSES.replace("model: impl }", "model: impl, effort: auto }"),
+    );
+    try {
+      const catalog: ModelCatalog = async () => true;
+      const result = await preflight({
+        ...f.input,
+        harnesses: splitHarnesses(f),
+        catalog,
+      });
+      expect(result.aliases.implementer).toBe("auto");
     } finally {
       f.repo.cleanup();
     }
@@ -499,7 +554,9 @@ describe("pre-flight", () => {
   });
 
   it("still refuses an @-prefixed model on a non-omp harness", async () => {
-    const f = await fixture(RUN_HEAD.replace("model: pm", 'model: "@free"'));
+    const f = await fixture(
+      RUN_HEAD_NO_HIGHEST.replace("model: pm", 'model: "@free"'),
+    );
     try {
       const catalog: ModelCatalog = async (_harness, model) =>
         model !== "@free";
@@ -512,7 +569,7 @@ describe("pre-flight", () => {
 
   it("checks scouts against omp, not the architect's harness", async () => {
     const f = await fixture(
-      withScouts(SPLIT_HARNESSES, "scouts: { model: ernie, effort: highest }"),
+      withScouts(SPLIT_HARNESSES, "scouts: { model: ernie, effort: max }"),
     );
     try {
       const seen: string[] = [];
@@ -525,8 +582,8 @@ describe("pre-flight", () => {
         harnesses: splitHarnesses(f),
         catalog,
       });
-      expect(result.aliases.scouts).toBe("high");
-      expect(f.configs.run.scouts!.effort).toBe("high");
+      expect(result.aliases.scouts).toBe("max");
+      expect(f.configs.run.scouts!.effort).toBe("max");
       expect(seen).toContain("omp/ernie");
       expect(seen).not.toContain("claude-code/ernie");
     } finally {
@@ -559,7 +616,9 @@ describe("pre-flight", () => {
   });
 
   it("refuses a scouts block when no alias or fallback runs on omp", async () => {
-    const f = await fixture(withScouts(RUN_HEAD, "scouts: { model: ernie }"));
+    const f = await fixture(
+      withScouts(RUN_HEAD_NO_HIGHEST, "scouts: { model: ernie }"),
+    );
     try {
       const err = await refusal(f.input);
       expect(err.findings).toContainEqual(
@@ -600,7 +659,7 @@ describe("pre-flight", () => {
 
   it("refuses a fallback on an unregistered harness", async () => {
     const f = await fixture(
-      RUN_HEAD.replace(
+      RUN_HEAD_NO_HIGHEST.replace(
         "implementer: { harness: fake, model: impl }",
         "implementer: { harness: fake, model: impl, fallbacks: [{ harness: ghost, model: far }] }",
       ),
@@ -620,9 +679,9 @@ describe("pre-flight", () => {
 
   it("resolves each fallback effort against its own harness caps", async () => {
     const f = await fixture(
-      RUN_HEAD.replace(
+      RUN_HEAD_NO_HIGHEST.replace(
         "implementer: { harness: fake, model: impl }",
-        "implementer: { harness: fake, model: impl, effort: highest, fallbacks: [{ harness: other, model: far, effort: highest }, { model: near }] }",
+        "implementer: { harness: fake, model: impl, effort: max, fallbacks: [{ harness: other, model: far, effort: high }, { model: near }] }",
       ),
     );
     try {
@@ -643,7 +702,7 @@ describe("pre-flight", () => {
 
   it("validates every rotation entry's harness, model and effort", async () => {
     const f = await fixture(
-      RUN_HEAD.replace(
+      RUN_HEAD_NO_HIGHEST.replace(
         "implementer: { harness: fake, model: impl }",
         `implementer:
     harness: fake
@@ -677,14 +736,14 @@ describe("pre-flight", () => {
 
   it("resolves a rotated entry's effort against its own harness and checks a rotating fallback everywhere it can land", async () => {
     const f = await fixture(
-      RUN_HEAD.replace(
+      RUN_HEAD_NO_HIGHEST.replace(
         "implementer: { harness: fake, model: impl }",
         `implementer:
     harness: fake
     model: impl
-    effort: highest
+    effort: max
     rotate:
-      - { harness: other, model: far, effort: highest }
+      - { harness: other, model: far, effort: high }
       - { harness: fake, model: near, effort: max }
     fallbacks:
       - { model: near }`,
@@ -717,7 +776,7 @@ describe("pre-flight", () => {
 
   it("refuses a subscription that names no capped pool", async () => {
     const f = await fixture(
-      RUN_HEAD.replace(
+      RUN_HEAD_NO_HIGHEST.replace(
         "implementer: { harness: fake, model: impl }",
         "implementer: { harness: fake, model: impl, subscription: typo, fallbacks: [{ model: near, subscription: other-typo }] }",
       ).replace(
@@ -781,7 +840,7 @@ describe("pre-flight", () => {
 
   it("names acpx and the bunx route when an acpx alias has no binary", async () => {
     const f = await fixture(
-      RUN_HEAD.replace(
+      RUN_HEAD_NO_HIGHEST.replace(
         "implementer: { harness: fake, model: impl }",
         "implementer: { harness: pi, model: impl }",
       ),
@@ -809,7 +868,7 @@ describe("pre-flight", () => {
     const configured = path.join(os.tmpdir(), `missing-acpx-${process.pid}`);
     expect(fs.existsSync(configured)).toBe(false);
     const f = await fixture(
-      RUN_HEAD.replace(
+      RUN_HEAD_NO_HIGHEST.replace(
         "implementer: { harness: fake, model: impl }",
         "implementer: { harness: opencode, model: impl }",
       ).replace(
@@ -841,7 +900,7 @@ describe("pre-flight", () => {
     const missing = path.join(os.tmpdir(), `missing-agent-${process.pid}`);
     expect(fs.existsSync(missing)).toBe(false);
     const f = await fixture(
-      RUN_HEAD.replace(
+      RUN_HEAD_NO_HIGHEST.replace(
         "implementer: { harness: fake, model: impl }",
         "implementer: { harness: opencode, model: impl }",
       ).replace(
@@ -895,7 +954,7 @@ describe("pre-flight", () => {
 
   it("accepts a tier that names a configured alias", async () => {
     const f = await fixture(
-      RUN_HEAD.replace(
+      RUN_HEAD_NO_HIGHEST.replace(
         "limits:",
         "  escalation: { harness: fake, model: esc }\nlimits:",
       ),
@@ -911,7 +970,7 @@ describe("pre-flight", () => {
 
   it("refuses an escalateTo that names no alias", async () => {
     const f = await fixture(
-      RUN_HEAD.replace(
+      RUN_HEAD_NO_HIGHEST.replace(
         "pm: { harness: fake, model: pm }",
         "pm: { harness: fake, model: pm, escalateTo: ghost }",
       ),
@@ -933,7 +992,7 @@ describe("pre-flight", () => {
 
   it("refuses an escalateTo of the reserved tier name `default`", async () => {
     const f = await fixture(
-      RUN_HEAD.replace(
+      RUN_HEAD_NO_HIGHEST.replace(
         "pm: { harness: fake, model: pm }",
         "pm: { harness: fake, model: pm, escalateTo: default }\n  default: { harness: fake, model: dflt }",
       ),
@@ -954,7 +1013,7 @@ describe("pre-flight", () => {
 
   it("refuses an escalateTo chain that forms a cycle", async () => {
     const f = await fixture(
-      RUN_HEAD.replace(
+      RUN_HEAD_NO_HIGHEST.replace(
         "pm: { harness: fake, model: pm }",
         "pm: { harness: fake, model: pm, escalateTo: esc }\n  esc: { harness: fake, model: esc, escalateTo: pm }",
       ),
@@ -973,7 +1032,7 @@ describe("pre-flight", () => {
 
   it("refuses a fallback that names no alias", async () => {
     const f = await fixture(
-      RUN_HEAD.replace(
+      RUN_HEAD_NO_HIGHEST.replace(
         "implementer: { harness: fake, model: impl }",
         "implementer: { harness: fake, model: impl, fallbacks: [{ alias: ghost }] }",
       ),
@@ -994,7 +1053,7 @@ describe("pre-flight", () => {
 
   it("refuses a fallback that names its own alias", async () => {
     const f = await fixture(
-      RUN_HEAD.replace(
+      RUN_HEAD_NO_HIGHEST.replace(
         "implementer: { harness: fake, model: impl }",
         "implementer: { harness: fake, model: impl, fallbacks: [{ alias: implementer }] }",
       ),
@@ -1013,7 +1072,7 @@ describe("pre-flight", () => {
 
   it("refuses a mutual fallback alias cycle", async () => {
     const f = await fixture(
-      RUN_HEAD.replace(
+      RUN_HEAD_NO_HIGHEST.replace(
         "implementer: { harness: fake, model: impl }",
         "implementer: { harness: fake, model: impl, fallbacks: [{ alias: reviewer }] }",
       ).replace(
@@ -1041,12 +1100,12 @@ describe("pre-flight", () => {
 
   it("accepts a fallback that reuses another alias's ladder", async () => {
     const f = await fixture(
-      RUN_HEAD.replace(
+      RUN_HEAD_NO_HIGHEST.replace(
         "implementer: { harness: fake, model: impl }",
         "implementer: { harness: fake, model: impl, fallbacks: [{ alias: reviewer }] }",
       ).replace(
         "reviewer: { harness: fake, model: rev }",
-        "reviewer: { harness: fake, model: rev, effort: highest }",
+        "reviewer: { harness: fake, model: rev, effort: max }",
       ),
     );
     try {
@@ -1059,7 +1118,7 @@ describe("pre-flight", () => {
 
   it("refuses session and worktree roots inside the repository", async () => {
     const f = await fixture(
-      RUN_HEAD +
+      RUN_HEAD_NO_HIGHEST +
         "sessions: { dir: .factory/sessions, keepRuns: 2 }\nworktreeRoot: .factory/worktrees\n",
     );
     try {
@@ -1398,7 +1457,9 @@ describe("pre-flight artifact LSP", () => {
   });
 
   it("does not check the YAML server for harnesses without an LSP surface", async () => {
-    const f = await fixture(RUN_HEAD.replace("limits:", "lsp: true\nlimits:"));
+    const f = await fixture(
+      RUN_HEAD_NO_HIGHEST.replace("limits:", "lsp: true\nlimits:"),
+    );
     const empty = fs.mkdtempSync(path.join(os.tmpdir(), "no-yamlls-fake-"));
     toolPath(empty);
     try {

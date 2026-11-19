@@ -14,46 +14,54 @@ const BUNDLED_SUBAGENTS = [
 export interface OmpOverlayOptions {
   /** Cheap model every spawned subagent must run on. */
   subagentModel?: string;
-  /** Provider cache lifetime; kernel-0 pins short (advice:290). */
+  /** Provider cache lifetime from `sessions.retention`. */
   retention?: "short" | "long";
-  approvalMode?: "always-ask" | "always-ask-cached" | "write" | "yolo";
-  /** Test-only top-level overrides (for example a forced compaction threshold). */
-  extra?: Record<string, unknown>;
+  /**
+   * Harness-entry `options`: omp config keys, passed through untouched. The
+   * shipped run config carries the unattended policy (memory/auto-learn off,
+   * approval, disabled providers, retry); the adapter adds only runtime facts.
+   */
+  options?: Record<string, unknown>;
+}
+
+function record(
+  value: unknown,
+  name: string,
+): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  throw new Error(
+    `Invalid "${name}" option: expected object, got ${typeof value}`,
+  );
 }
 
 export function ompOverlay(
   opts: OmpOverlayOptions = {},
 ): Record<string, unknown> {
-  const overlay: Record<string, unknown> = {
-    providers: { cacheRetention: opts.retention ?? "short" },
-    memory: { backend: "off" },
-    autolearn: { enabled: false },
-    skills: { enabled: false },
-    defaultThinkingLevel: "low",
-    features: { unexpectedStopDetection: false },
-    tools: { approvalMode: opts.approvalMode ?? "yolo", xdev: false },
-    compaction: { experimentalContextManagement: false },
-    disabledProviders: [
-      "native",
-      "claude",
-      "codex",
-      "gemini",
-      "opencode",
-      "cursor",
-      "agents-md",
-    ],
-    // The adapter owns retries and fallbacks so every hop stays visible.
-    retry: { enabled: false, modelFallback: false },
-    ...opts.extra,
+  const overlay: Record<string, unknown> = { ...opts.options };
+  // sessions.retention is the run's cache policy, so it wins over a stale
+  // providers block copied into the harness entry. The copy keeps that entry
+  // unchanged: it outlives the overlay and is serialized again on the next turn.
+  const providers = {
+    ...(record(overlay.providers, "providers") ?? {}),
   };
+  if (opts.retention) providers.cacheRetention = opts.retention;
+  if (Object.keys(providers).length > 0) overlay.providers = providers;
+  else delete overlay.providers;
 
   if (opts.subagentModel) {
     overlay.task = {
+      ...record(overlay.task, "task"),
       agentModelOverrides: Object.fromEntries(
         BUNDLED_SUBAGENTS.map((name) => [name, opts.subagentModel]),
       ),
     };
-    overlay.modelRoles = { task: opts.subagentModel };
+    overlay.modelRoles = {
+      ...record(overlay.modelRoles, "modelRoles"),
+      task: opts.subagentModel,
+    };
   }
 
   return overlay;

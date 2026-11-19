@@ -256,6 +256,27 @@ describe("shipped run-config coverage", () => {
       expect(alternate!.model).not.toBe(run.aliases.implementer!.model);
     });
 
+    it(`carries the unattended omp policy when an alias uses omp: ${name}.yaml`, () => {
+      const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
+      if (!fs.existsSync(runPath)) return;
+      const run = runConfigSchema.parse(
+        yaml.parse(fs.readFileSync(runPath, "utf8")),
+      );
+      const usesOmp = Object.values(run.aliases).some(
+        (alias) => alias.harness === "omp",
+      );
+      if (!usesOmp) return;
+      // The compiled-in overlay is gone: the entry must carry the unattended
+      // policy, or an omp turn reverts to prompting and learning on its own.
+      expect(run.harnesses.omp?.options).toMatchObject({
+        memory: { backend: "off" },
+        autolearn: { enabled: false },
+        skills: { enabled: false },
+        tools: { approvalMode: "yolo" },
+        retry: { enabled: false, modelFallback: false },
+      });
+    });
+
     it(`passes pre-flight: ${name}.yaml`, async () => {
       const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
       if (!fs.existsSync(runPath)) return;

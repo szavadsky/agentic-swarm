@@ -22,7 +22,7 @@ export class OmpRuntime {
   readonly binary: string;
   readonly sessionDir: string;
   readonly subagentModel?: string;
-  readonly overlayExtra?: Record<string, unknown>;
+  readonly options?: Record<string, unknown>;
   readonly readyTimeoutMs: number;
   readonly retention: "short" | "long";
   /** Canonical artifact LSP config; when set, every turn cwd gets it and `--no-lsp` is dropped. */
@@ -33,7 +33,7 @@ export class OmpRuntime {
     this.binary = opts.binary ?? Bun.which("omp") ?? "omp";
     this.sessionDir = path.resolve(opts.sessionDir);
     this.subagentModel = selectorOf(opts.subagentModel);
-    this.overlayExtra = opts.overlayExtra;
+    this.options = opts.options;
     this.readyTimeoutMs = opts.readyTimeoutMs ?? 30_000;
     this.retention = opts.retention ?? "short";
     this.lspConfig = opts.lspConfig;
@@ -77,8 +77,7 @@ export class OmpRuntime {
       {
         subagentModel: selectorOf(opaque?.subagentModel) ?? this.subagentModel,
         retention: this.retention,
-        approvalMode: opaque?.approvalMode,
-        extra: { ...this.overlayExtra, ...opaque?.overlayExtra },
+        options: { ...this.options, ...opaque?.overlayExtra },
       },
       this.dirs().base,
     );

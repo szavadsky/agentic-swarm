@@ -254,8 +254,8 @@ export const aliasSchema = z
   .strict();
 
 /**
- * A harness entry binds an adapter (`acpx`) or overrides the executable a
- * native adapter runs (omp); neither alone is a binding.
+ * A harness entry binds an adapter (`acpx`), overrides the executable a native
+ * adapter runs (omp), or carries opaque adapter options; at least one is needed.
  */
 export const harnessEntrySchema = z
   .object({
@@ -266,11 +266,19 @@ export const harnessEntrySchema = z
      * Absent resolves through PATH.
      */
     binary: z.string().min(1).optional(),
+    /**
+     * Adapter-specific keys, never interpreted by the kernel: acpx reads
+     * `args`/`env`, omp merges the rest into its launch overlay.
+     */
+    options: z.record(z.string(), z.unknown()).optional(),
   })
   .strict()
   .refine(
-    (entry) => entry.acpx !== undefined || entry.binary !== undefined,
-    "harness entry needs an acpx binding or a binary override",
+    (entry) =>
+      entry.acpx !== undefined ||
+      entry.binary !== undefined ||
+      entry.options !== undefined,
+    "harness entry needs an acpx binding, a binary override or options",
   );
 
 const concurrencySchema = z

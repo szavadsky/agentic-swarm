@@ -87,7 +87,7 @@ async function capsOf(
   return pending;
 }
 
-/** Resolves `highest`, validates a literal level, and reports every failure. */
+/** Resolves `harness-default`, validates a literal level, and reports every failure. */
 async function resolveEffort(
   ctx: AliasContext,
   key: string,
@@ -97,9 +97,12 @@ async function resolveEffort(
   liveLevels?: readonly string[],
 ): Promise<string | undefined> {
   if (!effort) return undefined;
+  // The factory's sentinel for "leave the harness default in place"; it is not
+  // a level any harness parses, so nothing is passed through.
+  if (effort === "harness-default") return undefined;
   if (isOmpAlias(harness, model.id)) {
-    // Only omp's CLI enum is knowable for an alias: `highest` is a factory
-    // sentinel omp does not parse, and passing it through aborts the launch.
+    // Only omp's CLI enum is knowable for an alias: `highest` is a removed
+    // factory sentinel omp does not parse, and passing it through aborts the launch.
     if (!OMP_THINKING_LEVELS.includes(effort)) {
       add(
         ctx,
@@ -109,6 +112,13 @@ async function resolveEffort(
     }
     return effort;
   }
+  if (effort === "highest") {
+    add(ctx, `${key}.effort`, 'effort "highest" is forbidden');
+    return undefined;
+  }
+  // omp's flag parses `auto` for every model, but `models --json` lists only
+  // model-specific efforts, so the catalog cannot be the gate for it.
+  if (harness === OMP_ID && effort === "auto") return effort;
   let levels: readonly string[];
   if (liveLevels !== undefined) {
     levels = liveLevels;
@@ -123,18 +133,6 @@ async function resolveEffort(
       );
       return undefined;
     }
-  }
-  if (effort === "highest") {
-    const highest = levels.at(-1);
-    if (!highest) {
-      add(
-        ctx,
-        `${key}.effort`,
-        'effort is "highest" but the model lists no effort levels',
-      );
-      return undefined;
-    }
-    return highest;
   }
   if (!levels.includes(effort)) {
     add(

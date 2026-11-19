@@ -27,7 +27,7 @@ import { resolveRawAgentCommand } from "./command.js";
 import { acpxModel } from "./model.js";
 import { AcpxTranscriptParser, acpxErrors } from "./transcript.js";
 import { turnUsageFromTotals, usageFromAcpxSessionText } from "./usage.js";
-import type { AcpxConfig, AcpxTurnOpaque } from "./config.js";
+import type { AcpxConfig, AcpxRunConfig, AcpxTurnOpaque } from "./config.js";
 import type {
   AcpxCommand,
   AcpxCommandResult,
@@ -45,19 +45,22 @@ const COMMAND_TIMEOUTS: TurnRequest["timeouts"] = {
 export interface AcpxRuntime {
   id: string;
   command: AcpxCommand;
-  acpx: AcpxConfig;
+  acpx: AcpxRunConfig;
 }
 
 function commandLine(runtime: AcpxRuntime, args: string[]): string[] {
   return [runtime.command.binary, ...runtime.command.prefix, ...args];
 }
 
-function turnConfig(runtime: AcpxRuntime, req: TurnRequest): AcpxConfig {
-  const opaque = (req.opaque as AcpxTurnOpaque | undefined) ?? runtime.acpx;
-  if (!opaque || typeof opaque.agent !== "string" || !opaque.agent) {
+function turnConfig(runtime: AcpxRuntime, req: TurnRequest): AcpxRunConfig {
+  const opaque = req.opaque as AcpxTurnOpaque | undefined;
+  // The per-turn block overrides the binding but never drops the harness
+  // entry's opaque process options.
+  const config = { ...runtime.acpx, ...opaque };
+  if (typeof config.agent !== "string" || !config.agent) {
     throw new Error(`acpx harness "${runtime.id}" has no agent configured`);
   }
-  return opaque;
+  return config;
 }
 
 /**
@@ -71,7 +74,7 @@ export function acpxAgentSelection(config: AcpxConfig): string[] {
     : [config.agent];
 }
 
-export function acpxGlobalArgs(config: AcpxConfig, cwd: string): string[] {
+export function acpxGlobalArgs(config: AcpxRunConfig, cwd: string): string[] {
   // acpx requires global flags before the agent subcommand (probe §0).
   return [
     "--format",
@@ -90,7 +93,7 @@ interface SetupFailure {
 
 async function runSetup(
   runtime: AcpxRuntime,
-  config: AcpxConfig,
+  config: AcpxRunConfig,
   args: string[],
   cwd: string,
   signal?: AbortSignal,
@@ -144,7 +147,7 @@ interface PromptProcessResult {
 /** One prompt process: stream stdout into the parser, enforce idle and wall bounds. */
 function runPromptProcess(
   runtime: AcpxRuntime,
-  config: AcpxConfig,
+  config: AcpxRunConfig,
   args: string[],
   cwd: string,
   timeouts: TurnRequest["timeouts"],
@@ -286,7 +289,7 @@ function runPromptProcess(
  */
 export async function runAcpxCommand(
   runtime: AcpxRuntime,
-  config: AcpxConfig,
+  config: AcpxRunConfig,
   ref: Pick<SessionRef, "id" | "cwd">,
   command: string,
   signal?: AbortSignal,

@@ -101,7 +101,7 @@ the producer.
 
 ```yaml
 aliases:
-  architect: { harness: opencode, model: opencode/minimax-m3.1-flash-free, effort: highest }
+  architect: { harness: opencode, model: opencode/minimax-m3.1-flash-free, effort: high }
   implementer: { harness: opencode, model: opencode/deepseek-v4.1-flash-free }
 prices:
   opencode/minimax-m3.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
@@ -192,12 +192,21 @@ no task turn, ends on `architect`, or ends with nothing left open does not
 consume the `iterations` budget: the boundary runs next in the same launch.
 
 Pre-flight resolves every alias (and fallback) through the harness, checks the
-model list, `effort: highest` (highest level the model accepts), binaries, the
-base branch, and that session/worktree roots are writable and outside the repo.
-An omp `@` alias is the exception: omp resolves it inside its own chain, so
-there is no catalog entry and no per-model effort list. `effort: highest` is
-refused there, and the effort must be one omp's `--thinking` flag parses
-(`off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, `auto`) — or absent.
+model list, the effort level, binaries, the base branch, and that
+session/worktree roots are writable and outside the repo. `effort` names a
+literal level the model accepts, `auto`, or `harness-default` (omit the level);
+`effort: highest` is refused. An omp `@` alias is the exception: omp resolves
+it inside its own chain, so there is no catalog entry and no per-model effort
+list; its effort must be one omp's `--thinking` flag parses (`off`, `minimal`,
+`low`, `medium`, `high`, `xhigh`, `max`, `auto`) — or absent.
+
+`harnesses.<id>` binds an adapter (`acpx:`) or executable and carries
+`options` passed untouched: acpx reads `args`/`env`, omp merges the keys into
+its launch overlay (`sessions.retention` still owns
+`providers.cacheRetention`). The shipped `bootstrap/run/self.yaml` keeps the
+unattended omp policy there — memory/auto-learn/skills off, approval, disabled
+providers, retry — so no policy is compiled in.
+
 Gates run once on the base; a red base is recorded and warned once, not fatal.
 
 ## Goal directory

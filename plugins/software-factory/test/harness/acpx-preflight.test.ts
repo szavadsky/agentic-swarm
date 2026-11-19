@@ -131,7 +131,7 @@ function sessionCalls(stub: AcpxStub, verb: "new" | "show" | "close") {
 }
 
 describe("acpx live pre-flight", () => {
-  it("rejects max against the model's live values and accepts high/highest", async () => {
+  it("rejects max against the model's live values", async () => {
     const stub = createAcpxStub({
       models: LIVE_MODELS,
       effortConfigId: "effort",
@@ -152,34 +152,28 @@ describe("acpx live pre-flight", () => {
     } finally {
       failed.repo.cleanup();
     }
+  });
 
-    const before = stub.invocations().length;
-    const passed = await fixture(
+  it("refuses highest effort", async () => {
+    const stub = createAcpxStub({
+      models: LIVE_MODELS,
+      effortConfigId: "effort",
+    });
+    const failed = await fixture(
       runConfig({ pmEffort: "high", reviewerEffort: "highest" }),
       stub,
     );
     try {
-      const result = await preflight(passed.input);
-      expect(result.aliases.pm).toBe("high");
-      expect(result.aliases.reviewer).toBe("default");
-      const calls = stub.invocations().slice(before);
-      const creates = calls.filter(
-        (args) => args.includes("sessions") && args.includes("new"),
+      const err = await refusal(failed.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "aliases.reviewer.effort",
+          file: expect.stringContaining(".factory/run-acpx.yaml"),
+        }),
       );
-      // Everyone shares one harness/model pair, so one live session serves all.
-      expect(creates).toHaveLength(1);
-      expect(calls.filter((args) => args.includes("show"))).toHaveLength(1);
-      expect(calls.filter((args) => args.includes("close"))).toHaveLength(1);
-      expect(calls.some((args) => args.includes("prompt"))).toBe(false);
-      expect(creates[0]![creates[0]!.indexOf("--model") + 1]).toBe("model-a");
-      const cwd = creates[0]![creates[0]!.indexOf("--cwd") + 1]!;
-      expect(cwd.startsWith(path.join(os.tmpdir(), "preflight-acpx-"))).toBe(
-        true,
-      );
-      expect(fs.existsSync(cwd)).toBe(false);
-      expect(stub.sessionNames()).toEqual([]);
+      expect(err.report).toContain('effort "highest" is forbidden');
     } finally {
-      passed.repo.cleanup();
+      failed.repo.cleanup();
     }
   });
 
@@ -205,13 +199,12 @@ describe("acpx live pre-flight", () => {
     }
   });
 
-  it("probes fallbacks once per harness/model and resolves their highest", async () => {
+  it("refuses highest in fallbacks", async () => {
     const stub = createAcpxStub({
       models: LIVE_MODELS,
       effortConfigId: "effort",
     });
     const text = `aliases:
-  architect: { harness: opencode, model: model-a }
   pm: { harness: opencode, model: model-a, fallbacks: [{ model: model-b, effort: highest }] }
   digest: { harness: opencode, model: model-a }
   implementer: { harness: opencode, model: model-a }
@@ -230,16 +223,8 @@ limits: { concurrency: { overall: 2 }, iterations: 1 }
 `;
     const f = await fixture(text, stub);
     try {
-      await preflight(f.input);
-      const fallback = f.configs.run.aliases.pm!.fallbacks![0]!;
-      expect("model" in fallback ? fallback.effort : undefined).toBe("medium");
-      const creates = sessionCalls(stub, "new");
-      const models = creates.map(
-        (args) => args[args.indexOf("--model") + 1] ?? "",
-      );
-      expect(models.sort()).toEqual(["model-a", "model-b"]);
-      expect(sessionCalls(stub, "show")).toHaveLength(2);
-      expect(sessionCalls(stub, "close")).toHaveLength(2);
+      const err = await refusal(f.input);
+      expect(err.report).toContain('effort "highest" is forbidden');
     } finally {
       f.repo.cleanup();
     }

@@ -29,10 +29,10 @@ const CODEX_ACPX: AcpxConfig = {
   },
   usage: { cache: true },
 };
+const AGY_OPTIONS = { args: ["--approve-all"] };
 const agyAcpx = (agent: string): AcpxConfig => ({
   agent,
   raw: true,
-  args: ["--approve-all"],
   effort: {
     configId: "thought_level",
     modelBases: { "gemini-3.8-flash": ["low", "medium", "high"] },
@@ -137,6 +137,137 @@ describe("AcpxHarness", () => {
       // --model after `pi` is `unknown option '--model'`, exit 2.
       expect(prompt.indexOf("--model")).toBeLessThan(prompt.indexOf("pi"));
       expect(prompt[prompt.indexOf("-s") + 1]).toBe(result.session!.id);
+    } finally {
+      stub.cleanup();
+    }
+  });
+
+  it("passes harness-entry options to the acpx child as args and env", async () => {
+    const stub = createAcpxStub();
+    const cwd = path.dirname(stub.binary);
+    const pidFile = path.join(cwd, "options-env.pid");
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      acpx: PI_ACPX,
+      options: {
+        args: ["--approve-all"],
+        env: { ACPX_STUB_PID_FILE: pidFile },
+      },
+    });
+    try {
+      const result = await harness.turn(request(cwd, "Say [[text:PONG]]"));
+      expect(result.text).toBe("PONG");
+      const create = stub
+        .invocations()
+        .find((args) => args.includes("sessions") && args.includes("new"))!;
+      expect(create).toContain("--approve-all");
+      // The stub writes this file only when the option env reached the child.
+      expect(fs.existsSync(pidFile)).toBe(true);
+    } finally {
+      stub.cleanup();
+    }
+  });
+
+  it("keeps harness-entry args and env when the turn carries the production opaque block", async () => {
+    const stub = createAcpxStub();
+    const cwd = path.dirname(stub.binary);
+    const pidFile = path.join(cwd, "opaque-options-env.pid");
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      acpx: PI_ACPX,
+      options: {
+        args: ["--approve-all"],
+        env: { ACPX_STUB_PID_FILE: pidFile },
+      },
+    });
+    try {
+      // flow-context passes harnesses.<id>.acpx here; the turn must not drop
+      // the entry's args/env when it applies that block.
+      const result = await harness.turn({
+        ...request(cwd, "Say [[text:PONG]]"),
+        opaque: PI_ACPX,
+      });
+      expect(result.text).toBe("PONG");
+      const create = stub
+        .invocations()
+        .find((args) => args.includes("sessions") && args.includes("new"))!;
+      expect(create).toContain("--approve-all");
+      expect(fs.existsSync(pidFile)).toBe(true);
+    } finally {
+      stub.cleanup();
+    }
+  });
+
+  it("refuses a scalar args option instead of spreading it into argv", () => {
+    expect(
+      () =>
+        new AcpxHarness({
+          id: "pi",
+          binary: "/bin/true",
+          acpx: PI_ACPX,
+          options: { args: "--approve-all" },
+        }),
+    ).toThrow('Invalid "args" option: expected string array, got string');
+    expect(
+      () =>
+        new AcpxHarness({
+          id: "pi",
+          binary: "/bin/true",
+          acpx: PI_ACPX,
+          options: { args: ["--approve-all", 1] },
+        }),
+    ).toThrow(
+      'Invalid "args" option: expected string array, got array with non-string entries',
+    );
+  });
+
+  it("refuses a non-string env option instead of coercing it", () => {
+    expect(
+      () =>
+        new AcpxHarness({
+          id: "pi",
+          binary: "/bin/true",
+          acpx: PI_ACPX,
+          options: { env: "ACPX_STUB_PID_FILE=/tmp/x" },
+        }),
+    ).toThrow(
+      'Invalid "env" option: expected string-to-string object, got string',
+    );
+    expect(
+      () =>
+        new AcpxHarness({
+          id: "pi",
+          binary: "/bin/true",
+          acpx: PI_ACPX,
+          options: { env: { ACPX_STUB_PID_FILE: 1 } },
+        }),
+    ).toThrow(
+      'Invalid "env" option: expected string-to-string object, got object with non-string values',
+    );
+  });
+
+  it("ignores non-args/env options in harness-entry", async () => {
+    const stub = createAcpxStub();
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      acpx: PI_ACPX,
+      options: {
+        args: ["--approve-all"],
+        env: { FOO: "bar" },
+        unexpected: "value",
+      } as any,
+    });
+    try {
+      await harness.turn(
+        request(path.dirname(stub.binary), "Say [[text:PONG]]"),
+      );
+      for (const args of stub.invocations()) {
+        expect(args).not.toContain("unexpected");
+        expect(args).not.toContain("value");
+      }
     } finally {
       stub.cleanup();
     }
@@ -441,6 +572,7 @@ describe("AcpxHarness", () => {
       id: "agy",
       binary: stub.binary,
       acpx: agyAcpx(`${AGY_BIN} acp`),
+      options: AGY_OPTIONS,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -522,6 +654,7 @@ describe("AcpxHarness", () => {
       id: "agy",
       binary: stub.binary,
       acpx: agyAcpx(`${AGY_BIN} acp`),
+      options: AGY_OPTIONS,
     };
     try {
       const cwd = path.dirname(stub.binary);
@@ -571,6 +704,7 @@ describe("AcpxHarness", () => {
       id: "agy",
       binary: stub.binary,
       acpx: agyAcpx(`${AGY_BIN} acp`),
+      options: AGY_OPTIONS,
     });
     try {
       const result = await harness.turn(
@@ -595,6 +729,7 @@ describe("AcpxHarness", () => {
       id: "agy",
       binary: "/nonexistent/agy",
       acpx: agyAcpx("/nonexistent/agy acp"),
+      options: AGY_OPTIONS,
     });
     expect(await harness.caps({ id: "gemini-3.8-flash-high" })).toEqual({
       resume: true,

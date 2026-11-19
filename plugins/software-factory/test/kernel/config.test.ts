@@ -530,6 +530,45 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("accepts a native harness entry that carries only opaque options", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/run.yaml"),
+      [
+        "harnesses:",
+        "  omp:",
+        "    options:",
+        "      memory: { backend: off }",
+        "",
+      ].join("\n"),
+    );
+    expect(loadConfigs(root).run.harnesses!.omp!.options).toEqual({
+      memory: { backend: "off" },
+    });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("refuses a harness entry with no binding, binary or options", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/run.yaml"),
+      ["harnesses:", "  omp: {}", ""].join("\n"),
+    );
+    let error: unknown;
+    try {
+      loadConfigs(root);
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(ConfigError);
+    expect((error as ConfigError).report).toContain(
+      "needs an acpx binding, a binary override or options",
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("requires an acpx usage command to be an adapter slash command", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });

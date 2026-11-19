@@ -12,7 +12,12 @@ import type {
 } from "../types.js";
 import { resolveAcpxCommand } from "./command.js";
 import { probeAcpxModel } from "./probe.js";
-import { readAcpxSessionUsage, runAcpxCommand, runAcpxTurn } from "./turn.js";
+import {
+  type AcpxRuntime,
+  readAcpxSessionUsage,
+  runAcpxCommand,
+  runAcpxTurn,
+} from "./turn.js";
 import { turnUsageFromTotals } from "./usage.js";
 import type { AcpxHarnessOptions, AcpxTurnSummary } from "./types.js";
 
@@ -137,10 +142,55 @@ function requireCompacted(summary: AcpxTurnSummary): void {
   );
 }
 
-function runtimeOf(opts: AcpxHarnessOptions) {
+/** `typeof` for scalar shapes; arrays report themselves rather than "object". */
+function shapeOf(value: unknown): string {
+  if (value === null) return "null";
+  return Array.isArray(value) ? "array" : typeof value;
+}
+
+/** The entry's `args`: a string list, or absent. A scalar would spread per character into argv. */
+function argsOption(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+    return value;
+  }
+  const got = Array.isArray(value)
+    ? "array with non-string entries"
+    : shapeOf(value);
+  throw new Error(`Invalid "args" option: expected string array, got ${got}`);
+}
+
+/** The entry's `env`: a string-to-string record, or absent; other values cannot reach the child env. */
+function envOption(value: unknown): Record<string, string> | undefined {
+  if (value === undefined) return undefined;
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.values(value).every((item) => typeof item === "string")
+  ) {
+    return value as Record<string, string>;
+  }
+  const got = Array.isArray(value)
+    ? "array"
+    : value !== null && typeof value === "object"
+      ? "object with non-string values"
+      : shapeOf(value);
+  throw new Error(
+    `Invalid "env" option: expected string-to-string object, got ${got}`,
+  );
+}
+
+function runtimeOf(opts: AcpxHarnessOptions): AcpxRuntime {
   return {
     id: opts.id,
     command: resolveAcpxCommand(opts.binary),
-    acpx: opts.acpx,
+    // The entry's opaque options win over the structured block; the adapter
+    // reads only `args` and `env` from the result.
+    acpx: {
+      ...opts.acpx,
+      args: argsOption(opts.options?.args),
+      env: envOption(opts.options?.env),
+    },
   };
 }
