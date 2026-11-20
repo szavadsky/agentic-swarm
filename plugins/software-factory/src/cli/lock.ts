@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -106,6 +105,152 @@ export interface AcquireRunLockOptions {
   onTakeover?: (info: { previousLock?: LockData; newLock: LockData }) => void;
 }
 
+/** Creates the lock file atomically; undefined when it already exists. */
+function createLockFile(
+  lockPath: string,
+  payloadStr: string,
+): RunLockHandle | undefined {
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(lockPath, "wx");
+    fs.writeSync(fd, payloadStr, 0, "utf8");
+    fs.closeSync(fd);
+    fd = undefined;
+    return createRunLockHandle(lockPath);
+  } catch (err: any) {
+    if (fd !== undefined) {
+      try {
+        fs.closeSync(fd);
+      } catch {}
+    }
+    if (err.code !== "EEXIST") throw err;
+    return undefined;
+  }
+}
+
+/** The existing lock and its stat, or that it could not be read at all. */
+function readExistingLock(lockPath: string): {
+  lock?: LockData;
+  stat?: fs.Stats;
+  unreadable?: boolean;
+} {
+  let stat: fs.Stats | undefined;
+  try {
+    stat = fs.statSync(lockPath);
+    const content = fs.readFileSync(lockPath, "utf8");
+    return { lock: JSON.parse(content) as LockData, stat };
+  } catch {
+    return { stat, unreadable: true };
+  }
+}
+
+/** Writes our payload under a temp name and renames it over the lock. */
+function replaceLockFile(
+  tmpLockPath: string,
+  lockPath: string,
+  payloadStr: string,
+): boolean {
+  try {
+    fs.writeFileSync(tmpLockPath, payloadStr, "utf8");
+    fs.renameSync(tmpLockPath, lockPath);
+    return true;
+  } catch {
+    try {
+      if (fs.existsSync(tmpLockPath)) fs.unlinkSync(tmpLockPath);
+    } catch {}
+    return false;
+  }
+}
+
+/** Whether the lock file now carries our payload. */
+function lockHoldsPayload(lockPath: string, payload: LockData): boolean {
+  try {
+    const verified = JSON.parse(fs.readFileSync(lockPath, "utf8")) as LockData;
+    return verified.pid === payload.pid && verified.host === payload.host;
+  } catch {
+    return false;
+  }
+}
+
+function clearTakeoverMarker(fd: number | undefined, marker: string): void {
+  if (fd === undefined) return;
+  try {
+    fs.closeSync(fd);
+    fs.unlinkSync(marker);
+  } catch {}
+}
+
+/** Takes over a stale lock behind an exclusive takeover marker. */
+function takeOverStaleLock(
+  lockDir: string,
+  task: string,
+  lockPath: string,
+  payloadStr: string,
+  payload: LockData,
+): boolean {
+  const takeoverMarker = path.join(lockDir, `${task}.lock.takeover`);
+  let takeoverFd: number | undefined;
+  try {
+    takeoverFd = fs.openSync(takeoverMarker, "wx");
+  } catch {
+    // Another takeover in progress
+    return false;
+  }
+  try {
+    const tmpLockPath = path.join(
+      lockDir,
+      `${task}.lock.takeover.${process.pid}.${Date.now()}`,
+    );
+    if (!replaceLockFile(tmpLockPath, lockPath, payloadStr)) return false;
+    return lockHoldsPayload(lockPath, payload);
+  } finally {
+    clearTakeoverMarker(takeoverFd, takeoverMarker);
+  }
+}
+
+/** Appends the `lock_takeover` journal entry, ignoring write failures. */
+function appendTakeoverJournal(
+  taskDir: string,
+  task: string,
+  previousLock: LockData | undefined,
+): void {
+  try {
+    const journalPath = path.join(taskDir, "journal.ndjson");
+    const entry =
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        type: "lock_takeover",
+        task,
+        previousPid: previousLock?.pid,
+        previousHost: previousLock?.host,
+        newPid: process.pid,
+        newHost: os.hostname(),
+      }) + "\n";
+    fs.mkdirSync(taskDir, { recursive: true });
+    fs.appendFileSync(journalPath, entry, "utf8");
+  } catch {
+    // Ignore journal write failures during lock takeover
+  }
+}
+
+/** Reports a takeover and records it in the task journal when one is named. */
+function recordTakeover(
+  opts: AcquireRunLockOptions | undefined,
+  task: string,
+  previousLock: LockData | undefined,
+  payload: LockData,
+): void {
+  console.warn(
+    `[factory lock] Stale run lock for task "${task}" (PID ${previousLock?.pid ?? "unknown"} on host ${previousLock?.host ?? "unknown"}) taken over by PID ${process.pid}`,
+  );
+  if (opts?.onTakeover) {
+    opts.onTakeover({ previousLock, newLock: payload });
+  }
+  if (opts?.taskDir) {
+    appendTakeoverJournal(opts.taskDir, task, previousLock);
+  }
+}
+
 /**
  * Attempts to acquire the exclusive run lock for a task (§2).
  * Uses atomic openSync with 'wx'. On EEXIST, inspects existing lock and takes over
@@ -129,40 +274,18 @@ export function acquireRunLock(
   const payloadStr = JSON.stringify(payload, null, 2);
 
   // 1. Atomic creation via openSync with "wx"
-  let fd: number | undefined;
-  try {
-    fd = fs.openSync(lockPath, "wx");
-    fs.writeSync(fd, payloadStr, 0, "utf8");
-    fs.closeSync(fd);
-    fd = undefined;
-    return createRunLockHandle(lockPath);
-  } catch (err: any) {
-    if (fd !== undefined) {
-      try {
-        fs.closeSync(fd);
-      } catch {}
-    }
-    if (err.code !== "EEXIST") {
-      throw err;
-    }
-  }
+  const created = createLockFile(lockPath, payloadStr);
+  if (created) return created;
 
   // 2. Lock already exists (EEXIST). Read and inspect existing lock.
-  let existingLock: LockData | undefined;
-  let stat: fs.Stats | undefined;
-  try {
-    stat = fs.statSync(lockPath);
-    const content = fs.readFileSync(lockPath, "utf8");
-    existingLock = JSON.parse(content) as LockData;
-  } catch {
-    // Corrupt or unparseable lock file.
-    // If file was just created (< 5000 ms ago), treat as live/pending creation to prevent race.
-    const mtimeMs = stat ? stat.mtimeMs : 0;
-    if (Date.now() - mtimeMs < 5000) {
-      return null;
-    }
-    existingLock = undefined;
+  const existing = readExistingLock(lockPath);
+  if (existing.unreadable) {
+    // Corrupt or unparseable lock file. If it was just created (< 5000 ms ago),
+    // treat it as a live/pending creation to prevent a race.
+    const mtimeMs = existing.stat?.mtimeMs ?? 0;
+    if (Date.now() - mtimeMs < 5000) return null;
   }
+  const existingLock = existing.unreadable ? undefined : existing.lock;
 
   // 3. Compare host: locks held by another host cannot be inspected locally
   if (existingLock?.host && existingLock.host !== os.hostname()) {
@@ -174,80 +297,13 @@ export function acquireRunLock(
     return null;
   }
 
-  // 5. Stale lock (dead PID on same host or corrupt file): take over atomically via exclusive takeover marker
-  const takeoverMarker = path.join(lockDir, `${task}.lock.takeover`);
-  let takeoverFd: number | undefined;
-  try {
-    takeoverFd = fs.openSync(takeoverMarker, "wx");
-  } catch {
-    // Another takeover in progress
+  // 5. Stale lock (dead PID on same host or corrupt file): take it over.
+  if (!takeOverStaleLock(lockDir, task, lockPath, payloadStr, payload)) {
     return null;
   }
 
-  try {
-    const tmpLockPath = path.join(
-      lockDir,
-      `${task}.lock.takeover.${process.pid}.${Date.now()}`,
-    );
-    try {
-      fs.writeFileSync(tmpLockPath, payloadStr, "utf8");
-      fs.renameSync(tmpLockPath, lockPath);
-    } catch {
-      try {
-        if (fs.existsSync(tmpLockPath)) fs.unlinkSync(tmpLockPath);
-      } catch {}
-      return null;
-    }
-
-    // Verify after rename that our payload holds the lock
-    try {
-      const verified = JSON.parse(
-        fs.readFileSync(lockPath, "utf8"),
-      ) as LockData;
-      if (verified.pid !== payload.pid || verified.host !== payload.host) {
-        return null;
-      }
-    } catch {
-      return null;
-    }
-  } finally {
-    if (takeoverFd !== undefined) {
-      try {
-        fs.closeSync(takeoverFd);
-        fs.unlinkSync(takeoverMarker);
-      } catch {}
-    }
-  }
-
   // 6. Log takeover notice (§2)
-  console.warn(
-    `[factory lock] Stale run lock for task "${task}" (PID ${existingLock?.pid ?? "unknown"} on host ${existingLock?.host ?? "unknown"}) taken over by PID ${process.pid}`,
-  );
-
-  if (opts?.onTakeover) {
-    opts.onTakeover({ previousLock: existingLock, newLock: payload });
-  }
-
-  // Append lock_takeover entry to task journal if taskDir is provided
-  if (opts?.taskDir) {
-    try {
-      const journalPath = path.join(opts.taskDir, "journal.ndjson");
-      const entry =
-        JSON.stringify({
-          ts: new Date().toISOString(),
-          type: "lock_takeover",
-          task,
-          previousPid: existingLock?.pid,
-          previousHost: existingLock?.host,
-          newPid: process.pid,
-          newHost: os.hostname(),
-        }) + "\n";
-      fs.mkdirSync(opts.taskDir, { recursive: true });
-      fs.appendFileSync(journalPath, entry, "utf8");
-    } catch {
-      // Ignore journal write failures during lock takeover
-    }
-  }
+  recordTakeover(opts, task, existingLock, payload);
 
   return createRunLockHandle(lockPath);
 }

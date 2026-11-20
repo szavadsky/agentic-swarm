@@ -1,8 +1,12 @@
-// biome-ignore-all lint/complexity: split-rest
 import { OMP_ID, OMP_THINKING_LEVELS } from "../harness/omp/types.js";
 import type { Caps, Harness, ModelProbe, ModelRef } from "../harness/types.js";
 import type { Finding } from "./findings.js";
-import type { AliasConfig, ConfigBundle, ConfigFiles } from "./types.js";
+import type {
+  AliasConfig,
+  ConfigBundle,
+  ConfigFiles,
+  FallbackModelConfig,
+} from "./types.js";
 
 /** Tells pre-flight whether a harness lists a model; omitted for fake harnesses. */
 export type ModelCatalog = (harness: string, model: string) => Promise<boolean>;
@@ -201,20 +205,20 @@ async function checkedModel(
   return {};
 }
 
-export async function checkAlias(
+/** The registered-harness finding both alias and tier rows share. */
+function registryMessage(ctx: AliasContext, harness: string): string {
+  return `harness "${harness}" is not registered (registered: ${[...ctx.harnesses.keys()].join(", ") || "none"})`;
+}
+
+/** Validates the alias's own harness and quota pool. */
+function checkAliasIdentity(
   ctx: AliasContext,
-  name: string,
+  key: string,
   alias: AliasConfig,
-  effortOut: Record<string, string | undefined>,
-): Promise<void> {
-  const key = `aliases.${name}`;
+): boolean {
   if (!ctx.harnesses.has(alias.harness)) {
-    add(
-      ctx,
-      `${key}.harness`,
-      `harness "${alias.harness}" is not registered (registered: ${[...ctx.harnesses.keys()].join(", ") || "none"})`,
-    );
-    return;
+    add(ctx, `${key}.harness`, registryMessage(ctx, alias.harness));
+    return false;
   }
   if (
     alias.subscription !== undefined &&
@@ -226,128 +230,204 @@ export async function checkAlias(
       `subscription "${alias.subscription}" names no limits.concurrency.perSubscription pool`,
     );
   }
-  if (!ctx.unavailable.has(alias.harness)) {
-    const primary = await checkedModel(
-      ctx,
-      key,
-      alias.harness,
-      alias.model,
-      "model",
-    );
-    if (primary)
-      effortOut[name] = await resolveEffort(
-        ctx,
-        key,
-        alias.harness,
-        { id: alias.model },
-        alias.effort ?? primary.modelEffort,
-        primary.effort,
-      );
-  }
+  return true;
+}
 
-  const rotation = alias.rotate ?? [];
-  for (const [index, entry] of rotation.entries()) {
-    const entryKey = `${key}.rotate.${index}`;
-    if (!ctx.harnesses.has(entry.harness)) {
-      add(
-        ctx,
-        `${entryKey}.harness`,
-        `harness "${entry.harness}" is not registered (registered: ${[...ctx.harnesses.keys()].join(", ") || "none"})`,
-      );
-      continue;
-    }
-    if (ctx.unavailable.has(entry.harness)) continue;
-    const checked = await checkedModel(
-      ctx,
-      entryKey,
-      entry.harness,
-      entry.model,
-      "rotation",
-    );
-    if (!checked) continue;
-    // A rotation entry carries its own effort: explicit, else the alias's,
-    // else a suffix declared on that entry's model.
-    entry.effort = await resolveEffort(
-      ctx,
-      entryKey,
-      entry.harness,
-      { id: entry.model },
-      entry.effort ?? alias.effort ?? checked.modelEffort,
-      checked.effort,
-    );
-  }
+/** Checks the alias's primary model and records its resolved effort. */
+async function checkPrimaryModel(
+  ctx: AliasContext,
+  key: string,
+  name: string,
+  alias: AliasConfig,
+  effortOut: Record<string, string | undefined>,
+): Promise<void> {
+  if (ctx.unavailable.has(alias.harness)) return;
+  const primary = await checkedModel(
+    ctx,
+    key,
+    alias.harness,
+    alias.model,
+    "model",
+  );
+  if (!primary) return;
+  effortOut[name] = await resolveEffort(
+    ctx,
+    key,
+    alias.harness,
+    { id: alias.model },
+    alias.effort ?? primary.modelEffort,
+    primary.effort,
+  );
+}
 
-  for (const [index, fallback] of (alias.fallbacks ?? []).entries()) {
-    // A named alias is checked under its own key, its whole ladder included.
-    if ("alias" in fallback) continue;
-    const tierKey = `${key}.fallbacks.${index}`;
-    if (
-      fallback.harness !== undefined &&
-      !ctx.harnesses.has(fallback.harness)
-    ) {
-      add(
-        ctx,
-        `${tierKey}.harness`,
-        `harness "${fallback.harness}" is not registered (registered: ${[...ctx.harnesses.keys()].join(", ") || "none"})`,
-      );
-      continue;
-    }
-    const tierSubscription = fallback.subscription ?? alias.subscription;
-    if (
-      tierSubscription !== undefined &&
-      !ctx.subscriptions.has(tierSubscription)
-    ) {
-      add(
-        ctx,
-        `${tierKey}.subscription`,
-        `subscription "${tierSubscription}" names no limits.concurrency.perSubscription pool`,
-      );
-    }
-    // A fallback without a harness runs on the rotated primary, so its model
-    // must exist on every harness a rotation iteration can select. With no
-    // rotation there is exactly one such harness: the alias's own.
-    const tierHarnesses =
-      fallback.harness !== undefined
-        ? [fallback.harness]
-        : rotation.length > 0
-          ? [...new Set(rotation.map((entry) => entry.harness))]
-          : [alias.harness];
-    const singleTier = tierHarnesses.length === 1;
-    for (const tierHarness of tierHarnesses) {
-      if (ctx.unavailable.has(tierHarness)) continue;
-      const tier = await checkedModel(
+/** Checks one rotation entry and stamps its own resolved effort. */
+async function checkRotationEntry(
+  ctx: AliasContext,
+  entryKey: string,
+  entry: NonNullable<AliasConfig["rotate"]>[number],
+  alias: AliasConfig,
+): Promise<void> {
+  if (!ctx.harnesses.has(entry.harness)) {
+    add(ctx, `${entryKey}.harness`, registryMessage(ctx, entry.harness));
+    return;
+  }
+  if (ctx.unavailable.has(entry.harness)) return;
+  const checked = await checkedModel(
+    ctx,
+    entryKey,
+    entry.harness,
+    entry.model,
+    "rotation",
+  );
+  if (!checked) return;
+  // A rotation entry carries its own effort: explicit, else the alias's,
+  // else a suffix declared on that entry's model.
+  entry.effort = await resolveEffort(
+    ctx,
+    entryKey,
+    entry.harness,
+    { id: entry.model },
+    entry.effort ?? alias.effort ?? checked.modelEffort,
+    checked.effort,
+  );
+}
+
+async function checkRotation(
+  ctx: AliasContext,
+  key: string,
+  alias: AliasConfig,
+): Promise<void> {
+  for (const [index, entry] of (alias.rotate ?? []).entries()) {
+    await checkRotationEntry(ctx, `${key}.rotate.${index}`, entry, alias);
+  }
+}
+
+/** A fallback without a harness runs on the rotated primary. */
+function fallbackHarnesses(
+  fallback: FallbackModelConfig,
+  rotation: readonly { harness: string }[],
+  alias: AliasConfig,
+): string[] {
+  if (fallback.harness !== undefined) return [fallback.harness];
+  if (rotation.length > 0) {
+    return [...new Set(rotation.map((entry) => entry.harness))];
+  }
+  return [alias.harness];
+}
+
+/** Checks one fallback model on one harness, stamping effort for single tiers. */
+async function checkTierModel(
+  ctx: AliasContext,
+  tierKey: string,
+  fallback: FallbackModelConfig,
+  alias: AliasConfig,
+  tierHarness: string,
+  singleTier: boolean,
+): Promise<void> {
+  if (ctx.unavailable.has(tierHarness)) return;
+  const tier = await checkedModel(
+    ctx,
+    tierKey,
+    tierHarness,
+    fallback.model,
+    "fallback",
+  );
+  if (!tier) return;
+  // Each tier carries its own effort: explicit, else the alias's, else a
+  // suffix declared on that model, resolved against the tier's live values. A
+  // rotating fallback without a fixed effort inherits the rotated entry's
+  // effort at resolution, so nothing is stamped here.
+  if (fallback.effort === undefined) {
+    if (singleTier) {
+      fallback.effort = await resolveEffort(
         ctx,
         tierKey,
         tierHarness,
-        fallback.model,
-        "fallback",
+        { id: fallback.model },
+        alias.effort ?? tier.modelEffort,
+        tier.effort,
       );
-      if (!tier) continue;
-      // Each tier carries its own effort: explicit, else the alias's, else a
-      // suffix declared on that model, resolved against the tier's live
-      // values. A rotating fallback without a fixed effort inherits the
-      // rotated entry's effort at resolution, so nothing is stamped here.
-      if (fallback.effort !== undefined) {
-        const resolved = await resolveEffort(
-          ctx,
-          tierKey,
-          tierHarness,
-          { id: fallback.model },
-          fallback.effort,
-          tier.effort,
-        );
-        if (singleTier) fallback.effort = resolved;
-      } else if (singleTier)
-        fallback.effort = await resolveEffort(
-          ctx,
-          tierKey,
-          tierHarness,
-          { id: fallback.model },
-          alias.effort ?? tier.modelEffort,
-          tier.effort,
-        );
     }
+    return;
   }
+  const resolved = await resolveEffort(
+    ctx,
+    tierKey,
+    tierHarness,
+    { id: fallback.model },
+    fallback.effort,
+    tier.effort,
+  );
+  if (singleTier) fallback.effort = resolved;
+}
+
+/** Checks one fallback tier, its harness and its quota pool. */
+async function checkFallbackTier(
+  ctx: AliasContext,
+  tierKey: string,
+  fallback: FallbackModelConfig,
+  alias: AliasConfig,
+  rotation: readonly { harness: string }[],
+): Promise<void> {
+  if (fallback.harness !== undefined && !ctx.harnesses.has(fallback.harness)) {
+    add(ctx, `${tierKey}.harness`, registryMessage(ctx, fallback.harness));
+    return;
+  }
+  const tierSubscription = fallback.subscription ?? alias.subscription;
+  if (
+    tierSubscription !== undefined &&
+    !ctx.subscriptions.has(tierSubscription)
+  ) {
+    add(
+      ctx,
+      `${tierKey}.subscription`,
+      `subscription "${tierSubscription}" names no limits.concurrency.perSubscription pool`,
+    );
+  }
+  const tierHarnesses = fallbackHarnesses(fallback, rotation, alias);
+  const singleTier = tierHarnesses.length === 1;
+  for (const tierHarness of tierHarnesses) {
+    await checkTierModel(
+      ctx,
+      tierKey,
+      fallback,
+      alias,
+      tierHarness,
+      singleTier,
+    );
+  }
+}
+
+async function checkFallbacks(
+  ctx: AliasContext,
+  key: string,
+  alias: AliasConfig,
+): Promise<void> {
+  const rotation = alias.rotate ?? [];
+  for (const [index, fallback] of (alias.fallbacks ?? []).entries()) {
+    // A named alias is checked under its own key, its whole ladder included.
+    if ("alias" in fallback) continue;
+    await checkFallbackTier(
+      ctx,
+      `${key}.fallbacks.${index}`,
+      fallback,
+      alias,
+      rotation,
+    );
+  }
+}
+
+export async function checkAlias(
+  ctx: AliasContext,
+  name: string,
+  alias: AliasConfig,
+  effortOut: Record<string, string | undefined>,
+): Promise<void> {
+  const key = `aliases.${name}`;
+  if (!checkAliasIdentity(ctx, key, alias)) return;
+  await checkPrimaryModel(ctx, key, name, alias, effortOut);
+  await checkRotation(ctx, key, alias);
+  await checkFallbacks(ctx, key, alias);
 }
 
 /**

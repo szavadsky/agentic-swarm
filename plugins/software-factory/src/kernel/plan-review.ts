@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { runAgentTurn } from "./agent.js";
 import { makeCause } from "./cause.js";
 import {
@@ -147,7 +148,6 @@ async function recordMissing(
  * reviewer is recorded and the round continues with the others, so one dead
  * model cannot hide another reviewer's findings or block the iteration.
  */
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: one reviewer turn, its read-only reconcile and its missing record
 export async function runPlanReview(
   runtime: KernelRuntime,
   opts: {
@@ -280,7 +280,6 @@ async function discardForeignWrites(
  * decision. A missing or failed return is recorded and the PM still runs:
  * the review advises, it never blocks the iteration.
  */
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: one architect turn, its read-only reconcile and its missing record
 export async function runArchitectReturn(
   runtime: KernelRuntime,
   opts: {

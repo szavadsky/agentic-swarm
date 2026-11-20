@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity: split-rest
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { cause } from "./helpers.js";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";

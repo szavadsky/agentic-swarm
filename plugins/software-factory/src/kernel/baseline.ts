@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity: split-rest
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import fs from "node:fs";
 import path from "node:path";
 import { runWorktreeSetup } from "../core/checks/setup.js";
@@ -6,6 +6,7 @@ import type { CheckResult } from "../core/checks/types.js";
 import { fingerprintText } from "../core/fingerprint.js";
 import { isAncestor } from "../core/git/commit.js";
 import { git } from "../core/git/exec.js";
+import type { ProcessResult } from "../core/proc.js";
 import { resolveGoalPaths } from "./config.js";
 import {
   capGateOutput,
@@ -166,6 +167,23 @@ function scratchPath(configs: ConfigBundle, repoRoot: string): string {
   return dir;
 }
 
+/** A gate's check; a timeout or unstartable command is infra, not a red tree. */
+function gateCheck(
+  gateId: string,
+  res: ProcessResult,
+  check: CheckResult,
+): CheckResult {
+  if (res.timedOut) {
+    return infra(gateId, `timed out after ${GATE_TIMEOUT_SEC}s`, check.output);
+  }
+  // 126/127 means the command itself could not start: an environment failure,
+  // not a verdict on the tree under test.
+  if (res.code === 126 || res.code === 127) {
+    return infra(gateId, `could not run: exit ${res.code}`, check.output);
+  }
+  return check;
+}
+
 async function runBaseGates(
   configs: ConfigBundle,
   repoRoot: string,
@@ -220,21 +238,7 @@ async function runBaseGates(
     const checks: CheckResult[] = [];
     for (const gate of configs.repo.gates) {
       const { res, check } = await runDeclaredGate(repoRoot, dir, gate);
-      if (res.timedOut) {
-        checks.push(
-          infra(gate.id, `timed out after ${GATE_TIMEOUT_SEC}s`, check.output),
-        );
-        continue;
-      }
-      // 126/127 means the command itself could not start: an environment
-      // failure, not a verdict on the tree under test.
-      if (res.code === 126 || res.code === 127) {
-        checks.push(
-          infra(gate.id, `could not run: exit ${res.code}`, check.output),
-        );
-        continue;
-      }
-      checks.push(check);
+      checks.push(gateCheck(gate.id, res, check));
     }
     return checks;
   } finally {

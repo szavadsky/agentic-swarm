@@ -1,9 +1,9 @@
-// biome-ignore-all lint/complexity: split-rest
 import { DEFAULT_FLOWS, reduceTask } from "./derive-task.js";
 
 import type {
   Concern,
   ConcernId,
+  RecordedConcern,
   EpicState,
   FlowDefinition,
   GoalDecision,
@@ -172,6 +172,37 @@ function planOwnedDebtTexts(
  * debt does not remove it, so only `debtClosed` or a `debt closed:` forward
  * line lands a done.
  */
+/** Records one concern as an open debt unless its text is already known. */
+function addDebt(
+  byText: Map<string, OpenDebt>,
+  rec: StepRecord,
+  concern: RecordedConcern,
+): void {
+  if (concern.kind !== "debt") return;
+  const key = normalizeDebtText(concern.text);
+  if (byText.has(key)) return;
+  byText.set(key, {
+    ...(concern.id ? { id: concern.id } : {}),
+    text: concern.text,
+    ...(concern.evidence ? { evidence: concern.evidence } : {}),
+    calibration: concern.calibration,
+    source: `${rec.slug ?? "goal"} ${rec.step} r${rec.round}`,
+    iteration: rec.iteration,
+    seq: rec.seq,
+  });
+}
+
+/** Whether a cited id or a quoted close names the debt as closed. */
+function isClosedDebt(
+  norm: string,
+  cited: ReadonlySet<string>,
+  quoted: ReadonlySet<string>,
+): boolean {
+  if (cited.has(norm)) return true;
+  for (const quote of quoted) if (quotes(quote, norm)) return true;
+  return false;
+}
+
 export function openDebts(
   records: readonly StepRecord[],
   plan?: string,
@@ -179,31 +210,13 @@ export function openDebts(
   const byText = new Map<string, OpenDebt>();
   for (const rec of [...records].sort(bySeq)) {
     if (!rec.outcome) continue;
-    for (const concern of rec.outcome.concerns) {
-      if (concern.kind !== "debt") continue;
-      const key = normalizeDebtText(concern.text);
-      if (byText.has(key)) continue;
-      byText.set(key, {
-        ...(concern.id ? { id: concern.id } : {}),
-        text: concern.text,
-        ...(concern.evidence ? { evidence: concern.evidence } : {}),
-        calibration: concern.calibration,
-        source: `${rec.slug ?? "goal"} ${rec.step} r${rec.round}`,
-        iteration: rec.iteration,
-        seq: rec.seq,
-      });
-    }
+    for (const concern of rec.outcome.concerns) addDebt(byText, rec, concern);
   }
   const byId = debtTextsById(records);
   const { cited, quoted } = closedDebtTexts(records, byId);
   const owned = plan ? planOwnedDebtTexts(plan, byId) : new Set<string>();
-  const isClosed = (norm: string): boolean => {
-    if (cited.has(norm)) return true;
-    for (const quote of quoted) if (quotes(quote, norm)) return true;
-    return false;
-  };
   return [...byText.entries()]
-    .filter(([norm]) => !owned.has(norm) && !isClosed(norm))
+    .filter(([norm]) => !owned.has(norm) && !isClosedDebt(norm, cited, quoted))
     .map(([, debt]) => debt)
     .sort((a, b) => a.seq - b.seq);
 }
@@ -233,141 +246,193 @@ function recordedDecision(rec: StepRecord): GoalDecision | undefined {
   return undefined;
 }
 
-/**
- * Pure, idempotent state derived from task files plus append-only records —
- * the whole crash-recovery story is calling this again. Unfinished records
- * (started, no end) are orphans: they contribute nothing, so the same step is
- * redispatched after the worktree is reconciled.
- *
- * `flows` is the configured flow catalog; without it the built-in
- * implement/review shape is assumed (callers that dispatch use their config).
- */
-export function derive(
-  tasks: TaskFile[],
-  records: StepRecord[],
-  flows: Record<string, FlowDefinition> = DEFAULT_FLOWS,
-): State {
-  const sorted = [...records].sort(bySeq);
+/** The latest numbered iteration; a quarantine rides along without numbering one. */
+function latestIteration(sorted: readonly StepRecord[]): number {
   let iteration = 0;
   for (const rec of sorted) {
-    // A quarantine report rides on the current iteration but starts none:
-    // the first launch's preflight quarantine must not number the first
-    // real iteration as 2 or mark the launch a relaunch.
+    // A quarantine report rides on the current iteration but starts none: the
+    // first launch's preflight quarantine must not number the first real
+    // iteration as 2 or mark the launch a relaunch.
     if (rec.step !== "task-quarantine") {
       iteration = Math.max(iteration, rec.iteration);
     }
   }
-  const currentIteration = iteration;
-  const hasArchitectDecisionThisIteration = sorted.some(
+  return iteration;
+}
+
+function hasArchitectDecision(
+  sorted: readonly StepRecord[],
+  iteration: number,
+): boolean {
+  return sorted.some(
     (rec) =>
-      rec.iteration === currentIteration &&
+      rec.iteration === iteration &&
       rec.actor === "agent" &&
       rec.step === "architect" &&
       rec.outcome?.decision !== undefined,
   );
-  const hasBlockingCrashThisIteration = sorted.some(
+}
+
+function hasBlockingCrash(
+  sorted: readonly StepRecord[],
+  iteration: number,
+): boolean {
+  return sorted.some(
     (rec) =>
-      rec.iteration === currentIteration &&
+      rec.iteration === iteration &&
       rec.stop?.kind === "infra" &&
       rec.stop?.cause === "crash" &&
       !isRecoveryCrash(rec),
   );
+}
 
-  const statuses = new Map<string, TaskStatus>();
-  const reductions = new Map<string, ReturnType<typeof reduceTask>>();
+/** The configured flow, the built-in one, or the default shape. */
+function flowFor(
+  name: string,
+  flows: Record<string, FlowDefinition>,
+): FlowDefinition {
+  return (
+    flows[name] ?? DEFAULT_FLOWS[name] ?? DEFAULT_FLOWS["implement-review"]!
+  );
+}
+
+type TaskReduction = ReturnType<typeof reduceTask>;
+
+/** Reduces every task file; terminal statuses land in `statuses`. */
+function reduceTasks(
+  tasks: TaskFile[],
+  sorted: readonly StepRecord[],
+  flows: Record<string, FlowDefinition>,
+  statuses: Map<string, TaskStatus>,
+): Map<string, TaskReduction> {
+  const reductions = new Map<string, TaskReduction>();
   for (const task of tasks) {
     const recs = sorted.filter((r) => r.slug === task.slug);
-    const flow =
-      flows[task.flow] ??
-      DEFAULT_FLOWS[task.flow] ??
-      DEFAULT_FLOWS["implement-review"]!;
-    const reduction = reduceTask(task, recs, flow);
+    const reduction = reduceTask(task, recs, flowFor(task.flow, flows));
     reductions.set(task.slug, reduction);
     // Terminal facts are order-independent; readiness is resolved below.
     if (reduction.terminal) statuses.set(task.slug, reduction.terminal.status);
   }
-  // A terminal slug whose file is unreadable (or deleted) keeps its status:
-  // the store lists no task for it, so without this the slug would vanish
-  // from derived state, reconcile would stop freezing it, and a later file
-  // reusing the slug would inherit the terminal record. Only
-  // merged/finished/cancelled persist here; a parked slug without a file is
-  // gone (its quarantine record is the report). The stand-in kind is `task`,
-  // so a spike merge would read as `merged`; spike flows finish rather than
-  // merge, so the default holds in practice.
-  const knownSlugs = new Set(tasks.map((task) => task.slug));
-  const orphanSlugs = new Set<string>();
+  return reductions;
+}
+
+/** The stand-in a terminal record needs when its task file is gone. */
+function standinTask(slug: string): TaskFile {
+  return {
+    slug,
+    title: slug,
+    kind: "development",
+    flow: "implement-review",
+    deps: [],
+    scope: [],
+    revision: 0,
+    source: "orphan terminal record",
+    body: "",
+  };
+}
+
+interface OrphanReductions {
+  slugs: Set<string>;
+  reductions: Map<string, TaskReduction>;
+}
+
+/**
+ * Reductions for terminal slugs whose file is unreadable or deleted. Only
+ * merged/finished/cancelled persist here; a parked slug without a file is gone
+ * (its quarantine record is the report). The stand-in kind is `task`, so a
+ * spike merge would read as `merged`; spike flows finish rather than merge, so
+ * the default holds in practice.
+ */
+function reduceOrphans(
+  sorted: readonly StepRecord[],
+  knownSlugs: ReadonlySet<string>,
+  flows: Record<string, FlowDefinition>,
+  statuses: Map<string, TaskStatus>,
+): OrphanReductions {
+  const slugs = new Set<string>();
   for (const rec of sorted) {
-    if (rec.slug && !knownSlugs.has(rec.slug)) orphanSlugs.add(rec.slug);
+    if (rec.slug && !knownSlugs.has(rec.slug)) slugs.add(rec.slug);
   }
-  const orphanReductions = new Map<string, ReturnType<typeof reduceTask>>();
-  for (const slug of orphanSlugs) {
+  const reductions = new Map<string, TaskReduction>();
+  for (const slug of slugs) {
     const recs = sorted.filter((r) => r.slug === slug);
-    const standin: TaskFile = {
-      slug,
-      title: slug,
-      kind: "development",
-      flow: "implement-review",
-      deps: [],
-      scope: [],
-      revision: 0,
-      source: "orphan terminal record",
-      body: "",
-    };
-    const flow =
-      flows[standin.flow] ??
-      DEFAULT_FLOWS[standin.flow] ??
-      DEFAULT_FLOWS["implement-review"]!;
-    const reduction = reduceTask(standin, recs, flow);
-    orphanReductions.set(slug, reduction);
+    const standin = standinTask(slug);
+    const reduction = reduceTask(standin, recs, flowFor(standin.flow, flows));
+    reductions.set(slug, reduction);
+    const status = reduction.terminal?.status;
     if (
-      reduction.terminal?.status === "merged" ||
-      reduction.terminal?.status === "finished" ||
-      reduction.terminal?.status === "cancelled"
+      status === "merged" ||
+      status === "finished" ||
+      status === "cancelled"
     ) {
-      statuses.set(slug, reduction.terminal.status);
+      statuses.set(slug, status);
     }
   }
+  return { slugs, reductions };
+}
 
-  const taskStates: Record<string, TaskState> = {};
-  const epics: Record<string, EpicState> = {};
+function taskStateFor(
+  task: TaskFile,
+  reduction: TaskReduction,
+  status: TaskStatus,
+): TaskState {
+  const terminal = reduction.terminal;
+  return {
+    status,
+    ...(task.epic !== undefined ? { epic: task.epic } : {}),
+    cause: terminal?.cause ?? reduction.park,
+    turns: reduction.turns,
+    round: reduction.round,
+    kind: task.kind,
+    flow: task.flow,
+    phase: terminal ? "done" : reduction.phase,
+    commit: terminal?.commit ?? reduction.commit,
+    verdict: reduction.verdict,
+    park: terminal ? undefined : reduction.park,
+    loop: terminal ? undefined : reduction.loop,
+    gateFix: terminal ? undefined : reduction.gateFix,
+    gateLastCall: terminal ? undefined : reduction.gateLastCall,
+  };
+}
+
+/** Resolves each task's status and state, and groups tasks under their epic. */
+function buildTaskStates(
+  tasks: TaskFile[],
+  statuses: Map<string, TaskStatus>,
+  reductions: ReadonlyMap<string, TaskReduction>,
+  taskStates: Record<string, TaskState>,
+  epics: Record<string, EpicState>,
+): void {
   for (const task of tasks) {
     const reduction = reductions.get(task.slug)!;
-    const terminal = reduction.terminal;
     const status: TaskStatus =
       statuses.get(task.slug) ??
       (depsSatisfied(task, statuses) ? "ready" : "pending");
     statuses.set(task.slug, status);
-    taskStates[task.slug] = {
-      status,
-      ...(task.epic !== undefined ? { epic: task.epic } : {}),
-      cause: terminal?.cause ?? reduction.park,
-      turns: reduction.turns,
-      round: reduction.round,
-      kind: task.kind,
-      flow: task.flow,
-      phase: terminal ? "done" : reduction.phase,
-      commit: terminal?.commit ?? reduction.commit,
-      verdict: reduction.verdict,
-      park: terminal ? undefined : reduction.park,
-      loop: terminal ? undefined : reduction.loop,
-      gateFix: terminal ? undefined : reduction.gateFix,
-      gateLastCall: terminal ? undefined : reduction.gateLastCall,
-    };
+    taskStates[task.slug] = taskStateFor(task, reduction, status);
     if (task.epic !== undefined) {
       const group = epics[task.epic] ?? { tasks: [], done: false };
       group.tasks.push(task.slug);
       epics[task.epic] = group;
     }
   }
-  for (const slug of [...orphanSlugs].sort()) {
-    const reduction = orphanReductions.get(slug)!;
+}
+
+/** Keeps the terminal state of a slug whose task file is gone. */
+function addOrphanTaskStates(
+  orphans: OrphanReductions,
+  taskStates: Record<string, TaskState>,
+): void {
+  for (const slug of [...orphans.slugs].sort()) {
+    const reduction = orphans.reductions.get(slug)!;
     const terminal = reduction.terminal;
     if (
       terminal?.status !== "merged" &&
       terminal?.status !== "finished" &&
       terminal?.status !== "cancelled"
-    )
+    ) {
       continue;
+    }
     taskStates[slug] = {
       status: terminal.status,
       cause: terminal.cause,
@@ -384,9 +449,13 @@ export function derive(
       gateLastCall: undefined,
     };
   }
+}
 
-  // The epic's own architect owns its decision; `done` also waits for every
-  // task in the epic to land, so a reopened task reopens the epic.
+/** The epic's own architect owns its decision. */
+function applySubarchitectDecisions(
+  sorted: readonly StepRecord[],
+  epics: Record<string, EpicState>,
+): void {
   for (const rec of sorted) {
     if (rec.step !== "subarchitect" || !rec.architect || !rec.endedAt) continue;
     const decision = rec.outcome?.decision;
@@ -395,6 +464,13 @@ export function derive(
     epic.decision = decision;
     epics[rec.architect] = epic;
   }
+}
+
+/** `done` also waits for every task in the epic to land. */
+function closeEpics(
+  epics: Record<string, EpicState>,
+  statuses: ReadonlyMap<string, TaskStatus>,
+): void {
   for (const epic of Object.values(epics)) {
     epic.done =
       (epic.decision === undefined || epic.decision === "done") &&
@@ -402,7 +478,13 @@ export function derive(
         OPEN_TASK_STATUSES.has(statuses.get(slug) ?? "pending"),
       );
   }
+}
 
+/** The goal decision the records settle on, latest last. */
+function settleGoal(
+  sorted: readonly StepRecord[],
+  epics: Record<string, EpicState>,
+): GoalStatus {
   let goal: GoalStatus = "active";
   for (const rec of sorted) {
     const decision = recordedDecision(rec);
@@ -422,7 +504,49 @@ export function derive(
       goal = "active";
     }
   }
+  return goal;
+}
 
+/**
+ * Pure, idempotent state derived from task files plus append-only records —
+ * the whole crash-recovery story is calling this again. Unfinished records
+ * (started, no end) are orphans: they contribute nothing, so the same step is
+ * redispatched after the worktree is reconciled.
+ *
+ * `flows` is the configured flow catalog; without it the built-in
+ * implement/review shape is assumed (callers that dispatch use their config).
+ */
+export function derive(
+  tasks: TaskFile[],
+  records: StepRecord[],
+  flows: Record<string, FlowDefinition> = DEFAULT_FLOWS,
+): State {
+  const sorted = [...records].sort(bySeq);
+  const iteration = latestIteration(sorted);
+  const hasArchitectDecisionThisIteration = hasArchitectDecision(
+    sorted,
+    iteration,
+  );
+  const hasBlockingCrashThisIteration = hasBlockingCrash(sorted, iteration);
+
+  const statuses = new Map<string, TaskStatus>();
+  const reductions = reduceTasks(tasks, sorted, flows, statuses);
+  const orphans = reduceOrphans(
+    sorted,
+    new Set(tasks.map((task) => task.slug)),
+    flows,
+    statuses,
+  );
+
+  const taskStates: Record<string, TaskState> = {};
+  const epics: Record<string, EpicState> = {};
+  buildTaskStates(tasks, statuses, reductions, taskStates, epics);
+  addOrphanTaskStates(orphans, taskStates);
+
+  applySubarchitectDecisions(sorted, epics);
+  closeEpics(epics, statuses);
+
+  const goal = settleGoal(sorted, epics);
   const interrupted =
     goal === "active" &&
     iteration > 0 &&

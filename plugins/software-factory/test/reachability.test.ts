@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -162,48 +161,64 @@ const AUTHOR_BODY_INCLUDE = /\{%-?\s*include\s+author_body\s*-?%\}/;
 const REVIEW_DUTIES_INCLUDE = /\{%-?\s*include\s+review_duties\s*-?%\}/;
 const REVIEW_TURN_INCLUDE = /\{%-?\s*include\s+review_turn\s*-?%\}/;
 
+interface IncludeScan {
+  included: Set<string>;
+  authorBody: boolean;
+  reviewDuties: boolean;
+  reviewTurn: boolean;
+}
+
+/** One prompt file's static includes and the dynamic-include flags it sets. */
+function scanPromptFile(child: string, scan: IncludeScan): void {
+  if (path.relative("prompts", child) in PROMPT_DOCS) return;
+  const source = fs.readFileSync(path.join(PACKAGE_ROOT, child), "utf8");
+  if (AUTHOR_BODY_INCLUDE.test(source)) scan.authorBody = true;
+  if (REVIEW_DUTIES_INCLUDE.test(source)) scan.reviewDuties = true;
+  if (REVIEW_TURN_INCLUDE.test(source)) scan.reviewTurn = true;
+  for (const match of source.matchAll(INCLUDE_SPECIFIER)) {
+    const name = match[1]!;
+    scan.included.add(
+      name.endsWith(".md") ? name.slice(0, -".md".length) : name,
+    );
+  }
+}
+
+function walkPromptFiles(dir: string, scan: IncludeScan): void {
+  for (const entry of fs.readdirSync(path.join(PACKAGE_ROOT, dir), {
+    withFileTypes: true,
+  })) {
+    const child = path.join(dir, entry.name);
+    if (entry.isDirectory()) walkPromptFiles(child, scan);
+    else if (entry.name.endsWith(".md")) scanPromptFile(child, scan);
+  }
+}
+
+/** Fragments the dynamic includes can resolve to, for every role they name. */
+function dynamicFragments(scan: IncludeScan): string[] {
+  return promptFragments().filter(
+    (fragment) =>
+      (scan.authorBody && fragment.endsWith("-body")) ||
+      (scan.reviewDuties && fragment.startsWith("review-")) ||
+      (scan.reviewTurn &&
+        fragment.startsWith("review-") &&
+        fragment.endsWith("-turn")),
+  );
+}
+
 /** Fragments another template pulls in via `{% include %}` (docs excluded: they quote syntax). */
 function includedFragments(): Set<string> {
-  const included = new Set<string>();
-  let dynamicAuthorBody = false;
-  let dynamicReviewDuties = false;
-  let dynamicReviewTurn = false;
-  const walk = (dir: string) => {
-    for (const entry of fs.readdirSync(path.join(PACKAGE_ROOT, dir), {
-      withFileTypes: true,
-    })) {
-      const child = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(child);
-      else if (entry.name.endsWith(".md")) {
-        if (path.relative("prompts", child) in PROMPT_DOCS) continue;
-        const source = fs.readFileSync(path.join(PACKAGE_ROOT, child), "utf8");
-        if (AUTHOR_BODY_INCLUDE.test(source)) dynamicAuthorBody = true;
-        if (REVIEW_DUTIES_INCLUDE.test(source)) dynamicReviewDuties = true;
-        if (REVIEW_TURN_INCLUDE.test(source)) dynamicReviewTurn = true;
-        for (const match of source.matchAll(INCLUDE_SPECIFIER)) {
-          const name = match[1]!;
-          included.add(
-            name.endsWith(".md") ? name.slice(0, -".md".length) : name,
-          );
-        }
-      }
-    }
+  const scan: IncludeScan = {
+    included: new Set<string>(),
+    authorBody: false,
+    reviewDuties: false,
+    reviewTurn: false,
   };
-  walk("prompts");
+  walkPromptFiles("prompts", scan);
   // The dynamic includes resolve to any role's body, duties or turn inputs,
   // so every `<role>-body`, `review-<role>` and `review-<role>-turn` fragment is
   // reachable through them.
-  for (const fragment of promptFragments()) {
-    if (
-      (dynamicAuthorBody && fragment.endsWith("-body")) ||
-      (dynamicReviewDuties && fragment.startsWith("review-")) ||
-      (dynamicReviewTurn &&
-        fragment.startsWith("review-") &&
-        fragment.endsWith("-turn"))
-    )
-      included.add(fragment);
-  }
-  return included;
+  for (const fragment of dynamicFragments(scan)) scan.included.add(fragment);
+  return scan.included;
 }
 
 /** Fragments production renders directly: role prompts plus `.render`/`.placeholders` literals in src. */

@@ -1,5 +1,6 @@
-// biome-ignore-all lint/complexity: split-rest
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import path from "node:path";
+import type { Usage } from "../harness/types.js";
 import { recordedBaseGates } from "./baseline.js";
 import { formatCause } from "./cause.js";
 import { derive, materialOpenDebts } from "./derive.js";
@@ -10,6 +11,7 @@ import {
   type GroupMetrics,
   type IncidentCounts,
   iterationMetrics,
+  type PlanReviewMarkCounts,
   rolesByStep,
   writeMetrics,
 } from "./metrics.js";
@@ -123,6 +125,200 @@ function concernLines(recs: StepRecord[], kind?: string): string[] {
   );
 }
 
+/** Parked tasks grouped by root-cause kind; rewording a detail never splits a group. */
+function summaryParkedByKind(
+  recs: StepRecord[],
+): Map<CauseKind, { slug: string; detail: string }[]> {
+  const parkedByKind = new Map<CauseKind, { slug: string; detail: string }[]>();
+  for (const rec of recs) {
+    if (rec.step !== "park" || !rec.endedAt || !rec.slug) continue;
+    const kind = rec.cause?.kind ?? "unknown";
+    const detail = rec.cause?.detail ?? "no recorded cause";
+    parkedByKind.set(kind, [
+      ...(parkedByKind.get(kind) ?? []),
+      { slug: rec.slug, detail },
+    ]);
+  }
+  return parkedByKind;
+}
+
+interface SummaryTaskLists {
+  pending: string[];
+  parked: string[];
+  cancelled: string[];
+}
+
+function summaryTaskLists(state: SummaryInput["state"]): SummaryTaskLists {
+  const pending: string[] = [];
+  const parked: string[] = [];
+  const cancelled: string[] = [];
+  for (const slug of Object.keys(state.tasks).sort()) {
+    const status = state.tasks[slug]!.status;
+    if (status === "parked") {
+      parked.push(slug);
+    } else if (status === "pending" || status === "ready") {
+      pending.push(slug);
+    } else if (status === "cancelled") {
+      cancelled.push(slug);
+    }
+  }
+  return { pending, parked, cancelled };
+}
+
+function ownerRemarkableLines(recs: StepRecord[]): string[] {
+  return recs.flatMap((rec) =>
+    (rec.outcome?.concerns ?? [])
+      .filter((concern) => concern.calibration === "owner")
+      .map(
+        (concern) =>
+          `- [${concern.kind}] ${rec.slug ? `${rec.slug}: ` : ""}${concern.text}${
+            concern.evidence ? ` (${concern.evidence})` : ""
+          }`,
+      ),
+  );
+}
+
+async function unansweredSteerLines(store: ArtifactStore): Promise<string[]> {
+  const inbox = await store.mailbox.files("inbox");
+  return inbox.map(
+    (file) =>
+      `- steer ${path.basename(file, path.extname(file))} is still in mailbox/inbox/${file}`,
+  );
+}
+
+/** Boundary, architect and script remarks, minus the facts with their own lines. */
+function summaryRemarks(
+  input: SummaryInput,
+  architect: StepRecord | undefined,
+  recs: StepRecord[],
+  budgetStop: string | undefined,
+): string[] {
+  const remarks: string[] = [];
+  if (input.cause && !budgetStop) {
+    remarks.push(`boundary: ${formatCause(input.cause)}`);
+  }
+  if (architect?.outcome) {
+    remarks.push(`architect: ${architect.outcome.summary}`);
+    for (const forward of architect.outcome.forward) {
+      if (/^steer\s/i.test(forward) || /^debt closed:/i.test(forward)) continue;
+      remarks.push(forward);
+    }
+  }
+  for (const rec of recs) {
+    if (rec.actor === "script" && rec.ok === false && rec.cause) {
+      remarks.push(`${rec.step}: ${formatCause(rec.cause)}`);
+    }
+  }
+  return remarks;
+}
+
+function closedDebtLines(recs: StepRecord[]): string[] {
+  return recs.flatMap((rec) => [
+    ...(rec.outcome?.forward ?? [])
+      .map((forward) => /^debt closed:\s*(.+)$/i.exec(forward)?.[1]?.trim())
+      .filter((text): text is string => Boolean(text))
+      .map((text) => `- ${text}`),
+    ...(rec.outcome?.debtClosed ?? []).map(
+      (entry) => `- ${entry.id}: ${entry.reason.trim()}`,
+    ),
+  ]);
+}
+
+function baseGateLines(base: ReturnType<typeof recordedBaseGates>): string[] {
+  if (!base) return ["- not recorded"];
+  if (base.ok) return [`- ${shortHash(base.commit)}: green`];
+  return [
+    `- ${shortHash(base.commit)} was red before any task (pre-existing; not attributed to tasks):`,
+    ...base.checks
+      .filter((c) => !c.ok)
+      .map((c) => `  - ${c.name}: ${c.summary}`),
+  ];
+}
+
+function distanceDebtLines(
+  open: ReturnType<typeof materialOpenDebts>,
+): string[] {
+  if (open.length === 0) return ["- open debt (0): none"];
+  return [
+    `- open debt (${open.length}):`,
+    ...open.map(
+      (debt) =>
+        `  - ${debt.id ? `${debt.id} ` : ""}${debt.source}: ${debt.text}${debt.evidence ? ` (${debt.evidence})` : ""}`,
+    ),
+  ];
+}
+
+function parkedCauseLines(
+  parkedByKind: ReadonlyMap<CauseKind, { slug: string; detail: string }[]>,
+): string[] {
+  if (parkedByKind.size === 0) return ["- none"];
+  return [...parkedByKind.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .flatMap(([kind, parks]) => [
+      `- ${kind}`,
+      ...parks.map((park) =>
+        park.detail ? `  - ${park.slug}: ${park.detail}` : `  - ${park.slug}`,
+      ),
+    ]);
+}
+
+function costByRoleLine(
+  roleNames: readonly { name: string; usage: Usage; unpricedTurns: number }[],
+): string {
+  if (roleNames.length === 0) return "- cost by role: none";
+  const rows = roleNames
+    .map(
+      (entry) =>
+        `${entry.name} ${costText(entry.usage.costUsd, entry.unpricedTurns)}`,
+    )
+    .join("; ");
+  return `- cost by role: ${rows}`;
+}
+
+function perMergedCost(cost: number | null, unpricedTurns: number): string {
+  if (cost === null) return "n/a";
+  return `$${cost.toFixed(4)}${unpricedTurns > 0 ? " (partial)" : ""}`;
+}
+
+function budgetLines(
+  budgetStop: string | undefined,
+  unpricedTurns: number,
+): string[] {
+  if (!budgetStop) return [];
+  return [
+    `- budget: ${budgetStop}; brake blind for ${unpricedTurns} unpriced ${
+      unpricedTurns === 1 ? "turn" : "turns"
+    }`,
+  ];
+}
+
+/** A one-line list, `none` when empty. */
+function listLine(label: string, items: readonly string[]): string {
+  return `- ${label}: ${items.length > 0 ? items.join(", ") : "none"}`;
+}
+
+/** The entries, or the `- none` placeholder every summary section uses. */
+function orNone(entries: string[]): string[] {
+  return entries.length > 0 ? entries : ["- none"];
+}
+
+function decisionLines(decision: string | undefined): string[] {
+  return decision ? [`decision: ${decision}`] : [];
+}
+
+function architectLines(
+  architect: StepRecord | undefined,
+  planReviewMarks: PlanReviewMarkCounts,
+): string[] {
+  return [
+    "## Architect",
+    ...(architect?.outcome
+      ? [`- summary: ${architect.outcome.summary}`]
+      : ["- no architect outcome recorded"]),
+    `- plan-review marks: ${planReviewMarks.helpful} helpful, ${planReviewMarks.unhelpful} unhelpful`,
+  ];
+}
+
 /**
  * The guaranteed remarkable: exactly one summary per iteration, written even
  * when the iteration crashed. Everything here is derived from records and
@@ -150,80 +346,26 @@ export async function writeIterationSummary(
     .filter((r) => r.step === "finish" && r.ok === true)
     .map((r) => r.slug!);
   // Root causes group by kind: rewording a park's detail never splits a group.
-  const parkedByKind = new Map<CauseKind, { slug: string; detail: string }[]>();
-  for (const rec of recs) {
-    if (rec.step !== "park" || !rec.endedAt || !rec.slug) continue;
-    const kind = rec.cause?.kind ?? "unknown";
-    const detail = rec.cause?.detail ?? "no recorded cause";
-    parkedByKind.set(kind, [
-      ...(parkedByKind.get(kind) ?? []),
-      { slug: rec.slug, detail },
-    ]);
-  }
-  const pending: string[] = [];
-  const parkedAll: string[] = [];
-  const cancelled: string[] = [];
-  for (const slug of Object.keys(input.state.tasks).sort()) {
-    const task = input.state.tasks[slug]!;
-    if (task.status === "parked") {
-      parkedAll.push(slug);
-    } else if (task.status === "pending" || task.status === "ready") {
-      pending.push(slug);
-    } else if (task.status === "cancelled") {
-      cancelled.push(slug);
-    }
-  }
+  const parkedByKind = summaryParkedByKind(recs);
+  const {
+    pending,
+    parked: parkedAll,
+    cancelled,
+  } = summaryTaskLists(input.state);
   // Distance counts what still blocks the goal: material debt left open after
   // every recorded closure, not fyi notes and not debts already retired.
   const open = materialOpenDebts(input.records);
 
-  const ownerRemarkable = recs.flatMap((rec) =>
-    (rec.outcome?.concerns ?? [])
-      .filter((concern) => concern.calibration === "owner")
-      .map(
-        (concern) =>
-          `- [${concern.kind}] ${rec.slug ? `${rec.slug}: ` : ""}${concern.text}${
-            concern.evidence ? ` (${concern.evidence})` : ""
-          }`,
-      ),
-  );
-  const inbox = await store.mailbox.files("inbox");
-  const unanswered = inbox.map(
-    (file) =>
-      `- steer ${path.basename(file, path.extname(file))} is still in mailbox/inbox/${file}`,
-  );
-
-  const remarks: string[] = [];
-  if (input.cause && !budgetStop) {
-    remarks.push(`boundary: ${formatCause(input.cause)}`);
-  }
-  if (architect?.outcome) {
-    remarks.push(`architect: ${architect.outcome.summary}`);
-    for (const forward of architect.outcome.forward) {
-      if (/^steer\s/i.test(forward) || /^debt closed:/i.test(forward)) continue;
-      remarks.push(forward);
-    }
-  }
-  for (const rec of recs) {
-    if (rec.actor === "script" && rec.ok === false && rec.cause) {
-      remarks.push(`${rec.step}: ${formatCause(rec.cause)}`);
-    }
-  }
+  const ownerRemarkable = ownerRemarkableLines(recs);
+  const unanswered = await unansweredSteerLines(store);
+  const remarks = summaryRemarks(input, architect, recs, budgetStop);
 
   const assumed = concernLines(
     recs.filter((r) => r.step === "architect"),
     "choice",
   );
   const debtOpened = concernLines(recs, "debt");
-  const debtClosed = recs.flatMap((rec) => [
-    ...(rec.outcome?.forward ?? [])
-      .map((forward) => /^debt closed:\s*(.+)$/i.exec(forward)?.[1]?.trim())
-      .filter((text): text is string => Boolean(text))
-      .map((text) => `- ${text}`),
-    ...(rec.outcome?.debtClosed ?? []).map(
-      (entry) => `- ${entry.id}: ${entry.reason.trim()}`,
-    ),
-  ]);
+  const debtClosed = closedDebtLines(recs);
 
   const roleByStep = { ...DEFAULT_ROLE_BY_STEP, ...(input.roleByStep ?? {}) };
   const computed = iterationMetrics(
@@ -274,119 +416,60 @@ export async function writeIterationSummary(
     (r) => r.actor === "script" && r.endedAt,
   ).length;
   const base = recordedBaseGates(input.records);
-  const baseLines = !base
-    ? ["- not recorded"]
-    : base.ok
-      ? [`- ${shortHash(base.commit)}: green`]
-      : [
-          `- ${shortHash(base.commit)} was red before any task (pre-existing; not attributed to tasks):`,
-          ...base.checks
-            .filter((c) => !c.ok)
-            .map((c) => `  - ${c.name}: ${c.summary}`),
-        ];
-
-  const distanceDebt =
-    open.length === 0
-      ? ["- open debt (0): none"]
-      : [
-          `- open debt (${open.length}):`,
-          ...open.map(
-            (debt) =>
-              `  - ${debt.id ? `${debt.id} ` : ""}${debt.source}: ${debt.text}${debt.evidence ? ` (${debt.evidence})` : ""}`,
-          ),
-        ];
+  const baseLines = baseGateLines(base);
+  const distanceDebt = distanceDebtLines(open);
   const lines = [
     `# Iteration ${iteration} summary`,
     "",
     `status: ${status}`,
-    ...(input.decision ? [`decision: ${input.decision}`] : []),
+    ...decisionLines(input.decision),
     "",
     "## Distance",
-    `- pending (${pending.length}): ${pending.length ? pending.join(", ") : "none"}`,
-    `- parks (${parkedAll.length}): ${parkedAll.length ? parkedAll.join(", ") : "none"}`,
+    listLine(`pending (${pending.length})`, pending),
+    listLine(`parks (${parkedAll.length})`, parkedAll),
     ...distanceDebt,
     "",
-    "## Architect",
-    ...(architect?.outcome
-      ? [`- summary: ${architect.outcome.summary}`]
-      : ["- no architect outcome recorded"]),
-    `- plan-review marks: ${planReviewMarks.helpful} helpful, ${planReviewMarks.unhelpful} unhelpful`,
+    ...architectLines(architect, planReviewMarks),
     "",
     "## Assumptions",
     ...(assumed.length ? assumed : ["- none recorded"]),
     "",
     "## Outcome",
-    `- merged: ${merged.length ? merged.join(", ") : "none"}`,
-    `- spikes finished: ${finished.length ? finished.join(", ") : "none"}`,
-    `- pending: ${pending.length ? pending.join(", ") : "none"}`,
-    `- cancelled: ${cancelled.length ? cancelled.join(", ") : "none"}`,
-    `- quarantined: ${quarantined.length ? quarantined.join(", ") : "none"}`,
+    listLine("merged", merged),
+    listLine("spikes finished", finished),
+    listLine("pending", pending),
+    listLine("cancelled", cancelled),
+    listLine("quarantined", quarantined),
     "",
     "## Base gates",
     ...baseLines,
     "",
     "## Parked by root cause",
-    ...(parkedByKind.size
-      ? [...parkedByKind.entries()]
-          .sort(([a], [b]) => a.localeCompare(b))
-          .flatMap(([kind, parks]) => [
-            `- ${kind}`,
-            ...parks.map((park) =>
-              park.detail
-                ? `  - ${park.slug}: ${park.detail}`
-                : `  - ${park.slug}`,
-            ),
-          ])
-      : ["- none"]),
+    ...parkedCauseLines(parkedByKind),
     "",
     "## Debt opened",
-    ...(debtOpened.length ? debtOpened : ["- none"]),
+    ...orNone(debtOpened),
     "",
     "## Debt closed",
-    ...(debtClosed.length ? debtClosed : ["- none"]),
+    ...orNone(debtClosed),
     "",
     "## Owner attention",
-    ...(ownerRemarkable.length || unanswered.length
-      ? [...ownerRemarkable, ...unanswered]
-      : ["- none"]),
+    ...orNone([...ownerRemarkable, ...unanswered]),
     "",
     "## Remarkable",
-    ...(remarks.length ? remarks.map((r) => `- ${r}`) : ["- none"]),
+    ...orNone(remarks.map((r) => `- ${r}`)),
     "",
     "## Metrics",
     `- turns: ${agentTurns} agent, ${scriptTurns} script`,
     `- tokens: input ${usage.in}, cached ${usage.cacheRead}, output ${usage.out}, reasoning ${usage.reasoningOut}`,
     `- cost: ${costText(usage.costUsd, unpricedTurns)}`,
     `- list cost: ${costText(usage.listCostUsd, unpricedTurns)}`,
-    `- cost by role: ${
-      roleNames.length
-        ? roleNames
-            .map(
-              (entry) =>
-                `${entry.name} ${costText(entry.usage.costUsd, entry.unpricedTurns)}`,
-            )
-            .join("; ")
-        : "none"
-    }`,
-    `- cost per merged task: ${
-      costPerMergedTask === null
-        ? "n/a"
-        : `$${costPerMergedTask.toFixed(4)}${unpricedTurns > 0 ? " (partial)" : ""}`
-    }; list ${
-      listCostPerMergedTask === null
-        ? "n/a"
-        : `$${listCostPerMergedTask.toFixed(4)}${unpricedTurns > 0 ? " (partial)" : ""}`
-    }`,
+    costByRoleLine(roleNames),
+    `- cost per merged task: ${perMergedCost(costPerMergedTask, unpricedTurns)}; list ${perMergedCost(listCostPerMergedTask, unpricedTurns)}`,
     `- work: ${edits} files (+${addedLines}/-${removedLines}), ${testRuns} test runs in ${gateRuns} gate runs`,
     `- gate wall: ${(gateWallMs / 1000).toFixed(1)}s gates, ${(commitWallMs / 1000).toFixed(1)}s commits`,
     `- operator acts: ${operatorActs} (${humanInterventions} steers)`,
-    ...(budgetStop
-      ? [
-          `- budget: ${budgetStop}; brake blind for ${unpricedTurns} unpriced ${
-            unpricedTurns === 1 ? "turn" : "turns"
-          }`,
-        ]
-      : []),
+    ...budgetLines(budgetStop, unpricedTurns),
     `- merged: ${merged.length}; parked: ${[...parkedByKind.values()].flat().length}; pending: ${pending.length}`,
     "",
     "## Incidents",

@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import path from "node:path";
 import type { Harness } from "../harness/types.js";
 import { loadConfigs } from "../kernel/config.js";
@@ -182,6 +181,78 @@ function flagValue(
   return { value: args[index + 1] ?? "", next: index + 1 };
 }
 
+interface ValueFlag {
+  name: string;
+  apply: (result: ParsedArgs, value: string) => void;
+}
+
+const VALUE_FLAGS: readonly ValueFlag[] = [
+  {
+    name: "--repo",
+    apply: (result, value) => {
+      if (!value) throw new Error("--repo requires a path");
+      result.repo = value;
+    },
+  },
+  {
+    name: "--goal",
+    apply: (result, value) => {
+      if (!value) throw new Error("--goal requires a name");
+      result.goal = value;
+    },
+  },
+  {
+    name: "--iterations",
+    apply: (result, value) => {
+      result.iterations = parsePositiveInt("--iterations", value);
+    },
+  },
+  {
+    name: "--run-config",
+    apply: (result, value) => {
+      if (!value) throw new Error("--run-config requires a path");
+      result.runConfig = value;
+    },
+  },
+  {
+    name: "--intent",
+    apply: (result, value) => {
+      if (!value) throw new Error("--intent requires a file");
+      result.intent = value;
+    },
+  },
+  {
+    name: "--step",
+    apply: (result, value) => {
+      if (!value) throw new Error("--step requires a step id");
+      result.step = value;
+    },
+  },
+  {
+    name: "--out",
+    apply: (result, value) => {
+      if (!value) throw new Error("--out requires a path");
+      result.out = value;
+    },
+  },
+];
+
+/** Applies one value flag; returns the index of its consumed argument. */
+function applyValueFlag(
+  result: ParsedArgs,
+  arg: string,
+  args: string[],
+  index: number,
+): number {
+  const flag = VALUE_FLAGS.find(
+    ({ name }) => arg === name || arg.startsWith(`${name}=`),
+  );
+  if (!flag) return index;
+  const parsed = flagValue(arg, flag.name, args, index);
+  flag.apply(result, parsed.value);
+  return parsed.next;
+}
+
 export function parseCliArgs(args: string[]): ParsedArgs {
   const result: ParsedArgs = {
     repo: process.cwd(),
@@ -196,44 +267,12 @@ export function parseCliArgs(args: string[]): ParsedArgs {
       result.help = true;
     } else if (arg === "--version" || arg === "-v") {
       result.version = true;
-    } else if (arg === "--repo" || arg.startsWith("--repo=")) {
-      const parsed = flagValue(arg, "--repo", args, i);
-      result.repo = parsed.value;
-      i = parsed.next;
-      if (!result.repo) throw new Error("--repo requires a path");
-    } else if (arg === "--goal" || arg.startsWith("--goal=")) {
-      const parsed = flagValue(arg, "--goal", args, i);
-      result.goal = parsed.value;
-      i = parsed.next;
-      if (!result.goal) throw new Error("--goal requires a name");
-    } else if (arg === "--iterations" || arg.startsWith("--iterations=")) {
-      const parsed = flagValue(arg, "--iterations", args, i);
-      result.iterations = parsePositiveInt("--iterations", parsed.value);
-      i = parsed.next;
-    } else if (arg === "--run-config" || arg.startsWith("--run-config=")) {
-      const parsed = flagValue(arg, "--run-config", args, i);
-      result.runConfig = parsed.value;
-      i = parsed.next;
-      if (!result.runConfig) throw new Error("--run-config requires a path");
-    } else if (arg === "--intent" || arg.startsWith("--intent=")) {
-      const parsed = flagValue(arg, "--intent", args, i);
-      result.intent = parsed.value;
-      i = parsed.next;
-      if (!result.intent) throw new Error("--intent requires a file");
-    } else if (arg === "--step" || arg.startsWith("--step=")) {
-      const parsed = flagValue(arg, "--step", args, i);
-      result.step = parsed.value;
-      i = parsed.next;
-      if (!result.step) throw new Error("--step requires a step id");
-    } else if (arg === "--out" || arg.startsWith("--out=")) {
-      const parsed = flagValue(arg, "--out", args, i);
-      result.out = parsed.value;
-      i = parsed.next;
-      if (!result.out) throw new Error("--out requires a path");
     } else if (arg === "--json") {
       result.json = true;
     } else if (arg === "-" || !arg.startsWith("-")) {
       positional.push(arg);
+    } else {
+      i = applyValueFlag(result, arg, args, i);
     }
   }
   result.command = positional[0];
@@ -312,6 +351,107 @@ async function runCommand(parsed: ParsedArgs, deps: CliDeps): Promise<number> {
   return exitCode(result);
 }
 
+/** `init`: create the goal directory, repo config and intent file. */
+async function initCommand(parsed: ParsedArgs): Promise<number> {
+  if (!parsed.goal) throw new Error("init requires --goal <name>");
+  const result = await initGoal({
+    repo: parsed.repo,
+    goal: parsed.goal,
+    intent: parsed.intent,
+  });
+  console.log(`goal: ${result.goalDir}`);
+  console.log(
+    `repo config: ${result.repoConfig} (${result.repoConfigCreated ? "created" : "existing"})`,
+  );
+  console.log(
+    `intent: ${result.intentPath} (${result.intentCreated ? "created" : "existing"})`,
+  );
+  return 0;
+}
+
+/** `status`: print the goal's status, as JSON when asked. */
+async function statusCommand(
+  parsed: ParsedArgs,
+  deps: CliDeps,
+): Promise<number> {
+  if (!parsed.goal) throw new Error("status requires --goal <name>");
+  const status = await statusGoal(parsed.repo, parsed.goal, {
+    json: parsed.json,
+    priceSource: deps.priceSource,
+  });
+  if (status.statusJson !== undefined) console.log(status.statusJson);
+  else printStatus(status);
+  return 0;
+}
+
+async function benchmarkCommand(parsed: ParsedArgs): Promise<number> {
+  if (!parsed.goal) throw new Error("benchmark requires --goal <name>");
+  console.log(formatBenchmark(await benchmarkGoal(parsed.repo, parsed.goal)));
+  return 0;
+}
+
+async function steerCommand(parsed: ParsedArgs): Promise<number> {
+  if (!parsed.goal) throw new Error("steer requires --goal <name>");
+  if (!parsed.file)
+    throw new Error("steer requires a file path or - for stdin");
+  const path = await steerGoal(
+    parsed.repo,
+    parsed.goal,
+    await readSteerSource(parsed.file),
+  );
+  console.log(`steer: ${path}`);
+  return 0;
+}
+
+async function validateCommand(parsed: ParsedArgs): Promise<number> {
+  if (!parsed.file) throw new Error("validate requires a file path");
+  const result = await validateFile(parsed.file, {
+    step: parsed.step,
+    repo: parsed.repo,
+  });
+  for (const finding of result.findings) console.error(finding);
+  if (result.findings.length > 0) return 1;
+  if (result.stepIndependent)
+    console.log(
+      `${parsed.file}: no --step and no started.yaml: step-independent checks only`,
+    );
+  console.log(`${parsed.file}: valid`);
+  return 0;
+}
+
+function variablesCommand(parsed: ParsedArgs): number {
+  if (!parsed.out) throw new Error("variables requires --out <file>");
+  const written = writePromptVariables(parsed.out);
+  console.log(`variables: ${written}`);
+  return 0;
+}
+
+function schemasCommand(parsed: ParsedArgs): number {
+  if (!parsed.out) throw new Error("schemas requires --out <dir>");
+  const written = writeKernelSchemas(parsed.out);
+  for (const file of written) console.log(file);
+  console.log(
+    `schemas: ${written.length} kernel schema(s) written to ${path.resolve(parsed.out)}`,
+  );
+  return 0;
+}
+
+type CommandHandler = (
+  parsed: ParsedArgs,
+  deps: CliDeps,
+) => number | Promise<number>;
+
+const COMMANDS: Record<string, CommandHandler> = {
+  run: runCommand,
+  init: initCommand,
+  status: statusCommand,
+  benchmark: benchmarkCommand,
+  steer: steerCommand,
+  validate: validateCommand,
+  variables: variablesCommand,
+  schemas: schemasCommand,
+};
+
 /** Main dispatch entrypoint; each command maps to one kernel or mailbox call. */
 export async function dispatch(
   args: string[],
@@ -351,82 +491,8 @@ export async function dispatch(
   }
 
   try {
-    if (parsed.command === "run") return await runCommand(parsed, deps);
-    if (parsed.command === "init") {
-      if (!parsed.goal) throw new Error("init requires --goal <name>");
-      const result = await initGoal({
-        repo: parsed.repo,
-        goal: parsed.goal,
-        intent: parsed.intent,
-      });
-      console.log(`goal: ${result.goalDir}`);
-      console.log(
-        `repo config: ${result.repoConfig} (${result.repoConfigCreated ? "created" : "existing"})`,
-      );
-      console.log(
-        `intent: ${result.intentPath} (${result.intentCreated ? "created" : "existing"})`,
-      );
-      return 0;
-    }
-    if (parsed.command === "status") {
-      if (!parsed.goal) throw new Error("status requires --goal <name>");
-      const status = await statusGoal(parsed.repo, parsed.goal, {
-        json: parsed.json,
-        priceSource: deps.priceSource,
-      });
-      if (status.statusJson !== undefined) console.log(status.statusJson);
-      else printStatus(status);
-      return 0;
-    }
-    if (parsed.command === "benchmark") {
-      if (!parsed.goal) throw new Error("benchmark requires --goal <name>");
-      console.log(
-        formatBenchmark(await benchmarkGoal(parsed.repo, parsed.goal)),
-      );
-      return 0;
-    }
-    if (parsed.command === "steer") {
-      if (!parsed.goal) throw new Error("steer requires --goal <name>");
-      if (!parsed.file)
-        throw new Error("steer requires a file path or - for stdin");
-      const path = await steerGoal(
-        parsed.repo,
-        parsed.goal,
-        await readSteerSource(parsed.file),
-      );
-      console.log(`steer: ${path}`);
-      return 0;
-    }
-    if (parsed.command === "validate") {
-      if (!parsed.file) throw new Error("validate requires a file path");
-      const result = await validateFile(parsed.file, {
-        step: parsed.step,
-        repo: parsed.repo,
-      });
-      for (const finding of result.findings) console.error(finding);
-      if (result.findings.length > 0) return 1;
-      if (result.stepIndependent)
-        console.log(
-          `${parsed.file}: no --step and no started.yaml: step-independent checks only`,
-        );
-      console.log(`${parsed.file}: valid`);
-      return 0;
-    }
-    if (parsed.command === "variables") {
-      if (!parsed.out) throw new Error("variables requires --out <file>");
-      const written = writePromptVariables(parsed.out);
-      console.log(`variables: ${written}`);
-      return 0;
-    }
-    if (parsed.command === "schemas") {
-      if (!parsed.out) throw new Error("schemas requires --out <dir>");
-      const written = writeKernelSchemas(parsed.out);
-      for (const file of written) console.log(file);
-      console.log(
-        `schemas: ${written.length} kernel schema(s) written to ${path.resolve(parsed.out)}`,
-      );
-      return 0;
-    }
+    const handler = COMMANDS[parsed.command];
+    if (handler) return await handler(parsed, deps);
     console.error(`Error: unknown command "${parsed.command}"`);
     console.log(ROOT_USAGE);
     return 1;

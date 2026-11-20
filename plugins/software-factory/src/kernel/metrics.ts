@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity: split-rest
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import yaml from "yaml";
 import type { Stop, TurnAttempt, Usage } from "../harness/types.js";
 import { addUsage, countOutcomeRepairs, zeroUsage } from "../harness/usage.js";
@@ -19,6 +19,7 @@ import {
   WASTE_REASONS,
   type WasteAccounting,
   type WasteCounts,
+  type WasteReason,
   wasteAccounting,
 } from "./waste.js";
 
@@ -412,6 +413,30 @@ function attemptIncidents(recs: StepRecord[], incidents: IncidentCounts): void {
   }
 }
 
+/** Counts one park reason; an unknown reason names no incident bucket. */
+function countPark(incidents: IncidentCounts, cause: string | undefined): void {
+  switch (cause) {
+    case "round-limit":
+    case "change-requests-exhausted":
+      incidents.roundLimitParks += 1;
+      break;
+    case "no-progress":
+      incidents.noProgressParks += 1;
+      break;
+    // An empty-diff park is a loop signal: the turn consumed budget without
+    // producing work. A spike's empty turn is a normal `finish` record, not a
+    // park, so it never reaches this count.
+    case "empty-diff":
+      incidents.emptyDiffParks += 1;
+      break;
+    case "overflow":
+      incidents.overflowParks += 1;
+      break;
+    default:
+      break;
+  }
+}
+
 function parkIncidents(all: StepRecord[], incidents: IncidentCounts): void {
   for (const rec of all) {
     if (rec.step === "merge" && rec.cause?.kind === "conflict") {
@@ -421,28 +446,214 @@ function parkIncidents(all: StepRecord[], incidents: IncidentCounts): void {
     } else if (rec.step === "gate-flake" && rec.endedAt) {
       incidents.gateFlakes += 1;
     } else if (rec.step === "park" && rec.endedAt) {
-      switch (rec.cause?.kind) {
-        case "round-limit":
-        case "change-requests-exhausted":
-          incidents.roundLimitParks += 1;
-          break;
-        case "no-progress":
-          incidents.noProgressParks += 1;
-          break;
-        // An empty-diff park is a loop signal: the turn consumed budget
-        // without producing work. A spike's empty turn is a normal `finish`
-        // record, not a park, so it never reaches this count.
-        case "empty-diff":
-          incidents.emptyDiffParks += 1;
-          break;
-        case "overflow":
-          incidents.overflowParks += 1;
-          break;
-        default:
-          break;
-      }
+      countPark(incidents, rec.cause?.kind);
     }
   }
+}
+
+/** Work one record committed, as the group totals count it. */
+interface WorkSize {
+  edits: number;
+  added: number;
+  removed: number;
+}
+
+type Priced = ReturnType<typeof pricedRecord>;
+
+/** Adds one turn's spend and work to its role and alias groups. */
+function recordGroups(
+  rec: StepRecord,
+  role: string,
+  part: Usage,
+  unpriced: number,
+  promptBytes: number,
+  work: WorkSize,
+  launch: LaunchKind | "unknown" | undefined,
+  roles: Record<string, RoleMetrics>,
+  aliases: Record<string, AliasMetrics>,
+): void {
+  const roleEntry = roles[role] ?? { role, ...emptyGroup() };
+  addTurn(roleEntry, part, unpriced, promptBytes, work, launch);
+  roles[role] = roleEntry;
+  // Records written before aliases existed fall back to the role name, so a
+  // spend row always names a grouping the run config can resolve.
+  const alias = rec.alias ?? role;
+  const aliasEntry = aliases[alias] ?? { alias, ...emptyGroup() };
+  addTurn(aliasEntry, part, unpriced, promptBytes, work, launch);
+  aliases[alias] = aliasEntry;
+}
+
+function addModelTurn(
+  model: string,
+  part: Usage,
+  unpriced: number,
+  promptBytes: number,
+  work: WorkSize | undefined,
+  launch: LaunchKind | "unknown" | undefined,
+  models: Record<string, ModelMetrics>,
+): void {
+  const entry = models[model] ?? { model, ...emptyGroup() };
+  addTurn(entry, part, unpriced, promptBytes, work, launch);
+  models[model] = entry;
+}
+
+/** Adds one record's turn to the model rows, split per served model. */
+function recordModels(
+  rec: StepRecord,
+  priced: Priced,
+  part: Usage,
+  unpriced: number,
+  promptBytes: number,
+  work: WorkSize,
+  launch: LaunchKind | "unknown" | undefined,
+  models: Record<string, ModelMetrics>,
+): void {
+  if (!priced.served) {
+    addModelTurn(
+      rec.model?.id ?? "unknown",
+      part,
+      unpriced,
+      promptBytes,
+      work,
+      launch,
+      models,
+    );
+    return;
+  }
+  // A turn that served several models counts once per model it served, but its
+  // work and prompt belong to the record: they land on the record's own model
+  // row so a native hop does not double-count committed work.
+  const ownsWork = priced.served.some(
+    (entry) => entry.model.id === rec.model?.id,
+  )
+    ? rec.model!.id
+    : priced.served[0]!.model.id;
+  for (const entry of priced.served) {
+    const owner = entry.model.id === ownsWork;
+    addModelTurn(
+      entry.model.id,
+      entry.usage,
+      entry.costKnown ? 0 : 1,
+      owner ? promptBytes : 0,
+      owner ? work : undefined,
+      owner ? launch : undefined,
+      models,
+    );
+  }
+}
+
+/** Adds one record's turn to the architect totals when it was an architect turn. */
+function recordArchitect(
+  rec: StepRecord,
+  role: string,
+  architect: ArchitectMetrics,
+  unpriced: number,
+  part: Usage,
+): void {
+  if (role !== "architect" && rec.step !== "architect") return;
+  architect.launches += 1;
+  architect.unpricedTurns += unpriced;
+  architect.usage = addUsage(architect.usage, part);
+  architect.tokens += tokenTotal(part);
+}
+
+/** Slugs of the records a predicate selects, sorted. */
+function sortedSlugs(
+  all: StepRecord[],
+  predicate: (rec: StepRecord) => boolean,
+): string[] {
+  return all
+    .filter(predicate)
+    .map((r) => r.slug!)
+    .sort();
+}
+
+/** Adds one wasted turn to its role and alias waste counts. */
+function recordWaste(
+  roles: Record<string, RoleMetrics>,
+  aliases: Record<string, AliasMetrics>,
+  entry: { role: string; alias: string; reason: WasteReason },
+): void {
+  const roleEntry = roles[entry.role] ?? { role: entry.role, ...emptyGroup() };
+  roleEntry.waste[entry.reason] += 1;
+  roles[entry.role] = roleEntry;
+  const aliasEntry = aliases[entry.alias] ?? {
+    alias: entry.alias,
+    ...emptyGroup(),
+  };
+  aliasEntry.waste[entry.reason] += 1;
+  aliases[entry.alias] = aliasEntry;
+}
+
+/** Adds one rebutted review to its role and alias counts. */
+function recordRebutted(
+  roles: Record<string, RoleMetrics>,
+  aliases: Record<string, AliasMetrics>,
+  review: { role: string; alias: string },
+): void {
+  const roleEntry = roles[review.role] ?? {
+    role: review.role,
+    ...emptyGroup(),
+  };
+  roleEntry.rebuttedReviews += 1;
+  roles[review.role] = roleEntry;
+  const aliasEntry = aliases[review.alias] ?? {
+    alias: review.alias,
+    ...emptyGroup(),
+  };
+  aliasEntry.rebuttedReviews += 1;
+  aliases[review.alias] = aliasEntry;
+}
+
+/** Helpful/unhelpful plan-review marks recorded across the iteration. */
+function planReviewMarkCounts(all: StepRecord[]): PlanReviewMarkCounts {
+  const marks: PlanReviewMarkCounts = { helpful: 0, unhelpful: 0 };
+  for (const rec of all) {
+    for (const mark of rec.outcome?.planReviewMarks ?? []) {
+      marks[mark.mark] += 1;
+    }
+  }
+  return marks;
+}
+
+interface ScriptTotals {
+  gateWallMs: number;
+  commitWallMs: number;
+  gateRuns: number;
+  testRuns: number;
+}
+
+/** Gate/commit wall and test runs from the script records' own stamps. */
+function scriptTotals(
+  all: StepRecord[],
+  roles: Record<string, RoleMetrics>,
+): ScriptTotals {
+  const totals: ScriptTotals = {
+    gateWallMs: 0,
+    commitWallMs: 0,
+    gateRuns: 0,
+    testRuns: 0,
+  };
+  for (const rec of all) {
+    if (!rec.endedAt) continue;
+    if (rec.step !== "checks" && rec.step !== "merge-checks") {
+      if (rec.step === "commit") totals.commitWallMs += wallMsOf(rec);
+      continue;
+    }
+    totals.gateWallMs += wallMsOf(rec);
+    totals.gateRuns += 1;
+    const runs = rec.testRuns ?? rec.checks?.length ?? 0;
+    totals.testRuns += runs;
+    const scriptRole = roles["script"] ?? { role: "script", ...emptyGroup() };
+    scriptRole.testRuns += runs;
+    roles["script"] = scriptRole;
+  }
+  return totals;
+}
+
+/** Priced cost per merged task, null when nothing merged or no cost is known. */
+function costPerTask(merged: number, cost: number | undefined): number | null {
+  return merged > 0 && cost !== undefined ? cost / merged : null;
 }
 
 /** One iteration's spend and incidents, shared by `metrics.yaml` and its summary. */
@@ -487,70 +698,40 @@ export function iterationMetrics(
     const role =
       roleByStep[rec.step] ?? DEFAULT_ROLE_BY_STEP[rec.step] ?? rec.step;
     const launch = deriveLaunchKind(rec);
-    const roleEntry = roles[role] ?? { role, ...emptyGroup() };
-    addTurn(roleEntry, part, unpriced, promptBytes, work, launch);
-    roles[role] = roleEntry;
-
-    // Records written before aliases existed fall back to the role name, so a
-    // spend row always names a grouping the run config can resolve.
-    const alias = rec.alias ?? role;
-    const aliasEntry = aliases[alias] ?? { alias, ...emptyGroup() };
-    addTurn(aliasEntry, part, unpriced, promptBytes, work, launch);
-    aliases[alias] = aliasEntry;
-
-    if (priced.served) {
-      // A turn that served several models counts once per model it served, but
-      // its work and prompt belong to the record: they land on the record's own
-      // model row so a native hop does not double-count committed work.
-      const ownsWork = priced.served.some(
-        (entry) => entry.model.id === rec.model?.id,
-      )
-        ? rec.model!.id
-        : priced.served[0]!.model.id;
-      for (const entry of priced.served) {
-        const modelEntry = models[entry.model.id] ?? {
-          model: entry.model.id,
-          ...emptyGroup(),
-        };
-        const owner = entry.model.id === ownsWork;
-        addTurn(
-          modelEntry,
-          entry.usage,
-          entry.costKnown ? 0 : 1,
-          owner ? promptBytes : 0,
-          owner ? work : undefined,
-          owner ? launch : undefined,
-        );
-        models[entry.model.id] = modelEntry;
-      }
-    } else {
-      const model = rec.model?.id ?? "unknown";
-      const modelEntry = models[model] ?? { model, ...emptyGroup() };
-      addTurn(modelEntry, part, unpriced, promptBytes, work, launch);
-      models[model] = modelEntry;
-    }
-
-    if (role === "architect" || rec.step === "architect") {
-      architect.launches += 1;
-      architect.unpricedTurns += unpriced;
-      architect.usage = addUsage(architect.usage, part);
-      architect.tokens += tokenTotal(part);
-    }
+    recordGroups(
+      rec,
+      role,
+      part,
+      unpriced,
+      promptBytes,
+      work,
+      launch,
+      roles,
+      aliases,
+    );
+    recordModels(
+      rec,
+      priced,
+      part,
+      unpriced,
+      promptBytes,
+      work,
+      launch,
+      models,
+    );
+    recordArchitect(rec, role, architect, unpriced, part);
   }
 
   const all = records.filter((r) => r.iteration === n);
-  const merged = all
-    .filter((r) => r.step === "merge" && r.ok === true)
-    .map((r) => r.slug!)
-    .sort();
-  const parked = all
-    .filter((r) => r.step === "park" && r.endedAt)
-    .map((r) => r.slug!)
-    .sort();
-  const quarantined = all
-    .filter((r) => r.step === "task-quarantine" && r.endedAt)
-    .map((r) => r.slug!)
-    .sort();
+  const merged = sortedSlugs(all, (r) => r.step === "merge" && r.ok === true);
+  const parked = sortedSlugs(
+    all,
+    (r) => r.step === "park" && r.endedAt !== undefined,
+  );
+  const quarantined = sortedSlugs(
+    all,
+    (r) => r.step === "task-quarantine" && r.endedAt !== undefined,
+  );
   const incidents = emptyIncidents();
   attemptIncidents(recs, incidents);
   parkIncidents(all, incidents);
@@ -558,65 +739,19 @@ export function iterationMetrics(
     records: all,
     roleOf: (step) => roleByStep[step] ?? DEFAULT_ROLE_BY_STEP[step] ?? step,
   });
-  for (const entry of waste.entries) {
-    const roleEntry = roles[entry.role] ?? {
-      role: entry.role,
-      ...emptyGroup(),
-    };
-    roleEntry.waste[entry.reason] += 1;
-    roles[entry.role] = roleEntry;
-    const aliasEntry = aliases[entry.alias] ?? {
-      alias: entry.alias,
-      ...emptyGroup(),
-    };
-    aliasEntry.waste[entry.reason] += 1;
-    aliases[entry.alias] = aliasEntry;
-  }
+  for (const entry of waste.entries) recordWaste(roles, aliases, entry);
   for (const review of waste.rebuttedReviews) {
-    const roleEntry = roles[review.role] ?? {
-      role: review.role,
-      ...emptyGroup(),
-    };
-    roleEntry.rebuttedReviews += 1;
-    roles[review.role] = roleEntry;
-    const aliasEntry = aliases[review.alias] ?? {
-      alias: review.alias,
-      ...emptyGroup(),
-    };
-    aliasEntry.rebuttedReviews += 1;
-    aliases[review.alias] = aliasEntry;
+    recordRebutted(roles, aliases, review);
   }
-  const planReviewMarks: PlanReviewMarkCounts = { helpful: 0, unhelpful: 0 };
-  for (const rec of all) {
-    for (const mark of rec.outcome?.planReviewMarks ?? []) {
-      planReviewMarks[mark.mark] += 1;
-    }
-  }
+  const planReviewMarks = planReviewMarkCounts(all);
   const tokens = tokenTotal(usage);
 
   // Gate/commit wall and test runs come from the script records' own stamps;
   // a gate's test runs are the script's work, not the agent turn it verifies.
-  let gateWallMs = 0;
-  let commitWallMs = 0;
-  let gateRuns = 0;
-  let testRuns = 0;
-  for (const rec of all) {
-    if (!rec.endedAt) continue;
-    if (rec.step === "checks" || rec.step === "merge-checks") {
-      gateWallMs += wallMsOf(rec);
-      gateRuns += 1;
-      const runs = rec.testRuns ?? rec.checks?.length ?? 0;
-      testRuns += runs;
-      const scriptRole = roles["script"] ?? {
-        role: "script",
-        ...emptyGroup(),
-      };
-      scriptRole.testRuns += runs;
-      roles["script"] = scriptRole;
-    } else if (rec.step === "commit") {
-      commitWallMs += wallMsOf(rec);
-    }
-  }
+  const { gateWallMs, commitWallMs, gateRuns, testRuns } = scriptTotals(
+    all,
+    roles,
+  );
   const operatorActs = humanInterventions + all.filter(isOutsideAct).length;
 
   architect.costShare = width(architect.usage.costUsd ?? 0, usage.costUsd ?? 0);
@@ -630,14 +765,8 @@ export function iterationMetrics(
     quarantined,
     usage,
     tokens,
-    costPerMergedTask:
-      merged.length > 0 && usage.costUsd !== undefined
-        ? usage.costUsd / merged.length
-        : null,
-    listCostPerMergedTask:
-      merged.length > 0 && usage.listCostUsd !== undefined
-        ? usage.listCostUsd / merged.length
-        : null,
+    costPerMergedTask: costPerTask(merged.length, usage.costUsd),
+    listCostPerMergedTask: costPerTask(merged.length, usage.listCostUsd),
     roles,
     aliases,
     models,
@@ -657,6 +786,87 @@ export function iterationMetrics(
     addedLines,
     removedLines,
   };
+}
+
+/** Adds one iteration's group into the running total for its name. */
+function sumGroupInto<T extends GroupMetrics>(
+  totals: Record<string, T>,
+  name: string,
+  entry: T,
+  create: (name: string) => T,
+): void {
+  const total = totals[name] ?? create(name);
+  sumGroup(total, entry);
+  totals[name] = total;
+}
+
+function sumGroup<T extends GroupMetrics>(total: T, entry: GroupMetrics): void {
+  total.turns += entry.turns;
+  total.usage = addUsage(total.usage, entry.usage);
+  total.tokens += entry.tokens;
+  total.promptBytes += entry.promptBytes;
+  total.unpricedTurns += entry.unpricedTurns;
+  total.edits += entry.edits;
+  total.addedLines += entry.addedLines;
+  total.removedLines += entry.removedLines;
+  total.testRuns += entry.testRuns;
+  total.launches.glitch += entry.launches.glitch;
+  total.launches["change-request"] += entry.launches["change-request"];
+  total.launches["qa-finding"] += entry.launches["qa-finding"];
+  total.launches.failure += entry.launches.failure;
+  total.launches.unknown += entry.launches.unknown;
+  for (const reason of WASTE_REASONS) {
+    total.waste[reason] += entry.waste[reason];
+  }
+  total.rebuttedReviews += entry.rebuttedReviews;
+}
+
+function sumIterationGroups(
+  iteration: IterationMetrics,
+  roles: Record<string, RoleMetrics>,
+  aliases: Record<string, AliasMetrics>,
+  models: Record<string, ModelMetrics>,
+): void {
+  for (const entry of Object.values(iteration.roles)) {
+    sumGroupInto(roles, entry.role, entry, (role) => ({
+      role,
+      ...emptyGroup(),
+    }));
+  }
+  for (const entry of Object.values(iteration.aliases)) {
+    sumGroupInto(aliases, entry.alias, entry, (alias) => ({
+      alias,
+      ...emptyGroup(),
+    }));
+  }
+  for (const entry of Object.values(iteration.models ?? {})) {
+    sumGroupInto(models, entry.model, entry, (model) => ({
+      model,
+      ...emptyGroup(),
+    }));
+  }
+}
+
+function sumIncidents(total: IncidentCounts, part: IncidentCounts): void {
+  for (const key of Object.keys(total) as (keyof IncidentCounts)[]) {
+    total[key] += part[key];
+  }
+}
+
+function sumArchitect(total: ArchitectMetrics, part: ArchitectMetrics): void {
+  total.launches += part.launches;
+  total.usage = addUsage(total.usage, part.usage);
+  total.tokens += part.tokens;
+  total.unpricedTurns += part.unpricedTurns;
+}
+
+function sumWaste(total: WasteAccounting, part: WasteAccounting): void {
+  total.turns += part.turns;
+  for (const reason of WASTE_REASONS) {
+    total.counts[reason] += part.counts[reason];
+  }
+  total.entries.push(...part.entries);
+  total.rebuttedReviews.push(...part.rebuttedReviews);
 }
 
 export function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
@@ -684,29 +894,6 @@ export function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
   const planReviewMarks: PlanReviewMarkCounts = { helpful: 0, unhelpful: 0 };
   const waste = emptyWasteAccounting();
 
-  const sumGroup = <T extends GroupMetrics>(
-    total: T,
-    entry: GroupMetrics,
-  ): void => {
-    total.turns += entry.turns;
-    total.usage = addUsage(total.usage, entry.usage);
-    total.tokens += entry.tokens;
-    total.promptBytes += entry.promptBytes;
-    total.unpricedTurns += entry.unpricedTurns;
-    total.edits += entry.edits;
-    total.addedLines += entry.addedLines;
-    total.removedLines += entry.removedLines;
-    total.testRuns += entry.testRuns;
-    total.launches.glitch += entry.launches.glitch;
-    total.launches["change-request"] += entry.launches["change-request"];
-    total.launches["qa-finding"] += entry.launches["qa-finding"];
-    total.launches.failure += entry.launches.failure;
-    total.launches.unknown += entry.launches.unknown;
-    for (const reason of WASTE_REASONS) {
-      total.waste[reason] += entry.waste[reason];
-    }
-    total.rebuttedReviews += entry.rebuttedReviews;
-  };
   for (const iteration of iterations) {
     usage = addUsage(usage, iteration.usage);
     tokens += iteration.tokens;
@@ -724,42 +911,12 @@ export function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
     addedLines += iteration.addedLines;
     removedLines += iteration.removedLines;
     unpricedTurns += iteration.unpricedTurns;
-    for (const entry of Object.values(iteration.roles)) {
-      const total = roles[entry.role] ?? { role: entry.role, ...emptyGroup() };
-      sumGroup(total, entry);
-      roles[entry.role] = total;
-    }
-    for (const entry of Object.values(iteration.aliases)) {
-      const total = aliases[entry.alias] ?? {
-        alias: entry.alias,
-        ...emptyGroup(),
-      };
-      sumGroup(total, entry);
-      aliases[entry.alias] = total;
-    }
-    for (const entry of Object.values(iteration.models ?? {})) {
-      const total = models[entry.model] ?? {
-        model: entry.model,
-        ...emptyGroup(),
-      };
-      sumGroup(total, entry);
-      models[entry.model] = total;
-    }
-    for (const key of Object.keys(incidents) as (keyof IncidentCounts)[]) {
-      incidents[key] += iteration.incidents[key];
-    }
-    architect.launches += iteration.architect.launches;
-    architect.usage = addUsage(architect.usage, iteration.architect.usage);
-    architect.tokens += iteration.architect.tokens;
-    architect.unpricedTurns += iteration.architect.unpricedTurns;
+    sumIterationGroups(iteration, roles, aliases, models);
+    sumIncidents(incidents, iteration.incidents);
+    sumArchitect(architect, iteration.architect);
     planReviewMarks.helpful += iteration.planReviewMarks?.helpful ?? 0;
     planReviewMarks.unhelpful += iteration.planReviewMarks?.unhelpful ?? 0;
-    waste.turns += iteration.waste.turns;
-    for (const reason of WASTE_REASONS) {
-      waste.counts[reason] += iteration.waste.counts[reason];
-    }
-    waste.entries.push(...iteration.waste.entries);
-    waste.rebuttedReviews.push(...iteration.waste.rebuttedReviews);
+    sumWaste(waste, iteration.waste);
   }
 
   architect.costShare = width(architect.usage.costUsd ?? 0, usage.costUsd ?? 0);
@@ -772,12 +929,8 @@ export function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
     quarantined: quarantinedList(iterations),
     usage,
     tokens,
-    costPerMergedTask:
-      merged > 0 && usage.costUsd !== undefined ? usage.costUsd / merged : null,
-    listCostPerMergedTask:
-      merged > 0 && usage.listCostUsd !== undefined
-        ? usage.listCostUsd / merged
-        : null,
+    costPerMergedTask: costPerTask(merged, usage.costUsd),
+    listCostPerMergedTask: costPerTask(merged, usage.listCostUsd),
     roles,
     aliases,
     models,

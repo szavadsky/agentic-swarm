@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity: split-rest
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { spawn } from "node:child_process";
 import { createActiveTimer, detectSuspend, getClock } from "./clock.js";
 import { childEnv } from "./env.js";
@@ -105,6 +105,104 @@ class HeadTailBuffer {
   }
 }
 
+/** SIGTERM the child's process group, falling back to the child alone. */
+function terminateGroup(child: ReturnType<typeof spawn>, pid: number): void {
+  try {
+    process.kill(-pid, "SIGTERM");
+  } catch {
+    try {
+      child.kill("SIGTERM");
+    } catch {}
+  }
+}
+
+/** SIGKILL the child's process group; without a group, kill the child alone. */
+function killGroupNow(child: ReturnType<typeof spawn>): void {
+  const pid = child.pid;
+  if (!pid || pid <= 0) {
+    try {
+      child.kill("SIGKILL");
+    } catch {}
+    return;
+  }
+  try {
+    process.kill(-pid, "SIGKILL");
+  } catch {
+    try {
+      child.kill("SIGKILL");
+    } catch {}
+  }
+}
+
+/** The spawn spec for a string shell command or an argument array. */
+function commandSpec(
+  cmd: string | string[],
+): { executable: string; args: string[] } | { error: string } {
+  if (typeof cmd === "string") return { executable: "bash", args: ["-c", cmd] };
+  if (cmd.length === 0) return { error: "Empty command array" };
+  return { executable: cmd[0]!, args: cmd.slice(1) };
+}
+
+/** The child environment: TMPDIR overrides plus the run config's allowlist. */
+function processEnv(options: RunProcessOptions): Record<string, string> {
+  const factoryTmp = process.env.TMPDIR;
+  const tmpEnv: Record<string, string> = factoryTmp
+    ? { TMPDIR: factoryTmp, TMP: factoryTmp, TEMP: factoryTmp }
+    : {};
+  return childEnv({
+    allow: options.envAllowlist,
+    set: { ...tmpEnv, ...options.env },
+  });
+}
+
+/** The ring must hold at least maxOutputBytes so end-capping stays meaningful. */
+function streamRingBytes(maxOutputBytes?: number): number {
+  return maxOutputBytes && maxOutputBytes > 0
+    ? maxOutputBytes
+    : DEFAULT_STREAM_RING_BYTES;
+}
+
+/** Spawns the child in its own process group, or reports the spawn error. */
+function spawnChild(
+  executable: string,
+  args: string[],
+  cwd: string,
+  env: Record<string, string>,
+): { child: ReturnType<typeof spawn> } | { stderr: string } {
+  try {
+    return {
+      child: spawn(executable, args, {
+        cwd,
+        env,
+        detached: true, // creates new process group for clean group kills
+        stdio: ["pipe", "pipe", "pipe"],
+      }),
+    };
+  } catch (err: any) {
+    return { stderr: err?.message ?? String(err) };
+  }
+}
+
+/** Registers the child's process group when it has one. */
+function registerGrouped(child: ReturnType<typeof spawn>): void {
+  if (child.pid && child.pid > 0) registerChildGroup(child.pid);
+}
+
+/** Clears the child's process-group registration when it had one. */
+function unregisterGrouped(child: ReturnType<typeof spawn>): void {
+  if (child.pid && child.pid > 0) unregisterChildGroup(child.pid);
+}
+
+/** Feeds the optional stdin payload and closes the pipe. */
+function writeStdin(
+  child: ReturnType<typeof spawn>,
+  stdin: string | undefined,
+): void {
+  if (stdin === undefined || !child.stdin) return;
+  child.stdin.write(stdin);
+  child.stdin.end();
+}
+
 /**
  * Runs a process with process-group cleanup on timeout, bounded output
  * capture, and support for string shell commands (via non-login `bash -c`,
@@ -116,19 +214,31 @@ class HeadTailBuffer {
  * (e.g. setsid/daemonised) holding the pipes cannot hang the caller.
  */
 export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
-  const { cmd, cwd, env, timeoutSec, maxOutputBytes, stdin } = options;
+  const { cmd, cwd, timeoutSec, maxOutputBytes, stdin } = options;
+
+  if (options.signal?.aborted) {
+    return Promise.resolve({
+      code: null,
+      stdout: "",
+      stderr: "",
+      timedOut: false,
+      aborted: true,
+      durationMs: 0,
+    });
+  }
+  const spec = commandSpec(cmd);
+  if ("error" in spec) {
+    return Promise.resolve({
+      code: 1,
+      stdout: "",
+      stderr: spec.error,
+      timedOut: false,
+      aborted: false,
+      durationMs: 0,
+    });
+  }
 
   return new Promise((resolve) => {
-    if (options.signal?.aborted) {
-      return resolve({
-        code: null,
-        stdout: "",
-        stderr: "",
-        timedOut: false,
-        aborted: true,
-        durationMs: 0,
-      });
-    }
     const clock = getClock();
     const startWall = clock.now();
     const startMono = clock.monotonic();
@@ -139,70 +249,28 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
     let exitCode: number | null = null;
     let exitSignal: string | undefined;
 
-    let executable: string;
-    let args: string[];
-
-    if (typeof cmd === "string") {
-      executable = "bash";
-      args = ["-c", cmd];
-    } else {
-      if (cmd.length === 0) {
-        return resolve({
-          code: 1,
-          stdout: "",
-          stderr: "Empty command array",
-          timedOut: false,
-          aborted: false,
-          durationMs: 0,
-        });
-      }
-      executable = cmd[0]!;
-      args = cmd.slice(1);
-    }
-
-    const factoryTmp = process.env.TMPDIR;
-    const tmpEnv: Record<string, string> = factoryTmp
-      ? { TMPDIR: factoryTmp, TMP: factoryTmp, TEMP: factoryTmp }
-      : {};
-
-    const mergedEnv = childEnv({
-      allow: options.envAllowlist,
-      set: { ...tmpEnv, ...env },
-    });
-
-    // The ring must hold at least maxOutputBytes so end-capping stays meaningful.
-    const ringCapacity =
-      maxOutputBytes && maxOutputBytes > 0
-        ? maxOutputBytes
-        : DEFAULT_STREAM_RING_BYTES;
-    const stdoutRing = new HeadTailBuffer(ringCapacity);
-    const stderrRing = new HeadTailBuffer(ringCapacity);
+    const mergedEnv = processEnv(options);
+    const capacity = streamRingBytes(maxOutputBytes);
+    const stdoutRing = new HeadTailBuffer(capacity);
+    const stderrRing = new HeadTailBuffer(capacity);
 
     const finalizeStream = (ring: HeadTailBuffer): string => {
       return ring.toString();
     };
 
-    let child: ReturnType<typeof spawn>;
-    try {
-      child = spawn(executable, args, {
-        cwd,
-        env: mergedEnv,
-        detached: true, // creates new process group for clean group kills
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-    } catch (err: any) {
+    const spawned = spawnChild(spec.executable, spec.args, cwd, mergedEnv);
+    if ("stderr" in spawned) {
       return resolve({
         code: 1,
         stdout: "",
-        stderr: err?.message ?? String(err),
+        stderr: spawned.stderr,
         timedOut: false,
         aborted: false,
         durationMs: Date.now() - startTime,
       });
     }
-    if (child.pid && child.pid > 0) {
-      registerChildGroup(child.pid);
-    }
+    const child = spawned.child;
+    registerGrouped(child);
     let activeTimer: { cancel: () => void } | undefined;
     let graceTimer: NodeJS.Timeout | undefined;
     let onAbort: (() => void) | undefined;
@@ -210,9 +278,7 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
     const finish = () => {
       if (settled) return;
       if (onAbort) options.signal?.removeEventListener("abort", onAbort);
-      if (child.pid && child.pid > 0) {
-        unregisterChildGroup(child.pid);
-      }
+      unregisterGrouped(child);
       if (activeTimer) activeTimer.cancel();
       if (graceTimer) clearTimeout(graceTimer);
       const { suspendDetected, gapMs } = detectSuspend(
@@ -256,37 +322,20 @@ export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
       stderrRing.push(chunk);
     });
 
-    if (stdin !== undefined && child.stdin) {
-      child.stdin.write(stdin);
-      child.stdin.end();
-    }
+    writeStdin(child, stdin);
 
     // Kill the whole process group: SIGTERM first, then SIGKILL.
     const killGroup = () => {
-      if (child.pid && child.pid > 0) {
-        try {
-          process.kill(-child.pid, "SIGTERM");
-        } catch {
-          try {
-            child.kill("SIGTERM");
-          } catch {}
-        }
-        setTimeout(() => {
-          if (child.pid && child.pid > 0) {
-            try {
-              process.kill(-child.pid, "SIGKILL");
-            } catch {
-              try {
-                child.kill("SIGKILL");
-              } catch {}
-            }
-          }
-        }, 500);
-      } else {
-        try {
-          child.kill("SIGKILL");
-        } catch {}
+      const pid = child.pid;
+      if (!pid || pid <= 0) {
+        killGroupNow(child);
+        return;
       }
+      terminateGroup(child, pid);
+      setTimeout(() => {
+        const latePid = child.pid;
+        if (latePid && latePid > 0) killGroupNow(child);
+      }, 500);
     };
     onAbort = () => {
       if (settled || aborted) return;

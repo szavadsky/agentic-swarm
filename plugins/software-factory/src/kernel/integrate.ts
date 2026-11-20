@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity: split-rest
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import type { CheckResult } from "../core/checks/types.js";
 import { runWorktreeSetup } from "../core/checks/setup.js";
 import { commitAll, isAncestor } from "../core/git/commit.js";
@@ -247,6 +247,215 @@ function judgedChecks(
  * worktree detached at the current integration head; the integration ref moves
  * only after green, and the stable goal checkout is synced afterwards.
  */
+/** Records a merge failure and removes the scratch worktree. */
+async function failMerge(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  iteration: number,
+  round: number,
+  cause: Cause,
+  checks?: CheckResult[],
+): Promise<void> {
+  await removeMergeScratch(runtime);
+  await recordMerge(runtime, task, iteration, round, {
+    ok: false,
+    cause,
+    ...(checks ? { checks } : {}),
+  });
+}
+
+/** Commits the staged squash; records the failure that prevents it. */
+async function commitSquashedBranch(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  iteration: number,
+  round: number,
+  scratch: string,
+): Promise<boolean> {
+  const staged = await git(scratch, ["diff", "--cached", "--quiet"], {
+    allowFail: true,
+  });
+  if (staged.code === 0) {
+    await failMerge(
+      runtime,
+      task,
+      iteration,
+      round,
+      makeCause("no-progress", "task branch has no changes since dispatch"),
+    );
+    return false;
+  }
+
+  try {
+    const mergeCommit = await commitAll(
+      runtime.repo,
+      scratch,
+      `factory: merge ${task.slug}`,
+    );
+    if (!mergeCommit) {
+      await failMerge(
+        runtime,
+        task,
+        iteration,
+        round,
+        makeCause("no-progress", "squash merge produced no commit"),
+      );
+      return false;
+    }
+  } catch (err) {
+    await failMerge(
+      runtime,
+      task,
+      iteration,
+      round,
+      makeCause("merge-failed", causeOf(err)),
+    );
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Squashes the task branch in a scratch worktree at the integration head.
+ * Undefined means the merge already failed and its record is written.
+ */
+async function squashTaskBranch(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  iteration: number,
+  round: number,
+): Promise<{ scratch: string; head: string } | undefined> {
+  const branch = taskBranchName(runtime, task.slug);
+  if (!(await branchExists(runtime, branch))) {
+    await recordMerge(runtime, task, iteration, round, {
+      ok: false,
+      cause: makeCause("merge-failed", `branch "${branch}" does not exist`),
+    });
+    return undefined;
+  }
+
+  const head = await integrationHead(runtime);
+  const scratch = await resetMergeScratch(runtime, head);
+  const squash = await git(scratch, ["merge", "--squash", branch], {
+    allowFail: true,
+  });
+  if (squash.code !== 0) {
+    // The record is the signal, not a park: the task's resolve step merges the
+    // head into the branch and resolves it, then checks and re-merges. A second
+    // conflict, a flow with no resolve step, or a kept-land merge parks the
+    // branch and leaves it to the wave-end steward.
+    const paths = await unmergedFiles(scratch);
+    await failMerge(
+      runtime,
+      task,
+      iteration,
+      round,
+      makeCause(
+        "conflict",
+        paths.join(", ") || "squash merge conflicts with the integration head",
+      ),
+    );
+    return undefined;
+  }
+
+  if (!(await commitSquashedBranch(runtime, task, iteration, round, scratch))) {
+    return undefined;
+  }
+  return { scratch, head };
+}
+
+/** The recorded green run for this tree, when the merge may reuse it. */
+function judgedMergeChecks(
+  records: StepRecord[],
+  slug: string,
+  mergedTree: string,
+  preexisting: ReadonlySet<string>,
+): { checks: CheckResult[]; skipCause?: Cause } | undefined {
+  const judged = judgedChecks(records, slug, mergedTree, preexisting);
+  if (!judged) return undefined;
+  return {
+    checks: judged.checks ?? [],
+    skipCause: makeCause(
+      "note",
+      `skipped merge-checks: merged tree equals checked tree ${mergedTree}`,
+    ),
+  };
+}
+
+/** Runs (or reuses) merge gates; undefined means a gate failed and is recorded. */
+async function mergeChecks(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  iteration: number,
+  round: number,
+  scratch: string,
+  records: StepRecord[],
+  preexisting: ReadonlySet<string>,
+  keptLand: boolean,
+): Promise<{ checks: CheckResult[]; skipCause?: Cause } | undefined> {
+  const mergedTree = await treeSha(scratch);
+  const judged = judgedMergeChecks(records, task.slug, mergedTree, preexisting);
+  if (judged) return judged;
+  const setup = await runWorktreeSetup({
+    commands: runtime.configs.repo.setup,
+    cwd: scratch,
+  });
+  if (!setup.ok) {
+    await failMerge(
+      runtime,
+      task,
+      iteration,
+      round,
+      makeCause("setup", setup.error ?? "unknown"),
+    );
+    return undefined;
+  }
+  const gate = await startChecks(
+    runtime.store,
+    {
+      iteration,
+      slug: task.slug,
+      round,
+      architect: taskArchitect(task),
+    },
+    { step: "merge-checks" },
+  );
+  let ran = await runGates(runtime, scratch);
+  if (keptLand) {
+    ran = await rerunRedKeptGates(
+      runtime,
+      {
+        iteration,
+        slug: task.slug,
+        round,
+        architect: taskArchitect(task),
+      },
+      scratch,
+      ran,
+      preexisting,
+    );
+  }
+  await finishChecks(gate, ran, { preexisting });
+  const red = newGateFailures(ran, preexisting);
+  if (red.length > 0) {
+    await failMerge(
+      runtime,
+      task,
+      iteration,
+      round,
+      makeCause("gates", red.map((c) => c.name).join(", ")),
+      ran,
+    );
+    return undefined;
+  }
+  return { checks: ran };
+}
+
+/**
+ * Serial squash-merge queue. The squash commit is built and gated in a scratch
+ * worktree detached at the current integration head; the integration ref moves
+ * only after green, and the stable goal checkout is synced afterwards.
+ */
 export async function mergeTask(
   runtime: KernelRuntime,
   task: TaskFile,
@@ -261,143 +470,29 @@ export async function mergeTask(
       records.some(
         (r) => r.slug === task.slug && r.step === "merge" && r.ok === true,
       )
-    )
+    ) {
       return {};
-    if (await recoverOpenMerge(runtime, task, records, iteration, round))
-      return {};
-
-    const branch = taskBranchName(runtime, task.slug);
-    if (!(await branchExists(runtime, branch))) {
-      await recordMerge(runtime, task, iteration, round, {
-        ok: false,
-        cause: makeCause("merge-failed", `branch "${branch}" does not exist`),
-      });
+    }
+    if (await recoverOpenMerge(runtime, task, records, iteration, round)) {
       return {};
     }
 
-    const head = await integrationHead(runtime);
-    const scratch = await resetMergeScratch(runtime, head);
-    const squash = await git(scratch, ["merge", "--squash", branch], {
-      allowFail: true,
-    });
-    if (squash.code !== 0) {
-      // The record is the signal, not a park: the task's resolve step merges
-      // the head into the branch and resolves it, then checks and re-merges. A
-      // second conflict, a flow with no resolve step, or a kept-land merge
-      // parks the branch and leaves it to the wave-end steward.
-      const paths = await unmergedFiles(scratch);
-      await removeMergeScratch(runtime);
-      await recordMerge(runtime, task, iteration, round, {
-        ok: false,
-        cause: makeCause(
-          "conflict",
-          paths.join(", ") ||
-            "squash merge conflicts with the integration head",
-        ),
-      });
-      return {};
-    }
-
-    const staged = await git(scratch, ["diff", "--cached", "--quiet"], {
-      allowFail: true,
-    });
-    if (staged.code === 0) {
-      await removeMergeScratch(runtime);
-      await recordMerge(runtime, task, iteration, round, {
-        ok: false,
-        cause: makeCause(
-          "no-progress",
-          "task branch has no changes since dispatch",
-        ),
-      });
-      return {};
-    }
-
-    try {
-      const mergeCommit = await commitAll(
-        runtime.repo,
-        scratch,
-        `factory: merge ${task.slug}`,
-      );
-      if (!mergeCommit) {
-        await removeMergeScratch(runtime);
-        await recordMerge(runtime, task, iteration, round, {
-          ok: false,
-          cause: makeCause("no-progress", "squash merge produced no commit"),
-        });
-        return {};
-      }
-    } catch (err) {
-      await removeMergeScratch(runtime);
-      await recordMerge(runtime, task, iteration, round, {
-        ok: false,
-        cause: makeCause("merge-failed", causeOf(err)),
-      });
-      return {};
-    }
-
-    const mergedTree = await treeSha(scratch);
+    const squashed = await squashTaskBranch(runtime, task, iteration, round);
+    if (!squashed) return {};
+    const { scratch, head } = squashed;
     const preexisting = preexistingRed(recordedBaseGates(records));
-    const judged = judgedChecks(records, task.slug, mergedTree, preexisting);
-    let checks: CheckResult[];
-    let skipCause: Cause | undefined;
-    if (judged) {
-      checks = judged.checks ?? [];
-      skipCause = makeCause(
-        "note",
-        `skipped merge-checks: merged tree equals checked tree ${mergedTree}`,
-      );
-    } else {
-      const setup = await runWorktreeSetup({
-        commands: runtime.configs.repo.setup,
-        cwd: scratch,
-      });
-      if (!setup.ok) {
-        await removeMergeScratch(runtime);
-        await recordMerge(runtime, task, iteration, round, {
-          ok: false,
-          cause: makeCause("setup", setup.error ?? "unknown"),
-        });
-        return {};
-      }
-      const gate = await startChecks(
-        runtime.store,
-        {
-          iteration,
-          slug: task.slug,
-          round,
-          architect: taskArchitect(task),
-        },
-        { step: "merge-checks" },
-      );
-      let ran = await runGates(runtime, scratch);
-      if (opts.keptLand) {
-        ran = await rerunRedKeptGates(
-          runtime,
-          {
-            iteration,
-            slug: task.slug,
-            round,
-            architect: taskArchitect(task),
-          },
-          scratch,
-          ran,
-          preexisting,
-        );
-      }
-      await finishChecks(gate, ran, { preexisting });
-      const red = newGateFailures(ran, preexisting);
-      if (red.length > 0) {
-        await removeMergeScratch(runtime);
-        await recordMerge(runtime, task, iteration, round, {
-          ok: false,
-          cause: makeCause("gates", red.map((c) => c.name).join(", ")),
-          checks: ran,
-        });
-        return {};
-      }
-      checks = ran;
-    }
+    const checked = await mergeChecks(
+      runtime,
+      task,
+      iteration,
+      round,
+      scratch,
+      records,
+      preexisting,
+      opts.keptLand === true,
+    );
+    if (!checked) return {};
+    const { checks, skipCause } = checked;
 
     const commit = await headSha(scratch);
     const turn = await runtime.store.startRecord({
@@ -578,6 +673,122 @@ export interface KeptLandResult {
  * another task continues: the continuation already carries the work, and PM
  * validation reads a landed base as a broken continuation.
  */
+/** The `kept-land` record meta for one task. */
+function keptLandMeta(
+  iteration: number,
+  task: TaskFile,
+  round: number,
+): Parameters<KernelRuntime["store"]["appendRecord"]>[0] {
+  return scriptMeta(iteration, "kept-land", {
+    slug: task.slug,
+    round,
+    architect: taskArchitect(task),
+  });
+}
+
+async function recordKeptLand(
+  runtime: KernelRuntime,
+  iteration: number,
+  task: TaskFile,
+  round: number,
+  end: RecordEnd,
+): Promise<void> {
+  await runtime.store.appendRecord(keptLandMeta(iteration, task, round), end);
+}
+
+/** The last merge attempt this iteration; a kept-land attempt is final. */
+function lastMergeAttempt(
+  records: readonly StepRecord[],
+  slug: string,
+  iteration: number,
+): StepRecord | undefined {
+  return records
+    .filter(
+      (r) =>
+        r.slug === slug &&
+        r.iteration === iteration &&
+        (r.step === "merge" || r.step === "kept-land") &&
+        r.endedAt,
+    )
+    .sort(bySeq)
+    .at(-1);
+}
+
+/** A failed merge leaves one kept-land record carrying its cause. */
+async function recordKeptLandFailure(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  iteration: number,
+  round: number,
+  merge: StepRecord,
+): Promise<void> {
+  const records = await runtime.store.listRecords();
+  if (
+    records.some(
+      (r) =>
+        r.slug === task.slug &&
+        r.step === "kept-land" &&
+        r.iteration === iteration,
+    )
+  ) {
+    return;
+  }
+  await recordKeptLand(runtime, iteration, task, round, {
+    ok: false,
+    cause:
+      merge.cause ??
+      makeCause("merge-failed", "merge failed with no recorded cause"),
+  });
+}
+
+/** Merges one approved kept branch, recording the landing or the failure. */
+async function landKeptTask(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  iteration: number,
+  state: TaskState,
+  tip: string,
+): Promise<"landed" | "failed"> {
+  try {
+    await mergeTask(runtime, task, iteration, state, { keptLand: true });
+  } catch (err) {
+    await recordKeptLand(runtime, iteration, task, state.round, {
+      ok: false,
+      cause: makeCause("merge-failed", causeOf(err)),
+    });
+    return "failed";
+  }
+  const merge = (await runtime.store.listRecords())
+    .filter((r) => r.slug === task.slug && r.step === "merge" && r.endedAt)
+    .sort(bySeq)
+    .at(-1);
+  if (!merge || merge.iteration !== iteration) return "failed";
+  if (merge.ok !== true) {
+    await recordKeptLandFailure(runtime, task, iteration, state.round, merge);
+    return "failed";
+  }
+  await recordKeptLand(runtime, iteration, task, state.round, {
+    ok: true,
+    commit: merge.commit,
+    cause: makeCause("note", `approved ${tip} landed as ${merge.commit}`),
+  });
+  return "landed";
+}
+
+/** Whether a parked task is a kept-land candidate this wave. */
+function keptLandCandidate(
+  task: TaskFile,
+  state: TaskState | undefined,
+  continued: ReadonlySet<string>,
+): boolean {
+  return (
+    state !== undefined &&
+    state.status === "parked" &&
+    task.kind === "development" &&
+    !continued.has(task.slug)
+  );
+}
+
 export async function runKeptLand(
   runtime: KernelRuntime,
   iteration: number,
@@ -592,35 +803,16 @@ export async function runKeptLand(
     const records = await runtime.store.listRecords();
     const taskState = derive(tasks, records, runtime.configs.process.flows)
       .tasks[task.slug];
-    if (!taskState || taskState.status !== "parked") continue;
-    if (task.kind !== "development") continue;
-    if (continued.has(task.slug)) continue;
-    const lastMerge = records
-      .filter(
-        (r) =>
-          r.slug === task.slug &&
-          r.iteration === iteration &&
-          (r.step === "merge" || r.step === "kept-land") &&
-          r.endedAt,
-      )
-      .sort(bySeq)
-      .at(-1);
-    if (lastMerge && lastMerge.ok === true) continue;
-    if (lastMerge && lastMerge.step === "kept-land") continue;
+    if (!taskState || !keptLandCandidate(task, taskState, continued)) continue;
+    const lastMerge = lastMergeAttempt(records, task.slug, iteration);
+    if (lastMerge?.ok === true || lastMerge?.step === "kept-land") continue;
     const branch = taskBranchName(runtime, task.slug);
     if (!(await branchExists(runtime, branch))) {
       attempted.push(task.slug);
-      await runtime.store.appendRecord(
-        scriptMeta(iteration, "kept-land", {
-          slug: task.slug,
-          round: taskState.round,
-          architect: taskArchitect(task),
-        }),
-        {
-          ok: false,
-          cause: makeCause("merge-failed", `branch "${branch}" does not exist`),
-        },
-      );
+      await recordKeptLand(runtime, iteration, task, taskState.round, {
+        ok: false,
+        cause: makeCause("merge-failed", `branch "${branch}" does not exist`),
+      });
       continue;
     }
     const tip = (
@@ -628,83 +820,18 @@ export async function runKeptLand(
     ).stdout.trim();
     if (!(await qualifiesForKeptLand(runtime, task, records, tip))) continue;
     if (deterministicRed(records, task.slug, tip)) {
-      await runtime.store.appendRecord(
-        scriptMeta(iteration, "kept-land", {
-          slug: task.slug,
-          round: taskState.round,
-          architect: taskArchitect(task),
-        }),
-        { ok: true, cause: makeCause("note", "skipped: deterministic-red") },
-      );
+      await recordKeptLand(runtime, iteration, task, taskState.round, {
+        ok: true,
+        cause: makeCause("note", "skipped: deterministic-red"),
+      });
       continue;
     }
     attempted.push(task.slug);
-    try {
-      await mergeTask(runtime, task, iteration, taskState, { keptLand: true });
-    } catch (err) {
-      await runtime.store.appendRecord(
-        scriptMeta(iteration, "kept-land", {
-          slug: task.slug,
-          round: taskState.round,
-          architect: taskArchitect(task),
-        }),
-        {
-          ok: false,
-          cause: makeCause("merge-failed", causeOf(err)),
-        },
-      );
-      continue;
-    }
-    const merge = (await runtime.store.listRecords())
-      .filter((r) => r.slug === task.slug && r.step === "merge" && r.endedAt)
-      .sort(bySeq)
-      .at(-1);
-    if (merge && merge.iteration === iteration) {
-      if (merge.ok === true) {
-        landed.push(task.slug);
-        await runtime.store.appendRecord(
-          scriptMeta(iteration, "kept-land", {
-            slug: task.slug,
-            round: taskState.round,
-            architect: taskArchitect(task),
-          }),
-          {
-            ok: true,
-            commit: merge.commit,
-            cause: makeCause(
-              "note",
-              `approved ${tip} landed as ${merge.commit}`,
-            ),
-          },
-        );
-      } else {
-        const records = await runtime.store.listRecords();
-        if (
-          !records.some(
-            (r) =>
-              r.slug === task.slug &&
-              r.step === "kept-land" &&
-              r.iteration === iteration,
-          )
-        ) {
-          await runtime.store.appendRecord(
-            scriptMeta(iteration, "kept-land", {
-              slug: task.slug,
-              round: taskState.round,
-              architect: taskArchitect(task),
-            }),
-            {
-              ok: false,
-              cause:
-                merge.cause ??
-                makeCause(
-                  "merge-failed",
-                  "merge failed with no recorded cause",
-                ),
-            },
-          );
-        }
-      }
+    if (
+      (await landKeptTask(runtime, task, iteration, taskState, tip)) ===
+      "landed"
+    ) {
+      landed.push(task.slug);
     }
   }
   return { landed, attempted };

@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity: split-rest
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -105,6 +105,11 @@ export interface AcpxStubOptions {
   envFile?: string;
 }
 
+/** A stub option's JSON value, with its default when the option is absent. */
+function jsonOr(value: unknown, fallback: unknown): string {
+  return JSON.stringify(value ?? fallback);
+}
+
 /**
  * A stub acpx executable that replays the probe's JSON-RPC frames. It keeps a
  * named-session record in its own state dir, so a missing `-s` is a real
@@ -118,25 +123,25 @@ export function createAcpxStub(opts: AcpxStubOptions = {}): AcpxStub {
   const readyPath = path.join(dir, "ready");
   const stateDir = path.join(dir, "state");
   const binary = path.join(dir, "acpx-stub.js");
-  const usageJs = JSON.stringify(opts.usage ?? null);
-  const sessionUsageJs = JSON.stringify(opts.sessionUsage ?? null);
-  const sessionCommandJs = JSON.stringify(opts.sessionCommand ?? "ok");
-  const compactUsageJs = JSON.stringify(opts.compactUsage ?? null);
-  const bannerJs = JSON.stringify(opts.banner ?? null);
-  const promptDelayJs = JSON.stringify(opts.promptDelayMs ?? 0);
-  const costJs = JSON.stringify(opts.cost ?? null);
-  const compactJs = JSON.stringify(opts.compact ?? "ok");
-  const modelsJs = JSON.stringify(opts.models ?? null);
-  const defaultModelJs = JSON.stringify(opts.defaultModel ?? null);
-  const effortConfigIdJs = JSON.stringify(opts.effortConfigId ?? "effort");
-  const stopReasonJs = JSON.stringify(opts.stopReason ?? "end_turn");
-  const promptExitCodeJs = JSON.stringify(opts.promptExitCode ?? 0);
-  const omitPromptResultJs = JSON.stringify(opts.omitPromptResult ?? false);
-  const errorAfterResultJs = JSON.stringify(opts.errorAfterResult ?? null);
-  const hangAfterResultJs = JSON.stringify(opts.hangAfterResult ?? false);
-  const sessionInfoErrorJs = JSON.stringify(opts.sessionInfoError ?? null);
-  const modelBehaviorsJs = JSON.stringify(opts.modelBehaviors ?? null);
-  const envFileJs = JSON.stringify(opts.envFile ?? null);
+  const usageJs = jsonOr(opts.usage, null);
+  const sessionUsageJs = jsonOr(opts.sessionUsage, null);
+  const sessionCommandJs = jsonOr(opts.sessionCommand, "ok");
+  const compactUsageJs = jsonOr(opts.compactUsage, null);
+  const bannerJs = jsonOr(opts.banner, null);
+  const promptDelayJs = jsonOr(opts.promptDelayMs, 0);
+  const costJs = jsonOr(opts.cost, null);
+  const compactJs = jsonOr(opts.compact, "ok");
+  const modelsJs = jsonOr(opts.models, null);
+  const defaultModelJs = jsonOr(opts.defaultModel, null);
+  const effortConfigIdJs = jsonOr(opts.effortConfigId, "effort");
+  const stopReasonJs = jsonOr(opts.stopReason, "end_turn");
+  const promptExitCodeJs = jsonOr(opts.promptExitCode, 0);
+  const omitPromptResultJs = jsonOr(opts.omitPromptResult, false);
+  const errorAfterResultJs = jsonOr(opts.errorAfterResult, null);
+  const hangAfterResultJs = jsonOr(opts.hangAfterResult, false);
+  const sessionInfoErrorJs = jsonOr(opts.sessionInfoError, null);
+  const modelBehaviorsJs = jsonOr(opts.modelBehaviors, null);
+  const envFileJs = jsonOr(opts.envFile, null);
 
   const script = `#!/usr/bin/env bun
 import fs from "node:fs";

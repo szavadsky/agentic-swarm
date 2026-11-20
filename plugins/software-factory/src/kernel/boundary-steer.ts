@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity: split-flow-dispatch
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 /**
  * The steered half of the hierarchy: the architect's live session hosts one
  * named subarchitect per epic, and the script steers this iteration's consult
@@ -234,6 +234,118 @@ function parentChildFile(
  * so a silent child never makes an epic look planned. A `continue` with an
  * unchanged epic plan fails the iteration exactly as the report consult does.
  */
+type ConsultReading =
+  | { kind: "skip" }
+  | { kind: "failure"; failure: ConsultFailure }
+  | { kind: "record" };
+
+/** The outcome a child wrote, or null when it is missing or invalid. */
+function readConsultSource(
+  outcomePath: string,
+): ReturnType<typeof readDeliveredOutcome> {
+  try {
+    return readDeliveredOutcome(outcomePath, "");
+  } catch (error) {
+    if (!(error instanceof OutcomeInvalidError)) throw error;
+    return null;
+  }
+}
+
+/** Whether one child's outcome records, skips, or fails the iteration. */
+async function readConsult(
+  runtime: KernelRuntime,
+  consult: SteeredHosting["consults"][number],
+  source: NonNullable<ReturnType<typeof readConsultSource>>,
+): Promise<ConsultReading> {
+  // A closure cites an id ingest assigned to an earlier record, so the check
+  // needs the record tree; a child's invalid outcome falls back to the report
+  // turn, which can repair it in-session.
+  const debtRecords = source.outcome.debtClosed?.length
+    ? await runtime.store.listRecords()
+    : undefined;
+  const findings = validateExpectation(
+    source.outcome,
+    KERNEL_TURN_STEPS.subarchitect,
+    debtRecords ? { records: debtRecords } : {},
+  );
+  if (findings.length > 0) return { kind: "skip" };
+  if (source.outcome.decision === "continue") {
+    const finding = missingPlanFinding(
+      consult.plan.path,
+      source.outcome.decision,
+      consult.planBefore,
+      "subarchitect",
+    );
+    if (finding) {
+      return {
+        kind: "failure",
+        failure: { cause: `${consult.epic}: ${finding}` },
+      };
+    }
+  }
+  return { kind: "record" };
+}
+
+/** The child's own transcript, compacted before the next launch revives it. */
+async function childSession(
+  runtime: KernelRuntime,
+  opts: { parent?: SessionRef },
+  target: ReturnType<typeof subarchitectTarget>,
+  childFile: string | undefined,
+): Promise<SessionRef | undefined> {
+  if (!childFile) return undefined;
+  const ref: SessionRef = {
+    harness: target.harness.id,
+    id: childFile,
+    cwd: runtime.paths.goalCheckout,
+    model: opts.parent?.model ?? target.model,
+    lastRequestStartedAt: new Date().toISOString(),
+    retentionTier: opts.parent?.retentionTier ?? "short",
+    dir: path.dirname(childFile),
+    compacted: false,
+  };
+  const compacted = await compactSession(runtime, ref);
+  return compacted?.session ?? ref;
+}
+
+/** Records one delivered child outcome and marks its epic delivered. */
+async function recordConsult(
+  runtime: KernelRuntime,
+  consult: SteeredHosting["consults"][number],
+  source: NonNullable<ReturnType<typeof readConsultSource>>,
+  opts: { iteration: number; parent?: SessionRef; transcript?: string },
+  target: ReturnType<typeof subarchitectTarget>,
+  delivered: Map<string, EpicConsult>,
+): Promise<void> {
+  const childFile =
+    consult.child?.sessionFile ??
+    parentChildFile(opts.transcript, consult.name);
+  const session = await childSession(runtime, opts, target, childFile);
+  await runtime.store.appendRecord(
+    {
+      iteration: opts.iteration,
+      step: "subarchitect",
+      round: 1,
+      actor: "agent",
+      architect: consult.epic,
+      alias: target.alias,
+      model: opts.parent?.model ?? target.model,
+    },
+    {
+      stop: { kind: "done" },
+      outcome: source.outcome,
+      ...(session ? { session } : {}),
+      ...(childFile ? { transcript: childFile } : {}),
+      promptBytes: consult.promptBytes,
+    },
+  );
+  delivered.set(consult.epic, {
+    epic: consult.epic,
+    plan: consult.plan,
+    changed: snapshotPlan(consult.plan.path) !== consult.planBefore,
+  });
+}
+
 export async function collectSteered(
   runtime: KernelRuntime,
   hosting: SteeredHosting,
@@ -242,87 +354,19 @@ export async function collectSteered(
   const delivered = new Map<string, EpicConsult>();
   const target = subarchitectTarget(runtime, opts.iteration);
   for (const consult of hosting.consults) {
-    let source: ReturnType<typeof readDeliveredOutcome>;
-    try {
-      source = readDeliveredOutcome(consult.outcomePath, "");
-    } catch (error) {
-      if (!(error instanceof OutcomeInvalidError)) throw error;
-      source = null;
-    }
+    const source = readConsultSource(consult.outcomePath);
     if (!source) {
       fs.rmSync(consult.outcomePath, { force: true });
       continue;
     }
-    // A closure cites an id ingest assigned to an earlier record, so the check
-    // needs the record tree; a child's invalid outcome falls back to the report
-    // turn, which can repair it in-session.
-    const debtRecords = source.outcome.debtClosed?.length
-      ? await runtime.store.listRecords()
-      : undefined;
-    const findings = validateExpectation(
-      source.outcome,
-      KERNEL_TURN_STEPS.subarchitect,
-      debtRecords ? { records: debtRecords } : {},
-    );
-    if (findings.length > 0) {
+    const reading = await readConsult(runtime, consult, source);
+    if (reading.kind === "skip") {
       fs.rmSync(consult.outcomePath, { force: true });
       continue;
     }
-    const decision = source.outcome.decision;
-    if (decision === "continue") {
-      const finding = missingPlanFinding(
-        consult.plan.path,
-        decision,
-        consult.planBefore,
-        "subarchitect",
-      );
-      if (finding) {
-        return { delivered, failure: { cause: `${consult.epic}: ${finding}` } };
-      }
-    }
-    // The child's context is compacted before the next launch revives it by
-    // name; the session id is the child transcript the child itself wrote.
-    const childFile =
-      consult.child?.sessionFile ??
-      parentChildFile(opts.transcript, consult.name);
-    let session: SessionRef | undefined;
-    if (childFile) {
-      const ref: SessionRef = {
-        harness: target.harness.id,
-        id: childFile,
-        cwd: runtime.paths.goalCheckout,
-        model: opts.parent?.model ?? target.model,
-        lastRequestStartedAt: new Date().toISOString(),
-        retentionTier: opts.parent?.retentionTier ?? "short",
-        dir: path.dirname(childFile),
-        compacted: false,
-      };
-      const compacted = await compactSession(runtime, ref);
-      session = compacted?.session ?? ref;
-    }
-    await runtime.store.appendRecord(
-      {
-        iteration: opts.iteration,
-        step: "subarchitect",
-        round: 1,
-        actor: "agent",
-        architect: consult.epic,
-        alias: target.alias,
-        model: opts.parent?.model ?? target.model,
-      },
-      {
-        stop: { kind: "done" },
-        outcome: source.outcome,
-        ...(session ? { session } : {}),
-        ...(childFile ? { transcript: childFile } : {}),
-        promptBytes: consult.promptBytes,
-      },
-    );
-    delivered.set(consult.epic, {
-      epic: consult.epic,
-      plan: consult.plan,
-      changed: snapshotPlan(consult.plan.path) !== consult.planBefore,
-    });
+    if (reading.kind === "failure")
+      return { delivered, failure: reading.failure };
+    await recordConsult(runtime, consult, source, opts, target, delivered);
     fs.rmSync(consult.outcomePath, { force: true });
   }
   return { delivered };

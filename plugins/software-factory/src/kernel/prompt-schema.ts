@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { z } from "zod";
 import { expectationField, type OutcomeExpectation } from "./outcome.js";
 import { qaOutcomeSchema } from "./qa.js";
@@ -37,6 +36,135 @@ function scalarFallback(type: string | undefined): string {
   return "...";
 }
 
+/** A local `$ref` resolved against the schema's definitions. */
+function resolveNode(node: JsonNode, defs: Record<string, JsonNode>): JsonNode {
+  if (!node.$ref?.startsWith("#/$defs/")) return node;
+  const target = defs[node.$ref.slice("#/$defs/".length)];
+  if (!target) throw new Error(`unresolvable schema ref ${node.$ref}`);
+  return resolveNode(target, defs);
+}
+
+function inlineUnion(node: JsonNode, defs: Record<string, JsonNode>): string {
+  return (node.anyOf ?? [])
+    .map((branch) => inlineSchema(branch, defs))
+    .join(" | ");
+}
+
+function inlineArray(node: JsonNode, defs: Record<string, JsonNode>): string {
+  const item = resolveNode(node.items!, defs);
+  if (item.type === "object" && item.properties) {
+    return `[${inlineSchema(item, defs)}]`;
+  }
+  if (item.enum) return `[${item.enum.map(String).join(" | ")}]`;
+  return item.description ? `[${oneLine(item.description)}]` : "[]";
+}
+
+function inlineObject(node: JsonNode, defs: Record<string, JsonNode>): string {
+  const required = new Set(node.required ?? []);
+  const parts = Object.entries(node.properties ?? {}).map(([key, value]) => {
+    const sub = resolveNode(value, defs);
+    const name = required.has(key) ? key : `${key}?`;
+    return sub.type === "array" && sub.items
+      ? `${name}: ${inlineSchema(sub, defs)}`
+      : name;
+  });
+  return `{${parts.join(", ")}}`;
+}
+
+/** One schema node rendered inline: enum, union, array, object or scalar. */
+function inlineSchema(raw: JsonNode, defs: Record<string, JsonNode>): string {
+  const node = resolveNode(raw, defs);
+  if (node.enum) return node.enum.map(String).join(" | ");
+  if (node.anyOf) return inlineUnion(node, defs);
+  if (node.type === "array" && node.items) return inlineArray(node, defs);
+  if (node.type === "object" && node.properties) {
+    return inlineObject(node, defs);
+  }
+  return node.description
+    ? oneLine(node.description)
+    : scalarFallback(node.type);
+}
+
+function unionEnumNotes(
+  node: JsonNode,
+  path: string,
+  defs: Record<string, JsonNode>,
+): string[] {
+  const parts: string[] = [];
+  const nested: string[] = [];
+  for (const branch of node.anyOf ?? []) {
+    const sub = resolveNode(branch, defs);
+    if (sub.enum) parts.push(sub.enum.map(String).join(" | "));
+    else if (sub.type === "object" && sub.properties) {
+      parts.push(`{${Object.keys(sub.properties).join(", ")}}`);
+    } else nested.push(...enumNotes(sub, path, defs));
+  }
+  if (parts.length > 0) {
+    nested.unshift(path ? `${path}: ${parts.join(" | ")}` : parts.join(" | "));
+  }
+  return nested;
+}
+
+function objectEnumNotes(
+  node: JsonNode,
+  path: string,
+  defs: Record<string, JsonNode>,
+): string[] {
+  const notes: string[] = [];
+  for (const [key, value] of Object.entries(node.properties ?? {})) {
+    const sub = resolveNode(value, defs);
+    const at = path ? `${path}.${key}` : key;
+    if (sub.enum) notes.push(`${at}: ${sub.enum.map(String).join(" | ")}`);
+    else notes.push(...enumNotes(sub, at, defs));
+  }
+  return notes;
+}
+
+/** Nested enum values, collected as `path: a | b` notes for the line comment. */
+function enumNotes(
+  raw: JsonNode,
+  path: string,
+  defs: Record<string, JsonNode>,
+): string[] {
+  const node = resolveNode(raw, defs);
+  if (node.anyOf) return unionEnumNotes(node, path, defs);
+  if (node.type === "array" && node.items) {
+    return enumNotes(node.items, path, defs);
+  }
+  if (node.type === "object" && node.properties) {
+    return objectEnumNotes(node, path, defs);
+  }
+  return [];
+}
+
+/** One top-level field's skeleton line, with its optional/enum comments. */
+function skeletonLine(
+  key: string,
+  value: JsonNode,
+  required: ReadonlySet<string>,
+  defs: Record<string, JsonNode>,
+): string {
+  const node = resolveNode(value, defs);
+  const comments: string[] = [];
+  if (!required.has(key)) comments.push("optional");
+  let rendered: string;
+  if (node.enum) {
+    rendered = node.enum.map(String).join(" | ");
+    if (node.description) comments.push(oneLine(node.description));
+  } else if (node.type === "array" || node.type === "object") {
+    rendered = inlineSchema(node, defs);
+    if (node.description) comments.push(oneLine(node.description));
+  } else {
+    rendered = node.description
+      ? oneLine(node.description)
+      : scalarFallback(node.type);
+  }
+  comments.push(...enumNotes(node, "", defs));
+  return comments.length > 0
+    ? `${key}: ${rendered}  # ${comments.join("; ")}`
+    : `${key}: ${rendered}`;
+}
+
 /**
  * One renderer from a kernel object schema to the YAML skeleton prompts show:
  * one `key: value` line per field in declaration order, enums joined with
@@ -55,95 +183,10 @@ export function renderSkeleton(
     throw new Error("schema skeleton needs a top-level object schema");
   }
   const defs = root.$defs ?? {};
-  const resolve = (node: JsonNode): JsonNode => {
-    if (node.$ref?.startsWith("#/$defs/")) {
-      const target = defs[node.$ref.slice("#/$defs/".length)];
-      if (!target) throw new Error(`unresolvable schema ref ${node.$ref}`);
-      return resolve(target);
-    }
-    return node;
-  };
-  const inline = (raw: JsonNode): string => {
-    const node = resolve(raw);
-    if (node.enum) return node.enum.map(String).join(" | ");
-    if (node.anyOf) return node.anyOf.map(inline).join(" | ");
-    if (node.type === "array" && node.items) {
-      const item = resolve(node.items);
-      if (item.type === "object" && item.properties) return `[${inline(item)}]`;
-      if (item.enum) return `[${item.enum.map(String).join(" | ")}]`;
-      return item.description ? `[${oneLine(item.description)}]` : "[]";
-    }
-    if (node.type === "object" && node.properties) {
-      const required = new Set(node.required ?? []);
-      const parts = Object.entries(node.properties).map(([key, value]) => {
-        const sub = resolve(value);
-        const name = required.has(key) ? key : `${key}?`;
-        return sub.type === "array" && sub.items
-          ? `${name}: ${inline(sub)}`
-          : name;
-      });
-      return `{${parts.join(", ")}}`;
-    }
-    return node.description
-      ? oneLine(node.description)
-      : scalarFallback(node.type);
-  };
-  // Nested enum values, collected as `path: a | b` notes for the line comment.
-  const enumNotes = (raw: JsonNode, path: string): string[] => {
-    const node = resolve(raw);
-    if (node.anyOf) {
-      const parts: string[] = [];
-      const nested: string[] = [];
-      for (const branch of node.anyOf) {
-        const sub = resolve(branch);
-        if (sub.enum) parts.push(sub.enum.map(String).join(" | "));
-        else if (sub.type === "object" && sub.properties)
-          parts.push(`{${Object.keys(sub.properties).join(", ")}}`);
-        else nested.push(...enumNotes(sub, path));
-      }
-      if (parts.length > 0)
-        nested.unshift(
-          path ? `${path}: ${parts.join(" | ")}` : parts.join(" | "),
-        );
-      return nested;
-    }
-    if (node.type === "array" && node.items) return enumNotes(node.items, path);
-    if (node.type === "object" && node.properties) {
-      const notes: string[] = [];
-      for (const [key, value] of Object.entries(node.properties)) {
-        const sub = resolve(value);
-        const at = path ? `${path}.${key}` : key;
-        if (sub.enum) notes.push(`${at}: ${sub.enum.map(String).join(" | ")}`);
-        else notes.push(...enumNotes(sub, at));
-      }
-      return notes;
-    }
-    return [];
-  };
   const required = new Set(root.required ?? []);
   return Object.entries(root.properties)
     .filter(([key]) => keep === undefined || keep.includes(key))
-    .map(([key, value]) => {
-      const node = resolve(value);
-      const comments: string[] = [];
-      if (!required.has(key)) comments.push("optional");
-      let rendered: string;
-      if (node.enum) {
-        rendered = node.enum.map(String).join(" | ");
-        if (node.description) comments.push(oneLine(node.description));
-      } else if (node.type === "array" || node.type === "object") {
-        rendered = inline(node);
-        if (node.description) comments.push(oneLine(node.description));
-      } else {
-        rendered = node.description
-          ? oneLine(node.description)
-          : scalarFallback(node.type);
-      }
-      comments.push(...enumNotes(node, ""));
-      return comments.length > 0
-        ? `${key}: ${rendered}  # ${comments.join("; ")}`
-        : `${key}: ${rendered}`;
-    })
+    .map(([key, value]) => skeletonLine(key, value, required, defs))
     .join("\n");
 }
 

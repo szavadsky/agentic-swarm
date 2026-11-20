@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import fs from "node:fs";
 import yaml from "yaml";
 import type { z } from "zod";
@@ -205,82 +204,97 @@ export interface ExpectationOptions {
   excludeRecordId?: string;
 }
 
+/** A decision turn must decide. */
+function decisionFindings(
+  field: string | undefined,
+  outcome: Outcome,
+): string[] {
+  if (field !== "decision" || outcome.decision) return [];
+  return ["decision is required: continue | done | blocked"];
+}
+
+/** A completed review must carry a verdict, and its last call cannot request changes. */
+function verdictFindings(
+  field: string | undefined,
+  outcome: Outcome,
+  lastCall: boolean,
+): string[] {
+  if (field !== "verdict") return [];
+  const completed = outcome.status !== "failed" && outcome.status !== "blocked";
+  const findings: string[] = [];
+  if (!outcome.verdict && completed) {
+    findings.push(
+      "verdict is required on a completed review: approve | changes | reject",
+    );
+  }
+  if (lastCall && outcome.verdict === "changes" && completed) {
+    findings.push(
+      'verdict "changes" is not available on the last review call: approve with concerns, or reject',
+    );
+  }
+  return findings;
+}
+
+/** A completed QA turn must report a verdict with its findings. */
+function qaFindings(
+  field: string | undefined,
+  outcome: Outcome,
+  lastCall: boolean,
+): string[] {
+  if (field !== "qa") return [];
+  const qa = qaReportOf(outcome);
+  const completed = outcome.status !== "failed" && outcome.status !== "blocked";
+  const findings: string[] = [];
+  if (!qa && completed) {
+    findings.push(
+      "qa verdict is required on a completed QA turn: accept | changes",
+    );
+  }
+  if (qa?.verdict !== "changes" || !completed) return findings;
+  if (qa.findings.length === 0) {
+    findings.push("qa verdict changes needs at least one finding");
+  }
+  if (lastCall) {
+    findings.push(
+      'qa verdict "changes" is not available on the last acceptance call: accept with concerns, or return blocked/failed',
+    );
+  }
+  return findings;
+}
+
+/** Closed debt ids must name an ingested, closable concern. */
+function debtFindings(outcome: Outcome, opts: ExpectationOptions): string[] {
+  const records = opts.records;
+  if (!records || !outcome.debtClosed) return [];
+  const known = knownDebtIds(records);
+  // The outcome's own record is in the tree once its file is written, but its
+  // ids exist from the next ingest on: a closure cites an earlier record.
+  if (opts.excludeRecordId) {
+    const own = `${opts.excludeRecordId}#`;
+    for (const id of known) if (id.startsWith(own)) known.delete(id);
+  }
+  return outcome.debtClosed
+    .filter((entry) => !known.has(entry.id))
+    .map(
+      (entry) =>
+        `unknown debt id: ${entry.id}: no ingested debt concern has that id`,
+    );
+}
+
 /** Per-step contract the schema alone cannot express. */
 export function validateExpectation(
   outcome: Outcome,
   expectation: OutcomeExpectation,
   opts: ExpectationOptions = {},
 ): string[] {
-  const findings: string[] = [];
   const field = expectationField(expectation);
-  if (field === "decision" && !outcome.decision) {
-    findings.push("decision is required: continue | done | blocked");
-  }
-  if (
-    field === "verdict" &&
-    !outcome.verdict &&
-    outcome.status !== "failed" &&
-    outcome.status !== "blocked"
-  ) {
-    findings.push(
-      "verdict is required on a completed review: approve | changes | reject",
-    );
-  }
-  if (
-    field === "verdict" &&
-    opts.lastCall &&
-    outcome.verdict === "changes" &&
-    outcome.status !== "failed" &&
-    outcome.status !== "blocked"
-  ) {
-    findings.push(
-      'verdict "changes" is not available on the last review call: approve with concerns, or reject',
-    );
-  }
-  if (field === "qa") {
-    const qa = qaReportOf(outcome);
-    if (!qa && outcome.status !== "failed" && outcome.status !== "blocked") {
-      findings.push(
-        "qa verdict is required on a completed QA turn: accept | changes",
-      );
-    }
-    if (
-      qa?.verdict === "changes" &&
-      qa.findings.length === 0 &&
-      outcome.status !== "failed" &&
-      outcome.status !== "blocked"
-    ) {
-      findings.push("qa verdict changes needs at least one finding");
-    }
-    if (
-      qa?.verdict === "changes" &&
-      opts.lastCall &&
-      outcome.status !== "failed" &&
-      outcome.status !== "blocked"
-    ) {
-      findings.push(
-        'qa verdict "changes" is not available on the last acceptance call: accept with concerns, or return blocked/failed',
-      );
-    }
-  }
-  const records = opts.records;
-  if (records && outcome.debtClosed) {
-    const known = knownDebtIds(records);
-    // The outcome's own record is in the tree once its file is written, but
-    // its ids exist from the next ingest on: a closure cites an earlier record.
-    if (opts.excludeRecordId) {
-      const own = `${opts.excludeRecordId}#`;
-      for (const id of known) if (id.startsWith(own)) known.delete(id);
-    }
-    for (const entry of outcome.debtClosed) {
-      if (!known.has(entry.id)) {
-        findings.push(
-          `unknown debt id: ${entry.id}: no ingested debt concern has that id`,
-        );
-      }
-    }
-  }
-  return findings;
+  const lastCall = opts.lastCall === true;
+  return [
+    ...decisionFindings(field, outcome),
+    ...verdictFindings(field, outcome, lastCall),
+    ...qaFindings(field, outcome, lastCall),
+    ...debtFindings(outcome, opts),
+  ];
 }
 
 /** The synthetic outcome after failed repairs; an invalid outcome past repair is failed (KERNEL0 §4). */

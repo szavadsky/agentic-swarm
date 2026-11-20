@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity: split-rest
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -33,6 +33,72 @@ const DEFAULT_ENV: Record<string, string> = {
   GIT_CONFIG_NOSYSTEM: "1",
   LC_ALL: "C",
 };
+
+/** A repo's `git` runner, as the cleanup helpers call it. */
+type GitRunner = TmpRepo["git"];
+
+function removeWorktrees(
+  worktrees: readonly string[],
+  runGit: GitRunner,
+): void {
+  for (const wt of worktrees) {
+    try {
+      runGit(["worktree", "remove", "--force", wt], { allowFail: true });
+    } catch {}
+    try {
+      fs.rmSync(wt, { recursive: true, force: true });
+    } catch {}
+  }
+  try {
+    runGit(["worktree", "prune"], { allowFail: true });
+  } catch {}
+}
+
+/** Sibling worktree roots and dirs created alongside `dir` (e.g. dir-wt). */
+function removeSiblingDirs(dir: string): void {
+  try {
+    const parentDir = path.dirname(dir);
+    const baseName = path.basename(dir);
+    if (!fs.existsSync(parentDir)) return;
+    for (const entry of fs.readdirSync(parentDir)) {
+      if (!entry.includes(baseName) || entry === baseName) continue;
+      try {
+        fs.rmSync(path.join(parentDir, entry), {
+          recursive: true,
+          force: true,
+        });
+      } catch {}
+    }
+  } catch {}
+}
+
+/**
+ * Stray preflight-probe / preflight-overlay dirs left by crashed runs, but only
+ * ones older than an hour. A live baseline worktree (or a concurrent launch)
+ * uses the same prefix and must never be swept; process birth is the wrong
+ * comparison because the parent factory predates us.
+ */
+function sweepStaleProbeDirs(): void {
+  try {
+    const tmp = os.tmpdir();
+    const cutoff = Date.now() - 3_600_000;
+    if (!fs.existsSync(tmp)) return;
+    for (const entry of fs.readdirSync(tmp)) {
+      if (
+        !entry.startsWith("preflight-probe-") &&
+        !entry.startsWith("preflight-overlay-")
+      ) {
+        continue;
+      }
+      try {
+        const st = fs.statSync(path.join(tmp, entry));
+        if (st.mtimeMs < cutoff) {
+          fs.rmSync(path.join(tmp, entry), { recursive: true, force: true });
+        }
+      } catch {}
+    }
+  } catch {}
+}
 
 export function createTmpRepo(options?: {
   initialCommitMessage?: string;
@@ -154,64 +220,10 @@ export function createTmpRepo(options?: {
 
     cleanup(): void {
       unregisterCleanup();
-      for (const wt of worktrees) {
-        try {
-          runGit(["worktree", "remove", "--force", wt], { allowFail: true });
-        } catch {}
-        try {
-          fs.rmSync(wt, { recursive: true, force: true });
-        } catch {}
-      }
-      try {
-        runGit(["worktree", "prune"], { allowFail: true });
-      } catch {}
-
-      // Clean up sibling worktree roots and dirs created alongside dir (e.g. dir-wt, dir.factory-wt)
-      try {
-        const parentDir = path.dirname(dir);
-        const baseName = path.basename(dir);
-        if (fs.existsSync(parentDir)) {
-          const entries = fs.readdirSync(parentDir);
-          for (const entry of entries) {
-            if (entry.includes(baseName) && entry !== baseName) {
-              try {
-                fs.rmSync(path.join(parentDir, entry), {
-                  recursive: true,
-                  force: true,
-                });
-              } catch {}
-            }
-          }
-        }
-      } catch {}
-
-      // Clean up stray preflight-probe / preflight-overlay dirs left by crashed
-      // runs — but only ones older than an hour. A live baseline worktree (or a
-      // concurrent launch) uses the same prefix and must never be swept; process
-      // birth is the wrong comparison because the parent factory predates us.
-      try {
-        const tmp = os.tmpdir();
-        const cutoff = Date.now() - 3_600_000;
-        if (fs.existsSync(tmp)) {
-          const entries = fs.readdirSync(tmp);
-          for (const entry of entries) {
-            if (
-              entry.startsWith("preflight-probe-") ||
-              entry.startsWith("preflight-overlay-")
-            ) {
-              try {
-                const st = fs.statSync(path.join(tmp, entry));
-                if (st.mtimeMs < cutoff)
-                  fs.rmSync(path.join(tmp, entry), {
-                    recursive: true,
-                    force: true,
-                  });
-              } catch {}
-            }
-          }
-        }
-      } catch {}
-
+      removeWorktrees(worktrees, runGit);
+      // Sibling worktree roots and dirs created alongside dir (e.g. dir-wt).
+      removeSiblingDirs(dir);
+      sweepStaleProbeDirs();
       try {
         fs.rmSync(dir, { recursive: true, force: true });
       } catch {}

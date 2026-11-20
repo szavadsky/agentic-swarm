@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity: split-rest
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { createHash } from "node:crypto";
 import { runAgentTurn } from "./agent.js";
 import { boundaryTarget, type TurnTarget } from "./flow-context.js";
@@ -25,6 +25,63 @@ function roleOf(rec: StepRecord, roleByStep: Record<string, string>): string {
   return roleByStep[rec.step] ?? rec.step;
 }
 
+/** Adds one past agent turn to its role/alias row. */
+function addRoleRow(
+  rows: Map<string, RoleRow>,
+  rec: StepRecord,
+  prices: PriceTable,
+  priceIds: Record<string, string> | undefined,
+  roleByStep: Record<string, string>,
+): void {
+  const priced = pricedRecord(rec, prices, priceIds);
+  const role = roleOf(rec, roleByStep);
+  const alias = rec.alias ?? "-";
+  const key = `${role}\u0000${alias}`;
+  const row =
+    rows.get(key) ??
+    ({
+      role,
+      alias,
+      turns: 0,
+      in: 0,
+      cacheRead: 0,
+      out: 0,
+      costUsd: 0,
+      costKnown: false,
+      unpricedTurns: 0,
+    } as RoleRow);
+  row.turns += 1;
+  row.in += priced.usage.in;
+  row.cacheRead += priced.usage.cacheRead;
+  row.out += priced.usage.out;
+  if (priced.usage.costUsd !== undefined) {
+    row.costUsd += priced.usage.costUsd;
+    row.costKnown = true;
+  }
+  if (!priced.costKnown) row.unpricedTurns += 1;
+  rows.set(key, row);
+}
+
+/** The transcript pointers, capped at the first twenty. */
+function appendTranscripts(lines: string[], records: StepRecord[]): void {
+  const transcripts = [
+    ...new Set(
+      records.map((r) => r.transcript).filter((t): t is string => Boolean(t)),
+    ),
+  ];
+  lines.push("## Transcripts");
+  if (transcripts.length === 0) {
+    lines.push("- none recorded");
+    return;
+  }
+  for (const transcript of transcripts.slice(0, 20)) {
+    lines.push(`- ${transcript}`);
+  }
+  if (transcripts.length > 20) {
+    lines.push(`- … ${transcripts.length - 20} more`);
+  }
+}
+
 /**
  * The script half of the digest: cost and turns by role, straight from the
  * records. No model is asked to add numbers it can only approximate.
@@ -42,33 +99,7 @@ function renderDigestFacts(
     if (rec.actor !== "agent" || !rec.endedAt) continue;
     if (rec.iteration >= iteration) continue;
     turns += 1;
-    const priced = pricedRecord(rec, prices, priceIds);
-    const role = roleOf(rec, roleByStep);
-    const alias = rec.alias ?? "-";
-    const key = `${role}\u0000${alias}`;
-    const row =
-      rows.get(key) ??
-      ({
-        role,
-        alias,
-        turns: 0,
-        in: 0,
-        cacheRead: 0,
-        out: 0,
-        costUsd: 0,
-        costKnown: false,
-        unpricedTurns: 0,
-      } as RoleRow);
-    row.turns += 1;
-    row.in += priced.usage.in;
-    row.cacheRead += priced.usage.cacheRead;
-    row.out += priced.usage.out;
-    if (priced.usage.costUsd !== undefined) {
-      row.costUsd += priced.usage.costUsd;
-      row.costKnown = true;
-    }
-    if (!priced.costKnown) row.unpricedTurns += 1;
-    rows.set(key, row);
+    addRoleRow(rows, rec, prices, priceIds, roleByStep);
   }
 
   const totals = [...rows.values()].reduce(
@@ -129,19 +160,7 @@ function renderDigestFacts(
     "",
   );
 
-  const transcripts = [
-    ...new Set(
-      records.map((r) => r.transcript).filter((t): t is string => Boolean(t)),
-    ),
-  ];
-  lines.push("## Transcripts");
-  if (transcripts.length === 0) lines.push("- none recorded");
-  else {
-    for (const transcript of transcripts.slice(0, 20))
-      lines.push(`- ${transcript}`);
-    if (transcripts.length > 20)
-      lines.push(`- … ${transcripts.length - 20} more`);
-  }
+  appendTranscripts(lines, records);
   lines.push(
     "",
     "<!-- The scout appends loops, failures and interventions from these sources. -->",

@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity: split-flow-dispatch
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 /**
  * The architect phase: one turn (with a de-novo retry after an infra death),
  * its steered-subarchitect lifecycle and the infra boundary check. The rest of
@@ -87,6 +87,55 @@ async function architectTurn(
   );
 }
 
+/** `first` before any architect turn, then `relaunch` or `boundary`. */
+function architectTurnKind(
+  records: ConsultContext["records"],
+  relaunch: boolean | undefined,
+): "first" | "relaunch" | "boundary" {
+  if (!records.some((r) => r.step === "architect")) return "first";
+  return relaunch ? "relaunch" : "boundary";
+}
+
+/** The depth-2 delivery route: steered children or a written report. */
+async function architectDelivery(
+  runtime: ConsultContext["runtime"],
+  context: ConsultContext,
+): Promise<"steer" | "report"> {
+  const depth = runtime.configs.process.hierarchy?.depth ?? 1;
+  if (depth !== 2) return "report";
+  return subarchitectDelivery(subarchitectTarget(runtime, context.iteration));
+}
+
+/** Hosts steered children when the delivery route asks for them. */
+async function hostSteered(
+  runtime: ConsultContext["runtime"],
+  context: ConsultContext,
+  turn: "first" | "relaunch" | "boundary",
+  delivery: "steer" | "report",
+): Promise<SteeredHosting | undefined> {
+  if (delivery !== "steer") return undefined;
+  return steeredHosting(runtime, {
+    iteration: context.iteration,
+    turn,
+    packRel: context.packRel!,
+    goalPlanFile: context.plan,
+    ...(context.digestPath ? { digestPath: context.digestPath } : {}),
+    tasks: context.tasks,
+    state: context.state,
+    records: context.records,
+  });
+}
+
+/** A resumed session that overflowed already spent the retry and is terminal. */
+function overflowOnResume(
+  session: { id: string } | undefined,
+  stop: { kind: string; cause?: string } | undefined,
+): boolean {
+  return (
+    session !== undefined && stop?.kind === "infra" && stop.cause === "overflow"
+  );
+}
+
 /**
  * Runs the architect, retrying once de novo after an infra death; a second
  * infra death ends the launch as infra, never blocked-by-user. A resumed
@@ -110,40 +159,15 @@ export async function runArchitectStage(
     (record) => record.step === "architect",
     target,
   );
-  const turn = context.records.some((r) => r.step === "architect")
-    ? context.opts.relaunch
-      ? "relaunch"
-      : "boundary"
-    : "first";
+  const turn = architectTurnKind(context.records, context.opts.relaunch);
   // Only a harness advertising `subagents: "steer"` hosts its subarchitects as
   // named children of this session; every other harness gets the written report.
-  const depth = runtime.configs.process.hierarchy?.depth ?? 1;
-  const delivery =
-    depth === 2
-      ? await subarchitectDelivery(
-          subarchitectTarget(runtime, context.iteration),
-        )
-      : "report";
-  const steered =
-    delivery === "steer"
-      ? await steeredHosting(runtime, {
-          iteration: context.iteration,
-          turn,
-          packRel: context.packRel!,
-          goalPlanFile: context.plan,
-          ...(context.digestPath ? { digestPath: context.digestPath } : {}),
-          tasks: context.tasks,
-          state: context.state,
-          records: context.records,
-        })
-      : undefined;
+  const delivery = await architectDelivery(runtime, context);
+  const steered = await hostSteered(runtime, context, turn, delivery);
 
   let result = await architectTurn(context, session, steered, turn);
   const stop = result.record.stop;
-  const overflowTerminal =
-    session !== undefined &&
-    stop?.kind === "infra" &&
-    stop.cause === "overflow";
+  const overflowTerminal = overflowOnResume(session, stop);
   const infraDied = stop?.kind === "infra" && !result.outcome?.decision;
   if (!overflowTerminal && infraDied)
     result = await architectTurn(context, undefined, steered, turn);

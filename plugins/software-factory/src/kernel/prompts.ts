@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity: split-rest
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import fs from "node:fs";
 import path from "node:path";
 import { type FS, Liquid } from "liquidjs";
@@ -121,28 +121,34 @@ export function loadPromptLibrary(opts: {
   }
   const { engine, fs: layers } = createEngine(roots, overrides);
 
+  // `locals` are assigned inside the template (`{% assign %}`), so they are
+  // not inputs the caller must pass. The reviewer assigns `author_body` and
+  // `review_duties` to include its author's `<role>-body`, `review-<role>`
+  // duties and `review-<role>-turn` inputs; Liquid cannot resolve those
+  // includes statically, so the fragments they name are analyzed in the caller
+  // (a missing one fails by name).
+  const dynamicIncludes = (
+    locals: Record<string, unknown>,
+    author: string | undefined,
+  ): string[] => {
+    if (author === undefined) return [];
+    return [
+      ...(locals.author_body ? [`${author}-body`] : []),
+      ...(locals.review_duties ? [`review-${author}`] : []),
+      ...(locals.review_turn ? [`review-${author}-turn`] : []),
+    ];
+  };
+
   const requiredVariables = (
     fragment: string,
     vars: Record<string, string>,
   ): string[] => {
     const { text, filepath } = loadFragment(layers, roots, fragment);
     const analysis = engine.parseAndAnalyzeSync(text, filepath);
-    // `locals` are assigned inside the template (`{% assign %}`), so they are
-    // not inputs the caller must pass. The reviewer assigns `author_body` and
-    // `review_duties` to include its author's `<role>-body`, `review-<role>`
-    // duties and `review-<role>-turn` inputs; Liquid cannot resolve those
-    // includes statically, so the fragments they name are analyzed here (a
-    // missing one fails by name).
     const names = new Set(Object.keys(analysis.globals));
-    if (vars.author !== undefined) {
-      const dynamic = [
-        ...(analysis.locals.author_body ? [`${vars.author}-body`] : []),
-        ...(analysis.locals.review_duties ? [`review-${vars.author}`] : []),
-        ...(analysis.locals.review_turn ? [`review-${vars.author}-turn`] : []),
-      ];
-      for (const included of dynamic) {
-        for (const name of requiredVariables(included, vars)) names.add(name);
-      }
+    const dynamic = dynamicIncludes(analysis.locals, vars.author);
+    for (const included of dynamic) {
+      for (const name of requiredVariables(included, vars)) names.add(name);
     }
     return [...names];
   };

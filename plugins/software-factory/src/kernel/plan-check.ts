@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity: split-rest
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { runAgentTurn } from "./agent.js";
 import { makeCause } from "./cause.js";
 import { formatCause } from "./cause.js";

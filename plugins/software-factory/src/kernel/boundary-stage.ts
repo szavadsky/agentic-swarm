@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-flow-dispatch
 /**
  * The boundary's first half: task/state init, the plan checker, the digest,
  * steer partitioning and the scripted pack. The architect turn lives in

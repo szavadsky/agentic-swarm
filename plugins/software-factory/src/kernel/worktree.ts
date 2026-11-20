@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity: split-rest
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -312,6 +312,76 @@ async function setupMarker(cwd: string): Promise<string | null> {
  * the park are present, and review diffs from the integration head so the
  * carried parked commits are in the diff. `startPoint` is that head.
  */
+interface WorktreeCreation {
+  startPoint: string;
+  conflict?: { paths: string[]; head: string };
+}
+
+/** Adds the task worktree and, for a continuation, merges the head into it. */
+async function createTaskWorktree(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  wtPath: string,
+  branch: string,
+  startSha: string,
+  startPoint: string,
+): Promise<WorktreeCreation> {
+  if (fs.existsSync(wtPath)) {
+    fs.rmSync(wtPath, { recursive: true, force: true });
+  }
+  fs.mkdirSync(path.dirname(wtPath), { recursive: true });
+  let current = startPoint;
+  let conflict: WorktreeCreation["conflict"];
+  await runtime.repo.writeLock.runExclusive(async () => {
+    if (await branchExists(runtime, branch)) {
+      await git(runtime.paths.repoRoot, ["worktree", "add", wtPath, branch]);
+    } else {
+      await git(runtime.paths.repoRoot, [
+        "worktree",
+        "add",
+        "-b",
+        branch,
+        wtPath,
+        startSha,
+      ]);
+    }
+    if (!task.base) return;
+    // The parked branch is never rewritten: only this continuation branch moves.
+    // A conflict stays in progress for the first turn to resolve instead of
+    // parking before it; the caller decides (first turn resolves, later parks).
+    current = await integrationHead(runtime);
+    const attempt = await mergeRef(
+      wtPath,
+      current,
+      runtime.repo.identityEnv(),
+      {
+        leaveConflict: true,
+      },
+    );
+    if (!attempt.ok) conflict = { paths: attempt.paths, head: current };
+  });
+  return { startPoint: current, conflict };
+}
+
+/** Runs the repo's setup commands once per worktree, unless its marker holds. */
+async function ensureSetup(
+  runtime: KernelRuntime,
+  wtPath: string,
+  created: boolean,
+): Promise<SetupResult | undefined> {
+  if (runtime.configs.repo.setup.length === 0) return undefined;
+  const marker = await setupMarker(wtPath);
+  if (!created && marker && fs.existsSync(marker)) return undefined;
+  const setup = await runWorktreeSetup({
+    commands: runtime.configs.repo.setup,
+    cwd: wtPath,
+  });
+  if (setup.ok && marker) {
+    fs.writeFileSync(marker, new Date().toISOString(), "utf8");
+  }
+  return setup;
+}
+
 export async function ensureTaskWorktree(
   runtime: KernelRuntime,
   task: TaskFile,
@@ -341,61 +411,32 @@ export async function ensureTaskWorktree(
     path.resolve(p),
   );
   let created = false;
-  let conflict: { paths: string[]; head: string } | undefined;
+  let conflict: WorktreeCreation["conflict"];
   if (!registered.includes(path.resolve(wtPath))) {
-    if (fs.existsSync(wtPath))
-      fs.rmSync(wtPath, { recursive: true, force: true });
-    fs.mkdirSync(path.dirname(wtPath), { recursive: true });
-    await runtime.repo.writeLock.runExclusive(async () => {
-      if (await branchExists(runtime, branch)) {
-        await git(runtime.paths.repoRoot, ["worktree", "add", wtPath, branch]);
-      } else {
-        await git(runtime.paths.repoRoot, [
-          "worktree",
-          "add",
-          "-b",
-          branch,
-          wtPath,
-          startSha,
-        ]);
-      }
-      if (!task.base) return;
-      // The parked branch is never rewritten: only this continuation branch moves.
-      // A conflict stays in progress for the first turn to resolve instead of
-      // parking before it; the caller decides (first turn resolves, later parks).
-      startPoint = await integrationHead(runtime);
-      const attempt = await mergeRef(
-        wtPath,
-        startPoint,
-        runtime.repo.identityEnv(),
-        { leaveConflict: true },
-      );
-      if (!attempt.ok) conflict = { paths: attempt.paths, head: startPoint };
-    });
+    const worktree = await createTaskWorktree(
+      runtime,
+      task,
+      wtPath,
+      branch,
+      startSha,
+      startPoint,
+    );
+    startPoint = worktree.startPoint;
+    conflict = worktree.conflict;
     created = true;
   }
 
-  let setup: SetupResult | undefined;
-  if (runtime.configs.repo.setup.length > 0) {
-    const marker = await setupMarker(wtPath);
-    if (created || !marker || !fs.existsSync(marker)) {
-      setup = await runWorktreeSetup({
-        commands: runtime.configs.repo.setup,
-        cwd: wtPath,
-      });
-      if (!setup.ok) {
-        if (conflict) await abortInFlightMerge(wtPath);
-        return {
-          path: wtPath,
-          branch,
-          created,
-          startPoint,
-          setup,
-          error: setup.error,
-        };
-      }
-      if (marker) fs.writeFileSync(marker, new Date().toISOString(), "utf8");
-    }
+  const setup = await ensureSetup(runtime, wtPath, created);
+  if (setup && !setup.ok) {
+    if (conflict) await abortInFlightMerge(wtPath);
+    return {
+      path: wtPath,
+      branch,
+      created,
+      startPoint,
+      setup,
+      error: setup.error,
+    };
   }
   return {
     path: wtPath,
@@ -496,38 +537,51 @@ const OPERATOR_CHANNELS = new Set([
   "mailbox/outbox",
 ]);
 
+/** Directory entries, or undefined when the directory vanished. */
+function readEntries(abs: string): fs.Dirent[] | undefined {
+  try {
+    return fs.readdirSync(abs, { withFileTypes: true });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw err;
+  }
+}
+
+/** A file's hash, or undefined when another writer removed it. */
+function fileHash(abs: string): string | undefined {
+  try {
+    return createHash("sha256").update(fs.readFileSync(abs)).digest("hex");
+  } catch (err) {
+    // Another writer may remove a file between readdir and read.
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw err;
+  }
+}
+
+function walkArtifacts(
+  abs: string,
+  rel: string,
+  files: Map<string, string>,
+): void {
+  const entries = readEntries(abs);
+  if (!entries) return;
+  for (const entry of entries) {
+    const childRel = rel === "" ? entry.name : `${rel}/${entry.name}`;
+    if (OPERATOR_CHANNELS.has(childRel)) continue;
+    const childAbs = path.join(abs, entry.name);
+    if (entry.isDirectory()) {
+      walkArtifacts(childAbs, childRel, files);
+    } else if (entry.isFile()) {
+      const hash = fileHash(childAbs);
+      if (hash !== undefined) files.set(childRel, hash);
+    }
+  }
+}
+
 /** Hashes of every goal artifact except the operator's mailbox channels. */
 function artifactState(dir: string): Map<string, string> {
   const files = new Map<string, string>();
-  const walk = (abs: string, rel: string): void => {
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(abs, { withFileTypes: true });
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
-      throw err;
-    }
-    for (const entry of entries) {
-      const childRel = rel === "" ? entry.name : `${rel}/${entry.name}`;
-      if (OPERATOR_CHANNELS.has(childRel)) continue;
-      const childAbs = path.join(abs, entry.name);
-      if (entry.isDirectory()) walk(childAbs, childRel);
-      else if (entry.isFile()) {
-        try {
-          files.set(
-            childRel,
-            createHash("sha256")
-              .update(fs.readFileSync(childAbs))
-              .digest("hex"),
-          );
-        } catch (err) {
-          // Another writer may remove a file between readdir and read.
-          if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-        }
-      }
-    }
-  };
-  walk(dir, "");
+  walkArtifacts(dir, "", files);
   return files;
 }
 
@@ -730,6 +784,81 @@ export async function containmentSnapshot(
   };
 }
 
+/** Breaches for a checkout/integration head move no merge record explains. */
+function integrationBreaches(
+  snapshot: ContainmentSnapshot,
+  checkout: WorktreeState,
+  integration: string,
+  mergeExplains: (commit: string) => boolean,
+  goalCheckout: string,
+): string[] {
+  const breaches: string[] = [];
+  if (checkout.branch !== snapshot.checkout.branch) {
+    breaches.push(
+      `HEAD is on "${checkout.branch || "detached"}" in the integration checkout ${goalCheckout}`,
+    );
+    return breaches;
+  }
+  if (checkout.head !== snapshot.checkout.head) {
+    const head = checkout.head.slice(0, 10);
+    if (!mergeExplains(checkout.head)) {
+      if (checkout.status !== snapshot.checkout.status) {
+        breaches.push(
+          `integration branch moved outside the merge queue in ${goalCheckout}: HEAD is ${head}`,
+        );
+      } else {
+        breaches.push(
+          `commit on the integration checkout ${goalCheckout}: HEAD moved to ${head}`,
+        );
+      }
+    } else if (integration !== checkout.head && !mergeExplains(integration)) {
+      breaches.push(
+        `integration branch moved outside the merge queue: HEAD is ${integration.slice(0, 10)}`,
+      );
+    }
+    return breaches;
+  }
+  if (integration !== snapshot.integration) {
+    if (!mergeExplains(integration)) {
+      breaches.push(
+        `integration branch moved outside the merge queue: HEAD is ${integration.slice(0, 10)}`,
+      );
+    }
+    return breaches;
+  }
+  if (checkout.status !== snapshot.checkout.status) {
+    breaches.push(`files changed outside the worktree in ${goalCheckout}`);
+  }
+  return breaches;
+}
+
+/** Operator moves in the repo root that a turn cannot have made. */
+function outsideBreaches(
+  root: WorktreeState,
+  snapshot: ContainmentSnapshot,
+  runtime: KernelRuntime,
+): string[] {
+  const statusKey = (status: string) =>
+    statusOutsideArtifacts(
+      status,
+      runtime.paths.repoRoot,
+      runtime.paths.artifacts.root,
+    );
+  // A same-repo artifact commit is the store's own write, not the operator's.
+  const storeCommit =
+    root.head !== snapshot.root.head &&
+    runtime.store.committed().includes(root.head) &&
+    statusKey(root.status) === statusKey(snapshot.root.status);
+  const outside: string[] = [];
+  if (!storeCommit && root.head !== snapshot.root.head) {
+    outside.push(`HEAD moved in ${runtime.paths.repoRoot}`);
+  }
+  if (!storeCommit && root.status !== snapshot.root.status) {
+    outside.push(`files changed in ${runtime.paths.repoRoot}`);
+  }
+  return outside;
+}
+
 /** Text for the park cause when a turn left its worktree; undefined when contained. */
 export async function containmentViolation(
   runtime: KernelRuntime,
@@ -789,60 +918,21 @@ export async function containmentViolation(
   }
 
   // The merge queue moves this checkout's HEAD and resets it; a move recorded
-  // as a merge is the queue's, not the turn's. A move no merge record explains
-  // is a commit the turn made there. While a merge is between its ref move and
-  // its checkout reset, the working tree is not the turn's to explain either.
-  if (checkout.branch !== snapshot.checkout.branch) {
-    breaches.push(
-      `HEAD is on "${checkout.branch || "detached"}" in the integration checkout ${runtime.paths.goalCheckout}`,
-    );
-  } else if (checkout.head !== snapshot.checkout.head) {
-    if (!mergeExplains(checkout.head)) {
-      if (checkout.status !== snapshot.checkout.status) {
-        breaches.push(
-          `integration branch moved outside the merge queue in ${runtime.paths.goalCheckout}: HEAD is ${checkout.head.slice(0, 10)}`,
-        );
-      } else {
-        breaches.push(
-          `commit on the integration checkout ${runtime.paths.goalCheckout}: HEAD moved to ${checkout.head.slice(0, 10)}`,
-        );
-      }
-    } else if (integration !== checkout.head && !mergeExplains(integration)) {
-      breaches.push(
-        `integration branch moved outside the merge queue: HEAD is ${integration.slice(0, 10)}`,
-      );
-    }
-  } else if (integration !== snapshot.integration) {
-    if (!mergeExplains(integration)) {
-      breaches.push(
-        `integration branch moved outside the merge queue: HEAD is ${integration.slice(0, 10)}`,
-      );
-    }
-  } else if (checkout.status !== snapshot.checkout.status) {
-    breaches.push(
-      `files changed outside the worktree in ${runtime.paths.goalCheckout}`,
-    );
-  }
+  // as a merge is the queue's, not the turn's.
+  breaches.push(
+    ...integrationBreaches(
+      snapshot,
+      checkout,
+      integration,
+      mergeExplains,
+      runtime.paths.goalCheckout,
+    ),
+  );
 
   // The operator may commit or edit in the main checkout while a turn runs. The
   // task cannot have made that change and must still merge; record it instead.
-  // A same-repo artifact commit is the store's own write, not the operator's.
   const root = await worktreeState(runtime.paths.repoRoot);
-  const statusKey = (status: string) =>
-    statusOutsideArtifacts(
-      status,
-      runtime.paths.repoRoot,
-      runtime.paths.artifacts.root,
-    );
-  const storeCommit =
-    root.head !== snapshot.root.head &&
-    runtime.store.committed().includes(root.head) &&
-    statusKey(root.status) === statusKey(snapshot.root.status);
-  const outside: string[] = [];
-  if (!storeCommit && root.head !== snapshot.root.head)
-    outside.push(`HEAD moved in ${runtime.paths.repoRoot}`);
-  if (!storeCommit && root.status !== snapshot.root.status)
-    outside.push(`files changed in ${runtime.paths.repoRoot}`);
+  const outside = outsideBreaches(root, snapshot, runtime);
   if (outside.length > 0) {
     await appendContainmentIncident(
       runtime,

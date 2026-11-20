@@ -1,17 +1,21 @@
 {
   "src/cli/commands.ts": "split-rest",
+  "src/cli/dispatch.ts": "split-rest",
   "src/harness/acpx/turn.ts": "split-rest",
+  "src/harness/omp/turn.ts": "split-rest",
   "src/kernel/agent.ts": "split-rest",
   "src/kernel/config.ts": "split-rest",
   "src/kernel/context-pack.ts": "split-rest",
-  "src/kernel/gates.ts": "split-rest",
+  "src/kernel/derive.ts": "split-rest",
   "src/kernel/integrate.ts": "split-rest",
   "src/kernel/mailbox.ts": "split-rest",
   "src/kernel/metrics.ts": "split-rest",
+  "src/kernel/preflight-aliases.ts": "split-rest",
   "src/kernel/preflight.ts": "split-rest",
   "src/kernel/prompt-vars-pages.ts": "split-rest",
   "src/kernel/steward.ts": "split-rest",
   "src/kernel/store.ts": "split-rest",
+  "src/kernel/summary.ts": "split-rest",
   "src/kernel/types.ts": "split-rest",
   "src/kernel/worktree.ts": "split-rest",
   "test/cli/validate.test.ts": "split-rest",
@@ -45,5 +49,6 @@
   "test/kernel/steer-routing.test.ts": "split-rest",
   "test/kernel/tasks.test.ts": "split-rest",
   "test/kernel/tier-fallback.test.ts": "split-rest",
-  "test/prompts.test.ts": "split-rest"
+  "test/prompts.test.ts": "split-rest",
+  "test/setup/hermetic-guard.ts": "split-rest"
 }

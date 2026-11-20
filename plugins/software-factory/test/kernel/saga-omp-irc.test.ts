@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity: saga steer scenario
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";

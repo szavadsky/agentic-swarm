@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity: split-rest
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import fs from "node:fs";
 import path from "node:path";
 import { resolveAcpxCommand } from "../harness/acpx/command.js";
@@ -27,6 +27,7 @@ import {
   type ArtifactStore,
   BOUNDARY_STEPS,
   type ConfigBundle,
+  type FlowDefinition,
   type GoalPaths,
   type HarnessConfig,
   type ProcessConfig,
@@ -194,6 +195,23 @@ export function fallbackAliasFindings(
  * alternate and every different-model follow-up. Nothing is derived from a role
  * name, so a renamed alias is the only requirement.
  */
+/** Every alias one flow names, with its step context. */
+function noteFlowAliases(
+  note: (alias: string, ref: string) => void,
+  name: string,
+  flow: FlowDefinition,
+): void {
+  for (const step of flow.steps) {
+    if (step.alias) note(step.alias, `flow "${name}" step "${step.id}"`);
+    for (const alternate of step.alternates ?? []) {
+      note(alternate, `flow "${name}" step "${step.id}" alternates`);
+    }
+    if (step.followUp?.mode === "different-model" && step.followUp.alias) {
+      note(step.followUp.alias, `flow "${name}" step "${step.id}" follow-up`);
+    }
+  }
+}
+
 function requiredAliases(process: ProcessConfig): Map<string, string> {
   const refs = new Map<string, string>();
   const note = (alias: string, ref: string): void => {
@@ -206,15 +224,7 @@ function requiredAliases(process: ProcessConfig): Map<string, string> {
     note(alias, "architecture reviewer");
   }
   for (const [name, flow] of Object.entries(process.flows)) {
-    for (const step of flow.steps) {
-      if (step.alias) note(step.alias, `flow "${name}" step "${step.id}"`);
-      for (const alternate of step.alternates ?? []) {
-        note(alternate, `flow "${name}" step "${step.id}" alternates`);
-      }
-      if (step.followUp?.mode === "different-model" && step.followUp.alias) {
-        note(step.followUp.alias, `flow "${name}" step "${step.id}" follow-up`);
-      }
-    }
+    noteFlowAliases(note, name, flow);
   }
   return refs;
 }
@@ -346,40 +356,33 @@ function rootFinding(
   }
 }
 
-/**
- * Validates configs, aliases, models, effort levels, fallbacks, binaries, the
- * roots and the base branch — collecting every violation into one report. A red
- * base is recorded and warned once; it never aborts.
- */
-export async function preflight(
-  input: PreflightInput,
-): Promise<PreflightResult> {
-  const { configs, paths, store, harnesses } = input;
-  const files = configs.files ?? configFilePaths(paths.repoRoot);
+/** Aliases the process config names but the run config lacks. */
+function requiredAliasFindings(
+  process: ProcessConfig,
+  aliases: Record<string, AliasConfig>,
+  file: string,
+): Finding[] {
   const findings: Finding[] = [];
-
-  for (const [alias, ref] of requiredAliases(configs.process)) {
-    if (!configs.run.aliases[alias]) {
+  for (const [alias, ref] of requiredAliases(process)) {
+    if (!aliases[alias]) {
       findings.push({
-        file: files.run,
+        file,
         key: `aliases.${alias}`,
         message: `required by ${ref} but missing`,
       });
     }
   }
+  return findings;
+}
 
-  findings.push(...escalationFindings(configs.run.aliases, files.run));
-  findings.push(...fallbackAliasFindings(configs.run.aliases, files.run));
-  findings.push(...acpxOptionFindings(configs.run.harnesses, files.run));
-
-  // A task type owns its flow and output schema. A type naming either one
-  // wrongly would quarantine every task of that type or fail mid-turn, after
-  // the plan spent, so pre-flight refuses the config instead.
-  const processFile = fs.existsSync(files.processOverride)
-    ? files.processOverride
-    : files.processDefault;
-  for (const [name, definition] of Object.entries(configs.process.taskTypes)) {
-    if (!Object.hasOwn(configs.process.flows, definition.flow)) {
+/** Task types must name a configured flow and a kernel outcome schema. */
+function taskTypeFindings(
+  process: ProcessConfig,
+  processFile: string,
+): Finding[] {
+  const findings: Finding[] = [];
+  for (const [name, definition] of Object.entries(process.taskTypes)) {
+    if (!Object.hasOwn(process.flows, definition.flow)) {
       findings.push({
         file: processFile,
         key: `taskTypes.${name}.flow`,
@@ -394,103 +397,132 @@ export async function preflight(
       });
     }
   }
+  return findings;
+}
 
-  // A trivial task implements in the front's session, so a follow-up declared
-  // on a step of that flow would never run: refuse it instead of letting the
-  // config claim a mode the turn ignores.
-  findings.push(...trivialFollowUpFindings(configs.process, processFile));
-
-  // A task tier names a run-config alias directly; an escalated task that names
-  // one the run config lacks would fail only mid-turn, after the plan spent.
+/** A task tier names a run-config alias directly. */
+async function tierFindings(
+  store: ArtifactStore,
+  aliases: Record<string, AliasConfig>,
+): Promise<Finding[]> {
+  const findings: Finding[] = [];
   for (const task of await store.listTasks()) {
-    if (!task.tier || task.tier === "default" || configs.run.aliases[task.tier])
-      continue;
+    if (!task.tier || task.tier === "default" || aliases[task.tier]) continue;
     findings.push({
       file: store.tasks.path(task.slug),
       key: "tier",
       message: `tier "${task.tier}" names no run-config alias`,
     });
   }
+  return findings;
+}
 
-  const usedHarnesses = new Set<string>();
-  for (const alias of Object.values(configs.run.aliases)) {
-    usedHarnesses.add(alias.harness);
-    for (const entry of alias.rotate ?? []) usedHarnesses.add(entry.harness);
+/** Every harness some configured alias, rotation or fallback can run. */
+function usedHarnesses(aliases: Record<string, AliasConfig>): Set<string> {
+  const used = new Set<string>();
+  for (const alias of Object.values(aliases)) {
+    used.add(alias.harness);
+    for (const entry of alias.rotate ?? []) used.add(entry.harness);
     for (const fallback of alias.fallbacks ?? []) {
-      if ("model" in fallback && fallback.harness)
-        usedHarnesses.add(fallback.harness);
+      if ("model" in fallback && fallback.harness) used.add(fallback.harness);
     }
   }
+  return used;
+}
+
+/** Real-launch executable checks, and the harnesses that could not run. */
+function harnessBinaries(
+  configs: ConfigBundle,
+  files: ReturnType<typeof configFilePaths>,
+  input: PreflightInput,
+  used: ReadonlySet<string>,
+): { findings: Finding[]; unavailable: Set<string> } {
+  const findings: Finding[] = [];
   const unavailable = new Set<string>();
-  if (input.binaries) {
-    for (const harness of [...usedHarnesses].sort()) {
-      const entry = configs.run.harnesses?.[harness];
-      if (entry?.acpx?.raw) {
-        // A raw agent is still spawned by acpx, so both executables must run:
-        // the dispatcher (config override, else PATH/bunx) and the agent head.
-        binaryFinding(
-          findings,
-          files.run,
-          harness,
-          resolveAcpxCommand(entry.binary).binary,
-          `harnesses.${harness}.binary`,
-          unavailable,
-        );
-        binaryFinding(
-          findings,
-          files.run,
-          harness,
-          input.binaries[harness],
-          `harnesses.${harness}.acpx.agent`,
-          unavailable,
-        );
-        continue;
-      }
+  if (!input.binaries) return { findings, unavailable };
+  for (const harness of [...used].sort()) {
+    const entry = configs.run.harnesses?.[harness];
+    if (entry?.acpx?.raw) {
+      // A raw agent is still spawned by acpx, so both executables must run:
+      // the dispatcher (config override, else PATH/bunx) and the agent head.
+      binaryFinding(
+        findings,
+        files.run,
+        harness,
+        resolveAcpxCommand(entry.binary).binary,
+        `harnesses.${harness}.binary`,
+        unavailable,
+      );
       binaryFinding(
         findings,
         files.run,
         harness,
         input.binaries[harness],
-        `harnesses.${harness}.binary`,
+        `harnesses.${harness}.acpx.agent`,
         unavailable,
       );
+      continue;
     }
-    // omp's built-in yamlls entry needs the server binary; it does not ship
-    // one. Only a real launch checks executables (`binaries` omitted means an
-    // injected harness and no executable surface).
-    if (
-      configs.run.lsp &&
-      usedHarnesses.has(OMP_ID) &&
-      !executable(yamlLspBinary())
-    ) {
-      findings.push({
-        file: files.run,
-        key: "lsp",
-        message: `lsp is enabled but "${YAML_LSP_BINARY}" is not on PATH: omp does not ship the YAML language server`,
-      });
-    }
+    binaryFinding(
+      findings,
+      files.run,
+      harness,
+      input.binaries[harness],
+      `harnesses.${harness}.binary`,
+      unavailable,
+    );
   }
+  // omp's built-in yamlls entry needs the server binary; it does not ship one.
+  // Only a real launch checks executables (`binaries` omitted means an injected
+  // harness and no executable surface).
+  if (configs.run.lsp && used.has(OMP_ID) && !executable(yamlLspBinary())) {
+    findings.push({
+      file: files.run,
+      key: "lsp",
+      message: `lsp is enabled but "${YAML_LSP_BINARY}" is not on PATH: omp does not ship the YAML language server`,
+    });
+  }
+  return { findings, unavailable };
+}
 
-  const ctx: AliasContext = {
+function aliasContext(
+  input: PreflightInput,
+  files: ReturnType<typeof configFilePaths>,
+  findings: Finding[],
+  unavailable: ReadonlySet<string>,
+): AliasContext {
+  return {
     findings,
     files,
-    harnesses,
+    harnesses: input.harnesses,
     catalog: input.catalog,
     unavailable,
     subscriptions: new Set(
-      Object.keys(configs.run.limits.concurrency.perSubscription),
+      Object.keys(input.configs.run.limits.concurrency.perSubscription),
     ),
     capsCache: new Map(),
     modelCache: new Map(),
     probeCache: new Map(),
   };
-  const resolvedAliases: Record<string, string | undefined> = {};
-  for (const [name, alias] of Object.entries(configs.run.aliases)) {
-    await checkAlias(ctx, name, alias, resolvedAliases);
-  }
-  await checkScouts(ctx, configs, resolvedAliases);
-  checkPortability(ctx, configs);
+}
 
+async function resolveAliases(
+  ctx: AliasContext,
+  aliases: Record<string, AliasConfig>,
+): Promise<Record<string, string | undefined>> {
+  const resolved: Record<string, string | undefined> = {};
+  for (const [name, alias] of Object.entries(aliases)) {
+    await checkAlias(ctx, name, alias, resolved);
+  }
+  return resolved;
+}
+
+/** Writable-root checks for the scratch worktree root and the sessions dir. */
+async function rootFindings(
+  paths: GoalPaths,
+  files: ReturnType<typeof configFilePaths>,
+): Promise<Finding[]> {
+  const findings: Finding[] = [];
   const worktreeProblem = inside(paths.worktreeRoot, paths.repoRoot)
     ? undefined
     : await writable(paths.worktreeRoot);
@@ -513,50 +545,114 @@ export async function preflight(
     paths.repoRoot,
     sessionsProblem,
   );
+  return findings;
+}
 
+async function baseBranchFindings(
+  paths: GoalPaths,
+  configs: ConfigBundle,
+  files: ReturnType<typeof configFilePaths>,
+): Promise<{ findings: Finding[]; baseCommit?: string }> {
   const baseCommit = await resolveBaseCommit(
     paths.repoRoot,
     configs.repo.baseBranch,
   );
-  if (!baseCommit) {
-    findings.push({
-      file: files.repo,
-      key: "baseBranch",
-      message: `branch "${configs.repo.baseBranch}" does not exist`,
-    });
-  }
+  if (baseCommit) return { findings: [], baseCommit };
+  return {
+    findings: [
+      {
+        file: files.repo,
+        key: "baseBranch",
+        message: `branch "${configs.repo.baseBranch}" does not exist`,
+      },
+    ],
+  };
+}
 
+function uniqueFindings(findings: Finding[]): Finding[] {
   const unique = new Map<string, Finding>();
-  for (const finding of findings)
+  for (const finding of findings) {
     unique.set(
       `${finding.file}\u0000${finding.key}\u0000${finding.message}`,
       finding,
     );
-  const all = [...unique.values()];
-
-  const taskFindings = await store.scanTaskFindings();
-  if (taskFindings.length > 0) {
-    for (const finding of taskFindings) {
-      if (finding.kind === "unconfigured-type") {
-        all.push({
-          file: finding.file,
-          key: "task",
-          message: `${finding.kind}: ${finding.reason}`,
-        });
-      }
-    }
   }
+  return [...unique.values()];
+}
 
+/** Task files whose type the config does not define. */
+async function unconfiguredTaskFindings(
+  store: ArtifactStore,
+): Promise<Finding[]> {
+  const taskFindings = await store.scanTaskFindings();
+  return taskFindings
+    .filter((finding) => finding.kind === "unconfigured-type")
+    .map((finding) => ({
+      file: finding.file,
+      key: "task",
+      message: `${finding.kind}: ${finding.reason}`,
+    }));
+}
+
+/**
+ * Validates configs, aliases, models, effort levels, fallbacks, binaries, the
+ * roots and the base branch — collecting every violation into one report. A red
+ * base is recorded and warned once; it never aborts.
+ */
+export async function preflight(
+  input: PreflightInput,
+): Promise<PreflightResult> {
+  const { configs, paths, store } = input;
+  const files = configs.files ?? configFilePaths(paths.repoRoot);
+  const findings: Finding[] = [];
+
+  findings.push(
+    ...requiredAliasFindings(configs.process, configs.run.aliases, files.run),
+  );
+  findings.push(...escalationFindings(configs.run.aliases, files.run));
+  findings.push(...fallbackAliasFindings(configs.run.aliases, files.run));
+  findings.push(...acpxOptionFindings(configs.run.harnesses, files.run));
+
+  // A task type owns its flow and output schema. A type naming either one
+  // wrongly would quarantine every task of that type or fail mid-turn, after
+  // the plan spent, so pre-flight refuses the config instead.
+  const processFile = fs.existsSync(files.processOverride)
+    ? files.processOverride
+    : files.processDefault;
+  findings.push(...taskTypeFindings(configs.process, processFile));
+  // A trivial task implements in the front's session, so a follow-up declared
+  // on a step of that flow would never run: refuse it instead of letting the
+  // config claim a mode the turn ignores.
+  findings.push(...trivialFollowUpFindings(configs.process, processFile));
+  // An escalated task naming a missing alias would fail only mid-turn, after
+  // the plan spent.
+  findings.push(...(await tierFindings(store, configs.run.aliases)));
+
+  const used = usedHarnesses(configs.run.aliases);
+  const binaries = harnessBinaries(configs, files, input, used);
+  findings.push(...binaries.findings);
+
+  const ctx = aliasContext(input, files, findings, binaries.unavailable);
+  const resolvedAliases = await resolveAliases(ctx, configs.run.aliases);
+  await checkScouts(ctx, configs, resolvedAliases);
+  checkPortability(ctx, configs);
+  findings.push(...(await rootFindings(paths, files)));
+
+  const base = await baseBranchFindings(paths, configs, files);
+  findings.push(...base.findings);
+
+  const all = uniqueFindings(findings);
+  all.push(...(await unconfiguredTaskFindings(store)));
   if (all.length > 0) throw new PreflightError(all);
 
   const result: PreflightResult = { aliases: resolvedAliases };
-  if (baseCommit && input.baseGates !== false) {
+  if (base.baseCommit && input.baseGates !== false) {
     result.base = await checkBase(
       configs,
       store,
       paths.repoRoot,
       configs.repo.baseBranch,
-      baseCommit,
+      base.baseCommit,
     );
   }
   for (const [name, effort] of Object.entries(resolvedAliases)) {

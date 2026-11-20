@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity: split-rest
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -320,15 +320,7 @@ describe("shipped run-config coverage", () => {
       const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
       const run = loadRunConfig(runPath);
       expect(run.priceIds).toBeDefined();
-      const ids = new Set<string>();
-      for (const alias of Object.values(run.aliases)) {
-        ids.add(alias.model);
-        for (const entry of alias.rotate!) ids.add(entry.model);
-        for (const fb of alias.fallbacks!) {
-          if ("model" in fb) ids.add(fb.model);
-        }
-      }
-      if (run.scouts) ids.add(run.scouts.model);
+      const ids = collectModelIds(run);
       expect(ids.size).toBeGreaterThan(0);
       for (const id of [...ids].sort()) {
         expect(
@@ -336,16 +328,37 @@ describe("shipped run-config coverage", () => {
           `${name}.yaml: ${id} matches no OpenRouter id`,
         ).toBeDefined();
       }
-      // No dangling mappings: every priceIds target is a catalog id.
-      for (const [from, to] of Object.entries(run.priceIds!)) {
-        expect(
-          OPENROUTER_IDS[to],
-          `${name}.yaml: priceIds ${from} -> ${to} names no catalog id`,
-        ).toBeDefined();
-      }
+      expectNoDanglingPriceIds(run, name);
     });
   }
 });
+
+/** Every model id a run config can route to. */
+function collectModelIds(run: ReturnType<typeof loadRunConfig>): Set<string> {
+  const ids = new Set<string>();
+  for (const alias of Object.values(run.aliases)) {
+    ids.add(alias.model);
+    for (const entry of alias.rotate!) ids.add(entry.model);
+    for (const fallback of alias.fallbacks!) {
+      if ("model" in fallback) ids.add(fallback.model);
+    }
+  }
+  if (run.scouts) ids.add(run.scouts.model);
+  return ids;
+}
+
+/** No dangling mappings: every priceIds target is a catalog id. */
+function expectNoDanglingPriceIds(
+  run: ReturnType<typeof loadRunConfig>,
+  name: string,
+): void {
+  for (const [from, to] of Object.entries(run.priceIds!)) {
+    expect(
+      OPENROUTER_IDS[to],
+      `${name}.yaml: priceIds ${from} -> ${to} names no catalog id`,
+    ).toBeDefined();
+  }
+}
 
 /**
  * The extends split must not change what a shipped run config resolves to:
