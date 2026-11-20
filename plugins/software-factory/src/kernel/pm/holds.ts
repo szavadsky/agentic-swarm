@@ -1,0 +1,108 @@
+import fs from "node:fs";
+import path from "node:path";
+import yaml from "yaml";
+import { holdsDir, selfHeldSlugs } from "../mailbox.js";
+import type { SteerRoute } from "../types.js";
+import type { KernelRuntime, TaskFile } from "../types.js";
+
+type ParsedHold =
+  | { status: "missing" }
+  | { status: "bad"; message: string }
+  | { status: "ok"; slugs: unknown; goal: unknown };
+
+function parseHoldFile(runtime: KernelRuntime, steerId: string): ParsedHold {
+  const dir = holdsDir(runtime.store);
+  const candidates = [`${steerId}.yaml`, `${steerId}.yml`].map((name) =>
+    path.join(dir, name),
+  );
+  const file = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!file) return { status: "missing" };
+  let parsed: unknown;
+  try {
+    parsed = yaml.parse(fs.readFileSync(file, "utf8"));
+  } catch (err) {
+    return { status: "bad", message: (err as Error).message };
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return { status: "bad", message: "hold is not a mapping" };
+  }
+  const { slugs, goal } = parsed as { slugs?: unknown; goal?: unknown };
+  return { status: "ok", slugs, goal };
+}
+
+export function stallHoldProblem(
+  runtime: KernelRuntime,
+  steerId: string,
+): string | undefined {
+  const hold = parseHoldFile(runtime, steerId);
+  if (hold.status === "missing") {
+    return `stall steer "${steerId}" has no hold file; a stall drains the goal with goal: true`;
+  }
+  if (hold.status === "bad") {
+    return `stall steer "${steerId}" hold is not valid YAML: ${hold.message}`;
+  }
+  if (hold.goal !== true) {
+    return `stall steer "${steerId}" hold has no goal: true; a stall drains the goal`;
+  }
+  return undefined;
+}
+
+export function architectHoldProblem(
+  runtime: KernelRuntime,
+  steerId: string,
+): string | undefined {
+  const hold = parseHoldFile(runtime, steerId);
+  if (hold.status === "missing") return undefined;
+  if (hold.status === "bad") {
+    return `architect steer "${steerId}" hold is not valid YAML: ${hold.message}`;
+  }
+  if (
+    !Array.isArray(hold.slugs) ||
+    !hold.slugs.every((slug) => typeof slug === "string")
+  ) {
+    return `architect steer "${steerId}" hold slugs must be a list of task slugs; an architect steer that voids nothing holds nothing with slugs: []`;
+  }
+  if (hold.goal !== false) {
+    return `architect steer "${steerId}" hold has no goal: false; goal: true stays reserved for stall`;
+  }
+  return undefined;
+}
+
+/**
+ * A hold that names a task its own steer created. The steer stays pending
+ * until its spike task ends, and the held task never starts: the two wait on
+ * each other, so the hold must be refused instead of written.
+ */
+export function selfHoldProblem(
+  runtime: KernelRuntime,
+  steerId: string,
+  tasks: readonly TaskFile[],
+): string | undefined {
+  const hold = parseHoldFile(runtime, steerId);
+  if (hold.status !== "ok" || !Array.isArray(hold.slugs)) return undefined;
+  const slugs = hold.slugs.filter(
+    (slug): slug is string => typeof slug === "string",
+  );
+  const own = selfHeldSlugs(steerId, slugs, tasks);
+  if (own.length === 0) return undefined;
+  return `steer "${steerId}" hold names task(s) it creates: ${own.join(", ")}; a steer never holds its own task — leave those slugs out of the hold`;
+}
+
+export function ensureSteerHold(
+  runtime: KernelRuntime,
+  steerId: string,
+  route: SteerRoute,
+): void {
+  const dir = holdsDir(runtime.store);
+  const candidates = [`${steerId}.yaml`, `${steerId}.yml`].map((name) =>
+    path.join(dir, name),
+  );
+  if (candidates.some((candidate) => fs.existsSync(candidate))) return;
+  fs.mkdirSync(dir, { recursive: true });
+  const goal = route === "stall";
+  fs.writeFileSync(
+    path.join(dir, `${steerId}.yaml`),
+    `slugs: []\ngoal: ${goal}\n`,
+    "utf8",
+  );
+}

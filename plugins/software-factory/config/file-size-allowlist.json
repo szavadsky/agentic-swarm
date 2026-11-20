@@ -14,7 +14,6 @@
   "src/kernel/launch.ts": "split-flow-dispatch",
   "src/kernel/mailbox.ts": "split-rest",
   "src/kernel/metrics.ts": "split-rest",
-  "src/kernel/pm.ts": "split-pm",
   "src/kernel/preflight.ts": "split-rest",
   "src/kernel/steward.ts": "split-rest",
   "src/kernel/store.ts": "split-rest",
