@@ -1,4 +1,5 @@
 import path from "node:path";
+import { DASHBOARD_REL_PATH, renderDashboard } from "./dashboard.js";
 import { derive, materialOpenDebts, type OpenDebt } from "./derive.js";
 import {
   DEFAULT_ROLE_BY_STEP,
@@ -375,10 +376,14 @@ export async function collectStatus(
   });
 }
 
-/** Rewrites `status.json` after an agent launch or finish. */
+/** Rewrites `status.json` and its dashboard after an agent launch or finish. */
 export async function writeStatus(source: StatusSource): Promise<string> {
   const status = await collectStatus(source);
+  // Render before either write: a template failure never leaves a fresh
+  // status.json beside a dashboard describing the previous snapshot.
+  const dashboard = renderDashboard(status);
   await source.store.writeFile(STATUS_REL_PATH, renderStatus(status));
+  await source.store.writeFile(DASHBOARD_REL_PATH, dashboard);
   return STATUS_REL_PATH;
 }
 

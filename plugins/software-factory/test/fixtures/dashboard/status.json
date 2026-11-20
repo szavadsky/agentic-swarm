@@ -1,0 +1,171 @@
+{
+  "goal": "demo-goal",
+  "status": "active",
+  "iteration": 2,
+  "iterations": 2,
+  "updatedAt": "2026-02-03T04:05:06.000Z",
+  "tasks": {
+    "open": [
+      {
+        "slug": "pending1",
+        "title": "Pending <one>",
+        "status": "pending",
+        "kind": "development",
+        "round": 1,
+        "turns": 0
+      }
+    ],
+    "merged": [
+      {
+        "slug": "merged1",
+        "title": "Merge & one",
+        "status": "merged",
+        "kind": "development",
+        "epic": "core",
+        "round": 2,
+        "turns": 3,
+        "commit": "abc123def4567890",
+        "record": "records/00002-i1-merged1-implement-r1"
+      }
+    ],
+    "finished": [
+      {
+        "slug": "spike1",
+        "title": "Spike one",
+        "status": "finished",
+        "kind": "spike",
+        "epic": "tools",
+        "round": 1,
+        "turns": 1,
+        "commit": "def456abc123",
+        "record": "records/00004-i1-spike1-implement-r1"
+      }
+    ],
+    "parked": [
+      {
+        "slug": "parked1",
+        "title": "Parked one",
+        "status": "parked",
+        "kind": "development",
+        "round": 2,
+        "turns": 2,
+        "cause": {
+          "kind": "review-rejected",
+          "detail": "missing \"test\" <coverage>"
+        },
+        "record": "records/00003-i1-parked1-review-r2"
+      }
+    ],
+    "cancelled": [
+      {
+        "slug": "cancelled1",
+        "title": "Cancelled one",
+        "status": "cancelled",
+        "kind": "development",
+        "round": 1,
+        "turns": 0
+      }
+    ]
+  },
+  "distance": {
+    "pending": ["pending1"],
+    "parks": ["parked1"],
+    "openDebt": [
+      {
+        "id": "00002-i1-merged1-implement-r1#1",
+        "text": "Cache invalidation needs <follow-up>",
+        "evidence": "src/cache.ts",
+        "calibration": "architect",
+        "source": "merged1 implement r1",
+        "iteration": 1,
+        "record": "records/00002-i1-merged1-implement-r1"
+      }
+    ]
+  },
+  "concerns": [
+    {
+      "id": "00001-i1-architect-r1#1",
+      "step": "architect",
+      "round": 1,
+      "kind": "risk",
+      "calibration": "owner",
+      "text": "<script>alert(\"plan\")</script> & owner must confirm",
+      "evidence": "plan.md",
+      "record": "records/00001-i1-architect-r1"
+    },
+    {
+      "id": "00002-i1-merged1-implement-r1#1",
+      "slug": "merged1",
+      "step": "implement",
+      "round": 1,
+      "kind": "debt",
+      "calibration": "architect",
+      "text": "Cache invalidation needs <follow-up>",
+      "evidence": "src/cache.ts",
+      "record": "records/00002-i1-merged1-implement-r1"
+    }
+  ],
+  "cost": {
+    "totalUsd": 0.6,
+    "unpricedTurns": 0,
+    "perMergedTask": 0.6,
+    "byRole": {
+      "architect": {
+        "turns": 1,
+        "tokens": 150,
+        "costUsd": 0.1,
+        "unpricedTurns": 0
+      },
+      "implementer": {
+        "turns": 1,
+        "tokens": 1200,
+        "costUsd": 0.5,
+        "unpricedTurns": 0
+      }
+    },
+    "byModel": {
+      "fake": {
+        "turns": 2,
+        "tokens": 1350,
+        "costUsd": 0.6,
+        "unpricedTurns": 0
+      }
+    }
+  },
+  "work": {
+    "turns": 2,
+    "edits": 2,
+    "addedLines": 10,
+    "removedLines": 3,
+    "testRuns": 1,
+    "byRole": {
+      "architect": {
+        "turns": 1,
+        "edits": 0,
+        "addedLines": 0,
+        "removedLines": 0,
+        "testRuns": 0
+      },
+      "implementer": {
+        "turns": 1,
+        "edits": 2,
+        "addedLines": 10,
+        "removedLines": 3,
+        "testRuns": 1
+      }
+    },
+    "byModel": {
+      "fake": {
+        "turns": 2,
+        "edits": 2,
+        "addedLines": 10,
+        "removedLines": 3,
+        "testRuns": 1
+      }
+    }
+  },
+  "epics": {
+    "core": ["merged1"],
+    "tools": ["spike1"]
+  }
+}

@@ -5,6 +5,10 @@ import path from "node:path";
 import { statusGoal } from "../../src/cli/commands.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import type { Usage } from "../../src/harness/types.js";
+import {
+  DASHBOARD_REL_PATH,
+  renderDashboard,
+} from "../../src/kernel/dashboard.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import {
@@ -273,6 +277,14 @@ describe("status file", () => {
       const file = path.join(store.goalDir, STATUS_REL_PATH);
       expect(fs.readFileSync(file, "utf8")).toBe(stored!);
 
+      const dashboard = fs.readFileSync(
+        path.join(store.goalDir, DASHBOARD_REL_PATH),
+        "utf8",
+      );
+      expect(dashboard).toBe(renderDashboard(parsed));
+      expect(dashboard).toContain("Merge one");
+      expect(dashboard).toContain('href="records/00003-i1-merged1-merge-r1/"');
+
       fs.writeFileSync(file, "{not json", "utf8");
       await expect(readStatus(store)).rejects.toThrow(
         `${file} is not valid JSON`,
@@ -328,6 +340,7 @@ describe("status before the kernel runs", () => {
         byModel: {},
       });
       expect(fs.existsSync(path.join(goalDir, STATUS_REL_PATH))).toBe(false);
+      expect(fs.existsSync(path.join(goalDir, DASHBOARD_REL_PATH))).toBe(false);
     } finally {
       repo.cleanup();
     }
@@ -335,14 +348,18 @@ describe("status before the kernel runs", () => {
 });
 
 describe("status refresh points", () => {
-  it("rewrites the snapshot after an agent launch and after its finish", async () => {
+  it("rewrites the snapshot and dashboard after an agent launch and after its finish", async () => {
     const { repo, goal, goalDir } = setupFlowRepo();
     try {
-      const launched: string[] = [];
+      const launched: { json: string; dashboard: string }[] = [];
       const capture = () =>
-        launched.push(
-          fs.readFileSync(path.join(goalDir, STATUS_REL_PATH), "utf8"),
-        );
+        launched.push({
+          json: fs.readFileSync(path.join(goalDir, STATUS_REL_PATH), "utf8"),
+          dashboard: fs.readFileSync(
+            path.join(goalDir, DASHBOARD_REL_PATH),
+            "utf8",
+          ),
+        });
       const harness = new FakeHarness({ id: "fake" });
       harness.script((req, ctx) => {
         capture();
@@ -360,17 +377,27 @@ describe("status refresh points", () => {
       await runDispatch(runtime, { iteration: 1 });
 
       expect(launched).toHaveLength(2);
-      const atImplement = logLaunch(launched[0]!);
+      const atImplement = logLaunch(launched[0]!.json);
       expect(atImplement).toEqual({ open: ["task"], turns: 0, merged: [] });
-      const atReview = logLaunch(launched[1]!);
+      const atReview = logLaunch(launched[1]!.json);
       expect(atReview).toEqual({ open: ["task"], turns: 1, merged: [] });
+      for (const atLaunch of launched) {
+        expect(atLaunch.dashboard).toBe(
+          renderDashboard(JSON.parse(atLaunch.json)),
+        );
+      }
 
-      const finished = snapshot(
-        fs.readFileSync(path.join(goalDir, STATUS_REL_PATH), "utf8"),
+      const finishedJson = fs.readFileSync(
+        path.join(goalDir, STATUS_REL_PATH),
+        "utf8",
       );
+      const finished = snapshot(finishedJson);
       expect(finished.tasks!.open[0]!.turns).toBe(2);
       expect(finished.cost!.totalUsd).toBeCloseTo(0.03, 10);
       expect(finished.work!.turns).toBe(2);
+      expect(
+        fs.readFileSync(path.join(goalDir, DASHBOARD_REL_PATH), "utf8"),
+      ).toBe(renderDashboard(JSON.parse(finishedJson)));
     } finally {
       cleanupFlowRepo(repo);
     }

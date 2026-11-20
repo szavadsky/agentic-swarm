@@ -33,7 +33,8 @@ bun bin/factory.ts variables --out <file>
 copies the intent (or writes a template). `run` pre-flights, takes the goal
 lock, recovers interrupted work and runs the iteration loop. `status` prints
 derived state and parked causes; `--json` prints `status.json`, the snapshot
-the kernel rewrites after each agent launch and finish; `benchmark` prints one
+the kernel rewrites after each agent launch and finish, together with the
+static `dashboard.html` rendered beside it; `benchmark` prints one
 goal's benchmark rows;
 `steer` drops a file into the inbox atomically. `validate` checks one
 schema-enforced file with the gate's validators (tasks/*.md with its
@@ -330,6 +331,7 @@ Gates run once on the base; a red base is recorded and warned once, not fatal.
   iterations/<n>/{context-pack.md,summary.md,metrics.yaml}
   metrics.yaml
   status.json              # machine-readable snapshot for the CLI and dashboard
+  dashboard.html           # static page rendered from status.json; no server
 ```
 
 ## Steering
