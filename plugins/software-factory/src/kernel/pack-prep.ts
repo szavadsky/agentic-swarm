@@ -1,9 +1,7 @@
 import fs from "node:fs";
-import path from "node:path";
 import { runAgentTurn } from "./agent.js";
 import { boundaryTarget } from "./flow-context.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
-import { goalPlan } from "./plan-file.js";
 import type { KernelRuntime } from "./types.js";
 
 /** Agent step of the pack-preparer boundary turn; slug-less, outside task turn counts. */
@@ -19,8 +17,10 @@ export async function runPackPreparer(
   runtime: KernelRuntime,
   opts: { iteration: number; packRel: string; dataRel: string },
 ): Promise<string | undefined> {
-  const packPath = path.join(runtime.store.goalDir, opts.packRel);
-  fs.mkdirSync(path.dirname(packPath), { recursive: true });
+  const packPath = await runtime.store.localPath({
+    area: "goal",
+    rel: opts.packRel,
+  });
   fs.rmSync(packPath, { force: true });
   const result = await runAgentTurn(runtime, {
     target: boundaryTarget(runtime, PACK_PREP_STEP, opts.iteration),
@@ -28,9 +28,12 @@ export async function runPackPreparer(
     meta: { iteration: opts.iteration, step: PACK_PREP_STEP, round: 1 },
     vars: {
       iteration: String(opts.iteration),
-      intent_path: path.join(runtime.store.goalDir, "intent.md"),
-      plan_path: goalPlan(runtime.store.goalDir).path,
-      context_data_path: path.join(runtime.store.goalDir, opts.dataRel),
+      intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
+      plan_path: runtime.store.plans.path,
+      context_data_path: runtime.store.pathOf({
+        area: "goal",
+        rel: opts.dataRel,
+      }),
       pack_path: packPath,
       checkout: runtime.paths.goalCheckout,
     },

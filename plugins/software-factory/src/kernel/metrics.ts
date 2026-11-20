@@ -875,13 +875,14 @@ export async function writeMetrics(
   const metrics: GoalMetrics = { iterations, totals: totalsOf(iterations) };
 
   for (const iteration of iterations) {
-    await store.writeFile(
-      `iterations/${iteration.n}/metrics.yaml`,
+    await store.iterations.write(
+      iteration.n,
+      "metrics.yaml",
       yaml.stringify(iteration),
     );
   }
   const text = yaml.stringify(metrics);
   await store.writeFile("metrics.yaml", text);
   // The outbox notifies the owner; the metrics themselves have one copy above.
-  await store.writeFile("mailbox/outbox/metrics.yaml", "metrics.yaml\n");
+  await store.mailbox.write("outbox", "metrics.yaml", "metrics.yaml\n");
 }

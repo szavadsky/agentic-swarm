@@ -1,4 +1,3 @@
-import path from "node:path";
 import { runAgentTurn } from "./agent.js";
 import { makeCause } from "./cause.js";
 import {
@@ -15,7 +14,7 @@ import {
   snapshotTurn,
   type TurnSnapshot,
 } from "./pm.js";
-import { type PlanFile, registeredPlans } from "./plan-file.js";
+import { type PlanFile } from "./plan-file.js";
 import { outcomeRepairSchemaVar } from "./prompt-schema.js";
 import { scriptMeta } from "./record.js";
 import { MAIN_ARCHITECT } from "./tasks.js";
@@ -44,7 +43,7 @@ export const PLAN_RETURN_STEP = ARCHITECTURE_STEPS[1];
 function planSet(runtime: KernelRuntime, target: PlanFile): PlanFile[] {
   const plans = [target];
   const seen = new Set([target.rel]);
-  for (const plan of registeredPlans(runtime.store.goalDir)) {
+  for (const plan of runtime.store.plans.registered()) {
     if (seen.has(plan.rel)) continue;
     seen.add(plan.rel);
     plans.push(plan);
@@ -184,9 +183,9 @@ export async function runPlanReview(
       },
       vars: {
         iteration: String(opts.iteration),
-        intent_path: path.join(runtime.store.goalDir, "intent.md"),
+        intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
         plan_path: plan.path,
-        pack_path: path.join(runtime.store.goalDir, opts.packRel),
+        pack_path: runtime.store.pathOf({ area: "goal", rel: opts.packRel }),
         worktree: runtime.paths.goalCheckout,
         outcome_schema: outcomeRepairSchemaVar(target.prompt, "any"),
       },
@@ -257,6 +256,7 @@ async function discardForeignWrites(
 ): Promise<void> {
   const tasks = await restoreTasks(runtime, snapshot.tasks);
   const plans = await restorePlans(
+    runtime,
     snapshot.plans,
     (plan) => plan.rel === keepRel,
   );
@@ -319,9 +319,9 @@ export async function runArchitectReturn(
     },
     vars: {
       iteration: String(opts.iteration),
-      intent_path: path.join(runtime.store.goalDir, "intent.md"),
+      intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
       plan_path: plan.path,
-      pack_path: path.join(runtime.store.goalDir, opts.packRel),
+      pack_path: runtime.store.pathOf({ area: "goal", rel: opts.packRel }),
       reviewers: opts.reviewers.join(", "),
       technical_findings: lines("technical"),
       plan_notes: lines("planNote"),

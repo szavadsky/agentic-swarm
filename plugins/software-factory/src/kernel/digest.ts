@@ -1,6 +1,5 @@
 // biome-ignore-all lint/complexity: split-rest
 import { createHash } from "node:crypto";
-import path from "node:path";
 import { runAgentTurn } from "./agent.js";
 import { boundaryTarget, type TurnTarget } from "./flow-context.js";
 import { postSteer, type Steer, scanInbox } from "./mailbox.js";
@@ -173,10 +172,11 @@ export async function writeLaunchDigest(
   } catch {
     scoutTarget = undefined;
   }
-  const rel = `iterations/${iteration}/digest.md`;
-  const digestPath = path.join(runtime.store.goalDir, rel);
-  await runtime.store.writeFile(
-    rel,
+  const rel = runtime.store.iterations.rel(iteration, "digest.md");
+  const digestPath = runtime.store.iterations.path(iteration, "digest.md");
+  await runtime.store.iterations.write(
+    iteration,
+    "digest.md",
     renderDigestFacts(
       records,
       iteration,
@@ -197,8 +197,8 @@ export async function writeLaunchDigest(
         meta: { iteration, step: "digest", round: 1 },
         vars: {
           launch_id: `previous-launch-before-${iteration}`,
-          goal_dir: runtime.store.goalDir,
-          records_dir: runtime.store.recordsDir,
+          goal_dir: runtime.store.pathOf({ area: "goal" }),
+          records_dir: runtime.store.pathOf({ area: "records" }),
           transcripts_dir: runtime.paths.sessionsDir,
           digest_path: digestPath,
         },
@@ -226,7 +226,7 @@ export async function postLaunchDigest(
 ): Promise<Steer | null> {
   const rel = await writeLaunchDigest(runtime, iteration, records);
   if (!rel) return null;
-  const digest = await runtime.store.readFile(rel);
+  const digest = await runtime.store.iterations.read(iteration, "digest.md");
   if (digest === null) return null;
   const text = [
     `# Launch digest before iteration ${iteration}`,

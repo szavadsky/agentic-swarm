@@ -15,6 +15,7 @@ import type {
   Usage,
 } from "../harness/types.js";
 import type { PriceSource } from "./openrouter.js";
+import type { PlanFile, PlanScope } from "./plan-file.js";
 import type { PromptLibrary } from "./prompts.js";
 
 export const concernSchema = z.object({
@@ -817,8 +818,166 @@ export interface DeclaredWrite {
   endedAt?: string;
 }
 
+/** The directory a goal artifact lives in; `goal` owns the files no sub-store does. */
+export type ArtifactArea =
+  | "goal"
+  | "records"
+  | "tasks"
+  | "plans"
+  | "mailbox"
+  | "iterations";
+
+/** One goal artifact, addressed by the store that owns it. */
+export interface ArtifactRef {
+  readonly area: ArtifactArea;
+  /** Path inside the area's directory; empty names that directory. */
+  readonly rel?: string;
+}
+
+/** One record directory and whether its start/end committed. */
+export interface RecordDir {
+  /** Directory name, `NNNNN-i<iteration>[-<slug>]-<step>-r<round>`. */
+  name: string;
+  /** Absolute directory path. */
+  path: string;
+  started: boolean;
+  ended: boolean;
+}
+
+/** The files a record directory owns; nothing else is a record. */
+export type RecordFile = "started.yaml" | "outcome.yaml" | "end.yaml";
+
+export interface RecordStore {
+  /** Absolute directory the record owns; prompts and briefs carry it. */
+  dir(record: StepRecord): string;
+  /** Absolute path of one of the record's files. */
+  file(record: StepRecord, name: RecordFile): string;
+  /**
+   * The reviewer prompt's `checks_log`: the pre-existing
+   * `<records>/<iteration>/<slug>/<step>` layout, not a record directory.
+   */
+  checksLog(record: StepRecord): string;
+  /** Every record directory on disk, in name order. */
+  dirs(): Promise<RecordDir[]>;
+  /** Includes unfinished records (started, no end); sorted by seq. */
+  list(): Promise<StepRecord[]>;
+  start(meta: RecordStart): Promise<TurnRecord>;
+  append(meta: RecordStart, end: RecordEnd): Promise<StepRecord>;
+  /** Writes an end for a record a dead process left open, then seals it. */
+  close(name: string, end: RecordEnd): Promise<void>;
+  /** Makes an ended record's files read-only. */
+  seal(name: string): Promise<void>;
+}
+
+export interface TaskStore {
+  /** Absolute directory holding the task files. */
+  readonly dir: string;
+  /** Absolute path of one task file; prompts carry it. */
+  path(slug: string): string;
+  /** Raw task texts by slug, sorted. */
+  texts(): Promise<Map<string, string>>;
+  list(): Promise<TaskFile[]>;
+  read(slug: string): Promise<TaskFile | null>;
+  write(task: TaskFile): Promise<void>;
+  /** Writes one file byte for byte: a kernel restore. */
+  writeText(slug: string, text: string): Promise<void>;
+  /** Restores what a turn changed or created; names the slugs it put back. */
+  restore(before: Map<string, string>): Promise<string[]>;
+  findings(): Promise<TaskFileFinding[]>;
+  /** Quarantines malformed files and records each; one listing's sweep. */
+  sweep(iteration: number): Promise<void>;
+}
+
+export interface PlanStore {
+  /** Absolute path of the goal's plan file; prompts carry it. */
+  readonly path: string;
+  /** Every plan the register names, goal plan first. */
+  registered(): PlanFile[];
+  /** The registered plans whose file exists, in register order. */
+  existing(): PlanFile[];
+  /** Every plan file on disk (goal plus `epics/*.md`), the ownership view. */
+  filesOnDisk(): PlanFile[];
+  /** A scope's bytes; the goal plan when no scope is named. */
+  read(scope?: PlanScope): Promise<string | null>;
+  exists(scope?: PlanScope): Promise<boolean>;
+  /** Kernel write: declares the path and replaces the file atomically. */
+  write(scope: PlanScope, text: string): Promise<void>;
+  /** Deletes the plan; absent is a no-op. */
+  remove(scope?: PlanScope): Promise<void>;
+}
+
+/** The files one iteration directory owns. */
+export type IterationFile =
+  | "context-pack.md"
+  | "context-data.json"
+  | "summary.md"
+  | "digest.md"
+  | "metrics.yaml";
+
+export interface IterationStore {
+  /** Goal-relative path of one iteration file. */
+  rel(iteration: number, file: IterationFile): string;
+  /** Absolute path of one iteration file; prompts carry it. */
+  path(iteration: number, file: IterationFile): string;
+  read(iteration: number, file: IterationFile): Promise<string | null>;
+  write(iteration: number, file: IterationFile, text: string): Promise<void>;
+}
+
+/** The mailbox queues a steer moves through. */
+export type MailboxQueue =
+  | "inbox"
+  | "processed"
+  | "outbox"
+  | "holds"
+  | "quarantine";
+
+export interface MailboxStore {
+  /** Absolute holds directory: where the PM writes one file per steer. */
+  readonly holds: string;
+  /** Absolute quarantine directory for holds that decide nothing. */
+  readonly quarantine: string;
+  /** Goal-relative path of a queue, or a file in it; prompts carry it. */
+  rel(queue: MailboxQueue, name?: string): string;
+  /** Reads a queue file; null when absent. */
+  read(queue: MailboxQueue, name: string): Promise<string | null>;
+  /** Writes a queue file atomically; materializes the queue directory. */
+  write(queue: MailboxQueue, name: string, text: string): Promise<void>;
+  /** Publishes a steer through the private tmp dir, then renames it in. */
+  publish(name: string, text: string): Promise<void>;
+  /** Renames between queues; false when the source is gone. */
+  move(
+    from: MailboxQueue,
+    fromName: string,
+    to: MailboxQueue,
+    toName: string,
+  ): Promise<boolean>;
+  /** Removes a queue file; absent is a no-op. */
+  remove(queue: MailboxQueue, name: string): Promise<void>;
+  /** Non-dot files directly in a queue, sorted. */
+  files(queue: MailboxQueue): Promise<string[]>;
+  /** Sizes of those files, by name, for the inbox settle check. */
+  sizes(queue: MailboxQueue): Promise<Map<string, number>>;
+}
+
 export interface ArtifactStore {
   readonly goalDir: string;
+  /** The store's areas, each owning its files and the paths they live at. */
+  readonly records: RecordStore;
+  readonly tasks: TaskStore;
+  readonly plans: PlanStore;
+  readonly mailbox: MailboxStore;
+  readonly iterations: IterationStore;
+  /**
+   * Absolute path of an artifact without touching the disk. Prompts carry it;
+   * a writer uses `localPath` so its parent exists.
+   */
+  pathOf(ref: ArtifactRef): string;
+  /** Absolute path of an artifact, its parent directory created. */
+  localPath(ref: ArtifactRef): Promise<string>;
+  /**
+   * Raw directories below are the folder backend's layout, kept for the
+   * unchanged suite; kernel modules reach artifacts through the areas above.
+   */
   readonly tasksDir: string;
   readonly recordsDir: string;
   readonly mailboxDir: string;

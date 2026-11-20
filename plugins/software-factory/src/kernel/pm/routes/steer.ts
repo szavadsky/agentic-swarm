@@ -84,7 +84,9 @@ async function validateSteerTurn(
   const scan = scanSteerRoutes(routes, claimed);
   findings.push(...scan.findings);
   findings.push(...unroutedSteerFindings(opts.claim, scan.routeOf));
-  findings.push(...steerRouteDetailFindings(runtime, routes, claimed, tasks));
+  findings.push(
+    ...(await steerRouteDetailFindings(runtime, routes, claimed, tasks)),
+  );
   if (parseFindings.length === 0) {
     findings.push(
       ...steerWriteFindings(
@@ -142,17 +144,17 @@ function unroutedSteerFindings(
 }
 
 /** The answer and hold each route must carry, and the self-hold guard. */
-function steerRouteDetailFindings(
+async function steerRouteDetailFindings(
   runtime: KernelRuntime,
   routes: readonly SteerRouteEntry[],
   claimed: ReadonlySet<string>,
   tasks: readonly TaskFile[],
-): string[] {
+): Promise<string[]> {
   const findings: string[] = [];
   for (const entry of routes) {
     if (!claimed.has(entry.steer)) continue;
     findings.push(...steerAnswerFindings(entry));
-    findings.push(...steerHoldFindings(runtime, entry, tasks));
+    findings.push(...(await steerHoldFindings(runtime, entry, tasks)));
   }
   return findings;
 }
@@ -174,21 +176,21 @@ function steerAnswerFindings(entry: SteerRouteEntry): string[] {
     : [];
 }
 
-function steerHoldFindings(
+async function steerHoldFindings(
   runtime: KernelRuntime,
   entry: SteerRouteEntry,
   tasks: readonly TaskFile[],
-): string[] {
+): Promise<string[]> {
   const findings: string[] = [];
   if (entry.route === "stall") {
-    const problem = stallHoldProblem(runtime, entry.steer);
+    const problem = await stallHoldProblem(runtime, entry.steer);
     if (problem) findings.push(problem);
   }
   if (isArchitectRoute(entry.route)) {
-    const problem = architectHoldProblem(runtime, entry.steer);
+    const problem = await architectHoldProblem(runtime, entry.steer);
     if (problem) findings.push(problem);
   }
-  const selfHeld = selfHoldProblem(runtime, entry.steer, tasks);
+  const selfHeld = await selfHoldProblem(runtime, entry.steer, tasks);
   if (selfHeld) findings.push(selfHeld);
   return findings;
 }
@@ -395,7 +397,7 @@ async function acceptSteerRoutes(
       await markProcessed(runtime.store, steer);
       await expireHold(runtime.store, steer.id);
     } else {
-      ensureSteerHold(runtime, steer.id, entry.route);
+      await ensureSteerHold(runtime, steer.id, entry.route);
     }
   }
   const remaining = unfixedBaseline(baseline, findings);

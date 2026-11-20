@@ -17,7 +17,6 @@ import {
 import { addUsage, reportsUsage, zeroUsage } from "../harness/usage.js";
 import { missingPlanFinding, snapshotPlan } from "./architect-session.js";
 import { makeCause } from "./cause.js";
-import { contextPackRelPath } from "./context-pack.js";
 import { type TurnTarget, tierPoolKey } from "./flow-context.js";
 import { launchKindOf } from "./metrics.js";
 import { loadPriceTable } from "./openrouter.js";
@@ -122,8 +121,9 @@ async function measurePack(
   spec: AgentTurnSpec,
 ): Promise<{ bytes: number } | undefined> {
   if (!PACK_STEPS.has(spec.meta.step)) return undefined;
-  const pack = await runtime.store.readFile(
-    contextPackRelPath(spec.meta.iteration),
+  const pack = await runtime.store.iterations.read(
+    spec.meta.iteration,
+    "context-pack.md",
   );
   if (pack === null) return undefined;
   return {

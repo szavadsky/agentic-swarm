@@ -1,6 +1,4 @@
 // biome-ignore-all lint/complexity: split-rest
-import fs from "node:fs";
-import path from "node:path";
 import { runAgentTurn } from "./agent.js";
 import { makeCause } from "./cause.js";
 import { formatCause } from "./cause.js";
@@ -14,10 +12,10 @@ import {
   runPlanCheckPm,
   snapshotTurn,
 } from "./pm.js";
-import { existingPlans, formatPlanList, registeredPlans } from "./plan-file.js";
+import { formatPlanList } from "./plan-file.js";
 import { scriptMeta } from "./record.js";
-import { recordDirName } from "./store.js";
 import type {
+  ArtifactStore,
   Cause,
   KernelRuntime,
   Outcome,
@@ -153,7 +151,7 @@ export function consultGate(input: {
  */
 export function lastGateRecord(
   records: StepRecord[],
-  recordsDir: string,
+  store: ArtifactStore,
 ): string | undefined {
   const last = records
     .filter(
@@ -164,9 +162,7 @@ export function lastGateRecord(
     )
     .sort((a, b) => a.seq - b.seq)
     .at(-1);
-  return last
-    ? path.join(recordsDir, recordDirName(last.seq, last), "end.yaml")
-    : undefined;
+  return last ? store.records.file(last, "end.yaml") : undefined;
 }
 
 /** One parked task's cause as the brief reads it. */
@@ -213,14 +209,16 @@ export async function runPlanCheck(
   runtime: KernelRuntime,
   opts: { iteration: number; round: number; state: State },
 ): Promise<PlanCheckTurn> {
-  const allPlans = registeredPlans(runtime.store.goalDir);
-  const plans = existingPlans(allPlans);
-  const texts = plans.map((plan) => fs.readFileSync(plan.path, "utf8"));
+  const allPlans = runtime.store.plans.registered();
+  const plans = runtime.store.plans.existing();
+  const texts = (
+    await Promise.all(plans.map((plan) => runtime.store.plans.read(plan.scope)))
+  ).filter((text): text is string => text !== null);
   const snapshot = await snapshotTurn(runtime, allPlans);
   const tasks = await runtime.store.listTasks();
   const gateRecord = lastGateRecord(
     await runtime.store.listRecords(),
-    runtime.store.recordsDir,
+    runtime.store,
   );
   const result = await runAgentTurn(runtime, {
     target: boundaryTarget(runtime, "plancheck", opts.iteration),
@@ -232,10 +230,10 @@ export async function runPlanCheck(
     },
     vars: {
       iteration: String(opts.iteration),
-      intent_path: path.join(runtime.store.goalDir, "intent.md"),
+      intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
       plans: formatPlanList(plans),
       checkout: runtime.paths.goalCheckout,
-      tasks_dir: runtime.store.tasksDir,
+      tasks_dir: runtime.store.tasks.dir,
       existing_tasks: planCheckBrief(opts.state, tasks),
       gate_record_path: gateRecord ?? "none recorded",
     },

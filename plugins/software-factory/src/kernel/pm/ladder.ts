@@ -1,10 +1,9 @@
-import path from "node:path";
 import { type AgentTurnResult, runAgentTurn } from "../agent.js";
 import { makeCause } from "../cause.js";
 import { boundaryTarget, type TurnTarget } from "../flow-context.js";
 import { holdsDir } from "../mailbox.js";
 import { KERNEL_TURN_STEPS } from "../outcome.js";
-import { formatPlanList, registeredPlans } from "../plan-file.js";
+import { formatPlanList } from "../plan-file.js";
 import { scriptMeta } from "../record.js";
 import type {
   AliasConfig,
@@ -105,7 +104,7 @@ export async function setupPmTurn(
   runtime: KernelRuntime,
   opts: { iteration: number; state: State },
 ): Promise<PmTurnSetup> {
-  const plans = registeredPlans(runtime.store.goalDir);
+  const plans = runtime.store.plans.registered();
   const snapshot = await snapshotTurn(runtime, plans);
   const plansBefore = snapshot.plans;
   const planList = formatPlanList(
@@ -308,9 +307,9 @@ export async function runPmTurn(
     meta: { iteration: opts.iteration, step: "pm", round: input.round },
     vars: {
       iteration: String(opts.iteration),
-      intent_path: path.join(runtime.store.goalDir, "intent.md"),
+      intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
       plans: input.planList,
-      tasks_dir: runtime.store.tasksDir,
+      tasks_dir: runtime.store.tasks.dir,
       existing_tasks: existingTasks(opts.state, input.tasks),
       repair: input.repair,
       steers: input.steers,

@@ -14,8 +14,6 @@ import { recordedBaseGates } from "./baseline.js";
 import {
   type ConcernAudience,
   type ContextPackInput,
-  contextDataRelPath,
-  contextPackRelPath,
   epicContextPackRelPath,
   epicSummaryRelPath,
   forwardedConcerns,
@@ -25,7 +23,6 @@ import {
   renderContextPack,
   type SpikeFinding,
   shallowCodeMap,
-  summaryRelPath,
 } from "./context-pack.js";
 import { derive, OPEN_TASK_STATUSES, openDebts } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
@@ -54,13 +51,7 @@ import {
   writeOutbox,
 } from "./mailbox.js";
 import { next } from "./next.js";
-import {
-  goalPlan,
-  type PlanFile,
-  planFilesOnDisk,
-  registeredPlans,
-  resolvePlan,
-} from "./plan-file.js";
+import { goalPlan, type PlanFile, resolvePlan } from "./plan-file.js";
 import { subarchitectDelivery } from "./hierarchy.js";
 import {
   KERNEL_TURN_STEPS,
@@ -133,23 +124,25 @@ export interface BoundaryOptions {
   digest?: boolean;
 }
 
-function previousSummary(
-  goalDir: string,
+async function previousSummary(
+  store: ArtifactStore,
   iteration: number,
-): string | undefined {
+): Promise<string | undefined> {
   if (iteration <= 0) return undefined;
-  const rel = summaryRelPath(iteration);
-  return fs.existsSync(path.join(goalDir, rel))
-    ? path.join(goalDir, rel)
-    : undefined;
+  const text = await store.iterations.read(iteration, "summary.md");
+  return text === null
+    ? undefined
+    : store.iterations.path(iteration, "summary.md");
 }
 
 /** The previous summary's waste section, so the next consult's pack carries it. */
-function previousWaste(goalDir: string, iteration: number): string | undefined {
+async function previousWaste(
+  store: ArtifactStore,
+  iteration: number,
+): Promise<string | undefined> {
   if (iteration <= 0) return undefined;
-  const file = path.join(goalDir, summaryRelPath(iteration));
-  if (!fs.existsSync(file)) return undefined;
-  return summaryWaste(fs.readFileSync(file, "utf8"));
+  const text = await store.iterations.read(iteration, "summary.md");
+  return text === null ? undefined : summaryWaste(text);
 }
 
 /** The previous iteration's summary for one epic, when it has one. */
@@ -166,11 +159,12 @@ function previousEpicSummary(
 }
 
 /** Every registered plan's text: the ownership view a debt register reads. */
-function ownedPlanText(runtime: KernelRuntime): string {
-  return registeredPlans(runtime.store.goalDir)
-    .filter((file) => fs.existsSync(file.path))
-    .map((file) => fs.readFileSync(file.path, "utf8"))
-    .join("\n");
+async function ownedPlanText(runtime: KernelRuntime): Promise<string> {
+  const plans = runtime.store.plans.existing();
+  const texts = await Promise.all(
+    plans.map((plan) => runtime.store.plans.read(plan.scope)),
+  );
+  return texts.filter((text): text is string => text !== null).join("\n");
 }
 
 function rungTrace(rungs: PmRung[]): string {
@@ -187,15 +181,10 @@ function infraCause(stop: { cause: string; details?: string }): string {
   return stop.details ? `${stop.cause}: ${stop.details}` : stop.cause;
 }
 
-async function taskSnapshot(goalDir: string): Promise<Map<string, string>> {
-  const dir = path.join(goalDir, "tasks");
-  const out = new Map<string, string>();
-  if (!fs.existsSync(dir)) return out;
-  for (const name of (await fs.promises.readdir(dir)).sort()) {
-    if (name.endsWith(".md"))
-      out.set(name, await fs.promises.readFile(path.join(dir, name), "utf8"));
-  }
-  return out;
+async function taskSnapshot(
+  store: ArtifactStore,
+): Promise<Map<string, string>> {
+  return store.tasks.texts();
 }
 
 function snapshotDiff(
@@ -224,16 +213,9 @@ async function codeMap(checkout: string): Promise<string[]> {
  * before they committed, as absolute paths the architect can drill into.
  */
 async function openRecords(store: KernelRuntime["store"]): Promise<string[]> {
-  const open: string[] = [];
-  for (const name of await store.listDir("records")) {
-    const dir = path.join(store.recordsDir, name);
-    if (
-      fs.existsSync(path.join(dir, "started.yaml")) &&
-      !fs.existsSync(path.join(dir, "end.yaml"))
-    )
-      open.push(dir);
-  }
-  return open;
+  return (await store.records.dirs())
+    .filter((dir) => dir.started && !dir.ended)
+    .map((dir) => dir.path);
 }
 
 function spikeLinkedTasks(tasks: TaskFile[], steerId: string): TaskFile[] {
@@ -528,11 +510,11 @@ async function steeredHosting(
       turn: opts.turn,
       iteration: String(opts.iteration),
       epic: row.epic,
-      intent_path: path.join(runtime.store.goalDir, "intent.md"),
+      intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
       plan_path: plan.path,
       parent_plan_path: opts.goalPlanFile.path,
       checkout: runtime.paths.goalCheckout,
-      pack_path: path.join(runtime.store.goalDir, opts.packRel),
+      pack_path: runtime.store.pathOf({ area: "goal", rel: opts.packRel }),
       digest_path: opts.digestPath ?? "",
       outcome_path: outcomePath,
     });
@@ -711,11 +693,13 @@ async function discardForeignPlanWrites(
   keepRels: readonly string[],
 ): Promise<string[]> {
   const keep = new Set(keepRels);
-  const restored = await restorePlans(snapshot, (plan) => keep.has(plan.rel));
+  const restored = await restorePlans(runtime, snapshot, (plan) =>
+    keep.has(plan.rel),
+  );
   const known = new Set(snapshot.map((entry) => entry.plan.rel));
-  for (const plan of planFilesOnDisk(runtime.store.goalDir)) {
+  for (const plan of runtime.store.plans.filesOnDisk()) {
     if (keep.has(plan.rel) || known.has(plan.rel)) continue;
-    fs.rmSync(plan.path, { force: true });
+    await runtime.store.plans.remove(plan.scope);
     restored.push(plan.rel);
   }
   return restored.sort();
@@ -762,13 +746,13 @@ async function writeEpicPack(
     goal: path.basename(runtime.paths.goalDir),
     iteration: opts.iteration,
     epic: opts.epic,
-    intentPath: path.join(runtime.store.goalDir, "intent.md"),
+    intentPath: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
     planPath: plan.path,
     checkout: runtime.paths.goalCheckout,
     integrationBranch: runtime.paths.integrationBranch,
     headHash: await integrationHead(runtime),
-    recordsDir: runtime.store.recordsDir,
-    tasksDir: runtime.store.tasksDir,
+    recordsDir: runtime.store.pathOf({ area: "records" }),
+    tasksDir: runtime.store.tasks.dir,
     previousSummary: previousEpicSummary(
       runtime.store.goalDir,
       opts.iteration - 1,
@@ -824,8 +808,11 @@ async function runEpicConsult(
   const plan = epicPlan(runtime.store.goalDir, opts.epic);
   const target = subarchitectTarget(runtime, opts.iteration);
   const planBefore = snapshotPlan(plan.path);
-  const plansBefore = snapshotPlans(planFilesOnDisk(runtime.store.goalDir));
-  const tasksBefore = await taskSnapshot(runtime.store.goalDir);
+  const plansBefore = await snapshotPlans(
+    runtime,
+    runtime.store.plans.filesOnDisk(),
+  );
+  const tasksBefore = await taskSnapshot(runtime.store);
   const session = await resumableSession(
     runtime,
     opts.records,
@@ -850,11 +837,11 @@ async function runEpicConsult(
           turn: opts.turn,
           iteration: String(opts.iteration),
           epic: opts.epic,
-          intent_path: path.join(runtime.store.goalDir, "intent.md"),
+          intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
           plan_path: plan.path,
           parent_plan_path: opts.goalPlanFile.path,
           checkout: runtime.paths.goalCheckout,
-          pack_path: path.join(runtime.store.goalDir, opts.packRel),
+          pack_path: runtime.store.pathOf({ area: "goal", rel: opts.packRel }),
           digest_path: opts.digestPath ?? "",
         },
         expectation: KERNEL_TURN_STEPS.subarchitect,
@@ -889,10 +876,7 @@ async function runEpicConsult(
       },
     );
   }
-  const touched = snapshotDiff(
-    tasksBefore,
-    await taskSnapshot(runtime.store.goalDir),
-  );
+  const touched = snapshotDiff(tasksBefore, await taskSnapshot(runtime.store));
   if (touched) {
     return {
       failure: {
@@ -962,7 +946,7 @@ export async function runBoundary(
   const plan = goalPlan(runtime.store.goalDir);
   const steers = await scanInbox(runtime.store);
   const gate = consultGate({
-    plan: fs.existsSync(plan.path),
+    plan: await runtime.store.plans.exists(),
     open: openWork(state),
     steerWaiting: steers.length > 0,
     records,
@@ -1010,11 +994,13 @@ export async function runBoundary(
         )
       : null;
   const digestPath = digestRel
-    ? path.join(runtime.store.goalDir, digestRel)
+    ? runtime.store.pathOf({ area: "goal", rel: digestRel })
     : undefined;
 
   const seenSteers = steers.map((steer) => steer.id);
-  const packRel = opts.frontPack ?? contextPackRelPath(iteration);
+  const packRel =
+    opts.frontPack ??
+    runtime.store.iterations.rel(iteration, "context-pack.md");
   const pmRoutes = collectSteerRoutes(records);
 
   // PM-handled steers never reach the architect. A `task` steer still in the
@@ -1062,8 +1048,8 @@ export async function runBoundary(
 
   if (!opts.frontPack) {
     const head = await integrationHead(runtime);
-    const previous = previousSummary(runtime.store.goalDir, iteration - 1);
-    const waste = previousWaste(runtime.store.goalDir, iteration - 1);
+    const previous = await previousSummary(runtime.store, iteration - 1);
+    const waste = await previousWaste(runtime.store, iteration - 1);
     const { holds } = await readHolds(runtime.store).catch((err) => {
       console.warn(
         `[factory] pending-steer holds unreadable: ${(err as Error).message}`,
@@ -1092,17 +1078,17 @@ export async function runBoundary(
           })
         : undefined;
     // A debt any active plan owns leaves the register, whichever architect wrote it.
-    const planText = ownedPlanText(runtime);
+    const planText = await ownedPlanText(runtime);
     const packInput: ContextPackInput = {
       goal: path.basename(runtime.paths.goalDir),
       iteration,
-      intentPath: path.join(runtime.store.goalDir, "intent.md"),
+      intentPath: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
       planPath: plan.path,
       checkout: runtime.paths.goalCheckout,
       integrationBranch: runtime.paths.integrationBranch,
       headHash: head,
-      recordsDir: runtime.store.recordsDir,
-      tasksDir: runtime.store.tasksDir,
+      recordsDir: runtime.store.pathOf({ area: "records" }),
+      tasksDir: runtime.store.tasks.dir,
       previousSummary: previous,
       previousWaste: waste,
       digestPath,
@@ -1130,8 +1116,15 @@ export async function runBoundary(
       planReview: latestPlanReview(records),
       agedReady: aged,
     };
-    const dataRel = contextDataRelPath(iteration);
-    await runtime.store.writeFile(dataRel, renderContextData(packInput));
+    const dataRel = runtime.store.iterations.rel(
+      iteration,
+      "context-data.json",
+    );
+    await runtime.store.iterations.write(
+      iteration,
+      "context-data.json",
+      renderContextData(packInput),
+    );
     // After the first iteration a cheap agent turns the full status into the
     // index. The script render is the first iteration's pack, when no front
     // wrote one, and every failed preparer's fallback.
@@ -1161,8 +1154,11 @@ export async function runBoundary(
     }
   }
 
-  const tasksBefore = await taskSnapshot(runtime.store.goalDir);
-  const plansBefore = snapshotPlans(planFilesOnDisk(runtime.store.goalDir));
+  const tasksBefore = await taskSnapshot(runtime.store);
+  const plansBefore = await snapshotPlans(
+    runtime,
+    runtime.store.plans.filesOnDisk(),
+  );
   const session = await resumableSession(
     runtime,
     records,
@@ -1211,10 +1207,10 @@ export async function runBoundary(
         vars: {
           turn,
           iteration: String(iteration),
-          intent_path: path.join(runtime.store.goalDir, "intent.md"),
+          intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
           plan_path: plan.path,
           checkout: runtime.paths.goalCheckout,
-          pack_path: path.join(runtime.store.goalDir, packRel),
+          pack_path: runtime.store.pathOf({ area: "goal", rel: packRel }),
           digest_path: digestPath ?? "",
           steers: formatSteers(forArchitect),
           depth: String(depth),
@@ -1397,10 +1393,7 @@ export async function runBoundary(
     );
   }
 
-  const touched = snapshotDiff(
-    tasksBefore,
-    await taskSnapshot(runtime.store.goalDir),
-  );
+  const touched = snapshotDiff(tasksBefore, await taskSnapshot(runtime.store));
   if (touched) {
     return {
       iteration,
@@ -1471,7 +1464,7 @@ export async function runBoundary(
   // The top architect's turn just landed; its record is part of the brief
   // each subarchitect reads, so read the log again instead of the pre-turn view.
   const consultRecords = await runtime.store.listRecords();
-  const planText = ownedPlanText(runtime);
+  const planText = await ownedPlanText(runtime);
   const consults: EpicConsult[] = [];
   for (const row of activeSubarchitects) {
     // A steered child already ran this epic's consult inside the architect's

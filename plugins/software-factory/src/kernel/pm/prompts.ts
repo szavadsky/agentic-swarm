@@ -1,4 +1,3 @@
-import path from "node:path";
 import { DEFAULT_PARK_AMENDS } from "../config.js";
 import { formatCause, makeCause } from "../cause.js";
 import type { TurnTarget } from "../flow-context.js";
@@ -126,7 +125,6 @@ export async function stallBrief(
 interface BriefFacts {
   records: StepRecord[];
   bySlug: Map<string, TaskFile>;
-  dirs: Map<number, string>;
   head: string;
   /** Amends already spent this iteration, per slug. */
   amends: Map<string, number>;
@@ -139,16 +137,10 @@ async function briefFacts(
   const tasks = await runtime.store.listTasks();
   const records = await runtime.store.listRecords();
   const bySlug = new Map(tasks.map((task) => [task.slug, task]));
-  const dirs = new Map<number, string>();
-  for (const name of await runtime.store.listDir("records")) {
-    const match = /^(\d+)-/.exec(name);
-    if (match) dirs.set(Number(match[1]), name);
-  }
   const head = await integrationHead(runtime);
   return {
     records,
     bySlug,
-    dirs,
     head,
     amends: amendsUsed(records, iteration),
   };
@@ -177,9 +169,7 @@ function slugFactLines(
         record.endedAt,
     )
     .sort((a, b) => a.seq - b.seq)
-    .map((record) => facts.dirs.get(record.seq))
-    .filter((dir): dir is string => dir !== undefined)
-    .map((dir) => path.join(runtime.store.recordsDir, dir));
+    .map((record) => runtime.store.records.dir(record));
   const used = facts.amends.get(slug) ?? 0;
   const bound = runtime.limits.parkAmends ?? DEFAULT_PARK_AMENDS;
   return [

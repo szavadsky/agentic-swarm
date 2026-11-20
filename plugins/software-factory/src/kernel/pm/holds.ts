@@ -1,7 +1,5 @@
-import fs from "node:fs";
-import path from "node:path";
 import yaml from "yaml";
-import { holdsDir, selfHeldSlugs } from "../mailbox.js";
+import { selfHeldSlugs } from "../mailbox.js";
 import type { SteerRoute } from "../types.js";
 import type { KernelRuntime, TaskFile } from "../types.js";
 
@@ -10,16 +8,20 @@ type ParsedHold =
   | { status: "bad"; message: string }
   | { status: "ok"; slugs: unknown; goal: unknown };
 
-function parseHoldFile(runtime: KernelRuntime, steerId: string): ParsedHold {
-  const dir = holdsDir(runtime.store);
-  const candidates = [`${steerId}.yaml`, `${steerId}.yml`].map((name) =>
-    path.join(dir, name),
-  );
-  const file = candidates.find((candidate) => fs.existsSync(candidate));
-  if (!file) return { status: "missing" };
+async function parseHoldFile(
+  runtime: KernelRuntime,
+  steerId: string,
+): Promise<ParsedHold> {
+  const candidates = [`${steerId}.yaml`, `${steerId}.yml`];
+  let text: string | null = null;
+  for (const name of candidates) {
+    text = await runtime.store.mailbox.read("holds", name);
+    if (text !== null) break;
+  }
+  if (text === null) return { status: "missing" };
   let parsed: unknown;
   try {
-    parsed = yaml.parse(fs.readFileSync(file, "utf8"));
+    parsed = yaml.parse(text);
   } catch (err) {
     return { status: "bad", message: (err as Error).message };
   }
@@ -30,11 +32,11 @@ function parseHoldFile(runtime: KernelRuntime, steerId: string): ParsedHold {
   return { status: "ok", slugs, goal };
 }
 
-export function stallHoldProblem(
+export async function stallHoldProblem(
   runtime: KernelRuntime,
   steerId: string,
-): string | undefined {
-  const hold = parseHoldFile(runtime, steerId);
+): Promise<string | undefined> {
+  const hold = await parseHoldFile(runtime, steerId);
   if (hold.status === "missing") {
     return `stall steer "${steerId}" has no hold file; a stall drains the goal with goal: true`;
   }
@@ -47,11 +49,11 @@ export function stallHoldProblem(
   return undefined;
 }
 
-export function architectHoldProblem(
+export async function architectHoldProblem(
   runtime: KernelRuntime,
   steerId: string,
-): string | undefined {
-  const hold = parseHoldFile(runtime, steerId);
+): Promise<string | undefined> {
+  const hold = await parseHoldFile(runtime, steerId);
   if (hold.status === "missing") return undefined;
   if (hold.status === "bad") {
     return `architect steer "${steerId}" hold is not valid YAML: ${hold.message}`;
@@ -73,12 +75,12 @@ export function architectHoldProblem(
  * until its spike task ends, and the held task never starts: the two wait on
  * each other, so the hold must be refused instead of written.
  */
-export function selfHoldProblem(
+export async function selfHoldProblem(
   runtime: KernelRuntime,
   steerId: string,
   tasks: readonly TaskFile[],
-): string | undefined {
-  const hold = parseHoldFile(runtime, steerId);
+): Promise<string | undefined> {
+  const hold = await parseHoldFile(runtime, steerId);
   if (hold.status !== "ok" || !Array.isArray(hold.slugs)) return undefined;
   const slugs = hold.slugs.filter(
     (slug): slug is string => typeof slug === "string",
@@ -88,21 +90,18 @@ export function selfHoldProblem(
   return `steer "${steerId}" hold names task(s) it creates: ${own.join(", ")}; a steer never holds its own task — leave those slugs out of the hold`;
 }
 
-export function ensureSteerHold(
+export async function ensureSteerHold(
   runtime: KernelRuntime,
   steerId: string,
   route: SteerRoute,
-): void {
-  const dir = holdsDir(runtime.store);
-  const candidates = [`${steerId}.yaml`, `${steerId}.yml`].map((name) =>
-    path.join(dir, name),
-  );
-  if (candidates.some((candidate) => fs.existsSync(candidate))) return;
-  fs.mkdirSync(dir, { recursive: true });
+): Promise<void> {
+  for (const name of [`${steerId}.yaml`, `${steerId}.yml`]) {
+    if ((await runtime.store.mailbox.read("holds", name)) !== null) return;
+  }
   const goal = route === "stall";
-  fs.writeFileSync(
-    path.join(dir, `${steerId}.yaml`),
+  await runtime.store.mailbox.write(
+    "holds",
+    `${steerId}.yaml`,
     `slugs: []\ngoal: ${goal}\n`,
-    "utf8",
   );
 }

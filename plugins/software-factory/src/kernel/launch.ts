@@ -198,8 +198,7 @@ async function resumeGate(
 }
 
 async function processedSteers(store: KernelRuntime["store"]): Promise<number> {
-  const files = await store.listDir("mailbox/processed");
-  return files.filter((f) => !f.startsWith(".")).length;
+  return (await store.mailbox.files("processed")).length;
 }
 
 /**

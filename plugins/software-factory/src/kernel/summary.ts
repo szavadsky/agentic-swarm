@@ -2,7 +2,6 @@
 import path from "node:path";
 import { recordedBaseGates } from "./baseline.js";
 import { formatCause } from "./cause.js";
-import { summaryRelPath } from "./context-pack.js";
 import { derive, materialOpenDebts } from "./derive.js";
 import { writeEpicSummaries } from "./epic-summary.js";
 import {
@@ -188,9 +187,7 @@ export async function writeIterationSummary(
           }`,
       ),
   );
-  const inbox = (await store.listDir("mailbox/inbox")).filter(
-    (name) => !name.startsWith("."),
-  );
+  const inbox = await store.mailbox.files("inbox");
   const unanswered = inbox.map(
     (file) =>
       `- steer ${path.basename(file, path.extname(file))} is still in mailbox/inbox/${file}`,
@@ -414,12 +411,13 @@ export async function writeIterationSummary(
     ...spendTable("model", modelNames),
     "",
   ];
-  const rel = summaryRelPath(iteration);
+  const rel = store.iterations.rel(iteration, "summary.md");
   const text = lines.join("\n");
-  await store.writeFile(rel, text);
+  await store.iterations.write(iteration, "summary.md", text);
   // The outbox notifies the owner; the summary itself has one copy above.
-  await store.writeFile(
-    `mailbox/outbox/iteration-${iteration}-summary.md`,
+  await store.mailbox.write(
+    "outbox",
+    `iteration-${iteration}-summary.md`,
     `${rel}\n`,
   );
   return rel;
@@ -447,7 +445,7 @@ export async function backfillSummaries(runtime: KernelRuntime): Promise<void> {
   const prices = await loadPriceTable(runtime.priceSource);
   const priceIds = runtime.configs.run.priceIds;
   for (let n = 1; n <= state.iteration; n++) {
-    if (await runtime.store.readFile(summaryRelPath(n))) continue;
+    if (await runtime.store.iterations.read(n, "summary.md")) continue;
     await writeIterationSummary(runtime.store, {
       iteration: n,
       state,

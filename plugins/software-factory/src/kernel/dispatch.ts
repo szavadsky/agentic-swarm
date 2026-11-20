@@ -15,7 +15,6 @@ import {
   planChecksSinceConsult,
   runPlanCheckRound,
 } from "./plan-check.js";
-import { existingPlans, registeredPlans } from "./plan-file.js";
 import { runStallPm, runSteerPm, STALL_ROUTES_STEP } from "./pm.js";
 import { type PriceTable, pricedRecord } from "./pricing.js";
 import { scriptMeta } from "./record.js";
@@ -854,8 +853,7 @@ export async function runDispatch(
       // Without a plan there is nothing to verify, so the front path dispatches
       // as before instead of spending a checker turn. The alias is required by
       // pre-flight, so only the plan's presence gates the turn itself.
-      const plans = existingPlans(registeredPlans(runtime.store.goalDir));
-      if (!opts.signals?.shouldStop() && plans.length > 0) {
+      if (!opts.signals?.shouldStop() && (await runtime.store.plans.exists())) {
         const checkTasks = await runtime.store.listTasks();
         const checkRecords = await runtime.store.listRecords();
         const checkState = derive(

@@ -373,7 +373,7 @@ export async function preflight(
     if (!task.tier || task.tier === "default" || configs.run.aliases[task.tier])
       continue;
     findings.push({
-      file: path.join(store.tasksDir, `${task.slug}.md`),
+      file: store.tasks.path(task.slug),
       key: "tier",
       message: `tier "${task.tier}" names no run-config alias`,
     });

@@ -8,19 +8,34 @@ import {
   writeTextAtomic,
   writeYamlAtomic,
 } from "../core/records/io.js";
-import { terminalFactFromRecords } from "./derive-task.js";
 import { readCause } from "./cause.js";
 import { makeCause } from "./cause.js";
+import {
+  existingPlans,
+  goalPlan,
+  planFilesOnDisk,
+  type PlanScope,
+  registeredPlans,
+  resolvePlan,
+} from "./plan-file.js";
 import { parseTaskFile, renderTaskFile, TaskFileError } from "./tasks.js";
 import {
+  ArtifactRef,
   ArtifactStore,
   DeclaredWrite,
+  IterationStore,
+  MailboxQueue,
+  MailboxStore,
+  PlanStore,
+  RecordDir,
   RecordEnd,
   RecordStart,
+  RecordStore,
   StepRecord,
   TaskFile,
   TaskFileFinding,
   TaskStatus,
+  TaskStore,
   TaskTypeDefinition,
   TurnRecord,
 } from "./types.js";
@@ -212,6 +227,11 @@ class FolderStore implements ArtifactStore {
   readonly recordsDir: string;
   readonly mailboxDir: string;
   readonly iterationsDir: string;
+  readonly records: RecordStore;
+  readonly tasks: TaskStore;
+  readonly plans: PlanStore;
+  readonly mailbox: MailboxStore;
+  readonly iterations: IterationStore;
   /** Directory holding all goals; its `.gitignore` keeps records out of git. */
   private readonly artifactRoot?: string;
   /** Process task types; a file naming one resolves its flow and kind here. */
@@ -233,6 +253,118 @@ class FolderStore implements ArtifactStore {
     this.iterationsDir = path.join(goalDir, "iterations");
     this.artifactRoot = artifactRoot;
     this.taskTypes = taskTypes;
+    this.records = this.recordArea();
+    this.tasks = this.taskArea();
+    this.plans = this.planArea();
+    this.mailbox = this.mailboxArea();
+    this.iterations = this.iterationArea();
+  }
+
+  pathOf(ref: ArtifactRef): string {
+    const root =
+      ref.area === "records"
+        ? this.recordsDir
+        : ref.area === "tasks"
+          ? this.tasksDir
+          : ref.area === "mailbox"
+            ? this.mailboxDir
+            : ref.area === "iterations"
+              ? this.iterationsDir
+              : this.goalDir;
+    return ref.rel === undefined || ref.rel === ""
+      ? root
+      : path.join(root, ref.rel);
+  }
+
+  async localPath(ref: ArtifactRef): Promise<string> {
+    const file = this.pathOf(ref);
+    await fs.promises.mkdir(path.dirname(file), { recursive: true });
+    return file;
+  }
+
+  private recordArea(): RecordStore {
+    return {
+      dir: (record) => this.recordDirOf(record),
+      file: (record, name) => path.join(this.recordDirOf(record), name),
+      checksLog: (record) =>
+        path.join(
+          this.recordsDir,
+          String(record.iteration),
+          record.slug ?? "unknown",
+          record.step,
+        ),
+      dirs: () => this.recordDirs(),
+      list: () => this.listRecords(),
+      start: (meta) => this.startRecord(meta),
+      append: (meta, end) => this.appendRecord(meta, end),
+      close: (name, end) => this.closeRecord(name, end),
+      seal: (name) => sealRecord(path.join(this.recordsDir, name)),
+    };
+  }
+
+  private taskArea(): TaskStore {
+    return {
+      dir: this.tasksDir,
+      path: (slug) => path.join(this.tasksDir, `${slug}.md`),
+      texts: () => this.taskTexts(),
+      list: () => this.listTasks(),
+      read: (slug) => this.readTask(slug),
+      write: (task) => this.writeTask(task),
+      writeText: (slug, text) => this.writeTaskText(slug, text),
+      restore: (before) => this.restoreTasks(before),
+      findings: () => this.scanTaskFindings(),
+      sweep: (iteration) => this.sweepTasks(iteration),
+    };
+  }
+
+  private planArea(): PlanStore {
+    const file = (scope: PlanScope) => resolvePlan(this.goalDir, scope);
+    return {
+      path: goalPlan(this.goalDir).path,
+      registered: () => registeredPlans(this.goalDir),
+      existing: () => existingPlans(registeredPlans(this.goalDir)),
+      filesOnDisk: () => planFilesOnDisk(this.goalDir),
+      read: (scope = { kind: "goal" }) => this.readFile(file(scope).rel),
+      exists: async (scope = { kind: "goal" }) =>
+        fs.existsSync(file(scope).path),
+      write: (scope, text) => this.writeFile(file(scope).rel, text),
+      remove: (scope = { kind: "goal" }) =>
+        this.removeGoalFile(file(scope).rel),
+    };
+  }
+
+  private mailboxArea(): MailboxStore {
+    const dir = (queue: MailboxQueue): string =>
+      path.join(this.mailboxDir, queue);
+    return {
+      holds: dir("holds"),
+      quarantine: dir("quarantine"),
+      rel: (queue, name) =>
+        name === undefined ? `mailbox/${queue}` : `mailbox/${queue}/${name}`,
+      read: (queue, name) => this.readOptional(path.join(dir(queue), name)),
+      write: (queue, name, text) =>
+        this.writeFile(`mailbox/${queue}/${name}`, text),
+      publish: (name, text) => this.publishSteer(name, text),
+      move: (from, fromName, to, toName) =>
+        this.moveMailbox(from, fromName, to, toName),
+      remove: (queue, name) => this.removeGoalFile(`mailbox/${queue}/${name}`),
+      files: (queue) => this.mailboxFiles(queue),
+      sizes: (queue) => this.mailboxSizes(queue),
+    };
+  }
+
+  private iterationArea(): IterationStore {
+    return {
+      rel: (iteration, file) => `iterations/${iteration}/${file}`,
+      path: (iteration, file) =>
+        path.join(this.iterationsDir, String(iteration), file),
+      read: (iteration, file) =>
+        this.readOptional(
+          path.join(this.iterationsDir, String(iteration), file),
+        ),
+      write: (iteration, file, text) =>
+        this.writeFile(`iterations/${iteration}/${file}`, text),
+    };
   }
 
   async ensureLayout(): Promise<void> {
@@ -273,12 +405,7 @@ class FolderStore implements ArtifactStore {
   }
 
   async readFile(rel: string): Promise<string | null> {
-    try {
-      return await readText(path.join(this.goalDir, rel));
-    } catch (err) {
-      if (isENOENT(err)) return null;
-      throw err;
-    }
+    return this.readOptional(path.join(this.goalDir, rel));
   }
 
   /**
@@ -318,11 +445,7 @@ class FolderStore implements ArtifactStore {
 
   async listTasks(): Promise<TaskFile[]> {
     const tasks: TaskFile[] = [];
-    for (const name of await this.listDir("tasks")) {
-      if (!name.endsWith(".md")) continue;
-      const slug = name.slice(0, -".md".length);
-      const text = await this.readFile(`tasks/${name}`);
-      if (text === null) continue;
+    for (const [slug, text] of await this.taskTexts()) {
       try {
         tasks.push(parseTaskFile(text, slug, this.taskTypes));
       } catch (err) {
@@ -332,20 +455,26 @@ class FolderStore implements ArtifactStore {
     return tasks.sort((a, b) => a.slug.localeCompare(b.slug));
   }
 
-  async scanTaskFindings(): Promise<TaskFileFinding[]> {
-    const findings: TaskFileFinding[] = [];
+  private async taskTexts(): Promise<Map<string, string>> {
+    const texts = new Map<string, string>();
     for (const name of await this.listDir("tasks")) {
       if (!name.endsWith(".md")) continue;
-      const slug = name.slice(0, -".md".length);
       const text = await this.readFile(`tasks/${name}`);
-      if (text === null) continue;
+      if (text !== null) texts.set(name.slice(0, -".md".length), text);
+    }
+    return texts;
+  }
+
+  async scanTaskFindings(): Promise<TaskFileFinding[]> {
+    const findings: TaskFileFinding[] = [];
+    for (const [slug, text] of await this.taskTexts()) {
       try {
         parseTaskFile(text, slug, this.taskTypes);
       } catch (err) {
         if (!(err instanceof TaskFileError)) throw err;
         findings.push({
           slug,
-          file: `tasks/${name}`,
+          file: `tasks/${slug}.md`,
           kind: err.kind,
           reason: err.message,
         });
@@ -489,15 +618,94 @@ class FolderStore implements ArtifactStore {
   }
 
   async writeTask(task: TaskFile): Promise<void> {
-    const write = this.declare(`tasks/${task.slug}.md`);
+    await this.writeTaskText(task.slug, renderTaskFile(task));
+  }
+
+  private async writeTaskText(slug: string, text: string): Promise<void> {
+    const write = this.declare(`tasks/${slug}.md`);
     try {
-      await writeTextAtomic(
-        path.join(this.tasksDir, `${task.slug}.md`),
-        renderTaskFile(task),
-      );
+      await writeTextAtomic(path.join(this.tasksDir, `${slug}.md`), text);
     } finally {
       write.endedAt = new Date().toISOString();
     }
+  }
+
+  /**
+   * Restores the task files a turn changed, byte for byte, and deletes the
+   * files it created. Names the slugs it put back.
+   */
+  private async restoreTasks(before: Map<string, string>): Promise<string[]> {
+    const texts = await this.taskTexts();
+    const changed = new Set<string>();
+    for (const [slug, original] of before) {
+      if (texts.get(slug) === original) continue;
+      await this.writeTaskText(slug, original);
+      changed.add(slug);
+    }
+    for (const slug of texts.keys()) {
+      if (before.has(slug)) continue;
+      await this.removeGoalFile(`tasks/${slug}.md`);
+      changed.add(slug);
+    }
+    return [...changed].sort();
+  }
+
+  /** Deletes a goal-relative file as a declared kernel write; absent is a no-op. */
+  private async removeGoalFile(rel: string): Promise<void> {
+    const write = this.declare(rel);
+    try {
+      await fs.promises.rm(path.join(this.goalDir, rel), { force: true });
+    } finally {
+      write.endedAt = new Date().toISOString();
+    }
+  }
+
+  /** Reads an absolute path; null when absent. */
+  private async readOptional(file: string): Promise<string | null> {
+    try {
+      return await readText(file);
+    } catch (err) {
+      if (isENOENT(err)) return null;
+      throw err;
+    }
+  }
+
+  private recordDirOf(record: StepRecord): string {
+    return path.join(this.recordsDir, recordDirName(record.seq, record));
+  }
+
+  private async recordDirs(): Promise<RecordDir[]> {
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.promises.readdir(this.recordsDir, {
+        withFileTypes: true,
+      });
+    } catch (err) {
+      if (isENOENT(err)) return [];
+      throw err;
+    }
+    return entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort()
+      .map((name) => {
+        const dir = path.join(this.recordsDir, name);
+        return {
+          name,
+          path: dir,
+          started: fs.existsSync(path.join(dir, "started.yaml")),
+          ended: fs.existsSync(path.join(dir, "end.yaml")),
+        };
+      });
+  }
+
+  private async closeRecord(name: string, end: RecordEnd): Promise<void> {
+    const dir = path.join(this.recordsDir, name);
+    await writeYamlAtomic(path.join(dir, "end.yaml"), {
+      ...end,
+      endedAt: new Date().toISOString(),
+    });
+    await sealRecord(dir);
   }
 
   private async nextSeq(): Promise<number> {
@@ -581,6 +789,99 @@ class FolderStore implements ArtifactStore {
       records.push(loaded.record);
     }
     return records.sort((a, b) => a.seq - b.seq);
+  }
+
+  /**
+   * A steer is published the way every writer must: a private file on the same
+   * filesystem, then a rename, so a reader never sees a partial inbox file.
+   */
+  private async publishSteer(name: string, text: string): Promise<void> {
+    const tmp = path.join(this.mailboxDir, ".tmp");
+    await fs.promises.mkdir(tmp, { recursive: true });
+    const temp = path.join(
+      tmp,
+      `${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`,
+    );
+    await fs.promises.writeFile(temp, text, "utf8");
+    const target = path.join(this.mailboxDir, "inbox", name);
+    const write = this.declare(`mailbox/inbox/${name}`);
+    try {
+      await fs.promises.mkdir(path.dirname(target), { recursive: true });
+      await fs.promises.rename(temp, target);
+    } finally {
+      write.endedAt = new Date().toISOString();
+    }
+  }
+
+  private async moveMailbox(
+    from: MailboxQueue,
+    fromName: string,
+    to: MailboxQueue,
+    toName: string,
+  ): Promise<boolean> {
+    const source = path.join(this.mailboxDir, from, fromName);
+    const target = path.join(this.mailboxDir, to, toName);
+    const removed = this.declare(`mailbox/${from}/${fromName}`);
+    const created = this.declare(`mailbox/${to}/${toName}`);
+    try {
+      await fs.promises.mkdir(path.dirname(target), { recursive: true });
+      await fs.promises.rename(source, target);
+      return true;
+    } catch (err) {
+      // A concurrent reader moved it first; the caller has nothing left to do.
+      if (isENOENT(err)) return false;
+      throw err;
+    } finally {
+      const endedAt = new Date().toISOString();
+      removed.endedAt = endedAt;
+      created.endedAt = endedAt;
+    }
+  }
+
+  private async mailboxFiles(queue: MailboxQueue): Promise<string[]> {
+    return [...(await this.mailboxSizes(queue)).keys()];
+  }
+
+  private async mailboxSizes(
+    queue: MailboxQueue,
+  ): Promise<Map<string, number>> {
+    const dir = path.join(this.mailboxDir, queue);
+    const sizes = new Map<string, number>();
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch (err) {
+      if (isENOENT(err)) return sizes;
+      throw err;
+    }
+    for (const entry of entries) {
+      if (!entry.isFile() || entry.name.startsWith(".")) continue;
+      try {
+        sizes.set(
+          entry.name,
+          (await fs.promises.stat(path.join(dir, entry.name))).size,
+        );
+      } catch (err) {
+        if (!isENOENT(err)) throw err;
+      }
+    }
+    return new Map([...sizes.entries()].sort(([a], [b]) => a.localeCompare(b)));
+  }
+}
+
+/**
+ * A goal-root file no area owns, such as a pre-canonical spike's `finish/`
+ * copy. The backend owns the goal's layout; the caller names the file.
+ */
+export async function readGoalFile(
+  goalDir: string,
+  rel: string,
+): Promise<string | null> {
+  try {
+    return await readText(path.join(goalDir, rel));
+  } catch (err) {
+    if (isENOENT(err)) return null;
+    throw err;
   }
 }
 

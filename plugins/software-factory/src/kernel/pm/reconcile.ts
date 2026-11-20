@@ -1,6 +1,3 @@
-import fs from "node:fs";
-import path from "node:path";
-import { writeTextAtomic } from "../../core/records/io.js";
 import { makeCause } from "../cause.js";
 import {
   planCheckProvenance,
@@ -23,22 +20,6 @@ import type {
   TaskTypeDefinition,
 } from "../types.js";
 
-function taskPath(runtime: KernelRuntime, slug: string): string {
-  return path.join(runtime.store.tasksDir, `${slug}.md`);
-}
-
-async function readTaskTexts(
-  runtime: KernelRuntime,
-): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  for (const name of await runtime.store.listDir("tasks")) {
-    if (!name.endsWith(".md")) continue;
-    const text = await runtime.store.readFile(`tasks/${name}`);
-    if (text !== null) out.set(name.slice(0, -".md".length), text);
-  }
-  return out;
-}
-
 /** One plan and its bytes before a turn; an absent plan is restored by deleting it. */
 export interface PlanSnapshot {
   plan: PlanFile;
@@ -55,19 +36,20 @@ export interface TurnSnapshot {
 async function snapshotTasks(
   runtime: KernelRuntime,
 ): Promise<Map<string, string>> {
-  return readTaskTexts(runtime);
+  return runtime.store.tasks.texts();
 }
 
 /** Each plan's bytes before a turn; an absent plan is restored by deleting it. */
-export function snapshotPlans(plans: readonly PlanFile[]): PlanSnapshot[] {
-  return plans.map((plan) => {
-    const exists = fs.existsSync(plan.path);
-    return {
-      plan,
-      exists,
-      text: exists ? fs.readFileSync(plan.path, "utf8") : "",
-    };
-  });
+export async function snapshotPlans(
+  runtime: KernelRuntime,
+  plans: readonly PlanFile[],
+): Promise<PlanSnapshot[]> {
+  return Promise.all(
+    plans.map(async (plan) => {
+      const text = await runtime.store.plans.read(plan.scope);
+      return { plan, exists: text !== null, text: text ?? "" };
+    }),
+  );
 }
 
 export async function snapshotTurn(
@@ -75,7 +57,7 @@ export async function snapshotTurn(
   plans: readonly PlanFile[],
 ): Promise<TurnSnapshot> {
   return {
-    plans: snapshotPlans(plans),
+    plans: await snapshotPlans(runtime, plans),
     tasks: await snapshotTasks(runtime),
   };
 }
@@ -89,21 +71,7 @@ export async function restoreTasks(
   runtime: KernelRuntime,
   before: Map<string, string>,
 ): Promise<string[]> {
-  const texts = await readTaskTexts(runtime);
-  const changed = new Set<string>();
-  for (const [slug, original] of before) {
-    if (texts.get(slug) !== original) {
-      await writeTextAtomic(taskPath(runtime, slug), original);
-      changed.add(slug);
-    }
-  }
-  for (const slug of texts.keys()) {
-    if (!before.has(slug)) {
-      fs.rmSync(taskPath(runtime, slug), { force: true });
-      changed.add(slug);
-    }
-  }
-  return [...changed].sort();
+  return runtime.store.tasks.restore(before);
 }
 
 /**
@@ -113,21 +81,21 @@ export async function restoreTasks(
  * rather than left behind as an empty file.
  */
 export async function restorePlans(
+  runtime: KernelRuntime,
   snapshot: readonly PlanSnapshot[],
   keep?: (plan: PlanFile) => boolean,
 ): Promise<string[]> {
   const plans: string[] = [];
   for (const before of snapshot) {
     if (keep?.(before.plan)) continue;
-    const existsNow = fs.existsSync(before.plan.path);
-    const textNow = existsNow ? fs.readFileSync(before.plan.path, "utf8") : "";
+    const textNow = await runtime.store.plans.read(before.plan.scope);
     if (!before.exists) {
-      if (existsNow) {
-        fs.rmSync(before.plan.path, { force: true });
+      if (textNow !== null) {
+        await runtime.store.plans.remove(before.plan.scope);
         plans.push(before.plan.rel);
       }
-    } else if (!existsNow || textNow !== before.text) {
-      await writeTextAtomic(before.plan.path, before.text);
+    } else if (textNow !== before.text) {
+      await runtime.store.plans.write(before.plan.scope, before.text);
       plans.push(before.plan.rel);
     }
   }
@@ -144,7 +112,7 @@ export async function restoreTurn(
   snapshot: TurnSnapshot,
 ): Promise<{ plans: string[]; tasks: string[] }> {
   return {
-    plans: await restorePlans(snapshot.plans),
+    plans: await restorePlans(runtime, snapshot.plans),
     tasks: await restoreTasks(runtime, snapshot.tasks),
   };
 }
@@ -218,8 +186,8 @@ async function reconcile(
   plansBefore: readonly PlanSnapshot[],
   taskSnapshot: Map<string, string>,
 ): Promise<string[]> {
-  const findings = await planRestoreFindings(plansBefore);
-  const texts = await readTaskTexts(runtime);
+  const findings = await planRestoreFindings(runtime, plansBefore);
+  const texts = await runtime.store.tasks.texts();
   findings.push(
     ...(await frozenTaskFindings(runtime, opts.state, taskSnapshot, texts)),
   );
@@ -240,21 +208,21 @@ async function reconcile(
 
 /** Restores every plan the turn edited or created and names what it restored. */
 async function planRestoreFindings(
+  runtime: KernelRuntime,
   plansBefore: readonly PlanSnapshot[],
 ): Promise<string[]> {
   const findings: string[] = [];
   for (const before of plansBefore) {
-    const existsNow = fs.existsSync(before.plan.path);
-    const textNow = existsNow ? fs.readFileSync(before.plan.path, "utf8") : "";
+    const textNow = await runtime.store.plans.read(before.plan.scope);
     if (!before.exists) {
-      if (existsNow) {
-        fs.rmSync(before.plan.path, { force: true });
+      if (textNow !== null) {
+        await runtime.store.plans.remove(before.plan.scope);
         findings.push(
           `${before.plan.rel} was created during the PM turn; removed: only the architect edits the plan`,
         );
       }
-    } else if (!existsNow || textNow !== before.text) {
-      await writeTextAtomic(before.plan.path, before.text);
+    } else if (textNow !== before.text) {
+      await runtime.store.plans.write(before.plan.scope, before.text);
       findings.push(
         `${before.plan.rel} changed during the PM turn; restored: only the architect edits the plan`,
       );
@@ -283,7 +251,7 @@ async function frozenTaskFindings(
       continue;
     }
     if (now === original) continue;
-    await writeTextAtomic(taskPath(runtime, slug), original);
+    await runtime.store.tasks.writeText(slug, original);
     findings.push(
       `frozen task "${slug}" was edited; restored: merged work is history, rework needs a new slug`,
     );
@@ -303,7 +271,7 @@ async function cancelledTaskFindings(
     const original = taskSnapshot.get(slug);
     if (original === undefined) continue;
     if (texts.get(slug) === original) continue;
-    await writeTextAtomic(taskPath(runtime, slug), original);
+    await runtime.store.tasks.writeText(slug, original);
     findings.push(
       `cancelled task "${slug}" was edited; restored: a spent slug cannot be reused`,
     );
@@ -333,7 +301,7 @@ async function deletedTaskFindings(
     } catch {
       continue;
     }
-    await writeTextAtomic(taskPath(runtime, slug), original);
+    await runtime.store.tasks.writeText(slug, original);
     findings.push(deletionFinding(slug, source));
   }
   return findings;
@@ -368,7 +336,7 @@ export async function graphFindings(
 ): Promise<string[]> {
   const findings = await reconcile(runtime, opts, plansBefore, taskSnapshot);
   const { tasks, findings: parseFindings } = parseTasks(
-    await readTaskTexts(runtime),
+    await runtime.store.tasks.texts(),
     runtime.configs.process.taskTypes,
   );
   findings.push(...parseFindings);
@@ -449,7 +417,7 @@ export async function readTasks(runtime: KernelRuntime): Promise<{
   findings: string[];
 }> {
   return parseTasks(
-    await readTaskTexts(runtime),
+    await runtime.store.tasks.texts(),
     runtime.configs.process.taskTypes,
   );
 }
@@ -474,7 +442,7 @@ export async function reconcileTurn(
   taskSnapshot: Map<string, string>,
 ): Promise<ReconciledTurn> {
   const findings = await reconcile(runtime, opts, plansBefore, taskSnapshot);
-  const texts = await readTaskTexts(runtime);
+  const texts = await runtime.store.tasks.texts();
   const { tasks, findings: parseFindings } = parseTasks(
     texts,
     runtime.configs.process.taskTypes,

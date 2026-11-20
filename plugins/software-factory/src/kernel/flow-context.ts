@@ -16,7 +16,6 @@ import {
   recordedBaseGates,
 } from "./baseline.js";
 import { makeCause } from "./cause.js";
-import { contextPackRelPath } from "./context-pack.js";
 import { formatFailingChecks, newGateFailures } from "./gates.js";
 import { launchKindOf } from "./metrics.js";
 import { taskOutcomeSchema } from "./outcome-schemas.js";
@@ -129,7 +128,7 @@ export class FrontClassError extends Error {
 
 /** The goal's front classification; null when the front has not run yet. */
 export function readFrontClass(runtime: KernelRuntime): FrontClass | null {
-  const file = path.join(runtime.store.goalDir, CLASS_FILE);
+  const file = runtime.store.pathOf({ area: "goal", rel: CLASS_FILE });
   if (!fs.existsSync(file)) return null;
   let raw: unknown;
   try {
@@ -714,7 +713,7 @@ export function standaloneUpscopeAsk(
 
 /** Rewrites the front class to bigger so the next launch runs the architect. */
 export function escalateFrontClassToBigger(runtime: KernelRuntime): void {
-  const file = path.join(runtime.store.goalDir, CLASS_FILE);
+  const file = runtime.store.pathOf({ area: "goal", rel: CLASS_FILE });
   fs.writeFileSync(file, yaml.stringify({ class: "bigger" }), "utf8");
 }
 
@@ -730,7 +729,7 @@ function frontPack(
   if (!frontTaskClass(runtime, task)) return undefined;
   const front = lastFrontRecord(records);
   if (!front) return undefined;
-  return path.join(runtime.store.goalDir, contextPackRelPath(front.iteration));
+  return runtime.store.iterations.path(front.iteration, "context-pack.md");
 }
 
 /**
@@ -1113,7 +1112,7 @@ export function promptVars(
   }
 
   return {
-    task_path: `${runtime.store.tasksDir}/${task.slug}.md`,
+    task_path: runtime.store.tasks.path(task.slug),
     worktree,
     // Where a spike commits its finding; empty for every other task.
     report_path: task.kind === "spike" ? spikeReportPath(task.slug) : "",
@@ -1129,12 +1128,7 @@ export function promptVars(
       : CHECK_HANDOFF_DEFAULTS.checks_result,
     checks_tree: checks?.tree ?? CHECK_HANDOFF_DEFAULTS.checks_tree,
     checks_log: checks
-      ? path.join(
-          runtime.store.recordsDir,
-          checks.iteration.toString(),
-          checks.slug ?? "unknown",
-          checks.step,
-        )
+      ? runtime.store.records.checksLog(checks)
       : CHECK_HANDOFF_DEFAULTS.checks_log,
     round: String(round),
     base_hash: "",

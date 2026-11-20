@@ -405,7 +405,7 @@ export async function readStatus(store: ArtifactStore): Promise<string | null> {
     JSON.parse(text);
   } catch (err) {
     throw new Error(
-      `${path.join(store.goalDir, STATUS_REL_PATH)} is not valid JSON: ${(err as Error).message}`,
+      `${store.pathOf({ area: "goal", rel: STATUS_REL_PATH })} is not valid JSON: ${(err as Error).message}`,
     );
   }
   return text;
