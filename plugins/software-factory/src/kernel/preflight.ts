@@ -144,9 +144,11 @@ function escalationFindings(
 /**
  * A fallback may name another alias, so its ladder is that alias's chain. A
  * missing name or a cycle would only fail while resolving a turn, after the
- * plan spent, so pre-flight refuses either here.
+ * plan spent, so pre-flight refuses either here. Every alias is a walk root,
+ * so an edge another root already reached is walked again; key and message
+ * identify it, and it is reported once.
  */
-function fallbackAliasFindings(
+export function fallbackAliasFindings(
   aliases: Record<string, AliasConfig>,
   file: string,
 ): Finding[] {
@@ -179,7 +181,11 @@ function fallbackAliasFindings(
     }
   };
   for (const name of Object.keys(aliases)) walk(name, [name]);
-  return findings;
+  const unique = new Map<string, Finding>();
+  for (const finding of findings) {
+    unique.set(`${finding.key}\u0000${finding.message}`, finding);
+  }
+  return [...unique.values()];
 }
 
 /**

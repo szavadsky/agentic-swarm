@@ -16,6 +16,7 @@ import {
   resolveGoalPaths,
 } from "../../src/kernel/config.js";
 import {
+  fallbackAliasFindings,
   type ModelCatalog,
   PreflightError,
   type PreflightInput,
@@ -1277,6 +1278,41 @@ harnesses:
     } finally {
       f.repo.cleanup();
     }
+  });
+
+  it("reports a shared missing fallback target once per edge", () => {
+    const findings = fallbackAliasFindings(
+      {
+        implementer: {
+          harness: "fake",
+          model: "impl",
+          fallbacks: [{ alias: "reviewer" }],
+        },
+        reviewer: {
+          harness: "fake",
+          model: "rev",
+          fallbacks: [{ alias: "ghost" }],
+        },
+        qa: {
+          harness: "fake",
+          model: "qa",
+          fallbacks: [{ alias: "ghost" }],
+        },
+      },
+      "run.yaml",
+    );
+    expect(findings).toEqual([
+      {
+        file: "run.yaml",
+        key: "aliases.reviewer.fallbacks.0.alias",
+        message: 'fallback alias "ghost" names no run-config alias',
+      },
+      {
+        file: "run.yaml",
+        key: "aliases.qa.fallbacks.0.alias",
+        message: 'fallback alias "ghost" names no run-config alias',
+      },
+    ]);
   });
 
   it("accepts a fallback that reuses another alias's ladder", async () => {
