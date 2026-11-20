@@ -28,6 +28,26 @@ import type { RecordedOutcome } from "./types.js";
 
 const RECORD_DIR = /^(\d{5})-/;
 
+/**
+ * Parsed records by absolute record directory, kept for the process: a record
+ * with a committed `end.yaml` is sealed history (`record-seal`), so its parse
+ * never changes again. Every dispatch pass lists the same directories; without
+ * this each pass re-read and re-parsed the whole history.
+ *
+ * `sealRecord`/`unsealRecord` drop the entry, so the kernel's own rewrite of a
+ * sealed record is read fresh. A record read before its end lands is not
+ * cached; the read after the seal caches it.
+ */
+const sealedRecords = new Map<string, StepRecord>();
+
+function recordCacheKey(dir: string): string {
+  return path.resolve(dir);
+}
+
+function forgetSealedRecord(dir: string): void {
+  sealedRecords.delete(recordCacheKey(dir));
+}
+
 function isENOENT(err: unknown): boolean {
   return (err as NodeJS.ErrnoException).code === "ENOENT";
 }
@@ -114,11 +134,13 @@ async function chmodRecord(dir: string, mode: number): Promise<void> {
  */
 export async function sealRecord(dir: string): Promise<void> {
   await chmodRecord(dir, 0o444);
+  forgetSealedRecord(dir);
 }
 
 /** Reopen a sealed record for a kernel-owned rewrite; seal it after. */
 export async function unsealRecord(dir: string): Promise<void> {
   await chmodRecord(dir, 0o644);
+  forgetSealedRecord(dir);
 }
 
 /**
@@ -131,6 +153,57 @@ function isTerminalHistory(
   status: TaskStatus | null,
 ): status is "merged" | "finished" | "cancelled" {
   return status === "merged" || status === "finished" || status === "cancelled";
+}
+
+/**
+ * A record file that is absent or torn reads as `undefined`: a torn write must
+ * degrade to an orphan, never kill the launch. Any other error propagates.
+ */
+async function readOptionalYaml(file: string): Promise<unknown> {
+  try {
+    return await readYaml(file);
+  } catch (err) {
+    if (
+      isENOENT(err) ||
+      (err instanceof Error && err.name === "YAMLParseError")
+    )
+      return undefined;
+    throw err;
+  }
+}
+
+/**
+ * One record directory's record; null when the directory is not a record.
+ * `sealed` means `end.yaml` committed: the parse is safe to keep.
+ */
+async function readRecordDir(
+  dir: string,
+  name: string,
+): Promise<{ record: StepRecord; sealed: boolean } | null> {
+  const started = await readOptionalYaml(path.join(dir, "started.yaml"));
+  if (!isPlainObject(started) || typeof started.seq !== "number") return null;
+  // end.yaml is script-written; outcome.yaml is agent-written and may be
+  // truncated or malformed — the turn's repair flow owns that, not rehydration.
+  const end = await readOptionalYaml(path.join(dir, "end.yaml"));
+  const delivered = await readOptionalYaml(path.join(dir, "outcome.yaml"));
+  const ended = (end ?? {}) as RecordEnd & { endedAt?: string };
+  const record: StepRecord = {
+    ...(started as unknown as StepRecord),
+    ...ended,
+  };
+  // Old records store a message; this is the one ingest point that turns it
+  // into a typed cause. A typed cause passes through unchanged.
+  record.cause = readCause(ended.cause);
+  // Script steps carry their outcome in end.yaml; an agent's own
+  // outcome.yaml wins when both exist.
+  const stored = delivered ?? record.outcome;
+  if (stored !== undefined) {
+    record.outcome = normalizeOutcome(stored, name);
+  }
+  return {
+    record,
+    sealed: isPlainObject(end) && typeof end.endedAt === "string",
+  };
 }
 
 class FolderStore implements ArtifactStore {
@@ -495,56 +568,17 @@ class FolderStore implements ArtifactStore {
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const dir = path.join(this.recordsDir, entry.name);
-      let started: unknown;
-      try {
-        started = await readYaml(path.join(dir, "started.yaml"));
-      } catch (err) {
-        // A directory without a usable started.yaml is not a record.
-        if (
-          isENOENT(err) ||
-          (err instanceof Error && err.name === "YAMLParseError")
-        )
-          continue;
-        throw err;
+      const cached = sealedRecords.get(recordCacheKey(dir));
+      if (cached) {
+        records.push(cached);
+        continue;
       }
-      if (!isPlainObject(started) || typeof started.seq !== "number") continue;
-      const base = started as unknown as StepRecord;
-      // end.yaml is script-written but a torn write must degrade to an orphan,
-      // never kill the launch; outcome.yaml is agent-written and may be
-      // truncated or malformed — the turn's repair flow owns that, not rehydration.
-      let end: RecordEnd & { endedAt?: string } = {};
-      try {
-        end = (await readYaml(path.join(dir, "end.yaml"))) as RecordEnd & {
-          endedAt?: string;
-        };
-      } catch (err) {
-        if (
-          !isENOENT(err) &&
-          !(err instanceof Error && err.name === "YAMLParseError")
-        )
-          throw err;
+      const loaded = await readRecordDir(dir, entry.name);
+      if (loaded === null) continue;
+      if (loaded.sealed) {
+        sealedRecords.set(recordCacheKey(dir), loaded.record);
       }
-      let delivered: unknown;
-      try {
-        delivered = await readYaml(path.join(dir, "outcome.yaml"));
-      } catch (err) {
-        if (
-          !isENOENT(err) &&
-          !(err instanceof Error && err.name === "YAMLParseError")
-        )
-          throw err;
-      }
-      const record: StepRecord = { ...base, ...end };
-      // Old records store a message; this is the one ingest point that turns
-      // it into a typed cause. A typed cause passes through unchanged.
-      record.cause = readCause((end as { cause?: unknown }).cause);
-      // Script steps carry their outcome in end.yaml; an agent's own
-      // outcome.yaml wins when both exist.
-      const stored = delivered ?? record.outcome;
-      if (stored !== undefined) {
-        record.outcome = normalizeOutcome(stored, entry.name);
-      }
-      records.push(record);
+      records.push(loaded.record);
     }
     return records.sort((a, b) => a.seq - b.seq);
   }
