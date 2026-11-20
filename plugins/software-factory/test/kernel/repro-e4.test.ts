@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -77,118 +76,139 @@ describe("repro E4: first signal does not stop dispatch admission", () => {
     const originalWarn = console.warn;
     console.warn = () => {};
     try {
-      // Bind every harness turn by step: the plan flow gained plan-review and
-      // PM turns, and a positional script queue would let one of them consume
-      // the handler that raises the signal before dispatch ever runs.
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script(
-        (req, ctx) => {
-          fs.writeFileSync(path.join(s.goalDir, "plan.md"), PLAN, "utf8");
-          ctx.writeOutcome(
-            outcome({ summary: "planned", decision: "continue" }),
-          );
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ step: "architect" }) },
+      const scope1 = await drainsAfterFirstSignalRaisedInsidePart1(s);
+      const scope2 = await drainsAfterFirstSignalRaisedInsidePart2(
+        s,
+        controller,
+        scope1,
       );
-      harness.script(
-        (req, ctx) => {
-          ctx.writeOutcome(
-            outcome({
-              summary: "plan reviewed",
-              planReview: { technical: [], planNotes: [] },
-            }),
-          );
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ step: "planreview" }) },
-      );
-      harness.script(
-        (req, ctx) => {
-          writeTasks(s.taskDir);
-          ctx.writeOutcome(outcome({ summary: "filed" }));
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ step: "pm" }) },
-      );
-
-      // The default flow's QA acceptance needs a neutral handler; the test
-      // scripts the implementer and reviewer it asserts on.
-      harness.script(
-        (_req, ctx) => {
-          ctx.writeOutcome(
-            outcome({ summary: "qa accepted", qa: { verdict: "accept" } }),
-          );
-          return fakeTurnResult(_req);
-        },
-        { when: whenTurn({ step: "qa" }), fallback: true },
-      );
-
-      const implemented: string[] = [];
-      harness.script(
-        (req, ctx) => {
-          const slug = path.basename(req.cwd!);
-          implemented.push(slug);
-          if (!controller.draining) controller.handleSignal("SIGINT");
-          fs.writeFileSync(
-            path.join(req.cwd!, `${slug}.txt`),
-            `${slug}\n`,
-            "utf8",
-          );
-          ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
-          return fakeTurnResult(req);
-        },
-        {
-          when: whenTurn({ step: "implement" }),
-          fallback: true,
-        },
-      );
-      harness.script(
-        (req, ctx) => {
-          const slug = path.basename(req.cwd!);
-          ctx.writeOutcome(
-            outcome({ summary: `${slug} approved`, verdict: "approve" }),
-          );
-          return fakeTurnResult(req);
-        },
-        {
-          when: whenTurn({ step: "review" }),
-          fallback: true,
-        },
-      );
-
-      await dispatch(["run", "--repo", s.repo.dir, "--goal", "demo"], {
-        harnesses: { fake: harness },
-        signals: controller,
-        priceSource: testPriceSource(s.repo.dir),
-      });
-
-      expect(controller.draining).toBe(true);
-      expect(implemented).toHaveLength(1);
-      const inFlight = implemented[0]!;
-
-      // The signaled turn finished and recorded: it was not cancelled, its
-      // review ran, and its merge landed. No other task has a record.
-      const store = createFolderStore(s.goalDir, undefined, {});
-      const records = await store.listRecords();
-      const ended = (step: string) =>
-        records.find(
-          (r) => r.slug === inFlight && r.step === step && r.endedAt,
-        );
-      expect(ended("implement")).toBeDefined();
-      expect(ended("implement")?.stop?.kind).not.toBe("cancelled");
-      expect(ended("review")).toBeDefined();
-      expect(
-        records.some(
-          (r) => r.slug === inFlight && r.step === "merge" && r.ok === true,
-        ),
-      ).toBe(true);
-      for (const slug of SLUGS.filter((slug) => slug !== inFlight)) {
-        expect(records.filter((r) => r.slug === slug)).toEqual([]);
-      }
+      await drainsAfterFirstSignalRaisedInsidePart3(scope2);
     } finally {
       console.warn = originalWarn;
       s.repo.cleanup();
     }
   }, 120_000);
 });
+
+async function drainsAfterFirstSignalRaisedInsidePart1(s: {
+  repo: TmpRepo;
+  goalDir: string;
+  taskDir: string;
+}) {
+  const harness = new FakeHarness({ id: "fake" });
+  harness.script(
+    (req, ctx) => {
+      fs.writeFileSync(path.join(s.goalDir, "plan.md"), PLAN, "utf8");
+      ctx.writeOutcome(outcome({ summary: "planned", decision: "continue" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "architect" }) },
+  );
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(
+        outcome({
+          summary: "plan reviewed",
+          planReview: { technical: [], planNotes: [] },
+        }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "planreview" }) },
+  );
+  harness.script(
+    (req, ctx) => {
+      writeTasks(s.taskDir);
+      ctx.writeOutcome(outcome({ summary: "filed" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "pm" }) },
+  );
+
+  // The default flow's QA acceptance needs a neutral handler; the test
+  // scripts the implementer and reviewer it asserts on.
+  harness.script(
+    (_req, ctx) => {
+      ctx.writeOutcome(
+        outcome({ summary: "qa accepted", qa: { verdict: "accept" } }),
+      );
+      return fakeTurnResult(_req);
+    },
+    { when: whenTurn({ step: "qa" }), fallback: true },
+  );
+
+  const implemented: string[] = [];
+
+  return { harness, implemented };
+}
+
+async function drainsAfterFirstSignalRaisedInsidePart2(
+  s: { repo: TmpRepo; goalDir: string; taskDir: string },
+  controller: ReturnType<typeof createDrainController>,
+  scope: Awaited<ReturnType<typeof drainsAfterFirstSignalRaisedInsidePart1>>,
+) {
+  const { harness, implemented } = scope;
+  harness.script(
+    (req, ctx) => {
+      const slug = path.basename(req.cwd!);
+      implemented.push(slug);
+      if (!controller.draining) controller.handleSignal("SIGINT");
+      fs.writeFileSync(path.join(req.cwd!, `${slug}.txt`), `${slug}\n`, "utf8");
+      ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
+      return fakeTurnResult(req);
+    },
+    {
+      when: whenTurn({ step: "implement" }),
+      fallback: true,
+    },
+  );
+  harness.script(
+    (req, ctx) => {
+      const slug = path.basename(req.cwd!);
+      ctx.writeOutcome(
+        outcome({ summary: `${slug} approved`, verdict: "approve" }),
+      );
+      return fakeTurnResult(req);
+    },
+    {
+      when: whenTurn({ step: "review" }),
+      fallback: true,
+    },
+  );
+
+  await dispatch(["run", "--repo", s.repo.dir, "--goal", "demo"], {
+    harnesses: { fake: harness },
+    signals: controller,
+    priceSource: testPriceSource(s.repo.dir),
+  });
+
+  expect(controller.draining).toBe(true);
+  expect(implemented).toHaveLength(1);
+  const inFlight = implemented[0]!;
+
+  // The signaled turn finished and recorded: it was not cancelled, its
+  // review ran, and its merge landed. No other task has a record.
+  const store = createFolderStore(s.goalDir, undefined, {});
+  const records = await store.listRecords();
+
+  return { ...scope, inFlight, records };
+}
+
+async function drainsAfterFirstSignalRaisedInsidePart3(
+  scope: Awaited<ReturnType<typeof drainsAfterFirstSignalRaisedInsidePart2>>,
+) {
+  const { records, inFlight } = scope;
+  const ended = (step: string) =>
+    records.find((r) => r.slug === inFlight && r.step === step && r.endedAt);
+  expect(ended("implement")).toBeDefined();
+  expect(ended("implement")?.stop?.kind).not.toBe("cancelled");
+  expect(ended("review")).toBeDefined();
+  expect(
+    records.some(
+      (r) => r.slug === inFlight && r.step === "merge" && r.ok === true,
+    ),
+  ).toBe(true);
+  for (const slug of SLUGS.filter((slug) => slug !== inFlight)) {
+    expect(records.filter((r) => r.slug === slug)).toEqual([]);
+  }
+}

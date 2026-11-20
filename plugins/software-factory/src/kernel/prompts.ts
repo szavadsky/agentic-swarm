@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import fs from "node:fs";
 import path from "node:path";
 import { type FS, Liquid } from "liquidjs";
@@ -104,41 +103,47 @@ function loadFragment(
  * `defaults` are launch-wide variables merged under every render's own vars:
  * an explicit var wins, so callers that do not know a default still render.
  */
-export function loadPromptLibrary(opts: {
-  builtinDir: string;
-  overrideDirs?: string[];
-  overrides?: Record<string, string>;
-  defaults?: Record<string, string>;
-}): PromptLibrary {
-  const overrideDirs = opts.overrideDirs ?? [];
-  const roots = [...overrideDirs, opts.builtinDir];
-  const overrides = opts.overrides ?? {};
-  const defaults = opts.defaults ?? {};
+/** Rejects non-string override bodies before the engine sees them. */
+function checkOverrides(overrides: Record<string, string>): void {
   for (const [name, content] of Object.entries(overrides)) {
     if (typeof content !== "string") {
       throw new TypeError(`prompt override "${name}" must be a string`);
     }
   }
-  const { engine, fs: layers } = createEngine(roots, overrides);
+}
 
-  // `locals` are assigned inside the template (`{% assign %}`), so they are
-  // not inputs the caller must pass. The reviewer assigns `author_body` and
-  // `review_duties` to include its author's `<role>-body`, `review-<role>`
-  // duties and `review-<role>-turn` inputs; Liquid cannot resolve those
-  // includes statically, so the fragments they name are analyzed in the caller
-  // (a missing one fails by name).
-  const dynamicIncludes = (
-    locals: Record<string, unknown>,
-    author: string | undefined,
-  ): string[] => {
-    if (author === undefined) return [];
-    return [
-      ...(locals.author_body ? [`${author}-body`] : []),
-      ...(locals.review_duties ? [`review-${author}`] : []),
-      ...(locals.review_turn ? [`review-${author}-turn`] : []),
-    ];
-  };
+/**
+ * `locals` are assigned inside the template (`{% assign %}`), so they are not
+ * inputs the caller must pass. The reviewer assigns `author_body` and
+ * `review_duties` to include its author's `<role>-body`, `review-<role>` duties
+ * and `review-<role>-turn` inputs; Liquid cannot resolve those includes
+ * statically, so the fragments they name are analyzed by the caller (a missing
+ * one fails by name).
+ */
+function dynamicIncludes(
+  locals: Record<string, unknown>,
+  author: string | undefined,
+): string[] {
+  if (author === undefined) return [];
+  return [
+    ...(locals.author_body ? [`${author}-body`] : []),
+    ...(locals.review_duties ? [`review-${author}`] : []),
+    ...(locals.review_turn ? [`review-${author}-turn`] : []),
+  ];
+}
 
+/** The analyzer closures a prompt library renders and validates with. */
+function promptAnalyzer(
+  engine: ReturnType<typeof createEngine>["engine"],
+  layers: ReturnType<typeof createEngine>["fs"],
+  roots: string[],
+): {
+  requiredVariables: (
+    fragment: string,
+    vars: Record<string, string>,
+  ) => string[];
+  requireVars: (fragment: string, vars: Record<string, string>) => void;
+} {
   const requiredVariables = (
     fragment: string,
     vars: Record<string, string>,
@@ -152,7 +157,6 @@ export function loadPromptLibrary(opts: {
     }
     return [...names];
   };
-
   const requireVars = (fragment: string, vars: Record<string, string>) => {
     const missing = requiredVariables(fragment, vars).filter(
       (v) => !(v in vars),
@@ -165,6 +169,26 @@ export function loadPromptLibrary(opts: {
       );
     }
   };
+  return { requiredVariables, requireVars };
+}
+
+export function loadPromptLibrary(opts: {
+  builtinDir: string;
+  overrideDirs?: string[];
+  overrides?: Record<string, string>;
+  defaults?: Record<string, string>;
+}): PromptLibrary {
+  const overrideDirs = opts.overrideDirs ?? [];
+  const roots = [...overrideDirs, opts.builtinDir];
+  const overrides = opts.overrides ?? {};
+  const defaults = opts.defaults ?? {};
+  checkOverrides(overrides);
+  const { engine, fs: layers } = createEngine(roots, overrides);
+  const { requiredVariables, requireVars } = promptAnalyzer(
+    engine,
+    layers,
+    roots,
+  );
 
   return {
     placeholders(

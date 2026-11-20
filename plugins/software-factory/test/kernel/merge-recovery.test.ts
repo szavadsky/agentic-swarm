@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -63,55 +62,8 @@ describe("merge queue crash recovery", () => {
       gates: [{ id: "red", command: "test -f never.txt" }],
     });
     try {
-      const runtime = await makeRuntime(repo, goal, {
-        fake: new FakeHarness({ id: "fake" }),
-      });
-      const { branch } = await prepareApprovedTask(runtime);
-      const checkout = runtime.paths.goalCheckout;
-      repo.git(["merge", "--squash", branch], { cwd: checkout });
-      repo.git(["commit", "-m", "manual merge"], { cwd: checkout });
-      const mergeCommit = repo
-        .git(["rev-parse", "HEAD"], { cwd: checkout })
-        .stdout.trim();
-      await runtime.store.startRecord({
-        ...scriptMeta(1, "merge", { slug: "task", round: 1 }),
-        commit: mergeCommit,
-      });
-
-      // The next launch always runs recovery first; it seals the interrupted
-      // merge, and the merge queue must still recover the recorded commit.
-      await recoverLaunch(runtime);
-      const sealed = (await runtime.store.listRecords()).filter(
-        (r) => r.slug === "task" && r.step === "merge",
-      );
-      expect(sealed).toHaveLength(1);
-      expect(sealed[0]!.stop).toEqual({ kind: "infra", cause: "crash" });
-
-      const result = await runDispatch(runtime, { iteration: 1 });
-      expect(result.reason).toBe("boundary");
-
-      const records = await runtime.store.listRecords();
-      const state = derive(
-        await runtime.store.listTasks(),
-        records,
-        runtime.configs.process.flows,
-      );
-      expect(state.tasks.task!.status).toBe("merged");
-      expect(repo.git(["rev-parse", "factory/demo"]).stdout.trim()).toBe(
-        mergeCommit,
-      );
-      expect(
-        repo.git(["rev-list", "--count", "main..factory/demo"]).stdout.trim(),
-      ).toBe("1");
-      expect(
-        records.filter(
-          (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
-        ).length,
-      ).toBe(1);
-      expect(
-        records.filter((r) => r.slug === "task" && r.step === "merge-checks")
-          .length,
-      ).toBe(0);
+      const scope1 = await completesRecordedMergeAfterCrashPart1(repo, goal);
+      await completesRecordedMergeAfterCrashPart2(scope1);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -162,3 +114,66 @@ describe("merge queue crash recovery", () => {
     }
   }, 60_000);
 });
+
+async function completesRecordedMergeAfterCrashPart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+) {
+  const runtime = await makeRuntime(repo, goal, {
+    fake: new FakeHarness({ id: "fake" }),
+  });
+  const { branch } = await prepareApprovedTask(runtime);
+  const checkout = runtime.paths.goalCheckout;
+  repo.git(["merge", "--squash", branch], { cwd: checkout });
+  repo.git(["commit", "-m", "manual merge"], { cwd: checkout });
+  const mergeCommit = repo
+    .git(["rev-parse", "HEAD"], { cwd: checkout })
+    .stdout.trim();
+  await runtime.store.startRecord({
+    ...scriptMeta(1, "merge", { slug: "task", round: 1 }),
+    commit: mergeCommit,
+  });
+
+  // The next launch always runs recovery first; it seals the interrupted
+  // merge, and the merge queue must still recover the recorded commit.
+  await recoverLaunch(runtime);
+  const sealed = (await runtime.store.listRecords()).filter(
+    (r) => r.slug === "task" && r.step === "merge",
+  );
+  expect(sealed).toHaveLength(1);
+  expect(sealed[0]!.stop).toEqual({ kind: "infra", cause: "crash" });
+
+  const result = await runDispatch(runtime, { iteration: 1 });
+  expect(result.reason).toBe("boundary");
+
+  const records = await runtime.store.listRecords();
+  const state = derive(
+    await runtime.store.listTasks(),
+    records,
+    runtime.configs.process.flows,
+  );
+  expect(state.tasks.task!.status).toBe("merged");
+  expect(repo.git(["rev-parse", "factory/demo"]).stdout.trim()).toBe(
+    mergeCommit,
+  );
+  expect(
+    repo.git(["rev-list", "--count", "main..factory/demo"]).stdout.trim(),
+  ).toBe("1");
+  expect(
+    records.filter(
+      (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
+    ).length,
+  ).toBe(1);
+
+  return { records };
+}
+
+async function completesRecordedMergeAfterCrashPart2(
+  scope: Awaited<ReturnType<typeof completesRecordedMergeAfterCrashPart1>>,
+) {
+  const { records } = scope;
+  expect(
+    records.filter((r) => r.slug === "task" && r.step === "merge-checks")
+      .length,
+  ).toBe(0);
+}

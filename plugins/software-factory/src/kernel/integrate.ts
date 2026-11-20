@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import type { CheckResult } from "../core/checks/types.js";
 import { runWorktreeSetup } from "../core/checks/setup.js";
 import { commitAll, isAncestor } from "../core/git/commit.js";
@@ -456,6 +455,46 @@ async function mergeChecks(
  * worktree detached at the current integration head; the integration ref moves
  * only after green, and the stable goal checkout is synced afterwards.
  */
+/** Moves the integration ref to the gated squash commit and records the merge. */
+async function landMergedTask(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  iteration: number,
+  round: number,
+  scratch: string,
+  head: string,
+  checked: NonNullable<Awaited<ReturnType<typeof mergeChecks>>>,
+): Promise<void> {
+  const { checks, skipCause } = checked;
+  const commit = await headSha(scratch);
+  const turn = await runtime.store.startRecord({
+    ...scriptMeta(iteration, "merge", {
+      slug: task.slug,
+      round,
+      architect: taskArchitect(task),
+    }),
+    commit,
+  });
+  try {
+    await refMove(runtime, commit, head);
+  } catch (err) {
+    if (!(err instanceof IntegrationMovedError)) throw err;
+    await removeMergeScratch(runtime);
+    await turn.finish({
+      ok: false,
+      cause: makeCause("integration-moved", err.detail),
+    });
+    return;
+  }
+  await syncCheckout(runtime, commit);
+  await removeMergeScratch(runtime);
+  await turn.finish(
+    skipCause
+      ? { ok: true, commit, checks, cause: skipCause }
+      : { ok: true, commit, checks },
+  );
+}
+
 export async function mergeTask(
   runtime: KernelRuntime,
   task: TaskFile,
@@ -479,7 +518,7 @@ export async function mergeTask(
 
     const squashed = await squashTaskBranch(runtime, task, iteration, round);
     if (!squashed) return {};
-    const { scratch, head } = squashed;
+    const { scratch } = squashed;
     const preexisting = preexistingRed(recordedBaseGates(records));
     const checked = await mergeChecks(
       runtime,
@@ -492,34 +531,14 @@ export async function mergeTask(
       opts.keptLand === true,
     );
     if (!checked) return {};
-    const { checks, skipCause } = checked;
-
-    const commit = await headSha(scratch);
-    const turn = await runtime.store.startRecord({
-      ...scriptMeta(iteration, "merge", {
-        slug: task.slug,
-        round,
-        architect: taskArchitect(task),
-      }),
-      commit,
-    });
-    try {
-      await refMove(runtime, commit, head);
-    } catch (err) {
-      if (!(err instanceof IntegrationMovedError)) throw err;
-      await removeMergeScratch(runtime);
-      await turn.finish({
-        ok: false,
-        cause: makeCause("integration-moved", err.detail),
-      });
-      return {};
-    }
-    await syncCheckout(runtime, commit);
-    await removeMergeScratch(runtime);
-    await turn.finish(
-      skipCause
-        ? { ok: true, commit, checks, cause: skipCause }
-        : { ok: true, commit, checks },
+    await landMergedTask(
+      runtime,
+      task,
+      iteration,
+      round,
+      scratch,
+      squashed.head,
+      checked,
     );
     return {};
   });

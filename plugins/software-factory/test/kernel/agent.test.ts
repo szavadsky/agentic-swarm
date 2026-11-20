@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -32,6 +31,712 @@ import { createAcpxStub } from "../harness/acpx-stub.js";
 import { TEST_ARCHITECTURE, TEST_BOUNDARY, task, cause } from "./helpers.js";
 
 function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
+  const scope1 = runtimeForPart1();
+  return runtimeForPart2(root, fake, scope1);
+}
+
+const vars = {
+  turn: "boundary",
+  iteration: "1",
+  intent_path: "/g/intent.md",
+  plan_path: "/g/plan.md",
+  checkout: "/wt",
+  pack_path: "/g/pack.md",
+  digest_path: "",
+  steers: "none",
+};
+
+describe("agent turn outcome delivery", () => {
+  registerAgentTurnOutcomeDeliveryPart1();
+  registerAgentTurnOutcomeDeliveryPart2();
+  registerAgentTurnOutcomeDeliveryPart3();
+  registerAgentTurnOutcomeDeliveryPart4();
+  registerAgentTurnOutcomeDeliveryPart5();
+  registerAgentTurnOutcomeDeliveryPart6();
+});
+const reviewerVars = {
+  task_path: "/g/tasks/a.md",
+  worktree: "/wt/a",
+  base_hash: "aaa",
+  head_hash: "bbb",
+  round: "1",
+  max_rounds: "2",
+  base_gates: "not recorded",
+  prior_findings: "",
+  upscope_ask: "",
+  last_call: "false",
+};
+
+const frontVars = {
+  iteration: "1",
+  intent_path: "/g/intent.md",
+  plan_path: "/g/plan.md",
+  tasks_dir: "/g/tasks",
+  class_path: "/g/class.yaml",
+  pack_path: "/g/iterations/1/context-pack.md",
+  checkout: "/wt",
+  setup_command: "none",
+  gate_commands: "none",
+  class_types: frontClassTypesVar({
+    development: {
+      flow: "implement-review",
+      kind: "development",
+      schema: "outcome",
+    },
+    trivial: {
+      flow: "just-implement",
+      kind: "development",
+      schema: "outcome",
+    },
+  }),
+};
+
+async function setup() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-guard-"));
+  const fake = new FakeHarness({ id: "fake" });
+  const runtime = runtimeFor(fake, root);
+  await runtime.store.ensureLayout();
+  return { root, fake, runtime };
+}
+
+describe("delivery guard", () => {
+  registerDeliveryGuardPart1();
+  registerDeliveryGuardPart2();
+  registerDeliveryGuardPart3();
+  registerDeliveryGuardPart4();
+  registerDeliveryGuardPart5();
+  registerDeliveryGuardPart6();
+  registerDeliveryGuardPart7();
+  registerDeliveryGuardPart8();
+  registerDeliveryGuardPart9();
+  registerDeliveryGuardPart10();
+  registerDeliveryGuardPart11();
+  registerDeliveryGuardPart12();
+  registerDeliveryGuardPart13();
+});
+
+const pmVars = {
+  iteration: "1",
+  intent_path: "/g/intent.md",
+  plans: "- goal: /g/plan.md",
+  tasks_dir: "/g/tasks",
+  existing_tasks: "none",
+  repair: "",
+  steers: "none",
+  holds_dir: "/g/mailbox/holds",
+  stalls: "none",
+  plan_checks: "none",
+};
+
+const implementerVars = {
+  task_path: "/g/tasks/a.md",
+  report_path: "",
+  front_pack: "",
+  worktree: "/wt/a",
+  resume_note: "",
+  setup_command: "none",
+  gate_commands: "none",
+  base_gates: "not recorded",
+  findings: "",
+};
+
+function packFixture(): string {
+  const tasks = [task("a"), task("b", { deps: ["a"] })];
+  return renderContextPack({
+    goal: "demo",
+    iteration: 1,
+    intentPath: "/g/intent.md",
+    planPath: "/g/plan.md",
+    checkout: "/wt",
+    integrationBranch: "factory/demo",
+    headHash: "abcdef1234567890",
+    recordsDir: "/g/records",
+    tasksDir: "/g/tasks",
+    tasks,
+    state: derive(tasks, []),
+    steers: [],
+    setup: [],
+    gates: [{ id: "test", command: "bun test" }],
+    forwarded: [],
+    debts: [],
+  });
+}
+
+describe("agent turn prompt size", () => {
+  agentTurnPromptSizePart1();
+  agentTurnPromptSizePart2();
+});
+
+async function setupLocal() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-repair-"));
+  const fake = new FakeHarness({ id: "fake" });
+  const runtime = runtimeFor(fake, root);
+  await runtime.store.ensureLayout();
+  return { root, fake, runtime };
+}
+
+function invalidYaml(line: string): string {
+  return `status: [unclosed ${line}\nsummary: x\n`;
+}
+
+describe("bounded repairs", () => {
+  registerBoundedRepairsPart1();
+  registerBoundedRepairsPart2();
+  registerBoundedRepairsPart3();
+  registerBoundedRepairsPart4();
+  registerBoundedRepairsPart5();
+  registerBoundedRepairsPart6();
+  registerBoundedRepairsPart7();
+  registerBoundedRepairsPart8();
+  registerBoundedRepairsPart9();
+  registerBoundedRepairsPart10();
+  registerBoundedRepairsPart11();
+});
+
+async function setupLocal2() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-launch-"));
+  const fake = new FakeHarness({ id: "fake" });
+  const runtime = runtimeFor(fake, root);
+  await runtime.store.ensureLayout();
+  return { root, fake, runtime };
+}
+
+const reviewerVarsLocal = {
+  task_path: "/g/tasks/a.md",
+  worktree: "/wt/a",
+  base_hash: "aaa",
+  head_hash: "bbb",
+  round: "1",
+  max_rounds: "2",
+  base_gates: "not recorded",
+  prior_findings: "",
+  upscope_ask: "",
+  last_call: "false",
+};
+
+describe("repair findings and launch kinds", () => {
+  registerRepairFindingsAndLaunchKindsPart1();
+  registerRepairFindingsAndLaunchKindsPart2();
+  registerRepairFindingsAndLaunchKindsPart3();
+  registerRepairFindingsAndLaunchKindsPart4();
+  registerRepairFindingsAndLaunchKindsPart5();
+  registerRepairFindingsAndLaunchKindsPart6();
+  registerRepairFindingsAndLaunchKindsPart7();
+});
+
+async function repairsArchitectContinueOverPart1(
+  runtime: KernelRuntime,
+  root: string,
+  fake: FakeHarness,
+) {
+  const planPath = path.join(runtime.store.goalDir, "plan.md");
+  fs.writeFileSync(planPath, "# Plan\n", "utf8");
+  const turn = () =>
+    runAgentTurn(runtime, {
+      target: boundaryTarget(runtime, "architect"),
+      cwd: root,
+      meta: { iteration: 1, step: "architect", round: 1 },
+      vars: { ...vars, plan_path: planPath },
+      expectation: "architect",
+      repairTurns: 3,
+    });
+  fake.script((req, ctx) => {
+    ctx.writeOutcome({
+      status: "done",
+      summary: "go",
+      decision: "continue",
+    });
+    return fakeTurnResult(req);
+  });
+  fake.script((req, ctx) => {
+    ctx.writeOutcome({
+      status: "done",
+      summary: "still going",
+      decision: "continue",
+    });
+    return fakeTurnResult(req);
+  });
+  fake.script((req, ctx) => {
+    ctx.writeOutcome({
+      status: "done",
+      summary: "still going",
+      decision: "continue",
+    });
+    return fakeTurnResult(req);
+  });
+
+  return { planPath, turn };
+}
+
+async function repairsArchitectContinueOverPart2(
+  fake: FakeHarness,
+  scope: Awaited<ReturnType<typeof repairsArchitectContinueOverPart1>>,
+) {
+  const { turn, planPath } = scope;
+  fake.script((req, ctx) => {
+    ctx.writeOutcome({
+      status: "done",
+      summary: "still going",
+      decision: "continue",
+    });
+    return fakeTurnResult(req);
+  });
+
+  const result = await turn();
+
+  expect(fake.calls).toHaveLength(4);
+  const repair = fake.calls[1]!.prompt;
+  expect(repair).toContain("plan edit or stop decision");
+  expect(repair).toContain(`${planPath} is unchanged since the turn started`);
+  expect(repair).toContain("the plan edit must be on disk");
+  expect(result.outcome?.status).toBe("failed");
+  expect(result.outcome?.summary).toContain(
+    `${planPath} is unchanged since the turn started`,
+  );
+}
+
+function agentTurnPromptSizePart1() {
+  it("records prompt bytes on every agent step", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
+    const fake = new FakeHarness({ id: "fake" });
+    const runtime = runtimeFor(fake, root);
+    await runtime.store.ensureLayout();
+    fake.script((req, ctx) => {
+      ctx.writeOutcome({ status: "done", summary: "ok" });
+      return fakeTurnResult(req);
+    });
+
+    const result = await runAgentTurn(runtime, {
+      target: resolveTurn(runtime, "implementer", "implementer"),
+      cwd: root,
+      meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+      vars: implementerVars,
+      expectation: "any",
+    });
+
+    expect(result.record.promptBytes).toBe(
+      Buffer.byteLength(fake.calls[0]!.prompt, "utf8"),
+    );
+    expect(result.record.promptBytes).toBeGreaterThan(0);
+    expect(result.record.packBytes).toBeUndefined();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+function agentTurnPromptSizePart2() {
+  it("records pack bytes on architect and PM records", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
+    const fake = new FakeHarness({ id: "fake" });
+    const runtime = runtimeFor(fake, root);
+    await runtime.store.ensureLayout();
+    const pack = packFixture();
+    await runtime.store.writeFile("iterations/1/context-pack.md", pack);
+
+    fake.script((req, ctx) => {
+      ctx.writeOutcome({
+        status: "done",
+        summary: "plan",
+        decision: "done",
+      });
+      return fakeTurnResult(req);
+    });
+    const architect = await runAgentTurn(runtime, {
+      target: boundaryTarget(runtime, "architect"),
+      cwd: root,
+      meta: { iteration: 1, step: "architect", round: 1 },
+      vars,
+      expectation: "architect",
+    });
+    expect(architect.record.packBytes).toBe(Buffer.byteLength(pack, "utf8"));
+
+    fake.script((req, ctx) => {
+      ctx.writeOutcome({ status: "done", summary: "tasks" });
+      return fakeTurnResult(req);
+    });
+    const pm = await runAgentTurn(runtime, {
+      target: boundaryTarget(runtime, "pm"),
+      cwd: root,
+      meta: { iteration: 1, step: "pm", round: 1 },
+      vars: pmVars,
+      expectation: "any",
+    });
+    expect(pm.record.packBytes).toBe(Buffer.byteLength(pack, "utf8"));
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+async function resolvesDebtClosedIdAgainstRecordsPart1(
+  runtime: KernelRuntime,
+  fake: FakeHarness,
+  root: string,
+) {
+  const seed = await runtime.store.startRecord({
+    iteration: 1,
+    slug: "a",
+    step: "review",
+    round: 1,
+    actor: "agent",
+    alias: "reviewer",
+    model: { id: "fake" },
+  });
+  await seed.finish({
+    stop: { kind: "done" },
+    outcome: {
+      status: "done",
+      summary: "raised a debt",
+      concerns: [
+        {
+          kind: "debt",
+          calibration: "architect",
+          text: "shim in the writer",
+        },
+      ],
+      forward: [],
+      verdict: "approve",
+    },
+  });
+  const debtId = `${path.basename(seed.dir)}#1`;
+
+  fake.script((req, ctx) => {
+    ctx.writeOutcome({
+      status: "done",
+      summary: "closed",
+      debtClosed: [{ id: debtId, reason: "shim removed" }],
+    });
+    return fakeTurnResult(req);
+  });
+  await runAgentTurn(runtime, {
+    target: resolveTurn(runtime, "implementer", "implementer"),
+    cwd: root,
+    meta: { iteration: 1, slug: "b", step: "implement", round: 1 },
+    vars: implementerVars,
+    expectation: "any",
+  });
+  expect(fake.calls).toHaveLength(1);
+}
+
+async function resolvesDebtClosedIdAgainstRecordsPart2(
+  runtime: KernelRuntime,
+  fake: FakeHarness,
+  root: string,
+) {
+  fake.script((req, ctx) => {
+    ctx.writeOutcome({
+      status: "done",
+      summary: "closed the wrong id",
+      debtClosed: [{ id: "nope#1", reason: "shim removed" }],
+    });
+    return fakeTurnResult(req);
+  });
+  fake.script((req, ctx) => {
+    ctx.writeOutcome({ status: "done", summary: "repaired" });
+    return fakeTurnResult(req);
+  });
+  const repaired = await runAgentTurn(runtime, {
+    target: resolveTurn(runtime, "implementer", "implementer"),
+    cwd: root,
+    meta: { iteration: 1, slug: "c", step: "implement", round: 1 },
+    vars: implementerVars,
+    expectation: "any",
+  });
+  expect(fake.calls).toHaveLength(3);
+  expect(fake.calls[2]!.prompt).toContain(
+    "- unknown debt id: nope#1: no ingested debt concern has that id",
+  );
+  expect(repaired.outcome?.summary).toBe("repaired");
+}
+
+async function retriesOnceDeNovoFullPromptChargesPart1(
+  priorSession: (root: string) => SessionRef,
+) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
+  const fake = new FakeHarness({ id: "fake" });
+  const runtime = runtimeFor(fake, root);
+  await runtime.store.ensureLayout();
+  // An item already through one review round: implement r1, green checks,
+  // review changes. The r2 fix turn is the one that overflows.
+  await runtime.store.appendRecord(
+    {
+      iteration: 1,
+      slug: "a",
+      step: "implement",
+      round: 1,
+      actor: "agent",
+      alias: "implementer",
+      model: { id: "fake-implementer" },
+    },
+    {
+      stop: { kind: "done" },
+      outcome: {
+        status: "done",
+        summary: "implemented",
+        concerns: [],
+        forward: [],
+      },
+      session: priorSession(root),
+    },
+  );
+  await runtime.store.appendRecord(
+    { iteration: 1, slug: "a", step: "checks", round: 1, actor: "script" },
+    { ok: true, checks: [] },
+  );
+
+  return { root, fake, runtime };
+}
+
+async function retriesOnceDeNovoFullPromptChargesPart2(
+  priorSession: (root: string) => SessionRef,
+  scope: Awaited<ReturnType<typeof retriesOnceDeNovoFullPromptChargesPart1>>,
+) {
+  const { runtime, fake, root } = scope;
+  await runtime.store.appendRecord(
+    {
+      iteration: 1,
+      slug: "a",
+      step: "review",
+      round: 1,
+      actor: "agent",
+      alias: "reviewer",
+      model: { id: "fake-reviewer" },
+    },
+    {
+      stop: { kind: "done" },
+      outcome: {
+        status: "done",
+        summary: "needs a fix",
+        concerns: [],
+        forward: [],
+        verdict: "changes",
+      },
+    },
+  );
+  fake.script((req) => {
+    expect(req.session?.id).toBe("prior-session");
+    return fakeTurnResult(req, {
+      stop: { kind: "infra", cause: "overflow" },
+      usage: { in: 40 },
+    });
+  });
+  fake.script((req, ctx) => {
+    ctx.writeOutcome({ status: "done", summary: "implemented" });
+    return fakeTurnResult(req, { usage: { in: 2 } });
+  });
+
+  const result = await runAgentTurn(runtime, {
+    target: resolveTurn(runtime, "implementer", "implementer"),
+    cwd: root,
+    meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
+    vars: implementerVars,
+    expectation: "any",
+    session: priorSession(root),
+  });
+
+  expect(fake.calls).toHaveLength(2);
+  expect(fake.calls[1]!.session).toBeUndefined();
+
+  return { ...scope, result };
+}
+
+async function retriesOnceDeNovoFullPromptChargesPart3(
+  flows: { "implement-review": FlowDefinition },
+  scope: Awaited<ReturnType<typeof retriesOnceDeNovoFullPromptChargesPart2>>,
+) {
+  const { fake, result, runtime, root } = scope;
+  expect(fake.calls[1]!.prompt).toBe(fake.calls[0]!.prompt);
+  expect(result.record.stop).toEqual({ kind: "done" });
+  expect(result.outcome?.status).toBe("done");
+  expect(result.record.usage?.in).toBe(42);
+  expect(result.record.session?.id).not.toBe("prior-session");
+
+  const records = await runtime.store.listRecords();
+  expect(
+    records.filter(
+      (r) => r.step === "implement" && r.actor === "agent" && r.endedAt,
+    ),
+  ).toHaveLength(2);
+  const state = derive([task("a")], records, flows);
+  expect(state.tasks.a!.turns).toBe(3);
+  expect(state.tasks.a!.round).toBe(2);
+  expect(state.tasks.a!.status).toBe("ready");
+  expect(state.tasks.a!.park).toBeUndefined();
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+function resumedOverflowPart1() {
+  const flow: FlowDefinition = {
+    steps: [
+      { id: "implement", prompt: "implementer", alias: "implementer" },
+      {
+        id: "review",
+        prompt: "reviewer",
+        alias: "reviewer",
+        review: true,
+        changeRequests: 2,
+      },
+    ],
+  };
+  const flows = { "implement-review": flow };
+
+  function priorSession(root: string): SessionRef {
+    return {
+      harness: "fake",
+      id: "prior-session",
+      cwd: root,
+      model: { id: "fake-implementer" },
+      lastRequestStartedAt: new Date(0).toISOString(),
+      retentionTier: "short",
+      compacted: false,
+    };
+  }
+
+  it("retries once de novo with the full prompt and charges one turn", async () => {
+    const scope1 = await retriesOnceDeNovoFullPromptChargesPart1(priorSession);
+    const scope2 = await retriesOnceDeNovoFullPromptChargesPart2(
+      priorSession,
+      scope1,
+    );
+    await retriesOnceDeNovoFullPromptChargesPart3(flows, scope2);
+  });
+
+  return { flows, priorSession };
+}
+
+function resumedOverflowPart2(scope: ReturnType<typeof resumedOverflowPart1>) {
+  const { priorSession } = scope;
+  it("does not accept an outcome left by the overflowed attempt", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
+    const fake = new FakeHarness({ id: "fake" });
+    const runtime = runtimeFor(fake, root);
+    await runtime.store.ensureLayout();
+    fake.script((req) => {
+      fs.writeFileSync(
+        req.outcomePath!,
+        JSON.stringify({
+          status: "done",
+          summary: "stale from the resumed attempt",
+        }),
+      );
+      return fakeTurnResult(req, {
+        stop: { kind: "infra", cause: "overflow" },
+      });
+    });
+    fake.script((req) => fakeTurnResult(req));
+    fake.script((req, ctx) => {
+      ctx.writeOutcome({ status: "done", summary: "delivered after retry" });
+      return fakeTurnResult(req);
+    });
+
+    const result = await runAgentTurn(runtime, {
+      target: resolveTurn(runtime, "implementer", "implementer"),
+      cwd: root,
+      meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
+      vars: implementerVars,
+      expectation: "any",
+      session: priorSession(root),
+    });
+
+    expect(fake.calls).toHaveLength(3);
+    expect(fake.calls[1]!.session).toBeUndefined();
+    expect(result.outcome?.summary).toBe("delivered after retry");
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+function resumedOverflowPart3(scope: ReturnType<typeof resumedOverflowPart1>) {
+  const { flows } = scope;
+  it("parks a de-novo overflow with cause overflow", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
+    const fake = new FakeHarness({ id: "fake" });
+    const runtime = runtimeFor(fake, root);
+    await runtime.store.ensureLayout();
+    fake.script((req) =>
+      fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" } }),
+    );
+
+    const result = await runAgentTurn(runtime, {
+      target: resolveTurn(runtime, "implementer", "implementer"),
+      cwd: root,
+      meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+      vars: implementerVars,
+      expectation: "any",
+    });
+
+    expect(fake.calls).toHaveLength(1);
+    expect(result.record.stop).toEqual({ kind: "infra", cause: "overflow" });
+    const records = await runtime.store.listRecords();
+    expect(records.find((r) => r.step === "park")?.cause).toEqual(
+      cause("overflow"),
+    );
+    const state = derive([task("a")], records, flows);
+    expect(state.tasks.a!.status).toBe("parked");
+    expect(state.tasks.a!.cause).toEqual(cause("overflow"));
+    expect(state.tasks.a!.turns).toBe(0);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+function resumedOverflowPart4(scope: ReturnType<typeof resumedOverflowPart1>) {
+  const { priorSession, flows } = scope;
+  it("parks when the de-novo retry overflows too", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
+    const fake = new FakeHarness({ id: "fake" });
+    const runtime = runtimeFor(fake, root);
+    await runtime.store.ensureLayout();
+    fake.script((req) =>
+      fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" } }),
+    );
+    fake.script((req) =>
+      fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" } }),
+    );
+
+    const result = await runAgentTurn(runtime, {
+      target: resolveTurn(runtime, "implementer", "implementer"),
+      cwd: root,
+      meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
+      vars: implementerVars,
+      expectation: "any",
+      session: priorSession(root),
+    });
+
+    expect(fake.calls).toHaveLength(2);
+    expect(result.record.stop).toEqual({ kind: "infra", cause: "overflow" });
+    const state = derive([task("a")], await runtime.store.listRecords(), flows);
+    expect(state.tasks.a!.status).toBe("parked");
+    expect(state.tasks.a!.cause).toEqual(cause("overflow"));
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+function resumedOverflowPart5(scope: ReturnType<typeof resumedOverflowPart1>) {
+  const { priorSession, flows } = scope;
+  it("does not retry a resumed turn on another infra cause", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
+    const fake = new FakeHarness({ id: "fake" });
+    const runtime = runtimeFor(fake, root);
+    await runtime.store.ensureLayout();
+    fake.script((req) =>
+      fakeTurnResult(req, { stop: { kind: "infra", cause: "auth" } }),
+    );
+
+    const result = await runAgentTurn(runtime, {
+      target: resolveTurn(runtime, "implementer", "implementer"),
+      cwd: root,
+      meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
+      vars: implementerVars,
+      expectation: "any",
+      session: priorSession(root),
+    });
+
+    expect(fake.calls).toHaveLength(1);
+    expect(result.record.stop).toEqual({ kind: "infra", cause: "auth" });
+    const records = await runtime.store.listRecords();
+    expect(records.filter((r) => r.step === "park")).toHaveLength(0);
+    expect(derive([task("a")], records, flows).tasks.a!.park).toBeUndefined();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+function runtimeForPart1() {
   const process: ProcessConfig = {
     taskTypes: {},
     flows: {},
@@ -65,6 +770,16 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
     },
     sessions: { dir: "", keepRuns: 1, retention: "short" },
   };
+
+  return { process, repo, run };
+}
+
+function runtimeForPart2(
+  root: string,
+  fake: FakeHarness,
+  scope: ReturnType<typeof runtimeForPart1>,
+): KernelRuntime {
+  const { repo, process, run } = scope;
   return {
     paths: {
       repoRoot: root,
@@ -97,18 +812,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
   };
 }
 
-const vars = {
-  turn: "boundary",
-  iteration: "1",
-  intent_path: "/g/intent.md",
-  plan_path: "/g/plan.md",
-  checkout: "/wt",
-  pack_path: "/g/pack.md",
-  digest_path: "",
-  steers: "none",
-};
-
-describe("agent turn outcome delivery", () => {
+function registerAgentTurnOutcomeDeliveryPart1(): void {
   it("repairs an invalid outcome once in the same session", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
     const fake = new FakeHarness({ id: "fake" });
@@ -148,7 +852,9 @@ describe("agent turn outcome delivery", () => {
     expect(result.record.usage?.in).toBe(13);
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function registerAgentTurnOutcomeDeliveryPart2(): void {
   it("records the acpx turn's persisted stdout transcript", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-acpx-"));
     const stub = createAcpxStub({
@@ -201,7 +907,9 @@ describe("agent turn outcome delivery", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerAgentTurnOutcomeDeliveryPart3(): void {
   it("records the models a call served and prices each at its own row", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
     const fake = new FakeHarness({ id: "fake" });
@@ -255,7 +963,9 @@ describe("agent turn outcome delivery", () => {
     expect(result.record.usage?.costUsd).toBeCloseTo(4, 10);
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function registerAgentTurnOutcomeDeliveryPart4(): void {
   it("turns a second invalid outcome into failed after one reminder", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
     const fake = new FakeHarness({ id: "fake" });
@@ -279,7 +989,9 @@ describe("agent turn outcome delivery", () => {
     expect(derive([], await runtime.store.listRecords()).iteration).toBe(1);
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function registerAgentTurnOutcomeDeliveryPart5(): void {
   it("never spends a repair turn on an infra stop", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
     const fake = new FakeHarness({ id: "fake" });
@@ -304,256 +1016,15 @@ describe("agent turn outcome delivery", () => {
   });
 
   describe("resumed overflow", () => {
-    const flow: FlowDefinition = {
-      steps: [
-        { id: "implement", prompt: "implementer", alias: "implementer" },
-        {
-          id: "review",
-          prompt: "reviewer",
-          alias: "reviewer",
-          review: true,
-          changeRequests: 2,
-        },
-      ],
-    };
-    const flows = { "implement-review": flow };
-
-    function priorSession(root: string): SessionRef {
-      return {
-        harness: "fake",
-        id: "prior-session",
-        cwd: root,
-        model: { id: "fake-implementer" },
-        lastRequestStartedAt: new Date(0).toISOString(),
-        retentionTier: "short",
-        compacted: false,
-      };
-    }
-
-    it("retries once de novo with the full prompt and charges one turn", async () => {
-      const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
-      const fake = new FakeHarness({ id: "fake" });
-      const runtime = runtimeFor(fake, root);
-      await runtime.store.ensureLayout();
-      // An item already through one review round: implement r1, green checks,
-      // review changes. The r2 fix turn is the one that overflows.
-      await runtime.store.appendRecord(
-        {
-          iteration: 1,
-          slug: "a",
-          step: "implement",
-          round: 1,
-          actor: "agent",
-          alias: "implementer",
-          model: { id: "fake-implementer" },
-        },
-        {
-          stop: { kind: "done" },
-          outcome: {
-            status: "done",
-            summary: "implemented",
-            concerns: [],
-            forward: [],
-          },
-          session: priorSession(root),
-        },
-      );
-      await runtime.store.appendRecord(
-        { iteration: 1, slug: "a", step: "checks", round: 1, actor: "script" },
-        { ok: true, checks: [] },
-      );
-      await runtime.store.appendRecord(
-        {
-          iteration: 1,
-          slug: "a",
-          step: "review",
-          round: 1,
-          actor: "agent",
-          alias: "reviewer",
-          model: { id: "fake-reviewer" },
-        },
-        {
-          stop: { kind: "done" },
-          outcome: {
-            status: "done",
-            summary: "needs a fix",
-            concerns: [],
-            forward: [],
-            verdict: "changes",
-          },
-        },
-      );
-      fake.script((req) => {
-        expect(req.session?.id).toBe("prior-session");
-        return fakeTurnResult(req, {
-          stop: { kind: "infra", cause: "overflow" },
-          usage: { in: 40 },
-        });
-      });
-      fake.script((req, ctx) => {
-        ctx.writeOutcome({ status: "done", summary: "implemented" });
-        return fakeTurnResult(req, { usage: { in: 2 } });
-      });
-
-      const result = await runAgentTurn(runtime, {
-        target: resolveTurn(runtime, "implementer", "implementer"),
-        cwd: root,
-        meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
-        vars: implementerVars,
-        expectation: "any",
-        session: priorSession(root),
-      });
-
-      expect(fake.calls).toHaveLength(2);
-      expect(fake.calls[1]!.session).toBeUndefined();
-      expect(fake.calls[1]!.prompt).toBe(fake.calls[0]!.prompt);
-      expect(result.record.stop).toEqual({ kind: "done" });
-      expect(result.outcome?.status).toBe("done");
-      expect(result.record.usage?.in).toBe(42);
-      expect(result.record.session?.id).not.toBe("prior-session");
-
-      const records = await runtime.store.listRecords();
-      expect(
-        records.filter(
-          (r) => r.step === "implement" && r.actor === "agent" && r.endedAt,
-        ),
-      ).toHaveLength(2);
-      const state = derive([task("a")], records, flows);
-      expect(state.tasks.a!.turns).toBe(3);
-      expect(state.tasks.a!.round).toBe(2);
-      expect(state.tasks.a!.status).toBe("ready");
-      expect(state.tasks.a!.park).toBeUndefined();
-      fs.rmSync(root, { recursive: true, force: true });
-    });
-
-    it("does not accept an outcome left by the overflowed attempt", async () => {
-      const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
-      const fake = new FakeHarness({ id: "fake" });
-      const runtime = runtimeFor(fake, root);
-      await runtime.store.ensureLayout();
-      fake.script((req) => {
-        fs.writeFileSync(
-          req.outcomePath!,
-          JSON.stringify({
-            status: "done",
-            summary: "stale from the resumed attempt",
-          }),
-        );
-        return fakeTurnResult(req, {
-          stop: { kind: "infra", cause: "overflow" },
-        });
-      });
-      fake.script((req) => fakeTurnResult(req));
-      fake.script((req, ctx) => {
-        ctx.writeOutcome({ status: "done", summary: "delivered after retry" });
-        return fakeTurnResult(req);
-      });
-
-      const result = await runAgentTurn(runtime, {
-        target: resolveTurn(runtime, "implementer", "implementer"),
-        cwd: root,
-        meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
-        vars: implementerVars,
-        expectation: "any",
-        session: priorSession(root),
-      });
-
-      expect(fake.calls).toHaveLength(3);
-      expect(fake.calls[1]!.session).toBeUndefined();
-      expect(result.outcome?.summary).toBe("delivered after retry");
-      fs.rmSync(root, { recursive: true, force: true });
-    });
-
-    it("parks a de-novo overflow with cause overflow", async () => {
-      const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
-      const fake = new FakeHarness({ id: "fake" });
-      const runtime = runtimeFor(fake, root);
-      await runtime.store.ensureLayout();
-      fake.script((req) =>
-        fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" } }),
-      );
-
-      const result = await runAgentTurn(runtime, {
-        target: resolveTurn(runtime, "implementer", "implementer"),
-        cwd: root,
-        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
-        vars: implementerVars,
-        expectation: "any",
-      });
-
-      expect(fake.calls).toHaveLength(1);
-      expect(result.record.stop).toEqual({ kind: "infra", cause: "overflow" });
-      const records = await runtime.store.listRecords();
-      expect(records.find((r) => r.step === "park")?.cause).toEqual(
-        cause("overflow"),
-      );
-      const state = derive([task("a")], records, flows);
-      expect(state.tasks.a!.status).toBe("parked");
-      expect(state.tasks.a!.cause).toEqual(cause("overflow"));
-      expect(state.tasks.a!.turns).toBe(0);
-      fs.rmSync(root, { recursive: true, force: true });
-    });
-
-    it("parks when the de-novo retry overflows too", async () => {
-      const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
-      const fake = new FakeHarness({ id: "fake" });
-      const runtime = runtimeFor(fake, root);
-      await runtime.store.ensureLayout();
-      fake.script((req) =>
-        fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" } }),
-      );
-      fake.script((req) =>
-        fakeTurnResult(req, { stop: { kind: "infra", cause: "overflow" } }),
-      );
-
-      const result = await runAgentTurn(runtime, {
-        target: resolveTurn(runtime, "implementer", "implementer"),
-        cwd: root,
-        meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
-        vars: implementerVars,
-        expectation: "any",
-        session: priorSession(root),
-      });
-
-      expect(fake.calls).toHaveLength(2);
-      expect(result.record.stop).toEqual({ kind: "infra", cause: "overflow" });
-      const state = derive(
-        [task("a")],
-        await runtime.store.listRecords(),
-        flows,
-      );
-      expect(state.tasks.a!.status).toBe("parked");
-      expect(state.tasks.a!.cause).toEqual(cause("overflow"));
-      fs.rmSync(root, { recursive: true, force: true });
-    });
-
-    it("does not retry a resumed turn on another infra cause", async () => {
-      const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
-      const fake = new FakeHarness({ id: "fake" });
-      const runtime = runtimeFor(fake, root);
-      await runtime.store.ensureLayout();
-      fake.script((req) =>
-        fakeTurnResult(req, { stop: { kind: "infra", cause: "auth" } }),
-      );
-
-      const result = await runAgentTurn(runtime, {
-        target: resolveTurn(runtime, "implementer", "implementer"),
-        cwd: root,
-        meta: { iteration: 1, slug: "a", step: "implement", round: 2 },
-        vars: implementerVars,
-        expectation: "any",
-        session: priorSession(root),
-      });
-
-      expect(fake.calls).toHaveLength(1);
-      expect(result.record.stop).toEqual({ kind: "infra", cause: "auth" });
-      const records = await runtime.store.listRecords();
-      expect(records.filter((r) => r.step === "park")).toHaveLength(0);
-      expect(derive([task("a")], records, flows).tasks.a!.park).toBeUndefined();
-      fs.rmSync(root, { recursive: true, force: true });
-    });
+    const scope1 = resumedOverflowPart1();
+    resumedOverflowPart2(scope1);
+    resumedOverflowPart3(scope1);
+    resumedOverflowPart4(scope1);
+    resumedOverflowPart5(scope1);
   });
+}
 
+function registerAgentTurnOutcomeDeliveryPart6(): void {
   it("takes turn timeouts from the alias, and a step may override them", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
     const fake = new FakeHarness({ id: "fake" });
@@ -593,53 +1064,9 @@ describe("agent turn outcome delivery", () => {
     expect(fake.calls[2]!.timeouts).toEqual({ idleMs: 7, wallMs: 9 });
     fs.rmSync(root, { recursive: true, force: true });
   });
-});
-describe("delivery guard", () => {
-  const reviewerVars = {
-    task_path: "/g/tasks/a.md",
-    worktree: "/wt/a",
-    base_hash: "aaa",
-    head_hash: "bbb",
-    round: "1",
-    max_rounds: "2",
-    base_gates: "not recorded",
-    prior_findings: "",
-    upscope_ask: "",
-    last_call: "false",
-  };
+}
 
-  const frontVars = {
-    iteration: "1",
-    intent_path: "/g/intent.md",
-    plan_path: "/g/plan.md",
-    tasks_dir: "/g/tasks",
-    class_path: "/g/class.yaml",
-    pack_path: "/g/iterations/1/context-pack.md",
-    checkout: "/wt",
-    setup_command: "none",
-    gate_commands: "none",
-    class_types: frontClassTypesVar({
-      development: {
-        flow: "implement-review",
-        kind: "development",
-        schema: "outcome",
-      },
-      trivial: {
-        flow: "just-implement",
-        kind: "development",
-        schema: "outcome",
-      },
-    }),
-  };
-
-  async function setup() {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-guard-"));
-    const fake = new FakeHarness({ id: "fake" });
-    const runtime = runtimeFor(fake, root);
-    await runtime.store.ensureLayout();
-    return { root, fake, runtime };
-  }
-
+function registerDeliveryGuardPart1(): void {
   it("repairs a verdict-less review from the template, then fails naming the verdict", async () => {
     const { root, fake, runtime } = await setup();
     try {
@@ -682,7 +1109,9 @@ describe("delivery guard", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerDeliveryGuardPart2(): void {
   it("refuses a changes verdict on the last review call and names it in the repair", async () => {
     const { root, fake, runtime } = await setup();
     try {
@@ -727,83 +1156,21 @@ describe("delivery guard", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerDeliveryGuardPart3(): void {
   it("resolves a debtClosed id against the records and repairs an unknown one", async () => {
     const { root, fake, runtime } = await setup();
     try {
-      const seed = await runtime.store.startRecord({
-        iteration: 1,
-        slug: "a",
-        step: "review",
-        round: 1,
-        actor: "agent",
-        alias: "reviewer",
-        model: { id: "fake" },
-      });
-      await seed.finish({
-        stop: { kind: "done" },
-        outcome: {
-          status: "done",
-          summary: "raised a debt",
-          concerns: [
-            {
-              kind: "debt",
-              calibration: "architect",
-              text: "shim in the writer",
-            },
-          ],
-          forward: [],
-          verdict: "approve",
-        },
-      });
-      const debtId = `${path.basename(seed.dir)}#1`;
-
-      fake.script((req, ctx) => {
-        ctx.writeOutcome({
-          status: "done",
-          summary: "closed",
-          debtClosed: [{ id: debtId, reason: "shim removed" }],
-        });
-        return fakeTurnResult(req);
-      });
-      await runAgentTurn(runtime, {
-        target: resolveTurn(runtime, "implementer", "implementer"),
-        cwd: root,
-        meta: { iteration: 1, slug: "b", step: "implement", round: 1 },
-        vars: implementerVars,
-        expectation: "any",
-      });
-      expect(fake.calls).toHaveLength(1);
-
-      fake.script((req, ctx) => {
-        ctx.writeOutcome({
-          status: "done",
-          summary: "closed the wrong id",
-          debtClosed: [{ id: "nope#1", reason: "shim removed" }],
-        });
-        return fakeTurnResult(req);
-      });
-      fake.script((req, ctx) => {
-        ctx.writeOutcome({ status: "done", summary: "repaired" });
-        return fakeTurnResult(req);
-      });
-      const repaired = await runAgentTurn(runtime, {
-        target: resolveTurn(runtime, "implementer", "implementer"),
-        cwd: root,
-        meta: { iteration: 1, slug: "c", step: "implement", round: 1 },
-        vars: implementerVars,
-        expectation: "any",
-      });
-      expect(fake.calls).toHaveLength(3);
-      expect(fake.calls[2]!.prompt).toContain(
-        "- unknown debt id: nope#1: no ingested debt concern has that id",
-      );
-      expect(repaired.outcome?.summary).toBe("repaired");
+      await resolvesDebtClosedIdAgainstRecordsPart1(runtime, fake, root);
+      await resolvesDebtClosedIdAgainstRecordsPart2(runtime, fake, root);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerDeliveryGuardPart4(): void {
   it("refuses a debt raised and closed in the same record", async () => {
     const { root, fake, runtime } = await setup();
     try {
@@ -846,7 +1213,9 @@ describe("delivery guard", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerDeliveryGuardPart5(): void {
   it("omits the verdict and decision lines when a bare done delivers", async () => {
     const { root, fake, runtime } = await setup();
     try {
@@ -876,7 +1245,9 @@ describe("delivery guard", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerDeliveryGuardPart6(): void {
   it("keeps the decision line but no verdict in an architect repair", async () => {
     const { root, fake, runtime } = await setup();
     try {
@@ -910,7 +1281,9 @@ describe("delivery guard", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerDeliveryGuardPart7(): void {
   it("names task files when a PM turn delivers no outcome", async () => {
     const { root, fake, runtime } = await setup();
     try {
@@ -940,7 +1313,9 @@ describe("delivery guard", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerDeliveryGuardPart8(): void {
   it("names class, task, and pack when a front turn delivers no outcome", async () => {
     const { root, fake, runtime } = await setup();
     try {
@@ -970,7 +1345,9 @@ describe("delivery guard", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerDeliveryGuardPart9(): void {
   it("repairs an architect continue with no plan on disk, then fails naming the plan", async () => {
     const { root, fake, runtime } = await setup();
     try {
@@ -1030,72 +1407,25 @@ describe("delivery guard", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerDeliveryGuardPart10(): void {
   it("repairs an architect continue over an untouched plan, then fails naming the plan edit", async () => {
     const { root, fake, runtime } = await setup();
     try {
-      const planPath = path.join(runtime.store.goalDir, "plan.md");
-      fs.writeFileSync(planPath, "# Plan\n", "utf8");
-      const turn = () =>
-        runAgentTurn(runtime, {
-          target: boundaryTarget(runtime, "architect"),
-          cwd: root,
-          meta: { iteration: 1, step: "architect", round: 1 },
-          vars: { ...vars, plan_path: planPath },
-          expectation: "architect",
-          repairTurns: 3,
-        });
-      fake.script((req, ctx) => {
-        ctx.writeOutcome({
-          status: "done",
-          summary: "go",
-          decision: "continue",
-        });
-        return fakeTurnResult(req);
-      });
-      fake.script((req, ctx) => {
-        ctx.writeOutcome({
-          status: "done",
-          summary: "still going",
-          decision: "continue",
-        });
-        return fakeTurnResult(req);
-      });
-      fake.script((req, ctx) => {
-        ctx.writeOutcome({
-          status: "done",
-          summary: "still going",
-          decision: "continue",
-        });
-        return fakeTurnResult(req);
-      });
-      fake.script((req, ctx) => {
-        ctx.writeOutcome({
-          status: "done",
-          summary: "still going",
-          decision: "continue",
-        });
-        return fakeTurnResult(req);
-      });
-
-      const result = await turn();
-
-      expect(fake.calls).toHaveLength(4);
-      const repair = fake.calls[1]!.prompt;
-      expect(repair).toContain("plan edit or stop decision");
-      expect(repair).toContain(
-        `${planPath} is unchanged since the turn started`,
+      const scope1 = await repairsArchitectContinueOverPart1(
+        runtime,
+        root,
+        fake,
       );
-      expect(repair).toContain("the plan edit must be on disk");
-      expect(result.outcome?.status).toBe("failed");
-      expect(result.outcome?.summary).toContain(
-        `${planPath} is unchanged since the turn started`,
-      );
+      await repairsArchitectContinueOverPart2(fake, scope1);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerDeliveryGuardPart11(): void {
   it("spends no repair turn when the architect edits or creates the continued plan", async () => {
     const { root, fake, runtime } = await setup();
     try {
@@ -1142,7 +1472,9 @@ describe("delivery guard", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerDeliveryGuardPart12(): void {
   it("compares the repair turn against the pre-turn plan, not the first attempt's", async () => {
     const { root, fake, runtime } = await setup();
     try {
@@ -1179,7 +1511,9 @@ describe("delivery guard", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerDeliveryGuardPart13(): void {
   it("spends no repair turn when the architect stops without touching the plan", async () => {
     const { root, fake, runtime } = await setup();
     try {
@@ -1220,138 +1554,11 @@ describe("delivery guard", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
-});
-
-const pmVars = {
-  iteration: "1",
-  intent_path: "/g/intent.md",
-  plans: "- goal: /g/plan.md",
-  tasks_dir: "/g/tasks",
-  existing_tasks: "none",
-  repair: "",
-  steers: "none",
-  holds_dir: "/g/mailbox/holds",
-  stalls: "none",
-  plan_checks: "none",
-};
-
-const implementerVars = {
-  task_path: "/g/tasks/a.md",
-  report_path: "",
-  front_pack: "",
-  worktree: "/wt/a",
-  resume_note: "",
-  setup_command: "none",
-  gate_commands: "none",
-  base_gates: "not recorded",
-  findings: "",
-};
-
-function packFixture(): string {
-  const tasks = [task("a"), task("b", { deps: ["a"] })];
-  return renderContextPack({
-    goal: "demo",
-    iteration: 1,
-    intentPath: "/g/intent.md",
-    planPath: "/g/plan.md",
-    checkout: "/wt",
-    integrationBranch: "factory/demo",
-    headHash: "abcdef1234567890",
-    recordsDir: "/g/records",
-    tasksDir: "/g/tasks",
-    tasks,
-    state: derive(tasks, []),
-    steers: [],
-    setup: [],
-    gates: [{ id: "test", command: "bun test" }],
-    forwarded: [],
-    debts: [],
-  });
 }
 
-describe("agent turn prompt size", () => {
-  it("records prompt bytes on every agent step", async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
-    const fake = new FakeHarness({ id: "fake" });
-    const runtime = runtimeFor(fake, root);
-    await runtime.store.ensureLayout();
-    fake.script((req, ctx) => {
-      ctx.writeOutcome({ status: "done", summary: "ok" });
-      return fakeTurnResult(req);
-    });
-
-    const result = await runAgentTurn(runtime, {
-      target: resolveTurn(runtime, "implementer", "implementer"),
-      cwd: root,
-      meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
-      vars: implementerVars,
-      expectation: "any",
-    });
-
-    expect(result.record.promptBytes).toBe(
-      Buffer.byteLength(fake.calls[0]!.prompt, "utf8"),
-    );
-    expect(result.record.promptBytes).toBeGreaterThan(0);
-    expect(result.record.packBytes).toBeUndefined();
-    fs.rmSync(root, { recursive: true, force: true });
-  });
-
-  it("records pack bytes on architect and PM records", async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
-    const fake = new FakeHarness({ id: "fake" });
-    const runtime = runtimeFor(fake, root);
-    await runtime.store.ensureLayout();
-    const pack = packFixture();
-    await runtime.store.writeFile("iterations/1/context-pack.md", pack);
-
-    fake.script((req, ctx) => {
-      ctx.writeOutcome({
-        status: "done",
-        summary: "plan",
-        decision: "done",
-      });
-      return fakeTurnResult(req);
-    });
-    const architect = await runAgentTurn(runtime, {
-      target: boundaryTarget(runtime, "architect"),
-      cwd: root,
-      meta: { iteration: 1, step: "architect", round: 1 },
-      vars,
-      expectation: "architect",
-    });
-    expect(architect.record.packBytes).toBe(Buffer.byteLength(pack, "utf8"));
-
-    fake.script((req, ctx) => {
-      ctx.writeOutcome({ status: "done", summary: "tasks" });
-      return fakeTurnResult(req);
-    });
-    const pm = await runAgentTurn(runtime, {
-      target: boundaryTarget(runtime, "pm"),
-      cwd: root,
-      meta: { iteration: 1, step: "pm", round: 1 },
-      vars: pmVars,
-      expectation: "any",
-    });
-    expect(pm.record.packBytes).toBe(Buffer.byteLength(pack, "utf8"));
-    fs.rmSync(root, { recursive: true, force: true });
-  });
-});
-
-describe("bounded repairs", () => {
-  async function setup() {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-repair-"));
-    const fake = new FakeHarness({ id: "fake" });
-    const runtime = runtimeFor(fake, root);
-    await runtime.store.ensureLayout();
-    return { root, fake, runtime };
-  }
-
-  function invalidYaml(line: string): string {
-    return `status: [unclosed ${line}\nsummary: x\n`;
-  }
-
+function registerBoundedRepairsPart1(): void {
   it("defaults to one reminder from process config", async () => {
-    const { root, fake, runtime } = await setup();
+    const { root, fake, runtime } = await setupLocal();
     try {
       expect(runtime.configs.process.reminders).toBe(1);
       fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
@@ -1372,9 +1579,11 @@ describe("bounded repairs", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerBoundedRepairsPart2(): void {
   it("delivers when the second repair fixes the outcome", async () => {
-    const { root, fake, runtime } = await setup();
+    const { root, fake, runtime } = await setupLocal();
     try {
       fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
       fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
@@ -1401,9 +1610,11 @@ describe("bounded repairs", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerBoundedRepairsPart3(): void {
   it("delivers when the third repair fixes the outcome", async () => {
-    const { root, fake, runtime } = await setup();
+    const { root, fake, runtime } = await setupLocal();
     try {
       fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
       fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
@@ -1431,9 +1642,11 @@ describe("bounded repairs", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerBoundedRepairsPart4(): void {
   it("stops at once on a valid outcome", async () => {
-    const { root, fake, runtime } = await setup();
+    const { root, fake, runtime } = await setupLocal();
     try {
       fake.script((req, ctx) => {
         ctx.writeOutcome({ status: "done", summary: "clean" });
@@ -1455,9 +1668,11 @@ describe("bounded repairs", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerBoundedRepairsPart5(): void {
   it("accepts an outcome written just after the harness returns", async () => {
-    const { root, fake, runtime } = await setup();
+    const { root, fake, runtime } = await setupLocal();
     try {
       fake.script((req) => {
         const outcomePath = req.outcomePath!;
@@ -1490,9 +1705,11 @@ describe("bounded repairs", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerBoundedRepairsPart6(): void {
   it("settles a missing outcome once for the whole turn", async () => {
-    const { root, fake, runtime } = await setup();
+    const { root, fake, runtime } = await setupLocal();
     try {
       fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
       fake.script((req) => fakeTurnResult(req, { text: "still nothing" }));
@@ -1519,9 +1736,11 @@ describe("bounded repairs", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerBoundedRepairsPart7(): void {
   it("carries each repair latest YAML finding verbatim with line and column", async () => {
-    const { root, fake, runtime } = await setup();
+    const { root, fake, runtime } = await setupLocal();
     try {
       const firstBad = invalidYaml("one");
       const secondBad = `status: done\nsummary: [bad\n: oops\n`;
@@ -1560,9 +1779,11 @@ describe("bounded repairs", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerBoundedRepairsPart8(): void {
   it("lets a task repairTurns override shrink the loop", async () => {
-    const { root, fake, runtime } = await setup();
+    const { root, fake, runtime } = await setupLocal();
     try {
       fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
       const zero = await runAgentTurn(runtime, {
@@ -1592,9 +1813,11 @@ describe("bounded repairs", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerBoundedRepairsPart9(): void {
   it("spends no repair on refusal or cancelled stops", async () => {
-    const { root, fake, runtime } = await setup();
+    const { root, fake, runtime } = await setupLocal();
     try {
       fake.script((req) =>
         fakeTurnResult(req, { stop: { kind: "refusal", details: "no" } }),
@@ -1625,9 +1848,11 @@ describe("bounded repairs", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerBoundedRepairsPart10(): void {
   it("ends the loop when a repair is interrupted without an outcome", async () => {
-    const { root, fake, runtime } = await setup();
+    const { root, fake, runtime } = await setupLocal();
     try {
       fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
       fake.script((req) =>
@@ -1649,9 +1874,11 @@ describe("bounded repairs", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerBoundedRepairsPart11(): void {
   it("checks the architect plan finding on every repair round", async () => {
-    const { root, fake, runtime } = await setup();
+    const { root, fake, runtime } = await setupLocal();
     try {
       const planPath = path.join(runtime.store.goalDir, "plan.md");
       fs.writeFileSync(planPath, "# Plan\n", "utf8");
@@ -1702,32 +1929,11 @@ describe("bounded repairs", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
-});
+}
 
-describe("repair findings and launch kinds", () => {
-  async function setup() {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-launch-"));
-    const fake = new FakeHarness({ id: "fake" });
-    const runtime = runtimeFor(fake, root);
-    await runtime.store.ensureLayout();
-    return { root, fake, runtime };
-  }
-
-  const reviewerVars = {
-    task_path: "/g/tasks/a.md",
-    worktree: "/wt/a",
-    base_hash: "aaa",
-    head_hash: "bbb",
-    round: "1",
-    max_rounds: "2",
-    base_gates: "not recorded",
-    prior_findings: "",
-    upscope_ask: "",
-    last_call: "false",
-  };
-
+function registerRepairFindingsAndLaunchKindsPart1(): void {
   it("marks repair findings resolved when the repair delivers", async () => {
-    const { root, fake, runtime } = await setup();
+    const { root, fake, runtime } = await setupLocal2();
     try {
       fake.script((req) => {
         fs.writeFileSync(
@@ -1770,9 +1976,11 @@ describe("repair findings and launch kinds", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerRepairFindingsAndLaunchKindsPart2(): void {
   it("marks infra stops as glitches", async () => {
-    const { root, fake, runtime } = await setup();
+    const { root, fake, runtime } = await setupLocal2();
     try {
       fake.script((req) =>
         fakeTurnResult(req, { stop: { kind: "infra", cause: "quota" } }),
@@ -1792,9 +2000,11 @@ describe("repair findings and launch kinds", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerRepairFindingsAndLaunchKindsPart3(): void {
   it("marks fallback hops as glitches", async () => {
-    const { root, fake, runtime } = await setup();
+    const { root, fake, runtime } = await setupLocal2();
     try {
       const base = resolveTurn(runtime, "implementer", "implementer");
       const target = {
@@ -1827,10 +2037,12 @@ describe("repair findings and launch kinds", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerRepairFindingsAndLaunchKindsPart4(): void {
   it("records exhausted pool on quota stop but not on timeout, rate, or crash", async () => {
     for (const cause of ["timeout", "rate", "crash"] as const) {
-      const { root, fake, runtime } = await setup();
+      const { root, fake, runtime } = await setupLocal2();
       try {
         const base = resolveTurn(runtime, "implementer", "implementer");
         const target = {
@@ -1862,9 +2074,11 @@ describe("repair findings and launch kinds", () => {
       }
     }
   });
+}
 
+function registerRepairFindingsAndLaunchKindsPart5(): void {
   it("marks review changes as change-request and failed outcomes as failure", async () => {
-    const { root, fake, runtime } = await setup();
+    const { root, fake, runtime } = await setupLocal2();
     try {
       fake.script((req, ctx) => {
         ctx.writeOutcome({
@@ -1878,7 +2092,7 @@ describe("repair findings and launch kinds", () => {
         target: resolveTurn(runtime, "reviewer", "reviewer"),
         cwd: root,
         meta: { iteration: 1, slug: "a", step: "review", round: 1 },
-        vars: reviewerVars,
+        vars: reviewerVarsLocal,
         expectation: "review",
       });
       expect(changes.record.launchKind).toBe("change-request");
@@ -1911,9 +2125,11 @@ describe("repair findings and launch kinds", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerRepairFindingsAndLaunchKindsPart6(): void {
   it("reads the reminder count from process config", async () => {
-    const { root, fake, runtime } = await setup();
+    const { root, fake, runtime } = await setupLocal2();
     try {
       runtime.configs.process.reminders = 0;
       fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
@@ -1947,9 +2163,11 @@ describe("repair findings and launch kinds", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerRepairFindingsAndLaunchKindsPart7(): void {
   it("stores a typed kind on every park", async () => {
-    const { root, runtime } = await setup();
+    const { root, runtime } = await setupLocal2();
     try {
       expect(parkLaunchKind(cause("overflow"))).toBe("glitch");
       expect(parkLaunchKind(cause("infra-repeat: timeout"))).toBe("glitch");
@@ -1996,4 +2214,4 @@ describe("repair findings and launch kinds", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
-});
+}

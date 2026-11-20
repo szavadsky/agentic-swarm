@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import fs from "node:fs";
 import path from "node:path";
 import { resolveAcpxCommand } from "../harness/acpx/command.js";
@@ -594,18 +593,13 @@ async function unconfiguredTaskFindings(
     }));
 }
 
-/**
- * Validates configs, aliases, models, effort levels, fallbacks, binaries, the
- * roots and the base branch — collecting every violation into one report. A red
- * base is recorded and warned once; it never aborts.
- */
-export async function preflight(
-  input: PreflightInput,
-): Promise<PreflightResult> {
-  const { configs, paths, store } = input;
-  const files = configs.files ?? configFilePaths(paths.repoRoot);
+/** The static config findings: aliases, fallbacks, process types, tiers. */
+async function configFindings(
+  configs: ConfigBundle,
+  files: ReturnType<typeof configFilePaths>,
+  store: ArtifactStore,
+): Promise<Finding[]> {
   const findings: Finding[] = [];
-
   findings.push(
     ...requiredAliasFindings(configs.process, configs.run.aliases, files.run),
   );
@@ -627,6 +621,34 @@ export async function preflight(
   // An escalated task naming a missing alias would fail only mid-turn, after
   // the plan spent.
   findings.push(...(await tierFindings(store, configs.run.aliases)));
+  return findings;
+}
+
+/** Writes the resolved effort levels back into the in-memory run config. */
+function applyResolvedEfforts(
+  configs: ConfigBundle,
+  resolved: Record<string, string | undefined>,
+): void {
+  for (const [name, effort] of Object.entries(resolved)) {
+    if (name === "scouts") {
+      if (configs.run.scouts) configs.run.scouts.effort = effort;
+    } else if (configs.run.aliases[name]) {
+      configs.run.aliases[name]!.effort = effort;
+    }
+  }
+}
+
+/**
+ * Validates configs, aliases, models, effort levels, fallbacks, binaries, the
+ * roots and the base branch — collecting every violation into one report. A red
+ * base is recorded and warned once; it never aborts.
+ */
+export async function preflight(
+  input: PreflightInput,
+): Promise<PreflightResult> {
+  const { configs, paths, store } = input;
+  const files = configs.files ?? configFilePaths(paths.repoRoot);
+  const findings = await configFindings(configs, files, store);
 
   const used = usedHarnesses(configs.run.aliases);
   const binaries = harnessBinaries(configs, files, input, used);
@@ -655,12 +677,6 @@ export async function preflight(
       base.baseCommit,
     );
   }
-  for (const [name, effort] of Object.entries(resolvedAliases)) {
-    if (name === "scouts") {
-      if (configs.run.scouts) configs.run.scouts.effort = effort;
-    } else if (configs.run.aliases[name]) {
-      configs.run.aliases[name]!.effort = effort;
-    }
-  }
+  applyResolvedEfforts(configs, resolvedAliases);
   return result;
 }

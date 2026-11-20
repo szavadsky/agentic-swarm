@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import yaml from "yaml";
 import type { Stop, TurnAttempt, Usage } from "../harness/types.js";
 import { addUsage, countOutcomeRepairs, zeroUsage } from "../harness/usage.js";
@@ -656,138 +655,6 @@ function costPerTask(merged: number, cost: number | undefined): number | null {
   return merged > 0 && cost !== undefined ? cost / merged : null;
 }
 
-/** One iteration's spend and incidents, shared by `metrics.yaml` and its summary. */
-export function iterationMetrics(
-  n: number,
-  status: SummaryStatus,
-  records: StepRecord[],
-  roleByStep: Record<string, string>,
-  humanInterventions: number,
-  prices: PriceTable,
-  priceIds?: Record<string, string>,
-): IterationMetrics {
-  const recs = records.filter(
-    (r) => r.iteration === n && r.endedAt && r.actor === "agent",
-  );
-  let usage = zeroUsage();
-  let unpricedTurns = 0;
-  let edits = 0;
-  let addedLines = 0;
-  let removedLines = 0;
-  const roles: Record<string, RoleMetrics> = {};
-  const aliases: Record<string, AliasMetrics> = {};
-  const models: Record<string, ModelMetrics> = {};
-  const architect: ArchitectMetrics = emptyArchitect();
-
-  for (const rec of recs) {
-    const priced = pricedRecord(rec, prices, priceIds);
-    const part = priced.usage;
-    const unpriced = priced.costKnown ? 0 : 1;
-    const promptBytes = rec.promptBytes ?? 0;
-    const work = {
-      edits: rec.edits?.files ?? 0,
-      added: rec.edits?.added ?? 0,
-      removed: rec.edits?.removed ?? 0,
-    };
-    usage = addUsage(usage, part);
-    unpricedTurns += unpriced;
-    edits += work.edits;
-    addedLines += work.added;
-    removedLines += work.removed;
-
-    const role =
-      roleByStep[rec.step] ?? DEFAULT_ROLE_BY_STEP[rec.step] ?? rec.step;
-    const launch = deriveLaunchKind(rec);
-    recordGroups(
-      rec,
-      role,
-      part,
-      unpriced,
-      promptBytes,
-      work,
-      launch,
-      roles,
-      aliases,
-    );
-    recordModels(
-      rec,
-      priced,
-      part,
-      unpriced,
-      promptBytes,
-      work,
-      launch,
-      models,
-    );
-    recordArchitect(rec, role, architect, unpriced, part);
-  }
-
-  const all = records.filter((r) => r.iteration === n);
-  const merged = sortedSlugs(all, (r) => r.step === "merge" && r.ok === true);
-  const parked = sortedSlugs(
-    all,
-    (r) => r.step === "park" && r.endedAt !== undefined,
-  );
-  const quarantined = sortedSlugs(
-    all,
-    (r) => r.step === "task-quarantine" && r.endedAt !== undefined,
-  );
-  const incidents = emptyIncidents();
-  attemptIncidents(recs, incidents);
-  parkIncidents(all, incidents);
-  const waste = wasteAccounting({
-    records: all,
-    roleOf: (step) => roleByStep[step] ?? DEFAULT_ROLE_BY_STEP[step] ?? step,
-  });
-  for (const entry of waste.entries) recordWaste(roles, aliases, entry);
-  for (const review of waste.rebuttedReviews) {
-    recordRebutted(roles, aliases, review);
-  }
-  const planReviewMarks = planReviewMarkCounts(all);
-  const tokens = tokenTotal(usage);
-
-  // Gate/commit wall and test runs come from the script records' own stamps;
-  // a gate's test runs are the script's work, not the agent turn it verifies.
-  const { gateWallMs, commitWallMs, gateRuns, testRuns } = scriptTotals(
-    all,
-    roles,
-  );
-  const operatorActs = humanInterventions + all.filter(isOutsideAct).length;
-
-  architect.costShare = width(architect.usage.costUsd ?? 0, usage.costUsd ?? 0);
-  architect.tokenShare = width(architect.tokens, tokens);
-  return {
-    n,
-    status,
-    turns: recs.length,
-    merged,
-    parked,
-    quarantined,
-    usage,
-    tokens,
-    costPerMergedTask: costPerTask(merged.length, usage.costUsd),
-    listCostPerMergedTask: costPerTask(merged.length, usage.listCostUsd),
-    roles,
-    aliases,
-    models,
-    architect,
-    planReviewMarks,
-    unpricedTurns,
-    waste,
-    incidents,
-    loopIncidents: incidents.noProgressParks + incidents.emptyDiffParks,
-    humanInterventions,
-    operatorActs,
-    gateWallMs,
-    commitWallMs,
-    gateRuns,
-    testRuns,
-    edits,
-    addedLines,
-    removedLines,
-  };
-}
-
 /** Adds one iteration's group into the running total for its name. */
 function sumGroupInto<T extends GroupMetrics>(
   totals: Record<string, T>,
@@ -869,77 +736,190 @@ function sumWaste(total: WasteAccounting, part: WasteAccounting): void {
   total.rebuttedReviews.push(...part.rebuttedReviews);
 }
 
-export function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
-  let usage = zeroUsage();
-  let tokens = 0;
-  let turns = 0;
-  let merged = 0;
-  let parked = 0;
-  let loopIncidents = 0;
-  let humanInterventions = 0;
-  let operatorActs = 0;
-  let gateWallMs = 0;
-  let commitWallMs = 0;
-  let gateRuns = 0;
-  let testRuns = 0;
-  let edits = 0;
-  let addedLines = 0;
-  let removedLines = 0;
-  let unpricedTurns = 0;
-  const roles: Record<string, RoleMetrics> = {};
-  const aliases: Record<string, AliasMetrics> = {};
-  const models: Record<string, ModelMetrics> = {};
+/** The running totals one iteration's agent turns accumulate into. */
+interface TurnAccumulator {
+  usage: Usage;
+  unpricedTurns: number;
+  edits: number;
+  addedLines: number;
+  removedLines: number;
+  roles: Record<string, RoleMetrics>;
+  aliases: Record<string, AliasMetrics>;
+  models: Record<string, ModelMetrics>;
+  architect: ArchitectMetrics;
+}
+
+/** Adds one agent turn's usage, work and group rows to the accumulator. */
+function accumulateTurn(
+  acc: TurnAccumulator,
+  rec: StepRecord,
+  roleByStep: Record<string, string>,
+  prices: PriceTable,
+  priceIds: Record<string, string> | undefined,
+): void {
+  const priced = pricedRecord(rec, prices, priceIds);
+  const part = priced.usage;
+  const unpriced = priced.costKnown ? 0 : 1;
+  const promptBytes = rec.promptBytes ?? 0;
+  const work = {
+    edits: rec.edits?.files ?? 0,
+    added: rec.edits?.added ?? 0,
+    removed: rec.edits?.removed ?? 0,
+  };
+  acc.usage = addUsage(acc.usage, part);
+  acc.unpricedTurns += unpriced;
+  acc.edits += work.edits;
+  acc.addedLines += work.added;
+  acc.removedLines += work.removed;
+
+  const role =
+    roleByStep[rec.step] ?? DEFAULT_ROLE_BY_STEP[rec.step] ?? rec.step;
+  const launch = deriveLaunchKind(rec);
+  recordGroups(
+    rec,
+    role,
+    part,
+    unpriced,
+    promptBytes,
+    work,
+    launch,
+    acc.roles,
+    acc.aliases,
+  );
+  recordModels(
+    rec,
+    priced,
+    part,
+    unpriced,
+    promptBytes,
+    work,
+    launch,
+    acc.models,
+  );
+  recordArchitect(rec, role, acc.architect, unpriced, part);
+}
+
+/** Accumulates every agent turn of the iteration. */
+function accumulateTurns(
+  recs: StepRecord[],
+  roleByStep: Record<string, string>,
+  prices: PriceTable,
+  priceIds: Record<string, string> | undefined,
+): TurnAccumulator {
+  const acc: TurnAccumulator = {
+    usage: zeroUsage(),
+    unpricedTurns: 0,
+    edits: 0,
+    addedLines: 0,
+    removedLines: 0,
+    roles: {},
+    aliases: {},
+    models: {},
+    architect: emptyArchitect(),
+  };
+  for (const rec of recs)
+    accumulateTurn(acc, rec, roleByStep, prices, priceIds);
+  return acc;
+}
+
+/** The iteration's waste, incidents and review marks. */
+function iterationIncidents(
+  all: StepRecord[],
+  recs: StepRecord[],
+  roleByStep: Record<string, string>,
+  roles: Record<string, RoleMetrics>,
+  aliases: Record<string, AliasMetrics>,
+): {
+  incidents: IncidentCounts;
+  waste: WasteAccounting;
+  planReviewMarks: PlanReviewMarkCounts;
+} {
   const incidents = emptyIncidents();
-  const architect = emptyArchitect();
-  const planReviewMarks: PlanReviewMarkCounts = { helpful: 0, unhelpful: 0 };
-  const waste = emptyWasteAccounting();
-
-  for (const iteration of iterations) {
-    usage = addUsage(usage, iteration.usage);
-    tokens += iteration.tokens;
-    turns += iteration.turns;
-    merged += iteration.merged.length;
-    parked += iteration.parked.length;
-    loopIncidents += iteration.loopIncidents;
-    humanInterventions += iteration.humanInterventions;
-    operatorActs += iteration.operatorActs;
-    gateWallMs += iteration.gateWallMs;
-    commitWallMs += iteration.commitWallMs;
-    gateRuns += iteration.gateRuns;
-    testRuns += iteration.testRuns;
-    edits += iteration.edits;
-    addedLines += iteration.addedLines;
-    removedLines += iteration.removedLines;
-    unpricedTurns += iteration.unpricedTurns;
-    sumIterationGroups(iteration, roles, aliases, models);
-    sumIncidents(incidents, iteration.incidents);
-    sumArchitect(architect, iteration.architect);
-    planReviewMarks.helpful += iteration.planReviewMarks?.helpful ?? 0;
-    planReviewMarks.unhelpful += iteration.planReviewMarks?.unhelpful ?? 0;
-    sumWaste(waste, iteration.waste);
+  attemptIncidents(recs, incidents);
+  parkIncidents(all, incidents);
+  const waste = wasteAccounting({
+    records: all,
+    roleOf: (step) => roleByStep[step] ?? DEFAULT_ROLE_BY_STEP[step] ?? step,
+  });
+  for (const entry of waste.entries) recordWaste(roles, aliases, entry);
+  for (const review of waste.rebuttedReviews) {
+    recordRebutted(roles, aliases, review);
   }
+  return { incidents, waste, planReviewMarks: planReviewMarkCounts(all) };
+}
 
-  architect.costShare = width(architect.usage.costUsd ?? 0, usage.costUsd ?? 0);
-  architect.tokenShare = width(architect.tokens, tokens);
+/** The slug lists a single iteration's records name. */
+function iterationSlugs(all: StepRecord[]): {
+  merged: string[];
+  parked: string[];
+  quarantined: string[];
+} {
   return {
-    iterations: iterations.length,
-    turns,
-    merged: mergedList(iterations),
-    parked: parkedList(iterations),
-    quarantined: quarantinedList(iterations),
+    merged: sortedSlugs(all, (r) => r.step === "merge" && r.ok === true),
+    parked: sortedSlugs(
+      all,
+      (r) => r.step === "park" && r.endedAt !== undefined,
+    ),
+    quarantined: sortedSlugs(
+      all,
+      (r) => r.step === "task-quarantine" && r.endedAt !== undefined,
+    ),
+  };
+}
+
+/** The inputs one iteration's final metrics object is built from. */
+interface IterationMetricsParts {
+  n: number;
+  status: SummaryStatus;
+  recs: StepRecord[];
+  all: StepRecord[];
+  acc: TurnAccumulator;
+  slugs: ReturnType<typeof iterationSlugs>;
+  humanInterventions: number;
+  incidents: IncidentCounts;
+  waste: WasteAccounting;
+  planReviewMarks: PlanReviewMarkCounts;
+}
+
+/** Assembles one iteration's metrics from its accumulated parts. */
+function iterationMetricsResult(
+  parts: IterationMetricsParts,
+): IterationMetrics {
+  const { acc, slugs, incidents, humanInterventions, all, recs } = parts;
+  const { usage, unpricedTurns, edits, addedLines, removedLines } = acc;
+  // Gate/commit wall and test runs come from the script records' own stamps;
+  // a gate's test runs are the script's work, not the agent turn it verifies.
+  const { gateWallMs, commitWallMs, gateRuns, testRuns } = scriptTotals(
+    all,
+    acc.roles,
+  );
+  const operatorActs = humanInterventions + all.filter(isOutsideAct).length;
+  const tokens = tokenTotal(usage);
+  acc.architect.costShare = width(
+    acc.architect.usage.costUsd ?? 0,
+    usage.costUsd ?? 0,
+  );
+  acc.architect.tokenShare = width(acc.architect.tokens, tokens);
+  return {
+    n: parts.n,
+    status: parts.status,
+    turns: recs.length,
+    merged: slugs.merged,
+    parked: slugs.parked,
+    quarantined: slugs.quarantined,
     usage,
     tokens,
-    costPerMergedTask: costPerTask(merged, usage.costUsd),
-    listCostPerMergedTask: costPerTask(merged, usage.listCostUsd),
-    roles,
-    aliases,
-    models,
-    architect,
-    planReviewMarks,
+    costPerMergedTask: costPerTask(slugs.merged.length, usage.costUsd),
+    listCostPerMergedTask: costPerTask(slugs.merged.length, usage.listCostUsd),
+    roles: acc.roles,
+    aliases: acc.aliases,
+    models: acc.models,
+    architect: acc.architect,
+    planReviewMarks: parts.planReviewMarks,
     unpricedTurns,
-    waste,
+    waste: parts.waste,
     incidents,
-    loopIncidents,
+    loopIncidents: incidents.noProgressParks + incidents.emptyDiffParks,
     humanInterventions,
     operatorActs,
     gateWallMs,
@@ -950,6 +930,177 @@ export function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
     addedLines,
     removedLines,
   };
+}
+
+/** One iteration's spend and incidents, shared by `metrics.yaml` and its summary. */
+export function iterationMetrics(
+  n: number,
+  status: SummaryStatus,
+  records: StepRecord[],
+  roleByStep: Record<string, string>,
+  humanInterventions: number,
+  prices: PriceTable,
+  priceIds?: Record<string, string>,
+): IterationMetrics {
+  const recs = records.filter(
+    (r) => r.iteration === n && r.endedAt && r.actor === "agent",
+  );
+  const acc = accumulateTurns(recs, roleByStep, prices, priceIds);
+  const all = records.filter((r) => r.iteration === n);
+  const { incidents, waste, planReviewMarks } = iterationIncidents(
+    all,
+    recs,
+    roleByStep,
+    acc.roles,
+    acc.aliases,
+  );
+  return iterationMetricsResult({
+    n,
+    status,
+    recs,
+    all,
+    acc,
+    slugs: iterationSlugs(all),
+    humanInterventions,
+    incidents,
+    waste,
+    planReviewMarks,
+  });
+}
+
+/** The running totals every iteration accumulates into. */
+interface TotalsAccumulator {
+  usage: Usage;
+  tokens: number;
+  turns: number;
+  merged: number;
+  parked: number;
+  loopIncidents: number;
+  humanInterventions: number;
+  operatorActs: number;
+  gateWallMs: number;
+  commitWallMs: number;
+  gateRuns: number;
+  testRuns: number;
+  edits: number;
+  addedLines: number;
+  removedLines: number;
+  unpricedTurns: number;
+  roles: Record<string, RoleMetrics>;
+  aliases: Record<string, AliasMetrics>;
+  models: Record<string, ModelMetrics>;
+  incidents: IncidentCounts;
+  architect: ArchitectMetrics;
+  planReviewMarks: PlanReviewMarkCounts;
+  waste: WasteAccounting;
+}
+
+/** The empty accumulator a totals run starts from. */
+function emptyTotals(): TotalsAccumulator {
+  return {
+    usage: zeroUsage(),
+    tokens: 0,
+    turns: 0,
+    merged: 0,
+    parked: 0,
+    loopIncidents: 0,
+    humanInterventions: 0,
+    operatorActs: 0,
+    gateWallMs: 0,
+    commitWallMs: 0,
+    gateRuns: 0,
+    testRuns: 0,
+    edits: 0,
+    addedLines: 0,
+    removedLines: 0,
+    unpricedTurns: 0,
+    roles: {},
+    aliases: {},
+    models: {},
+    incidents: emptyIncidents(),
+    architect: emptyArchitect(),
+    planReviewMarks: { helpful: 0, unhelpful: 0 },
+    waste: emptyWasteAccounting(),
+  };
+}
+
+/** Folds every iteration's metrics into the running totals. */
+function sumIterations(
+  iterations: IterationMetrics[],
+  totals: TotalsAccumulator,
+): void {
+  for (const iteration of iterations) {
+    totals.usage = addUsage(totals.usage, iteration.usage);
+    totals.tokens += iteration.tokens;
+    totals.turns += iteration.turns;
+    totals.merged += iteration.merged.length;
+    totals.parked += iteration.parked.length;
+    totals.loopIncidents += iteration.loopIncidents;
+    totals.humanInterventions += iteration.humanInterventions;
+    totals.operatorActs += iteration.operatorActs;
+    totals.gateWallMs += iteration.gateWallMs;
+    totals.commitWallMs += iteration.commitWallMs;
+    totals.gateRuns += iteration.gateRuns;
+    totals.testRuns += iteration.testRuns;
+    totals.edits += iteration.edits;
+    totals.addedLines += iteration.addedLines;
+    totals.removedLines += iteration.removedLines;
+    totals.unpricedTurns += iteration.unpricedTurns;
+    sumIterationGroups(iteration, totals.roles, totals.aliases, totals.models);
+    sumIncidents(totals.incidents, iteration.incidents);
+    sumArchitect(totals.architect, iteration.architect);
+    totals.planReviewMarks.helpful += iteration.planReviewMarks?.helpful ?? 0;
+    totals.planReviewMarks.unhelpful +=
+      iteration.planReviewMarks?.unhelpful ?? 0;
+    sumWaste(totals.waste, iteration.waste);
+  }
+}
+
+/** Assembles the totals object from the accumulated fields. */
+function totalsResult(
+  iterations: IterationMetrics[],
+  totals: TotalsAccumulator,
+): MetricsTotals {
+  totals.architect.costShare = width(
+    totals.architect.usage.costUsd ?? 0,
+    totals.usage.costUsd ?? 0,
+  );
+  totals.architect.tokenShare = width(totals.architect.tokens, totals.tokens);
+  return {
+    iterations: iterations.length,
+    turns: totals.turns,
+    merged: mergedList(iterations),
+    parked: parkedList(iterations),
+    quarantined: quarantinedList(iterations),
+    usage: totals.usage,
+    tokens: totals.tokens,
+    costPerMergedTask: costPerTask(totals.merged, totals.usage.costUsd),
+    listCostPerMergedTask: costPerTask(totals.merged, totals.usage.listCostUsd),
+    roles: totals.roles,
+    aliases: totals.aliases,
+    models: totals.models,
+    architect: totals.architect,
+    planReviewMarks: totals.planReviewMarks,
+    unpricedTurns: totals.unpricedTurns,
+    waste: totals.waste,
+    incidents: totals.incidents,
+    loopIncidents: totals.loopIncidents,
+    humanInterventions: totals.humanInterventions,
+    operatorActs: totals.operatorActs,
+    gateWallMs: totals.gateWallMs,
+    commitWallMs: totals.commitWallMs,
+    gateRuns: totals.gateRuns,
+    testRuns: totals.testRuns,
+    edits: totals.edits,
+    addedLines: totals.addedLines,
+    removedLines: totals.removedLines,
+  };
+}
+
+export function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
+  const totals = emptyTotals();
+  sumIterations(iterations, totals);
+  return totalsResult(iterations, totals);
 }
 
 function mergedList(iterations: IterationMetrics[]): string[] {

@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { runAgentTurn } from "./agent.js";
 import {
   type FrontClass,
@@ -188,6 +187,64 @@ async function resultFor(
   return { action: "dispatch" };
 }
 
+/** The template variables a front turn reads. */
+function frontTurnVars(
+  runtime: KernelRuntime,
+  opts: FrontRunOptions,
+  packPath: string,
+): Record<string, string> {
+  return {
+    iteration: String(opts.iteration),
+    intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
+    plan_path: runtime.store.plans.path,
+    tasks_dir: runtime.store.tasks.dir,
+    class_path: runtime.store.pathOf({ area: "goal", rel: CLASS_FILE }),
+    pack_path: packPath,
+    checkout: runtime.paths.goalCheckout,
+    setup_command: runtime.configs.repo.setup.join(" && ") || "none",
+    gate_commands: gateCommands(runtime),
+    class_types: frontClassTypesVar(runtime.configs.process.taskTypes),
+  };
+}
+
+/** Runs the front's agent turn against the prepared context pack. */
+async function runFrontTurn(
+  runtime: KernelRuntime,
+  opts: FrontRunOptions,
+  target: ReturnType<typeof frontTarget>,
+  packPath: string,
+): Promise<Awaited<ReturnType<typeof runAgentTurn>>> {
+  return await runAgentTurn(runtime, {
+    target,
+    cwd: runtime.paths.goalCheckout,
+    meta: { iteration: opts.iteration, step: "front", round: 1 },
+    vars: frontTurnVars(runtime, opts, packPath),
+    expectation: KERNEL_TURN_STEPS.front,
+  });
+}
+
+/** The infra/blocked result for a front turn that did not finish cleanly. */
+function frontTurnFailure(
+  result: Awaited<ReturnType<typeof runAgentTurn>>,
+): FrontResult | undefined {
+  if (!result.outcome) {
+    return {
+      action: "infra",
+      cause: `front turn produced no outcome (${stopText(result.record.stop)})`,
+    };
+  }
+  if (result.outcome.status === "blocked") {
+    return { action: "blocked", cause: result.outcome.summary };
+  }
+  if (result.outcome.status !== "done") {
+    return {
+      action: "infra",
+      cause: `front turn ended ${result.outcome.status}: ${result.outcome.summary}`,
+    };
+  }
+  return undefined;
+}
+
 /**
  * The front consult, run before the architect boundary. A goal that already has
  * a plan or a class.yaml skips the turn: the class only changes by escalation.
@@ -222,39 +279,9 @@ export async function runFront(
       area: "iterations",
       rel: `${opts.iteration}/context-pack.md`,
     });
-    const result = await runAgentTurn(runtime, {
-      target,
-      cwd: runtime.paths.goalCheckout,
-      meta: { iteration: opts.iteration, step: "front", round: 1 },
-      vars: {
-        iteration: String(opts.iteration),
-        intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
-        plan_path: runtime.store.plans.path,
-        tasks_dir: runtime.store.tasks.dir,
-        class_path: runtime.store.pathOf({ area: "goal", rel: CLASS_FILE }),
-        pack_path: packPath,
-        checkout: runtime.paths.goalCheckout,
-        setup_command: runtime.configs.repo.setup.join(" && ") || "none",
-        gate_commands: gateCommands(runtime),
-        class_types: frontClassTypesVar(runtime.configs.process.taskTypes),
-      },
-      expectation: KERNEL_TURN_STEPS.front,
-    });
-    if (!result.outcome) {
-      return {
-        action: "infra",
-        cause: `front turn produced no outcome (${stopText(result.record.stop)})`,
-      };
-    }
-    if (result.outcome.status === "blocked") {
-      return { action: "blocked", cause: result.outcome.summary };
-    }
-    if (result.outcome.status !== "done") {
-      return {
-        action: "infra",
-        cause: `front turn ended ${result.outcome.status}: ${result.outcome.summary}`,
-      };
-    }
+    const result = await runFrontTurn(runtime, opts, target, packPath);
+    const failure = frontTurnFailure(result);
+    if (failure) return failure;
     const cls = readFrontClass(runtime);
     if (!cls) {
       return {

@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -179,6 +178,8 @@ function cliArgs(argv: string[]): string[] {
   return argv.slice(2);
 }
 
+const runs: Array<{ args: string[]; result: Captured }> = [];
+
 describe("run-factory skill", () => {
   it("ships kernel and config resources and a linked sandbox page", () => {
     expect(fs.existsSync(path.join(SKILL_DIR, "kernel.md"))).toBe(true);
@@ -218,107 +219,135 @@ describe("run-factory skill", () => {
       harnesses: { fake: alphaRun(goalDir, taskDir) },
       priceSource: testPriceSource(repo.dir),
     });
-    const runs: Array<{ args: string[]; result: Captured }> = [];
     try {
-      for (const line of walkthroughLines()) {
-        const args = cliArgs(argvFor(line, repo.dir));
-        const result = await captured(() => dispatch(args, deps()));
-        runs.push({ args, result });
-      }
-
-      const init = runs.find((run) => run.args[0] === "init")!;
-      expect(init.result.code).toBe(0);
-      expect(
-        fs.readFileSync(path.join(goalDir, "intent.md"), "utf8"),
-      ).toContain("Create alpha.txt");
-      for (const dir of ["tasks", "records", "mailbox/inbox", "iterations"]) {
-        expect(fs.existsSync(path.join(goalDir, dir))).toBe(true);
-      }
-
-      const steer = runs.find((run) => run.args[0] === "steer")!;
-      expect(steer.result.code).toBe(0);
-      const steerId = fs
-        .readdirSync(path.join(goalDir, "mailbox/processed"))
-        .find((name) => name.endsWith(".md"))!
-        .replace(/\.md$/, "");
-      expect(
-        fs.readFileSync(
-          path.join(goalDir, "mailbox/outbox", `steer-${steerId}.md`),
-          "utf8",
-        ),
-      ).toContain("acknowledged");
-
-      const run = runs.find((entry) => entry.args[0] === "run")!;
-      expect(run.result.code).toBe(3);
-      expect(run.result.out).toContain("stop=iteration-limit");
-      expect(fs.existsSync(path.join(goalDir, "plan.md"))).toBe(true);
-      expect(fs.existsSync(path.join(taskDir, "alpha.md"))).toBe(true);
-      expect(fs.existsSync(path.join(goalDir, "iterations/1/summary.md"))).toBe(
-        true,
+      const scope1 = await runsSkillWalkthroughFromFreshPart1(
+        repo,
+        deps,
+        goalDir,
+        taskDir,
       );
-      expect(
-        fs.readdirSync(path.join(goalDir, "mailbox/processed")).length,
-      ).toBe(1);
-
-      const status = runs.find(
-        (entry) => entry.args[0] === "status" && !entry.args.includes("--json"),
-      )!;
-      expect(status.result.code).toBe(0);
-      expect(status.result.out).toContain("goal demo: active (iteration 1)");
-      expect(status.result.out).toContain("alpha: merged");
-      expect(status.result.out).toContain("iterations/1/summary.md");
-
-      const statusJson = runs.find(
-        (entry) => entry.args[0] === "status" && entry.args.includes("--json"),
-      )!;
-      expect(statusJson.result.code).toBe(0);
-      const snapshot = JSON.parse(statusJson.result.out);
-      expect(snapshot.goal).toBe("demo");
-      expect(snapshot.status).toBe("active");
-      expect(
-        snapshot.tasks.merged.map((task: { slug: string }) => task.slug),
-      ).toEqual(["alpha"]);
-      expect(
-        fs.readFileSync(path.join(goalDir, "status.json"), "utf8").trim(),
-      ).toBe(statusJson.result.out.trim());
-      const dashboard = fs.readFileSync(
-        path.join(goalDir, "dashboard.html"),
-        "utf8",
-      );
-      expect(dashboard).toContain("demo");
-      expect(dashboard).toContain("alpha");
-      expect(dashboard).toContain('href="status.json"');
-
-      const benchmark = runs.find((entry) => entry.args[0] === "benchmark")!;
-      expect(benchmark.result.code).toBe(0);
-      expect(benchmark.result.out).toContain("goal demo: 1 iteration(s)");
-      expect(benchmark.result.out).toContain("| merged/parked | 1 / 0 |");
-
-      // The skill says a bounded launch ending in 3 is continued by the same
-      // command; the second launch closes the goal.
-      const close = await captured(() =>
-        dispatch(run.args, {
-          harnesses: { fake: doneHarness() },
-          priceSource: testPriceSource(repo.dir),
-        }),
-      );
-      expect(close.code).toBe(0);
-      const finalStatus = await captured(() =>
-        dispatch(["status", "--repo", repo.dir, "--goal", "demo"]),
-      );
-      expect(finalStatus.code).toBe(0);
-      expect(finalStatus.out).toContain("goal demo: done (iteration 2)");
-
-      const closed = JSON.parse(
-        fs.readFileSync(path.join(goalDir, "status.json"), "utf8"),
-      );
-      expect(closed.status).toBe("done");
-      expect(closed.iterations).toBe(2);
-      expect(
-        fs.readFileSync(path.join(goalDir, "dashboard.html"), "utf8"),
-      ).toContain("badge goal-done");
+      await runsSkillWalkthroughFromFreshPart2(repo, goalDir, scope1);
+      await runsSkillWalkthroughFromFreshPart3(goalDir);
     } finally {
       repo.cleanup();
     }
   }, 60_000);
 });
+
+async function runsSkillWalkthroughFromFreshPart1(
+  repo: TmpRepo,
+  deps: () => CliDeps,
+  goalDir: string,
+  taskDir: string,
+) {
+  for (const line of walkthroughLines()) {
+    const args = cliArgs(argvFor(line, repo.dir));
+    const result = await captured(() => dispatch(args, deps()));
+    runs.push({ args, result });
+  }
+
+  const init = runs.find((run) => run.args[0] === "init")!;
+  expect(init.result.code).toBe(0);
+  expect(fs.readFileSync(path.join(goalDir, "intent.md"), "utf8")).toContain(
+    "Create alpha.txt",
+  );
+  for (const dir of ["tasks", "records", "mailbox/inbox", "iterations"]) {
+    expect(fs.existsSync(path.join(goalDir, dir))).toBe(true);
+  }
+
+  const steer = runs.find((run) => run.args[0] === "steer")!;
+  expect(steer.result.code).toBe(0);
+  const steerId = fs
+    .readdirSync(path.join(goalDir, "mailbox/processed"))
+    .find((name) => name.endsWith(".md"))!
+    .replace(/\.md$/, "");
+  expect(
+    fs.readFileSync(
+      path.join(goalDir, "mailbox/outbox", `steer-${steerId}.md`),
+      "utf8",
+    ),
+  ).toContain("acknowledged");
+
+  const run = runs.find((entry) => entry.args[0] === "run")!;
+  expect(run.result.code).toBe(3);
+  expect(run.result.out).toContain("stop=iteration-limit");
+  expect(fs.existsSync(path.join(goalDir, "plan.md"))).toBe(true);
+  expect(fs.existsSync(path.join(taskDir, "alpha.md"))).toBe(true);
+  expect(fs.existsSync(path.join(goalDir, "iterations/1/summary.md"))).toBe(
+    true,
+  );
+  expect(fs.readdirSync(path.join(goalDir, "mailbox/processed")).length).toBe(
+    1,
+  );
+
+  const status = runs.find(
+    (entry) => entry.args[0] === "status" && !entry.args.includes("--json"),
+  )!;
+  expect(status.result.code).toBe(0);
+  expect(status.result.out).toContain("goal demo: active (iteration 1)");
+  expect(status.result.out).toContain("alpha: merged");
+
+  return { run, status };
+}
+
+async function runsSkillWalkthroughFromFreshPart2(
+  repo: TmpRepo,
+  goalDir: string,
+  scope: Awaited<ReturnType<typeof runsSkillWalkthroughFromFreshPart1>>,
+) {
+  const { status, run } = scope;
+  expect(status.result.out).toContain("iterations/1/summary.md");
+
+  const statusJson = runs.find(
+    (entry) => entry.args[0] === "status" && entry.args.includes("--json"),
+  )!;
+  expect(statusJson.result.code).toBe(0);
+  const snapshot = JSON.parse(statusJson.result.out);
+  expect(snapshot.goal).toBe("demo");
+  expect(snapshot.status).toBe("active");
+  expect(
+    snapshot.tasks.merged.map((task: { slug: string }) => task.slug),
+  ).toEqual(["alpha"]);
+  expect(
+    fs.readFileSync(path.join(goalDir, "status.json"), "utf8").trim(),
+  ).toBe(statusJson.result.out.trim());
+  const dashboard = fs.readFileSync(
+    path.join(goalDir, "dashboard.html"),
+    "utf8",
+  );
+  expect(dashboard).toContain("demo");
+  expect(dashboard).toContain("alpha");
+  expect(dashboard).toContain('href="status.json"');
+
+  const benchmark = runs.find((entry) => entry.args[0] === "benchmark")!;
+  expect(benchmark.result.code).toBe(0);
+  expect(benchmark.result.out).toContain("goal demo: 1 iteration(s)");
+  expect(benchmark.result.out).toContain("| merged/parked | 1 / 0 |");
+
+  // The skill says a bounded launch ending in 3 is continued by the same
+  // command; the second launch closes the goal.
+  const close = await captured(() =>
+    dispatch(run.args, {
+      harnesses: { fake: doneHarness() },
+      priceSource: testPriceSource(repo.dir),
+    }),
+  );
+  expect(close.code).toBe(0);
+  const finalStatus = await captured(() =>
+    dispatch(["status", "--repo", repo.dir, "--goal", "demo"]),
+  );
+  expect(finalStatus.code).toBe(0);
+  expect(finalStatus.out).toContain("goal demo: done (iteration 2)");
+
+  const closed = JSON.parse(
+    fs.readFileSync(path.join(goalDir, "status.json"), "utf8"),
+  );
+  expect(closed.status).toBe("done");
+  expect(closed.iterations).toBe(2);
+}
+
+async function runsSkillWalkthroughFromFreshPart3(goalDir: string) {
+  expect(
+    fs.readFileSync(path.join(goalDir, "dashboard.html"), "utf8"),
+  ).toContain("badge goal-done");
+}

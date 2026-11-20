@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -81,6 +80,13 @@ function captureWarn(): { lines: string[]; restore(): void } {
 }
 
 describe("signal policy", () => {
+  registerSignalPolicyPart1();
+  registerSignalPolicyPart2();
+  registerSignalPolicyPart3();
+  registerSignalPolicyPart4();
+});
+
+function registerSignalPolicyPart1(): void {
   it("drains on the first signal and aborts on the second, without OS signals", () => {
     const warning = captureWarn();
     let recordedGrace: number | undefined;
@@ -112,7 +118,9 @@ describe("signal policy", () => {
       warning.restore();
     }
   });
+}
 
+function registerSignalPolicyPart2(): void {
   it("stops dispatching after a drain request and writes the summary", async () => {
     const s = setupRepo();
     const controller = createDrainController();
@@ -156,7 +164,9 @@ describe("signal policy", () => {
       s.repo.cleanup();
     }
   }, 60_000);
+}
 
+function registerSignalPolicyPart3(): void {
   it("records the partial usage a cancelled turn returns", async () => {
     const s = setupRepo();
     const controller = createDrainController(() => Promise.resolve());
@@ -202,7 +212,9 @@ describe("signal policy", () => {
       s.repo.cleanup();
     }
   }, 60_000);
+}
 
+function registerSignalPolicyPart4(): void {
   it("a real second SIGINT in a launch still kills every registered group", async () => {
     const shutdownPath = path.resolve(__dirname, "../../src/core/shutdown.ts");
     const signalsPath = path.resolve(__dirname, "../../src/kernel/signals.ts");
@@ -258,4 +270,4 @@ process.exit(0);
 
     expect(res.exitCode).toBe(0);
   });
-});
+}

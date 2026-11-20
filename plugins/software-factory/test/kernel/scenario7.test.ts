@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -95,6 +94,23 @@ function scriptFirstIteration(harness: FakeHarness, goalDir: string): void {
 }
 
 function scriptSecondIteration(harness: FakeHarness, goalDir: string): void {
+  scriptSecondIterationPart1(harness, goalDir);
+  scriptSecondIterationPart2(harness, goalDir);
+}
+
+describe("KERNEL0 scenario 7 — plan edit between iterations", () => {
+  it("re-reads a changed pending task, keeps a removed one open, adds one, and restores frozen work", async () => {
+    const goal = makeGoal();
+    try {
+      const scope1 = await reReadsChangedPendingTaskKeepsPart1(goal);
+      await reReadsChangedPendingTaskKeepsPart2(goal, scope1);
+    } finally {
+      cleanup(goal);
+    }
+  }, 90_000);
+});
+
+function scriptSecondIterationPart1(harness: FakeHarness, goalDir: string) {
   scriptDigest(harness, goalDir, 2);
   harness.script((req, ctx) => {
     expect(req.prompt).toContain("- turn: `relaunch`");
@@ -129,6 +145,9 @@ function scriptSecondIteration(harness: FakeHarness, goalDir: string): void {
     ctx.writeOutcome(outcome({ summary: "repair acknowledged" }));
     return fakeTurnResult(req);
   });
+}
+
+function scriptSecondIterationPart2(harness: FakeHarness, goalDir: string) {
   harness.script((req, ctx) => {
     expect(
       fs.readFileSync(path.join(goalDir, "tasks/beta.md"), "utf8"),
@@ -159,61 +178,63 @@ function scriptSecondIteration(harness: FakeHarness, goalDir: string): void {
   });
 }
 
-describe("KERNEL0 scenario 7 — plan edit between iterations", () => {
-  it("re-reads a changed pending task, keeps a removed one open, adds one, and restores frozen work", async () => {
-    const goal = makeGoal();
-    try {
-      const first = new FakeHarness({ id: "fake" });
-      scriptFirstIteration(first, goal.goalDir);
-      await expectLaunch(3, goal.repo, first);
+async function reReadsChangedPendingTaskKeepsPart1(
+  goal: ReturnType<typeof makeGoal>,
+) {
+  const first = new FakeHarness({ id: "fake" });
+  scriptFirstIteration(first, goal.goalDir);
+  await expectLaunch(3, goal.repo, first);
 
-      let state = await stateOf(goal.goalDir);
-      expect(state.tasks.alpha!.status).toBe("merged");
-      expect(state.tasks.p!.status).toBe("parked");
-      expect(state.tasks.beta!.status).toBe("pending");
-      expect(state.tasks.gamma!.status).toBe("pending");
+  let state = await stateOf(goal.goalDir);
+  expect(state.tasks.alpha!.status).toBe("merged");
+  expect(state.tasks.p!.status).toBe("parked");
+  expect(state.tasks.beta!.status).toBe("pending");
+  expect(state.tasks.gamma!.status).toBe("pending");
 
-      const second = new FakeHarness({ id: "fake" });
-      scriptSecondIteration(second, goal.goalDir);
-      await expectLaunch(0, goal.repo, second, 2);
+  const second = new FakeHarness({ id: "fake" });
+  scriptSecondIteration(second, goal.goalDir);
+  await expectLaunch(0, goal.repo, second, 2);
 
-      state = await stateOf(goal.goalDir);
-      expect(state.tasks.alpha!.status).toBe("merged");
-      expect(state.tasks.beta!.status).toBe("merged");
-      expect(state.tasks.delta!.status).toBe("merged");
-      expect(state.tasks.gamma!.status).toBe("pending");
-      expect(state.tasks.p!.status).toBe("parked");
-      expect(
-        fs.readFileSync(path.join(goal.goalDir, "tasks/alpha.md"), "utf8"),
-      ).toBe(ALPHA);
+  state = await stateOf(goal.goalDir);
+  expect(state.tasks.alpha!.status).toBe("merged");
+  expect(state.tasks.beta!.status).toBe("merged");
+  expect(state.tasks.delta!.status).toBe("merged");
+  expect(state.tasks.gamma!.status).toBe("pending");
+  expect(state.tasks.p!.status).toBe("parked");
+  expect(
+    fs.readFileSync(path.join(goal.goalDir, "tasks/alpha.md"), "utf8"),
+  ).toBe(ALPHA);
 
-      const store = createFolderStore(goal.goalDir, undefined, {});
-      const records = await store.listRecords();
-      // Dropping gamma's bullet says nothing: it stays open, with no cancel.
-      expect(
-        records.find((r) => r.step === "cancel" && r.slug === "gamma"),
-      ).toBeUndefined();
-      expect(fs.existsSync(path.join(goal.goalDir, "tasks/gamma.md"))).toBe(
-        true,
-      );
-      const reconcile = records.find((r) => r.step === "pm-reconcile");
-      expect(causeText(reconcile?.cause)).toContain(
-        'frozen task "alpha" was edited; restored',
-      );
-      const summary = fs.readFileSync(
-        path.join(goal.goalDir, "iterations/2/summary.md"),
-        "utf8",
-      );
-      expect(summary).toContain("pm-reconcile");
-      expect(summary).toContain("- cancelled: none");
-      expect(
-        fs.existsSync(path.join(goal.goalDir, "iterations/2/digest.md")),
-      ).toBe(true);
-      expect(
-        goal.repo.git(["show", "factory/demo:beta2.txt"]).stdout.trim(),
-      ).toBe("beta2");
-    } finally {
-      cleanup(goal);
-    }
-  }, 90_000);
-});
+  const store = createFolderStore(goal.goalDir, undefined, {});
+  const records = await store.listRecords();
+  // Dropping gamma's bullet says nothing: it stays open, with no cancel.
+  expect(
+    records.find((r) => r.step === "cancel" && r.slug === "gamma"),
+  ).toBeUndefined();
+  expect(fs.existsSync(path.join(goal.goalDir, "tasks/gamma.md"))).toBe(true);
+  const reconcile = records.find((r) => r.step === "pm-reconcile");
+  expect(causeText(reconcile?.cause)).toContain(
+    'frozen task "alpha" was edited; restored',
+  );
+  const summary = fs.readFileSync(
+    path.join(goal.goalDir, "iterations/2/summary.md"),
+    "utf8",
+  );
+  expect(summary).toContain("pm-reconcile");
+
+  return { summary };
+}
+
+async function reReadsChangedPendingTaskKeepsPart2(
+  goal: ReturnType<typeof makeGoal>,
+  scope: Awaited<ReturnType<typeof reReadsChangedPendingTaskKeepsPart1>>,
+) {
+  const { summary } = scope;
+  expect(summary).toContain("- cancelled: none");
+  expect(fs.existsSync(path.join(goal.goalDir, "iterations/2/digest.md"))).toBe(
+    true,
+  );
+  expect(goal.repo.git(["show", "factory/demo:beta2.txt"]).stdout.trim()).toBe(
+    "beta2",
+  );
+}

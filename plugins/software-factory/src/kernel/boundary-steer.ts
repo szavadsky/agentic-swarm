@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 /**
  * The steered half of the hierarchy: the architect's live session hosts one
  * named subarchitect per epic, and the script steers this iteration's consult
@@ -103,24 +102,20 @@ async function monitorSteers(
   return failures.slice(-5);
 }
 
-/**
- * Prepares the steered consults for the epics that already have a plan to
- * review. A malformed register is left to the post-turn parse, which turns it
- * into a finding; no child is launched for epics whose job is already done.
- */
-export async function steeredHosting(
-  runtime: KernelRuntime,
-  opts: {
-    iteration: number;
-    turn: string;
-    packRel: string;
-    goalPlanFile: PlanFile;
-    digestPath?: string;
-    tasks: readonly TaskFile[];
-    state: State;
-    records: readonly StepRecord[];
-  },
-): Promise<SteeredHosting | undefined> {
+/** The inputs of one steered-hosting preparation. */
+interface SteeredHostingOpts {
+  iteration: number;
+  turn: string;
+  packRel: string;
+  goalPlanFile: PlanFile;
+  digestPath?: string;
+  tasks: readonly TaskFile[];
+  state: State;
+  records: readonly StepRecord[];
+}
+
+/** Epics with a finished subarchitect consult and no closed job yet. */
+function steeredRows(opts: SteeredHostingOpts): EpicRow[] | undefined {
   if (!fs.existsSync(opts.goalPlanFile.path)) return undefined;
   let register: { epics: EpicRow[] };
   try {
@@ -140,42 +135,75 @@ export async function steeredHosting(
           record.endedAt,
       ),
   );
-  if (rows.length === 0) return undefined;
+  return rows.length > 0 ? rows : undefined;
+}
+
+/** Builds one epic child's consult, prompt and snapshot before hosting. */
+function steeredConsult(
+  runtime: KernelRuntime,
+  opts: SteeredHostingOpts,
+  target: ReturnType<typeof subarchitectTarget>,
+  outcomeDir: string,
+  epic: string,
+): SteeredConsult {
+  const plan = resolvePlan(runtime.store.goalDir, { kind: "epic", epic });
+  const outcomePath = path.join(outcomeDir, `i${opts.iteration}-${epic}.yaml`);
+  fs.rmSync(outcomePath, { force: true });
+  const prompt = runtime.prompts.render(target.prompt, {
+    turn: opts.turn,
+    iteration: String(opts.iteration),
+    epic,
+    intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
+    plan_path: plan.path,
+    parent_plan_path: opts.goalPlanFile.path,
+    checkout: runtime.paths.goalCheckout,
+    pack_path: runtime.store.pathOf({ area: "goal", rel: opts.packRel }),
+    digest_path: opts.digestPath ?? "",
+    outcome_path: outcomePath,
+  });
+  return {
+    epic,
+    plan,
+    planBefore: snapshotPlan(plan.path),
+    name: subarchitectName(epic),
+    outcomePath,
+    prompt,
+    promptBytes: Buffer.byteLength(prompt, "utf8"),
+  };
+}
+
+/** The architect prompt block naming every hosted subarchitect. */
+function steeredHostingBlock(
+  runtime: KernelRuntime,
+  consults: readonly SteeredConsult[],
+): string {
+  return `${runtime.prompts.render("architect-subarchitects", {
+    subarchitects: consults
+      .map(
+        (consult) =>
+          `- epic \`${consult.epic}\` — agent \`${SUBARCHITECT_AGENT}\`, name \`${consult.name}\``,
+      )
+      .join("\n"),
+  })}\n`;
+}
+
+/**
+ * Prepares the steered consults for the epics that already have a plan to
+ * review. A malformed register is left to the post-turn parse, which turns it
+ * into a finding; no child is launched for epics whose job is already done.
+ */
+export async function steeredHosting(
+  runtime: KernelRuntime,
+  opts: SteeredHostingOpts,
+): Promise<SteeredHosting | undefined> {
+  const rows = steeredRows(opts);
+  if (!rows) return undefined;
   const target = subarchitectTarget(runtime, opts.iteration);
   const outcomeDir = path.join(runtime.paths.sessionsDir, "subarchitect");
   fs.mkdirSync(outcomeDir, { recursive: true });
-  const consults = rows.map((row): SteeredConsult => {
-    const plan = resolvePlan(runtime.store.goalDir, {
-      kind: "epic",
-      epic: row.epic,
-    });
-    const outcomePath = path.join(
-      outcomeDir,
-      `i${opts.iteration}-${row.epic}.yaml`,
-    );
-    fs.rmSync(outcomePath, { force: true });
-    const prompt = runtime.prompts.render(target.prompt, {
-      turn: opts.turn,
-      iteration: String(opts.iteration),
-      epic: row.epic,
-      intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
-      plan_path: plan.path,
-      parent_plan_path: opts.goalPlanFile.path,
-      checkout: runtime.paths.goalCheckout,
-      pack_path: runtime.store.pathOf({ area: "goal", rel: opts.packRel }),
-      digest_path: opts.digestPath ?? "",
-      outcome_path: outcomePath,
-    });
-    return {
-      epic: row.epic,
-      plan,
-      planBefore: snapshotPlan(plan.path),
-      name: subarchitectName(row.epic),
-      outcomePath,
-      prompt,
-      promptBytes: Buffer.byteLength(prompt, "utf8"),
-    };
-  });
+  const consults = rows.map((row) =>
+    steeredConsult(runtime, opts, target, outcomeDir, row.epic),
+  );
   let cancelled = false;
   let running: Promise<string[]> | undefined;
   return {
@@ -186,14 +214,7 @@ export async function steeredHosting(
         markdown: runtime.prompts.render("subarchitect-agent", {}),
       },
     ],
-    block: `${runtime.prompts.render("architect-subarchitects", {
-      subarchitects: consults
-        .map(
-          (consult) =>
-            `- epic \`${consult.epic}\` — agent \`${SUBARCHITECT_AGENT}\`, name \`${consult.name}\``,
-        )
-        .join("\n"),
-    })}\n`,
+    block: steeredHostingBlock(runtime, consults),
     start(agents) {
       // One monitor per hosting: a repair turn reuses the same live process,
       // and a second monitor would steer the same child twice.

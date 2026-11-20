@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -11,14 +10,20 @@ import { runBoundary } from "../../src/kernel/boundary.js";
 import { numberedPlanFindings } from "../../src/kernel/context-pack.js";
 import {
   latestPlanReview,
-  PLAN_REVIEW_STEP,
   PLAN_RETURN_STEP,
+  PLAN_REVIEW_STEP,
   validatePlanReturnDelivery,
   validatePlanReviewDelivery,
   validatePlanReviewMarks,
 } from "../../src/kernel/plan-review.js";
-import type { Outcome, PlanReviewOutcome } from "../../src/kernel/types.js";
-import { rec, causeText } from "./helpers.js";
+import type { Outcome } from "../../src/kernel/types.js";
+import { causeText, rec } from "./helpers.js";
+import {
+  ALIASES,
+  FINDINGS,
+  planReviewBy,
+  reviewed,
+} from "./plan-review-fixtures.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -27,41 +32,22 @@ import {
   whenTurn,
 } from "./s2-helpers.js";
 
-const FINDINGS: PlanReviewOutcome = {
-  technical: [
-    {
-      planLine: "plan.md:12",
-      finding: "the bullet assumes a module the repo lacks",
-    },
-  ],
-  planNotes: [
-    { planLine: "plan.md:40", finding: "the done-when names no command" },
-  ],
-};
-
-const ALIASES = {
-  architect: { harness: "fake", model: "fake-architect" },
-  pm: { harness: "fake", model: "fake-pm" },
-  implementer: { harness: "fake", model: "fake-impl" },
-  researcher: { harness: "fake", model: "fake-research" },
-  reviewer: { harness: "fake", model: "fake-review" },
-  steward: { harness: "fake", model: "fake-steward" },
-  "plan-checker": { harness: "fake", model: "fake-check" },
-  "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
-  "plan-reviewer-b": { harness: "fake", model: "fake-plan-review-b" },
-};
-
-/** A plan review outcome carrying the given findings. */
-function reviewed(summary: string, findings: PlanReviewOutcome): Outcome {
-  return outcome({ summary, planReview: findings }) as Outcome;
-}
-
-function planReviewBy(model: string) {
-  return (req: Parameters<FakeHarness["turn"]>[0]) =>
-    whenTurn({ step: PLAN_REVIEW_STEP })(req) && req.model.id === model;
-}
-
 describe("plan review findings", () => {
+  planReviewFindingsPart1();
+  planReviewFindingsPart2();
+  planReviewFindingsPart3();
+  planReviewFindingsPart4();
+  planReviewFindingsPart5();
+  planReviewFindingsPart6();
+});
+
+describe("architecture flow", () => {
+  registerArchitectureFlowPart1();
+  registerArchitectureFlowPart2();
+  registerArchitectureFlowPart3();
+});
+
+function planReviewFindingsPart1() {
   it("numbers technical first, then plan notes", () => {
     expect(numberedPlanFindings(FINDINGS)).toEqual([
       { ...FINDINGS.technical[0]!, number: 1, kind: "technical" },
@@ -92,7 +78,9 @@ describe("plan review findings", () => {
       "planReviewMarks: finding 2 is unmarked",
     ]);
   });
+}
 
+function planReviewFindingsPart2() {
   it("a completed plan review delivers planReview and no verdict", () => {
     expect(
       validatePlanReviewDelivery(
@@ -113,7 +101,9 @@ describe("plan review findings", () => {
       "a plan review has no verdict: deliver `planReview` findings instead",
     ]);
   });
+}
 
+function planReviewFindingsPart3() {
   it("a return marks every finding and takes no decision or verdict", () => {
     const marked = (patch: Record<string, unknown>) =>
       validatePlanReturnDelivery(
@@ -143,7 +133,9 @@ describe("plan review findings", () => {
       ),
     ).toEqual([]);
   });
+}
 
+function planReviewFindingsPart4() {
   it("aggregates every reviewer of the round and hides it once the architect answers", () => {
     const first = rec(1, {
       slug: undefined,
@@ -186,7 +178,9 @@ describe("plan review findings", () => {
     });
     expect(latestPlanReview([first, second, answered])).toBeUndefined();
   });
+}
 
+function planReviewFindingsPart5() {
   it("answers one plan without hiding another plan's findings", () => {
     const epicFinding = {
       planLine: "epics/auth.md:8",
@@ -227,7 +221,9 @@ describe("plan review findings", () => {
     expect(remaining?.technical).toEqual([epicFinding]);
     expect(remaining?.reviewers).toEqual(["plan-reviewer"]);
   });
+}
 
+function planReviewFindingsPart6() {
   it("hides an older round when the newest one delivered nothing", () => {
     const older = rec(1, {
       slug: undefined,
@@ -246,9 +242,62 @@ describe("plan review findings", () => {
     });
     expect(latestPlanReview([older, failed])).toBeUndefined();
   });
-});
+}
 
-describe("architecture flow", () => {
+/** Plans alpha, then scripts the review, return and PM turns of Part 1. */
+function scriptArchitectureFlowTurns(
+  harness: FakeHarness,
+  planPath: string,
+  strayPath: string,
+  onReturnPrompt: (prompt: string) => void,
+): void {
+  harness.script((req, ctx) => {
+    fs.appendFileSync(planPath, "\n## alpha\n", "utf8");
+    ctx.writeOutcome(
+      outcome({ summary: "planned alpha", decision: "continue" }),
+    );
+    return fakeTurnResult(req);
+  });
+  harness.script(
+    (req, ctx) => {
+      expect(req.prompt).toContain("## Bounds");
+      expect(req.prompt).toContain("## What the plan carries");
+      expect(req.prompt).toContain("Temporary debt only with a named remover");
+      expect(req.prompt).not.toContain("## Turn order");
+      ctx.writeOutcome(reviewed("reviewed", FINDINGS));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: PLAN_REVIEW_STEP }) },
+  );
+  harness.script(
+    (req, ctx) => {
+      onReturnPrompt(req.prompt);
+      fs.appendFileSync(planPath, "\n## addressed the finding\n", "utf8");
+      fs.writeFileSync(strayPath, "# Stray\n", "utf8");
+      ctx.writeOutcome(
+        outcome({
+          summary: "addressed the technical finding",
+          planReviewMarks: [
+            { finding: 1, mark: "helpful" },
+            { finding: 2, mark: "helpful" },
+          ],
+        }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: PLAN_RETURN_STEP }) },
+  );
+  harness.script((req, ctx) => {
+    expect(fs.existsSync(strayPath)).toBe(false);
+    expect(fs.readFileSync(planPath, "utf8")).toContain(
+      "## addressed the finding",
+    );
+    ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
+    return fakeTurnResult(req);
+  });
+}
+
+function registerArchitectureFlowPart1(): void {
   it("runs one return on technical findings before the PM and records its marks", async () => {
     const { repo, goal } = setupFlowRepo({ aliases: ALIASES });
     try {
@@ -258,51 +307,8 @@ describe("architecture flow", () => {
       const strayPath = path.join(runtime.store.tasksDir, "stray.md");
       fs.writeFileSync(planPath, "# Plan\n\n- alpha\n", "utf8");
       let returnPrompt = "";
-      harness.script((req, ctx) => {
-        fs.appendFileSync(planPath, "\n## alpha\n", "utf8");
-        ctx.writeOutcome(
-          outcome({ summary: "planned alpha", decision: "continue" }),
-        );
-        return fakeTurnResult(req);
-      });
-      harness.script(
-        (req, ctx) => {
-          expect(req.prompt).toContain("## Bounds");
-          expect(req.prompt).toContain("## What the plan carries");
-          expect(req.prompt).toContain(
-            "Temporary debt only with a named remover",
-          );
-          expect(req.prompt).not.toContain("## Turn order");
-          ctx.writeOutcome(reviewed("reviewed", FINDINGS));
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ step: PLAN_REVIEW_STEP }) },
-      );
-      harness.script(
-        (req, ctx) => {
-          returnPrompt = req.prompt;
-          fs.appendFileSync(planPath, "\n## addressed the finding\n", "utf8");
-          fs.writeFileSync(strayPath, "# Stray\n", "utf8");
-          ctx.writeOutcome(
-            outcome({
-              summary: "addressed the technical finding",
-              planReviewMarks: [
-                { finding: 1, mark: "helpful" },
-                { finding: 2, mark: "helpful" },
-              ],
-            }),
-          );
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ step: PLAN_RETURN_STEP }) },
-      );
-      harness.script((req, ctx) => {
-        expect(fs.existsSync(strayPath)).toBe(false);
-        expect(fs.readFileSync(planPath, "utf8")).toContain(
-          "## addressed the finding",
-        );
-        ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
-        return fakeTurnResult(req);
+      scriptArchitectureFlowTurns(harness, planPath, strayPath, (prompt) => {
+        returnPrompt = prompt;
       });
 
       const first = await runBoundary(runtime, { relaunch: false });
@@ -337,7 +343,9 @@ describe("architecture flow", () => {
       cleanupFlowRepo(repo);
     }
   }, 90_000);
+}
 
+function registerArchitectureFlowPart2(): void {
   it("skips the return when the config never allows one and leaves the findings for the next pack", async () => {
     const { repo, goal } = setupFlowRepo({
       aliases: ALIASES,
@@ -384,7 +392,69 @@ describe("architecture flow", () => {
       cleanupFlowRepo(repo);
     }
   }, 90_000);
+}
 
+/** Scripts both reviewers, the architect return and the PM for Part 3. */
+function scriptTwoReviewerFlow(
+  harness: FakeHarness,
+  planPath: string,
+  onReturnPrompt: (prompt: string) => void,
+): void {
+  harness.script((req, ctx) => {
+    fs.appendFileSync(planPath, "\n## alpha\n", "utf8");
+    ctx.writeOutcome(
+      outcome({ summary: "planned alpha", decision: "continue" }),
+    );
+    return fakeTurnResult(req);
+  });
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(
+        reviewed("first", {
+          technical: [FINDINGS.technical[0]!],
+          planNotes: [],
+        }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: planReviewBy("fake-plan-review") },
+  );
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(
+        reviewed("second", {
+          technical: [],
+          planNotes: [FINDINGS.planNotes[0]!],
+        }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: planReviewBy("fake-plan-review-b") },
+  );
+  harness.script(
+    (req, ctx) => {
+      onReturnPrompt(req.prompt);
+      fs.appendFileSync(planPath, "\n## addressed the finding\n", "utf8");
+      ctx.writeOutcome(
+        outcome({
+          summary: "addressed the technical finding",
+          planReviewMarks: [
+            { finding: 1, mark: "helpful" },
+            { finding: 2, mark: "helpful" },
+          ],
+        }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: PLAN_RETURN_STEP }) },
+  );
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
+    return fakeTurnResult(req);
+  });
+}
+
+function registerArchitectureFlowPart3(): void {
   it("runs every configured reviewer and merges their findings", async () => {
     const { repo, goal } = setupFlowRepo({
       aliases: ALIASES,
@@ -397,58 +467,9 @@ describe("architecture flow", () => {
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const planPath = path.join(runtime.store.goalDir, "plan.md");
       fs.writeFileSync(planPath, "# Plan\n\n- alpha\n", "utf8");
-      harness.script((req, ctx) => {
-        fs.appendFileSync(planPath, "\n## alpha\n", "utf8");
-        ctx.writeOutcome(
-          outcome({ summary: "planned alpha", decision: "continue" }),
-        );
-        return fakeTurnResult(req);
-      });
-      harness.script(
-        (req, ctx) => {
-          ctx.writeOutcome(
-            reviewed("first", {
-              technical: [FINDINGS.technical[0]!],
-              planNotes: [],
-            }),
-          );
-          return fakeTurnResult(req);
-        },
-        { when: planReviewBy("fake-plan-review") },
-      );
-      harness.script(
-        (req, ctx) => {
-          ctx.writeOutcome(
-            reviewed("second", {
-              technical: [],
-              planNotes: [FINDINGS.planNotes[0]!],
-            }),
-          );
-          return fakeTurnResult(req);
-        },
-        { when: planReviewBy("fake-plan-review-b") },
-      );
       let returnPrompt = "";
-      harness.script(
-        (req, ctx) => {
-          returnPrompt = req.prompt;
-          fs.appendFileSync(planPath, "\n## addressed the finding\n", "utf8");
-          ctx.writeOutcome(
-            outcome({
-              summary: "addressed the technical finding",
-              planReviewMarks: [
-                { finding: 1, mark: "helpful" },
-                { finding: 2, mark: "helpful" },
-              ],
-            }),
-          );
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ step: PLAN_RETURN_STEP }) },
-      );
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
-        return fakeTurnResult(req);
+      scriptTwoReviewerFlow(harness, planPath, (prompt) => {
+        returnPrompt = prompt;
       });
 
       await runBoundary(runtime, { relaunch: false });
@@ -471,4 +492,4 @@ describe("architecture flow", () => {
       cleanupFlowRepo(repo);
     }
   }, 90_000);
-});
+}

@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -154,6 +153,91 @@ function scriptPlanning(
   });
 }
 
+/** Asserts the first launch merged both tasks and wrote the launch artifacts. */
+async function expectFirstLaunch(
+  store: ReturnType<typeof createFolderStore>,
+  repo: ReturnType<typeof setupRepo>["repo"],
+  goalDir: string,
+): Promise<void> {
+  const state = derive(await store.listTasks(), await store.listRecords());
+  expect(state.goal).toBe("active");
+  expect(state.tasks.alpha!.status).toBe("merged");
+  expect(state.tasks.beta!.status).toBe("merged");
+  expect(state.iteration).toBe(1);
+  expect(repo.git(["show", "factory/demo:alpha.txt"]).stdout.trim()).toBe(
+    "alpha",
+  );
+  expect(repo.git(["show", "factory/demo:beta.txt"]).stdout.trim()).toBe(
+    "beta",
+  );
+  expect(fs.existsSync(path.join(goalDir, "iterations/1/summary.md"))).toBe(
+    true,
+  );
+  expect(
+    fs.existsSync(path.join(goalDir, "mailbox/outbox/iteration-1-summary.md")),
+  ).toBe(true);
+  expect(fs.existsSync(path.join(goalDir, "metrics.yaml"))).toBe(true);
+  const mergeRecords = (await store.listRecords()).filter(
+    (r) => r.step === "merge",
+  );
+  expect(mergeRecords.map((r) => [r.slug, r.ok])).toEqual([
+    ["alpha", true],
+    ["beta", true],
+  ]);
+}
+
+/** Scripts the second launch: a digest turn, then the architect done. */
+function scriptSecondLaunch(second: FakeHarness, goalDir: string): void {
+  second.script((req, ctx) => {
+    const digest = path.join(goalDir, "iterations/2/digest.md");
+    expect(fs.readFileSync(digest, "utf8")).toContain("architect");
+    fs.appendFileSync(digest, "\n## Loops\n- none\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "digest written" }));
+    return fakeTurnResult(req);
+  });
+  second.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
+    return fakeTurnResult(req);
+  });
+}
+
+/** Asserts the second launch closed the goal and kept the digest. */
+async function expectSecondLaunch(
+  store: ReturnType<typeof createFolderStore>,
+  goalDir: string,
+): Promise<void> {
+  const after = derive(await store.listTasks(), await store.listRecords());
+  expect(after.goal).toBe("done");
+  expect(after.iteration).toBe(2);
+  expect(fs.existsSync(path.join(goalDir, "iterations/2/summary.md"))).toBe(
+    true,
+  );
+  expect(
+    fs.readFileSync(path.join(goalDir, "iterations/2/digest.md"), "utf8"),
+  ).toContain("Loops");
+}
+
+/** Strips derived artifacts and asserts the state re-derives identically. */
+async function expectDerivedFromRecordsOnly(
+  repo: ReturnType<typeof setupRepo>["repo"],
+  goalDir: string,
+  after: ReturnType<typeof derive>,
+): Promise<void> {
+  const configs = loadConfigs(repo.dir);
+  const paths = resolveGoalPaths(configs, repo.dir, "demo");
+  expect(paths.goalDir).toBe(goalDir);
+  for (const entry of fs.readdirSync(goalDir)) {
+    if (entry === "tasks" || entry === "records") continue;
+    fs.rmSync(path.join(goalDir, entry), { recursive: true, force: true });
+  }
+  const stripped = createFolderStore(goalDir, undefined, {});
+  const derivedAgain = derive(
+    await stripped.listTasks(),
+    await stripped.listRecords(),
+  );
+  expect(derivedAgain).toEqual(after);
+}
+
 async function runScenario(): Promise<void> {
   const { repo, goalDir, planPath, newHarness } = setupRepo();
   try {
@@ -162,74 +246,18 @@ async function runScenario(): Promise<void> {
     await expectLaunch(3, repo, first);
 
     let store = createFolderStore(goalDir, undefined, {});
-    const state = derive(await store.listTasks(), await store.listRecords());
-    expect(state.goal).toBe("active");
-    expect(state.tasks.alpha!.status).toBe("merged");
-    expect(state.tasks.beta!.status).toBe("merged");
-    expect(state.iteration).toBe(1);
-
-    expect(repo.git(["show", "factory/demo:alpha.txt"]).stdout.trim()).toBe(
-      "alpha",
-    );
-    expect(repo.git(["show", "factory/demo:beta.txt"]).stdout.trim()).toBe(
-      "beta",
-    );
-    expect(fs.existsSync(path.join(goalDir, "iterations/1/summary.md"))).toBe(
-      true,
-    );
-    expect(
-      fs.existsSync(
-        path.join(goalDir, "mailbox/outbox/iteration-1-summary.md"),
-      ),
-    ).toBe(true);
-    expect(fs.existsSync(path.join(goalDir, "metrics.yaml"))).toBe(true);
-    const mergeRecords = (await store.listRecords()).filter(
-      (r) => r.step === "merge",
-    );
-    expect(mergeRecords.map((r) => [r.slug, r.ok])).toEqual([
-      ["alpha", true],
-      ["beta", true],
-    ]);
+    await expectFirstLaunch(store, repo, goalDir);
 
     const second = newHarness();
-    second.script((req, ctx) => {
-      const digest = path.join(goalDir, "iterations/2/digest.md");
-      expect(fs.readFileSync(digest, "utf8")).toContain("architect");
-      fs.appendFileSync(digest, "\n## Loops\n- none\n", "utf8");
-      ctx.writeOutcome(outcome({ summary: "digest written" }));
-      return fakeTurnResult(req);
-    });
-    second.script((req, ctx) => {
-      ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
-      return fakeTurnResult(req);
-    });
+    scriptSecondLaunch(second, goalDir);
     await expectLaunch(0, repo, second);
 
     store = createFolderStore(goalDir, undefined, {});
+    await expectSecondLaunch(store, goalDir);
     const after = derive(await store.listTasks(), await store.listRecords());
-    expect(after.goal).toBe("done");
-    expect(after.iteration).toBe(2);
-    expect(fs.existsSync(path.join(goalDir, "iterations/2/summary.md"))).toBe(
-      true,
-    );
-    expect(
-      fs.readFileSync(path.join(goalDir, "iterations/2/digest.md"), "utf8"),
-    ).toContain("Loops");
 
     // State is only derived: deleting everything but tasks/ and records/ loses nothing.
-    const configs = loadConfigs(repo.dir);
-    const paths = resolveGoalPaths(configs, repo.dir, "demo");
-    expect(paths.goalDir).toBe(goalDir);
-    for (const entry of fs.readdirSync(goalDir)) {
-      if (entry === "tasks" || entry === "records") continue;
-      fs.rmSync(path.join(goalDir, entry), { recursive: true, force: true });
-    }
-    const stripped = createFolderStore(goalDir, undefined, {});
-    const derivedAgain = derive(
-      await stripped.listTasks(),
-      await stripped.listRecords(),
-    );
-    expect(derivedAgain).toEqual(after);
+    await expectDerivedFromRecordsOnly(repo, goalDir, after);
   } finally {
     const worktreeRoot = path.resolve(
       repo.dir,

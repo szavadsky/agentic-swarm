@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { commitAll } from "../core/git/commit.js";
 import { git } from "../core/git/exec.js";
 import { unmergedFiles } from "../core/git/merge.js";
@@ -285,6 +284,44 @@ async function finishStewardAttempt(
   };
 }
 
+/** The steward turn's settle hook: containment, merge settle, compaction. */
+function stewardSettle(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  iteration: number,
+  round: number,
+  ensured: { path: string; branch: string },
+  contained: Awaited<ReturnType<typeof containmentSnapshot>>,
+  onBreach: (breach: string | undefined) => void,
+): NonNullable<Parameters<typeof runAgentTurn>[1]["settle"]> {
+  return async (_record, outcome, live) => {
+    const breach = await containmentViolation(
+      runtime,
+      ensured.path,
+      ensured.branch,
+      contained,
+    );
+    onBreach(breach);
+    if (breach) {
+      return { ok: false, cause: makeCause("containment", breach) };
+    }
+    const settled = await settleMergeTurn(
+      runtime,
+      { iteration, slug: task.slug, round },
+      ensured.path,
+      `factory: ${task.slug} merge integration head`,
+    );
+    if (!outcome || !live) return settled;
+    const compacted = await compactSession(runtime, live);
+    if (!compacted) return settled;
+    return {
+      ...settled,
+      session: compacted.session,
+      ...(compacted.usage ? { compactUsage: compacted.usage } : {}),
+    };
+  };
+}
+
 async function attemptStewardMerge(
   runtime: KernelRuntime,
   task: TaskFile,
@@ -330,31 +367,17 @@ async function attemptStewardMerge(
     vars,
     expectation: KERNEL_TURN_STEPS.steward,
     session,
-    settle: async (_record, outcome, live) => {
-      breach = await containmentViolation(
-        runtime,
-        ensured.path,
-        ensured.branch,
-        contained,
-      );
-      if (breach) {
-        return { ok: false, cause: makeCause("containment", breach) };
-      }
-      const settled = await settleMergeTurn(
-        runtime,
-        { iteration, slug: task.slug, round: state.round },
-        ensured.path,
-        `factory: ${task.slug} merge integration head`,
-      );
-      if (!outcome || !live) return settled;
-      const compacted = await compactSession(runtime, live);
-      if (!compacted) return settled;
-      return {
-        ...settled,
-        session: compacted.session,
-        ...(compacted.usage ? { compactUsage: compacted.usage } : {}),
-      };
-    },
+    settle: stewardSettle(
+      runtime,
+      task,
+      iteration,
+      state.round,
+      ensured,
+      contained,
+      (found) => {
+        breach = found;
+      },
+    ),
   });
 
   return finishStewardAttempt(runtime, ensured.path, before, breach, result);
@@ -624,6 +647,26 @@ async function stewardCandidate(
   );
 }
 
+/** Records a wave with no candidates and returns its empty result. */
+async function skipStewardWave(
+  runtime: KernelRuntime,
+  records: StepRecord[],
+  iteration: number,
+): Promise<StewardResult> {
+  await recordSkippedSteward(runtime, records, iteration);
+  return { skipped: true, attempted: [], landed: [], unmerged: [], dead: [] };
+}
+
+/** The candidate's state derived from the newest records and task list. */
+async function stewardCandidateState(
+  runtime: KernelRuntime,
+  records: StepRecord[],
+  slug: string,
+): Promise<TaskState> {
+  const tasks = await runtime.store.listTasks();
+  return derive(tasks, records, runtime.configs.process.flows).tasks[slug]!;
+}
+
 /**
  * Steward-merge launch step: every parked conflict is attempted once by a
  * model turn in its own worktree (compacted at settle), then the merge queue
@@ -646,10 +689,8 @@ export async function runSteward(
   // task-turn backoff, so a later wave retries it instead of skipping it.
   const attempted = attemptedThisWave(records, iteration);
   const candidates = stewardCandidates(tasks, state, attempted, opts.frozen);
-  if (candidates.length === 0) {
-    await recordSkippedSteward(runtime, records, iteration);
-    return { skipped: true, attempted: [], landed: [], unmerged: [], dead: [] };
-  }
+  if (candidates.length === 0)
+    return await skipStewardWave(runtime, records, iteration);
 
   const attemptedSlugs: string[] = [];
   const landed: string[] = [];
@@ -660,11 +701,7 @@ export async function runSteward(
   for (const slug of candidates) {
     const task = tasks.find((t) => t.slug === slug)!;
     const fresh = await runtime.store.listRecords();
-    const taskState = derive(
-      await runtime.store.listTasks(),
-      fresh,
-      runtime.configs.process.flows,
-    ).tasks[slug]!;
+    const taskState = await stewardCandidateState(runtime, fresh, slug);
     attemptedSlugs.push(slug);
     const outcome = await stewardCandidate(
       runtime,

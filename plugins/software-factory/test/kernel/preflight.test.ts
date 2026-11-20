@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -142,6 +141,178 @@ async function refusal(input: PreflightInput): Promise<PreflightError> {
 }
 
 describe("pre-flight", () => {
+  registerPreFlightPart1();
+  registerPreFlightPart2();
+  registerPreFlightPart3();
+  registerPreFlightPart4();
+  registerPreFlightPart5();
+  registerPreFlightPart6();
+  registerPreFlightPart7();
+  registerPreFlightPart8();
+  registerPreFlightPart9();
+  registerPreFlightPart10();
+  registerPreFlightPart11();
+  registerPreFlightPart12();
+  registerPreFlightPart13();
+  registerPreFlightPart14();
+  registerPreFlightPart15();
+  registerPreFlightPart16();
+  registerPreFlightPart17();
+  registerPreFlightPart18();
+  registerPreFlightPart19();
+  registerPreFlightPart20();
+  registerPreFlightPart21();
+  registerPreFlightPart22();
+  registerPreFlightPart23();
+  registerPreFlightPart24();
+  registerPreFlightPart25();
+  registerPreFlightPart26();
+  registerPreFlightPart27();
+  registerPreFlightPart28();
+  registerPreFlightPart29();
+  registerPreFlightPart30();
+  registerPreFlightPart31();
+  registerPreFlightPart32();
+  registerPreFlightPart33();
+  registerPreFlightPart34();
+  registerPreFlightPart35();
+  registerPreFlightPart36();
+  registerPreFlightPart37();
+  registerPreFlightPart38();
+  registerPreFlightPart39();
+  registerPreFlightPart40();
+  registerPreFlightPart41();
+  registerPreFlightPart42();
+  registerPreFlightPart43();
+  registerPreFlightPart44();
+  registerPreFlightPart45();
+  registerPreFlightPart46();
+});
+
+describe("configuration report", () => {
+  it("collects every violation across layers into one report with file and key", () => {
+    const repo = createTmpRepo();
+    try {
+      repo.writeFile(".factory/repo.yaml", "baseBranch: main\ngates: nope\n");
+      repo.writeFile(
+        ".factory/run.yaml",
+        "aliases:\n  architect: { harness: 7, model: x }\nlimits: { iterations: 0 }\n",
+      );
+      repo.commit("broken config");
+      try {
+        loadConfigs(repo.dir);
+        throw new Error("loadConfigs unexpectedly passed");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ConfigError);
+        const error = err as ConfigError;
+        const keys = error.findings.map(
+          (f) => `${path.basename(f.file)}:${f.key}`,
+        );
+        expect(keys).toContain("repo.yaml:gates");
+        expect(keys).toContain("run.yaml:aliases.architect.harness");
+        expect(keys).toContain("run.yaml:limits.iterations");
+        expect(error.report).toContain("3 violation(s)");
+      }
+    } finally {
+      repo.cleanup();
+    }
+  });
+});
+
+describe("pre-flight artifact LSP", () => {
+  const scope1 = preFlightArtifactLSPPart1();
+  preFlightArtifactLSPPart2(scope1);
+});
+
+function preFlightArtifactLSPPart1() {
+  const binaries = {
+    omp: process.execPath,
+    fake: process.execPath,
+    "claude-code": process.execPath,
+  };
+
+  /** A PATH with git only: the base check still runs, the YAML server does not. */
+  function toolPath(dir: string): void {
+    const git = Bun.which("git");
+    if (!git) throw new Error("git is not on PATH");
+    fs.symlinkSync(git, path.join(dir, "git"));
+  }
+
+  function withPath<T>(dir: string, fn: () => Promise<T>): Promise<T> {
+    const saved = process.env.PATH;
+    process.env.PATH = dir;
+    return fn().finally(() => {
+      process.env.PATH = saved;
+    });
+  }
+
+  it("refuses omp with lsp enabled when the YAML server is not on PATH", async () => {
+    const f = await fixture(
+      SPLIT_HARNESSES.replace("limits:", "lsp: true\nlimits:"),
+    );
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), "no-yamlls-"));
+    toolPath(empty);
+    try {
+      const err = await withPath(empty, () =>
+        refusal({ ...f.input, harnesses: splitHarnesses(f), binaries }),
+      );
+      expect(err.findings).toContainEqual({
+        file: path.join(f.repo.dir, ".factory/run.yaml"),
+        key: "lsp",
+        message:
+          'lsp is enabled but "yaml-language-server" is not on PATH: omp does not ship the YAML language server',
+      });
+    } finally {
+      f.repo.cleanup();
+      fs.rmSync(empty, { recursive: true, force: true });
+    }
+  });
+
+  return { binaries, toolPath, withPath };
+}
+
+function preFlightArtifactLSPPart2(
+  scope: ReturnType<typeof preFlightArtifactLSPPart1>,
+) {
+  const { toolPath, withPath, binaries } = scope;
+  it("passes when the YAML server is on PATH", async () => {
+    const f = await fixture(
+      SPLIT_HARNESSES.replace("limits:", "lsp: true\nlimits:"),
+    );
+    const bin = fs.mkdtempSync(path.join(os.tmpdir(), "has-yamlls-"));
+    toolPath(bin);
+    fs.writeFileSync(path.join(bin, "yaml-language-server"), "#!/bin/sh\n", {
+      mode: 0o755,
+    });
+    try {
+      await withPath(bin, () =>
+        preflight({ ...f.input, harnesses: splitHarnesses(f), binaries }),
+      );
+    } finally {
+      f.repo.cleanup();
+      fs.rmSync(bin, { recursive: true, force: true });
+    }
+  });
+
+  it("does not check the YAML server for harnesses without an LSP surface", async () => {
+    const f = await fixture(
+      RUN_HEAD_NO_HIGHEST.replace("limits:", "lsp: true\nlimits:"),
+    );
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), "no-yamlls-fake-"));
+    toolPath(empty);
+    try {
+      const result = await withPath(empty, () =>
+        preflight({ ...f.input, binaries }),
+      );
+      expect(result.aliases.architect).toBe("max");
+    } finally {
+      f.repo.cleanup();
+      fs.rmSync(empty, { recursive: true, force: true });
+    }
+  });
+}
+
+function registerPreFlightPart1(): void {
   it("refuses effort: highest", async () => {
     const f = await fixture(RUN_HEAD_NO_HIGHEST_WITH_HIGHEST);
     try {
@@ -166,7 +337,9 @@ describe("pre-flight", () => {
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart2(): void {
   it("refuses malformed acpx option shapes, naming the key", async () => {
     const runYaml = `${RUN_HEAD_NO_HIGHEST}harnesses:
   opencode:
@@ -199,7 +372,9 @@ describe("pre-flight", () => {
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart3(): void {
   it("runGoal reports malformed acpx options before constructing adapters", async () => {
     const runYaml = `${RUN_HEAD_NO_HIGHEST}worktreeRoot: WORKTREE_ROOT
 sessions: { dir: SESSIONS_DIR }
@@ -227,7 +402,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart4(): void {
   it("accepts string acpx args and env and leaves other option keys opaque", async () => {
     const runYaml = `${RUN_HEAD_NO_HIGHEST}harnesses:
   opencode:
@@ -264,7 +441,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart5(): void {
   it("passes harness-default as no effort override", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace("effort: max", "effort: harness-default"),
@@ -297,7 +476,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart6(): void {
   it("reports a task type naming an unknown output schema", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST,
@@ -338,7 +519,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart7(): void {
   it("accepts a task type whose flow and schema exist", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST,
@@ -373,7 +556,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart8(): void {
   it("refuses an alternate alias the flow step names", async () => {
     const f = await fixture();
     try {
@@ -411,7 +596,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart9(): void {
   it("refuses a follow-up on a trivial-flow step, naming the step", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST,
@@ -443,7 +630,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart10(): void {
   for (const [step, alias] of [
     ["packprep", "pack-preparer"],
     ["plancheck", "plan-checker"],
@@ -481,7 +670,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart11(): void {
   it("requires only the aliases process config names, not role names", async () => {
     const f = await fixture();
     try {
@@ -520,7 +711,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart12(): void {
   it("refuses a model the harness does not list and a missing fallback", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace("model: pm", "model: ghost").replace(
@@ -539,7 +732,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart13(): void {
   it("validates a cross-harness fallback against its own harness", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace(
@@ -563,7 +758,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart14(): void {
   it("passes an @-prefixed omp alias the catalog does not list", async () => {
     const f = await fixture(
       SPLIT_HARNESSES.replace("model: impl }", 'model: "@free" }'),
@@ -585,7 +782,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart15(): void {
   it("passes auto on an @-prefixed omp alias", async () => {
     const f = await fixture(
       SPLIT_HARNESSES.replace(
@@ -606,7 +805,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart16(): void {
   it("refuses effort: highest on an @-prefixed omp alias, naming the alias and omp's levels", async () => {
     const f = await fixture(
       SPLIT_HARNESSES.replace(
@@ -628,7 +829,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart17(): void {
   it("refuses an effort omp does not parse on an @-prefixed omp alias", async () => {
     const f = await fixture(
       SPLIT_HARNESSES.replace(
@@ -649,7 +852,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart18(): void {
   it("validates a literal level on a plain omp model through the catalog", async () => {
     const f = await fixture(
       SPLIT_HARNESSES.replace("model: impl }", "model: impl, effort: max }"),
@@ -689,7 +894,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart19(): void {
   it("still refuses an unlisted plain omp model id", async () => {
     const f = await fixture(SPLIT_HARNESSES);
     try {
@@ -724,7 +931,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart20(): void {
   it("checks scouts against omp, not the architect's harness", async () => {
     const f = await fixture(
       withScouts(SPLIT_HARNESSES, "scouts: { model: ernie, effort: max }"),
@@ -748,7 +957,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart21(): void {
   it("refuses a scouts model omp does not list, naming omp", async () => {
     const f = await fixture(
       withScouts(SPLIT_HARNESSES, "scouts: { model: ernie }"),
@@ -772,7 +983,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart22(): void {
   it("refuses a scouts block when no alias or fallback runs on omp", async () => {
     const f = await fixture(
       withScouts(RUN_HEAD_NO_HIGHEST, "scouts: { model: ernie }"),
@@ -814,7 +1027,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart23(): void {
   it("refuses a fallback on an unregistered harness", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace(
@@ -834,7 +1049,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart24(): void {
   it("refuses a portability edge naming an unregistered harness", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace(
@@ -860,7 +1077,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart25(): void {
   it("resolves each fallback effort against its own harness caps", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace(
@@ -883,7 +1102,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart26(): void {
   it("validates every rotation entry's harness, model and effort", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace(
@@ -917,7 +1138,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart27(): void {
   it("resolves a rotated entry's effort against its own harness and checks a rotating fallback everywhere it can land", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace(
@@ -957,7 +1180,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart28(): void {
   it("refuses a subscription that names no capped pool", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace(
@@ -993,7 +1218,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart29(): void {
   it("refuses a configured omp binary that is missing, naming the path", async () => {
     const configured = path.join(os.tmpdir(), `missing-omp-${process.pid}`);
     expect(fs.existsSync(configured)).toBe(false);
@@ -1021,7 +1248,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart30(): void {
   it("names acpx and the bunx route when an acpx alias has no binary", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace(
@@ -1047,7 +1276,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart31(): void {
   it("checks a raw agent's configured acpx dispatcher and its agent head", async () => {
     const configured = path.join(os.tmpdir(), `missing-acpx-${process.pid}`);
     expect(fs.existsSync(configured)).toBe(false);
@@ -1079,7 +1310,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart32(): void {
   it("names a raw agent's missing executable and its agent key", async () => {
     const missing = path.join(os.tmpdir(), `missing-agent-${process.pid}`);
     expect(fs.existsSync(missing)).toBe(false);
@@ -1111,7 +1344,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart33(): void {
   it("refuses a task tier that names no alias, ignoring `default`", async () => {
     const f = await fixture();
     try {
@@ -1151,7 +1386,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart34(): void {
   it("refuses an escalateTo that names no alias", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace(
@@ -1173,7 +1410,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart35(): void {
   it("refuses an escalateTo of the reserved tier name `default`", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace(
@@ -1213,7 +1452,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart36(): void {
   it("refuses a fallback that names no alias", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace(
@@ -1253,7 +1494,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart37(): void {
   it("refuses a mutual fallback alias cycle", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace(
@@ -1281,7 +1524,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart38(): void {
   it("reports a shared missing fallback target once per edge", () => {
     const findings = fallbackAliasFindings(
       {
@@ -1316,7 +1561,9 @@ harnesses:
       },
     ]);
   });
+}
 
+function registerPreFlightPart39(): void {
   it("accepts a fallback that reuses another alias's ladder", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace(
@@ -1350,7 +1597,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart40(): void {
   it("refuses a base branch that does not exist", async () => {
     const f = await fixture(
       undefined,
@@ -1368,7 +1617,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart41(): void {
   it("records and warns about a red base once, without aborting", async () => {
     const f = await fixture(
       undefined,
@@ -1395,7 +1646,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart42(): void {
   it("baselines the integration head tasks start from, not the base branch", async () => {
     const f = await fixture(
       undefined,
@@ -1428,7 +1681,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart43(): void {
   it("baselines the base tip when the integration branch only lags it", async () => {
     const f = await fixture(
       undefined,
@@ -1460,7 +1715,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart44(): void {
   it("does not record a gate that could not run as base-red", async () => {
     const f = await fixture(
       undefined,
@@ -1517,7 +1774,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart45(): void {
   it("does not record a failed baseline setup as base-red", async () => {
     const f = await fixture(
       undefined,
@@ -1538,7 +1797,9 @@ harnesses:
       f.repo.cleanup();
     }
   });
+}
 
+function registerPreFlightPart46(): void {
   it("keeps the base-gate scratch out of the swept tmp prefix", async () => {
     // A private TMPDIR stands in for os.tmpdir(): the gate sweeps exactly the
     // prefix this package's own test helper sweeps, and must not reach the
@@ -1580,115 +1841,4 @@ harnesses:
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
-});
-
-describe("configuration report", () => {
-  it("collects every violation across layers into one report with file and key", () => {
-    const repo = createTmpRepo();
-    try {
-      repo.writeFile(".factory/repo.yaml", "baseBranch: main\ngates: nope\n");
-      repo.writeFile(
-        ".factory/run.yaml",
-        "aliases:\n  architect: { harness: 7, model: x }\nlimits: { iterations: 0 }\n",
-      );
-      repo.commit("broken config");
-      try {
-        loadConfigs(repo.dir);
-        throw new Error("loadConfigs unexpectedly passed");
-      } catch (err) {
-        expect(err).toBeInstanceOf(ConfigError);
-        const error = err as ConfigError;
-        const keys = error.findings.map(
-          (f) => `${path.basename(f.file)}:${f.key}`,
-        );
-        expect(keys).toContain("repo.yaml:gates");
-        expect(keys).toContain("run.yaml:aliases.architect.harness");
-        expect(keys).toContain("run.yaml:limits.iterations");
-        expect(error.report).toContain("3 violation(s)");
-      }
-    } finally {
-      repo.cleanup();
-    }
-  });
-});
-
-describe("pre-flight artifact LSP", () => {
-  const binaries = {
-    omp: process.execPath,
-    fake: process.execPath,
-    "claude-code": process.execPath,
-  };
-
-  /** A PATH with git only: the base check still runs, the YAML server does not. */
-  function toolPath(dir: string): void {
-    const git = Bun.which("git");
-    if (!git) throw new Error("git is not on PATH");
-    fs.symlinkSync(git, path.join(dir, "git"));
-  }
-
-  function withPath<T>(dir: string, fn: () => Promise<T>): Promise<T> {
-    const saved = process.env.PATH;
-    process.env.PATH = dir;
-    return fn().finally(() => {
-      process.env.PATH = saved;
-    });
-  }
-
-  it("refuses omp with lsp enabled when the YAML server is not on PATH", async () => {
-    const f = await fixture(
-      SPLIT_HARNESSES.replace("limits:", "lsp: true\nlimits:"),
-    );
-    const empty = fs.mkdtempSync(path.join(os.tmpdir(), "no-yamlls-"));
-    toolPath(empty);
-    try {
-      const err = await withPath(empty, () =>
-        refusal({ ...f.input, harnesses: splitHarnesses(f), binaries }),
-      );
-      expect(err.findings).toContainEqual({
-        file: path.join(f.repo.dir, ".factory/run.yaml"),
-        key: "lsp",
-        message:
-          'lsp is enabled but "yaml-language-server" is not on PATH: omp does not ship the YAML language server',
-      });
-    } finally {
-      f.repo.cleanup();
-      fs.rmSync(empty, { recursive: true, force: true });
-    }
-  });
-
-  it("passes when the YAML server is on PATH", async () => {
-    const f = await fixture(
-      SPLIT_HARNESSES.replace("limits:", "lsp: true\nlimits:"),
-    );
-    const bin = fs.mkdtempSync(path.join(os.tmpdir(), "has-yamlls-"));
-    toolPath(bin);
-    fs.writeFileSync(path.join(bin, "yaml-language-server"), "#!/bin/sh\n", {
-      mode: 0o755,
-    });
-    try {
-      await withPath(bin, () =>
-        preflight({ ...f.input, harnesses: splitHarnesses(f), binaries }),
-      );
-    } finally {
-      f.repo.cleanup();
-      fs.rmSync(bin, { recursive: true, force: true });
-    }
-  });
-
-  it("does not check the YAML server for harnesses without an LSP surface", async () => {
-    const f = await fixture(
-      RUN_HEAD_NO_HIGHEST.replace("limits:", "lsp: true\nlimits:"),
-    );
-    const empty = fs.mkdtempSync(path.join(os.tmpdir(), "no-yamlls-fake-"));
-    toolPath(empty);
-    try {
-      const result = await withPath(empty, () =>
-        preflight({ ...f.input, binaries }),
-      );
-      expect(result.aliases.architect).toBe("max");
-    } finally {
-      f.repo.cleanup();
-      fs.rmSync(empty, { recursive: true, force: true });
-    }
-  });
-});
+}

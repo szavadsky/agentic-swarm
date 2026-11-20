@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 /**
  * The architect phase: one turn (with a de-novo retry after an infra death),
  * its steered-subarchitect lifecycle and the infra boundary check. The rest of
@@ -142,6 +141,68 @@ function overflowOnResume(
  * session that overflowed already spent the retry and is terminal. Steered
  * children run inside the architect's session and are collected after it closes.
  */
+/** Runs the architect turn, retrying once de novo after an infra death. */
+async function architectTurnWithRetry(
+  context: ConsultContext,
+  session: Awaited<ReturnType<typeof resumableSession>>,
+  steered: Awaited<ReturnType<typeof hostSteered>>,
+  turn: ReturnType<typeof architectTurnKind>,
+): Promise<Awaited<ReturnType<typeof architectTurn>>> {
+  let result = await architectTurn(context, session, steered, turn);
+  const stop = result.record.stop;
+  const overflowTerminal = overflowOnResume(session, stop);
+  const infraDied = stop?.kind === "infra" && !result.outcome?.decision;
+  if (!overflowTerminal && infraDied)
+    result = await architectTurn(context, undefined, steered, turn);
+  return result;
+}
+
+/** Collects a hosted child's delivery after the architect's process closed. */
+async function collectArchitectChildren(
+  runtime: ConsultContext["runtime"],
+  context: ConsultContext,
+  steered: Awaited<ReturnType<typeof hostSteered>>,
+  result: Awaited<ReturnType<typeof architectTurn>>,
+): Promise<Awaited<ReturnType<typeof collectSteered>> | undefined> {
+  // The architect's process has closed, so the live handle is over. Whatever a
+  // child delivered is a real subarchitect consult; an epic without one falls
+  // through to the written-report turn in the tail.
+  await recordSteerFailures(
+    runtime,
+    context.iteration,
+    (await steered?.stop()) ?? [],
+  );
+  return steered
+    ? await collectSteered(runtime, steered, {
+        iteration: context.iteration,
+        ...(result.record.session ? { parent: result.record.session } : {}),
+        ...(result.record.transcript
+          ? { transcript: result.record.transcript }
+          : {}),
+      })
+    : undefined;
+}
+
+/** The blocked result for an architect turn that died on infrastructure. */
+function architectInfraBlocked(
+  context: ConsultContext,
+  result: Awaited<ReturnType<typeof architectTurn>>,
+): ReturnType<typeof boundaryResult> | undefined {
+  const stop = result.record.stop;
+  if (stop?.kind !== "infra" || result.outcome?.decision) return undefined;
+  return boundaryResult(context, "blocked", {
+    cause: `architect turn stopped on infrastructure: ${infraCause(stop)}`,
+    stop: { cause: stop.cause, details: stop.details },
+    outcome: result.outcome,
+  });
+}
+
+/**
+ * Runs the architect, retrying once de novo after an infra death; a second
+ * infra death ends the launch as infra, never blocked-by-user. A resumed
+ * session that overflowed already spent the retry and is terminal. Steered
+ * children run inside the architect's session and are collected after it closes.
+ */
 export async function runArchitectStage(
   context: ConsultContext,
 ): Promise<ReturnType<typeof boundaryResult> | undefined> {
@@ -165,31 +226,14 @@ export async function runArchitectStage(
   const delivery = await architectDelivery(runtime, context);
   const steered = await hostSteered(runtime, context, turn, delivery);
 
-  let result = await architectTurn(context, session, steered, turn);
-  const stop = result.record.stop;
-  const overflowTerminal = overflowOnResume(session, stop);
-  const infraDied = stop?.kind === "infra" && !result.outcome?.decision;
-  if (!overflowTerminal && infraDied)
-    result = await architectTurn(context, undefined, steered, turn);
+  const result = await architectTurnWithRetry(context, session, steered, turn);
   context.architect = result;
-
-  // The architect's process has closed, so the live handle is over. Whatever a
-  // child delivered is a real subarchitect consult; an epic without one falls
-  // through to the written-report turn in the tail.
-  await recordSteerFailures(
+  const collected = await collectArchitectChildren(
     runtime,
-    context.iteration,
-    (await steered?.stop()) ?? [],
+    context,
+    steered,
+    result,
   );
-  const collected = steered
-    ? await collectSteered(runtime, steered, {
-        iteration: context.iteration,
-        ...(result.record.session ? { parent: result.record.session } : {}),
-        ...(result.record.transcript
-          ? { transcript: result.record.transcript }
-          : {}),
-      })
-    : undefined;
   if (collected?.failure) {
     return boundaryResult(context, "blocked", {
       cause: collected.failure.cause,
@@ -198,14 +242,5 @@ export async function runArchitectStage(
     });
   }
   context.steeredDone = collected?.delivered ?? new Map();
-
-  const architectStop = result.record.stop;
-  if (architectStop?.kind === "infra" && !result.outcome?.decision) {
-    return boundaryResult(context, "blocked", {
-      cause: `architect turn stopped on infrastructure: ${infraCause(architectStop)}`,
-      stop: { cause: architectStop.cause, details: architectStop.details },
-      outcome: result.outcome,
-    });
-  }
-  return undefined;
+  return architectInfraBlocked(context, result);
 }

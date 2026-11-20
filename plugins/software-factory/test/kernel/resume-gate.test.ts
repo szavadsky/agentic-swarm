@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -50,74 +49,8 @@ describe("resume gate — recorded, bounded attempts", () => {
     const { repo, goalDir } = await drainedAfterAlpha();
     const restoreWarn = silenceWarn();
     try {
-      const store = createFolderStore(goalDir, undefined, {});
-      // Delta's stuck state: iteration 1 interrupted with beta ready, beta
-      // held by a pending steer, and the iteration's latest plan-check is
-      // architect.
-      await postSteer(store, "s1", "Hold beta until the architect looks.");
-      fs.mkdirSync(path.join(goalDir, "mailbox/holds"), { recursive: true });
-      fs.writeFileSync(
-        path.join(goalDir, "mailbox/holds/s1.yaml"),
-        "slugs: [beta]\ngoal: false\n",
-        "utf8",
-      );
-      await store.appendRecord(
-        { iteration: 1, step: "plancheck", round: 1, actor: "agent" },
-        {
-          ok: true,
-          outcome: {
-            status: "done",
-            summary: "plan needs the architect",
-            concerns: [],
-            forward: [],
-            planCheck: { verdict: "architect", evidence: [], followUps: [] },
-          },
-        },
-      );
-      const before = derive(await store.listTasks(), await store.listRecords());
-      expect(before.interrupted).toBe(true);
-      expect(before.iteration).toBe(1);
-      expect(before.tasks.beta!.status).toBe("ready");
-
-      const second = new FakeHarness({ id: "fake" });
-      queueDigestSteer(second);
-      stillGoing(second, 4);
-      await expectDispatch(3, args(repo.dir, "1"), {
-        harnesses: { fake: second },
-      });
-
-      const records = await store.listRecords();
-      const refused = records.filter((r) => r.step === "resume-refused");
-      expect(refused).toHaveLength(1);
-      expect(refused[0]!.iteration).toBe(1);
-      expect(causeText(refused[0]!.cause)).toContain("architect");
-      expect(records.some((r) => r.step === "resume")).toBe(false);
-      // The front turn is skipped (plan.md exists): the boundary runs at
-      // iteration 2 within the same launch, which has a budget of one pass.
-      expect(
-        records.filter(
-          (r) =>
-            r.actor === "agent" && r.step === "architect" && r.iteration === 2,
-        ),
-      ).toHaveLength(1);
-      expect(
-        records.filter((r) => r.iteration === 1 && r.slug === "beta"),
-      ).toHaveLength(0);
-
-      // A second launch stands on iteration 2: iteration 1 is never resumed.
-      const third = new FakeHarness({ id: "fake" });
-      queueDigestSteer(third);
-      stillGoing(third, 4);
-      await expectDispatch(3, args(repo.dir, "1"), {
-        harnesses: { fake: third },
-      });
-      const after = await store.listRecords();
-      expect(
-        after.filter((r) => r.step === "resume" && r.iteration === 1),
-      ).toHaveLength(0);
-      expect(
-        after.filter((r) => r.step === "resume-refused" && r.iteration === 1),
-      ).toHaveLength(1);
+      const scope1 = await deltaStateRefusesResumeCauseRunsPart1(goalDir, repo);
+      await deltaStateRefusesResumeCauseRunsPart2(repo, scope1);
     } finally {
       restoreWarn();
       repo.cleanup();
@@ -128,61 +61,155 @@ describe("resume gate — recorded, bounded attempts", () => {
     const { repo, goalDir, taskDir } = await drainedAfterAlpha();
     const restoreWarn = silenceWarn();
     try {
-      const second = new FakeHarness({ id: "fake" });
-      queueDigestSteer(second, digestTaskTurn(taskDir, "beta"));
-      second.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "beta added" }));
-        return fakeTurnResult(req);
-      });
-      second.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "beta approved", verdict: "approve" }),
-        );
-        return fakeTurnResult(req);
-      });
-      second.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({
-            summary: "needs the architect",
-            planCheck: { verdict: "architect", evidence: [], followUps: [] },
-          }),
-        );
-        return fakeTurnResult(req);
-      });
-      second.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
-        return fakeTurnResult(req);
-      });
-      // One pass of budget: the resume does not count, so the boundary runs.
-      await expectDispatch(0, args(repo.dir, "1"), {
-        harnesses: { fake: second },
-      });
-
-      const store = createFolderStore(goalDir, undefined, {});
-      const records = await store.listRecords();
-      const resumes = records.filter((r) => r.step === "resume");
-      expect(resumes).toHaveLength(1);
-      expect(resumes[0]!.iteration).toBe(1);
-      expect(resumes[0]!.outcome?.summary).toBe(
-        "resume attempt 1 of iteration 1",
+      const scope1 = await aHealthyResumeRecordsAttemptWhenPart1(
+        taskDir,
+        repo,
+        goalDir,
       );
-      expect(records.some((r) => r.step === "resume-refused")).toBe(false);
-      expect(
-        records
-          .filter((r) => r.slug === "beta")
-          .every((r) => r.iteration === 1),
-      ).toBe(true);
-      expect(
-        records.filter(
-          (r) =>
-            r.actor === "agent" && r.step === "architect" && r.iteration === 2,
-        ),
-      ).toHaveLength(1);
-      expect(derive(await store.listTasks(), records).goal).toBe("done");
+      await aHealthyResumeRecordsAttemptWhenPart2(scope1);
     } finally {
       restoreWarn();
       repo.cleanup();
     }
   }, 120_000);
 });
+
+async function aHealthyResumeRecordsAttemptWhenPart1(
+  taskDir: string,
+  repo: Awaited<ReturnType<typeof drainedAfterAlpha>>["repo"],
+  goalDir: string,
+) {
+  const second = new FakeHarness({ id: "fake" });
+  queueDigestSteer(second, digestTaskTurn(taskDir, "beta"));
+  second.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "beta added" }));
+    return fakeTurnResult(req);
+  });
+  second.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "beta approved", verdict: "approve" }));
+    return fakeTurnResult(req);
+  });
+  second.script((req, ctx) => {
+    ctx.writeOutcome(
+      outcome({
+        summary: "needs the architect",
+        planCheck: { verdict: "architect", evidence: [], followUps: [] },
+      }),
+    );
+    return fakeTurnResult(req);
+  });
+  second.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
+    return fakeTurnResult(req);
+  });
+  // One pass of budget: the resume does not count, so the boundary runs.
+  await expectDispatch(0, args(repo.dir, "1"), {
+    harnesses: { fake: second },
+  });
+
+  const store = createFolderStore(goalDir, undefined, {});
+  const records = await store.listRecords();
+  const resumes = records.filter((r) => r.step === "resume");
+  expect(resumes).toHaveLength(1);
+  expect(resumes[0]!.iteration).toBe(1);
+  expect(resumes[0]!.outcome?.summary).toBe("resume attempt 1 of iteration 1");
+  expect(records.some((r) => r.step === "resume-refused")).toBe(false);
+
+  return { store, records };
+}
+
+async function aHealthyResumeRecordsAttemptWhenPart2(
+  scope: Awaited<ReturnType<typeof aHealthyResumeRecordsAttemptWhenPart1>>,
+) {
+  const { records, store } = scope;
+  expect(
+    records.filter((r) => r.slug === "beta").every((r) => r.iteration === 1),
+  ).toBe(true);
+  expect(
+    records.filter(
+      (r) => r.actor === "agent" && r.step === "architect" && r.iteration === 2,
+    ),
+  ).toHaveLength(1);
+  expect(derive(await store.listTasks(), records).goal).toBe("done");
+}
+
+async function deltaStateRefusesResumeCauseRunsPart1(
+  goalDir: string,
+  repo: Awaited<ReturnType<typeof drainedAfterAlpha>>["repo"],
+) {
+  const store = createFolderStore(goalDir, undefined, {});
+  // Delta's stuck state: iteration 1 interrupted with beta ready, beta
+  // held by a pending steer, and the iteration's latest plan-check is
+  // architect.
+  await postSteer(store, "s1", "Hold beta until the architect looks.");
+  fs.mkdirSync(path.join(goalDir, "mailbox/holds"), { recursive: true });
+  fs.writeFileSync(
+    path.join(goalDir, "mailbox/holds/s1.yaml"),
+    "slugs: [beta]\ngoal: false\n",
+    "utf8",
+  );
+  await store.appendRecord(
+    { iteration: 1, step: "plancheck", round: 1, actor: "agent" },
+    {
+      ok: true,
+      outcome: {
+        status: "done",
+        summary: "plan needs the architect",
+        concerns: [],
+        forward: [],
+        planCheck: { verdict: "architect", evidence: [], followUps: [] },
+      },
+    },
+  );
+  const before = derive(await store.listTasks(), await store.listRecords());
+  expect(before.interrupted).toBe(true);
+  expect(before.iteration).toBe(1);
+  expect(before.tasks.beta!.status).toBe("ready");
+
+  const second = new FakeHarness({ id: "fake" });
+  queueDigestSteer(second);
+  stillGoing(second, 4);
+  await expectDispatch(3, args(repo.dir, "1"), {
+    harnesses: { fake: second },
+  });
+
+  const records = await store.listRecords();
+  const refused = records.filter((r) => r.step === "resume-refused");
+  expect(refused).toHaveLength(1);
+  expect(refused[0]!.iteration).toBe(1);
+  expect(causeText(refused[0]!.cause)).toContain("architect");
+  expect(records.some((r) => r.step === "resume")).toBe(false);
+
+  return { store, records };
+}
+
+async function deltaStateRefusesResumeCauseRunsPart2(
+  repo: Awaited<ReturnType<typeof drainedAfterAlpha>>["repo"],
+  scope: Awaited<ReturnType<typeof deltaStateRefusesResumeCauseRunsPart1>>,
+) {
+  const { records, store } = scope;
+  expect(
+    records.filter(
+      (r) => r.actor === "agent" && r.step === "architect" && r.iteration === 2,
+    ),
+  ).toHaveLength(1);
+  expect(
+    records.filter((r) => r.iteration === 1 && r.slug === "beta"),
+  ).toHaveLength(0);
+
+  // A second launch stands on iteration 2: iteration 1 is never resumed.
+  const third = new FakeHarness({ id: "fake" });
+  queueDigestSteer(third);
+  stillGoing(third, 4);
+  await expectDispatch(3, args(repo.dir, "1"), {
+    harnesses: { fake: third },
+  });
+  const after = await store.listRecords();
+  expect(
+    after.filter((r) => r.step === "resume" && r.iteration === 1),
+  ).toHaveLength(0);
+  expect(
+    after.filter((r) => r.step === "resume-refused" && r.iteration === 1),
+  ).toHaveLength(1);
+}

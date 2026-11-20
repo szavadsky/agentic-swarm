@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -111,232 +110,276 @@ function readPack(req: Parameters<FakeTurnHandler>[0]): string {
 }
 
 describe("saga concern chain at depth 2", () => {
+  registerSagaConcernChainAtDepth2Part1();
+});
+
+/** The shared state of the saga concern-chain test. */
+interface SagaChainCtx {
+  goal: ReturnType<typeof makeGoal>;
+  planPath: string;
+  alphaPlan: string;
+  betaPlan: string;
+  harness: FakeHarness;
+  topDonePack: string;
+}
+
+/** Iteration 1: the main architect registers two epics. */
+function scriptChainArchitectI1(ctx: SagaChainCtx): void {
+  ctx.harness.script(
+    (req, turnedCtx) => {
+      expect(req.prompt).toContain("## Architect register");
+      fs.writeFileSync(ctx.planPath, GOAL_PLAN, "utf8");
+      turnedCtx.writeOutcome(
+        outcome({ summary: "split into alpha and beta", decision: "continue" }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: (req) => iterationOf(req).includes("-i1-architect-") },
+  );
+}
+
+/** Both subarchitects plan their epic and keep it open. */
+function scriptChainPlans(ctx: SagaChainCtx): void {
+  for (const [epic, plan, text] of [
+    ["alpha", ctx.alphaPlan, ALPHA_PLAN],
+    ["beta", ctx.betaPlan, BETA_PLAN],
+  ] as const) {
+    ctx.harness.script(
+      (req, turnedCtx) => {
+        expect(req.prompt).toContain(`- epic: \`${epic}\``);
+        fs.mkdirSync(path.dirname(plan), { recursive: true });
+        fs.writeFileSync(plan, text, "utf8");
+        turnedCtx.writeOutcome(
+          outcome({ summary: `epic ${epic} planned`, decision: "continue" }),
+        );
+        return fakeTurnResult(req);
+      },
+      {
+        when: (req) =>
+          iterationOf(req).includes("-i1-subarchitect-") &&
+          req.prompt.includes(`- epic: \`${epic}\``),
+      },
+    );
+  }
+}
+
+/** The PM derives one task per epic plan from the all-plans brief. */
+function scriptChainPmI1(ctx: SagaChainCtx): void {
+  ctx.harness.script(
+    (req, turnedCtx) => {
+      expect(req.prompt).toContain("epics/alpha.md");
+      expect(req.prompt).toContain("epics/beta.md");
+      fs.mkdirSync(ctx.goal.tasksDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(ctx.goal.tasksDir, "alpha.build.md"),
+        epicTask("alpha.build", "alpha", "alpha.txt"),
+        "utf8",
+      );
+      fs.writeFileSync(
+        path.join(ctx.goal.tasksDir, "beta.build.md"),
+        epicTask("beta.build", "beta", "beta.txt"),
+        "utf8",
+      );
+      turnedCtx.writeOutcome(outcome({ summary: "filed both epics' tasks" }));
+      return fakeTurnResult(req);
+    },
+    { when: (req) => iterationOf(req).includes("-i1-pm-") },
+  );
+}
+
+/** Both epics' task implement/approve turns, each carrying its risk concern. */
+function scriptChainTasks(ctx: SagaChainCtx): void {
+  ctx.harness.script(implementer("alpha.txt", ALPHA_RISK), {
+    when: (req) =>
+      fakeTurnIdentity(req).slug === "alpha.build" &&
+      fakeTurnIdentity(req).step === "implement",
+  });
+  ctx.harness.script(approver("alpha is correct"), {
+    when: (req) =>
+      fakeTurnIdentity(req).slug === "alpha.build" &&
+      fakeTurnIdentity(req).step === "review",
+  });
+  ctx.harness.script(implementer("beta.txt", BETA_RISK), {
+    when: (req) =>
+      fakeTurnIdentity(req).slug === "beta.build" &&
+      fakeTurnIdentity(req).step === "implement",
+  });
+  ctx.harness.script(approver("beta is correct"), {
+    when: (req) =>
+      fakeTurnIdentity(req).slug === "beta.build" &&
+      fakeTurnIdentity(req).step === "review",
+  });
+}
+
+/** Iteration 2: the top architect reads no epic's task concern. */
+function scriptChainArchitectI2(ctx: SagaChainCtx): void {
+  ctx.harness.script(
+    (req, turnedCtx) => {
+      const pack = readPack(req);
+      expect(pack).not.toContain(ALPHA_RISK);
+      expect(pack).not.toContain(BETA_RISK);
+      expect(pack).toContain("- `alpha`: open");
+      expect(pack).toContain("- `beta`: open");
+      fs.appendFileSync(
+        ctx.planPath,
+        "\n## Milestone 2\n- keep the cross-epic interface stable.\n",
+        "utf8",
+      );
+      turnedCtx.writeOutcome(
+        outcome({ summary: "direction holds", decision: "continue" }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: (req) => iterationOf(req).includes("-i2-architect-") },
+  );
+}
+
+/** Alpha's subarchitect closes its epic and carries one brief concern up. */
+function scriptChainAlphaI2(ctx: SagaChainCtx): void {
+  ctx.harness.script(
+    (req, turnedCtx) => {
+      const pack = readPack(req);
+      expect(pack).toContain(
+        "# Context pack — goal demo, epic `alpha`, iteration 2",
+      );
+      expect(pack).toContain(ALPHA_RISK);
+      expect(pack).not.toContain(BETA_RISK);
+      expect(pack).toContain("- `alpha`: open");
+      turnedCtx.writeOutcome(
+        outcome({
+          summary: "alpha complete",
+          decision: "done",
+          concerns: [
+            {
+              kind: "risk",
+              calibration: "architect",
+              text: ALPHA_BRIEF,
+              evidence: "alpha.txt:1",
+            },
+          ],
+        }),
+      );
+      return fakeTurnResult(req);
+    },
+    {
+      when: (req) =>
+        iterationOf(req).includes("-i2-subarchitect-") &&
+        req.prompt.includes("- epic: `alpha`"),
+    },
+  );
+}
+
+/** Beta's subarchitect sees only its own concern and carries nothing up. */
+function scriptChainBetaI2(ctx: SagaChainCtx): void {
+  ctx.harness.script(
+    (req, turnedCtx) => {
+      const pack = readPack(req);
+      expect(pack).toContain(BETA_RISK);
+      expect(pack).not.toContain(ALPHA_RISK);
+      turnedCtx.writeOutcome(
+        outcome({ summary: "beta complete", decision: "done" }),
+      );
+      return fakeTurnResult(req);
+    },
+    {
+      when: (req) =>
+        iterationOf(req).includes("-i2-subarchitect-") &&
+        req.prompt.includes("- epic: `beta`"),
+    },
+  );
+}
+
+/** The iteration-2 PM files no new tasks. */
+function scriptChainPmI2(ctx: SagaChainCtx): void {
+  ctx.harness.script(
+    (req, turnedCtx) => {
+      turnedCtx.writeOutcome(outcome({ summary: "no new tasks" }));
+      return fakeTurnResult(req);
+    },
+    { when: (req) => iterationOf(req).includes("-i2-pm-") },
+  );
+}
+
+/** Iteration 3: only the brief reaches the top; both epics are done. */
+function scriptChainArchitectI3(ctx: SagaChainCtx): void {
+  ctx.harness.script(
+    (req, turnedCtx) => {
+      ctx.topDonePack = readPack(req);
+      expect(ctx.topDonePack).toContain(ALPHA_BRIEF);
+      expect(ctx.topDonePack).not.toContain(BETA_RISK);
+      expect(ctx.topDonePack).not.toContain(ALPHA_RISK);
+      expect(ctx.topDonePack).toContain("- `alpha`: done");
+      expect(ctx.topDonePack).toContain("- `beta`: done");
+      turnedCtx.writeOutcome(
+        outcome({ summary: "goal complete", decision: "done" }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: (req) => iterationOf(req).includes("-i3-architect-") },
+  );
+}
+
+/** The task concerns reached exactly one pack: their own epic's. */
+function expectChainPacks(ctx: SagaChainCtx): void {
+  const alphaPack = fs.readFileSync(
+    path.join(ctx.goal.goalDir, "iterations/2/epics/alpha/context-pack.md"),
+    "utf8",
+  );
+  expect(alphaPack).toContain(ALPHA_RISK);
+  expect(alphaPack).not.toContain(BETA_RISK);
+  const betaPack = fs.readFileSync(
+    path.join(ctx.goal.goalDir, "iterations/2/epics/beta/context-pack.md"),
+    "utf8",
+  );
+  expect(betaPack).toContain(BETA_RISK);
+  expect(betaPack).not.toContain(ALPHA_RISK);
+  expect(ctx.topDonePack).not.toContain(BETA_RISK);
+}
+
+/** The goal and both epics ended done, with both tasks merged. */
+async function expectChainState(ctx: SagaChainCtx): Promise<void> {
+  const store = createFolderStore(ctx.goal.goalDir, undefined, {});
+  const records = await store.listRecords();
+  const state = await stateOf(ctx.goal.goalDir);
+  expect(state.goal).toBe("done");
+  expect(state.epics.alpha?.done).toBe(true);
+  expect(state.epics.beta?.done).toBe(true);
+  expect(state.tasks["alpha.build"]?.status).toBe("merged");
+  expect(state.tasks["beta.build"]?.status).toBe("merged");
+  expect(
+    records.filter(
+      (record) => record.step === "subarchitect" && record.iteration === 2,
+    ),
+  ).toHaveLength(2);
+}
+
+function registerSagaConcernChainAtDepth2Part1(): void {
   it("keeps a task concern in its epic's pack until the subarchitect carries it up", async () => {
     const goal = makeGoal({ processYaml: PROCESS });
     try {
-      const planPath = goal.planPath;
-      const alphaPlan = path.join(goal.goalDir, "epics/alpha.md");
-      const betaPlan = path.join(goal.goalDir, "epics/beta.md");
-      const harness = new FakeHarness({ id: "fake" });
+      const ctx: SagaChainCtx = {
+        goal,
+        planPath: goal.planPath,
+        alphaPlan: path.join(goal.goalDir, "epics/alpha.md"),
+        betaPlan: path.join(goal.goalDir, "epics/beta.md"),
+        harness: new FakeHarness({ id: "fake" }),
+        topDonePack: "",
+      };
+      scriptChainArchitectI1(ctx);
+      scriptChainPlans(ctx);
+      scriptChainPmI1(ctx);
+      scriptChainTasks(ctx);
+      scriptChainArchitectI2(ctx);
+      scriptChainAlphaI2(ctx);
+      scriptChainBetaI2(ctx);
+      scriptChainPmI2(ctx);
+      scriptChainArchitectI3(ctx);
 
-      // Iteration 1: the main architect registers two epics.
-      harness.script(
-        (req, ctx) => {
-          expect(req.prompt).toContain("## Architect register");
-          fs.writeFileSync(planPath, GOAL_PLAN, "utf8");
-          ctx.writeOutcome(
-            outcome({
-              summary: "split into alpha and beta",
-              decision: "continue",
-            }),
-          );
-          return fakeTurnResult(req);
-        },
-        { when: (req) => iterationOf(req).includes("-i1-architect-") },
-      );
-
-      // Both subarchitects plan and keep their epic open.
-      for (const [epic, plan, text] of [
-        ["alpha", alphaPlan, ALPHA_PLAN],
-        ["beta", betaPlan, BETA_PLAN],
-      ] as const) {
-        harness.script(
-          (req, ctx) => {
-            expect(req.prompt).toContain(`- epic: \`${epic}\``);
-            fs.mkdirSync(path.dirname(plan), { recursive: true });
-            fs.writeFileSync(plan, text, "utf8");
-            ctx.writeOutcome(
-              outcome({
-                summary: `epic ${epic} planned`,
-                decision: "continue",
-              }),
-            );
-            return fakeTurnResult(req);
-          },
-          {
-            when: (req) =>
-              iterationOf(req).includes("-i1-subarchitect-") &&
-              req.prompt.includes(`- epic: \`${epic}\``),
-          },
-        );
-      }
-
-      // The PM derives one task per epic plan from the all-plans brief.
-      harness.script(
-        (req, ctx) => {
-          expect(req.prompt).toContain("epics/alpha.md");
-          expect(req.prompt).toContain("epics/beta.md");
-          fs.mkdirSync(goal.tasksDir, { recursive: true });
-          fs.writeFileSync(
-            path.join(goal.tasksDir, "alpha.build.md"),
-            epicTask("alpha.build", "alpha", "alpha.txt"),
-            "utf8",
-          );
-          fs.writeFileSync(
-            path.join(goal.tasksDir, "beta.build.md"),
-            epicTask("beta.build", "beta", "beta.txt"),
-            "utf8",
-          );
-          ctx.writeOutcome(outcome({ summary: "filed both epics' tasks" }));
-          return fakeTurnResult(req);
-        },
-        { when: (req) => iterationOf(req).includes("-i1-pm-") },
-      );
-
-      harness.script(implementer("alpha.txt", ALPHA_RISK), {
-        when: (req) =>
-          fakeTurnIdentity(req).slug === "alpha.build" &&
-          fakeTurnIdentity(req).step === "implement",
-      });
-      harness.script(approver("alpha is correct"), {
-        when: (req) =>
-          fakeTurnIdentity(req).slug === "alpha.build" &&
-          fakeTurnIdentity(req).step === "review",
-      });
-      harness.script(implementer("beta.txt", BETA_RISK), {
-        when: (req) =>
-          fakeTurnIdentity(req).slug === "beta.build" &&
-          fakeTurnIdentity(req).step === "implement",
-      });
-      harness.script(approver("beta is correct"), {
-        when: (req) =>
-          fakeTurnIdentity(req).slug === "beta.build" &&
-          fakeTurnIdentity(req).step === "review",
-      });
-
-      // Iteration 2: the top architect reads no epic's task concern. It keeps
-      // the goal going so its subarchitects can finish their scopes.
-      harness.script(
-        (req, ctx) => {
-          const pack = readPack(req);
-          expect(pack).not.toContain(ALPHA_RISK);
-          expect(pack).not.toContain(BETA_RISK);
-          expect(pack).toContain("- `alpha`: open");
-          expect(pack).toContain("- `beta`: open");
-          fs.appendFileSync(
-            planPath,
-            "\n## Milestone 2\n- keep the cross-epic interface stable.\n",
-            "utf8",
-          );
-          ctx.writeOutcome(
-            outcome({ summary: "direction holds", decision: "continue" }),
-          );
-          return fakeTurnResult(req);
-        },
-        { when: (req) => iterationOf(req).includes("-i2-architect-") },
-      );
-
-      // Alpha's subarchitect sees its epic's concern, never beta's; it closes
-      // the epic and carries one brief concern upward.
-      harness.script(
-        (req, ctx) => {
-          const pack = readPack(req);
-          expect(pack).toContain(
-            "# Context pack — goal demo, epic `alpha`, iteration 2",
-          );
-          expect(pack).toContain(ALPHA_RISK);
-          expect(pack).not.toContain(BETA_RISK);
-          expect(pack).toContain("- `alpha`: open");
-          ctx.writeOutcome(
-            outcome({
-              summary: "alpha complete",
-              decision: "done",
-              concerns: [
-                {
-                  kind: "risk",
-                  calibration: "architect",
-                  text: ALPHA_BRIEF,
-                  evidence: "alpha.txt:1",
-                },
-              ],
-            }),
-          );
-          return fakeTurnResult(req);
-        },
-        {
-          when: (req) =>
-            iterationOf(req).includes("-i2-subarchitect-") &&
-            req.prompt.includes("- epic: `alpha`"),
-        },
-      );
-
-      // Beta's subarchitect sees only its own concern and carries nothing up.
-      harness.script(
-        (req, ctx) => {
-          const pack = readPack(req);
-          expect(pack).toContain(BETA_RISK);
-          expect(pack).not.toContain(ALPHA_RISK);
-          ctx.writeOutcome(
-            outcome({ summary: "beta complete", decision: "done" }),
-          );
-          return fakeTurnResult(req);
-        },
-        {
-          when: (req) =>
-            iterationOf(req).includes("-i2-subarchitect-") &&
-            req.prompt.includes("- epic: `beta`"),
-        },
-      );
-
-      harness.script(
-        (req, ctx) => {
-          ctx.writeOutcome(outcome({ summary: "no new tasks" }));
-          return fakeTurnResult(req);
-        },
-        { when: (req) => iterationOf(req).includes("-i2-pm-") },
-      );
-
-      // Iteration 3: only the brief reaches the top, and both epics are done,
-      // so the top architect's done lands the goal.
-      let topDonePack = "";
-      harness.script(
-        (req, ctx) => {
-          topDonePack = readPack(req);
-          expect(topDonePack).toContain(ALPHA_BRIEF);
-          expect(topDonePack).not.toContain(BETA_RISK);
-          expect(topDonePack).not.toContain(ALPHA_RISK);
-          expect(topDonePack).toContain("- `alpha`: done");
-          expect(topDonePack).toContain("- `beta`: done");
-          ctx.writeOutcome(
-            outcome({ summary: "goal complete", decision: "done" }),
-          );
-          return fakeTurnResult(req);
-        },
-        { when: (req) => iterationOf(req).includes("-i3-architect-") },
-      );
-
-      await expectLaunch(0, goal.repo, harness, 3);
-
-      // The task concerns reached exactly one pack: their own epic's.
-      const alphaPack = fs.readFileSync(
-        path.join(goal.goalDir, "iterations/2/epics/alpha/context-pack.md"),
-        "utf8",
-      );
-      expect(alphaPack).toContain(ALPHA_RISK);
-      expect(alphaPack).not.toContain(BETA_RISK);
-      const betaPack = fs.readFileSync(
-        path.join(goal.goalDir, "iterations/2/epics/beta/context-pack.md"),
-        "utf8",
-      );
-      expect(betaPack).toContain(BETA_RISK);
-      expect(betaPack).not.toContain(ALPHA_RISK);
-      expect(topDonePack).not.toContain(BETA_RISK);
-
-      const store = createFolderStore(goal.goalDir, undefined, {});
-      const records = await store.listRecords();
-      const state = await stateOf(goal.goalDir);
-      expect(state.goal).toBe("done");
-      expect(state.epics.alpha?.done).toBe(true);
-      expect(state.epics.beta?.done).toBe(true);
-      expect(state.tasks["alpha.build"]?.status).toBe("merged");
-      expect(state.tasks["beta.build"]?.status).toBe("merged");
-      expect(
-        records.filter(
-          (record) => record.step === "subarchitect" && record.iteration === 2,
-        ),
-      ).toHaveLength(2);
+      await expectLaunch(0, goal.repo, ctx.harness, 3);
+      expectChainPacks(ctx);
+      await expectChainState(ctx);
     } finally {
       cleanup(goal);
     }
   }, 120_000);
-});
+}

@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -81,87 +80,23 @@ describe("boundary turns hold the merge lock", () => {
       limits: { concurrency: { overall: 3 } },
     });
     try {
-      const harness = new FakeHarness({ id: "fake" });
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      for (const slug of ["alpha", "beta", "gamma"])
-        await writeTask(runtime, task(slug, { scope: [`${slug}.txt`] }));
-
-      const implement =
-        (slug: string) =>
-        (
-          req: Parameters<FakeHarness["turn"]>[0],
-          ctx: { writeOutcome(value: unknown): void },
-        ) => {
-          fs.writeFileSync(
-            path.join(req.cwd!, `${slug}.txt`),
-            `${slug}\n`,
-            "utf8",
-          );
-          ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
-          return fakeTurnResult(req);
-        };
-      harness.script(implement("alpha"), {
-        when: whenTurn({ slug: "alpha", step: "implement" }),
-      });
-      harness.script(implement("beta"), {
-        when: whenTurn({ slug: "beta", step: "implement" }),
-      });
-      harness.script(
-        async (req, ctx) => {
-          // The steer must be in the inbox before this turn returns, so the
-          // loop wakes with something new to claim while the merge still holds.
-          await waitFor(holding, 15_000);
-          await waitFor(steerPosted, 15_000);
-          return implement("gamma")(req, ctx);
-        },
-        { when: whenTurn({ slug: "gamma", step: "implement" }) },
+      const scope1 = await holdsSteerPMTurnUntilMergeReleasesPart1(
+        repo,
+        goal,
+        holding,
+        steerPosted,
       );
-      harness.script(
-        (req, ctx) => {
-          ctx.writeOutcome(
-            outcome({ summary: "approved", verdict: "approve" }),
-          );
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ step: "review" }), fallback: true },
+      const scope2 = await holdsSteerPMTurnUntilMergeReleasesPart2(
+        holding,
+        release,
+        scope1,
       );
-
-      let steerStartedWhileHeld = false;
-      let steerStarted = false;
-      harness.script(
-        (req, ctx) => {
-          steerStarted = true;
-          steerStartedWhileHeld =
-            fs.existsSync(holding) && !fs.existsSync(release);
-          ctx.writeOutcome(
-            outcome({
-              summary: "steer routed to the architect",
-              steerRoutes: [{ steer: "s1", route: "architect" }],
-            }),
-          );
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ step: "pm" }) },
+      await holdsSteerPMTurnUntilMergeReleasesPart3(
+        holding,
+        steerPosted,
+        release,
+        scope2,
       );
-
-      const dispatched = runDispatch(runtime, { iteration: 1 });
-      try {
-        await waitFor(holding, 15_000);
-        await postSteer(runtime.store, "s1", "Route this steer by hand.");
-        fs.writeFileSync(steerPosted, "");
-        // Give the waking dispatch loop time to claim the steer and reach its
-        // PM turn; an unlocked turn starts now, a locked one waits.
-        const deadline = Date.now() + 1_500;
-        while (!steerStarted && Date.now() < deadline) await sleep(10);
-        fs.writeFileSync(release, "");
-        const result = await dispatched;
-        expect(result.reason).toBe("boundary");
-      } finally {
-        fs.writeFileSync(release, "");
-        await dispatched;
-      }
-      expect(steerStarted).toBe(true);
-      expect(steerStartedWhileHeld).toBe(false);
     } finally {
       cleanupFlowRepo(repo);
       fs.rmSync(shared, { recursive: true, force: true });
@@ -211,3 +146,106 @@ describe("boundary turn containment", () => {
     }
   }, 60_000);
 });
+
+async function holdsSteerPMTurnUntilMergeReleasesPart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+  holding: string,
+  steerPosted: string,
+) {
+  const harness = new FakeHarness({ id: "fake" });
+  const runtime = await makeRuntime(repo, goal, { fake: harness });
+  for (const slug of ["alpha", "beta", "gamma"])
+    await writeTask(runtime, task(slug, { scope: [`${slug}.txt`] }));
+
+  const implement =
+    (slug: string) =>
+    (
+      req: Parameters<FakeHarness["turn"]>[0],
+      ctx: { writeOutcome(value: unknown): void },
+    ) => {
+      fs.writeFileSync(path.join(req.cwd!, `${slug}.txt`), `${slug}\n`, "utf8");
+      ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
+      return fakeTurnResult(req);
+    };
+  harness.script(implement("alpha"), {
+    when: whenTurn({ slug: "alpha", step: "implement" }),
+  });
+  harness.script(implement("beta"), {
+    when: whenTurn({ slug: "beta", step: "implement" }),
+  });
+  harness.script(
+    async (req, ctx) => {
+      // The steer must be in the inbox before this turn returns, so the
+      // loop wakes with something new to claim while the merge still holds.
+      await waitFor(holding, 15_000);
+      await waitFor(steerPosted, 15_000);
+      return implement("gamma")(req, ctx);
+    },
+    { when: whenTurn({ slug: "gamma", step: "implement" }) },
+  );
+
+  return { harness, runtime };
+}
+
+async function holdsSteerPMTurnUntilMergeReleasesPart2(
+  holding: string,
+  release: string,
+  scope: Awaited<ReturnType<typeof holdsSteerPMTurnUntilMergeReleasesPart1>>,
+) {
+  const { harness, runtime } = scope;
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "review" }), fallback: true },
+  );
+
+  const state = { steerStartedWhileHeld: false, steerStarted: false };
+  harness.script(
+    (req, ctx) => {
+      state.steerStarted = true;
+      state.steerStartedWhileHeld =
+        fs.existsSync(holding) && !fs.existsSync(release);
+      ctx.writeOutcome(
+        outcome({
+          summary: "steer routed to the architect",
+          steerRoutes: [{ steer: "s1", route: "architect" }],
+        }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "pm" }) },
+  );
+
+  const dispatched = runDispatch(runtime, { iteration: 1 });
+
+  return { ...scope, state, dispatched };
+}
+
+async function holdsSteerPMTurnUntilMergeReleasesPart3(
+  holding: string,
+  steerPosted: string,
+  release: string,
+  scope: Awaited<ReturnType<typeof holdsSteerPMTurnUntilMergeReleasesPart2>>,
+) {
+  const { runtime, state, dispatched } = scope;
+  try {
+    await waitFor(holding, 15_000);
+    await postSteer(runtime.store, "s1", "Route this steer by hand.");
+    fs.writeFileSync(steerPosted, "");
+    // Give the waking dispatch loop time to claim the steer and reach its
+    // PM turn; an unlocked turn starts now, a locked one waits.
+    const deadline = Date.now() + 1_500;
+    while (!state.steerStarted && Date.now() < deadline) await sleep(10);
+    fs.writeFileSync(release, "");
+    const result = await dispatched;
+    expect(result.reason).toBe("boundary");
+  } finally {
+    fs.writeFileSync(release, "");
+    await dispatched;
+  }
+  expect(state.steerStarted).toBe(true);
+  expect(state.steerStartedWhileHeld).toBe(false);
+}

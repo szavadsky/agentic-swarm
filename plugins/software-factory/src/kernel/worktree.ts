@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -214,15 +213,14 @@ async function followBase(runtime: KernelRuntime): Promise<void> {
  * Creates (or recovers) the stable integration checkout. It is the only
  * worktree the merge queue moves; task worktrees are disposable.
  */
-export async function prepareIntegrationCheckout(
+/** Removes this goal's leftover task worktrees and merge scratch. */
+async function removeOwnWorktrees(
   runtime: KernelRuntime,
+  goalCheckout: string,
+  ownTasks: string,
+  ownScratch: string,
 ): Promise<void> {
-  const { repoRoot, goalCheckout, integrationBranch } = runtime.paths;
-  const goal = path.basename(runtime.paths.goalDir);
-  const ownTasks = path.join(goalWorktreeRoot(runtime), `${goal}-tasks`);
-  const ownScratch = mergeScratchPath(runtime);
-  fs.mkdirSync(goalWorktreeRoot(runtime), { recursive: true });
-
+  const { repoRoot } = runtime.paths;
   // Recovery owns this goal's worktrees only: a sibling goal's checkout and
   // task worktrees, and another repo sharing the root, are not ours to remove.
   for (const wt of await registeredWorktrees(runtime)) {
@@ -240,7 +238,15 @@ export async function prepareIntegrationCheckout(
       allowFail: true,
     });
   }
+}
 
+/** Creates the integration worktree, or recreates it on the wrong branch. */
+async function ensureIntegrationCheckout(
+  runtime: KernelRuntime,
+  goalCheckout: string,
+  integrationBranch: string,
+): Promise<void> {
+  const { repoRoot } = runtime.paths;
   const registered = (await registeredWorktrees(runtime)).map((p) =>
     path.resolve(p),
   );
@@ -274,6 +280,22 @@ export async function prepareIntegrationCheckout(
     });
     await git(repoRoot, ["worktree", "add", goalCheckout, integrationBranch]);
   }
+}
+
+/**
+ * Creates (or recovers) the stable integration checkout. It is the only
+ * worktree the merge queue moves; task worktrees are disposable.
+ */
+export async function prepareIntegrationCheckout(
+  runtime: KernelRuntime,
+): Promise<void> {
+  const { goalCheckout, integrationBranch } = runtime.paths;
+  const goal = path.basename(runtime.paths.goalDir);
+  const ownTasks = path.join(goalWorktreeRoot(runtime), `${goal}-tasks`);
+  const ownScratch = mergeScratchPath(runtime);
+  fs.mkdirSync(goalWorktreeRoot(runtime), { recursive: true });
+  await removeOwnWorktrees(runtime, goalCheckout, ownTasks, ownScratch);
+  await ensureIntegrationCheckout(runtime, goalCheckout, integrationBranch);
   // A crashed merge must not leave staged or conflicted state for the next launch.
   await git(goalCheckout, ["reset", "--hard", "HEAD"]);
   await git(goalCheckout, ["clean", "-fd"]);
@@ -382,6 +404,39 @@ async function ensureSetup(
   return setup;
 }
 
+/** The result for a task branch whose start point does not exist. */
+function missingBranchWorktree(
+  wtPath: string,
+  branch: string,
+  branchPoint: string,
+): EnsuredWorktree {
+  return {
+    path: wtPath,
+    branch,
+    created: false,
+    startPoint: branchPoint,
+    error: `branch "${branchPoint}" does not exist`,
+  };
+}
+
+/** The result for a created worktree whose setup failed. */
+function failedSetupWorktree(
+  wtPath: string,
+  branch: string,
+  created: boolean,
+  startPoint: string,
+  setup: SetupResult,
+): EnsuredWorktree {
+  return {
+    path: wtPath,
+    branch,
+    created,
+    startPoint,
+    setup,
+    error: setup.error,
+  };
+}
+
 export async function ensureTaskWorktree(
   runtime: KernelRuntime,
   task: TaskFile,
@@ -393,15 +448,8 @@ export async function ensureTaskWorktree(
     : runtime.paths.integrationBranch;
 
   const branchPointExists = await branchExists(runtime, branchPoint);
-  if (!branchPointExists) {
-    return {
-      path: wtPath,
-      branch,
-      created: false,
-      startPoint: branchPoint,
-      error: `branch "${branchPoint}" does not exist`,
-    };
-  }
+  if (!branchPointExists)
+    return missingBranchWorktree(wtPath, branch, branchPoint);
   const startSha = (
     await git(runtime.paths.repoRoot, ["rev-parse", branchPoint])
   ).stdout.trim();
@@ -429,14 +477,7 @@ export async function ensureTaskWorktree(
   const setup = await ensureSetup(runtime, wtPath, created);
   if (setup && !setup.ok) {
     if (conflict) await abortInFlightMerge(wtPath);
-    return {
-      path: wtPath,
-      branch,
-      created,
-      startPoint,
-      setup,
-      error: setup.error,
-    };
+    return failedSetupWorktree(wtPath, branch, created, startPoint, setup);
   }
   return {
     path: wtPath,
@@ -860,6 +901,71 @@ function outsideBreaches(
 }
 
 /** Text for the park cause when a turn left its worktree; undefined when contained. */
+/** The branch-identity breach, if the turn left its task branch. */
+async function taskBranchBreach(
+  taskWorktree: string,
+  expectedBranch: string,
+  snapshot: ContainmentSnapshot,
+): Promise<string | undefined> {
+  const branch = await git(
+    taskWorktree,
+    ["rev-parse", "--abbrev-ref", "HEAD"],
+    { allowFail: true },
+  );
+  const now = branch.stdout.trim();
+  if (snapshot.branch === expectedBranch && now === expectedBranch)
+    return undefined;
+  return `HEAD is on "${now || "detached"}", not the task branch "${expectedBranch}"`;
+}
+
+/** Goal artifacts the turn wrote outside its worktree. */
+function changedArtifactBreaches(
+  runtime: KernelRuntime,
+  snapshot: ContainmentSnapshot,
+  records: StepRecord[] | undefined,
+  artifacts: ReadonlyMap<string, string> | undefined,
+): string[] {
+  if (artifacts === undefined || records === undefined) return [];
+  const changed = artifactBreaches(snapshot.artifacts, artifacts, {
+    at: snapshot.at,
+    maxSeq: snapshot.maxSeq,
+    inFlight: snapshot.inFlight,
+    sealed: snapshot.sealed,
+    records,
+    declared: runtime.store.declaredWrites(),
+    steerActive: steerTurnWroteDuring(
+      records,
+      snapshot.at,
+      new Date().toISOString(),
+    ),
+  });
+  return changed.length === 0
+    ? []
+    : [
+        `goal artifacts changed outside the worktree in ${runtime.paths.goalDir}: ${summarizePaths(changed)}`,
+      ];
+}
+
+/** Operator moves in the repo root are incidents, not turn breaches. */
+async function recordOutsideChanges(
+  runtime: KernelRuntime,
+  taskWorktree: string,
+  records: StepRecord[] | undefined,
+  snapshot: ContainmentSnapshot,
+): Promise<void> {
+  // The operator may commit or edit in the main checkout while a turn runs. The
+  // task cannot have made that change and must still merge; record it instead.
+  const root = await worktreeState(runtime.paths.repoRoot);
+  const outside = outsideBreaches(root, snapshot, runtime);
+  if (outside.length === 0) return;
+  await appendContainmentIncident(
+    runtime,
+    taskWorktree,
+    records,
+    makeCause("outside-change", outside.join("; ")),
+  );
+}
+
 export async function containmentViolation(
   runtime: KernelRuntime,
   taskWorktree: string,
@@ -868,17 +974,12 @@ export async function containmentViolation(
   opts: ContainmentOptions = {},
 ): Promise<string | undefined> {
   const breaches: string[] = [];
-  const branch = await git(
+  const branchBreach = await taskBranchBreach(
     taskWorktree,
-    ["rev-parse", "--abbrev-ref", "HEAD"],
-    { allowFail: true },
+    expectedBranch,
+    snapshot,
   );
-  const now = branch.stdout.trim();
-  if (snapshot.branch !== expectedBranch || now !== expectedBranch) {
-    breaches.push(
-      `HEAD is on "${now || "detached"}", not the task branch "${expectedBranch}"`,
-    );
-  }
+  if (branchBreach) breaches.push(branchBreach);
 
   // Read the shared surfaces before the records: a merge record or a PM record
   // is written before its owner moves the ref, resets the checkout or edits the
@@ -895,27 +996,9 @@ export async function containmentViolation(
       (r) => r.step === "merge" && r.ok !== false && r.commit === commit,
     ) ?? false;
 
-  const changedArtifacts =
-    artifacts === undefined || records === undefined
-      ? []
-      : artifactBreaches(snapshot.artifacts, artifacts, {
-          at: snapshot.at,
-          maxSeq: snapshot.maxSeq,
-          inFlight: snapshot.inFlight,
-          sealed: snapshot.sealed,
-          records,
-          declared: runtime.store.declaredWrites(),
-          steerActive: steerTurnWroteDuring(
-            records,
-            snapshot.at,
-            new Date().toISOString(),
-          ),
-        });
-  if (changedArtifacts.length > 0) {
-    breaches.push(
-      `goal artifacts changed outside the worktree in ${runtime.paths.goalDir}: ${summarizePaths(changedArtifacts)}`,
-    );
-  }
+  breaches.push(
+    ...changedArtifactBreaches(runtime, snapshot, records, artifacts),
+  );
 
   // The merge queue moves this checkout's HEAD and resets it; a move recorded
   // as a merge is the queue's, not the turn's.
@@ -929,19 +1012,7 @@ export async function containmentViolation(
     ),
   );
 
-  // The operator may commit or edit in the main checkout while a turn runs. The
-  // task cannot have made that change and must still merge; record it instead.
-  const root = await worktreeState(runtime.paths.repoRoot);
-  const outside = outsideBreaches(root, snapshot, runtime);
-  if (outside.length > 0) {
-    await appendContainmentIncident(
-      runtime,
-      taskWorktree,
-      records,
-      makeCause("outside-change", outside.join("; ")),
-    );
-  }
-
+  await recordOutsideChanges(runtime, taskWorktree, records, snapshot);
   return breaches.length > 0 ? breaches.join("; ") : undefined;
 }
 

@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import path from "node:path";
 import type { AcpxConfig } from "../../src/harness/acpx/config.js";
@@ -47,6 +46,94 @@ function request(
 }
 
 describe("AcpxHarness opencode raw route", () => {
+  registerAcpxHarnessOpencodeRawRoutePart1();
+  registerAcpxHarnessOpencodeRawRoutePart2();
+  registerAcpxHarnessOpencodeRawRoutePart3();
+});
+
+async function runsRawAgentSetsEffortRecordsUsagePart1(
+  harness: AcpxHarness,
+  stub: ReturnType<typeof createAcpxStub>,
+) {
+  const result = await harness.turn(
+    request(path.dirname(stub.binary), "Say [[text:PONG]]", {
+      effort: "high",
+    }),
+  );
+
+  expect(result.stop).toEqual({ kind: "done" });
+  expect(result.text).toBe("PONG");
+  expect(result.model).toEqual({
+    id: "opencode-go/deepseek-v4.1-flash",
+    effort: "high",
+  });
+  expect(result.session?.harness).toBe("opencode");
+  expect(result.session?.id).toMatch(/^opencode-/);
+  expect(result.usage).toEqual({
+    in: 7163,
+    cacheRead: 20,
+    cacheWrite5m: 5,
+    cacheWrite1h: 0,
+    out: 20,
+    reasoningOut: 12,
+    costUsd: 0.0032,
+  });
+
+  expect(await harness.caps({ id: "opencode-go/deepseek-v4.1-flash" })).toEqual(
+    {
+      resume: true,
+      compact: "none",
+      subagents: "none",
+      structuredOutput: "none",
+      effort: [],
+      usage: { cache: true, cost: true },
+    },
+  );
+
+  const calls = stub.invocations();
+  const create = calls.find(
+    (args) => args.includes("sessions") && args.includes("new"),
+  )!;
+  const set = calls.find((args) => args.includes("set"))!;
+  const prompt = calls.find((args) => args.at(-1)?.includes("[[text:PONG]]"))!;
+
+  return { result, create, set, prompt };
+}
+
+async function runsRawAgentSetsEffortRecordsUsagePart2(
+  scope: Awaited<ReturnType<typeof runsRawAgentSetsEffortRecordsUsagePart1>>,
+) {
+  const { create, set, prompt, result } = scope;
+  for (const [args, verb] of [
+    [create, "sessions"],
+    [set, "set"],
+    [prompt, "prompt"],
+  ] as const) {
+    // The raw route has no positional agent: `--agent` is global and must
+    // precede the subcommand.
+    expect(args[args.indexOf("--agent") + 1]).toMatch(/(^|\/)opencode acp$/);
+    expect(args.indexOf("--agent")).toBeLessThan(args.indexOf(verb));
+  }
+  expect(set.slice(set.indexOf("set"))).toEqual([
+    "set",
+    "-s",
+    result.session!.id,
+    "effort",
+    "high",
+  ]);
+  expect(prompt[prompt.indexOf("--model") + 1]).toBe(
+    "opencode-go/deepseek-v4.1-flash",
+  );
+  expect(prompt.indexOf("--model")).toBeLessThan(prompt.indexOf("prompt"));
+  expect(prompt.slice(prompt.indexOf("prompt"))).toEqual([
+    "prompt",
+    "-s",
+    result.session!.id,
+    "Say [[text:PONG]]",
+  ]);
+}
+
+function registerAcpxHarnessOpencodeRawRoutePart1(): void {
   it("runs the raw agent, sets effort and records the usage_update cost", async () => {
     const stub = createAcpxStub({
       usage: OPENCODE_USAGE,
@@ -59,84 +146,18 @@ describe("AcpxHarness opencode raw route", () => {
       acpx: OPENCODE_ACPX,
     });
     try {
-      const result = await harness.turn(
-        request(path.dirname(stub.binary), "Say [[text:PONG]]", {
-          effort: "high",
-        }),
+      const scope1 = await runsRawAgentSetsEffortRecordsUsagePart1(
+        harness,
+        stub,
       );
-
-      expect(result.stop).toEqual({ kind: "done" });
-      expect(result.text).toBe("PONG");
-      expect(result.model).toEqual({
-        id: "opencode-go/deepseek-v4.1-flash",
-        effort: "high",
-      });
-      expect(result.session?.harness).toBe("opencode");
-      expect(result.session?.id).toMatch(/^opencode-/);
-      expect(result.usage).toEqual({
-        in: 7163,
-        cacheRead: 20,
-        cacheWrite5m: 5,
-        cacheWrite1h: 0,
-        out: 20,
-        reasoningOut: 12,
-        costUsd: 0.0032,
-      });
-
-      expect(
-        await harness.caps({ id: "opencode-go/deepseek-v4.1-flash" }),
-      ).toEqual({
-        resume: true,
-        compact: "none",
-        subagents: "none",
-        structuredOutput: "none",
-        effort: [],
-        usage: { cache: true, cost: true },
-      });
-
-      const calls = stub.invocations();
-      const create = calls.find(
-        (args) => args.includes("sessions") && args.includes("new"),
-      )!;
-      const set = calls.find((args) => args.includes("set"))!;
-      const prompt = calls.find((args) =>
-        args.at(-1)?.includes("[[text:PONG]]"),
-      )!;
-
-      for (const [args, verb] of [
-        [create, "sessions"],
-        [set, "set"],
-        [prompt, "prompt"],
-      ] as const) {
-        // The raw route has no positional agent: `--agent` is global and must
-        // precede the subcommand.
-        expect(args[args.indexOf("--agent") + 1]).toMatch(
-          /(^|\/)opencode acp$/,
-        );
-        expect(args.indexOf("--agent")).toBeLessThan(args.indexOf(verb));
-      }
-      expect(set.slice(set.indexOf("set"))).toEqual([
-        "set",
-        "-s",
-        result.session!.id,
-        "effort",
-        "high",
-      ]);
-      expect(prompt[prompt.indexOf("--model") + 1]).toBe(
-        "opencode-go/deepseek-v4.1-flash",
-      );
-      expect(prompt.indexOf("--model")).toBeLessThan(prompt.indexOf("prompt"));
-      expect(prompt.slice(prompt.indexOf("prompt"))).toEqual([
-        "prompt",
-        "-s",
-        result.session!.id,
-        "Say [[text:PONG]]",
-      ]);
+      await runsRawAgentSetsEffortRecordsUsagePart2(scope1);
     } finally {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessOpencodeRawRoutePart2(): void {
   it("resumes the session without reporting the cumulative cost again", async () => {
     const stub = createAcpxStub({
       usage: OPENCODE_USAGE,
@@ -189,7 +210,9 @@ describe("AcpxHarness opencode raw route", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessOpencodeRawRoutePart3(): void {
   it("leaves cost unknown when the reported currency is not USD", async () => {
     const stub = createAcpxStub({
       usage: OPENCODE_USAGE,
@@ -214,4 +237,4 @@ describe("AcpxHarness opencode raw route", () => {
       stub.cleanup();
     }
   });
-});
+}

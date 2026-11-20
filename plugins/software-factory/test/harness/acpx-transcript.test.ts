@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import {
   AcpxTranscriptParser,
@@ -16,6 +15,16 @@ function feed(lines: unknown[]): ReturnType<AcpxTranscriptParser["result"]> {
 }
 
 describe("acpx transcript", () => {
+  acpxTranscriptPart1();
+  acpxTranscriptPart2();
+  acpxTranscriptPart3();
+  acpxTranscriptPart4();
+  acpxTranscriptPart5();
+  acpxTranscriptPart6();
+  acpxTranscriptPart7();
+});
+
+function acpxTranscriptPart1() {
   it("keeps the last agent message when a banner is an earlier message", () => {
     const summary = feed([
       { jsonrpc: "2.0", id: 7, method: "session/prompt", params: {} },
@@ -55,7 +64,9 @@ describe("acpx transcript", () => {
     expect(summary.stopReason).toBe("end_turn");
     expect(summary.sessionId).toBe("s");
   });
+}
 
+function acpxTranscriptPart2() {
   it("joins streamed chunks that share a message id", () => {
     const summary = feed([
       { jsonrpc: "2.0", id: 7, method: "session/prompt", params: {} },
@@ -87,7 +98,9 @@ describe("acpx transcript", () => {
     ]);
     expect(summary.text).toBe("PONG");
   });
+}
 
+function acpxTranscriptPart3() {
   it("maps codex prompt usage with reasoning kept disjoint from text output", () => {
     expect(
       usageFromAcpxResult({
@@ -127,7 +140,9 @@ describe("acpx transcript", () => {
       reasoningOut: 5,
     });
   });
+}
 
+function acpxTranscriptPart4() {
   it("leaves usage unknown when the prompt result carries none", () => {
     expect(usageFromAcpxResult(undefined)).toEqual({
       in: 0,
@@ -138,7 +153,9 @@ describe("acpx transcript", () => {
       reasoningOut: 0,
     });
   });
+}
 
+function acpxTranscriptPart5() {
   it("records the newest usage_update cost alongside the prompt usage", () => {
     const summary = feed([
       { jsonrpc: "2.0", id: 7, method: "session/prompt", params: {} },
@@ -177,7 +194,9 @@ describe("acpx transcript", () => {
     expect(summary.usage.costUsd).toBe(0.0032);
     expect(summary.usage.in).toBe(10);
   });
+}
 
+function acpxTranscriptPart6() {
   it("leaves cost unknown for a non-USD usage_update cost", () => {
     const summary = feed([
       { jsonrpc: "2.0", id: 7, method: "session/prompt", params: {} },
@@ -222,7 +241,9 @@ describe("acpx transcript", () => {
       usageFromAcpxSessionText("Session: s\nMessages: 7\nCost: 0"),
     ).toBeUndefined();
   });
+}
 
+function acpxTranscriptPart7() {
   it("turns cumulative totals into a non-negative per-turn delta", () => {
     const before = {
       in: 2403,
@@ -252,4 +273,4 @@ describe("acpx transcript", () => {
     // A reset counter must not produce a negative turn.
     expect(turnUsageFromTotals({ ...after, in: 10 }, before).in).toBe(0);
   });
-});
+}

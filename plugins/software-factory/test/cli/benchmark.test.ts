@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -103,66 +102,102 @@ async function benchmark(
 }
 
 describe("benchmark command", () => {
+  registerBenchmarkCommandPart1();
+  registerBenchmarkCommandPart2();
+  registerBenchmarkCommandPart3();
+  registerBenchmarkCommandPart4();
+  registerBenchmarkCommandPart5();
+  registerBenchmarkCommandPart6();
+});
+
+/** The architect and implementer turns Part 1 reports on. */
+function benchmarkPart1Turns(): StepRecord[] {
+  return [
+    rec(1, {
+      iteration: 1,
+      step: "architect",
+      slug: undefined,
+      alias: "architect",
+      usage: usage(1.5, 1_000_000, 100_000),
+      startedAt: "2026-01-01T00:00:00.000Z",
+      endedAt: "2026-01-01T00:20:00.000Z",
+    }),
+    rec(2, {
+      iteration: 1,
+      slug: "alpha",
+      alias: "implementer",
+      usage: usage(0.5, 2_000_000, 200_000),
+      attempts: [
+        {
+          model: { id: "model-a" },
+          stop: { kind: "infra", cause: "quota" },
+          usage: usage(0, 0, 0),
+        },
+        {
+          model: { id: "model-b" },
+          stop: { kind: "done" },
+          usage: usage(0, 0, 0),
+        },
+      ],
+      startedAt: "2026-01-01T00:30:00.000Z",
+      endedAt: "2026-01-01T01:30:00.000Z",
+    }),
+  ];
+}
+
+/** The merge and park records Part 1 reports on. */
+function benchmarkPart1Scripts(): StepRecord[] {
+  return [
+    script(3, {
+      iteration: 1,
+      slug: "alpha",
+      step: "merge",
+      ok: true,
+      startedAt: "2026-01-01T01:31:00.000Z",
+      endedAt: "2026-01-01T02:00:00.000Z",
+    }),
+    script(4, {
+      iteration: 1,
+      slug: "alpha",
+      step: "merge",
+      ok: false,
+      cause: cause("conflict: alpha.txt"),
+      startedAt: "2026-01-01T02:01:00.000Z",
+      endedAt: "2026-01-01T02:10:00.000Z",
+    }),
+    script(5, {
+      iteration: 1,
+      slug: "beta",
+      step: "park",
+      ok: true,
+      cause: cause("review rejected: out of scope"),
+      startedAt: "2026-01-01T03:00:00.000Z",
+      endedAt: "2026-01-01T03:05:00.000Z",
+    }),
+  ];
+}
+
+/** Every benchmark row Part 1 expects in the report. */
+function expectBenchmarkPart1Rows(out: string): void {
+  expect(out).toContain("goal demo: 1 iteration(s)");
+  expect(out).toContain("| launches | 2 | launches |");
+  expect(out).toContain("| architect launches | 1 | launches |");
+  expect(out).toContain("| tokens in/out | 3.00 / 0.30 | Mtok |");
+  expect(out).toContain("| cost | $2.0000 | USD |");
+  expect(out).toContain("| architect share | 75.0% | % of cost |");
+  expect(out).toContain("| cost per merged | $2.0000 | USD/merged task |");
+  expect(out).toContain("| loop incidents | 0 | events |");
+  expect(out).toContain("| human interventions | 1 | events |");
+  expect(out).toContain("| wall | 3 h 5 m | h m |");
+  expect(out).toContain("| merged/parked | 1 / 1 | tasks |");
+  expect(out).toContain("loop incidents: none");
+}
+
+function registerBenchmarkCommandPart1(): void {
   it("prints every benchmark row with its unit from fixture records", async () => {
     const fixture = fixtureGoal();
     try {
-      const records: StepRecord[] = [
-        rec(1, {
-          iteration: 1,
-          step: "architect",
-          slug: undefined,
-          alias: "architect",
-          usage: usage(1.5, 1_000_000, 100_000),
-          startedAt: "2026-01-01T00:00:00.000Z",
-          endedAt: "2026-01-01T00:20:00.000Z",
-        }),
-        rec(2, {
-          iteration: 1,
-          slug: "alpha",
-          alias: "implementer",
-          usage: usage(0.5, 2_000_000, 200_000),
-          attempts: [
-            {
-              model: { id: "model-a" },
-              stop: { kind: "infra", cause: "quota" },
-              usage: usage(0, 0, 0),
-            },
-            {
-              model: { id: "model-b" },
-              stop: { kind: "done" },
-              usage: usage(0, 0, 0),
-            },
-          ],
-          startedAt: "2026-01-01T00:30:00.000Z",
-          endedAt: "2026-01-01T01:30:00.000Z",
-        }),
-        script(3, {
-          iteration: 1,
-          slug: "alpha",
-          step: "merge",
-          ok: true,
-          startedAt: "2026-01-01T01:31:00.000Z",
-          endedAt: "2026-01-01T02:00:00.000Z",
-        }),
-        script(4, {
-          iteration: 1,
-          slug: "alpha",
-          step: "merge",
-          ok: false,
-          cause: cause("conflict: alpha.txt"),
-          startedAt: "2026-01-01T02:01:00.000Z",
-          endedAt: "2026-01-01T02:10:00.000Z",
-        }),
-        script(5, {
-          iteration: 1,
-          slug: "beta",
-          step: "park",
-          ok: true,
-          cause: cause("review rejected: out of scope"),
-          startedAt: "2026-01-01T03:00:00.000Z",
-          endedAt: "2026-01-01T03:05:00.000Z",
-        }),
-      ];
+      const records = [...benchmarkPart1Turns(), ...benchmarkPart1Scripts()];
       for (const record of records) writeRecord(fixture.goalDir, record);
       await writeMetrics(fixture.store, {
         iteration: 1,
@@ -174,76 +209,72 @@ describe("benchmark command", () => {
 
       const { code, out } = await benchmark(fixture);
       expect(code).toBe(0);
-      expect(out).toContain("goal demo: 1 iteration(s)");
-      expect(out).toContain("| launches | 2 | launches |");
-      expect(out).toContain("| architect launches | 1 | launches |");
-      expect(out).toContain("| tokens in/out | 3.00 / 0.30 | Mtok |");
-      expect(out).toContain("| cost | $2.0000 | USD |");
-      expect(out).toContain("| architect share | 75.0% | % of cost |");
-      expect(out).toContain("| cost per merged | $2.0000 | USD/merged task |");
-      expect(out).toContain("| loop incidents | 0 | events |");
-      expect(out).toContain("| human interventions | 1 | events |");
-      expect(out).toContain("| wall | 3 h 5 m | h m |");
-      expect(out).toContain("| merged/parked | 1 / 1 | tasks |");
-      expect(out).toContain("loop incidents: none");
+      expectBenchmarkPart1Rows(out);
     } finally {
       fixture.repo.cleanup();
     }
   });
+}
 
+/** The turns and parks Part 2 reports on, including a non-loop overflow. */
+function benchmarkPart2Records(): StepRecord[] {
+  return [
+    rec(1, {
+      iteration: 1,
+      step: "architect",
+      slug: undefined,
+      alias: "architect",
+      usage: usage(0.1, 100, 10),
+    }),
+    rec(2, {
+      iteration: 1,
+      slug: "alpha",
+      alias: "implementer",
+      usage: usage(0.2, 200, 20),
+      attempts: [
+        {
+          model: { id: "model-a" },
+          stop: { kind: "infra", cause: "quota" },
+          usage: usage(0, 0, 0),
+        },
+        {
+          model: { id: "model-a" },
+          stop: { kind: "done" },
+          usage: usage(0, 0, 0),
+        },
+      ],
+    }),
+    script(3, {
+      iteration: 1,
+      slug: "alpha",
+      step: "park",
+      ok: true,
+      cause: cause("no-progress: implement r2 repeats r1 (deadbeef)"),
+    }),
+    script(4, {
+      iteration: 1,
+      slug: "beta",
+      step: "park",
+      ok: true,
+      cause: cause("empty-diff: implement r1 committed no changes"),
+    }),
+    script(5, {
+      iteration: 1,
+      slug: "gamma",
+      step: "park",
+      ok: true,
+      cause: cause("overflow"),
+    }),
+    // A spike produces knowledge: its empty finish is not an empty-diff park.
+    script(6, { iteration: 1, slug: "probe", step: "finish", ok: true }),
+  ];
+}
+
+function registerBenchmarkCommandPart2(): void {
   it("prints metrics.loopIncidents as the loop row and excludes other incident classes", async () => {
     const fixture = fixtureGoal();
     try {
-      const records: StepRecord[] = [
-        rec(1, {
-          iteration: 1,
-          step: "architect",
-          slug: undefined,
-          alias: "architect",
-          usage: usage(0.1, 100, 10),
-        }),
-        rec(2, {
-          iteration: 1,
-          slug: "alpha",
-          alias: "implementer",
-          usage: usage(0.2, 200, 20),
-          attempts: [
-            {
-              model: { id: "model-a" },
-              stop: { kind: "infra", cause: "quota" },
-              usage: usage(0, 0, 0),
-            },
-            {
-              model: { id: "model-a" },
-              stop: { kind: "done" },
-              usage: usage(0, 0, 0),
-            },
-          ],
-        }),
-        script(3, {
-          iteration: 1,
-          slug: "alpha",
-          step: "park",
-          ok: true,
-          cause: cause("no-progress: implement r2 repeats r1 (deadbeef)"),
-        }),
-        script(4, {
-          iteration: 1,
-          slug: "beta",
-          step: "park",
-          ok: true,
-          cause: cause("empty-diff: implement r1 committed no changes"),
-        }),
-        script(5, {
-          iteration: 1,
-          slug: "gamma",
-          step: "park",
-          ok: true,
-          cause: cause("overflow"),
-        }),
-        // A spike produces knowledge: its empty finish is not an empty-diff park.
-        script(6, { iteration: 1, slug: "probe", step: "finish", ok: true }),
-      ];
+      const records = benchmarkPart2Records();
       for (const record of records) writeRecord(fixture.goalDir, record);
       await writeMetrics(fixture.store, {
         iteration: 1,
@@ -276,7 +307,9 @@ describe("benchmark command", () => {
       fixture.repo.cleanup();
     }
   });
+}
 
+function registerBenchmarkCommandPart3(): void {
   it("marks cost-derived rows partial and never reports an unpriced turn as $0", async () => {
     const fixture = fixtureGoal();
     try {
@@ -333,7 +366,9 @@ describe("benchmark command", () => {
       fixture.repo.cleanup();
     }
   });
+}
 
+function registerBenchmarkCommandPart4(): void {
   it("prints n/a wall and no merged cost when the goal has no records", async () => {
     const fixture = fixtureGoal();
     try {
@@ -369,7 +404,9 @@ describe("benchmark command", () => {
       fixture.repo.cleanup();
     }
   });
+}
 
+function registerBenchmarkCommandPart5(): void {
   it("fails loudly when the goal has no metrics file", async () => {
     const fixture = fixtureGoal();
     try {
@@ -407,7 +444,9 @@ describe("benchmark command", () => {
       fixture.repo.cleanup();
     }
   });
+}
 
+function registerBenchmarkCommandPart6(): void {
   it("documents the benchmark command in help", async () => {
     const original = console.log;
     const lines: string[] = [];
@@ -422,4 +461,4 @@ describe("benchmark command", () => {
       console.log = original;
     }
   });
-});
+}

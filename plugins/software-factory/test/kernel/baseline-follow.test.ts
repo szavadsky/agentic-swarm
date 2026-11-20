@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -51,7 +50,20 @@ async function quietWarnings(run: () => Promise<void>): Promise<string[]> {
   return warnings;
 }
 
-describe("baseline on the head after the base follow", () => {
+/** A new failure hides behind the same red gate and is still the task's. */
+async function expectNewTaskRed(
+  runtime: Awaited<ReturnType<typeof makeRuntime>>,
+  checkout: string,
+  inherited: ReadonlySet<string>,
+): Promise<void> {
+  fs.writeFileSync(path.join(checkout, "task-broken.txt"), "Y\n", "utf8");
+  const withTaskRed = await runGates(runtime, checkout);
+  expect(newGateFailures(withTaskRed, inherited).map((c) => c.name)).toEqual([
+    "package",
+  ]);
+}
+
+function registerBaseFollowRed(): void {
   it("inherits the red of the merged head the follow leaves, not the pre-follow head", async () => {
     const { repo, goal } = setupFlowRepo({
       gates: [{ id: "package", command: GATE }],
@@ -103,17 +115,14 @@ describe("baseline on the head after the base follow", () => {
       );
       expect(newGateFailures(checks, inherited)).toEqual([]);
 
-      // A new failure hides behind the same red gate and is still the task's.
-      fs.writeFileSync(path.join(checkout, "task-broken.txt"), "Y\n", "utf8");
-      const withTaskRed = await runGates(runtime, checkout);
-      expect(
-        newGateFailures(withTaskRed, inherited).map((c) => c.name),
-      ).toEqual(["package"]);
+      await expectNewTaskRed(runtime, checkout, inherited);
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerMergePreviewRecheck(): void {
   it("re-gates the merge preview when base moves under a fixed integration head", async () => {
     const { repo, goal } = setupFlowRepo({
       gates: [{ id: "package", command: GATE }],
@@ -157,7 +166,9 @@ describe("baseline on the head after the base follow", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerConflictInfra(): void {
   it("treats a base follow that would conflict as infra, never base-red", async () => {
     const { repo, goal } = setupFlowRepo({
       gates: [{ id: "package", command: GATE }],
@@ -200,9 +211,15 @@ describe("baseline on the head after the base follow", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
+
+describe("baseline on the head after the base follow", () => {
+  registerBaseFollowRed();
+  registerMergePreviewRecheck();
+  registerConflictInfra();
 });
 
-describe("inherited-red baseline debt", () => {
+function registerInheritedRedCap(): void {
   it("matches two red runs differing only in root length past the cap", () => {
     // The baseline scratch root is ~30 chars longer than a task worktree root;
     // capping the raw text would push the cut later for the baseline and drop
@@ -253,7 +270,9 @@ describe("inherited-red baseline debt", () => {
     });
     expect(newGateFailures([taskCheck], inherited)).toEqual([]);
   });
+}
 
+function registerInheritedRedNoDetails(): void {
   it("never inherits red from a baseline record without details", () => {
     const stale: CheckResult = {
       name: "package",
@@ -286,7 +305,9 @@ describe("inherited-red baseline debt", () => {
       ).map((c) => c.name),
     ).toEqual(["package"]);
   });
+}
 
+function registerInheritedRedStale(): void {
   it("re-runs a stale baseline record instead of reusing it", async () => {
     const { repo, goal } = setupFlowRepo({
       gates: [
@@ -345,4 +366,10 @@ describe("inherited-red baseline debt", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
+
+describe("inherited-red baseline debt", () => {
+  registerInheritedRedCap();
+  registerInheritedRedNoDetails();
+  registerInheritedRedStale();
 });

@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -90,6 +89,11 @@ function argv(file: string): string[] {
 }
 
 describe("omp artifact LSP", () => {
+  ompArtifactLSPPart1();
+  ompArtifactLSPPart2();
+});
+
+function ompArtifactLSPPart1() {
   it("installs the config into the turn cwd and drops --no-lsp", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "omp-lsp-src-"));
     const config = path.join(dir, "lsp.json");
@@ -114,7 +118,9 @@ describe("omp artifact LSP", () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   }, 30_000);
+}
 
+function ompArtifactLSPPart2() {
   it("passes the launch's config through the real harness factory", async () => {
     const f = fixture();
     const source = path.join(f.dir, "canonical.json");
@@ -158,4 +164,4 @@ describe("omp artifact LSP", () => {
       f.cleanup();
     }
   }, 30_000);
-});
+}

@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import { DEFAULT_FLOWS, reduceTask } from "../../src/kernel/derive-task.js";
 import type { StepRecord } from "../../src/kernel/types.js";
@@ -59,6 +58,26 @@ const advance = (seq: number, tree: string, headTree?: string): StepRecord =>
   });
 
 describe("continuation carry", () => {
+  continuationCarryPart1();
+  continuationCarryPart2();
+  continuationCarryPart3();
+  continuationCarryPart4();
+  continuationCarryPart5();
+  continuationCarryPart6();
+  continuationCarryPart7();
+});
+
+describe("empty gate fix deferral", () => {
+  const scope1 = emptyGateFixDeferralPart1();
+  const scope2 = emptyGateFixDeferralPart2(scope1);
+  emptyGateFixDeferralPart3(scope2);
+  emptyGateFixDeferralPart4(scope2);
+  emptyGateFixDeferralPart5(scope2);
+  emptyGateFixDeferralPart6(scope2);
+  emptyGateFixDeferralPart7(scope2);
+});
+
+function continuationCarryPart1() {
   it("carries a no-change first turn past checks to QA when the branch holds work beyond the head", () => {
     const t = task("beta", { base: "alpha" });
     const flow = DEFAULT_FLOWS["implement-review"]!;
@@ -85,7 +104,9 @@ describe("continuation carry", () => {
     expect(afterChecks.park).toBeUndefined();
     expect(afterChecks.phase).toBe("qa");
   });
+}
 
+function continuationCarryPart2() {
   it("carries a no-change first turn past checks to merge on just-implement", () => {
     const t = task("beta", {
       base: "alpha",
@@ -115,7 +136,9 @@ describe("continuation carry", () => {
     expect(afterChecks.park).toBeUndefined();
     expect(afterChecks.phase).toBe("merge");
   });
+}
 
+function continuationCarryPart3() {
   it("parks empty-diff when the kept work is already on the head", () => {
     const t = task("beta", { base: "alpha" });
     const flow = DEFAULT_FLOWS["implement-review"]!;
@@ -131,7 +154,9 @@ describe("continuation carry", () => {
     expect(causeText(reduction.park)).toStartWith("empty-diff:");
     expect(causeText(reduction.park)).toContain("already on the head");
   });
+}
 
+function continuationCarryPart4() {
   it("defers a reply-only fix turn in a later round to review instead of parking", () => {
     const t = task("beta", { base: "alpha" });
     const flow = DEFAULT_FLOWS["implement-review"]!;
@@ -161,7 +186,9 @@ describe("continuation carry", () => {
     expect(reduction.park).toBeUndefined();
     expect(reduction.verdict).toBe("changes");
   });
+}
 
+function continuationCarryPart5() {
   it("defers a reply-only turn after a reused-worktree sync to review instead of parking", () => {
     const t = task("beta", { base: "alpha" });
     const flow = DEFAULT_FLOWS["implement-review"]!;
@@ -192,7 +219,9 @@ describe("continuation carry", () => {
     expect(reduction.park).toBeUndefined();
     expect(reduction.verdict).toBe("changes");
   });
+}
 
+function continuationCarryPart6() {
   it("derives old base-advance records without headTree as today", () => {
     const t = task("beta", { base: "alpha" });
     const flow = DEFAULT_FLOWS["implement-review"]!;
@@ -209,7 +238,9 @@ describe("continuation carry", () => {
       cause("empty-diff: implement r1 committed no changes"),
     );
   });
+}
 
+function continuationCarryPart7() {
   it("defers a reply-only fix after a later advance without resetting the first-turn carry", () => {
     const t = task("beta", { base: "alpha" });
     const flow = DEFAULT_FLOWS["implement-review"]!;
@@ -240,9 +271,9 @@ describe("continuation carry", () => {
     expect(reduction.park).toBeUndefined();
     expect(reduction.verdict).toBe("changes");
   });
-});
+}
 
-describe("empty gate fix deferral", () => {
+function emptyGateFixDeferralPart1() {
   const gate = (name: string, ok: boolean) => ({
     name,
     ok,
@@ -288,6 +319,13 @@ describe("empty gate fix deferral", () => {
       startedAt: new Date(seq).toISOString(),
     });
 
+  return { gate, failedChecks, passedChecks, infraChecks };
+}
+
+function emptyGateFixDeferralPart2(
+  scope: ReturnType<typeof emptyGateFixDeferralPart1>,
+) {
+  const { gate, failedChecks } = scope;
   const mergeGatesRed = (seq: number): StepRecord =>
     script(seq, {
       step: "merge",
@@ -316,6 +354,13 @@ describe("empty gate fix deferral", () => {
     expect(reduction.gateFix).toBe(true);
   });
 
+  return { ...scope, mergeGatesRed };
+}
+
+function emptyGateFixDeferralPart3(
+  scope: ReturnType<typeof emptyGateFixDeferralPart2>,
+) {
+  const { failedChecks, passedChecks } = scope;
   it("green checks after an empty gate fix proceed to QA with no extra round", () => {
     const t = task("a");
     const flow = DEFAULT_FLOWS["implement-review"]!;
@@ -353,7 +398,12 @@ describe("empty gate fix deferral", () => {
     expect(reduction.park).toBeUndefined();
     expect(reduction.loop).toBeUndefined();
   });
+}
 
+function emptyGateFixDeferralPart4(
+  scope: ReturnType<typeof emptyGateFixDeferralPart2>,
+) {
+  const { failedChecks } = scope;
   it("an identical red after an empty gate fix parks empty-diff after red checks", () => {
     const t = task("a");
     const flow = DEFAULT_FLOWS["implement-review"]!;
@@ -394,7 +444,12 @@ describe("empty gate fix deferral", () => {
     expect(reduction.loop).toBeUndefined();
     expect(reduction.gateFix).toBe(true);
   });
+}
 
+function emptyGateFixDeferralPart5(
+  scope: ReturnType<typeof emptyGateFixDeferralPart2>,
+) {
+  const { failedChecks, infraChecks, passedChecks } = scope;
   it("infra-only reds after an empty gate fix keep the infra path", () => {
     const t = task("a");
     const flow = DEFAULT_FLOWS["implement-review"]!;
@@ -436,7 +491,12 @@ describe("empty gate fix deferral", () => {
     expect(reduction.park).toBeUndefined();
     expect(reduction.loop).toBeUndefined();
   });
+}
 
+function emptyGateFixDeferralPart6(
+  scope: ReturnType<typeof emptyGateFixDeferralPart2>,
+) {
+  const { passedChecks, mergeGatesRed, failedChecks } = scope;
   it("an empty fix after merge-gates red defers: green task checks merge", () => {
     const t = task("a", { flow: "just-implement" });
     const flow = DEFAULT_FLOWS["just-implement"]!;
@@ -477,7 +537,12 @@ describe("empty gate fix deferral", () => {
       ),
     );
   });
+}
 
+function emptyGateFixDeferralPart7(
+  scope: ReturnType<typeof emptyGateFixDeferralPart2>,
+) {
+  const { failedChecks, passedChecks } = scope;
   it("replays m5-kept-land 01140-01146 to QA", () => {
     // i30: implement r1 left tree 31d8285c, checks 01140 went red on tests, the
     // fix turn verified the work and committed nothing, checks 01146 came back
@@ -515,4 +580,4 @@ describe("empty gate fix deferral", () => {
     expect(reduction.park).toBeUndefined();
     expect(reduction.loop).toBeUndefined();
   });
-});
+}

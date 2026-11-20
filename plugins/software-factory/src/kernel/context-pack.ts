@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import type { ConcernKind } from "../core/concern-types.js";
 import { concernFingerprint } from "../core/concerns.js";
 import { formatCause, makeCause } from "./cause.js";
@@ -592,8 +591,9 @@ export function renderContextPack(input: ContextPackInput): string {
  * keeps in full and what it names with a pointer and a summary; the fallback
  * render above consumes the same input.
  */
-export function renderContextData(input: ContextPackInput): string {
-  const statuses = [...input.tasks]
+/** Every task with its derived run-state, sorted by slug. */
+function contextTaskStatuses(input: ContextPackInput) {
+  return [...input.tasks]
     .sort((a, b) => a.slug.localeCompare(b.slug))
     .map((task) => {
       const state = input.state.tasks[task.slug];
@@ -612,13 +612,24 @@ export function renderContextData(input: ContextPackInput): string {
         cause: state?.cause ?? null,
       };
     });
-  const parked = statuses
+}
+
+/** Parked tasks with the cause a reader needs, defaulted when none recorded. */
+function contextParked(statuses: ReturnType<typeof contextTaskStatuses>) {
+  return statuses
     .filter((task) => task.status === "parked")
     .map((task) => ({
       slug: task.slug,
       cause: task.cause ?? makeCause("unknown", "no recorded cause"),
     }));
-  const pending = statuses
+}
+
+/** Pending/ready tasks and the deps still keeping them waiting. */
+function contextPending(
+  input: ContextPackInput,
+  statuses: ReturnType<typeof contextTaskStatuses>,
+) {
+  return statuses
     .filter((task) => task.status === "pending" || task.status === "ready")
     .map((task) => {
       const waitsOn = task.deps.filter((dep) => {
@@ -627,10 +638,14 @@ export function renderContextData(input: ContextPackInput): string {
       });
       return { slug: task.slug, waitsOn };
     });
+}
+
+/** Steers with the hold that blocks them, when one does. */
+function contextSteers(input: ContextPackInput) {
   const heldBySteer = new Map(
     (input.holds ?? []).map((hold) => [hold.steer, hold]),
   );
-  const steers = input.steers.map((steer) => {
+  return input.steers.map((steer) => {
     const hold = heldBySteer.get(steer.id);
     return {
       id: steer.id,
@@ -639,6 +654,13 @@ export function renderContextData(input: ContextPackInput): string {
       holds: hold ? (hold.goal ? "goal" : [...hold.slugs].sort()) : [],
     };
   });
+}
+
+export function renderContextData(input: ContextPackInput): string {
+  const statuses = contextTaskStatuses(input);
+  const parked = contextParked(statuses);
+  const pending = contextPending(input, statuses);
+  const steers = contextSteers(input);
   const data = {
     goal: input.goal,
     iteration: input.iteration,

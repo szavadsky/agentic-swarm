@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -13,6 +12,16 @@ import {
 } from "../../src/kernel/outcome.js";
 
 describe("outcome delivery", () => {
+  registerOutcomeDeliveryPart1();
+  registerOutcomeDeliveryPart2();
+  registerOutcomeDeliveryPart3();
+  registerOutcomeDeliveryPart4();
+  registerOutcomeDeliveryPart5();
+  registerOutcomeDeliveryPart6();
+  registerOutcomeDeliveryPart7();
+});
+
+function registerOutcomeDeliveryPart1(): void {
   it("parses YAML and JSON with zod defaults", () => {
     expect(parseOutcome("status: done\nsummary: landed\n").concerns).toEqual(
       [],
@@ -55,7 +64,9 @@ describe("outcome delivery", () => {
       ),
     ).toThrow(/route/);
   });
+}
 
+function registerOutcomeDeliveryPart2(): void {
   it("reads the retired continue route as a replace, and refuses unknown actions", () => {
     const legacy = parseOutcome(
       [
@@ -96,7 +107,9 @@ describe("outcome delivery", () => {
     expect(delivered?.outcome.summary).toBe("file");
     fs.rmSync(dir, { recursive: true, force: true });
   });
+}
 
+function registerOutcomeDeliveryPart3(): void {
   it("falls back to the last fenced block when the file is absent or malformed", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-outcome-"));
     const file = path.join(dir, "outcome.yaml");
@@ -119,7 +132,9 @@ describe("outcome delivery", () => {
       ),
     ).toEqual([]);
   });
+}
 
+function registerOutcomeDeliveryPart4(): void {
   it("refuses changes on the last review call", () => {
     const changes = parseOutcome(
       "status: done\nsummary: fixed\nverdict: changes\n",
@@ -139,7 +154,9 @@ describe("outcome delivery", () => {
       ),
     ).toEqual([]);
   });
+}
 
+function registerOutcomeDeliveryPart5(): void {
   it("refuses a debtClosed id that no ingested concern has", () => {
     const records = [
       {
@@ -197,7 +214,9 @@ describe("outcome delivery", () => {
     // Without records the id cannot be resolved, so only the step contract runs.
     expect(validateExpectation(close("anything"), "architect")).toEqual([]);
   });
+}
 
+function registerOutcomeDeliveryPart6(): void {
   it("maps steps to expectations from the flow catalog and kernel turn steps", () => {
     const flows = {
       "implement-review": {
@@ -226,7 +245,9 @@ describe("outcome delivery", () => {
     expect(KERNEL_TURN_STEPS.architect).toBe("architect");
     expect(KERNEL_TURN_STEPS.pm).toBe("any");
   });
+}
 
+function registerOutcomeDeliveryPart7(): void {
   it("fails loud on a step no flow configures", () => {
     expect(() => expectationForStep("reveiw", {})).toThrow(
       'step "reveiw" is not configured in the repo\'s flows',
@@ -244,4 +265,4 @@ describe("outcome delivery", () => {
       'step "toString" is not configured in the repo\'s flows',
     );
   });
-});
+}

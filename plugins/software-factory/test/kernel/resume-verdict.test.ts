@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import type { Hold } from "../../src/kernel/mailbox.js";
 import { resumeVerdict } from "../../src/kernel/resume.js";
@@ -59,6 +58,13 @@ const hold = (steer: string, ...slugs: string[]): Hold => ({
 });
 
 describe("resumeVerdict", () => {
+  resumeVerdictPart1();
+  resumeVerdictPart2();
+  resumeVerdictPart3();
+  resumeVerdictPart4();
+});
+
+function resumeVerdictPart1() {
   it("resumes first-time work", () => {
     expect(
       resumeVerdict(state("alpha"), [taskTurn()], [], new Set(), LIMITS),
@@ -95,7 +101,9 @@ describe("resumeVerdict", () => {
       } as Limits).cause,
     ).toContain("limit 1");
   });
+}
 
+function resumeVerdictPart2() {
   it("ignores resumes of other iterations", () => {
     const records = [
       record({ step: "resume", actor: "script", iteration: 0 }),
@@ -136,7 +144,9 @@ describe("resumeVerdict", () => {
       resumeVerdict(state("alpha"), records, [], new Set(), LIMITS).resume,
     ).toBe(true);
   });
+}
 
+function resumeVerdictPart3() {
   it("refuses when the latest plan-check is architect, resumes when a later one is progress", () => {
     const refused = resumeVerdict(
       state("alpha"),
@@ -177,7 +187,9 @@ describe("resumeVerdict", () => {
     expect(verdict.resume).toBe(false);
     expect(verdict.cause).toContain("held");
   });
+}
 
+function resumeVerdictPart4() {
   it("resumes when one ready task is runnable or the holding steer is gone", () => {
     const holds = [hold("s1", "alpha")];
     expect(
@@ -188,4 +200,4 @@ describe("resumeVerdict", () => {
       resumeVerdict(state("alpha"), [], holds, new Set(), LIMITS).resume,
     ).toBe(true);
   });
-});
+}

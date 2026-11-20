@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -105,6 +104,14 @@ const LEGACY: Array<[text: string, kind: CauseKind, detail: string]> = [
 ];
 
 describe("typed causes", () => {
+  typedCausesPart1();
+  typedCausesPart2();
+  typedCausesPart3();
+  typedCausesPart4();
+  typedCausesPart5();
+});
+
+function typedCausesPart1() {
   it("maps every legacy record text through the one reader", () => {
     for (const [text, kind, detail] of LEGACY) {
       expect(readCause(text)).toEqual({ kind, detail });
@@ -137,7 +144,9 @@ describe("typed causes", () => {
     );
     expect(formatCause(makeCause("error", "store boom"))).toBe("store boom");
   });
+}
 
+function typedCausesPart2() {
   it("reads a record written before causes were typed and derives its kind", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-cause-"));
     const store = createFolderStore(path.join(root, "goal"), undefined, {});
@@ -170,7 +179,9 @@ describe("typed causes", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function typedCausesPart3() {
   it("writes a typed cause to the record and never a message prefix", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-cause-"));
     const store = createFolderStore(path.join(root, "goal"), undefined, {});
@@ -195,7 +206,9 @@ describe("typed causes", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function typedCausesPart4() {
   it("routes a merge failure by its kind, not by the words in its detail", () => {
     const merge = (seq: number, cause: Cause): StepRecord => ({
       seq,
@@ -226,7 +239,9 @@ describe("typed causes", () => {
     expect(conflict.tasks.alpha!.status).toBe("ready");
     expect(conflict.tasks.alpha!.phase).toBe("resolve");
   });
+}
 
+function typedCausesPart5() {
   it("counts incidents by kind, not by words in the detail", () => {
     const all = [
       {
@@ -262,4 +277,4 @@ describe("typed causes", () => {
     expect(metrics.incidents.noProgressParks).toBe(0);
     expect(metrics.incidents.roundLimitParks).toBe(0);
   });
-});
+}

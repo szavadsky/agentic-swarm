@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { createHash } from "node:crypto";
 import { runAgentTurn } from "./agent.js";
 import { boundaryTarget, type TurnTarget } from "./flow-context.js";
@@ -82,17 +81,25 @@ function appendTranscripts(lines: string[], records: StepRecord[]): void {
   }
 }
 
-/**
- * The script half of the digest: cost and turns by role, straight from the
- * records. No model is asked to add numbers it can only approximate.
- */
-function renderDigestFacts(
+/** The digest's per-role totals, accumulated over past agent turns. */
+interface DigestTotals {
+  turns: number;
+  in: number;
+  cacheRead: number;
+  out: number;
+  costUsd: number;
+  costKnown: boolean;
+  unpricedTurns: number;
+}
+
+/** Groups past agent turns by role/alias and counts them. */
+function digestRoleRows(
   records: StepRecord[],
   iteration: number,
   roleByStep: Record<string, string>,
   prices: PriceTable,
   priceIds?: Record<string, string>,
-): string {
+): { rows: Map<string, RoleRow>; turns: number } {
   const rows = new Map<string, RoleRow>();
   let turns = 0;
   for (const rec of records) {
@@ -101,8 +108,21 @@ function renderDigestFacts(
     turns += 1;
     addRoleRow(rows, rec, prices, priceIds, roleByStep);
   }
+  return { rows, turns };
+}
 
-  const totals = [...rows.values()].reduce(
+/** Sums the per-role rows into the digest's grand totals. */
+function digestTotals(rows: Map<string, RoleRow>): DigestTotals {
+  const empty: DigestTotals = {
+    turns: 0,
+    in: 0,
+    cacheRead: 0,
+    out: 0,
+    costUsd: 0,
+    costKnown: false,
+    unpricedTurns: 0,
+  };
+  return [...rows.values()].reduce<DigestTotals>(
     (sum, row) => ({
       turns: sum.turns + row.turns,
       in: sum.in + row.in,
@@ -112,23 +132,13 @@ function renderDigestFacts(
       costKnown: sum.costKnown || row.costKnown,
       unpricedTurns: sum.unpricedTurns + row.unpricedTurns,
     }),
-    {
-      turns: 0,
-      in: 0,
-      cacheRead: 0,
-      out: 0,
-      costUsd: 0,
-      costKnown: false,
-      unpricedTurns: 0,
-    },
+    empty,
   );
+}
 
+/** The digest's markdown cost/turn table, one row per role/alias. */
+function renderRoleTable(rows: Map<string, RoleRow>): string[] {
   const lines = [
-    `# Digest — previous launch (before iteration ${iteration})`,
-    "",
-    `launch: previous-launch-before-${iteration}`,
-    `records: ${records.filter((r) => (r.iteration ?? 0) < iteration).length}`,
-    "",
     "## Cost and turns by role",
     "| role | alias | turns | input | cached | output | cost |",
     "|---|---|---|---|---|---|---|",
@@ -144,7 +154,16 @@ function renderDigestFacts(
     );
   }
   if (rows.size === 0) lines.push("| (none) | | | | | | |");
-  lines.push(
+  return lines;
+}
+
+/** The digest's markdown totals block. */
+function renderDigestTotals(
+  turns: number,
+  rows: Map<string, RoleRow>,
+  totals: DigestTotals,
+): string[] {
+  return [
     "",
     "## Totals",
     `- turns: ${turns}`,
@@ -158,8 +177,36 @@ function renderDigestFacts(
           )
     }`,
     "",
-  );
+  ];
+}
 
+/**
+ * The script half of the digest: cost and turns by role, straight from the
+ * records. No model is asked to add numbers it can only approximate.
+ */
+function renderDigestFacts(
+  records: StepRecord[],
+  iteration: number,
+  roleByStep: Record<string, string>,
+  prices: PriceTable,
+  priceIds?: Record<string, string>,
+): string {
+  const { rows, turns } = digestRoleRows(
+    records,
+    iteration,
+    roleByStep,
+    prices,
+    priceIds,
+  );
+  const lines = [
+    `# Digest — previous launch (before iteration ${iteration})`,
+    "",
+    `launch: previous-launch-before-${iteration}`,
+    `records: ${records.filter((r) => (r.iteration ?? 0) < iteration).length}`,
+    "",
+    ...renderRoleTable(rows),
+    ...renderDigestTotals(turns, rows, digestTotals(rows)),
+  ];
   appendTranscripts(lines, records);
   lines.push(
     "",

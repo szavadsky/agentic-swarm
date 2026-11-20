@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -83,84 +82,92 @@ describe("artifact single location", () => {
   it("writes no artifact content at two paths in one iteration with a spike and a steer", async () => {
     const goal = makeGoal();
     try {
-      const store = createFolderStore(goal.goalDir, undefined, {});
-      await store.ensureLayout();
-      await postSteer(store, "s1", STEER);
-
-      const harness = new FakeHarness({ id: "fake" });
-      // Architect: edits the plan (the steer's constraint) and answers the steer.
-      harness.script((req, ctx) => {
-        expect(req.prompt).toContain("Keep the finding short");
-        fs.writeFileSync(goal.planPath, PLAN, "utf8");
-        ctx.writeOutcome(
-          outcome({
-            summary: "answered the steer",
-            decision: "continue",
-            forward: ["steer s1: short it is"],
-          }),
-        );
-        return fakeTurnResult(req);
-      });
-      // PM: files the plan's one spike as a task.
-      harness.script((req, ctx) => {
-        writeTask(goal.goalDir, SPIKE);
-        ctx.writeOutcome(outcome({ summary: "filed the probe spike" }));
-        return fakeTurnResult(req);
-      });
-      // Spike implement: the report lands in the worktree, and the checks step
-      // commits it as the spike's only copy.
-      harness.script((req, ctx) => {
-        const file = path.join(req.cwd!, spikeReportPath("probe"));
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, REPORT, "utf8");
-        ctx.writeOutcome(outcome({ summary: "wrote the finding" }));
-        return fakeTurnResult(req);
-      });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "finding holds", verdict: "approve" }),
-        );
-        return fakeTurnResult(req);
-      });
-
-      // One full iteration: the boundary answers the steer, the spike commits
-      // its report and finishes; the goal keeps running for a second iteration.
-      await expectLaunch(3, goal.repo, harness);
-
-      expect((await stateOf(goal.goalDir)).tasks.probe!.status).toBe(
-        "finished",
-      );
-      const finish = (await store.listRecords()).find(
-        (record) => record.step === "finish" && record.slug === "probe",
-      )!;
-      expect(finish.report).toBe(
-        `${finish.commit}:${spikeReportPath("probe")}`,
-      );
-      expect(
-        fs.existsSync(path.join(goal.goalDir, "finish/probe/report.md")),
-      ).toBe(false);
-      expect(
-        fs.existsSync(path.join(goal.goalDir, "mailbox/processed/s1.md")),
-      ).toBe(true);
-      expect(readGoal(goal.goalDir, "mailbox/outbox/steer-s1.md")).toContain(
-        "short it is",
-      );
-
-      // The outbox entries reference the one copy instead of repeating it.
-      expect(readGoal(goal.goalDir, SUMMARY)).toContain(
-        "- spikes finished: probe",
-      );
-      expect(
-        readGoal(goal.goalDir, "mailbox/outbox/iteration-1-summary.md"),
-      ).toBe(`${SUMMARY}\n`);
-      expect(readGoal(goal.goalDir, "metrics.yaml")).toContain("totals:");
-      expect(readGoal(goal.goalDir, "mailbox/outbox/metrics.yaml")).toBe(
-        "metrics.yaml\n",
-      );
-
-      expect(duplicateContents(goal.goalDir)).toEqual([]);
+      const scope1 = await writesNoArtifactContentAtTwoPathsPart1(goal);
+      await writesNoArtifactContentAtTwoPathsPart2(goal, scope1);
     } finally {
       cleanup(goal);
     }
   }, 60_000);
 });
+
+async function writesNoArtifactContentAtTwoPathsPart1(
+  goal: ReturnType<typeof makeGoal>,
+) {
+  const store = createFolderStore(goal.goalDir, undefined, {});
+  await store.ensureLayout();
+  await postSteer(store, "s1", STEER);
+
+  const harness = new FakeHarness({ id: "fake" });
+  // Architect: edits the plan (the steer's constraint) and answers the steer.
+  harness.script((req, ctx) => {
+    expect(req.prompt).toContain("Keep the finding short");
+    fs.writeFileSync(goal.planPath, PLAN, "utf8");
+    ctx.writeOutcome(
+      outcome({
+        summary: "answered the steer",
+        decision: "continue",
+        forward: ["steer s1: short it is"],
+      }),
+    );
+    return fakeTurnResult(req);
+  });
+  // PM: files the plan's one spike as a task.
+  harness.script((req, ctx) => {
+    writeTask(goal.goalDir, SPIKE);
+    ctx.writeOutcome(outcome({ summary: "filed the probe spike" }));
+    return fakeTurnResult(req);
+  });
+  // Spike implement: the report lands in the worktree, and the checks step
+  // commits it as the spike's only copy.
+  harness.script((req, ctx) => {
+    const file = path.join(req.cwd!, spikeReportPath("probe"));
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, REPORT, "utf8");
+    ctx.writeOutcome(outcome({ summary: "wrote the finding" }));
+    return fakeTurnResult(req);
+  });
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "finding holds", verdict: "approve" }));
+    return fakeTurnResult(req);
+  });
+
+  // One full iteration: the boundary answers the steer, the spike commits
+  // its report and finishes; the goal keeps running for a second iteration.
+  await expectLaunch(3, goal.repo, harness);
+
+  expect((await stateOf(goal.goalDir)).tasks.probe!.status).toBe("finished");
+  const finish = (await store.listRecords()).find(
+    (record) => record.step === "finish" && record.slug === "probe",
+  )!;
+
+  return { finish };
+}
+
+async function writesNoArtifactContentAtTwoPathsPart2(
+  goal: ReturnType<typeof makeGoal>,
+  scope: Awaited<ReturnType<typeof writesNoArtifactContentAtTwoPathsPart1>>,
+) {
+  const { finish } = scope;
+  expect(finish.report).toBe(`${finish.commit}:${spikeReportPath("probe")}`);
+  expect(fs.existsSync(path.join(goal.goalDir, "finish/probe/report.md"))).toBe(
+    false,
+  );
+  expect(
+    fs.existsSync(path.join(goal.goalDir, "mailbox/processed/s1.md")),
+  ).toBe(true);
+  expect(readGoal(goal.goalDir, "mailbox/outbox/steer-s1.md")).toContain(
+    "short it is",
+  );
+
+  // The outbox entries reference the one copy instead of repeating it.
+  expect(readGoal(goal.goalDir, SUMMARY)).toContain("- spikes finished: probe");
+  expect(readGoal(goal.goalDir, "mailbox/outbox/iteration-1-summary.md")).toBe(
+    `${SUMMARY}\n`,
+  );
+  expect(readGoal(goal.goalDir, "metrics.yaml")).toContain("totals:");
+  expect(readGoal(goal.goalDir, "mailbox/outbox/metrics.yaml")).toBe(
+    "metrics.yaml\n",
+  );
+
+  expect(duplicateContents(goal.goalDir)).toEqual([]);
+}

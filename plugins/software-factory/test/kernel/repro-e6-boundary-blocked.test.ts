@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -109,6 +108,14 @@ const PM_CHAIN_YAML = [
 ].join("\n");
 
 describe("E6 inverted: an architect infra death is infra, not blocked-by-user", () => {
+  registerE6InvertedAnArchitectInfraDeathIsInfraNotBlockedByUserPart1();
+  registerE6InvertedAnArchitectInfraDeathIsInfraNotBlockedByUserPart2();
+  registerE6InvertedAnArchitectInfraDeathIsInfraNotBlockedByUserPart3();
+  registerE6InvertedAnArchitectInfraDeathIsInfraNotBlockedByUserPart4();
+  registerE6InvertedAnArchitectInfraDeathIsInfraNotBlockedByUserPart5();
+});
+
+function registerE6InvertedAnArchitectInfraDeathIsInfraNotBlockedByUserPart1(): void {
   it("stops the launch as infra with the dead architect alias, not a retry on it", async () => {
     const goal = makeGoal();
     try {
@@ -142,7 +149,9 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
       cleanup(goal);
     }
   }, 60_000);
+}
 
+function registerE6InvertedAnArchitectInfraDeathIsInfraNotBlockedByUserPart2(): void {
   it("treats a crash the same way and exits 1 through the CLI", async () => {
     const goal = makeGoal();
     try {
@@ -155,7 +164,9 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
       cleanup(goal);
     }
   }, 60_000);
+}
 
+function registerE6InvertedAnArchitectInfraDeathIsInfraNotBlockedByUserPart3(): void {
   it("a single transient death is retried de novo, not on the resumed session", async () => {
     const goal = makeGoal();
     try {
@@ -202,7 +213,9 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
       cleanup(goal);
     }
   }, 90_000);
+}
 
+function registerE6InvertedAnArchitectInfraDeathIsInfraNotBlockedByUserPart4(): void {
   it("does not retry a resumed session that overflowed past the harness's de-novo retry", async () => {
     const goal = makeGoal();
     try {
@@ -236,7 +249,9 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
       cleanup(goal);
     }
   }, 90_000);
+}
 
+function registerE6InvertedAnArchitectInfraDeathIsInfraNotBlockedByUserPart5(): void {
   it("a real owner block (the escalated PM asks) is still blocked-by-user with exit 3", async () => {
     const goal = makeGoal({ runYaml: PM_CHAIN_YAML });
     try {
@@ -283,4 +298,4 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
       cleanup(goal);
     }
   }, 60_000);
-});
+}

@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -58,6 +57,112 @@ function assistant(message: Record<string, unknown>): string {
 }
 
 describe("omp usage", () => {
+  registerOmpUsagePart1();
+  registerOmpUsagePart2();
+  registerOmpUsagePart3();
+  registerOmpUsagePart4();
+  registerOmpUsagePart5();
+  registerOmpUsagePart6();
+  registerOmpUsagePart7();
+  registerOmpUsagePart8();
+});
+
+function splitsTurnSAssistantUsageByModelPart1(tmp: string) {
+  const parent = path.join(tmp, "parent.jsonl");
+
+  return { parent };
+}
+
+function splitsTurnSAssistantUsageByModelPart2(
+  scope: ReturnType<typeof splitsTurnSAssistantUsageByModelPart1>,
+) {
+  const { parent } = scope;
+  fs.writeFileSync(
+    parent,
+    [
+      assistant({
+        provider: "openrouter",
+        model: "baidu/ernie-5.5-flash-preview:free",
+        usage: {
+          input: 100,
+          output: 10,
+          cacheRead: 5,
+          cacheWrite: 0,
+          reasoningTokens: 2,
+          cost: { total: 0 },
+        },
+        timestamp: 1_000,
+      }),
+      assistant({
+        provider: "opencode-go",
+        model: "deepseek-v4.1-flash",
+        usage: {
+          input: 200,
+          output: 20,
+          cacheRead: 7,
+          cacheWrite: 3,
+          reasoningTokens: 4,
+          cost: { total: 0.02 },
+        },
+        timestamp: 2_000,
+      }),
+      // Before the prompt: another turn's message, never part of the split.
+      assistant({
+        provider: "openrouter",
+        model: "baidu/ernie-5.5-flash-preview:free",
+        usage: { input: 999, output: 1, timestamp: 10 },
+        timestamp: 10,
+      }),
+      JSON.stringify({
+        type: "message",
+        message: { role: "user", timestamp: 1_500 },
+      }),
+    ].join("\n"),
+  );
+}
+
+function splitsTurnSAssistantUsageByModelPart3(
+  scope: ReturnType<typeof splitsTurnSAssistantUsageByModelPart1>,
+) {
+  const { parent } = scope;
+  expect(servedUsage(parent, 1_000)).toEqual([
+    {
+      model: { id: "openrouter/baidu/ernie-5.5-flash-preview:free" },
+      usage: {
+        in: 100,
+        cacheRead: 5,
+        cacheWrite5m: 0,
+        cacheWrite1h: 0,
+        out: 8,
+        reasoningOut: 2,
+        costUsd: 0,
+      },
+    },
+    {
+      model: { id: "opencode-go/deepseek-v4.1-flash" },
+      usage: {
+        in: 200,
+        cacheRead: 7,
+        cacheWrite5m: 3,
+        cacheWrite1h: 0,
+        out: 16,
+        reasoningOut: 4,
+        costUsd: 0.02,
+      },
+    },
+  ]);
+  expect(servedTotal(servedUsage(parent, 1_000)!)).toEqual({
+    in: 300,
+    cacheRead: 12,
+    cacheWrite5m: 3,
+    cacheWrite1h: 0,
+    out: 24,
+    reasoningOut: 6,
+    costUsd: 0.02,
+  });
+}
+
+function registerOmpUsagePart1(): void {
   it("subtracts reasoning from output so the counters stay disjoint", () => {
     expect(
       usageFromMessage({
@@ -92,7 +197,9 @@ describe("omp usage", () => {
     });
     expect(summary.lastAssistantStopReason).toBe("stop");
   });
+}
 
+function registerOmpUsagePart2(): void {
   it("matches parent session stats on a subagent turn (child usage is separate)", () => {
     const recorded = frames("rpc-subagent.ndjson");
     const summary = summarizeOmpFrames(recorded);
@@ -134,7 +241,9 @@ describe("omp usage", () => {
       costUsd: 0,
     });
   });
+}
 
+function registerOmpUsagePart3(): void {
   it("clamps a stats reset (compaction) to zero instead of going negative", () => {
     const usage = statsDelta(
       {
@@ -168,7 +277,9 @@ describe("omp usage", () => {
       costUsd: 0,
     });
   });
+}
 
+function registerOmpUsagePart4(): void {
   it("adds child-session usage only for messages after the turn started", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-usage-"));
     try {
@@ -195,7 +306,9 @@ describe("omp usage", () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
+}
 
+function registerOmpUsagePart5(): void {
   // The fixture dates its pre-turn message at 1s and its in-turn message in 2100.
   it("sums parent stats and child-session usage for one turn, cost included", () => {
     const recorded = frames("rpc-subagent.ndjson");
@@ -218,7 +331,9 @@ describe("omp usage", () => {
       });
     });
   });
+}
 
+function registerOmpUsagePart6(): void {
   it("sums frame usage and child-session usage when session stats are unavailable", () => {
     const recorded = frames("rpc-subagent.ndjson");
     withChildSession("child-session-cost.jsonl", (sessionFile) => {
@@ -242,89 +357,16 @@ describe("omp usage", () => {
   it("splits a turn's assistant usage by the model that served it", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-served-"));
     try {
-      const parent = path.join(tmp, "parent.jsonl");
-      fs.writeFileSync(
-        parent,
-        [
-          assistant({
-            provider: "openrouter",
-            model: "baidu/ernie-5.5-flash-preview:free",
-            usage: {
-              input: 100,
-              output: 10,
-              cacheRead: 5,
-              cacheWrite: 0,
-              reasoningTokens: 2,
-              cost: { total: 0 },
-            },
-            timestamp: 1_000,
-          }),
-          assistant({
-            provider: "opencode-go",
-            model: "deepseek-v4.1-flash",
-            usage: {
-              input: 200,
-              output: 20,
-              cacheRead: 7,
-              cacheWrite: 3,
-              reasoningTokens: 4,
-              cost: { total: 0.02 },
-            },
-            timestamp: 2_000,
-          }),
-          // Before the prompt: another turn's message, never part of the split.
-          assistant({
-            provider: "openrouter",
-            model: "baidu/ernie-5.5-flash-preview:free",
-            usage: { input: 999, output: 1, timestamp: 10 },
-            timestamp: 10,
-          }),
-          JSON.stringify({
-            type: "message",
-            message: { role: "user", timestamp: 1_500 },
-          }),
-        ].join("\n"),
-      );
-      expect(servedUsage(parent, 1_000)).toEqual([
-        {
-          model: { id: "openrouter/baidu/ernie-5.5-flash-preview:free" },
-          usage: {
-            in: 100,
-            cacheRead: 5,
-            cacheWrite5m: 0,
-            cacheWrite1h: 0,
-            out: 8,
-            reasoningOut: 2,
-            costUsd: 0,
-          },
-        },
-        {
-          model: { id: "opencode-go/deepseek-v4.1-flash" },
-          usage: {
-            in: 200,
-            cacheRead: 7,
-            cacheWrite5m: 3,
-            cacheWrite1h: 0,
-            out: 16,
-            reasoningOut: 4,
-            costUsd: 0.02,
-          },
-        },
-      ]);
-      expect(servedTotal(servedUsage(parent, 1_000)!)).toEqual({
-        in: 300,
-        cacheRead: 12,
-        cacheWrite5m: 3,
-        cacheWrite1h: 0,
-        out: 24,
-        reasoningOut: 6,
-        costUsd: 0.02,
-      });
+      const scope1 = splitsTurnSAssistantUsageByModelPart1(tmp);
+      splitsTurnSAssistantUsageByModelPart2(scope1);
+      splitsTurnSAssistantUsageByModelPart3(scope1);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
+}
 
+function registerOmpUsagePart7(): void {
   it("returns one served model and refuses a partial split", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-served-"));
     try {
@@ -377,7 +419,9 @@ describe("omp usage", () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
+}
 
+function registerOmpUsagePart8(): void {
   it("adds a child session's model to the served split", () => {
     withChildSession("child-session-cost.jsonl", (sessionFile) => {
       fs.writeFileSync(
@@ -411,4 +455,4 @@ describe("omp usage", () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
-});
+}

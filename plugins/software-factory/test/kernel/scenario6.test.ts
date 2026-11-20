@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -8,6 +7,11 @@ import { createFolderStore } from "../../src/kernel/store.js";
 import { cleanup, expectLaunch, makeGoal, outcome } from "./e2e-helpers.js";
 
 describe("KERNEL0 scenario 6 — steer reaches the architect and is answered", () => {
+  steerAnsweredTest();
+  steerUnansweredTest();
+});
+
+function steerAnsweredTest(): void {
   it("puts the steer in the pack and prompt, then processed + outbox", async () => {
     const goal = makeGoal();
     try {
@@ -62,7 +66,9 @@ describe("KERNEL0 scenario 6 — steer reaches the architect and is answered", (
       cleanup(goal);
     }
   }, 60_000);
+}
 
+function steerUnansweredTest(): void {
   it("leaves an unanswered steer in the inbox and reports it to the owner", async () => {
     const goal = makeGoal();
     try {
@@ -95,4 +101,4 @@ describe("KERNEL0 scenario 6 — steer reaches the architect and is answered", (
       cleanup(goal);
     }
   }, 60_000);
-});
+}

@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -89,6 +88,28 @@ function makeRoot(prefix: string, files: Record<string, string>): string {
 }
 
 describe("gate failure signatures", () => {
+  gateFailureSignaturesPart1();
+  gateFailureSignaturesPart2();
+  gateFailureSignaturesPart3();
+});
+
+describe("inherited red is matched per signature, not per gate", () => {
+  registerInheritedRedIsMatchedPerSignatureNotPerGatePart1();
+  registerInheritedRedIsMatchedPerSignatureNotPerGatePart2();
+  registerInheritedRedIsMatchedPerSignatureNotPerGatePart3();
+  registerInheritedRedIsMatchedPerSignatureNotPerGatePart4();
+  registerInheritedRedIsMatchedPerSignatureNotPerGatePart5();
+  registerInheritedRedIsMatchedPerSignatureNotPerGatePart6();
+  registerInheritedRedIsMatchedPerSignatureNotPerGatePart7();
+  registerInheritedRedIsMatchedPerSignatureNotPerGatePart8();
+  registerInheritedRedIsMatchedPerSignatureNotPerGatePart9();
+  registerInheritedRedIsMatchedPerSignatureNotPerGatePart10();
+  registerInheritedRedIsMatchedPerSignatureNotPerGatePart11();
+  registerInheritedRedIsMatchedPerSignatureNotPerGatePart12();
+  registerInheritedRedIsMatchedPerSignatureNotPerGatePart13();
+});
+
+function gateFailureSignaturesPart1() {
   it("collapses tsc diagnostics to file:line and code", () => {
     const output = [
       "src/a.ts(12,3): error TS2322: Type 'string' is not assignable to type 'number'.",
@@ -132,7 +153,9 @@ describe("gate failure signatures", () => {
     expect(first).toEqual(expected);
     expect(second).toEqual(expected);
   });
+}
 
+function gateFailureSignaturesPart2() {
   it("falls back to the output lines when the gate speaks no known format", () => {
     expect([
       ...gateSignatures(check("package", "reason Y: task-broken.txt")),
@@ -158,7 +181,9 @@ describe("gate failure signatures", () => {
       ]);
     }
   });
+}
 
+function gateFailureSignaturesPart3() {
   it("keeps failures that differ only below a known root distinct", () => {
     const inherited = preexistingRed(
       base([
@@ -187,9 +212,76 @@ describe("gate failure signatures", () => {
       "package",
     ]);
   });
-});
+}
 
-describe("inherited red is matched per signature, not per gate", () => {
+async function recordsPytestJUnitReportBaseSoPart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+) {
+  repo.writeFile("pytest-junit.xml", PYTEST_JUNIT);
+  const commit = repo.commit("pytest fixture");
+  const runtime = await makeRuntime(repo, goal, {});
+  const warn = console.warn;
+  console.warn = () => {};
+  let baseline: { ok: boolean };
+  try {
+    baseline = await checkBase(
+      runtime.configs,
+      runtime.store,
+      repo.dir,
+      "main",
+      commit,
+    );
+  } finally {
+    console.warn = warn;
+  }
+  expect(baseline.ok).toBe(false);
+  const recorded = recordedBaseGates(await runtime.store.listRecords())!;
+  // The base record carries the report's cases, not only its output lines.
+  expect(recorded.checks[0]!.details).toMatchObject({
+    junit: { truncated: false },
+  });
+  expect([...gateSignatures(recorded.checks[0]!)]).toEqual([
+    "py > tests.test_calc > test_sub",
+  ]);
+  expect(recorded.checks[0]!.summary).toBe(
+    "1 failing: tests.test_calc > test_sub",
+  );
+
+  // The task worktree is a different absolute root and runs the same gate;
+  // the failing case name, not a root-bearing output line, is the identity.
+  const taskRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gate-task-"));
+
+  return { runtime, recorded, taskRoot };
+}
+
+async function recordsPytestJUnitReportBaseSoPart2(
+  scope: Awaited<ReturnType<typeof recordsPytestJUnitReportBaseSoPart1>>,
+) {
+  const { taskRoot, runtime, recorded } = scope;
+  try {
+    fs.writeFileSync(path.join(taskRoot, "pytest-junit.xml"), PYTEST_JUNIT);
+    const [run] = await runGates(runtime, taskRoot);
+    expect([...gateSignatures(run!)]).toEqual([
+      "py > tests.test_calc > test_sub",
+    ]);
+    expect(newGateFailures([run!], preexistingRed(recorded))).toEqual([]);
+
+    // A different failing case under the same gate is the task's own red.
+    fs.writeFileSync(
+      path.join(taskRoot, "pytest-junit.xml"),
+      PYTEST_JUNIT.replace('"test_sub"', '"test_new"'),
+    );
+    const [fresh] = await runGates(runtime, taskRoot);
+    expect(
+      newGateFailures([fresh!], preexistingRed(recorded)).map((c) => c.name),
+    ).toEqual(["py"]);
+  } finally {
+    fs.rmSync(taskRoot, { recursive: true, force: true });
+  }
+}
+
+function registerInheritedRedIsMatchedPerSignatureNotPerGatePart1(): void {
   it("drops only the signatures the base was red for", () => {
     const inherited = preexistingRed(
       base([check("package", "reason X: base-broken.txt")]),
@@ -219,7 +311,9 @@ describe("inherited red is matched per signature, not per gate", () => {
       [],
     );
   });
+}
 
+function registerInheritedRedIsMatchedPerSignatureNotPerGatePart2(): void {
   it("fails a new tsc diagnostic under an already-red typecheck gate", () => {
     const inherited = preexistingRed(
       base([check("typecheck", "src/a.ts(12,3): error TS2322: first")]),
@@ -250,7 +344,9 @@ describe("inherited red is matched per signature, not per gate", () => {
       "typecheck",
     ]);
   });
+}
 
+function registerInheritedRedIsMatchedPerSignatureNotPerGatePart3(): void {
   it("fails a new bun test under an already-red tests gate", () => {
     const baseOutput = [
       "suite.test.ts:",
@@ -289,12 +385,16 @@ describe("inherited red is matched per signature, not per gate", () => {
       ),
     ).toEqual([]);
   });
+}
 
+function registerInheritedRedIsMatchedPerSignatureNotPerGatePart4(): void {
   it("matches a silent red gate by name because it carries no signature", () => {
     const inherited = preexistingRed(base([check("always-red", "")]));
     expect(newGateFailures([check("always-red", "")], inherited)).toEqual([]);
   });
+}
 
+function registerInheritedRedIsMatchedPerSignatureNotPerGatePart5(): void {
   it("matches a real mixed bun run across roots and still fails a new import", () => {
     const files = {
       "test/fail.test.ts": FAILING_TEST,
@@ -339,7 +439,9 @@ describe("inherited red is matched per signature, not per gate", () => {
         fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerInheritedRedIsMatchedPerSignatureNotPerGatePart6(): void {
   it("attaches the run root to a gate check so below-root paths stay distinct", async () => {
     const root = makeRoot("gate-root-", {});
     try {
@@ -364,7 +466,9 @@ describe("inherited red is matched per signature, not per gate", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerInheritedRedIsMatchedPerSignatureNotPerGatePart7(): void {
   it("matches two real capped runs of the same red suite", () => {
     // Enough failures that the report exceeds the gate output cap. Timing digits
     // move the byte the cap would cut at between runs, so a raw tail slice would
@@ -417,7 +521,9 @@ describe("inherited red is matched per signature, not per gate", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerInheritedRedIsMatchedPerSignatureNotPerGatePart8(): void {
   it("keeps a fail line below the cut before the next file header", () => {
     // The cut opened inside a failure block, so its header is gone; the block's
     // `(fail)` line and the next file's header both survive.
@@ -459,7 +565,9 @@ describe("inherited red is matched per signature, not per gate", () => {
       "tests",
     ]);
   });
+}
 
+function registerInheritedRedIsMatchedPerSignatureNotPerGatePart9(): void {
   it("keeps an unhandled error line whose marker the cut removed", () => {
     const report = [
       "-------------------------------",
@@ -477,7 +585,9 @@ describe("inherited red is matched per signature, not per gate", () => {
       ],
     );
   });
+}
 
+function registerInheritedRedIsMatchedPerSignatureNotPerGatePart10(): void {
   it("never emits a detail line identity when one file's block exceeds the cap", () => {
     const source = (pad: number) =>
       "// pad\n".repeat(pad) +
@@ -514,7 +624,9 @@ describe("inherited red is matched per signature, not per gate", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerInheritedRedIsMatchedPerSignatureNotPerGatePart11(): void {
   it("emits no identity for a single line longer than the cap", async () => {
     const root = makeRoot("gate-line-", {});
     try {
@@ -542,7 +654,9 @@ describe("inherited red is matched per signature, not per gate", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerInheritedRedIsMatchedPerSignatureNotPerGatePart12(): void {
   it("records the baseline root its gate ran from so a task worktree matches", async () => {
     const { repo, goal } = setupFlowRepo({
       gates: [
@@ -591,7 +705,9 @@ describe("inherited red is matched per signature, not per gate", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerInheritedRedIsMatchedPerSignatureNotPerGatePart13(): void {
   it("records a pytest JUnit report on base so its failing case matches the task", async () => {
     const { repo, goal } = setupFlowRepo({
       gates: [
@@ -603,61 +719,8 @@ describe("inherited red is matched per signature, not per gate", () => {
       ],
     });
     try {
-      repo.writeFile("pytest-junit.xml", PYTEST_JUNIT);
-      const commit = repo.commit("pytest fixture");
-      const runtime = await makeRuntime(repo, goal, {});
-      const warn = console.warn;
-      console.warn = () => {};
-      let baseline: { ok: boolean };
-      try {
-        baseline = await checkBase(
-          runtime.configs,
-          runtime.store,
-          repo.dir,
-          "main",
-          commit,
-        );
-      } finally {
-        console.warn = warn;
-      }
-      expect(baseline.ok).toBe(false);
-      const recorded = recordedBaseGates(await runtime.store.listRecords())!;
-      // The base record carries the report's cases, not only its output lines.
-      expect(recorded.checks[0]!.details).toMatchObject({
-        junit: { truncated: false },
-      });
-      expect([...gateSignatures(recorded.checks[0]!)]).toEqual([
-        "py > tests.test_calc > test_sub",
-      ]);
-      expect(recorded.checks[0]!.summary).toBe(
-        "1 failing: tests.test_calc > test_sub",
-      );
-
-      // The task worktree is a different absolute root and runs the same gate;
-      // the failing case name, not a root-bearing output line, is the identity.
-      const taskRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gate-task-"));
-      try {
-        fs.writeFileSync(path.join(taskRoot, "pytest-junit.xml"), PYTEST_JUNIT);
-        const [run] = await runGates(runtime, taskRoot);
-        expect([...gateSignatures(run!)]).toEqual([
-          "py > tests.test_calc > test_sub",
-        ]);
-        expect(newGateFailures([run!], preexistingRed(recorded))).toEqual([]);
-
-        // A different failing case under the same gate is the task's own red.
-        fs.writeFileSync(
-          path.join(taskRoot, "pytest-junit.xml"),
-          PYTEST_JUNIT.replace('"test_sub"', '"test_new"'),
-        );
-        const [fresh] = await runGates(runtime, taskRoot);
-        expect(
-          newGateFailures([fresh!], preexistingRed(recorded)).map(
-            (c) => c.name,
-          ),
-        ).toEqual(["py"]);
-      } finally {
-        fs.rmSync(taskRoot, { recursive: true, force: true });
-      }
+      const scope1 = await recordsPytestJUnitReportBaseSoPart1(repo, goal);
+      await recordsPytestJUnitReportBaseSoPart2(scope1);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -677,4 +740,4 @@ describe("inherited red is matched per signature, not per gate", () => {
       ).map((c) => c.name),
     ).toEqual(["package"]);
   });
-});
+}

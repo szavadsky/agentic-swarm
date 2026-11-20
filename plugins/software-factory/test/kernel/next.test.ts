@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import { derive } from "../../src/kernel/derive.js";
 import { next } from "../../src/kernel/next.js";
@@ -84,6 +83,13 @@ const check = (seq: number): StepRecord =>
   script(seq, { step: "checks", ok: true, checks: [] });
 
 describe("next", () => {
+  registerNextPart1();
+  registerNextPart2();
+  registerNextPart3();
+  registerNextPart4();
+});
+
+function registerNextPart1(): void {
   it("asks for the boundary when there is nothing to do", () => {
     const actions = next(deriveFlow([task("a")], []), limits, new Set());
     expect(actions.map((a) => a.kind)).toEqual(["step"]);
@@ -113,7 +119,9 @@ describe("next", () => {
       { kind: "exit", reason: "goal done" },
     ]);
   });
+}
 
+function registerNextPart2(): void {
   it("dispatches implement, then review, then merge for an approving flow", () => {
     expect(next(deriveFlow([task("a")], []), limits, new Set())).toEqual([
       { kind: "step", slug: "a", step: "implement", round: 1 },
@@ -145,7 +153,9 @@ describe("next", () => {
       { kind: "finish", slug: "s" },
     ]);
   });
+}
 
+function registerNextPart3(): void {
   it("parks changes on the last call and merges a last-call approve", () => {
     const lastCallChanges = deriveFlow(
       [task("a")],
@@ -194,7 +204,9 @@ describe("next", () => {
       { kind: "merge", slug: "a" },
     ]);
   });
+}
 
+function registerNextPart4(): void {
   it("does not redispatch a task that is already running", () => {
     const state = deriveFlow([task("a")], []);
     expect(next(state, limits, new Set(["a"]))).toEqual([]);
@@ -234,4 +246,4 @@ describe("next", () => {
       ),
     ).toEqual([{ kind: "step", slug: "b", step: "implement", round: 1 }]);
   });
-});
+}

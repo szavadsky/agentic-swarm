@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -466,6 +465,235 @@ async function finishOmpTurn(state: OmpTurnFinish): Promise<AdapterTurnResult> {
   };
 }
 
+/** The session's cwd must match the request's: omp sessions are cwd-bound. */
+function assertOmpSessionCwd(req: TurnRequest): void {
+  if (
+    req.session &&
+    req.session.harness === OMP_ID &&
+    path.resolve(req.session.cwd) !== path.resolve(req.cwd)
+  ) {
+    throw new Error(
+      `omp session ${req.session.id} is cwd-bound to ${req.session.cwd}, not ${req.cwd}`,
+    );
+  }
+}
+
+/** The launched RPC state, or the failure that ends the turn. */
+interface LaunchState {
+  live: OmpRpc | undefined;
+  baseline: OmpStats | undefined;
+  resumeDir: string;
+  attempts: TurnAttempt[];
+  failure: AdapterTurnResult | undefined;
+}
+
+/** One omp turn's state: the RPC child, its timers and the prompt result. */
+class OmpTurnRun {
+  private readonly retainedFrames: any[] = [];
+  private readonly abortSignal: Promise<void>;
+  private abortResolve: (() => void) | undefined;
+  private idleTimer: ReturnType<typeof setTimeout> | undefined;
+  private wallTimer: ReturnType<typeof setTimeout> | undefined;
+  private abortReason: "idle" | "wall" | undefined;
+  // Set by the kernel's AbortSignal (the wall bound fired): the child is
+  // stopped and the turn reports `cancelled`, never `timeout`.
+  private aborted = false;
+  private rpc: OmpRpc | undefined;
+  private attempts: TurnAttempt[] | undefined;
+  private finished = false;
+  private lastModelEventAtMs: number | undefined;
+
+  constructor(
+    private readonly runtime: OmpRuntime,
+    private readonly req: TurnRequest,
+    private readonly model: ModelRef,
+    private readonly dirs: ReturnType<OmpRuntime["dirs"]>,
+    private readonly overlayPath: string,
+    private readonly resume: string | undefined,
+    private readonly extraArgs: string[],
+  ) {
+    this.abortSignal = new Promise<void>((resolve) => {
+      this.abortResolve = resolve;
+    });
+  }
+
+  public async run(): Promise<AdapterTurnResult> {
+    this.req.signal?.addEventListener("abort", this.externalAbort, {
+      once: true,
+    });
+    const state = await this.start();
+    if (state.failure) return state.failure;
+    const live = state.live;
+    if (!live) throw new Error("omp launch reported no failure and no rpc");
+    // The signal may have fired during the baseline stats request; the prompt
+    // was never sent, so there is no result to keep.
+    if (this.aborted) return await this.cancelBeforePrompt();
+    // Usage for this turn starts when the prompt is sent. Cache hotness instead
+    // follows the last streamed model frame: a long final request refreshes the
+    // cache while it streams.
+    const startedAtMs = Date.now();
+    const { promptResult, promptFailed } = await awaitPrompt(
+      live,
+      this.abortSignal,
+      this.req,
+    );
+    this.finished = true;
+    this.clearTimers();
+    this.clearSignal();
+    return await this.result(state, startedAtMs, promptResult, promptFailed);
+  }
+
+  /** Launches the RPC child, or returns the failure result for this turn. */
+  private async start(): Promise<LaunchState> {
+    const launch = await launchTurnRpc(
+      this.runtime,
+      this.model,
+      this.req,
+      this.overlayPath,
+      this.dirs,
+      this.resume,
+      this.extraArgs,
+    );
+    this.rpc = launch.rpc;
+    this.attempts = launch.attempts;
+    const state: LaunchState = {
+      live: launch.rpc,
+      baseline: undefined,
+      resumeDir: launch.resumeDir,
+      attempts: launch.attempts,
+      failure: undefined,
+    };
+    if (!launch.rpc) {
+      this.clearTimers();
+      this.clearSignal();
+      state.failure = {
+        stop: launchFailure(launch.error),
+        text: "",
+        usage: zeroUsage(),
+        model: this.model,
+        attempts: launch.attempts,
+      };
+      return state;
+    }
+    // The signal may have fired while the child was launching, when `rpc` was
+    // still undefined: stop it now instead of running the turn.
+    if (this.aborted) {
+      state.failure = await this.cancelBeforePrompt();
+      return state;
+    }
+    if (this.req.onLive) this.req.onLive(liveAgents(launch.rpc));
+    // Idle resets on every frame, including streamed deltas the RPC discards.
+    launch.rpc.setOnFrame(this.onFrame);
+    if (this.req.timeouts.wallMs > 0) {
+      this.wallTimer = setTimeout(
+        () => this.abort("wall"),
+        this.req.timeouts.wallMs,
+      );
+      this.wallTimer.unref?.();
+    }
+    this.resetIdle();
+    state.baseline = await launch.rpc
+      .request("get_session_stats", {}, 10_000)
+      .then((frame) => frame.data as OmpStats)
+      .catch(() => undefined);
+    return state;
+  }
+
+  /** The turn result assembled from the launched state and prompt outcome. */
+  private async result(
+    state: LaunchState,
+    startedAtMs: number,
+    promptResult: Awaited<ReturnType<typeof awaitPrompt>>["promptResult"],
+    promptFailed: Awaited<ReturnType<typeof awaitPrompt>>["promptFailed"],
+  ): Promise<AdapterTurnResult> {
+    return await finishOmpTurn({
+      runtime: this.runtime,
+      req: this.req,
+      model: this.model,
+      rpc: this.rpc!,
+      baseline: state.baseline,
+      startedAtMs,
+      promptResult,
+      promptFailed,
+      abortReason: this.abortReason,
+      aborted: this.aborted,
+      lastModelEventAtMs: this.lastModelEventAtMs,
+      retainedFrames: this.retainedFrames,
+      resume: this.resume,
+      resumeDir: state.resumeDir,
+      attempts: state.attempts,
+    });
+  }
+
+  /** Retains a bounded text-only tail of message_end frames for the transcript. */
+  private readonly onFrame = (frame: any): void => {
+    if (this.finished) return;
+    // Frame timestamps mark message creation, not completion. Receipt time is
+    // the freshest evidence that the final request's cache is still hot.
+    this.lastModelEventAtMs = Date.now();
+    this.resetIdle();
+    if (frame.type !== "message_end") return;
+    const message = frame.message ?? {};
+    const text = textOfContent(message.content);
+    this.retainedFrames.push({
+      type: "message_end",
+      message: {
+        role: message.role,
+        usage: message.usage,
+        stopReason: message.stopReason,
+        content: text ? [{ type: "text", text }] : [],
+      },
+    });
+    if (this.retainedFrames.length > 200) this.retainedFrames.shift();
+  };
+
+  private readonly externalAbort = (): void => {
+    if (this.aborted || this.finished) return;
+    this.aborted = true;
+    this.abortResolve?.();
+    this.killRpc();
+  };
+
+  private abort(reason: "idle" | "wall"): void {
+    if (this.abortReason || this.finished || this.aborted) return;
+    this.abortReason = reason;
+    this.abortResolve?.();
+    this.killRpc();
+  }
+
+  private killRpc(): void {
+    this.rpc?.abort();
+    setTimeout(() => this.rpc?.kill("SIGTERM"), 2_000).unref?.();
+    setTimeout(() => this.rpc?.kill("SIGKILL"), 4_000).unref?.();
+  }
+
+  private clearTimers(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    if (this.wallTimer) clearTimeout(this.wallTimer);
+    this.idleTimer = undefined;
+    this.wallTimer = undefined;
+  }
+
+  private clearSignal(): void {
+    this.req.signal?.removeEventListener("abort", this.externalAbort);
+  }
+
+  private resetIdle(): void {
+    const { idleMs } = this.req.timeouts;
+    if (!idleMs || idleMs <= 0) return;
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = setTimeout(() => this.abort("idle"), idleMs);
+    this.idleTimer.unref?.();
+  }
+
+  private async cancelBeforePrompt(): Promise<AdapterTurnResult> {
+    this.clearTimers();
+    this.clearSignal();
+    await this.rpc?.close(500);
+    return cancelledTurn(this.req.session, this.model, this.attempts);
+  }
+}
+
 /** One omp RPC process for one model from the fallback chain. */
 export async function runOmpTurn(
   runtime: OmpRuntime,
@@ -482,165 +710,16 @@ export async function runOmpTurn(
   const dirs = runtime.dirs();
   const overlayPath = await runtime.overlay(opaque);
   const extraArgs = turnArgs(runtime, req, opaque, dirs);
-
-  if (
-    req.session &&
-    req.session.harness === OMP_ID &&
-    path.resolve(req.session.cwd) !== path.resolve(req.cwd)
-  ) {
-    throw new Error(
-      `omp session ${req.session.id} is cwd-bound to ${req.session.cwd}, not ${req.cwd}`,
-    );
-  }
+  assertOmpSessionCwd(req);
   const resume =
     req.session && req.session.harness === OMP_ID ? req.session.id : undefined;
-  const retainedFrames: any[] = [];
-  let idleTimer: ReturnType<typeof setTimeout> | undefined;
-  let wallTimer: ReturnType<typeof setTimeout> | undefined;
-  let abortResolve: (() => void) | undefined;
-  const abortSignal = new Promise<void>((resolve) => {
-    abortResolve = resolve;
-  });
-  let abortReason: "idle" | "wall" | undefined;
-  // Set by the kernel's AbortSignal (the wall bound fired): the child is
-  // stopped and the turn reports `cancelled`, never `timeout`.
-  let aborted = false;
-  let rpc: OmpRpc | undefined;
-  let finished = false;
-  let lastModelEventAtMs: number | undefined;
-
-  const clearTimers = () => {
-    if (idleTimer) clearTimeout(idleTimer);
-    if (wallTimer) clearTimeout(wallTimer);
-    idleTimer = undefined;
-    wallTimer = undefined;
-  };
-  const clearSignal = () =>
-    req.signal?.removeEventListener("abort", externalAbort);
-  const killRpc = () => {
-    rpc?.abort();
-    setTimeout(() => rpc?.kill("SIGTERM"), 2_000).unref?.();
-    setTimeout(() => rpc?.kill("SIGKILL"), 4_000).unref?.();
-  };
-  const abort = (reason: "idle" | "wall") => {
-    if (abortReason || finished || aborted) return;
-    abortReason = reason;
-    abortResolve?.();
-    killRpc();
-  };
-  const externalAbort = () => {
-    if (aborted || finished) return;
-    aborted = true;
-    abortResolve?.();
-    killRpc();
-  };
-  req.signal?.addEventListener("abort", externalAbort, { once: true });
-  const resetIdle = () => {
-    if (!req.timeouts.idleMs || req.timeouts.idleMs <= 0) return;
-    if (idleTimer) clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => abort("idle"), req.timeouts.idleMs);
-    idleTimer.unref?.();
-  };
-
-  const launch = await launchTurnRpc(
+  return await new OmpTurnRun(
     runtime,
-    model,
     req,
-    overlayPath,
+    model,
     dirs,
+    overlayPath,
     resume,
     extraArgs,
-  );
-  rpc = launch.rpc;
-  const attempts = launch.attempts;
-  if (!rpc) {
-    clearTimers();
-    clearSignal();
-    return {
-      stop: launchFailure(launch.error),
-      text: "",
-      usage: zeroUsage(),
-      model,
-      attempts,
-    };
-  }
-  const live = rpc;
-  const cancelBeforePrompt = async (): Promise<AdapterTurnResult> => {
-    clearTimers();
-    clearSignal();
-    await live.close(500);
-    return cancelledTurn(req.session, model, attempts);
-  };
-  // The signal may have fired while the child was launching, when `rpc` was
-  // still undefined: stop it now instead of running the turn.
-  if (aborted) return cancelBeforePrompt();
-  if (req.onLive) req.onLive(liveAgents(live));
-  // Idle resets on every frame, including streamed deltas the RPC discards.
-  live.setOnFrame((frame: any) => {
-    if (finished) return;
-    // Frame timestamps mark message creation, not completion. Receipt time is
-    // the freshest evidence that the final request's cache is still hot.
-    lastModelEventAtMs = Date.now();
-    resetIdle();
-    if (frame.type === "message_end") {
-      const message = frame.message ?? {};
-      const text = textOfContent(message.content);
-      retainedFrames.push({
-        type: "message_end",
-        message: {
-          role: message.role,
-          usage: message.usage,
-          stopReason: message.stopReason,
-          content: text ? [{ type: "text", text }] : [],
-        },
-      });
-      if (retainedFrames.length > 200) retainedFrames.shift();
-    }
-  });
-
-  if (req.timeouts.wallMs > 0) {
-    wallTimer = setTimeout(() => abort("wall"), req.timeouts.wallMs);
-    wallTimer.unref?.();
-  }
-  resetIdle();
-
-  const baseline = await live
-    .request("get_session_stats", {}, 10_000)
-    .then((frame) => frame.data as OmpStats)
-    .catch(() => undefined);
-
-  // The signal may have fired during the baseline stats request; the prompt
-  // was never sent, so there is no result to keep.
-  if (aborted) return cancelBeforePrompt();
-
-  // Usage for this turn starts when the prompt is sent. Cache hotness instead
-  // follows the last streamed model frame: a long final request refreshes the
-  // cache while it streams.
-  const startedAtMs = Date.now();
-  const { promptResult, promptFailed } = await awaitPrompt(
-    live,
-    abortSignal,
-    req,
-  );
-  finished = true;
-  clearTimers();
-  clearSignal();
-
-  return finishOmpTurn({
-    runtime,
-    req,
-    model,
-    rpc: live,
-    baseline,
-    startedAtMs,
-    promptResult,
-    promptFailed,
-    abortReason,
-    aborted,
-    lastModelEventAtMs,
-    retainedFrames,
-    resume,
-    resumeDir: launch.resumeDir,
-    attempts,
-  });
+  ).run();
 }

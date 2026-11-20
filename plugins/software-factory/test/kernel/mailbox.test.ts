@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -28,6 +27,17 @@ async function setup(): Promise<{
 }
 
 describe("mailbox", () => {
+  registerMailboxPart1();
+  registerMailboxPart2();
+  registerMailboxPart3();
+  registerMailboxPart4();
+  registerMailboxPart5();
+  registerMailboxPart6();
+  registerMailboxPart7();
+  registerMailboxPart8();
+});
+
+function registerMailboxPart1(): void {
   it("writes an inbox file by tmp + rename", async () => {
     const { root, store } = await setup();
     try {
@@ -43,7 +53,9 @@ describe("mailbox", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerMailboxPart2(): void {
   it("reads the urgent flag from frontmatter and keeps the header out of the steer text", async () => {
     const { root, store } = await setup();
     try {
@@ -92,7 +104,9 @@ describe("mailbox", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerMailboxPart3(): void {
   it("ignores an inbox file whose size is still changing", async () => {
     const { root, store } = await setup();
     const file = path.join(store.goalDir, "mailbox/inbox/growing.md");
@@ -112,7 +126,9 @@ describe("mailbox", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerMailboxPart4(): void {
   it("identifies a steer by file name: identical text under a new name is a new steer", async () => {
     const { root, store } = await setup();
     try {
@@ -143,7 +159,9 @@ describe("mailbox", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerMailboxPart5(): void {
   it("reads one hold per steer and ignores files that are not hold YAML", async () => {
     const { root, store } = await setup();
     try {
@@ -177,7 +195,9 @@ describe("mailbox", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerMailboxPart6(): void {
   it("parses steer answers only from steer <id>: lines", async () => {
     const responses = steerResponses(
       {
@@ -210,7 +230,9 @@ describe("mailbox", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerMailboxPart7(): void {
   it("names a targeted architect in its pack answer line", () => {
     expect(
       formatPmAnswers(
@@ -247,7 +269,9 @@ describe("mailbox", () => {
       ["s2", "second steer"],
     ]);
   });
+}
 
+function registerMailboxPart8(): void {
   it("answers steer ids containing spaces, colons and quotes", async () => {
     const responses = steerResponses(
       {
@@ -269,4 +293,4 @@ describe("mailbox", () => {
     // The longest id wins: "a:b: split it" answers a:b, not a.
     expect(responses.get("a")).toBe("wrong split for a:b must not win");
   });
-});
+}

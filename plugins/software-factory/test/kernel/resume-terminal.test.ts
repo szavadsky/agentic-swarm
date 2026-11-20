@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -21,6 +20,91 @@ import { formatCause } from "../../src/kernel/cause.js";
 import { causeText } from "./helpers.js";
 
 describe("resume guards — front-stop, holds and terminal", () => {
+  registerResumeGuardsFrontStopHoldsAndTerminalPart1();
+  registerResumeGuardsFrontStopHoldsAndTerminalPart2();
+  registerResumeGuardsFrontStopHoldsAndTerminalPart3();
+});
+
+async function anIterationAllTasksTerminalGoesPart1(
+  s: ReturnType<typeof setupRepo>,
+) {
+  const first = new FakeHarness({ id: "fake" });
+  first.script((req, ctx) => {
+    fs.writeFileSync(path.join(s.goalDir, "plan.md"), PLAN, "utf8");
+    ctx.writeOutcome(outcome({ summary: "planned", decision: "continue" }));
+    return fakeTurnResult(req);
+  });
+  first.script((req, ctx) => {
+    fs.writeFileSync(path.join(s.taskDir, "alpha.md"), ALPHA, "utf8");
+    fs.writeFileSync(path.join(s.taskDir, "beta.md"), BETA, "utf8");
+    ctx.writeOutcome(outcome({ summary: "filed" }));
+    return fakeTurnResult(req);
+  });
+  first.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "alpha added" }));
+    return fakeTurnResult(req);
+  });
+  first.script((req, ctx) => {
+    ctx.writeOutcome(
+      outcome({ summary: "alpha approved", verdict: "approve" }),
+    );
+    return fakeTurnResult(req);
+  });
+  first.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "beta added" }));
+    return fakeTurnResult(req);
+  });
+  first.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "beta approved", verdict: "approve" }));
+    return fakeTurnResult(req);
+  });
+  await expectDispatch(
+    3,
+    ["run", "--repo", s.repo.dir, "--goal", "demo", "--iterations", "1"],
+    { harnesses: { fake: first } },
+  );
+
+  const mid = createFolderStore(s.goalDir, undefined, {});
+  const midState = derive(await mid.listTasks(), await mid.listRecords());
+  expect(midState.goal).toBe("active");
+
+  return { midState };
+}
+
+async function anIterationAllTasksTerminalGoesPart2(
+  s: ReturnType<typeof setupRepo>,
+  scope: Awaited<ReturnType<typeof anIterationAllTasksTerminalGoesPart1>>,
+) {
+  const { midState } = scope;
+  expect(midState.tasks.alpha!.status).toBe("merged");
+  expect(midState.tasks.beta!.status).toBe("merged");
+
+  const second = new FakeHarness({ id: "fake" });
+  queueDigestSteer(second);
+  second.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
+    return fakeTurnResult(req);
+  });
+  await expectDispatch(
+    0,
+    ["run", "--repo", s.repo.dir, "--goal", "demo", "--iterations", "1"],
+    { harnesses: { fake: second } },
+  );
+
+  const store = createFolderStore(s.goalDir, undefined, {});
+  const records = await store.listRecords();
+  const state = derive(await store.listTasks(), records);
+  expect(state.goal).toBe("done");
+  expect(
+    records.filter(
+      (r) => r.actor === "agent" && r.step === "architect" && r.iteration === 2,
+    ).length,
+  ).toBe(1);
+}
+
+function registerResumeGuardsFrontStopHoldsAndTerminalPart1(): void {
   it("a resume never writes a front-stop record", async () => {
     const { repo, goalDir, taskDir } = await drainedAfterAlpha();
     try {
@@ -60,7 +144,9 @@ describe("resume guards — front-stop, holds and terminal", () => {
       repo.cleanup();
     }
   }, 120_000);
+}
 
+function registerResumeGuardsFrontStopHoldsAndTerminalPart2(): void {
   it("an unreadable hold file blocks resume instead of reading as no holds", async () => {
     const { repo, goalDir } = await drainedAfterAlpha();
     try {
@@ -114,80 +200,16 @@ describe("resume guards — front-stop, holds and terminal", () => {
       repo.cleanup();
     }
   }, 120_000);
+}
 
+function registerResumeGuardsFrontStopHoldsAndTerminalPart3(): void {
   it("an iteration with all tasks terminal goes to the boundary", async () => {
     const s = setupRepo();
     try {
-      const first = new FakeHarness({ id: "fake" });
-      first.script((req, ctx) => {
-        fs.writeFileSync(path.join(s.goalDir, "plan.md"), PLAN, "utf8");
-        ctx.writeOutcome(outcome({ summary: "planned", decision: "continue" }));
-        return fakeTurnResult(req);
-      });
-      first.script((req, ctx) => {
-        fs.writeFileSync(path.join(s.taskDir, "alpha.md"), ALPHA, "utf8");
-        fs.writeFileSync(path.join(s.taskDir, "beta.md"), BETA, "utf8");
-        ctx.writeOutcome(outcome({ summary: "filed" }));
-        return fakeTurnResult(req);
-      });
-      first.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "alpha added" }));
-        return fakeTurnResult(req);
-      });
-      first.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "alpha approved", verdict: "approve" }),
-        );
-        return fakeTurnResult(req);
-      });
-      first.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "beta added" }));
-        return fakeTurnResult(req);
-      });
-      first.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "beta approved", verdict: "approve" }),
-        );
-        return fakeTurnResult(req);
-      });
-      await expectDispatch(
-        3,
-        ["run", "--repo", s.repo.dir, "--goal", "demo", "--iterations", "1"],
-        { harnesses: { fake: first } },
-      );
-
-      const mid = createFolderStore(s.goalDir, undefined, {});
-      const midState = derive(await mid.listTasks(), await mid.listRecords());
-      expect(midState.goal).toBe("active");
-      expect(midState.tasks.alpha!.status).toBe("merged");
-      expect(midState.tasks.beta!.status).toBe("merged");
-
-      const second = new FakeHarness({ id: "fake" });
-      queueDigestSteer(second);
-      second.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
-        return fakeTurnResult(req);
-      });
-      await expectDispatch(
-        0,
-        ["run", "--repo", s.repo.dir, "--goal", "demo", "--iterations", "1"],
-        { harnesses: { fake: second } },
-      );
-
-      const store = createFolderStore(s.goalDir, undefined, {});
-      const records = await store.listRecords();
-      const state = derive(await store.listTasks(), records);
-      expect(state.goal).toBe("done");
-      expect(
-        records.filter(
-          (r) =>
-            r.actor === "agent" && r.step === "architect" && r.iteration === 2,
-        ).length,
-      ).toBe(1);
+      const scope1 = await anIterationAllTasksTerminalGoesPart1(s);
+      await anIterationAllTasksTerminalGoesPart2(s, scope1);
     } finally {
       s.repo.cleanup();
     }
   }, 120_000);
-});
+}

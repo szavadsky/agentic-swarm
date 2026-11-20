@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import path from "node:path";
 import type { Usage } from "../harness/types.js";
 import { recordedBaseGates } from "./baseline.js";
@@ -10,6 +9,7 @@ import {
   DEFAULT_ROLE_BY_STEP,
   type GroupMetrics,
   type IncidentCounts,
+  type IterationMetrics,
   iterationMetrics,
   type PlanReviewMarkCounts,
   rolesByStep,
@@ -319,6 +319,226 @@ function architectLines(
   ];
 }
 
+/** The task/slug facts one summary renders. */
+interface SummaryTaskFacts {
+  merged: string[];
+  finished: string[];
+  parkedByKind: Map<CauseKind, { slug: string; detail: string }[]>;
+  pending: string[];
+  parkedAll: string[];
+  cancelled: string[];
+  open: ReturnType<typeof materialOpenDebts>;
+}
+
+/** Collects the iteration's slug lists and open material debt. */
+function summaryTaskFacts(
+  recs: StepRecord[],
+  state: State,
+  allRecords: StepRecord[],
+): SummaryTaskFacts {
+  const merged = recs
+    .filter((r) => r.step === "merge" && r.ok === true)
+    .map((r) => r.slug!);
+  const finished = recs
+    .filter((r) => r.step === "finish" && r.ok === true)
+    .map((r) => r.slug!);
+  // Root causes group by kind: rewording a park's detail never splits a group.
+  const parkedByKind = summaryParkedByKind(recs);
+  const { pending, parked: parkedAll, cancelled } = summaryTaskLists(state);
+  // Distance counts what still blocks the goal: material debt left open after
+  // every recorded closure, not fyi notes and not debts already retired.
+  const open = materialOpenDebts(allRecords);
+  return {
+    merged,
+    finished,
+    parkedByKind,
+    pending,
+    parkedAll,
+    cancelled,
+    open,
+  };
+}
+
+/** The remark/assumption/debt lines one summary renders. */
+interface SummaryRemarkFacts {
+  ownerRemarkable: string[];
+  unanswered: string[];
+  remarks: string[];
+  assumed: string[];
+  debtOpened: string[];
+  debtClosed: string[];
+}
+
+/** Collects the summary's remark lines from outcomes, mailbox and debt. */
+async function summaryRemarkFacts(
+  store: ArtifactStore,
+  input: SummaryInput,
+  architect: StepRecord | undefined,
+  recs: StepRecord[],
+  budgetStop: string | undefined,
+): Promise<SummaryRemarkFacts> {
+  const ownerRemarkable = ownerRemarkableLines(recs);
+  const unanswered = await unansweredSteerLines(store);
+  const remarks = summaryRemarks(input, architect, recs, budgetStop);
+  const assumed = concernLines(
+    recs.filter((r) => r.step === "architect"),
+    "choice",
+  );
+  const debtOpened = concernLines(recs, "debt");
+  const debtClosed = closedDebtLines(recs);
+  return {
+    ownerRemarkable,
+    unanswered,
+    remarks,
+    assumed,
+    debtOpened,
+    debtClosed,
+  };
+}
+
+/** The metric rows named for launch/spend tables, sorted by name. */
+function summaryNamedRows(computed: IterationMetrics) {
+  return {
+    roleNames: Object.values(computed.roles)
+      .map((entry) => ({ name: entry.role, ...entry }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    aliasNames: Object.values(computed.aliases)
+      .map((entry) => ({ name: entry.alias, ...entry }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    modelNames: Object.values(computed.models)
+      .map((entry) => ({ name: entry.model, ...entry }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  };
+}
+
+/** Everything the summary's line builders read. */
+interface SummaryRender {
+  iteration: number;
+  status: SummaryStatus;
+  decision: SummaryInput["decision"];
+  budgetStop: string | undefined;
+  architect: StepRecord | undefined;
+  facts: SummaryTaskFacts;
+  remarks: SummaryRemarkFacts;
+  computed: IterationMetrics;
+  named: ReturnType<typeof summaryNamedRows>;
+  agentTurns: number;
+  scriptTurns: number;
+  baseLines: string[];
+  distanceDebt: string[];
+}
+
+/** The summary's distance through remarkable sections. */
+function summaryHeadLines(render: SummaryRender): string[] {
+  const { facts, remarks, computed } = render;
+  return [
+    `# Iteration ${render.iteration} summary`,
+    "",
+    `status: ${render.status}`,
+    ...decisionLines(render.decision),
+    "",
+    "## Distance",
+    listLine(`pending (${facts.pending.length})`, facts.pending),
+    listLine(`parks (${facts.parkedAll.length})`, facts.parkedAll),
+    ...render.distanceDebt,
+    "",
+    ...architectLines(render.architect, computed.planReviewMarks),
+    "",
+    "## Assumptions",
+    ...(remarks.assumed.length ? remarks.assumed : ["- none recorded"]),
+    "",
+    "## Outcome",
+    listLine("merged", facts.merged),
+    listLine("spikes finished", facts.finished),
+    listLine("pending", facts.pending),
+    listLine("cancelled", facts.cancelled),
+    listLine("quarantined", computed.quarantined),
+    "",
+    "## Base gates",
+    ...render.baseLines,
+    "",
+    "## Parked by root cause",
+    ...parkedCauseLines(facts.parkedByKind),
+    "",
+    "## Debt opened",
+    ...orNone(remarks.debtOpened),
+    "",
+    "## Debt closed",
+    ...orNone(remarks.debtClosed),
+    "",
+    "## Owner attention",
+    ...orNone([...remarks.ownerRemarkable, ...remarks.unanswered]),
+    "",
+    "## Remarkable",
+    ...orNone(remarks.remarks.map((r) => `- ${r}`)),
+    "",
+  ];
+}
+
+/** The summary's metrics, incidents, waste and launch/spend tables. */
+function summaryMetricsLines(render: SummaryRender): string[] {
+  const computed = render.computed;
+  const { usage, unpricedTurns, incidents, loopIncidents } = computed;
+  return [
+    "## Metrics",
+    `- turns: ${render.agentTurns} agent, ${render.scriptTurns} script`,
+    `- tokens: input ${usage.in}, cached ${usage.cacheRead}, output ${usage.out}, reasoning ${usage.reasoningOut}`,
+    `- cost: ${costText(usage.costUsd, unpricedTurns)}`,
+    `- list cost: ${costText(usage.listCostUsd, unpricedTurns)}`,
+    costByRoleLine(render.named.roleNames),
+    `- cost per merged task: ${perMergedCost(computed.costPerMergedTask, unpricedTurns)}; list ${perMergedCost(computed.listCostPerMergedTask, unpricedTurns)}`,
+    `- work: ${computed.edits} files (+${computed.addedLines}/-${computed.removedLines}), ${computed.testRuns} test runs in ${computed.gateRuns} gate runs`,
+    `- gate wall: ${(computed.gateWallMs / 1000).toFixed(1)}s gates, ${(computed.commitWallMs / 1000).toFixed(1)}s commits`,
+    `- operator acts: ${computed.operatorActs} (${computed.humanInterventions} steers)`,
+    ...budgetLines(render.budgetStop, unpricedTurns),
+    `- merged: ${render.facts.merged.length}; parked: ${[...render.facts.parkedByKind.values()].flat().length}; pending: ${render.facts.pending.length}`,
+    "",
+    "## Incidents",
+    ...incidentLines(incidents, loopIncidents),
+    "",
+    "## Waste",
+    ...wasteLines(
+      computed.waste,
+      render.agentTurns,
+      render.named.roleNames,
+      render.named.aliasNames,
+    ),
+    "",
+    "## Launches by role",
+    ...launchTable("role", render.named.roleNames),
+    "",
+    "## Launches by alias",
+    ...launchTable("alias", render.named.aliasNames),
+    "",
+    "## Spend by role",
+    ...spendTable("role", render.named.roleNames),
+    "",
+    "## Spend by alias",
+    ...spendTable("alias", render.named.aliasNames),
+    "",
+    "## Spend by model",
+    ...spendTable("model", render.named.modelNames),
+    "",
+  ];
+}
+
+/** Writes the summary and its outbox notice, returning the summary path. */
+async function writeSummaryFile(
+  store: ArtifactStore,
+  iteration: number,
+  lines: string[],
+): Promise<string> {
+  const rel = store.iterations.rel(iteration, "summary.md");
+  await store.iterations.write(iteration, "summary.md", lines.join("\n"));
+  // The outbox notifies the owner; the summary itself has one copy above.
+  await store.mailbox.write(
+    "outbox",
+    `iteration-${iteration}-summary.md`,
+    `${rel}\n`,
+  );
+  return rel;
+}
+
 /**
  * The guaranteed remarkable: exactly one summary per iteration, written even
  * when the iteration crashed. Everything here is derived from records and
@@ -338,35 +558,14 @@ export async function writeIterationSummary(
   // spend fact, so it gets its own metrics line instead of the boundary remark.
   const budgetStop =
     input.cause?.kind === "budget" ? input.cause.detail : undefined;
-
-  const merged = recs
-    .filter((r) => r.step === "merge" && r.ok === true)
-    .map((r) => r.slug!);
-  const finished = recs
-    .filter((r) => r.step === "finish" && r.ok === true)
-    .map((r) => r.slug!);
-  // Root causes group by kind: rewording a park's detail never splits a group.
-  const parkedByKind = summaryParkedByKind(recs);
-  const {
-    pending,
-    parked: parkedAll,
-    cancelled,
-  } = summaryTaskLists(input.state);
-  // Distance counts what still blocks the goal: material debt left open after
-  // every recorded closure, not fyi notes and not debts already retired.
-  const open = materialOpenDebts(input.records);
-
-  const ownerRemarkable = ownerRemarkableLines(recs);
-  const unanswered = await unansweredSteerLines(store);
-  const remarks = summaryRemarks(input, architect, recs, budgetStop);
-
-  const assumed = concernLines(
-    recs.filter((r) => r.step === "architect"),
-    "choice",
+  const facts = summaryTaskFacts(recs, input.state, input.records);
+  const remarks = await summaryRemarkFacts(
+    store,
+    input,
+    architect,
+    recs,
+    budgetStop,
   );
-  const debtOpened = concernLines(recs, "debt");
-  const debtClosed = closedDebtLines(recs);
-
   const roleByStep = { ...DEFAULT_ROLE_BY_STEP, ...(input.roleByStep ?? {}) };
   const computed = iterationMetrics(
     iteration,
@@ -377,133 +576,23 @@ export async function writeIterationSummary(
     input.prices ?? {},
     input.priceIds,
   );
-  const {
-    usage,
-    unpricedTurns,
-    quarantined,
-    roles: roleCosts,
-    aliases,
-    models,
-    incidents,
-    loopIncidents,
-    costPerMergedTask,
-    listCostPerMergedTask,
-    gateWallMs,
-    commitWallMs,
-    gateRuns,
-    testRuns,
-    edits,
-    addedLines,
-    removedLines,
-    operatorActs,
-    humanInterventions,
-    planReviewMarks,
-    waste,
-  } = computed;
-  const roleNames = Object.values(roleCosts)
-    .map((entry) => ({ name: entry.role, ...entry }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const aliasNames = Object.values(aliases)
-    .map((entry) => ({ name: entry.alias, ...entry }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const modelNames = Object.values(models)
-    .map((entry) => ({ name: entry.model, ...entry }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const agentTurns = recs.filter(
-    (r) => r.actor === "agent" && r.endedAt,
-  ).length;
-  const scriptTurns = recs.filter(
-    (r) => r.actor === "script" && r.endedAt,
-  ).length;
-  const base = recordedBaseGates(input.records);
-  const baseLines = baseGateLines(base);
-  const distanceDebt = distanceDebtLines(open);
-  const lines = [
-    `# Iteration ${iteration} summary`,
-    "",
-    `status: ${status}`,
-    ...decisionLines(input.decision),
-    "",
-    "## Distance",
-    listLine(`pending (${pending.length})`, pending),
-    listLine(`parks (${parkedAll.length})`, parkedAll),
-    ...distanceDebt,
-    "",
-    ...architectLines(architect, planReviewMarks),
-    "",
-    "## Assumptions",
-    ...(assumed.length ? assumed : ["- none recorded"]),
-    "",
-    "## Outcome",
-    listLine("merged", merged),
-    listLine("spikes finished", finished),
-    listLine("pending", pending),
-    listLine("cancelled", cancelled),
-    listLine("quarantined", quarantined),
-    "",
-    "## Base gates",
-    ...baseLines,
-    "",
-    "## Parked by root cause",
-    ...parkedCauseLines(parkedByKind),
-    "",
-    "## Debt opened",
-    ...orNone(debtOpened),
-    "",
-    "## Debt closed",
-    ...orNone(debtClosed),
-    "",
-    "## Owner attention",
-    ...orNone([...ownerRemarkable, ...unanswered]),
-    "",
-    "## Remarkable",
-    ...orNone(remarks.map((r) => `- ${r}`)),
-    "",
-    "## Metrics",
-    `- turns: ${agentTurns} agent, ${scriptTurns} script`,
-    `- tokens: input ${usage.in}, cached ${usage.cacheRead}, output ${usage.out}, reasoning ${usage.reasoningOut}`,
-    `- cost: ${costText(usage.costUsd, unpricedTurns)}`,
-    `- list cost: ${costText(usage.listCostUsd, unpricedTurns)}`,
-    costByRoleLine(roleNames),
-    `- cost per merged task: ${perMergedCost(costPerMergedTask, unpricedTurns)}; list ${perMergedCost(listCostPerMergedTask, unpricedTurns)}`,
-    `- work: ${edits} files (+${addedLines}/-${removedLines}), ${testRuns} test runs in ${gateRuns} gate runs`,
-    `- gate wall: ${(gateWallMs / 1000).toFixed(1)}s gates, ${(commitWallMs / 1000).toFixed(1)}s commits`,
-    `- operator acts: ${operatorActs} (${humanInterventions} steers)`,
-    ...budgetLines(budgetStop, unpricedTurns),
-    `- merged: ${merged.length}; parked: ${[...parkedByKind.values()].flat().length}; pending: ${pending.length}`,
-    "",
-    "## Incidents",
-    ...incidentLines(incidents, loopIncidents),
-    "",
-    "## Waste",
-    ...wasteLines(waste, agentTurns, roleNames, aliasNames),
-    "",
-    "## Launches by role",
-    ...launchTable("role", roleNames),
-    "",
-    "## Launches by alias",
-    ...launchTable("alias", aliasNames),
-    "",
-    "## Spend by role",
-    ...spendTable("role", roleNames),
-    "",
-    "## Spend by alias",
-    ...spendTable("alias", aliasNames),
-    "",
-    "## Spend by model",
-    ...spendTable("model", modelNames),
-    "",
-  ];
-  const rel = store.iterations.rel(iteration, "summary.md");
-  const text = lines.join("\n");
-  await store.iterations.write(iteration, "summary.md", text);
-  // The outbox notifies the owner; the summary itself has one copy above.
-  await store.mailbox.write(
-    "outbox",
-    `iteration-${iteration}-summary.md`,
-    `${rel}\n`,
-  );
-  return rel;
+  const render: SummaryRender = {
+    iteration,
+    status,
+    decision: input.decision,
+    budgetStop,
+    architect,
+    facts,
+    remarks,
+    computed,
+    named: summaryNamedRows(computed),
+    agentTurns: recs.filter((r) => r.actor === "agent" && r.endedAt).length,
+    scriptTurns: recs.filter((r) => r.actor === "script" && r.endedAt).length,
+    baseLines: baseGateLines(recordedBaseGates(input.records)),
+    distanceDebt: distanceDebtLines(facts.open),
+  };
+  const lines = [...summaryHeadLines(render), ...summaryMetricsLines(render)];
+  return await writeSummaryFile(store, iteration, lines);
 }
 
 /**

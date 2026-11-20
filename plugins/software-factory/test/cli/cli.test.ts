@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -66,6 +65,11 @@ function conflictingBaseRepo(): TmpRepo {
 }
 
 describe("CLI dispatch", () => {
+  registerCliDispatchPart1();
+  registerCliDispatchPart2();
+});
+
+function registerCliDispatchPart1(): void {
   it("parses global flags and the positional command", () => {
     expect(
       parseCliArgs([
@@ -117,7 +121,9 @@ describe("CLI dispatch", () => {
       console.log = original;
     }
   });
+}
 
+function registerCliDispatchPart2(): void {
   it("rejects unknown commands", async () => {
     const originalErr = console.error;
     const originalLog = console.log;
@@ -160,81 +166,85 @@ describe("CLI dispatch", () => {
       repo.cleanup();
     }
   }, 60_000);
-});
+}
+
+/** The per-test temp repo the run-lock registrations share. */
+interface RunLockRepo {
+  repo: string;
+}
 
 describe("Run lock", () => {
-  let repo: string;
+  const state: RunLockRepo = { repo: "" };
 
   beforeEach(() => {
-    repo = fs.mkdtempSync(path.join(os.tmpdir(), "factory-lock-"));
+    state.repo = fs.mkdtempSync(path.join(os.tmpdir(), "factory-lock-"));
   });
 
   afterEach(() => {
-    fs.rmSync(repo, { recursive: true, force: true });
+    fs.rmSync(state.repo, { recursive: true, force: true });
   });
 
+  registerRunLockResolvePart1(state);
+  registerRunLockExclusivePart2(state);
+});
+
+function registerRunLockResolvePart1(state: RunLockRepo): void {
   it("resolves the runtime directory outside the checkout", () => {
-    const runtimeDir = resolveRuntimeDir(repo, "../wt-test");
+    const runtimeDir = resolveRuntimeDir(state.repo, "../wt-test");
     expect(runtimeDir).toBe(
-      path.resolve(repo, "../wt-test", ".factory-runtime"),
+      path.resolve(state.repo, "../wt-test", ".factory-runtime"),
     );
   });
 
   it("defaults the worktree root to a sibling named for the repository", () => {
-    const runtimeDir = resolveRuntimeDir(repo);
+    const runtimeDir = resolveRuntimeDir(state.repo);
     expect(runtimeDir).toBe(
       path.join(
-        path.dirname(repo),
-        `wt-${path.basename(repo)}`,
+        path.dirname(state.repo),
+        `wt-${path.basename(state.repo)}`,
         ".factory-runtime",
       ),
     );
-    expect(runtimeDir.startsWith(repo + path.sep)).toBe(false);
+    expect(runtimeDir.startsWith(state.repo + path.sep)).toBe(false);
   });
 
   it("relocates a worktree root inside the checkout beside it", () => {
-    const runtimeDir = resolveRuntimeDir(repo, path.join(repo, "inside"));
+    const runtimeDir = resolveRuntimeDir(
+      state.repo,
+      path.join(state.repo, "inside"),
+    );
     expect(runtimeDir).toBe(
       path.join(
-        path.dirname(repo),
-        `wt-${path.basename(repo)}`,
+        path.dirname(state.repo),
+        `wt-${path.basename(state.repo)}`,
         ".factory-runtime",
       ),
     );
-    expect(runtimeDir.startsWith(repo + path.sep)).toBe(false);
+    expect(runtimeDir.startsWith(state.repo + path.sep)).toBe(false);
   });
+}
 
+function registerRunLockExclusivePart2(state: RunLockRepo): void {
   it("is exclusive while held and free after release", () => {
     const task = "t1";
-    const lockPath = getRunLockPath(repo, task, {
-      runtimeDir: path.join(repo, "rt"),
-    });
-    expect(
-      isRunLockFree(repo, task, { runtimeDir: path.join(repo, "rt") }).free,
-    ).toBe(true);
+    const runtimeDir = path.join(state.repo, "rt");
+    const lockPath = getRunLockPath(state.repo, task, { runtimeDir });
+    expect(isRunLockFree(state.repo, task, { runtimeDir }).free).toBe(true);
 
-    const handle = acquireRunLock(repo, task, {
-      runtimeDir: path.join(repo, "rt"),
-    });
+    const handle = acquireRunLock(state.repo, task, { runtimeDir });
     expect(handle).not.toBeNull();
     expect(fs.existsSync(lockPath)).toBe(true);
-    expect(
-      isRunLockFree(repo, task, { runtimeDir: path.join(repo, "rt") }).free,
-    ).toBe(false);
-    expect(
-      acquireRunLock(repo, task, { runtimeDir: path.join(repo, "rt") }),
-    ).toBeNull();
+    expect(isRunLockFree(state.repo, task, { runtimeDir }).free).toBe(false);
+    expect(acquireRunLock(state.repo, task, { runtimeDir })).toBeNull();
 
     handle!.release();
     expect(fs.existsSync(lockPath)).toBe(false);
-    expect(
-      isRunLockFree(repo, task, { runtimeDir: path.join(repo, "rt") }).free,
-    ).toBe(true);
+    expect(isRunLockFree(state.repo, task, { runtimeDir }).free).toBe(true);
   });
 
   it("takes over a stale lock from a dead pid on this host", () => {
-    const runtimeDir = path.join(repo, "rt");
-    const lockPath = getRunLockPath(repo, "t2", { runtimeDir });
+    const runtimeDir = path.join(state.repo, "rt");
+    const lockPath = getRunLockPath(state.repo, "t2", { runtimeDir });
     fs.mkdirSync(path.dirname(lockPath), { recursive: true });
     fs.writeFileSync(
       lockPath,
@@ -244,11 +254,10 @@ describe("Run lock", () => {
         start: new Date(0).toISOString(),
       }),
     );
-
-    const handle = acquireRunLock(repo, "t2", { runtimeDir });
+    const handle = acquireRunLock(state.repo, "t2", { runtimeDir });
     expect(handle).not.toBeNull();
     const data = JSON.parse(fs.readFileSync(lockPath, "utf8"));
     expect(data.pid).toBe(process.pid);
     handle!.release();
   });
-});
+}

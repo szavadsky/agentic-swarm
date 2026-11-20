@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -63,71 +62,342 @@ const CROSS_HARNESS_ARCHITECT_RUN = [
 ].join("\n");
 
 describe("architect session continuity", () => {
+  registerArchitectSessionContinuityPart1();
+  registerArchitectSessionContinuityPart2();
+});
+
+describe("delivery guard", () => {
+  deliveryGuardPart1();
+  deliveryGuardPart2();
+  deliveryGuardPart3();
+});
+
+const PLAN_REVIEW_ALIASES = {
+  architect: { harness: "fake", model: "fake-architect" },
+  pm: { harness: "fake", model: "fake-pm" },
+  implementer: { harness: "fake", model: "fake-impl" },
+  researcher: { harness: "fake", model: "fake-research" },
+  reviewer: { harness: "fake", model: "fake-review" },
+  steward: { harness: "fake", model: "fake-steward" },
+  "plan-checker": { harness: "fake", model: "fake-check" },
+  intent: { harness: "fake", model: "fake-intent" },
+  "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+  "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
+};
+
+describe("plan review session hygiene", () => {
+  it("starts every plan review fresh, discards its writes, and never blocks on its failure", async () => {
+    const { repo, goal } = setupFlowRepo({ aliases: PLAN_REVIEW_ALIASES });
+    try {
+      const scope1 = await startsEveryPlanReviewFreshDiscardsPart1(repo, goal);
+      const scope2 = await startsEveryPlanReviewFreshDiscardsPart2(scope1);
+      await startsEveryPlanReviewFreshDiscardsPart3(scope2);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 90_000);
+});
+
+async function startsEveryPlanReviewFreshDiscardsPart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+) {
+  const harness = new FakeHarness({ id: "fake" });
+  const runtime = await makeRuntime(repo, goal, { fake: harness });
+  const planPath = path.join(runtime.store.goalDir, "plan.md");
+  fs.writeFileSync(planPath, "# Plan\n\n- alpha\n", "utf8");
+  const reviewSessions: (string | undefined)[] = [];
+
+  harness.script((req, ctx) => {
+    fs.appendFileSync(planPath, "\n## alpha\n", "utf8");
+    ctx.writeOutcome(
+      outcome({ summary: "planned alpha", decision: "continue" }),
+    );
+    return fakeTurnResult(req);
+  });
+  harness.script(
+    (req, ctx) => {
+      reviewSessions.push(req.session?.id);
+      fs.writeFileSync(planPath, "# Plan\n\nHACKED\n", "utf8");
+      ctx.writeOutcome(
+        outcome({
+          summary: "alpha needs a test",
+          planReview: {
+            technical: [],
+            planNotes: [{ planLine: "# Plan", finding: "alpha needs a test" }],
+          },
+        }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: PLAN_REVIEW_STEP }) },
+  );
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
+    return fakeTurnResult(req);
+  });
+
+  const first = await runBoundary(runtime, { relaunch: false });
+  expect(first.decision).toBe("continue");
+  expect(fs.readFileSync(planPath, "utf8")).toContain("- alpha");
+  const reconciled = (await runtime.store.listRecords()).find(
+    (record) => record.step === "plan-review-reconcile",
+  );
+  expect(reconciled?.ok).toBe(false);
+
+  return { harness, runtime, planPath, reviewSessions, reconciled };
+}
+
+async function startsEveryPlanReviewFreshDiscardsPart2(
+  scope: Awaited<ReturnType<typeof startsEveryPlanReviewFreshDiscardsPart1>>,
+) {
+  const { reconciled, harness, planPath, reviewSessions, runtime } = scope;
+  expect(causeText(reconciled?.cause)).toContain("plan.md");
+
+  harness.script((req, ctx) => {
+    fs.appendFileSync(planPath, "\n## beta\n", "utf8");
+    ctx.writeOutcome(
+      outcome({ summary: "planned beta", decision: "continue" }),
+    );
+    return fakeTurnResult(req);
+  });
+  harness.script(
+    (req, ctx) => {
+      reviewSessions.push(req.session?.id);
+      return fakeTurnResult(req, {
+        stop: { kind: "infra", cause: "quota" },
+      });
+    },
+    { when: whenTurn({ step: PLAN_REVIEW_STEP }) },
+  );
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
+    return fakeTurnResult(req);
+  });
+
+  const second = await runBoundary(runtime, {
+    relaunch: false,
+    iteration: 2,
+  });
+  expect(second.decision).toBe("continue");
+  // The first review left a session on the same alias and cwd; the second
+  // still starts de novo.
+  expect(reviewSessions).toEqual([undefined, undefined]);
+  const records = await runtime.store.listRecords();
+  const missing = records.find(
+    (record) => record.step === "plan-review-missing" && record.iteration === 2,
+  );
+  expect(missing?.ok).toBe(false);
+  expect(causeText(missing?.cause)).toContain("infrastructure: quota");
+  expect(
+    records.some(
+      (record) =>
+        record.step === PLAN_REVIEW_STEP &&
+        record.iteration === 2 &&
+        record.endedAt,
+    ),
+  ).toBe(true);
+
+  return { ...scope, records };
+}
+
+async function startsEveryPlanReviewFreshDiscardsPart3(
+  scope: Awaited<ReturnType<typeof startsEveryPlanReviewFreshDiscardsPart2>>,
+) {
+  const { records } = scope;
+  expect(
+    records.some((record) => record.step === "pm" && record.iteration === 2),
+  ).toBe(true);
+}
+
+function deliveryGuardPart1() {
+  it("repairs an architect continue with no plan, then blocks naming the plan", async () => {
+    const goal = makeGoal();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "go", decision: "continue" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "still going", decision: "continue" }),
+        );
+        return fakeTurnResult(req);
+      });
+
+      await expectLaunch(3, goal.repo, harness);
+      expect(harness.calls).toHaveLength(2);
+      expect(harness.calls[1]!.prompt).toContain("plan edit or stop decision");
+      const summary = fs.readFileSync(
+        path.join(goal.goalDir, "iterations/1/summary.md"),
+        "utf8",
+      );
+      expect(summary).toContain("status: blocked-by-user");
+      expect(summary).toContain("plan.md does not exist");
+      const records = await createFolderStore(
+        goal.goalDir,
+        undefined,
+        {},
+      ).listRecords();
+      expect(records.some((r) => r.step === "pm")).toBe(false);
+    } finally {
+      cleanup(goal);
+    }
+  }, 60_000);
+}
+
+function deliveryGuardPart2() {
+  it("repairs an architect continue over an untouched plan, then blocks naming the plan edit", async () => {
+    const goal = makeGoal();
+    try {
+      writePlan(goal.goalDir, PLAN);
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "go", decision: "continue" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({ summary: "still going", decision: "continue" }),
+        );
+        return fakeTurnResult(req);
+      });
+
+      await expectLaunch(3, goal.repo, harness);
+      expect(harness.calls).toHaveLength(2);
+      expect(harness.calls[1]!.prompt).toContain("plan edit or stop decision");
+      expect(harness.calls[1]!.prompt).toContain(
+        "is unchanged since the turn started",
+      );
+      const summary = fs.readFileSync(
+        path.join(goal.goalDir, "iterations/1/summary.md"),
+        "utf8",
+      );
+      expect(summary).toContain("status: blocked-by-user");
+      expect(summary).toContain("is unchanged since the turn started");
+      const records = await createFolderStore(
+        goal.goalDir,
+        undefined,
+        {},
+      ).listRecords();
+      expect(records.some((r) => r.step === "pm")).toBe(false);
+    } finally {
+      cleanup(goal);
+    }
+  }, 60_000);
+}
+
+function deliveryGuardPart3() {
+  it("repairs a front turn with no outcome, then fails the launch naming the deliverable", async () => {
+    const goal = makeGoal({ classYaml: null });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req) => fakeTurnResult(req, { text: "nothing" }));
+      harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
+
+      await expectLaunch(1, goal.repo, harness);
+      expect(harness.calls).toHaveLength(2);
+      expect(harness.calls[1]!.prompt).toContain(
+        "You are the front. Your turn did not deliver its class, task, and pack.",
+      );
+      const records = await createFolderStore(
+        goal.goalDir,
+        undefined,
+        {},
+      ).listRecords();
+      expect(records.filter((r) => r.step === "architect")).toEqual([]);
+      const summary = fs.readFileSync(
+        path.join(goal.goalDir, "iterations/1/summary.md"),
+        "utf8",
+      );
+      expect(summary).toContain("front turn ended the launch as infra");
+      expect(summary).toContain("missing deliverable: class, task, and pack");
+    } finally {
+      cleanup(goal);
+    }
+  }, 60_000);
+}
+
+async function storesCompactedRefReDerivesAfterPart1(
+  goal: ReturnType<typeof makeGoal>,
+) {
+  const first = new FakeHarness({ id: "fake" });
+  first.script((req, ctx) => {
+    expect(req.prompt).toContain("- turn: `first`");
+    writePlan(goal.goalDir, PLAN);
+    ctx.writeOutcome(
+      outcome({ summary: "planned nothing yet", decision: "continue" }),
+    );
+    return fakeTurnResult(req);
+  });
+  first.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
+    return fakeTurnResult(req);
+  });
+
+  await expectLaunch(3, goal.repo, first);
+  const store = createFolderStore(goal.goalDir, undefined, {});
+  const records = await store.listRecords();
+  const architect = records.find((r) => r.step === "architect");
+  expect(architect?.session?.compacted).toBe(true);
+  expect(first.compactions).toHaveLength(1);
+  const sessionId = architect!.session!.id;
+
+  // A hard kill after the records, before the summary: backfill owns it.
+  fs.rmSync(path.join(goal.goalDir, "iterations/1/summary.md"));
+
+  const second = new FakeHarness({ id: "fake" });
+  scriptDigest(second, goal.goalDir, 2);
+  let seenSession: string | undefined;
+  second.script((req, ctx) => {
+    seenSession = req.session?.id;
+    expect(req.session?.compacted).toBe(true);
+    expect(req.prompt).toContain("- turn: `relaunch`");
+    const pack = fs.readFileSync(
+      path.join(goal.goalDir, "iterations/2/context-pack.md"),
+      "utf8",
+    );
+    expect(pack).toContain("iterations/2/digest.md");
+    ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
+    return fakeTurnResult(req);
+  });
+
+  await expectLaunch(0, goal.repo, second);
+
+  return { sessionId, seenSession };
+}
+
+async function storesCompactedRefReDerivesAfterPart2(
+  goal: ReturnType<typeof makeGoal>,
+  scope: Awaited<ReturnType<typeof storesCompactedRefReDerivesAfterPart1>>,
+) {
+  const { seenSession, sessionId } = scope;
+  expect(seenSession).toBe(sessionId);
+
+  const state = await stateOf(goal.goalDir);
+  expect(state.goal).toBe("done");
+  expect(
+    fs.existsSync(path.join(goal.goalDir, "iterations/1/summary.md")),
+  ).toBe(true);
+  expect(
+    fs.readFileSync(path.join(goal.goalDir, "iterations/1/summary.md"), "utf8"),
+  ).toContain("stopped-with-debt");
+  const digest = fs.readFileSync(
+    path.join(goal.goalDir, "iterations/2/digest.md"),
+    "utf8",
+  );
+  expect(digest).toContain("## Cost and turns by role");
+  expect(digest).toContain("architect");
+  expect(digest).toContain("## Loops");
+}
+
+function registerArchitectSessionContinuityPart1(): void {
   it("stores the compacted ref, re-derives it after a restart, and backfills a missing summary", async () => {
     const goal = makeGoal();
     try {
-      const first = new FakeHarness({ id: "fake" });
-      first.script((req, ctx) => {
-        expect(req.prompt).toContain("- turn: `first`");
-        writePlan(goal.goalDir, PLAN);
-        ctx.writeOutcome(
-          outcome({ summary: "planned nothing yet", decision: "continue" }),
-        );
-        return fakeTurnResult(req);
-      });
-      first.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
-        return fakeTurnResult(req);
-      });
-
-      await expectLaunch(3, goal.repo, first);
-      const store = createFolderStore(goal.goalDir, undefined, {});
-      const records = await store.listRecords();
-      const architect = records.find((r) => r.step === "architect");
-      expect(architect?.session?.compacted).toBe(true);
-      expect(first.compactions).toHaveLength(1);
-      const sessionId = architect!.session!.id;
-
-      // A hard kill after the records, before the summary: backfill owns it.
-      fs.rmSync(path.join(goal.goalDir, "iterations/1/summary.md"));
-
-      const second = new FakeHarness({ id: "fake" });
-      scriptDigest(second, goal.goalDir, 2);
-      let seenSession: string | undefined;
-      second.script((req, ctx) => {
-        seenSession = req.session?.id;
-        expect(req.session?.compacted).toBe(true);
-        expect(req.prompt).toContain("- turn: `relaunch`");
-        const pack = fs.readFileSync(
-          path.join(goal.goalDir, "iterations/2/context-pack.md"),
-          "utf8",
-        );
-        expect(pack).toContain("iterations/2/digest.md");
-        ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
-        return fakeTurnResult(req);
-      });
-
-      await expectLaunch(0, goal.repo, second);
-      expect(seenSession).toBe(sessionId);
-
-      const state = await stateOf(goal.goalDir);
-      expect(state.goal).toBe("done");
-      expect(
-        fs.existsSync(path.join(goal.goalDir, "iterations/1/summary.md")),
-      ).toBe(true);
-      expect(
-        fs.readFileSync(
-          path.join(goal.goalDir, "iterations/1/summary.md"),
-          "utf8",
-        ),
-      ).toContain("stopped-with-debt");
-      const digest = fs.readFileSync(
-        path.join(goal.goalDir, "iterations/2/digest.md"),
-        "utf8",
-      );
-      expect(digest).toContain("## Cost and turns by role");
-      expect(digest).toContain("architect");
-      expect(digest).toContain("## Loops");
+      const scope1 = await storesCompactedRefReDerivesAfterPart1(goal);
+      await storesCompactedRefReDerivesAfterPart2(goal, scope1);
     } finally {
       cleanup(goal);
     }
@@ -160,7 +430,9 @@ describe("architect session continuity", () => {
       cleanup(goal);
     }
   }, 60_000);
+}
 
+function registerArchitectSessionContinuityPart2(): void {
   it("resumes the architect across a declared portability edge", async () => {
     const goal = makeGoal({ runYaml: CROSS_HARNESS_ARCHITECT_RUN });
     try {
@@ -212,228 +484,4 @@ describe("architect session continuity", () => {
       cleanup(goal);
     }
   }, 90_000);
-});
-
-describe("delivery guard", () => {
-  it("repairs an architect continue with no plan, then blocks naming the plan", async () => {
-    const goal = makeGoal();
-    try {
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "go", decision: "continue" }));
-        return fakeTurnResult(req);
-      });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "still going", decision: "continue" }),
-        );
-        return fakeTurnResult(req);
-      });
-
-      await expectLaunch(3, goal.repo, harness);
-      expect(harness.calls).toHaveLength(2);
-      expect(harness.calls[1]!.prompt).toContain("plan edit or stop decision");
-      const summary = fs.readFileSync(
-        path.join(goal.goalDir, "iterations/1/summary.md"),
-        "utf8",
-      );
-      expect(summary).toContain("status: blocked-by-user");
-      expect(summary).toContain("plan.md does not exist");
-      const records = await createFolderStore(
-        goal.goalDir,
-        undefined,
-        {},
-      ).listRecords();
-      expect(records.some((r) => r.step === "pm")).toBe(false);
-    } finally {
-      cleanup(goal);
-    }
-  }, 60_000);
-
-  it("repairs an architect continue over an untouched plan, then blocks naming the plan edit", async () => {
-    const goal = makeGoal();
-    try {
-      writePlan(goal.goalDir, PLAN);
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "go", decision: "continue" }));
-        return fakeTurnResult(req);
-      });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "still going", decision: "continue" }),
-        );
-        return fakeTurnResult(req);
-      });
-
-      await expectLaunch(3, goal.repo, harness);
-      expect(harness.calls).toHaveLength(2);
-      expect(harness.calls[1]!.prompt).toContain("plan edit or stop decision");
-      expect(harness.calls[1]!.prompt).toContain(
-        "is unchanged since the turn started",
-      );
-      const summary = fs.readFileSync(
-        path.join(goal.goalDir, "iterations/1/summary.md"),
-        "utf8",
-      );
-      expect(summary).toContain("status: blocked-by-user");
-      expect(summary).toContain("is unchanged since the turn started");
-      const records = await createFolderStore(
-        goal.goalDir,
-        undefined,
-        {},
-      ).listRecords();
-      expect(records.some((r) => r.step === "pm")).toBe(false);
-    } finally {
-      cleanup(goal);
-    }
-  }, 60_000);
-
-  it("repairs a front turn with no outcome, then fails the launch naming the deliverable", async () => {
-    const goal = makeGoal({ classYaml: null });
-    try {
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script((req) => fakeTurnResult(req, { text: "nothing" }));
-      harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
-
-      await expectLaunch(1, goal.repo, harness);
-      expect(harness.calls).toHaveLength(2);
-      expect(harness.calls[1]!.prompt).toContain(
-        "You are the front. Your turn did not deliver its class, task, and pack.",
-      );
-      const records = await createFolderStore(
-        goal.goalDir,
-        undefined,
-        {},
-      ).listRecords();
-      expect(records.filter((r) => r.step === "architect")).toEqual([]);
-      const summary = fs.readFileSync(
-        path.join(goal.goalDir, "iterations/1/summary.md"),
-        "utf8",
-      );
-      expect(summary).toContain("front turn ended the launch as infra");
-      expect(summary).toContain("missing deliverable: class, task, and pack");
-    } finally {
-      cleanup(goal);
-    }
-  }, 60_000);
-});
-
-const PLAN_REVIEW_ALIASES = {
-  architect: { harness: "fake", model: "fake-architect" },
-  pm: { harness: "fake", model: "fake-pm" },
-  implementer: { harness: "fake", model: "fake-impl" },
-  researcher: { harness: "fake", model: "fake-research" },
-  reviewer: { harness: "fake", model: "fake-review" },
-  steward: { harness: "fake", model: "fake-steward" },
-  "plan-checker": { harness: "fake", model: "fake-check" },
-  intent: { harness: "fake", model: "fake-intent" },
-  "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
-  "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
-};
-
-describe("plan review session hygiene", () => {
-  it("starts every plan review fresh, discards its writes, and never blocks on its failure", async () => {
-    const { repo, goal } = setupFlowRepo({ aliases: PLAN_REVIEW_ALIASES });
-    try {
-      const harness = new FakeHarness({ id: "fake" });
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      const planPath = path.join(runtime.store.goalDir, "plan.md");
-      fs.writeFileSync(planPath, "# Plan\n\n- alpha\n", "utf8");
-      const reviewSessions: (string | undefined)[] = [];
-
-      harness.script((req, ctx) => {
-        fs.appendFileSync(planPath, "\n## alpha\n", "utf8");
-        ctx.writeOutcome(
-          outcome({ summary: "planned alpha", decision: "continue" }),
-        );
-        return fakeTurnResult(req);
-      });
-      harness.script(
-        (req, ctx) => {
-          reviewSessions.push(req.session?.id);
-          fs.writeFileSync(planPath, "# Plan\n\nHACKED\n", "utf8");
-          ctx.writeOutcome(
-            outcome({
-              summary: "alpha needs a test",
-              planReview: {
-                technical: [],
-                planNotes: [
-                  { planLine: "# Plan", finding: "alpha needs a test" },
-                ],
-              },
-            }),
-          );
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ step: PLAN_REVIEW_STEP }) },
-      );
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
-        return fakeTurnResult(req);
-      });
-
-      const first = await runBoundary(runtime, { relaunch: false });
-      expect(first.decision).toBe("continue");
-      expect(fs.readFileSync(planPath, "utf8")).toContain("- alpha");
-      const reconciled = (await runtime.store.listRecords()).find(
-        (record) => record.step === "plan-review-reconcile",
-      );
-      expect(reconciled?.ok).toBe(false);
-      expect(causeText(reconciled?.cause)).toContain("plan.md");
-
-      harness.script((req, ctx) => {
-        fs.appendFileSync(planPath, "\n## beta\n", "utf8");
-        ctx.writeOutcome(
-          outcome({ summary: "planned beta", decision: "continue" }),
-        );
-        return fakeTurnResult(req);
-      });
-      harness.script(
-        (req, ctx) => {
-          reviewSessions.push(req.session?.id);
-          return fakeTurnResult(req, {
-            stop: { kind: "infra", cause: "quota" },
-          });
-        },
-        { when: whenTurn({ step: PLAN_REVIEW_STEP }) },
-      );
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
-        return fakeTurnResult(req);
-      });
-
-      const second = await runBoundary(runtime, {
-        relaunch: false,
-        iteration: 2,
-      });
-      expect(second.decision).toBe("continue");
-      // The first review left a session on the same alias and cwd; the second
-      // still starts de novo.
-      expect(reviewSessions).toEqual([undefined, undefined]);
-      const records = await runtime.store.listRecords();
-      const missing = records.find(
-        (record) =>
-          record.step === "plan-review-missing" && record.iteration === 2,
-      );
-      expect(missing?.ok).toBe(false);
-      expect(causeText(missing?.cause)).toContain("infrastructure: quota");
-      expect(
-        records.some(
-          (record) =>
-            record.step === PLAN_REVIEW_STEP &&
-            record.iteration === 2 &&
-            record.endedAt,
-        ),
-      ).toBe(true);
-      // Advisory: the PM still ran after the failed review.
-      expect(
-        records.some(
-          (record) => record.step === "pm" && record.iteration === 2,
-        ),
-      ).toBe(true);
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 90_000);
-});
+}

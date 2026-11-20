@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { runAgentTurn } from "./agent.js";
 import { makeCause } from "./cause.js";
 import { formatCause } from "./cause.js";
@@ -205,57 +204,51 @@ export interface PlanCheckTurn {
  * reports `architect`, so the checker can only add progress, never block the
  * iteration on its own failure.
  */
-export async function runPlanCheck(
+/** The template variables of one plan-checker turn. */
+function planCheckVars(
   runtime: KernelRuntime,
-  opts: { iteration: number; round: number; state: State },
-): Promise<PlanCheckTurn> {
-  const allPlans = runtime.store.plans.registered();
-  const plans = runtime.store.plans.existing();
-  const texts = (
-    await Promise.all(plans.map((plan) => runtime.store.plans.read(plan.scope)))
-  ).filter((text): text is string => text !== null);
-  const snapshot = await snapshotTurn(runtime, allPlans);
-  const tasks = await runtime.store.listTasks();
-  const gateRecord = lastGateRecord(
-    await runtime.store.listRecords(),
-    runtime.store,
-  );
-  const result = await runAgentTurn(runtime, {
-    target: boundaryTarget(runtime, "plancheck", opts.iteration),
-    cwd: runtime.paths.goalCheckout,
-    meta: {
-      iteration: opts.iteration,
-      step: PLAN_CHECK_STEP,
-      round: opts.round,
-    },
-    vars: {
-      iteration: String(opts.iteration),
-      intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
-      plans: formatPlanList(plans),
-      checkout: runtime.paths.goalCheckout,
-      tasks_dir: runtime.store.tasks.dir,
-      existing_tasks: planCheckBrief(opts.state, tasks),
-      gate_record_path: gateRecord ?? "none recorded",
-    },
-    expectation: KERNEL_TURN_STEPS[PLAN_CHECK_STEP],
-    validate: (outcome) => validatePlanCheck(texts, outcome),
-  });
-  const restored = await restoreTurn(runtime, snapshot);
+  opts: { iteration: number; state: State },
+  plans: ReturnType<KernelRuntime["store"]["plans"]["existing"]>,
+  tasks: Awaited<ReturnType<KernelRuntime["store"]["listTasks"]>>,
+  gateRecord: string | undefined,
+): Record<string, string> {
+  return {
+    iteration: String(opts.iteration),
+    intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
+    plans: formatPlanList(plans),
+    checkout: runtime.paths.goalCheckout,
+    tasks_dir: runtime.store.tasks.dir,
+    existing_tasks: planCheckBrief(opts.state, tasks),
+    gate_record_path: gateRecord ?? "none recorded",
+  };
+}
+
+/** Records the checker's reads-only breach after restoring its writes. */
+async function recordDiscardedWrites(
+  runtime: KernelRuntime,
+  opts: { iteration: number; round: number },
+  restored: Awaited<ReturnType<typeof restoreTurn>>,
+): Promise<void> {
   const touched = [...restored.plans, ...restored.tasks].sort();
-  if (touched.length > 0) {
-    await runtime.store.appendRecord(
-      scriptMeta(opts.iteration, "plan-check-reconcile", {
-        round: opts.round,
-      }),
-      {
-        ok: false,
-        cause: makeCause(
-          "invalid-outcome",
-          `checker writes discarded: ${touched.join(", ")}; the checker is read-only`,
-        ),
-      },
-    );
-  }
+  if (touched.length === 0) return;
+  await runtime.store.appendRecord(
+    scriptMeta(opts.iteration, "plan-check-reconcile", {
+      round: opts.round,
+    }),
+    {
+      ok: false,
+      cause: makeCause(
+        "invalid-outcome",
+        `checker writes discarded: ${touched.join(", ")}; the checker is read-only`,
+      ),
+    },
+  );
+}
+
+/** The turn result: infra, no verdict, or the checker's verdict. */
+function planCheckTurnResult(
+  result: Awaited<ReturnType<typeof runAgentTurn>>,
+): PlanCheckTurn {
   const stop = result.record.stop;
   if (stop?.kind === "infra") {
     return {
@@ -284,6 +277,41 @@ export async function runPlanCheck(
     followUps: check.followUps,
     outcome: result.outcome,
   };
+}
+
+export async function runPlanCheck(
+  runtime: KernelRuntime,
+  opts: { iteration: number; round: number; state: State },
+): Promise<PlanCheckTurn> {
+  const allPlans = runtime.store.plans.registered();
+  const plans = runtime.store.plans.existing();
+  const texts = (
+    await Promise.all(plans.map((plan) => runtime.store.plans.read(plan.scope)))
+  ).filter((text): text is string => text !== null);
+  const snapshot = await snapshotTurn(runtime, allPlans);
+  const tasks = await runtime.store.listTasks();
+  const gateRecord = lastGateRecord(
+    await runtime.store.listRecords(),
+    runtime.store,
+  );
+  const result = await runAgentTurn(runtime, {
+    target: boundaryTarget(runtime, "plancheck", opts.iteration),
+    cwd: runtime.paths.goalCheckout,
+    meta: {
+      iteration: opts.iteration,
+      step: PLAN_CHECK_STEP,
+      round: opts.round,
+    },
+    vars: planCheckVars(runtime, opts, plans, tasks, gateRecord),
+    expectation: KERNEL_TURN_STEPS[PLAN_CHECK_STEP],
+    validate: (outcome) => validatePlanCheck(texts, outcome),
+  });
+  await recordDiscardedWrites(
+    runtime,
+    opts,
+    await restoreTurn(runtime, snapshot),
+  );
+  return planCheckTurnResult(result);
 }
 
 export interface PlanCheckRound {

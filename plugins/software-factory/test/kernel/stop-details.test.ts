@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -31,6 +30,13 @@ const NO_ROUTE =
   "provider.no-route Model unavailable: opencode/does-not-exist-free";
 
 describe("infra stop details", () => {
+  registerInfraStopDetailsPart1();
+  registerInfraStopDetailsPart2();
+  registerInfraStopDetailsPart3();
+  registerInfraStopDetailsPart4();
+});
+
+function registerInfraStopDetailsPart1(): void {
   it("shows a no-route stop's details in the dispatch cause and keeps the record verbatim", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -63,7 +69,9 @@ describe("infra stop details", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerInfraStopDetailsPart2(): void {
   it("prints a stop without details as before", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -82,7 +90,9 @@ describe("infra stop details", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerInfraStopDetailsPart3(): void {
   it("keeps refusal details in the park cause", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -112,7 +122,9 @@ describe("infra stop details", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerInfraStopDetailsPart4(): void {
   it("carries the details through the launch stop text and the iteration summary", async () => {
     const goal = makeGoal();
     try {
@@ -162,4 +174,4 @@ describe("infra stop details", () => {
       cleanup(goal);
     }
   }, 60_000);
-});
+}

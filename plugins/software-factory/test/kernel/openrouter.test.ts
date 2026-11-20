@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -75,6 +74,13 @@ describe("OpenRouter model-list parsing", () => {
 });
 
 describe("price cache loading", () => {
+  registerPriceCacheLoadingPart1();
+  registerPriceCacheLoadingPart2();
+  registerPriceCacheLoadingPart3();
+  registerPriceCacheLoadingPart4();
+});
+
+function registerPriceCacheLoadingPart1(): void {
   it("prices a model absent from config through a fake fetcher", async () => {
     const cachePath = tmpCache();
     try {
@@ -107,7 +113,9 @@ describe("price cache loading", () => {
       fs.rmSync(path.dirname(cachePath), { recursive: true, force: true });
     }
   });
+}
 
+function registerPriceCacheLoadingPart2(): void {
   it("serves a fresh cache with no network", async () => {
     const cachePath = tmpCache();
     try {
@@ -133,7 +141,9 @@ describe("price cache loading", () => {
       fs.rmSync(path.dirname(cachePath), { recursive: true, force: true });
     }
   });
+}
 
+function registerPriceCacheLoadingPart3(): void {
   it("refreshes a stale cache and falls back to it without network", async () => {
     const staleAt = new Date(Date.now() - PRICE_CACHE_TTL_MS - 1000);
     const fresh = {
@@ -191,7 +201,9 @@ describe("price cache loading", () => {
       }
     }
   });
+}
 
+function registerPriceCacheLoadingPart4(): void {
   it("leaves turns unpriced with no cache and no network", async () => {
     const cachePath = tmpCache();
     try {
@@ -232,4 +244,4 @@ describe("price cache loading", () => {
       fs.rmSync(path.dirname(cachePath), { recursive: true, force: true });
     }
   });
-});
+}

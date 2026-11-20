@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -157,73 +156,8 @@ describe("just-implement", () => {
   it("merges after gates with zero reviewer turns and keeps the implementer's debt", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "done\n", "utf8");
-        ctx.writeOutcome(
-          outcome({
-            summary: "implemented directly",
-            concerns: [
-              {
-                kind: "debt",
-                calibration: "architect",
-                text: "retry policy is untested",
-              },
-            ],
-          }),
-        );
-        return fakeTurnResult(req);
-      });
-
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(
-        runtime,
-        task("task", { flow: "just-implement", scope: ["task.txt"] }),
-      );
-      const result = await runDispatch(runtime, { iteration: 1 });
-      expect(result.reason).toBe("boundary");
-
-      const records = await runtime.store.listRecords();
-      const state = derive(
-        await runtime.store.listTasks(),
-        records,
-        runtime.configs.process.flows,
-      );
-      expect(state.tasks.task!.status).toBe("merged");
-      expect(state.tasks.task!.phase).toBe("done");
-      expect(harness.calls.length).toBe(1);
-      expect(
-        records.filter((r) => r.slug === "task" && r.step === "review"),
-      ).toEqual([]);
-      expect(records.some((r) => r.slug === "task" && r.step === "debt")).toBe(
-        false,
-      );
-      expect(
-        records.filter((r) => r.slug === "task" && r.step === "checks").length,
-      ).toBe(1);
-      expect(
-        records.filter((r) => r.slug === "task" && r.step === "merge-checks")
-          .length,
-      ).toBe(0);
-      const merges = records.filter(
-        (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
-      );
-      expect(merges.length).toBe(1);
-      expect(causeText(merges[0]!.cause)).toContain("skipped merge-checks");
-
-      await writeIterationSummary(runtime.store, {
-        iteration: 1,
-        state,
-        records,
-        status: "in-progress",
-      });
-      const summary = fs.readFileSync(
-        path.join(runtime.store.goalDir, "iterations/1/summary.md"),
-        "utf8",
-      );
-      expect(summary).toMatch(
-        /## Debt opened\n- task: retry policy is untested/,
-      );
+      const scope1 = await mergesAfterGatesZeroReviewerTurnsPart1(repo, goal);
+      await mergesAfterGatesZeroReviewerTurnsPart2(scope1);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -237,74 +171,12 @@ describe("just-implement", () => {
     });
     const checkout = goalCheckout(repo, goal);
     try {
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "v1" }));
-        return fakeTurnResult(req);
-      });
-      harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v2\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "v2" }));
-        return fakeTurnResult(req);
-      });
-
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      const file = task("task", {
-        flow: "just-implement",
-        scope: ["task.txt"],
-      });
-      await writeTask(runtime, file);
-      const drive = async (action: Action): Promise<void> => {
-        const before = derive(
-          await runtime.store.listTasks(),
-          await runtime.store.listRecords(),
-          runtime.configs.process.flows,
-        );
-        await executeTaskAction(
-          runtime,
-          file,
-          action,
-          1,
-          before.tasks[file.slug]!,
-        );
-      };
-      await drive({ kind: "step", slug: "task", step: "implement", round: 1 });
-      // A concurrent landing poisons the head before the merge queue runs.
-      fs.writeFileSync(path.join(checkout, "poison.txt"), "poison\n", "utf8");
-      repo.git(["add", "poison.txt"], { cwd: checkout });
-      repo.git(["commit", "-m", "concurrent poison"], { cwd: checkout });
-      await drive({ kind: "merge", slug: "task" });
-      await drive({ kind: "step", slug: "task", step: "implement", round: 1 });
-      await drive({ kind: "merge", slug: "task" });
-      scriptStallLeave(harness, ["task"]);
-      const result = await runDispatch(runtime, { iteration: 1 });
-      expect(result.reason).toBe("boundary");
-
-      const records = await runtime.store.listRecords();
-      const state = derive(
-        await runtime.store.listTasks(),
-        records,
-        runtime.configs.process.flows,
+      const scope1 = await parksAfterRedMergedGateLetsOneGatePart1(
+        repo,
+        goal,
+        checkout,
       );
-      expect(state.tasks.task!.status).toBe("parked");
-      expect(causeText(state.tasks.task!.cause)).toContain(
-        "gates: poison-gate",
-      );
-      expect(state.tasks.task!.round).toBe(1);
-      expect(harness.calls.length).toBe(3);
-      expect(
-        records.filter(
-          (r) => r.slug === "task" && r.step === "merge" && r.ok === false,
-        ).length,
-      ).toBe(2);
-      expect(
-        records.filter((r) => r.slug === "task" && r.step === "merge-checks")
-          .length,
-      ).toBe(2);
-      expect(
-        records.filter((r) => r.slug === "task" && r.step === "review"),
-      ).toEqual([]);
+      await parksAfterRedMergedGateLetsOneGatePart2(scope1);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -312,6 +184,266 @@ describe("just-implement", () => {
 });
 
 describe("fix-round follow-up modes", () => {
+  registerFixRoundFollowUpModesPart1();
+  registerFixRoundFollowUpModesPart2();
+  registerFixRoundFollowUpModesPart3();
+  registerFixRoundFollowUpModesPart4();
+  registerFixRoundFollowUpModesPart5();
+});
+
+describe("worktree setup", () => {
+  registerWorktreeSetupPart1();
+  registerWorktreeSetupPart2();
+});
+
+describe("checks step bound and last call", () => {
+  it("honors checks step changeRequests: 1 by rendering last call on the 2nd fix turn and parking on 2nd failure", async () => {
+    const { repo, goal } = setupFlowRepo({
+      gates: [{ id: "unit", command: "test ! -f broken.txt" }],
+    });
+    try {
+      const scope1 = await honorsChecksStepChangeRequests1ByPart1(repo, goal);
+      await honorsChecksStepChangeRequests1ByPart2(scope1);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+});
+
+async function mergesAfterGatesZeroReviewerTurnsPart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+) {
+  const harness = new FakeHarness({ id: "fake" });
+  harness.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "task.txt"), "done\n", "utf8");
+    ctx.writeOutcome(
+      outcome({
+        summary: "implemented directly",
+        concerns: [
+          {
+            kind: "debt",
+            calibration: "architect",
+            text: "retry policy is untested",
+          },
+        ],
+      }),
+    );
+    return fakeTurnResult(req);
+  });
+
+  const runtime = await makeRuntime(repo, goal, { fake: harness });
+  await writeTask(
+    runtime,
+    task("task", { flow: "just-implement", scope: ["task.txt"] }),
+  );
+  const result = await runDispatch(runtime, { iteration: 1 });
+  expect(result.reason).toBe("boundary");
+
+  const records = await runtime.store.listRecords();
+  const state = derive(
+    await runtime.store.listTasks(),
+    records,
+    runtime.configs.process.flows,
+  );
+  expect(state.tasks.task!.status).toBe("merged");
+  expect(state.tasks.task!.phase).toBe("done");
+  expect(harness.calls.length).toBe(1);
+  expect(
+    records.filter((r) => r.slug === "task" && r.step === "review"),
+  ).toEqual([]);
+  expect(records.some((r) => r.slug === "task" && r.step === "debt")).toBe(
+    false,
+  );
+  expect(
+    records.filter((r) => r.slug === "task" && r.step === "checks").length,
+  ).toBe(1);
+
+  return { runtime, records, state };
+}
+
+async function mergesAfterGatesZeroReviewerTurnsPart2(
+  scope: Awaited<ReturnType<typeof mergesAfterGatesZeroReviewerTurnsPart1>>,
+) {
+  const { records, runtime, state } = scope;
+  expect(
+    records.filter((r) => r.slug === "task" && r.step === "merge-checks")
+      .length,
+  ).toBe(0);
+  const merges = records.filter(
+    (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
+  );
+  expect(merges.length).toBe(1);
+  expect(causeText(merges[0]!.cause)).toContain("skipped merge-checks");
+
+  await writeIterationSummary(runtime.store, {
+    iteration: 1,
+    state,
+    records,
+    status: "in-progress",
+  });
+  const summary = fs.readFileSync(
+    path.join(runtime.store.goalDir, "iterations/1/summary.md"),
+    "utf8",
+  );
+  expect(summary).toMatch(/## Debt opened\n- task: retry policy is untested/);
+}
+
+async function honorsChecksStepChangeRequests1ByPart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+) {
+  const processYaml = [
+    "flows:",
+    "  implement-review:",
+    "    steps:",
+    "      - id: implement",
+    "        prompt: implementer",
+    "        alias: implementer",
+    "      - id: checks",
+    "        changeRequests: 1",
+    "      - id: review",
+    "        prompt: reviewer",
+    "        alias: reviewer",
+    "        review: true",
+    "",
+  ].join("\n");
+  repo.writeFile(".factory/process.yaml", processYaml);
+
+  const harness = new FakeHarness({ id: "fake" });
+  const prompts: string[] = [];
+
+  // Initial turn creates broken.txt
+  harness.script((req, ctx) => {
+    prompts.push(req.prompt ?? "");
+    fs.writeFileSync(path.join(req.cwd!, "broken.txt"), "bad\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "wrote broken" }));
+    return fakeTurnResult(req);
+  });
+  // Fix 1
+  harness.script((req, ctx) => {
+    prompts.push(req.prompt ?? "");
+    fs.writeFileSync(path.join(req.cwd!, "fix-1.txt"), "f1\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "fix 1" }));
+    return fakeTurnResult(req);
+  });
+  // Fix 2 (last call)
+  harness.script((req, ctx) => {
+    prompts.push(req.prompt ?? "");
+    fs.writeFileSync(path.join(req.cwd!, "fix-2.txt"), "f2\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "fix 2" }));
+    return fakeTurnResult(req);
+  });
+  scriptStallLeave(harness, ["task"]);
+
+  const runtime = await makeRuntime(repo, goal, { fake: harness });
+  await writeTask(
+    runtime,
+    task("task", { scope: ["broken.txt", "fix-1.txt", "fix-2.txt"] }),
+  );
+
+  return { prompts, runtime };
+}
+
+async function honorsChecksStepChangeRequests1ByPart2(
+  scope: Awaited<ReturnType<typeof honorsChecksStepChangeRequests1ByPart1>>,
+) {
+  const { runtime, prompts } = scope;
+  const result = await runDispatch(runtime, { iteration: 1 });
+  expect(result.reason).toBe("boundary");
+
+  const records = await runtime.store.listRecords();
+  const state = derive(
+    await runtime.store.listTasks(),
+    records,
+    runtime.configs.process.flows,
+  );
+
+  expect(state.tasks.task!.status).toBe("parked");
+  expect(state.tasks.task!.cause).toEqual(cause("gates: unit"));
+
+  // Initial + Fix 1 + Fix 2 = 3 turns
+  expect(prompts).toHaveLength(3);
+  expect(prompts[1]).not.toContain(GATE_LAST_CALL_TEXT);
+  expect(prompts[2]).toContain(GATE_LAST_CALL_TEXT);
+}
+
+async function parksAfterRedMergedGateLetsOneGatePart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+  checkout: string,
+) {
+  const harness = new FakeHarness({ id: "fake" });
+  harness.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "v1" }));
+    return fakeTurnResult(req);
+  });
+  harness.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v2\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "v2" }));
+    return fakeTurnResult(req);
+  });
+
+  const runtime = await makeRuntime(repo, goal, { fake: harness });
+  const file = task("task", {
+    flow: "just-implement",
+    scope: ["task.txt"],
+  });
+  await writeTask(runtime, file);
+  const drive = async (action: Action): Promise<void> => {
+    const before = derive(
+      await runtime.store.listTasks(),
+      await runtime.store.listRecords(),
+      runtime.configs.process.flows,
+    );
+    await executeTaskAction(runtime, file, action, 1, before.tasks[file.slug]!);
+  };
+  await drive({ kind: "step", slug: "task", step: "implement", round: 1 });
+  // A concurrent landing poisons the head before the merge queue runs.
+  fs.writeFileSync(path.join(checkout, "poison.txt"), "poison\n", "utf8");
+  repo.git(["add", "poison.txt"], { cwd: checkout });
+  repo.git(["commit", "-m", "concurrent poison"], { cwd: checkout });
+  await drive({ kind: "merge", slug: "task" });
+  await drive({ kind: "step", slug: "task", step: "implement", round: 1 });
+  await drive({ kind: "merge", slug: "task" });
+  scriptStallLeave(harness, ["task"]);
+  const result = await runDispatch(runtime, { iteration: 1 });
+  expect(result.reason).toBe("boundary");
+
+  const records = await runtime.store.listRecords();
+
+  return { harness, runtime, records };
+}
+
+async function parksAfterRedMergedGateLetsOneGatePart2(
+  scope: Awaited<ReturnType<typeof parksAfterRedMergedGateLetsOneGatePart1>>,
+) {
+  const { runtime, records, harness } = scope;
+  const state = derive(
+    await runtime.store.listTasks(),
+    records,
+    runtime.configs.process.flows,
+  );
+  expect(state.tasks.task!.status).toBe("parked");
+  expect(causeText(state.tasks.task!.cause)).toContain("gates: poison-gate");
+  expect(state.tasks.task!.round).toBe(1);
+  expect(harness.calls.length).toBe(3);
+  expect(
+    records.filter(
+      (r) => r.slug === "task" && r.step === "merge" && r.ok === false,
+    ).length,
+  ).toBe(2);
+  expect(
+    records.filter((r) => r.slug === "task" && r.step === "merge-checks")
+      .length,
+  ).toBe(2);
+  expect(
+    records.filter((r) => r.slug === "task" && r.step === "review"),
+  ).toEqual([]);
+}
+
+function registerFixRoundFollowUpModesPart1(): void {
   it("same-session resumes the session compacted at the end of its turn", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -358,7 +490,9 @@ describe("fix-round follow-up modes", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerFixRoundFollowUpModesPart2(): void {
   it("de-novo starts the fix turn without the previous session", async () => {
     const { repo, goal } = setupFlowRepo({
       process: followUpFlow({ mode: "de-novo" }),
@@ -374,7 +508,9 @@ describe("fix-round follow-up modes", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerFixRoundFollowUpModesPart3(): void {
   it("different-model runs the fix turn on another alias without a session", async () => {
     const { repo, goal } = setupFlowRepo({
       process: followUpFlow({
@@ -404,7 +540,9 @@ describe("fix-round follow-up modes", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerFixRoundFollowUpModesPart4(): void {
   it("different-model keepSession resumes the same-harness compacted transcript", async () => {
     const { repo, goal } = setupFlowRepo({
       process: followUpFlow({
@@ -447,7 +585,9 @@ describe("fix-round follow-up modes", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerFixRoundFollowUpModesPart5(): void {
   it("honours followUp per step: the review switch leaves the fix on its alias", async () => {
     const { repo, goal } = setupFlowRepo({
       process: followUpFlow(undefined, {
@@ -490,9 +630,9 @@ describe("fix-round follow-up modes", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
-});
+}
 
-describe("worktree setup", () => {
+function registerWorktreeSetupPart1(): void {
   it("runs the setup step in a fresh worktree before gates", async () => {
     const { repo, goal } = setupFlowRepo({
       setup: ["printf ready > dependency.txt"],
@@ -536,7 +676,9 @@ describe("worktree setup", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerWorktreeSetupPart2(): void {
   it("parks a failed setup with the task's architect", async () => {
     const { repo, goal } = setupFlowRepo({ setup: ["false"] });
     try {
@@ -559,82 +701,4 @@ describe("worktree setup", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
-});
-
-describe("checks step bound and last call", () => {
-  it("honors checks step changeRequests: 1 by rendering last call on the 2nd fix turn and parking on 2nd failure", async () => {
-    const { repo, goal } = setupFlowRepo({
-      gates: [{ id: "unit", command: "test ! -f broken.txt" }],
-    });
-    try {
-      const processYaml = [
-        "flows:",
-        "  implement-review:",
-        "    steps:",
-        "      - id: implement",
-        "        prompt: implementer",
-        "        alias: implementer",
-        "      - id: checks",
-        "        changeRequests: 1",
-        "      - id: review",
-        "        prompt: reviewer",
-        "        alias: reviewer",
-        "        review: true",
-        "",
-      ].join("\n");
-      repo.writeFile(".factory/process.yaml", processYaml);
-
-      const harness = new FakeHarness({ id: "fake" });
-      const prompts: string[] = [];
-
-      // Initial turn creates broken.txt
-      harness.script((req, ctx) => {
-        prompts.push(req.prompt ?? "");
-        fs.writeFileSync(path.join(req.cwd!, "broken.txt"), "bad\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "wrote broken" }));
-        return fakeTurnResult(req);
-      });
-      // Fix 1
-      harness.script((req, ctx) => {
-        prompts.push(req.prompt ?? "");
-        fs.writeFileSync(path.join(req.cwd!, "fix-1.txt"), "f1\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "fix 1" }));
-        return fakeTurnResult(req);
-      });
-      // Fix 2 (last call)
-      harness.script((req, ctx) => {
-        prompts.push(req.prompt ?? "");
-        fs.writeFileSync(path.join(req.cwd!, "fix-2.txt"), "f2\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "fix 2" }));
-        return fakeTurnResult(req);
-      });
-      scriptStallLeave(harness, ["task"]);
-
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(
-        runtime,
-        task("task", { scope: ["broken.txt", "fix-1.txt", "fix-2.txt"] }),
-      );
-
-      const result = await runDispatch(runtime, { iteration: 1 });
-      expect(result.reason).toBe("boundary");
-
-      const records = await runtime.store.listRecords();
-      const state = derive(
-        await runtime.store.listTasks(),
-        records,
-        runtime.configs.process.flows,
-      );
-
-      expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toEqual(cause("gates: unit"));
-
-      // Initial + Fix 1 + Fix 2 = 3 turns
-      expect(prompts).toHaveLength(3);
-      expect(prompts[1]).not.toContain(GATE_LAST_CALL_TEXT);
-      expect(prompts[2]).toContain(GATE_LAST_CALL_TEXT);
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 60_000);
-});
+}

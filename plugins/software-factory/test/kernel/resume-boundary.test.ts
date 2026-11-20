@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -70,87 +69,8 @@ async function deltaI5Goal(liveFinding: boolean): Promise<{
   taskDir: string;
   store: ReturnType<typeof createFolderStore>;
 }> {
-  const s = setupRepo();
-  writeFile(
-    s.goalDir,
-    "plan.md",
-    "# Plan\n\n## alpha\nCreate alpha.\n\n## beta\nCreate beta.\n",
-  );
-  const writeTask = (slug: string, opts: Parameters<typeof taskText>[1]) =>
-    writeFile(s.taskDir, `${slug}.md`, taskText(slug, opts));
-  // Frozen history: both continuations are terminal, their bases cancelled.
-  writeTask("handoff-log", {});
-  writeTask("handoff-land", { base: "handoff-log" });
-  writeTask("kept-live", {});
-  writeTask("kept-land-fix", { base: "kept-live" });
-  writeTask("metrics-attrib", {});
-  writeTask("metrics-attrib-land", { base: "metrics-attrib" });
-  writeTask("alpha", {});
-  if (liveFinding) {
-    writeTask("gone", {});
-    writeTask("gamma", {});
-    writeTask("beta", { base: "gone", deps: ["gamma"] });
-  }
-
-  const store = createFolderStore(s.goalDir, undefined, {});
-  const script = (
-    iteration: number,
-    step: string,
-    slug: string,
-    ok: boolean,
-    cause?: Cause,
-  ) =>
-    store.appendRecord(
-      { iteration, step, round: 1, actor: "script", slug },
-      ok ? { ok } : { ok, cause },
-    );
-  const architect = (iteration: number, summary: string) =>
-    store.appendRecord(
-      { iteration, step: "architect", round: 1, actor: "agent" },
-      {
-        ok: true,
-        outcome: outcome({ summary, decision: "continue" }) as Outcome,
-      },
-    );
-
-  await architect(1, "iteration one boundary");
-  await script(
-    1,
-    "cancel",
-    "handoff-log",
-    false,
-    cause("landed as handoff-land"),
-  );
-  await script(1, "merge", "handoff-land", true);
-  await script(
-    1,
-    "cancel",
-    "kept-live",
-    false,
-    cause("replaced by kept-land-fix"),
-  );
-  await script(
-    1,
-    "park",
-    "kept-land-fix",
-    false,
-    cause("kept for a later base"),
-  );
-  await script(
-    1,
-    "cancel",
-    "metrics-attrib",
-    false,
-    cause("landed as metrics-attrib-land"),
-  );
-  await script(1, "merge", "metrics-attrib-land", true);
-  if (liveFinding) {
-    await script(1, "cancel", "gone", false, cause("spent"));
-    await script(1, "park", "gamma", false, cause("needs the base ruling"));
-  }
-  // The interrupted iteration opened with a boundary and died before dispatch.
-  await architect(2, "iteration two boundary");
-  return { ...s, store };
+  const scope1 = await deltaI5GoalPart1(liveFinding);
+  return await deltaI5GoalPart2(liveFinding, scope1);
 }
 
 /** Routes the resume's digest steer to a spike, with the task it created. */
@@ -222,65 +142,13 @@ describe("resume boundary — architect routing has an outlet", () => {
     const { repo, goalDir, taskDir, store } = await deltaI5Goal(false);
     const restoreWarn = silenceWarn();
     try {
-      const harness = new FakeHarness({ id: "fake" });
-      queueDigestSteer(harness, digestSpikeTurn(taskDir));
-      harness.script(digestScoutTurn(goalDir, 2), {
-        when: whenTurn({ step: "digest" }),
-      });
-      scriptTaskTurns(harness, "alpha", writesTaskFile("alpha", "alpha.txt"));
-      scriptTaskTurns(
-        harness,
-        "digest-spike",
-        writesSpikeReport("digest-spike"),
+      const scope1 = await variantCleanFrozenBaseResumePart1(
+        taskDir,
+        goalDir,
+        repo,
+        store,
       );
-      // The resumed pass started task turns but its plan-check summons the
-      // architect, so the pass is refunded and the closing boundary runs next.
-      harness.script(
-        (req, ctx) => {
-          ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ step: "architect" }) },
-      );
-
-      await expectDispatch(
-        0,
-        ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
-        { harnesses: { fake: harness } },
-      );
-
-      const records = await store.listRecords();
-      const state = derive(await store.listTasks(), records);
-      // The frozen-base history stays history; the live ready work dispatched.
-      expect(state.goal).toBe("done");
-      expect(state.tasks["handoff-land"]!.status).toBe("merged");
-      expect(state.tasks["kept-land-fix"]!.status).toBe("parked");
-      expect(state.tasks["metrics-attrib-land"]!.status).toBe("merged");
-      expect(state.tasks.alpha!.status).toBe("merged");
-      expect(state.tasks["digest-spike"]!.status).toBe("finished");
-      expect(
-        records.filter(
-          (r) =>
-            r.actor === "agent" && r.slug !== undefined && r.iteration === 2,
-        ).length,
-      ).toBeGreaterThan(0);
-      // No boundary ran on the clean resume: only the seeded iteration-two
-      // architect record exists.
-      expect(
-        records.filter(
-          (r) =>
-            r.actor === "agent" && r.step === "architect" && r.iteration === 2,
-        ),
-      ).toHaveLength(1);
-      expect(records.filter((r) => r.step === "pm-validate")).toHaveLength(0);
-      expect(
-        records.some((r) =>
-          (r.outcome?.steerRoutes ?? []).some(
-            (entry) =>
-              entry.steer.startsWith("digest-2-") && entry.route === "spike",
-          ),
-        ),
-      ).toBe(true);
+      await variantCleanFrozenBaseResumePart2(scope1);
     } finally {
       restoreWarn();
       repo.cleanup();
@@ -291,84 +159,259 @@ describe("resume boundary — architect routing has an outlet", () => {
     const { repo, goalDir, taskDir, store } = await deltaI5Goal(true);
     const restoreWarn = silenceWarn();
     try {
-      const harness = new FakeHarness({ id: "fake" });
-      queueDigestSteer(harness, digestSpikeTurn(taskDir));
-      harness.script(digestScoutTurn(goalDir, 2), {
-        when: whenTurn({ step: "digest" }),
-      });
-      // The boundary the architect route/finding summons: the architect rules
-      // and edits the plan, then the derive ladder reports the same finding.
-      harness.script(
-        (req, ctx) => {
-          fs.appendFileSync(
-            path.join(goalDir, "plan.md"),
-            `\n## Ruling\n\n${RULING}\n`,
-            "utf8",
-          );
-          ctx.writeOutcome(outcome({ summary: RULING, decision: "continue" }));
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ step: "architect" }) },
+      const scope1 = await variantBUnderivableLiveFindingRunsPart1(
+        taskDir,
+        goalDir,
+        repo,
+        store,
       );
-      harness.script(
-        (req, ctx) => {
-          ctx.writeOutcome(outcome({ summary: "nothing to file" }));
-          return fakeTurnResult(req);
-        },
-        {
-          when: (req) =>
-            whenTurn({ step: "pm" })(req) &&
-            req.prompt.includes("pending steers: `none`") &&
-            req.prompt.includes("stalled parks: `none`"),
-        },
-      );
-      scriptTaskTurns(harness, "alpha", writesTaskFile("alpha", "alpha.txt"));
-      scriptTaskTurns(
-        harness,
-        "digest-spike",
-        writesSpikeReport("digest-spike"),
-      );
-
-      await expectDispatch(
-        3,
-        ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
-        { harnesses: { fake: harness } },
-      );
-
-      const records = await store.listRecords();
-      // The resumed iteration ran the boundary and the architect's ruling is
-      // on the record, beside the interrupted iteration's own opening turn.
-      expect(
-        records
-          .filter(
-            (r) =>
-              r.actor === "agent" &&
-              r.step === "architect" &&
-              r.iteration === 2,
-          )
-          .map((r) => r.outcome?.summary),
-      ).toContain(RULING);
-      // The PM ladder reported the pre-existing finding instead of spending
-      // rungs on it: no rung failure, and the boundary recorded its cause.
-      expect(records.filter((r) => r.step === "pm-validate")).toHaveLength(0);
-      expect(await store.readFile("iterations/2/summary.md")).toContain(
-        "PM ladder routed to the architect",
-      );
-      expect(await store.readFile("iterations/2/summary.md")).toContain(
-        'task "beta" continues "gone", which is cancelled',
-      );
-      // A resume that only ruled counts as the pass's progress: with one pass
-      // of budget the launch does not refund it and consult a third iteration.
-      expect(await store.readFile("iterations/3/summary.md")).toBeNull();
-      expect(
-        records.filter(
-          (r) =>
-            r.actor === "agent" && r.step === "architect" && r.iteration === 3,
-        ),
-      ).toHaveLength(0);
+      await variantBUnderivableLiveFindingRunsPart2(store, scope1);
     } finally {
       restoreWarn();
       repo.cleanup();
     }
   }, 120_000);
 });
+
+async function variantCleanFrozenBaseResumePart1(
+  taskDir: string,
+  goalDir: string,
+  repo: Awaited<ReturnType<typeof deltaI5Goal>>["repo"],
+  store: Awaited<ReturnType<typeof deltaI5Goal>>["store"],
+) {
+  const harness = new FakeHarness({ id: "fake" });
+  queueDigestSteer(harness, digestSpikeTurn(taskDir));
+  harness.script(digestScoutTurn(goalDir, 2), {
+    when: whenTurn({ step: "digest" }),
+  });
+  scriptTaskTurns(harness, "alpha", writesTaskFile("alpha", "alpha.txt"));
+  scriptTaskTurns(harness, "digest-spike", writesSpikeReport("digest-spike"));
+  // The resumed pass started task turns but its plan-check summons the
+  // architect, so the pass is refunded and the closing boundary runs next.
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "architect" }) },
+  );
+
+  await expectDispatch(
+    0,
+    ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
+    { harnesses: { fake: harness } },
+  );
+
+  const records = await store.listRecords();
+  const state = derive(await store.listTasks(), records);
+  // The frozen-base history stays history; the live ready work dispatched.
+  expect(state.goal).toBe("done");
+  expect(state.tasks["handoff-land"]!.status).toBe("merged");
+  expect(state.tasks["kept-land-fix"]!.status).toBe("parked");
+  expect(state.tasks["metrics-attrib-land"]!.status).toBe("merged");
+  expect(state.tasks.alpha!.status).toBe("merged");
+  expect(state.tasks["digest-spike"]!.status).toBe("finished");
+  expect(
+    records.filter(
+      (r) => r.actor === "agent" && r.slug !== undefined && r.iteration === 2,
+    ).length,
+  ).toBeGreaterThan(0);
+
+  return { records };
+}
+
+async function variantCleanFrozenBaseResumePart2(
+  scope: Awaited<ReturnType<typeof variantCleanFrozenBaseResumePart1>>,
+) {
+  const { records } = scope;
+  expect(
+    records.filter(
+      (r) => r.actor === "agent" && r.step === "architect" && r.iteration === 2,
+    ),
+  ).toHaveLength(1);
+  expect(records.filter((r) => r.step === "pm-validate")).toHaveLength(0);
+  expect(
+    records.some((r) =>
+      (r.outcome?.steerRoutes ?? []).some(
+        (entry) =>
+          entry.steer.startsWith("digest-2-") && entry.route === "spike",
+      ),
+    ),
+  ).toBe(true);
+}
+
+async function variantBUnderivableLiveFindingRunsPart1(
+  taskDir: string,
+  goalDir: string,
+  repo: Awaited<ReturnType<typeof deltaI5Goal>>["repo"],
+  store: Awaited<ReturnType<typeof deltaI5Goal>>["store"],
+) {
+  const harness = new FakeHarness({ id: "fake" });
+  queueDigestSteer(harness, digestSpikeTurn(taskDir));
+  harness.script(digestScoutTurn(goalDir, 2), {
+    when: whenTurn({ step: "digest" }),
+  });
+  // The boundary the architect route/finding summons: the architect rules
+  // and edits the plan, then the derive ladder reports the same finding.
+  harness.script(
+    (req, ctx) => {
+      fs.appendFileSync(
+        path.join(goalDir, "plan.md"),
+        `\n## Ruling\n\n${RULING}\n`,
+        "utf8",
+      );
+      ctx.writeOutcome(outcome({ summary: RULING, decision: "continue" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "architect" }) },
+  );
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(outcome({ summary: "nothing to file" }));
+      return fakeTurnResult(req);
+    },
+    {
+      when: (req) =>
+        whenTurn({ step: "pm" })(req) &&
+        req.prompt.includes("pending steers: `none`") &&
+        req.prompt.includes("stalled parks: `none`"),
+    },
+  );
+  scriptTaskTurns(harness, "alpha", writesTaskFile("alpha", "alpha.txt"));
+  scriptTaskTurns(harness, "digest-spike", writesSpikeReport("digest-spike"));
+
+  await expectDispatch(
+    3,
+    ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "1"],
+    { harnesses: { fake: harness } },
+  );
+
+  const records = await store.listRecords();
+
+  return { records };
+}
+
+async function variantBUnderivableLiveFindingRunsPart2(
+  store: Awaited<ReturnType<typeof deltaI5Goal>>["store"],
+  scope: Awaited<ReturnType<typeof variantBUnderivableLiveFindingRunsPart1>>,
+) {
+  const { records } = scope;
+  expect(
+    records
+      .filter(
+        (r) =>
+          r.actor === "agent" && r.step === "architect" && r.iteration === 2,
+      )
+      .map((r) => r.outcome?.summary),
+  ).toContain(RULING);
+  // The PM ladder reported the pre-existing finding instead of spending
+  // rungs on it: no rung failure, and the boundary recorded its cause.
+  expect(records.filter((r) => r.step === "pm-validate")).toHaveLength(0);
+  expect(await store.readFile("iterations/2/summary.md")).toContain(
+    "PM ladder routed to the architect",
+  );
+  expect(await store.readFile("iterations/2/summary.md")).toContain(
+    'task "beta" continues "gone", which is cancelled',
+  );
+  // A resume that only ruled counts as the pass's progress: with one pass
+  // of budget the launch does not refund it and consult a third iteration.
+  expect(await store.readFile("iterations/3/summary.md")).toBeNull();
+  expect(
+    records.filter(
+      (r) => r.actor === "agent" && r.step === "architect" && r.iteration === 3,
+    ),
+  ).toHaveLength(0);
+}
+
+async function deltaI5GoalPart1(liveFinding: boolean) {
+  const s = setupRepo();
+  writeFile(
+    s.goalDir,
+    "plan.md",
+    "# Plan\n\n## alpha\nCreate alpha.\n\n## beta\nCreate beta.\n",
+  );
+  const writeTask = (slug: string, opts: Parameters<typeof taskText>[1]) =>
+    writeFile(s.taskDir, `${slug}.md`, taskText(slug, opts));
+  // Frozen history: both continuations are terminal, their bases cancelled.
+  writeTask("handoff-log", {});
+  writeTask("handoff-land", { base: "handoff-log" });
+  writeTask("kept-live", {});
+  writeTask("kept-land-fix", { base: "kept-live" });
+  writeTask("metrics-attrib", {});
+  writeTask("metrics-attrib-land", { base: "metrics-attrib" });
+  writeTask("alpha", {});
+  if (liveFinding) {
+    writeTask("gone", {});
+    writeTask("gamma", {});
+    writeTask("beta", { base: "gone", deps: ["gamma"] });
+  }
+
+  const store = createFolderStore(s.goalDir, undefined, {});
+  const script = (
+    iteration: number,
+    step: string,
+    slug: string,
+    ok: boolean,
+    cause?: Cause,
+  ) =>
+    store.appendRecord(
+      { iteration, step, round: 1, actor: "script", slug },
+      ok ? { ok } : { ok, cause },
+    );
+  const architect = (iteration: number, summary: string) =>
+    store.appendRecord(
+      { iteration, step: "architect", round: 1, actor: "agent" },
+      {
+        ok: true,
+        outcome: outcome({ summary, decision: "continue" }) as Outcome,
+      },
+    );
+
+  await architect(1, "iteration one boundary");
+
+  return { s, store, script, architect };
+}
+
+async function deltaI5GoalPart2(
+  liveFinding: boolean,
+  scope: Awaited<ReturnType<typeof deltaI5GoalPart1>>,
+) {
+  const { script, architect, s, store } = scope;
+  await script(
+    1,
+    "cancel",
+    "handoff-log",
+    false,
+    cause("landed as handoff-land"),
+  );
+  await script(1, "merge", "handoff-land", true);
+  await script(
+    1,
+    "cancel",
+    "kept-live",
+    false,
+    cause("replaced by kept-land-fix"),
+  );
+  await script(
+    1,
+    "park",
+    "kept-land-fix",
+    false,
+    cause("kept for a later base"),
+  );
+  await script(
+    1,
+    "cancel",
+    "metrics-attrib",
+    false,
+    cause("landed as metrics-attrib-land"),
+  );
+  await script(1, "merge", "metrics-attrib-land", true);
+  if (liveFinding) {
+    await script(1, "cancel", "gone", false, cause("spent"));
+    await script(1, "park", "gamma", false, cause("needs the base ruling"));
+  }
+  // The interrupted iteration opened with a boundary and died before dispatch.
+  await architect(2, "iteration two boundary");
+  return { ...s, store };
+}

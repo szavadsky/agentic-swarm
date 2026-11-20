@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -229,6 +228,12 @@ describe("OmpHarness crash details", () => {
 });
 
 describe("AcpxHarness opencode raw route crash details", () => {
+  acpxHarnessOpencodeRawRouteCrashPart1();
+  acpxHarnessOpencodeRawRouteCrashPart2();
+  acpxHarnessOpencodeRawRouteCrashPart3();
+});
+
+function acpxHarnessOpencodeRawRouteCrashPart1() {
   it("carries the errno when the binary is missing", async () => {
     const dir = tempDir("oc-missing-");
     try {
@@ -273,7 +278,9 @@ describe("AcpxHarness opencode raw route crash details", () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   }, 20_000);
+}
 
+function acpxHarnessOpencodeRawRouteCrashPart2() {
   it("records the exit code when the prompt writes only the banner", async () => {
     const dir = tempDir("oc-banner-");
     try {
@@ -313,7 +320,9 @@ describe("AcpxHarness opencode raw route crash details", () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   }, 20_000);
+}
 
+function acpxHarnessOpencodeRawRouteCrashPart3() {
   it("keeps the tail of very long stderr", async () => {
     const dir = tempDir("oc-long-");
     try {
@@ -334,4 +343,4 @@ describe("AcpxHarness opencode raw route crash details", () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   }, 20_000);
-});
+}

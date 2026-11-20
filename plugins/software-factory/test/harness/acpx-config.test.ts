@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -43,6 +42,13 @@ function probe(
 }
 
 describe("harness binary resolution", () => {
+  harnessBinaryResolutionPart1();
+  harnessBinaryResolutionPart2();
+  harnessBinaryResolutionPart3();
+  harnessBinaryResolutionPart4();
+});
+
+function harnessBinaryResolutionPart1() {
   it("takes the configured acpx path over PATH", () => {
     const dir = tmpDir();
     try {
@@ -86,7 +92,9 @@ console.log(JSON.stringify(resolveAcpxCommand()));`,
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+}
 
+function harnessBinaryResolutionPart2() {
   it("resolves each harness from its config override, then PATH", () => {
     const dir = tmpDir();
     try {
@@ -128,7 +136,9 @@ console.log(JSON.stringify(resolveHarnessBinaries().omp));`,
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+}
 
+function harnessBinaryResolutionPart3() {
   it("reads per-harness binary overrides from the run config", () => {
     const root = tmpDir();
     try {
@@ -154,7 +164,9 @@ console.log(JSON.stringify(resolveHarnessBinaries().omp));`,
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function harnessBinaryResolutionPart4() {
   it("rejects a harness entry that neither binds an adapter nor a binary", () => {
     const root = tmpDir();
     try {
@@ -178,4 +190,4 @@ console.log(JSON.stringify(resolveHarnessBinaries().omp));`,
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
-});
+}

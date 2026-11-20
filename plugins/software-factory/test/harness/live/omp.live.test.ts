@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -43,85 +42,107 @@ live("omp harness live smoke", () => {
 
     const started = Date.now();
     try {
-      const caps = await harness.caps(PARENT);
-      expect(caps.effort).toContain("low");
-      expect(caps.compact).toBe("server");
-      expect(caps.usage).toEqual({ cache: true, cost: true });
-
-      const first = await harness.turn({
-        model: PARENT,
+      const scope1 = await twoTurnResumeOutcomeOutsideCwdPart1(
+        harness,
         cwd,
-        prompt: `Remember the secret word ALPHA. Write the exact text DONE into the file ${outcomePath} and reply with exactly: ONE`,
-        timeouts: TIMEOUTS,
-      });
-      expect(first.stop).toEqual({ kind: "done" });
-      expect(first.text.trim()).toContain("ONE");
-      expect(fs.readFileSync(outcomePath, "utf8").trim()).toBe("DONE");
-      expect(first.session?.id).toBeTruthy();
-      expect(first.model.id).toBe(PARENT.id);
-      expect(first.usage.in).toBeGreaterThan(0);
-      expect(first.transcript && fs.existsSync(first.transcript)).toBe(true);
-
-      const second = await harness.turn({
-        model: PARENT,
-        cwd,
-        prompt: "What was the secret word? Reply with the word only.",
-        session: first.session,
-        timeouts: TIMEOUTS,
-      });
-      expect(second.stop).toEqual({ kind: "done" });
-      expect(second.text.trim()).toContain("ALPHA");
-      expect(second.session?.id).toBe(first.session!.id);
-
-      const compacted = await harness.compact(second.session!);
-      expect(compacted.session.compacted).toBe(true);
-
-      const spawned = await harness.turn({
-        model: PARENT,
-        cwd,
-        prompt:
-          'Use the task tool to spawn one subagent with agent "scout" and this task: "Reply with exactly SUBAGENT_OK and nothing else." Then reply with the subagent\'s exact answer. Do not use bash.',
-        session: second.session,
-        timeouts: TIMEOUTS,
-      });
-      expect(spawned.stop).toEqual({ kind: "done" });
-      expect(spawned.text).toContain("SUBAGENT_OK");
-
-      const sessionsDir = path.join(root, "sessions", "omp", "sessions");
-      const changes = jsonlFiles(sessionsDir)
-        .flatMap((file) =>
-          fs
-            .readFileSync(file, "utf8")
-            .split("\n")
-            .filter((line) => line.includes('"type":"model_change"'))
-            .map((line) => JSON.parse(line)),
-        )
-        .filter((entry) => String(entry.role ?? "").startsWith("subagent:"));
-      expect(changes.length).toBeGreaterThan(0);
-      expect(
-        changes.some((entry) =>
-          String(entry.model).includes("longcat-2.5-free"),
-        ),
-      ).toBe(true);
-      console.log(
-        "omp live",
-        JSON.stringify({
-          wallMs: Date.now() - started,
-          caps: caps.effort,
-          turn1: {
-            model: first.model,
-            usage: first.usage,
-            transcript: first.transcript,
-          },
-          turn2: { model: second.model, usage: second.usage },
-          subagentTurn: {
-            usage: spawned.usage,
-            childModels: changes.map((c) => c.model),
-          },
-        }),
+        outcomePath,
+        root,
       );
+      await twoTurnResumeOutcomeOutsideCwdPart2(started, scope1);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
   }, 600_000);
 });
+
+async function twoTurnResumeOutcomeOutsideCwdPart1(
+  harness: OmpHarness,
+  cwd: string,
+  outcomePath: string,
+  root: string,
+) {
+  const caps = await harness.caps(PARENT);
+  expect(caps.effort).toContain("low");
+  expect(caps.compact).toBe("server");
+  expect(caps.usage).toEqual({ cache: true, cost: true });
+
+  const first = await harness.turn({
+    model: PARENT,
+    cwd,
+    prompt: `Remember the secret word ALPHA. Write the exact text DONE into the file ${outcomePath} and reply with exactly: ONE`,
+    timeouts: TIMEOUTS,
+  });
+  expect(first.stop).toEqual({ kind: "done" });
+  expect(first.text.trim()).toContain("ONE");
+  expect(fs.readFileSync(outcomePath, "utf8").trim()).toBe("DONE");
+  expect(first.session?.id).toBeTruthy();
+  expect(first.model.id).toBe(PARENT.id);
+  expect(first.usage.in).toBeGreaterThan(0);
+  expect(first.transcript && fs.existsSync(first.transcript)).toBe(true);
+
+  const second = await harness.turn({
+    model: PARENT,
+    cwd,
+    prompt: "What was the secret word? Reply with the word only.",
+    session: first.session,
+    timeouts: TIMEOUTS,
+  });
+  expect(second.stop).toEqual({ kind: "done" });
+  expect(second.text.trim()).toContain("ALPHA");
+  expect(second.session?.id).toBe(first.session!.id);
+
+  const compacted = await harness.compact(second.session!);
+  expect(compacted.session.compacted).toBe(true);
+
+  const spawned = await harness.turn({
+    model: PARENT,
+    cwd,
+    prompt:
+      'Use the task tool to spawn one subagent with agent "scout" and this task: "Reply with exactly SUBAGENT_OK and nothing else." Then reply with the subagent\'s exact answer. Do not use bash.',
+    session: second.session,
+    timeouts: TIMEOUTS,
+  });
+  expect(spawned.stop).toEqual({ kind: "done" });
+  expect(spawned.text).toContain("SUBAGENT_OK");
+
+  const sessionsDir = path.join(root, "sessions", "omp", "sessions");
+
+  return { caps, first, second, spawned, sessionsDir };
+}
+
+async function twoTurnResumeOutcomeOutsideCwdPart2(
+  started: number,
+  scope: Awaited<ReturnType<typeof twoTurnResumeOutcomeOutsideCwdPart1>>,
+) {
+  const { sessionsDir, caps, first, second, spawned } = scope;
+  const changes = jsonlFiles(sessionsDir)
+    .flatMap((file) =>
+      fs
+        .readFileSync(file, "utf8")
+        .split("\n")
+        .filter((line) => line.includes('"type":"model_change"'))
+        .map((line) => JSON.parse(line)),
+    )
+    .filter((entry) => String(entry.role ?? "").startsWith("subagent:"));
+  expect(changes.length).toBeGreaterThan(0);
+  expect(
+    changes.some((entry) => String(entry.model).includes("longcat-2.5-free")),
+  ).toBe(true);
+  console.log(
+    "omp live",
+    JSON.stringify({
+      wallMs: Date.now() - started,
+      caps: caps.effort,
+      turn1: {
+        model: first.model,
+        usage: first.usage,
+        transcript: first.transcript,
+      },
+      turn2: { model: second.model, usage: second.usage },
+      subagentTurn: {
+        usage: spawned.usage,
+        childModels: changes.map((c) => c.model),
+      },
+    }),
+  );
+}

@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -149,10 +148,10 @@ function start(over: Partial<RecordStart> = {}): RecordStart {
   };
 }
 
-describe("record index", () => {
-  let goalDir: string;
-  let recordsDir: string;
+let goalDir: string;
+let recordsDir: string;
 
+describe("record index", () => {
   beforeEach(() => {
     goalDir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-index-"));
     recordsDir = path.join(goalDir, "records");
@@ -161,7 +160,11 @@ describe("record index", () => {
   afterEach(() => {
     fs.rmSync(goalDir, { recursive: true, force: true });
   });
+  registerRecordIndexPart1();
+  registerRecordIndexPart2();
+});
 
+function registerRecordIndexPart1(): void {
   it("reads 5,000 sealed records once and derives the same state from cache", async () => {
     const expected = seed(recordsDir);
     const store = createFolderStore(goalDir, undefined, {});
@@ -204,7 +207,9 @@ describe("record index", () => {
       reads.restore();
     }
   }, 60_000);
+}
 
+function registerRecordIndexPart2(): void {
   it("does not cache a record before its end is sealed", async () => {
     const store = createFolderStore(goalDir, undefined, {});
     const turn = await store.startRecord(start());
@@ -234,4 +239,4 @@ describe("record index", () => {
     const [record] = await store.listRecords();
     expect(record!.outcome).toEqual(rewritten);
   });
-});
+}

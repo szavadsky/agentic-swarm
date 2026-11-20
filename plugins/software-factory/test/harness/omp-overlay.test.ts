@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -21,6 +20,12 @@ const POLICY = {
 } as const;
 
 describe("omp overlay", () => {
+  ompOverlayPart1();
+  ompOverlayPart2();
+  ompOverlayPart3();
+});
+
+function ompOverlayPart1() {
   it("passes the harness entry's options through untouched", () => {
     const overlay = ompOverlay({ options: { ...POLICY } });
     for (const [key, value] of Object.entries(POLICY)) {
@@ -65,7 +70,9 @@ describe("omp overlay", () => {
       expect(overrides[agent]).toBe("opencode-go/longcat-2.5-free");
     }
   });
+}
 
+function ompOverlayPart2() {
   it("leaves the caller's options unchanged when retention overrides the provider block", () => {
     const options = { providers: { cacheRetention: "long" } };
     const overlay = ompOverlay({ options, retention: "short" });
@@ -111,7 +118,9 @@ describe("omp overlay", () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
+}
 
+function ompOverlayPart3() {
   it("writes cacheRetention short from a runtime built without a retention", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-overlay-"));
     try {
@@ -145,4 +154,4 @@ describe("omp overlay", () => {
       ompOverlay({ options: { providers: "invalid" as any } }),
     ).toThrow(/Invalid "providers" option: expected object, got string/);
   });
-});
+}

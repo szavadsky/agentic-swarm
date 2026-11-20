@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { runAgentTurn } from "./agent.js";
 import { makeCause } from "./cause.js";
 import {
@@ -8,6 +7,13 @@ import {
 } from "./context-pack.js";
 import { architectureTarget } from "./flow-context.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
+import type { PlanFile } from "./plan-file.js";
+import {
+  type PlanReviewRound,
+  validatePlanReturnDelivery,
+  validatePlanReviewDelivery,
+  validatePlanReviewMarks,
+} from "./plan-review-interface.js";
 import {
   restorePlans,
   restoreTasks,
@@ -15,7 +21,6 @@ import {
   snapshotTurn,
   type TurnSnapshot,
 } from "./pm.js";
-import { type PlanFile } from "./plan-file.js";
 import { outcomeRepairSchemaVar } from "./prompt-schema.js";
 import { scriptMeta } from "./record.js";
 import { MAIN_ARCHITECT } from "./tasks.js";
@@ -25,10 +30,16 @@ import {
   type KernelRuntime,
   type Outcome,
   type PlanReviewFinding,
-  type PlanReviewMark,
   type PlanReviewOutcome,
   type StepRecord,
 } from "./types.js";
+
+export {
+  type PlanReviewRound,
+  validatePlanReturnDelivery,
+  validatePlanReviewDelivery,
+  validatePlanReviewMarks,
+};
 
 /** Agent step of a plan-review turn; slug-less, so it stays out of the item's turn count. */
 export const PLAN_REVIEW_STEP = ARCHITECTURE_STEPS[0];
@@ -53,83 +64,6 @@ function planSet(runtime: KernelRuntime, target: PlanFile): PlanFile[] {
 }
 
 /** The reviewers that delivered findings, and what they found. */
-export interface PlanReviewRound {
-  /** Undefined when no reviewer delivered a findings outcome. */
-  findings: PlanReviewOutcome | undefined;
-  /** The aliases that delivered a valid findings outcome, in run order. */
-  reviewers: string[];
-}
-
-/**
- * A completed plan review delivers findings, not a verdict: a bare done hides
- * the technical concerns the architect must see before the PM.
- */
-export function validatePlanReviewDelivery(outcome: Outcome): string[] {
-  if (outcome.status !== "done") return [];
-  const findings: string[] = [];
-  if (outcome.verdict !== undefined) {
-    findings.push(
-      "a plan review has no verdict: deliver `planReview` findings instead",
-    );
-  }
-  if (!outcome.planReview) {
-    findings.push(
-      "planReview is required on a completed plan review: {technical: [], planNotes: []} when the plan has no findings",
-    );
-  }
-  return findings;
-}
-
-/**
- * The architect answers every finding the review delivered: one mark per
- * number 1..N, no duplicate and no number outside the review. A return turn
- * takes no goal decision and no verdict; the consult already decided.
- */
-export function validatePlanReturnDelivery(
-  findings: PlanReviewOutcome,
-  outcome: Outcome,
-): string[] {
-  if (outcome.status !== "done") return [];
-  const problems: string[] = [];
-  if (outcome.decision !== undefined) {
-    problems.push(
-      "a plan-review return takes no decision: the consult already decided continue",
-    );
-  }
-  if (outcome.verdict !== undefined) {
-    problems.push("a plan-review return takes no verdict");
-  }
-  problems.push(...validatePlanReviewMarks(findings, outcome.planReviewMarks));
-  return problems;
-}
-
-/** Every finding marked exactly once, within 1..N. */
-export function validatePlanReviewMarks(
-  findings: PlanReviewOutcome,
-  marks: readonly PlanReviewMark[] | undefined,
-): string[] {
-  const total = findings.technical.length + findings.planNotes.length;
-  const problems: string[] = [];
-  const seen = new Set<number>();
-  for (const mark of marks ?? []) {
-    if (mark.finding < 1 || mark.finding > total) {
-      problems.push(
-        `planReviewMarks: finding ${mark.finding} is outside 1..${total}`,
-      );
-    } else if (seen.has(mark.finding)) {
-      problems.push(`planReviewMarks: finding ${mark.finding} is marked twice`);
-    } else {
-      seen.add(mark.finding);
-    }
-  }
-  for (let number = 1; number <= total; number++) {
-    if (!seen.has(number)) {
-      problems.push(`planReviewMarks: finding ${number} is unmarked`);
-    }
-  }
-  return problems;
-}
-
 async function recordMissing(
   runtime: KernelRuntime,
   iteration: number,
@@ -142,6 +76,135 @@ async function recordMissing(
   });
 }
 
+/** The inputs of one plan-review round. */
+interface PlanReviewOptions {
+  iteration: number;
+  packRel: string;
+  /** The plan under review: the goal's or one epic's. */
+  plan: PlanFile;
+  /** The architect that owns the plan; absent is the main architect. */
+  architect?: string;
+}
+
+/** One reviewer's findings, or the cause that kept it from delivering. */
+interface ReviewerOutcome {
+  technical: PlanReviewFinding[];
+  planNotes: PlanReviewFinding[];
+  delivered: boolean;
+  missing: Cause | undefined;
+}
+
+/** The template variables one plan reviewer reads. */
+function planReviewVars(
+  runtime: KernelRuntime,
+  opts: PlanReviewOptions,
+  plan: PlanFile,
+  target: ReturnType<typeof architectureTarget>,
+): Record<string, string> {
+  return {
+    iteration: String(opts.iteration),
+    intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
+    plan_path: plan.path,
+    pack_path: runtime.store.pathOf({ area: "goal", rel: opts.packRel }),
+    worktree: runtime.paths.goalCheckout,
+    outcome_schema: outcomeRepairSchemaVar(target.prompt, "any"),
+  };
+}
+
+/** Records a reviewer's writes after restoring them. */
+async function recordReviewerWrites(
+  runtime: KernelRuntime,
+  opts: PlanReviewOptions,
+  alias: string,
+  restored: Awaited<ReturnType<typeof restoreTurn>>,
+): Promise<void> {
+  const touched = [...restored.plans, ...restored.tasks].sort();
+  if (touched.length === 0) return;
+  await runtime.store.appendRecord(
+    scriptMeta(opts.iteration, "plan-review-reconcile", { round: 1 }),
+    {
+      ok: false,
+      cause: makeCause(
+        "invalid-outcome",
+        `plan reviewer ${alias} writes discarded: ${touched.join(", ")}; the reviewer is read-only`,
+      ),
+    },
+  );
+}
+
+/** A reviewer outcome that delivered nothing, with the recorded cause. */
+function reviewerMissing(cause: Cause): ReviewerOutcome {
+  return {
+    technical: [],
+    planNotes: [],
+    delivered: false,
+    missing: cause,
+  };
+}
+
+/** Runs one read-only reviewer over the plan and classifies its delivery. */
+async function runPlanReviewer(
+  runtime: KernelRuntime,
+  opts: PlanReviewOptions,
+  alias: string,
+): Promise<ReviewerOutcome> {
+  const plan = opts.plan;
+  const target = architectureTarget(
+    runtime,
+    "planReview",
+    alias,
+    opts.iteration,
+  );
+  const snapshot = await snapshotTurn(runtime, planSet(runtime, plan));
+  const result = await runAgentTurn(runtime, {
+    target,
+    cwd: runtime.paths.goalCheckout,
+    meta: {
+      iteration: opts.iteration,
+      step: PLAN_REVIEW_STEP,
+      round: 1,
+      ...(opts.architect ? { architect: opts.architect } : {}),
+    },
+    vars: planReviewVars(runtime, opts, plan, target),
+    expectation: KERNEL_TURN_STEPS[PLAN_REVIEW_STEP],
+    validate: validatePlanReviewDelivery,
+  });
+  await recordReviewerWrites(
+    runtime,
+    opts,
+    alias,
+    await restoreTurn(runtime, snapshot),
+  );
+  const stop = result.record.stop;
+  if (stop?.kind === "infra") {
+    return reviewerMissing(
+      makeCause(
+        "infra",
+        `plan review by ${alias} stopped on infrastructure: ${
+          stop.details ? `${stop.cause}: ${stop.details}` : stop.cause
+        }`,
+      ),
+    );
+  }
+  const outcome = result.outcome;
+  if (outcome?.status === "done" && outcome.planReview) {
+    return {
+      technical: outcome.planReview.technical,
+      planNotes: outcome.planReview.planNotes,
+      delivered: true,
+      missing: undefined,
+    };
+  }
+  return reviewerMissing(
+    makeCause(
+      "invalid-outcome",
+      `plan review by ${alias} produced no findings: ${
+        outcome?.summary ?? "no outcome"
+      }`,
+    ),
+  );
+}
+
 /**
  * One read-only review turn per configured reviewer before the PM: fresh
  * session, goal checkout, writes discarded. Findings are advisory; a failed
@@ -150,96 +213,25 @@ async function recordMissing(
  */
 export async function runPlanReview(
   runtime: KernelRuntime,
-  opts: {
-    iteration: number;
-    packRel: string;
-    /** The plan under review: the goal's or one epic's. */
-    plan: PlanFile;
-    /** The architect that owns the plan; absent is the main architect. */
-    architect?: string;
-  },
+  opts: PlanReviewOptions,
 ): Promise<PlanReviewRound> {
-  const plan = opts.plan;
-  const reviewers = runtime.configs.process.architecture.reviewers;
   const technical: PlanReviewFinding[] = [];
   const planNotes: PlanReviewFinding[] = [];
   const delivered: string[] = [];
-  for (const alias of reviewers) {
-    const target = architectureTarget(
-      runtime,
-      "planReview",
-      alias,
-      opts.iteration,
-    );
-    const snapshot = await snapshotTurn(runtime, planSet(runtime, plan));
-    const result = await runAgentTurn(runtime, {
-      target,
-      cwd: runtime.paths.goalCheckout,
-      meta: {
-        iteration: opts.iteration,
-        step: PLAN_REVIEW_STEP,
-        round: 1,
-        ...(opts.architect ? { architect: opts.architect } : {}),
-      },
-      vars: {
-        iteration: String(opts.iteration),
-        intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
-        plan_path: plan.path,
-        pack_path: runtime.store.pathOf({ area: "goal", rel: opts.packRel }),
-        worktree: runtime.paths.goalCheckout,
-        outcome_schema: outcomeRepairSchemaVar(target.prompt, "any"),
-      },
-      expectation: KERNEL_TURN_STEPS[PLAN_REVIEW_STEP],
-      validate: validatePlanReviewDelivery,
-    });
-    const restored = await restoreTurn(runtime, snapshot);
-    const touched = [...restored.plans, ...restored.tasks].sort();
-    if (touched.length > 0) {
-      await runtime.store.appendRecord(
-        scriptMeta(opts.iteration, "plan-review-reconcile", { round: 1 }),
-        {
-          ok: false,
-          cause: makeCause(
-            "invalid-outcome",
-            `plan reviewer ${alias} writes discarded: ${touched.join(", ")}; the reviewer is read-only`,
-          ),
-        },
-      );
-    }
-    const stop = result.record.stop;
-    if (stop?.kind === "infra") {
-      const cause = makeCause(
-        "infra",
-        `plan review by ${alias} stopped on infrastructure: ${
-          stop.details ? `${stop.cause}: ${stop.details}` : stop.cause
-        }`,
-      );
+  for (const alias of runtime.configs.process.architecture.reviewers) {
+    const review = await runPlanReviewer(runtime, opts, alias);
+    if (review.missing) {
       await recordMissing(
         runtime,
         opts.iteration,
         "plan-review-missing",
-        cause,
+        review.missing,
       );
       continue;
     }
-    const outcome = result.outcome;
-    if (outcome?.status === "done" && outcome.planReview) {
-      technical.push(...outcome.planReview.technical);
-      planNotes.push(...outcome.planReview.planNotes);
-      delivered.push(alias);
-      continue;
-    }
-    await recordMissing(
-      runtime,
-      opts.iteration,
-      "plan-review-missing",
-      makeCause(
-        "invalid-outcome",
-        `plan review by ${alias} produced no findings: ${
-          outcome?.summary ?? "no outcome"
-        }`,
-      ),
-    );
+    technical.push(...review.technical);
+    planNotes.push(...review.planNotes);
+    delivered.push(alias);
   }
   return {
     findings: delivered.length > 0 ? { technical, planNotes } : undefined,
@@ -280,17 +272,52 @@ async function discardForeignWrites(
  * decision. A missing or failed return is recorded and the PM still runs:
  * the review advises, it never blocks the iteration.
  */
+/** The inputs of one architect return turn. */
+interface PlanReturnOptions {
+  iteration: number;
+  packRel: string;
+  plan: PlanFile;
+  findings: PlanReviewOutcome;
+  reviewers: readonly string[];
+  /** The architect that owns the plan; absent is the main architect. */
+  architect?: string;
+}
+
+/** Formats the numbered findings of one kind for the return prompt. */
+function findingsOfKind(
+  numbered: ReturnType<typeof numberedPlanFindings>,
+  kind: "technical" | "planNote",
+): string {
+  const matching = numbered.filter((finding) => finding.kind === kind);
+  return matching.length === 0
+    ? "none"
+    : matching.map(formatPlanFinding).join("\n");
+}
+
+/** The template variables one architect return turn reads. */
+function planReturnVars(
+  runtime: KernelRuntime,
+  opts: PlanReturnOptions,
+  plan: PlanFile,
+  target: ReturnType<typeof architectureTarget>,
+  numbered: ReturnType<typeof numberedPlanFindings>,
+): Record<string, string> {
+  return {
+    iteration: String(opts.iteration),
+    intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
+    plan_path: plan.path,
+    pack_path: runtime.store.pathOf({ area: "goal", rel: opts.packRel }),
+    reviewers: opts.reviewers.join(", "),
+    technical_findings: findingsOfKind(numbered, "technical"),
+    plan_notes: findingsOfKind(numbered, "planNote"),
+    finding_count: String(numbered.length),
+    outcome_schema: outcomeRepairSchemaVar(target.prompt, "any"),
+  };
+}
+
 export async function runArchitectReturn(
   runtime: KernelRuntime,
-  opts: {
-    iteration: number;
-    packRel: string;
-    plan: PlanFile;
-    findings: PlanReviewOutcome;
-    reviewers: readonly string[];
-    /** The architect that owns the plan; absent is the main architect. */
-    architect?: string;
-  },
+  opts: PlanReturnOptions,
 ): Promise<void> {
   const plan = opts.plan;
   const target = architectureTarget(
@@ -300,12 +327,6 @@ export async function runArchitectReturn(
     opts.iteration,
   );
   const numbered = numberedPlanFindings(opts.findings);
-  const lines = (kind: "technical" | "planNote"): string => {
-    const matching = numbered.filter((finding) => finding.kind === kind);
-    return matching.length === 0
-      ? "none"
-      : matching.map(formatPlanFinding).join("\n");
-  };
   const snapshot = await snapshotTurn(runtime, planSet(runtime, plan));
   const result = await runAgentTurn(runtime, {
     target,
@@ -316,17 +337,7 @@ export async function runArchitectReturn(
       round: 1,
       architect: opts.architect ?? MAIN_ARCHITECT,
     },
-    vars: {
-      iteration: String(opts.iteration),
-      intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
-      plan_path: plan.path,
-      pack_path: runtime.store.pathOf({ area: "goal", rel: opts.packRel }),
-      reviewers: opts.reviewers.join(", "),
-      technical_findings: lines("technical"),
-      plan_notes: lines("planNote"),
-      finding_count: String(numbered.length),
-      outcome_schema: outcomeRepairSchemaVar(target.prompt, "any"),
-    },
+    vars: planReturnVars(runtime, opts, plan, target, numbered),
     expectation: KERNEL_TURN_STEPS[PLAN_RETURN_STEP],
     validate: (outcome) => validatePlanReturnDelivery(opts.findings, outcome),
   });

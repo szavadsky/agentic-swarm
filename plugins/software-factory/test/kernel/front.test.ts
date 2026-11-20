@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -117,153 +116,265 @@ async function statusLine(goal: E2EGoal): Promise<string> {
 }
 
 describe("front ladder", () => {
+  registerFrontLadderPart1();
+  registerFrontLadderPart2();
+  registerFrontLadderPart3();
+  registerFrontLadderPart4();
+  registerFrontLadderPart5();
+  registerFrontLadderPart6();
+  registerFrontLadderPart7();
+  registerFrontLadderPart8();
+  registerFrontLadderPart9();
+  registerFrontLadderPart10();
+  registerFrontLadderPart11();
+  registerFrontLadderPart12();
+  registerFrontLadderPart13();
+  registerFrontLadderPart14();
+  registerFrontLadderPart15();
+  registerFrontLadderPart16();
+  registerFrontLadderPart17();
+  registerFrontLadderPart18();
+});
+
+async function runsTrivialTaskSImplementTurnFrontPart1() {
+  const goal = makeGoal({
+    classYaml: null,
+    processYaml: "boundary:\n  front: { prompt: front, alias: front }\n",
+    runYaml: [
+      "aliases:",
+      "  front: { harness: fake, model: fake-front }",
+      "  architect: { harness: fake, model: fake-architect }",
+      "  pm: { harness: fake, model: fake-pm }",
+      "  implementer: { harness: fake, model: fake-impl }",
+      "  implementer-b: { harness: fake, model: fake-impl-b }",
+      "  researcher: { harness: fake, model: fake-research }",
+      "  reviewer: { harness: fake, model: fake-review }",
+      "  qa: { harness: fake, model: fake-qa }",
+      "  steward: { harness: fake, model: fake-steward }",
+      "  plan-checker: { harness: fake, model: fake-check }",
+      "  intent: { harness: fake, model: fake-intent }",
+      "  plan-reviewer: { harness: fake, model: fake-plan-review }",
+      "  pack-preparer: { harness: fake, model: fake-pack-prep }",
+      "  digest: { harness: fake, model: fake-digest }",
+      "limits: { iterations: 1, concurrency: { overall: 1 } }",
+      "",
+    ].join("\n"),
+  });
+
+  return { goal };
+}
+
+async function runsTrivialTaskSImplementTurnFrontPart2(
+  scope: Awaited<ReturnType<typeof runsTrivialTaskSImplementTurnFrontPart1>>,
+) {
+  const { goal } = scope;
+  try {
+    const packPath = path.join(goal.goalDir, contextPackRelPath(1));
+    const harness = new FakeHarness({ id: "fake" });
+    harness.script(trivialFront(goal, "tiny"));
+    harness.script((req, ctx) => {
+      // The follow-up prompt resumes the front's session with its recorded
+      // cwd; the work goes to the absolute worktree from the prompt.
+      expect(req.session).toBeDefined();
+      expect(req.cwd).toBe(req.session!.cwd);
+      expect(req.prompt).toContain(`- front pack: \`${packPath}\``);
+      expect(req.prompt).toContain("- branch: `factory-task/demo/tiny`");
+      expect(req.model.id).toBe("fake-front");
+      const worktree = promptWorktree(req.prompt);
+      fs.writeFileSync(path.join(worktree, "tiny.txt"), "tiny\n", "utf8");
+      ctx.writeOutcome(outcome({ summary: "tiny.txt created" }));
+      return fakeTurnResult(req);
+    });
+
+    await expectLaunch(0, goal.repo, harness, 3);
+
+    const records = await recordsOf(goal);
+    const front = records.find((r) => r.step === "front");
+    const implement = records.find(
+      (r) => r.slug === "tiny" && r.step === "implement",
+    );
+    expect(front?.alias).toBe("front");
+    expect(implement?.alias).toBe("front");
+    expect(implement?.model?.id).toBe("fake-front");
+    expect(implement?.session?.harness).toBe("fake");
+    expect(implement?.session?.id).toBe(front?.session?.id);
+    expect(
+      records.some(
+        (r) => r.slug === "tiny" && r.step === "merge" && r.ok === true,
+      ),
+    ).toBe(true);
+  } finally {
+    cleanup(goal);
+  }
+}
+
+async function resumesBlockedFrontGoalWaitingPart1(goal: E2EGoal) {
+  const harness = new FakeHarness({ id: "fake" });
+  harness.script(trivialFront(goal, "tiny"));
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(
+      outcome({ status: "blocked", summary: "missing an input" }),
+    );
+    return fakeTurnResult(req);
+  });
+  scriptStallLeave(harness, ["tiny"]);
+
+  await expectLaunch(2, goal.repo, harness, 3);
+  expect((await stateOf(goal.goalDir)).goal).toBe("blocked");
+
+  const inbox = path.join(goal.goalDir, "mailbox/inbox");
+  fs.mkdirSync(inbox, { recursive: true });
+  fs.writeFileSync(
+    path.join(inbox, "s1.md"),
+    "The input arrived; close the goal.\n",
+    "utf8",
+  );
+
+  scriptDigest(harness, goal.goalDir, 2);
+  harness.script((req, ctx) => {
+    expect(req.prompt).toContain("You are the architect");
+    expect(req.prompt).toContain(
+      "- s1 (mailbox/inbox/s1.md): The input arrived; close the goal.",
+    );
+    ctx.writeOutcome(
+      outcome({
+        summary: "the input arrived",
+        decision: "done",
+        forward: ["steer s1: input accepted"],
+      }),
+    );
+    return fakeTurnResult(req);
+  });
+
+  await expectLaunch(0, goal.repo, harness, 3);
+
+  const state = await stateOf(goal.goalDir);
+  expect(state.goal).toBe("done");
+  expect(state.terminal).toBe(true);
+  const records = await recordsOf(goal);
+  const architect = records.filter((r) => r.step === "architect");
+  expect(architect.map((r) => r.outcome?.decision)).toEqual(["done"]);
+
+  return { inbox, records };
+}
+
+async function resumesBlockedFrontGoalWaitingPart2(
+  goal: E2EGoal,
+  scope: Awaited<ReturnType<typeof resumesBlockedFrontGoalWaitingPart1>>,
+) {
+  const { records, inbox } = scope;
+  expect(
+    records
+      .filter((r) => r.step === "front-stop")
+      .map((r) => r.outcome?.decision),
+  ).toEqual(["blocked"]);
+  expect(fs.existsSync(path.join(inbox, "s1.md"))).toBe(false);
+  expect(
+    fs.readFileSync(
+      path.join(goal.goalDir, "mailbox/outbox/steer-s1.md"),
+      "utf8",
+    ),
+  ).toContain("input accepted");
+  expect(await statusLine(goal)).toContain("goal demo: done");
+}
+
+async function implementsTrivialGoalFrontSOwnPart1(goal: E2EGoal) {
+  const harness = new FakeHarness({ id: "fake" });
+  harness.script(trivialFront(goal, "tiny"));
+  harness.script((req, ctx) => {
+    const taskPath = /- task: `([^`]+)`/.exec(req.prompt)?.[1];
+    expect(taskPath).toBeDefined();
+    expect(fs.readFileSync(taskPath!, "utf8")).toContain(
+      "flow: just-implement",
+    );
+    // The follow-up prompt resumes the front's session with its recorded
+    // cwd and names the absolute worktree and branch; the pack stays a
+    // prompt variable for the briefing.
+    expect(req.session).toBeDefined();
+    expect(req.cwd).toBe(req.session!.cwd);
+    const worktree = promptWorktree(req.prompt);
+    expect(path.isAbsolute(worktree)).toBe(true);
+    expect(worktree).not.toBe(req.cwd);
+    expect(req.prompt).toContain("- branch: `factory-task/demo/tiny`");
+    expect(req.prompt).toContain(
+      `Do all work under the absolute worktree path \`${worktree}\``,
+    );
+    expect(req.prompt).toContain(
+      `- front pack: \`${path.join(goal.goalDir, contextPackRelPath(1))}\``,
+    );
+    expect(
+      fs.readFileSync(path.join(goal.goalDir, contextPackRelPath(1)), "utf8"),
+    ).toContain("one file");
+    fs.writeFileSync(path.join(worktree, "tiny.txt"), "tiny\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "tiny.txt created" }));
+    return fakeTurnResult(req);
+  });
+
+  await expectLaunch(0, goal.repo, harness, 3);
+
+  const records = await recordsOf(goal);
+  expect(records.filter((r) => r.step === "front")).toHaveLength(1);
+  const front = records.find((r) => r.step === "front");
+  expect(front?.alias).toBe("pm");
+  expect(front?.model?.id).toBe("fake-pm");
+  expect(front?.session).toBeDefined();
+
+  return { harness, records, front };
+}
+
+async function implementsTrivialGoalFrontSOwnPart2(
+  goal: E2EGoal,
+  scope: Awaited<ReturnType<typeof implementsTrivialGoalFrontSOwnPart1>>,
+) {
+  const { records, front, harness } = scope;
+  const implement = records.find(
+    (r) => r.slug === "tiny" && r.step === "implement",
+  );
+  // The ladder's "same agent, same session": the fallback front alias is
+  // the implement target, and the implement record carries the front's
+  // session id — a de-novo retry would mint a new one.
+  expect(implement?.alias).toBe(front?.alias);
+  expect(implement?.model?.id).toBe(front?.model?.id);
+  expect(implement?.session?.id).toBe(front?.session?.id);
+  expect(implement?.session?.cwd).toBe(front?.session?.cwd);
+  // The follow-up turn inherits the front's tool grant: same model and
+  // same harness passthrough on both calls.
+  expect(harness.calls[1]?.model).toEqual(harness.calls[0]?.model);
+  expect(harness.calls[1]?.opaque).toEqual(harness.calls[0]?.opaque);
+  expect(records.filter((r) => r.step === "architect")).toEqual([]);
+  expect(records.filter((r) => r.step === "pm")).toEqual([]);
+  expect(records.filter((r) => r.step === "review")).toEqual([]);
+  expect(records.some((r) => r.slug === "tiny" && r.step === "checks")).toBe(
+    true,
+  );
+  expect(
+    records.some(
+      (r) => r.slug === "tiny" && r.step === "merge" && r.ok === true,
+    ),
+  ).toBe(true);
+  expect(harness.calls).toHaveLength(2);
+  const classPath = path.join(goal.goalDir, "class.yaml");
+  expect(fs.readFileSync(classPath, "utf8")).toContain("class: trivial");
+  expect((await validateFile(classPath)).findings).toEqual([]);
+  expect(
+    fs.readFileSync(path.join(goal.goalDir, "iterations/1/summary.md"), "utf8"),
+  ).toContain("status: goal-met");
+}
+
+function registerFrontLadderPart1(): void {
   it("implements a trivial goal in the front's own session and merges without architect or reviewer", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script(trivialFront(goal, "tiny"));
-      harness.script((req, ctx) => {
-        const taskPath = /- task: `([^`]+)`/.exec(req.prompt)?.[1];
-        expect(taskPath).toBeDefined();
-        expect(fs.readFileSync(taskPath!, "utf8")).toContain(
-          "flow: just-implement",
-        );
-        // The follow-up prompt resumes the front's session with its recorded
-        // cwd and names the absolute worktree and branch; the pack stays a
-        // prompt variable for the briefing.
-        expect(req.session).toBeDefined();
-        expect(req.cwd).toBe(req.session!.cwd);
-        const worktree = promptWorktree(req.prompt);
-        expect(path.isAbsolute(worktree)).toBe(true);
-        expect(worktree).not.toBe(req.cwd);
-        expect(req.prompt).toContain("- branch: `factory-task/demo/tiny`");
-        expect(req.prompt).toContain(
-          `Do all work under the absolute worktree path \`${worktree}\``,
-        );
-        expect(req.prompt).toContain(
-          `- front pack: \`${path.join(goal.goalDir, contextPackRelPath(1))}\``,
-        );
-        expect(
-          fs.readFileSync(
-            path.join(goal.goalDir, contextPackRelPath(1)),
-            "utf8",
-          ),
-        ).toContain("one file");
-        fs.writeFileSync(path.join(worktree, "tiny.txt"), "tiny\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "tiny.txt created" }));
-        return fakeTurnResult(req);
-      });
-
-      await expectLaunch(0, goal.repo, harness, 3);
-
-      const records = await recordsOf(goal);
-      expect(records.filter((r) => r.step === "front")).toHaveLength(1);
-      const front = records.find((r) => r.step === "front");
-      expect(front?.alias).toBe("pm");
-      expect(front?.model?.id).toBe("fake-pm");
-      expect(front?.session).toBeDefined();
-      const implement = records.find(
-        (r) => r.slug === "tiny" && r.step === "implement",
-      );
-      // The ladder's "same agent, same session": the fallback front alias is
-      // the implement target, and the implement record carries the front's
-      // session id — a de-novo retry would mint a new one.
-      expect(implement?.alias).toBe(front?.alias);
-      expect(implement?.model?.id).toBe(front?.model?.id);
-      expect(implement?.session?.id).toBe(front?.session?.id);
-      expect(implement?.session?.cwd).toBe(front?.session?.cwd);
-      // The follow-up turn inherits the front's tool grant: same model and
-      // same harness passthrough on both calls.
-      expect(harness.calls[1]?.model).toEqual(harness.calls[0]?.model);
-      expect(harness.calls[1]?.opaque).toEqual(harness.calls[0]?.opaque);
-      expect(records.filter((r) => r.step === "architect")).toEqual([]);
-      expect(records.filter((r) => r.step === "pm")).toEqual([]);
-      expect(records.filter((r) => r.step === "review")).toEqual([]);
-      expect(
-        records.some((r) => r.slug === "tiny" && r.step === "checks"),
-      ).toBe(true);
-      expect(
-        records.some(
-          (r) => r.slug === "tiny" && r.step === "merge" && r.ok === true,
-        ),
-      ).toBe(true);
-      expect(harness.calls).toHaveLength(2);
-      const classPath = path.join(goal.goalDir, "class.yaml");
-      expect(fs.readFileSync(classPath, "utf8")).toContain("class: trivial");
-      expect((await validateFile(classPath)).findings).toEqual([]);
-      expect(
-        fs.readFileSync(
-          path.join(goal.goalDir, "iterations/1/summary.md"),
-          "utf8",
-        ),
-      ).toContain("status: goal-met");
+      const scope1 = await implementsTrivialGoalFrontSOwnPart1(goal);
+      await implementsTrivialGoalFrontSOwnPart2(goal, scope1);
     } finally {
       cleanup(goal);
     }
   }, 90_000);
 
   it("runs a trivial task's implement turn in the front's session, on the front alias, with the pack variable", async () => {
-    const goal = makeGoal({
-      classYaml: null,
-      processYaml: "boundary:\n  front: { prompt: front, alias: front }\n",
-      runYaml: [
-        "aliases:",
-        "  front: { harness: fake, model: fake-front }",
-        "  architect: { harness: fake, model: fake-architect }",
-        "  pm: { harness: fake, model: fake-pm }",
-        "  implementer: { harness: fake, model: fake-impl }",
-        "  implementer-b: { harness: fake, model: fake-impl-b }",
-        "  researcher: { harness: fake, model: fake-research }",
-        "  reviewer: { harness: fake, model: fake-review }",
-        "  qa: { harness: fake, model: fake-qa }",
-        "  steward: { harness: fake, model: fake-steward }",
-        "  plan-checker: { harness: fake, model: fake-check }",
-        "  intent: { harness: fake, model: fake-intent }",
-        "  plan-reviewer: { harness: fake, model: fake-plan-review }",
-        "  pack-preparer: { harness: fake, model: fake-pack-prep }",
-        "  digest: { harness: fake, model: fake-digest }",
-        "limits: { iterations: 1, concurrency: { overall: 1 } }",
-        "",
-      ].join("\n"),
-    });
-    try {
-      const packPath = path.join(goal.goalDir, contextPackRelPath(1));
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script(trivialFront(goal, "tiny"));
-      harness.script((req, ctx) => {
-        // The follow-up prompt resumes the front's session with its recorded
-        // cwd; the work goes to the absolute worktree from the prompt.
-        expect(req.session).toBeDefined();
-        expect(req.cwd).toBe(req.session!.cwd);
-        expect(req.prompt).toContain(`- front pack: \`${packPath}\``);
-        expect(req.prompt).toContain("- branch: `factory-task/demo/tiny`");
-        expect(req.model.id).toBe("fake-front");
-        const worktree = promptWorktree(req.prompt);
-        fs.writeFileSync(path.join(worktree, "tiny.txt"), "tiny\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "tiny.txt created" }));
-        return fakeTurnResult(req);
-      });
-
-      await expectLaunch(0, goal.repo, harness, 3);
-
-      const records = await recordsOf(goal);
-      const front = records.find((r) => r.step === "front");
-      const implement = records.find(
-        (r) => r.slug === "tiny" && r.step === "implement",
-      );
-      expect(front?.alias).toBe("front");
-      expect(implement?.alias).toBe("front");
-      expect(implement?.model?.id).toBe("fake-front");
-      expect(implement?.session?.harness).toBe("fake");
-      expect(implement?.session?.id).toBe(front?.session?.id);
-      expect(
-        records.some(
-          (r) => r.slug === "tiny" && r.step === "merge" && r.ok === true,
-        ),
-      ).toBe(true);
-    } finally {
-      cleanup(goal);
-    }
+    const scope1 = await runsTrivialTaskSImplementTurnFrontPart1();
+    await runsTrivialTaskSImplementTurnFrontPart2(scope1);
   }, 90_000);
 
   it("derives a landed front goal as done and prints it in the status line", async () => {
@@ -288,7 +399,9 @@ describe("front ladder", () => {
       cleanup(goal);
     }
   }, 90_000);
+}
 
+function registerFrontLadderPart2(): void {
   it("derives a parked front goal as blocked and prints it in the status line", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
@@ -323,71 +436,15 @@ describe("front ladder", () => {
   it("resumes a blocked front goal on a waiting steer and lets the architect decide", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script(trivialFront(goal, "tiny"));
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ status: "blocked", summary: "missing an input" }),
-        );
-        return fakeTurnResult(req);
-      });
-      scriptStallLeave(harness, ["tiny"]);
-
-      await expectLaunch(2, goal.repo, harness, 3);
-      expect((await stateOf(goal.goalDir)).goal).toBe("blocked");
-
-      const inbox = path.join(goal.goalDir, "mailbox/inbox");
-      fs.mkdirSync(inbox, { recursive: true });
-      fs.writeFileSync(
-        path.join(inbox, "s1.md"),
-        "The input arrived; close the goal.\n",
-        "utf8",
-      );
-
-      scriptDigest(harness, goal.goalDir, 2);
-      harness.script((req, ctx) => {
-        expect(req.prompt).toContain("You are the architect");
-        expect(req.prompt).toContain(
-          "- s1 (mailbox/inbox/s1.md): The input arrived; close the goal.",
-        );
-        ctx.writeOutcome(
-          outcome({
-            summary: "the input arrived",
-            decision: "done",
-            forward: ["steer s1: input accepted"],
-          }),
-        );
-        return fakeTurnResult(req);
-      });
-
-      await expectLaunch(0, goal.repo, harness, 3);
-
-      const state = await stateOf(goal.goalDir);
-      expect(state.goal).toBe("done");
-      expect(state.terminal).toBe(true);
-      const records = await recordsOf(goal);
-      const architect = records.filter((r) => r.step === "architect");
-      expect(architect.map((r) => r.outcome?.decision)).toEqual(["done"]);
-      // The front's blocked stop stays on record; the architect's later
-      // decision is what derives the goal.
-      expect(
-        records
-          .filter((r) => r.step === "front-stop")
-          .map((r) => r.outcome?.decision),
-      ).toEqual(["blocked"]);
-      expect(fs.existsSync(path.join(inbox, "s1.md"))).toBe(false);
-      expect(
-        fs.readFileSync(
-          path.join(goal.goalDir, "mailbox/outbox/steer-s1.md"),
-          "utf8",
-        ),
-      ).toContain("input accepted");
-      expect(await statusLine(goal)).toContain("goal demo: done");
+      const scope1 = await resumesBlockedFrontGoalWaitingPart1(goal);
+      await resumesBlockedFrontGoalWaitingPart2(goal, scope1);
     } finally {
       cleanup(goal);
     }
   }, 90_000);
+}
 
+function registerFrontLadderPart3(): void {
   it("does not derive the goal status from class.yaml alone", async () => {
     const goal = makeGoal({ classYaml: "class: trivial\nslug: tiny\n" });
     try {
@@ -402,7 +459,9 @@ describe("front ladder", () => {
       cleanup(goal);
     }
   }, 90_000);
+}
 
+function registerFrontLadderPart4(): void {
   it("classifies a task goal, merges one implement-review task, and never reaches architect or PM", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
@@ -452,7 +511,9 @@ describe("front ladder", () => {
       cleanup(goal);
     }
   }, 90_000);
+}
 
+function registerFrontLadderPart5(): void {
   it("resumes a task-class fix turn on the implementer alias with the pack variable", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
@@ -501,7 +562,9 @@ describe("front ladder", () => {
       cleanup(goal);
     }
   }, 90_000);
+}
 
+function registerFrontLadderPart6(): void {
   it("runs the architect boundary with the pack the front prepared for a bigger goal", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
@@ -541,7 +604,9 @@ describe("front ladder", () => {
       cleanup(goal);
     }
   }, 90_000);
+}
 
+function registerFrontLadderPart7(): void {
   it("skips the front turn when the goal already has a plan", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
@@ -565,7 +630,9 @@ describe("front ladder", () => {
       cleanup(goal);
     }
   }, 90_000);
+}
 
+function registerFrontLadderPart8(): void {
   it("parks a trivial class without a front session instead of implementing de novo", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
@@ -605,7 +672,9 @@ describe("front ladder", () => {
       cleanup(goal);
     }
   }, 90_000);
+}
 
+function registerFrontLadderPart9(): void {
   it("stops a trivial goal with a recorded cause when the harness cannot resume", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
@@ -638,7 +707,9 @@ describe("front ladder", () => {
       cleanup(goal);
     }
   }, 90_000);
+}
 
+function registerFrontLadderPart10(): void {
   it("parks a trivial turn that writes the goal checkout as a containment incident", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
@@ -672,7 +743,32 @@ describe("front ladder", () => {
       cleanup(goal);
     }
   }, 90_000);
+}
 
+/** Asserts the pending steer bypassed front and implement for the architect. */
+function expectSteeredToArchitect(
+  goal: ReturnType<typeof makeGoal>,
+  records: Awaited<ReturnType<typeof recordsOf>>,
+  harness: FakeHarness,
+  inbox: string,
+): void {
+  expect(records.filter((r) => r.step === "front")).toEqual([]);
+  expect(records.filter((r) => r.step === "architect")).toHaveLength(1);
+  expect(records.filter((r) => r.step === "implement")).toEqual([]);
+  expect(fs.existsSync(path.join(inbox, "s1.md"))).toBe(false);
+  expect(
+    fs.readFileSync(path.join(goal.goalDir, "mailbox/processed/s1.md"), "utf8"),
+  ).toContain("Keep the API stable");
+  expect(
+    fs.readFileSync(
+      path.join(goal.goalDir, "mailbox/outbox/steer-s1.md"),
+      "utf8",
+    ),
+  ).toContain("the API stays stable");
+  expect(harness.calls).toHaveLength(1);
+}
+
+function registerFrontLadderPart11(): void {
   it("routes a pending steer to the architect boundary instead of dispatching a front class", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
@@ -708,28 +804,14 @@ describe("front ladder", () => {
       await expectLaunch(0, goal.repo, harness, 3);
 
       const records = await recordsOf(goal);
-      expect(records.filter((r) => r.step === "front")).toEqual([]);
-      expect(records.filter((r) => r.step === "architect")).toHaveLength(1);
-      expect(records.filter((r) => r.step === "implement")).toEqual([]);
-      expect(fs.existsSync(path.join(inbox, "s1.md"))).toBe(false);
-      expect(
-        fs.readFileSync(
-          path.join(goal.goalDir, "mailbox/processed/s1.md"),
-          "utf8",
-        ),
-      ).toContain("Keep the API stable");
-      expect(
-        fs.readFileSync(
-          path.join(goal.goalDir, "mailbox/outbox/steer-s1.md"),
-          "utf8",
-        ),
-      ).toContain("the API stays stable");
-      expect(harness.calls).toHaveLength(1);
+      expectSteeredToArchitect(goal, records, harness, inbox);
     } finally {
       cleanup(goal);
     }
   }, 90_000);
+}
 
+function registerFrontLadderPart12(): void {
   it("stops a front-classified goal blocked when its task parks, without an architect turn", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
@@ -762,7 +844,9 @@ describe("front ladder", () => {
       cleanup(goal);
     }
   }, 90_000);
+}
 
+function registerFrontLadderPart13(): void {
   it("stops the launch blocked when the front's outcome is blocked", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
@@ -793,7 +877,9 @@ describe("front ladder", () => {
       cleanup(goal);
     }
   }, 90_000);
+}
 
+function registerFrontLadderPart14(): void {
   it("ends the launch as infra when the front turn produces no outcome", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
@@ -820,7 +906,9 @@ describe("front ladder", () => {
       cleanup(goal);
     }
   }, 90_000);
+}
 
+function registerFrontLadderPart15(): void {
   it("ends the launch as infra when the front's task file fails tasks.ts validation", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
@@ -852,7 +940,9 @@ describe("front ladder", () => {
       cleanup(goal);
     }
   }, 90_000);
+}
 
+function registerFrontLadderPart16(): void {
   it("ends the launch as infra when a trivial/task front writes more than one task", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
@@ -879,7 +969,9 @@ describe("front ladder", () => {
       cleanup(goal);
     }
   }, 90_000);
+}
 
+function registerFrontLadderPart17(): void {
   it("does not default a missing class.yaml to bigger", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
@@ -907,7 +999,9 @@ describe("front ladder", () => {
       cleanup(goal);
     }
   }, 90_000);
+}
 
+function registerFrontLadderPart18(): void {
   it("ends the launch as infra when a front-classified task has no pack", async () => {
     const goal = makeGoal({ classYaml: null });
     try {
@@ -934,4 +1028,4 @@ describe("front ladder", () => {
       cleanup(goal);
     }
   }, 90_000);
-});
+}

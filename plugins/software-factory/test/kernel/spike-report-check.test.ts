@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -70,148 +69,11 @@ const names = (records: StepRecord[]) =>
   records.filter((r) => r.step !== "commit").map((r) => r.step);
 
 describe("spike report check", () => {
-  it("sends a spike that committed no report to a gate-fix turn, not review", async () => {
-    const { repo, goal } = setupFlowRepo();
-    try {
-      const harness = new FakeHarness({ id: "fake" });
-      implementTurn(harness, "no-report", "looked around");
-      implementTurn(harness, "no-report", "wrote it down", "# Finding\nA.\n");
-      approveTurn(harness);
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, spike("no-report"));
-      await runDispatch(runtime, { iteration: 1 });
-
-      const records = await stepsOf(runtime, "no-report");
-      expect(names(records)).toEqual([
-        "implement",
-        "checks",
-        "implement",
-        "checks",
-        "review",
-        "finish",
-      ]);
-      const [red, green] = records.filter((r) => r.step === "checks");
-      expect(red!.ok).toBe(false);
-      const missing = red!.checks!.find((c) => c.name === SPIKE_REPORT_CHECK);
-      expect(missing!.ok).toBe(false);
-      expect(missing!.summary).toContain(spikeReportPath("no-report"));
-      expect(
-        green!.checks!.find((c) => c.name === SPIKE_REPORT_CHECK)!.ok,
-      ).toBe(true);
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 60_000);
-
-  it("parks after the gate-fix rounds run out and names the report path", async () => {
-    const { repo, goal } = setupFlowRepo();
-    try {
-      const harness = new FakeHarness({ id: "fake" });
-      for (const n of [1, 2, 3, 4]) {
-        implementTurn(
-          harness,
-          "never",
-          `attempt ${n}`,
-          n === 4 ? "  \n\t\n" : undefined,
-        );
-      }
-      scriptStallLeave(harness, ["never"]);
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, spike("never"));
-      await runDispatch(runtime, { iteration: 1 });
-
-      const parked = (await stateOf(runtime)).tasks.never!;
-      expect(parked.status).toBe("parked");
-      expect(parked.cause).toEqual(
-        cause(`gates: ${SPIKE_REPORT_CHECK} (${spikeReportPath("never")})`),
-      );
-      expect(names(await stepsOf(runtime, "never"))).not.toContain("review");
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 60_000);
-
-  it("lets a spike with a non-empty committed report reach review", async () => {
-    const { repo, goal } = setupFlowRepo();
-    try {
-      const harness = new FakeHarness({ id: "fake" });
-      implementTurn(harness, "reported", "done", "# Finding\nB.\n");
-      approveTurn(harness);
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, spike("reported"));
-      await runDispatch(runtime, { iteration: 1 });
-
-      const records = await stepsOf(runtime, "reported");
-      expect(names(records)).toEqual([
-        "implement",
-        "checks",
-        "review",
-        "finish",
-      ]);
-      const checks = records.find((r) => r.step === "checks")!;
-      expect(checks.ok).toBe(true);
-      expect(checks.checks!.map((c) => c.name)).toContain(SPIKE_REPORT_CHECK);
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 60_000);
-
-  it("adds no spike-report check to a development task", async () => {
-    const { repo, goal } = setupFlowRepo();
-    try {
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "dev.txt"), "dev\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "built" }));
-        return fakeTurnResult(req);
-      });
-      approveTurn(harness);
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("dev", { scope: ["dev.txt"] }));
-      await runDispatch(runtime, { iteration: 1 });
-
-      const checks = (await stepsOf(runtime, "dev")).filter(
-        (r) => r.step === "checks",
-      );
-      expect(checks.length).toBeGreaterThan(0);
-      for (const record of checks) {
-        expect(record.checks!.map((c) => c.name)).not.toContain(
-          SPIKE_REPORT_CHECK,
-        );
-      }
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 60_000);
-
-  it("references the report's commit in the finish record and copies nothing", async () => {
-    const { repo, goal } = setupFlowRepo();
-    try {
-      const harness = new FakeHarness({ id: "fake" });
-      const report = "# Finding\nSealed\n";
-      implementTurn(harness, "sealed", "done", report);
-      approveTurn(harness);
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, spike("sealed"));
-      await runDispatch(runtime, { iteration: 1 });
-
-      const records = await stepsOf(runtime, "sealed");
-      const finish = records.find((r) => r.step === "finish")!;
-      expect(finish.report).toBe(
-        `${finish.commit}:${spikeReportPath("sealed")}`,
-      );
-      expect(await spikeFinding(runtime.store, records, "sealed")).toBe(
-        report.trim(),
-      );
-      expect(
-        fs.existsSync(
-          path.join(runtime.store.goalDir, "finish/sealed/report.md"),
-        ),
-      ).toBe(false);
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 60_000);
+  spikeReportCheckPart1();
+  spikeReportCheckPart2();
+  spikeReportCheckPart3();
+  spikeReportCheckPart4();
+  spikeReportCheckPart5();
 });
 
 describe("checkSpikeReport", () => {
@@ -267,6 +129,12 @@ describe("checkSpikeReport", () => {
 });
 
 describe("spikeFinding", () => {
+  const scope1 = spikeFindingPart1();
+  spikeFindingPart2(scope1);
+  spikeFindingPart3(scope1);
+});
+
+function spikeFindingPart1() {
   const withOutcome = (summary: string): StepRecord[] => [
     rec(1, { slug: "probe", step: "implement", outcome: outcome({ summary }) }),
   ];
@@ -301,6 +169,11 @@ describe("spikeFinding", () => {
     }
   });
 
+  return { withOutcome, withReport, storeWith, refOf };
+}
+
+function spikeFindingPart2(scope: ReturnType<typeof spikeFindingPart1>) {
+  const { withReport, refOf, storeWith, withOutcome } = scope;
   it("prefers the finish record's reference over a legacy copy", async () => {
     const repo = createTmpRepo();
     try {
@@ -345,7 +218,10 @@ describe("spikeFinding", () => {
       repo.cleanup();
     }
   });
+}
 
+function spikeFindingPart3(scope: ReturnType<typeof spikeFindingPart1>) {
+  const { storeWith, withOutcome } = scope;
   it("falls back to the implement outcome summary for a legacy spike", async () => {
     expect(
       await spikeFinding(storeWith(), withOutcome("legacy summary"), "probe"),
@@ -355,4 +231,157 @@ describe("spikeFinding", () => {
   it("is undefined when there is neither a report nor an outcome", async () => {
     expect(await spikeFinding(storeWith(), [], "probe")).toBeUndefined();
   });
-});
+}
+
+function spikeReportCheckPart1() {
+  it("sends a spike that committed no report to a gate-fix turn, not review", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      implementTurn(harness, "no-report", "looked around");
+      implementTurn(harness, "no-report", "wrote it down", "# Finding\nA.\n");
+      approveTurn(harness);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, spike("no-report"));
+      await runDispatch(runtime, { iteration: 1 });
+
+      const records = await stepsOf(runtime, "no-report");
+      expect(names(records)).toEqual([
+        "implement",
+        "checks",
+        "implement",
+        "checks",
+        "review",
+        "finish",
+      ]);
+      const [red, green] = records.filter((r) => r.step === "checks");
+      expect(red!.ok).toBe(false);
+      const missing = red!.checks!.find((c) => c.name === SPIKE_REPORT_CHECK);
+      expect(missing!.ok).toBe(false);
+      expect(missing!.summary).toContain(spikeReportPath("no-report"));
+      expect(
+        green!.checks!.find((c) => c.name === SPIKE_REPORT_CHECK)!.ok,
+      ).toBe(true);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+function spikeReportCheckPart2() {
+  it("parks after the gate-fix rounds run out and names the report path", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      for (const n of [1, 2, 3, 4]) {
+        implementTurn(
+          harness,
+          "never",
+          `attempt ${n}`,
+          n === 4 ? "  \n\t\n" : undefined,
+        );
+      }
+      scriptStallLeave(harness, ["never"]);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, spike("never"));
+      await runDispatch(runtime, { iteration: 1 });
+
+      const parked = (await stateOf(runtime)).tasks.never!;
+      expect(parked.status).toBe("parked");
+      expect(parked.cause).toEqual(
+        cause(`gates: ${SPIKE_REPORT_CHECK} (${spikeReportPath("never")})`),
+      );
+      expect(names(await stepsOf(runtime, "never"))).not.toContain("review");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+function spikeReportCheckPart3() {
+  it("lets a spike with a non-empty committed report reach review", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      implementTurn(harness, "reported", "done", "# Finding\nB.\n");
+      approveTurn(harness);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, spike("reported"));
+      await runDispatch(runtime, { iteration: 1 });
+
+      const records = await stepsOf(runtime, "reported");
+      expect(names(records)).toEqual([
+        "implement",
+        "checks",
+        "review",
+        "finish",
+      ]);
+      const checks = records.find((r) => r.step === "checks")!;
+      expect(checks.ok).toBe(true);
+      expect(checks.checks!.map((c) => c.name)).toContain(SPIKE_REPORT_CHECK);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+function spikeReportCheckPart4() {
+  it("adds no spike-report check to a development task", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "dev.txt"), "dev\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "built" }));
+        return fakeTurnResult(req);
+      });
+      approveTurn(harness);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("dev", { scope: ["dev.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+
+      const checks = (await stepsOf(runtime, "dev")).filter(
+        (r) => r.step === "checks",
+      );
+      expect(checks.length).toBeGreaterThan(0);
+      for (const record of checks) {
+        expect(record.checks!.map((c) => c.name)).not.toContain(
+          SPIKE_REPORT_CHECK,
+        );
+      }
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+function spikeReportCheckPart5() {
+  it("references the report's commit in the finish record and copies nothing", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const report = "# Finding\nSealed\n";
+      implementTurn(harness, "sealed", "done", report);
+      approveTurn(harness);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, spike("sealed"));
+      await runDispatch(runtime, { iteration: 1 });
+
+      const records = await stepsOf(runtime, "sealed");
+      const finish = records.find((r) => r.step === "finish")!;
+      expect(finish.report).toBe(
+        `${finish.commit}:${spikeReportPath("sealed")}`,
+      );
+      expect(await spikeFinding(runtime.store, records, "sealed")).toBe(
+        report.trim(),
+      );
+      expect(
+        fs.existsSync(
+          path.join(runtime.store.goalDir, "finish/sealed/report.md"),
+        ),
+      ).toBe(false);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}

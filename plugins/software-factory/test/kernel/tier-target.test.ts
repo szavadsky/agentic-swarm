@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -35,67 +34,149 @@ const aliases = {
 };
 
 describe("task tier resolution", () => {
+  registerTaskTierResolutionPart1();
+  registerTaskTierResolutionPart2();
+});
+
+async function runsProducerTierAliasLeavesReviewPart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+) {
+  const runtime = await makeRuntime(repo, goal, {
+    fake: new FakeHarness({ id: "fake" }),
+    expensive: new FakeHarness({ id: "expensive" }),
+  });
+  const escalated = task("escalated", { tier: "escalation" });
+  const plain = task("plain");
+  const escalatedState = derive([escalated], [], runtime.configs.process.flows)
+    .tasks.escalated!;
+  const plainState = derive([plain], [], runtime.configs.process.flows).tasks
+    .plain!;
+
+  const escalatedTarget = stepTarget(
+    runtime,
+    escalated,
+    escalatedState,
+    "implement",
+    1,
+  );
+  expect(escalatedTarget.alias).toBe("escalation");
+  // A tier moves the same prompt to another alias; it declares no role.
+  expect(escalatedTarget.prompt).toBe("implementer");
+  expect(
+    stepTarget(runtime, escalated, escalatedState, "review", 1).alias,
+  ).toBe("reviewer");
+  expect(stepTarget(runtime, plain, plainState, "implement", 1).alias).toBe(
+    "implementer",
+  );
+
+  // A tier value is an alias name; `default` is no override.
+  expect(
+    resolveTurn(runtime, "implementer", "implementer", "default").alias,
+  ).toBe("implementer");
+  expect(
+    resolveTurn(runtime, "implementer", "implementer", "escalation"),
+  ).toMatchObject({
+    alias: "escalation",
+    model: { id: "fake-escalated", effort: "high" },
+    effort: "high",
+    tierOffset: 0,
+    timeouts: { idleMs: 123, wallMs: 456 },
+  });
+
+  return { runtime };
+}
+
+async function runsProducerTierAliasLeavesReviewPart2(
+  scope: Awaited<ReturnType<typeof runsProducerTierAliasLeavesReviewPart1>>,
+) {
+  const { runtime } = scope;
+  const tiers = resolveTurn(
+    runtime,
+    "implementer",
+    "implementer",
+    "escalation",
+  ).tiers;
+  expect(tiers.map((tier) => tier.harness.id)).toEqual([
+    "expensive",
+    "expensive",
+  ]);
+  expect(tiers.map((tier) => tier.model)).toEqual([
+    { id: "fake-escalated", effort: "high" },
+    { id: "fake-fallback", effort: "high" },
+  ]);
+}
+
+async function admitsRunsEscalatedImplementTurnPart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+) {
+  const fake = new FakeHarness({ id: "fake" });
+  const expensive = new FakeHarness({ id: "expensive" });
+  expensive.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "task.txt"), "escalated\n", "utf8");
+    ctx.writeOutcome(
+      outcome({ summary: "implemented on the escalation tier" }),
+    );
+    return fakeTurnResult(req);
+  });
+  fake.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+    return fakeTurnResult(req);
+  });
+
+  const runtime = await makeRuntime(repo, goal, { fake, expensive });
+  await writeTask(
+    runtime,
+    task("task", { tier: "escalation", scope: ["task.txt"] }),
+  );
+
+  const taskFile = (await runtime.store.listTasks()).find(
+    (t) => t.slug === "task",
+  )!;
+  const initialState = derive([taskFile], [], runtime.configs.process.flows)
+    .tasks.task!;
+  const admitted = stepTarget(runtime, taskFile, initialState, "implement", 1);
+  expect(admitted.harness.id).toBe("expensive");
+
+  expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
+    "boundary",
+  );
+
+  // Admission and the turn agree: the escalation harness is the one that ran it.
+  expect(expensive.calls).toHaveLength(1);
+  expect(expensive.calls[0]!.model.id).toBe(admitted.model.id);
+  expect(expensive.calls[0]!.effort).toBe("high");
+  // The kernel walks the tiers; the adapter sees one model, no chain.
+  expect(expensive.calls[0]!.fallbacks).toBeUndefined();
+
+  return { fake, runtime, admitted };
+}
+
+async function admitsRunsEscalatedImplementTurnPart2(
+  scope: Awaited<ReturnType<typeof admitsRunsEscalatedImplementTurnPart1>>,
+) {
+  const { fake, runtime, admitted } = scope;
+  expect(fake.calls).toHaveLength(2);
+
+  const records = await runtime.store.listRecords();
+  const implement = records.find(
+    (r) => r.slug === "task" && r.step === "implement",
+  )!;
+  const review = records.find((r) => r.slug === "task" && r.step === "review")!;
+  expect(implement.alias).toBe("escalation");
+  expect(implement.model?.id).toBe("fake-escalated");
+  expect(implement.session?.harness).toBe(admitted.harness.id);
+  expect(review.alias).toBe("reviewer");
+  expect(review.model?.id).toBe("fake-review");
+}
+
+function registerTaskTierResolutionPart1(): void {
   it("runs the producer on the tier alias and leaves review on the reviewer alias", async () => {
     const { repo, goal } = setupFlowRepo({ aliases });
     try {
-      const runtime = await makeRuntime(repo, goal, {
-        fake: new FakeHarness({ id: "fake" }),
-        expensive: new FakeHarness({ id: "expensive" }),
-      });
-      const escalated = task("escalated", { tier: "escalation" });
-      const plain = task("plain");
-      const escalatedState = derive(
-        [escalated],
-        [],
-        runtime.configs.process.flows,
-      ).tasks.escalated!;
-      const plainState = derive([plain], [], runtime.configs.process.flows)
-        .tasks.plain!;
-
-      const escalatedTarget = stepTarget(
-        runtime,
-        escalated,
-        escalatedState,
-        "implement",
-        1,
-      );
-      expect(escalatedTarget.alias).toBe("escalation");
-      // A tier moves the same prompt to another alias; it declares no role.
-      expect(escalatedTarget.prompt).toBe("implementer");
-      expect(
-        stepTarget(runtime, escalated, escalatedState, "review", 1).alias,
-      ).toBe("reviewer");
-      expect(stepTarget(runtime, plain, plainState, "implement", 1).alias).toBe(
-        "implementer",
-      );
-
-      // A tier value is an alias name; `default` is no override.
-      expect(
-        resolveTurn(runtime, "implementer", "implementer", "default").alias,
-      ).toBe("implementer");
-      expect(
-        resolveTurn(runtime, "implementer", "implementer", "escalation"),
-      ).toMatchObject({
-        alias: "escalation",
-        model: { id: "fake-escalated", effort: "high" },
-        effort: "high",
-        tierOffset: 0,
-        timeouts: { idleMs: 123, wallMs: 456 },
-      });
-      const tiers = resolveTurn(
-        runtime,
-        "implementer",
-        "implementer",
-        "escalation",
-      ).tiers;
-      expect(tiers.map((tier) => tier.harness.id)).toEqual([
-        "expensive",
-        "expensive",
-      ]);
-      expect(tiers.map((tier) => tier.model)).toEqual([
-        { id: "fake-escalated", effort: "high" },
-        { id: "fake-fallback", effort: "high" },
-      ]);
+      const scope1 = await runsProducerTierAliasLeavesReviewPart1(repo, goal);
+      await runsProducerTierAliasLeavesReviewPart2(scope1);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -104,74 +185,15 @@ describe("task tier resolution", () => {
   it("admits and runs the escalated implement turn on the escalation alias", async () => {
     const { repo, goal } = setupFlowRepo({ aliases });
     try {
-      const fake = new FakeHarness({ id: "fake" });
-      const expensive = new FakeHarness({ id: "expensive" });
-      expensive.script((req, ctx) => {
-        fs.writeFileSync(
-          path.join(req.cwd!, "task.txt"),
-          "escalated\n",
-          "utf8",
-        );
-        ctx.writeOutcome(
-          outcome({ summary: "implemented on the escalation tier" }),
-        );
-        return fakeTurnResult(req);
-      });
-      fake.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
-        return fakeTurnResult(req);
-      });
-
-      const runtime = await makeRuntime(repo, goal, { fake, expensive });
-      await writeTask(
-        runtime,
-        task("task", { tier: "escalation", scope: ["task.txt"] }),
-      );
-
-      const taskFile = (await runtime.store.listTasks()).find(
-        (t) => t.slug === "task",
-      )!;
-      const initialState = derive([taskFile], [], runtime.configs.process.flows)
-        .tasks.task!;
-      const admitted = stepTarget(
-        runtime,
-        taskFile,
-        initialState,
-        "implement",
-        1,
-      );
-      expect(admitted.harness.id).toBe("expensive");
-
-      expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
-        "boundary",
-      );
-
-      // Admission and the turn agree: the escalation harness is the one that ran it.
-      expect(expensive.calls).toHaveLength(1);
-      expect(expensive.calls[0]!.model.id).toBe(admitted.model.id);
-      expect(expensive.calls[0]!.effort).toBe("high");
-      // The kernel walks the tiers; the adapter sees one model, no chain.
-      expect(expensive.calls[0]!.fallbacks).toBeUndefined();
-      // QA then runs on its own alias, and the review on the reviewer's.
-      expect(fake.calls).toHaveLength(2);
-
-      const records = await runtime.store.listRecords();
-      const implement = records.find(
-        (r) => r.slug === "task" && r.step === "implement",
-      )!;
-      const review = records.find(
-        (r) => r.slug === "task" && r.step === "review",
-      )!;
-      expect(implement.alias).toBe("escalation");
-      expect(implement.model?.id).toBe("fake-escalated");
-      expect(implement.session?.harness).toBe(admitted.harness.id);
-      expect(review.alias).toBe("reviewer");
-      expect(review.model?.id).toBe("fake-review");
+      const scope1 = await admitsRunsEscalatedImplementTurnPart1(repo, goal);
+      await admitsRunsEscalatedImplementTurnPart2(scope1);
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerTaskTierResolutionPart2(): void {
   it("resumes a fix turn after an escalated implement on the escalation alias", async () => {
     const { repo, goal } = setupFlowRepo({ aliases });
     try {
@@ -226,4 +248,4 @@ describe("task tier resolution", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
-});
+}

@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -7,7 +6,7 @@ import { dispatch } from "../../src/cli/dispatch.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import type { GoalMetrics } from "../../src/kernel/metrics.js";
 import { createFolderStore } from "../../src/kernel/store.js";
-import { createTmpRepo } from "../helpers/tmp-repo.js";
+import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import {
   cleanup,
   expectDispatch,
@@ -125,296 +124,370 @@ function runYaml(repoDir: string): string {
 }
 
 describe("cross-slice E2E — init, steer and three launches through S2/S3/S4", () => {
+  registerCrossSliceE2EInitSteerAndThreeLaunchesThroughS2S3S4Part1();
+});
+
+/** The repo, goal paths and values carried between the three launches. */
+interface E2ECtx {
+  repo: TmpRepo;
+  goalDir: string;
+  goal: {
+    repo: TmpRepo;
+    goalDir: string;
+    planPath: string;
+    tasksDir: string;
+  };
+  steerId: string;
+  betaTip: string;
+  integrationBefore: string;
+}
+
+/** Writes the run config and intent, then inits the goal through the CLI. */
+async function e2eInit(ctx: E2ECtx): Promise<void> {
+  ctx.repo.writeFile(".factory/run.yaml", runYaml(ctx.repo.dir));
+  const intentPath = path.join(ctx.repo.dir, "INTENT.md");
+  fs.writeFileSync(
+    intentPath,
+    "# Goal\n\nBuild alpha, beta and gamma.\n",
+    "utf8",
+  );
+  ctx.repo.commit("factory config and intent");
+  const initCode = await dispatch(
+    ["init", "--repo", ctx.repo.dir, "--goal", "demo", "--intent", intentPath],
+    {},
+  );
+  expect(initCode).toBe(0);
+  expect(fs.existsSync(path.join(ctx.repo.dir, ".factory/repo.yaml"))).toBe(
+    true,
+  );
+  expect(
+    fs.readFileSync(path.join(ctx.goalDir, "intent.md"), "utf8"),
+  ).toContain("Build alpha");
+  fs.writeFileSync(
+    path.join(ctx.goalDir, "class.yaml"),
+    "class: bigger\n",
+    "utf8",
+  );
+}
+
+/** Launch 1's planning turns: architect, PM, and beta's parked review. */
+function scriptLaunch1Planning(first: FakeHarness, ctx: E2ECtx): void {
+  first.script((req, turnedCtx) => {
+    expect(req.prompt).toContain("- turn: `first`");
+    write(ctx.goalDir, "plan.md", PLAN_1);
+    turnedCtx.writeOutcome(
+      outcome({
+        summary: "planned alpha, beta, gamma",
+        decision: "continue",
+      }),
+    );
+    return fakeTurnResult(req);
+  });
+  first.script((req, turnedCtx) => {
+    for (const [slug, text] of [
+      ["alpha", ALPHA],
+      ["beta", BETA],
+      ["gamma", GAMMA_1],
+    ] as const) {
+      writeTask(ctx.goalDir, slug, text);
+    }
+    turnedCtx.writeOutcome(outcome({ summary: "filed three tasks" }));
+    return fakeTurnResult(req);
+  });
+  // beta parks on its last-call rejection while alpha merges: the
+  // wave-end stall owns the park.
+  scriptStallLeave(first, ["beta"]);
+}
+
+/** Launch 1's task turns: alpha merges, beta is rejected, gamma waits. */
+function scriptLaunch1Tasks(first: FakeHarness): void {
+  first.script((req, turnedCtx) => {
+    write(req.cwd!, "alpha.txt", "alpha\n");
+    turnedCtx.writeOutcome(outcome({ summary: "alpha implemented" }));
+    return fakeTurnResult(req);
+  });
+  first.script((req, turnedCtx) => {
+    turnedCtx.writeOutcome(
+      outcome({ summary: "alpha approved", verdict: "approve" }),
+    );
+    return fakeTurnResult(req);
+  });
+  first.script((req, turnedCtx) => {
+    write(req.cwd!, "beta.txt", "beta v1\n");
+    turnedCtx.writeOutcome(outcome({ summary: "beta v1" }));
+    return fakeTurnResult(req);
+  });
+  first.script((req, turnedCtx) => {
+    turnedCtx.writeOutcome(
+      outcome({
+        summary: "beta needs the second direction",
+        verdict: "changes",
+      }),
+    );
+    return fakeTurnResult(req);
+  });
+  first.script((req, turnedCtx) => {
+    write(req.cwd!, "beta.txt", "beta v2\n");
+    turnedCtx.writeOutcome(outcome({ summary: "beta v2" }));
+    return fakeTurnResult(req);
+  });
+  first.script((req, turnedCtx) => {
+    turnedCtx.writeOutcome(
+      outcome({ summary: "not salvageable", verdict: "reject" }),
+    );
+    return fakeTurnResult(req);
+  });
+}
+
+/** Launch 1 ended merged/merged/parked with the recorded rejection. */
+async function expectLaunch1(ctx: E2ECtx): Promise<void> {
+  const state = await stateOf(ctx.goalDir);
+  expect(state.tasks.alpha!.status).toBe("merged");
+  expect(state.tasks.beta!.status).toBe("parked");
+  expect(causeText(state.tasks.beta!.cause)).toContain("review-rejected");
+  expect(state.tasks.gamma!.status).toBe("pending");
+  const summary = summaryOf(ctx.goalDir, 1);
+  expect(summary).toContain("- review-rejected\n  - beta: not salvageable");
+  expect(summaryOf(ctx.goalDir, 1)).toContain("- merged: alpha");
+  expect(
+    fs.existsSync(
+      path.join(ctx.goalDir, "mailbox/outbox/iteration-1-summary.md"),
+    ),
+  ).toBe(true);
+  const one = await metricsOf(ctx.goalDir);
+  expect(one.iterations.map((i) => i.n)).toEqual([1]);
+  expect(one.iterations[0]!.turns).toBe(14);
+  expect(one.iterations[0]!.merged).toEqual(["alpha"]);
+  expect(one.iterations[0]!.parked).toEqual(["beta"]);
+  ctx.betaTip = ctx.repo
+    .git(["rev-parse", "factory-task/demo/beta"])
+    .stdout.trim();
+}
+
+/** Files a steer through the CLI and records its id. */
+async function steerBeta2(ctx: E2ECtx): Promise<void> {
+  const steerPath = path.join(ctx.repo.dir, "steer-source.md");
+  fs.writeFileSync(
+    steerPath,
+    "Keep the parked beta branch; finish it as beta2.\n",
+    "utf8",
+  );
+  expect(
+    await dispatch(
+      ["steer", "--repo", ctx.repo.dir, "--goal", "demo", steerPath],
+      {},
+    ),
+  ).toBe(0);
+  const inbox = fs.readdirSync(path.join(ctx.goalDir, "mailbox/inbox"));
+  expect(inbox.length).toBe(1);
+  ctx.steerId = path.basename(inbox[0]!, ".md");
+}
+
+/** Launch 2's architect and PM turns answer the steer. */
+function scriptLaunch2Planning(second: FakeHarness, ctx: E2ECtx): void {
+  scriptDigest(second, ctx.goalDir, 2);
+  second.script((req, turnedCtx) => {
+    expect(req.prompt).toContain("- turn: `relaunch`");
+    expect(req.prompt).toContain(ctx.steerId);
+    expect(req.prompt).toContain("Keep the parked beta branch");
+    write(ctx.goalDir, "plan.md", PLAN_2);
+    turnedCtx.writeOutcome(
+      outcome({
+        summary: "answered the steer, beta2 continues beta",
+        decision: "continue",
+        forward: [`steer ${ctx.steerId}: keep the branch, finish it as beta2`],
+      }),
+    );
+    return fakeTurnResult(req);
+  });
+  second.script((req, turnedCtx) => {
+    expect(req.prompt).toContain("beta | parked");
+    writeTask(ctx.goalDir, "beta2", BETA_2);
+    writeTask(ctx.goalDir, "gamma", GAMMA_2);
+    turnedCtx.writeOutcome(
+      outcome({ summary: "filed beta2 and re-pointed gamma" }),
+    );
+    return fakeTurnResult(req);
+  });
+}
+
+/** Launch 2's task turns continue beta's kept branch, then gamma. */
+function scriptLaunch2Tasks(second: FakeHarness): void {
+  second.script((req, turnedCtx) => {
+    expect(fs.readFileSync(path.join(req.cwd!, "beta.txt"), "utf8")).toBe(
+      "beta v2\n",
+    );
+    write(req.cwd!, "beta2.txt", "beta2\n");
+    turnedCtx.writeOutcome(
+      outcome({ summary: "beta2 completed on beta's branch" }),
+    );
+    return fakeTurnResult(req);
+  });
+  second.script((req, turnedCtx) => {
+    turnedCtx.writeOutcome(
+      outcome({ summary: "beta2 approved", verdict: "approve" }),
+    );
+    return fakeTurnResult(req);
+  });
+  second.script((req, turnedCtx) => {
+    expect(fs.existsSync(path.join(req.cwd!, "beta2.txt"))).toBe(true);
+    write(req.cwd!, "gamma.txt", "gamma\n");
+    turnedCtx.writeOutcome(outcome({ summary: "gamma implemented on beta2" }));
+    return fakeTurnResult(req);
+  });
+  second.script((req, turnedCtx) => {
+    turnedCtx.writeOutcome(
+      outcome({ summary: "gamma approved", verdict: "approve" }),
+    );
+    return fakeTurnResult(req);
+  });
+}
+
+/** Launch 2 landed beta2 and gamma on beta's kept branch. */
+async function expectLaunch2Merged(ctx: E2ECtx): Promise<void> {
+  const state = await stateOf(ctx.goalDir);
+  expect(state.tasks.alpha!.status).toBe("merged");
+  expect(state.tasks.beta!.status).toBe("parked");
+  expect(state.tasks.beta2!.status).toBe("merged");
+  expect(state.tasks.gamma!.status).toBe("merged");
+  expect(ctx.repo.git(["show", "factory/demo:beta.txt"]).stdout.trim()).toBe(
+    "beta v2",
+  );
+  expect(ctx.repo.git(["show", "factory/demo:beta2.txt"]).stdout.trim()).toBe(
+    "beta2",
+  );
+  expect(ctx.repo.git(["show", "factory/demo:gamma.txt"]).stdout.trim()).toBe(
+    "gamma",
+  );
+}
+
+/** The continuation reviewed from the integration head, not beta's tip. */
+async function expectLaunch2Continuation(ctx: E2ECtx): Promise<void> {
+  const records = await createFolderStore(
+    ctx.goalDir,
+    undefined,
+    {},
+  ).listRecords();
+  expect(records.find((r) => r.slug === "beta" && r.step === "merge")).toBe(
+    undefined,
+  );
+  const continuation = records.find(
+    (r) => r.slug === "beta2" && r.step === "implement",
+  );
+  expect(continuation?.base).toBe(ctx.integrationBefore);
+  expect(continuation?.base).not.toBe(ctx.betaTip);
+}
+
+/** The steer was consumed into processed, answered in outbox and summarized. */
+async function expectLaunch2Steer(ctx: E2ECtx): Promise<void> {
+  const pack = fs.readFileSync(
+    path.join(ctx.goalDir, "iterations/2/context-pack.md"),
+    "utf8",
+  );
+  expect(pack).toContain(
+    `previous iteration summary: ${path.join(ctx.goalDir, "iterations/1/summary.md")}`,
+  );
+  expect(pack).toContain(`- ${ctx.steerId}: mailbox/inbox/`);
+  expect(fs.readdirSync(path.join(ctx.goalDir, "mailbox/inbox"))).toEqual([]);
+  expect(fs.readdirSync(path.join(ctx.goalDir, "mailbox/processed"))).toContain(
+    `${ctx.steerId}.md`,
+  );
+  expect(
+    fs.readFileSync(
+      path.join(ctx.goalDir, `mailbox/outbox/steer-${ctx.steerId}.md`),
+      "utf8",
+    ),
+  ).toContain("finish it as beta2");
+  expect(summaryOf(ctx.goalDir, 2)).toContain("merged: beta2, gamma");
+  const two = await metricsOf(ctx.goalDir);
+  expect(two.iterations.map((i) => i.n)).toEqual([1, 2]);
+  expect(two.iterations[1]!.turns).toBe(12);
+  expect(two.iterations[1]!.humanInterventions).toBe(1);
+  expect(two.iterations[1]!.merged).toEqual(["beta2", "gamma"]);
+  expect(two.totals.merged).toEqual(["alpha", "beta2", "gamma"]);
+}
+
+/** Launch 3: the architect says done. */
+async function launch3(ctx: E2ECtx): Promise<void> {
+  const third = new FakeHarness({ id: "fake" });
+  scriptDigest(third, ctx.goalDir, 3);
+  third.script((req, turnedCtx) => {
+    expect(req.prompt).toContain("- turn: `relaunch`");
+    turnedCtx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
+    return fakeTurnResult(req);
+  });
+  await expectDispatch(0, ["run", "--repo", ctx.repo.dir, "--goal", "demo"], {
+    harnesses: { fake: third },
+  });
+}
+
+/** Launch 3 closed the goal and its summary and metrics. */
+async function expectLaunch3(ctx: E2ECtx): Promise<void> {
+  const state = await stateOf(ctx.goalDir);
+  expect(state.goal).toBe("done");
+  expect(state.tasks.beta2!.status).toBe("merged");
+  expect(summaryOf(ctx.goalDir, 3)).toContain("status: goal-met");
+  expect(
+    fs.existsSync(
+      path.join(ctx.goalDir, "mailbox/outbox/iteration-3-summary.md"),
+    ),
+  ).toBe(true);
+  const three = await metricsOf(ctx.goalDir);
+  expect(three.iterations.map((i) => i.n)).toEqual([1, 2, 3]);
+  expect(three.iterations[2]!.turns).toBe(3);
+  expect(three.totals.parked).toEqual(["beta"]);
+  expect(three.totals.loopIncidents).toBe(0);
+}
+
+function registerCrossSliceE2EInitSteerAndThreeLaunchesThroughS2S3S4Part1(): void {
   it("merges, parks, continues with base, answers the steer and ends done", async () => {
     const repo = createTmpRepo();
     const goalDir = path.join(repo.dir, ".factory/artifacts/demo");
-    const goal = {
+    const ctx: E2ECtx = {
       repo,
       goalDir,
-      planPath: path.join(goalDir, "plan.md"),
-      tasksDir: path.join(goalDir, "tasks"),
+      goal: {
+        repo,
+        goalDir,
+        planPath: path.join(goalDir, "plan.md"),
+        tasksDir: path.join(goalDir, "tasks"),
+      },
+      steerId: "",
+      betaTip: "",
+      integrationBefore: "",
     };
     try {
-      repo.writeFile(".factory/run.yaml", runYaml(repo.dir));
-      const intentPath = path.join(repo.dir, "INTENT.md");
-      fs.writeFileSync(
-        intentPath,
-        "# Goal\n\nBuild alpha, beta and gamma.\n",
-        "utf8",
-      );
-      repo.commit("factory config and intent");
-
-      // factory init through the CLI
-      const initCode = await dispatch(
-        ["init", "--repo", repo.dir, "--goal", "demo", "--intent", intentPath],
-        {},
-      );
-      expect(initCode).toBe(0);
-      expect(fs.existsSync(path.join(repo.dir, ".factory/repo.yaml"))).toBe(
-        true,
-      );
-      expect(
-        fs.readFileSync(path.join(goalDir, "intent.md"), "utf8"),
-      ).toContain("Build alpha");
-      fs.writeFileSync(
-        path.join(goalDir, "class.yaml"),
-        "class: bigger\n",
-        "utf8",
-      );
+      await e2eInit(ctx);
 
       // Launch 1: alpha merges, beta is rejected on review, gamma waits.
       const first = new FakeHarness({ id: "fake" });
-      first.script((req, ctx) => {
-        expect(req.prompt).toContain("- turn: `first`");
-        write(goalDir, "plan.md", PLAN_1);
-        ctx.writeOutcome(
-          outcome({
-            summary: "planned alpha, beta, gamma",
-            decision: "continue",
-          }),
-        );
-        return fakeTurnResult(req);
-      });
-      first.script((req, ctx) => {
-        for (const [slug, text] of [
-          ["alpha", ALPHA],
-          ["beta", BETA],
-          ["gamma", GAMMA_1],
-        ] as const) {
-          writeTask(goalDir, slug, text);
-        }
-        ctx.writeOutcome(outcome({ summary: "filed three tasks" }));
-        return fakeTurnResult(req);
-      });
-      // beta parks on its last-call rejection while alpha merges: the
-      // wave-end stall owns the park.
-      scriptStallLeave(first, ["beta"]);
-      first.script((req, ctx) => {
-        write(req.cwd!, "alpha.txt", "alpha\n");
-        ctx.writeOutcome(outcome({ summary: "alpha implemented" }));
-        return fakeTurnResult(req);
-      });
-      first.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "alpha approved", verdict: "approve" }),
-        );
-        return fakeTurnResult(req);
-      });
-      first.script((req, ctx) => {
-        write(req.cwd!, "beta.txt", "beta v1\n");
-        ctx.writeOutcome(outcome({ summary: "beta v1" }));
-        return fakeTurnResult(req);
-      });
-      first.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({
-            summary: "beta needs the second direction",
-            verdict: "changes",
-          }),
-        );
-        return fakeTurnResult(req);
-      });
-      first.script((req, ctx) => {
-        write(req.cwd!, "beta.txt", "beta v2\n");
-        ctx.writeOutcome(outcome({ summary: "beta v2" }));
-        return fakeTurnResult(req);
-      });
-      first.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "not salvageable", verdict: "reject" }),
-        );
-        return fakeTurnResult(req);
-      });
-
+      scriptLaunch1Planning(first, ctx);
+      scriptLaunch1Tasks(first);
       await expectDispatch(3, ["run", "--repo", repo.dir, "--goal", "demo"], {
         harnesses: { fake: first },
       });
-
-      let state = await stateOf(goalDir);
-      expect(state.tasks.alpha!.status).toBe("merged");
-      expect(state.tasks.beta!.status).toBe("parked");
-      expect(causeText(state.tasks.beta!.cause)).toContain("review-rejected");
-      expect(state.tasks.gamma!.status).toBe("pending");
-      const summary = summaryOf(goalDir, 1);
-      expect(summary).toContain("- review-rejected\n  - beta: not salvageable");
-      expect(summaryOf(goalDir, 1)).toContain("- merged: alpha");
-      expect(
-        fs.existsSync(
-          path.join(goalDir, "mailbox/outbox/iteration-1-summary.md"),
-        ),
-      ).toBe(true);
-      const one = await metricsOf(goalDir);
-      expect(one.iterations.map((i) => i.n)).toEqual([1]);
-      expect(one.iterations[0]!.turns).toBe(14);
-      expect(one.iterations[0]!.merged).toEqual(["alpha"]);
-      expect(one.iterations[0]!.parked).toEqual(["beta"]);
-      const betaTip = repo
-        .git(["rev-parse", "factory-task/demo/beta"])
-        .stdout.trim();
-
-      // factory steer through the CLI
-      const steerPath = path.join(repo.dir, "steer-source.md");
-      fs.writeFileSync(
-        steerPath,
-        "Keep the parked beta branch; finish it as beta2.\n",
-        "utf8",
-      );
-      expect(
-        await dispatch(
-          ["steer", "--repo", repo.dir, "--goal", "demo", steerPath],
-          {},
-        ),
-      ).toBe(0);
-      const inbox = fs.readdirSync(path.join(goalDir, "mailbox/inbox"));
-      expect(inbox.length).toBe(1);
-      const steerId = path.basename(inbox[0]!, ".md");
+      await expectLaunch1(ctx);
+      await steerBeta2(ctx);
 
       // Launch 2: architect answers the steer, PM reconciles, beta2 continues
       // beta's kept branch, gamma follows beta2.
       const second = new FakeHarness({ id: "fake" });
-      scriptDigest(second, goalDir, 2);
-      second.script((req, ctx) => {
-        expect(req.prompt).toContain("- turn: `relaunch`");
-        expect(req.prompt).toContain(steerId);
-        expect(req.prompt).toContain("Keep the parked beta branch");
-        write(goalDir, "plan.md", PLAN_2);
-        ctx.writeOutcome(
-          outcome({
-            summary: "answered the steer, beta2 continues beta",
-            decision: "continue",
-            forward: [`steer ${steerId}: keep the branch, finish it as beta2`],
-          }),
-        );
-        return fakeTurnResult(req);
-      });
-      second.script((req, ctx) => {
-        expect(req.prompt).toContain("beta | parked");
-        writeTask(goalDir, "beta2", BETA_2);
-        writeTask(goalDir, "gamma", GAMMA_2);
-        ctx.writeOutcome(
-          outcome({ summary: "filed beta2 and re-pointed gamma" }),
-        );
-        return fakeTurnResult(req);
-      });
-      second.script((req, ctx) => {
-        expect(fs.readFileSync(path.join(req.cwd!, "beta.txt"), "utf8")).toBe(
-          "beta v2\n",
-        );
-        write(req.cwd!, "beta2.txt", "beta2\n");
-        ctx.writeOutcome(
-          outcome({ summary: "beta2 completed on beta's branch" }),
-        );
-        return fakeTurnResult(req);
-      });
-      second.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "beta2 approved", verdict: "approve" }),
-        );
-        return fakeTurnResult(req);
-      });
-      second.script((req, ctx) => {
-        expect(fs.existsSync(path.join(req.cwd!, "beta2.txt"))).toBe(true);
-        write(req.cwd!, "gamma.txt", "gamma\n");
-        ctx.writeOutcome(outcome({ summary: "gamma implemented on beta2" }));
-        return fakeTurnResult(req);
-      });
-      second.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "gamma approved", verdict: "approve" }),
-        );
-        return fakeTurnResult(req);
-      });
-
-      const integrationBefore = repo
+      scriptLaunch2Planning(second, ctx);
+      scriptLaunch2Tasks(second);
+      ctx.integrationBefore = repo
         .git(["rev-parse", "factory/demo"])
         .stdout.trim();
       await expectDispatch(3, ["run", "--repo", repo.dir, "--goal", "demo"], {
         harnesses: { fake: second },
       });
+      await expectLaunch2Merged(ctx);
+      await expectLaunch2Continuation(ctx);
+      await expectLaunch2Steer(ctx);
 
-      state = await stateOf(goalDir);
-      expect(state.tasks.alpha!.status).toBe("merged");
-      expect(state.tasks.beta!.status).toBe("parked");
-      expect(state.tasks.beta2!.status).toBe("merged");
-      expect(state.tasks.gamma!.status).toBe("merged");
-      expect(repo.git(["show", "factory/demo:beta.txt"]).stdout.trim()).toBe(
-        "beta v2",
-      );
-      expect(repo.git(["show", "factory/demo:beta2.txt"]).stdout.trim()).toBe(
-        "beta2",
-      );
-      expect(repo.git(["show", "factory/demo:gamma.txt"]).stdout.trim()).toBe(
-        "gamma",
-      );
-      const records = await createFolderStore(
-        goalDir,
-        undefined,
-        {},
-      ).listRecords();
-      const betaMerge = records.find(
-        (r) => r.slug === "beta" && r.step === "merge",
-      );
-      expect(betaMerge).toBeUndefined();
-      const continuation = records.find(
-        (r) => r.slug === "beta2" && r.step === "implement",
-      );
-      expect(continuation?.base).toBe(integrationBefore);
-      expect(continuation?.base).not.toBe(betaTip);
-      const pack = fs.readFileSync(
-        path.join(goalDir, "iterations/2/context-pack.md"),
-        "utf8",
-      );
-      expect(pack).toContain(
-        `previous iteration summary: ${path.join(goalDir, "iterations/1/summary.md")}`,
-      );
-      expect(pack).toContain(`- ${steerId}: mailbox/inbox/`);
-      expect(fs.readdirSync(path.join(goalDir, "mailbox/inbox"))).toEqual([]);
-      expect(fs.readdirSync(path.join(goalDir, "mailbox/processed"))).toContain(
-        `${steerId}.md`,
-      );
-      expect(
-        fs.readFileSync(
-          path.join(goalDir, `mailbox/outbox/steer-${steerId}.md`),
-          "utf8",
-        ),
-      ).toContain("finish it as beta2");
-      expect(summaryOf(goalDir, 2)).toContain("merged: beta2, gamma");
-      const two = await metricsOf(goalDir);
-      expect(two.iterations.map((i) => i.n)).toEqual([1, 2]);
-      expect(two.iterations[1]!.turns).toBe(12);
-      expect(two.iterations[1]!.humanInterventions).toBe(1);
-      expect(two.iterations[1]!.merged).toEqual(["beta2", "gamma"]);
-      expect(two.totals.merged).toEqual(["alpha", "beta2", "gamma"]);
-
-      // Launch 3: architect says done.
-      const third = new FakeHarness({ id: "fake" });
-      scriptDigest(third, goalDir, 3);
-      third.script((req, ctx) => {
-        expect(req.prompt).toContain("- turn: `relaunch`");
-        ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
-        return fakeTurnResult(req);
-      });
-
-      await expectDispatch(0, ["run", "--repo", repo.dir, "--goal", "demo"], {
-        harnesses: { fake: third },
-      });
-
-      state = await stateOf(goalDir);
-      expect(state.goal).toBe("done");
-      expect(state.tasks.beta2!.status).toBe("merged");
-      expect(summaryOf(goalDir, 3)).toContain("status: goal-met");
-      expect(
-        fs.existsSync(
-          path.join(goalDir, "mailbox/outbox/iteration-3-summary.md"),
-        ),
-      ).toBe(true);
-      const three = await metricsOf(goalDir);
-      expect(three.iterations.map((i) => i.n)).toEqual([1, 2, 3]);
-      expect(three.iterations[2]!.turns).toBe(3);
-      expect(three.totals.parked).toEqual(["beta"]);
-      expect(three.totals.loopIncidents).toBe(0);
+      await launch3(ctx);
+      await expectLaunch3(ctx);
     } finally {
-      cleanup(goal);
+      cleanup(ctx.goal);
     }
   }, 90_000);
-});
+}

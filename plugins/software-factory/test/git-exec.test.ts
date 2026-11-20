@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -6,9 +5,9 @@ import path from "node:path";
 import { GitError, git } from "../src/core/git/exec.js";
 import { createTmpRepo, type TmpRepo } from "./helpers/tmp-repo.js";
 
-describe("Hardened git execution (§2, §7)", () => {
-  let repo: TmpRepo;
+let repo: TmpRepo;
 
+describe("Hardened git execution (§2, §7)", () => {
   beforeAll(() => {
     repo = createTmpRepo();
   });
@@ -16,7 +15,13 @@ describe("Hardened git execution (§2, §7)", () => {
   afterAll(() => {
     repo.cleanup();
   });
+  registerHardenedGitExecution27Part1();
+  registerHardenedGitExecution27Part2();
+  registerHardenedGitExecution27Part3();
+  registerHardenedGitExecution27Part4();
+});
 
+function registerHardenedGitExecution27Part1(): void {
   it("executes git commands and trims trailing newline from stdout", async () => {
     const res = await git(repo.dir, ["rev-parse", "--abbrev-ref", "HEAD"]);
     expect(res.code).toBe(0);
@@ -34,7 +39,9 @@ describe("Hardened git execution (§2, §7)", () => {
     expect(res.code).not.toBe(0);
     expect(res.stderr).toContain("nonexistent-branch");
   });
+}
 
+function registerHardenedGitExecution27Part2(): void {
   it("commits successfully using factory fallback identity when repo lacks config", async () => {
     // Create bare clone without user.name/email
     const unconfiguredDir = fs.mkdtempSync(
@@ -68,7 +75,9 @@ describe("Hardened git execution (§2, §7)", () => {
       fs.rmSync(unconfiguredDir, { recursive: true, force: true });
     }
   });
+}
 
+function registerHardenedGitExecution27Part3(): void {
   it("engine git calls bypass repo hooks that would reject the commit", async () => {
     // A hostile pre-commit hook that rejects everything.
     const hookPath = path.join(repo.dir, ".git", "hooks", "pre-commit");
@@ -105,7 +114,9 @@ describe("Hardened git execution (§2, §7)", () => {
       probe.cleanup();
     }
   });
+}
 
+function registerHardenedGitExecution27Part4(): void {
   it("Repo.identityEnv builds the author/committer env once", async () => {
     const { Repo } = await import("../src/core/git/repo.js");
     const withIdentity = new Repo({
@@ -125,4 +136,4 @@ describe("Hardened git execution (§2, §7)", () => {
     });
     expect(withoutIdentity.identityEnv()).toBeUndefined();
   });
-});
+}

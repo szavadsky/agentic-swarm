@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -342,221 +341,15 @@ describe("spike prompt", () => {
 });
 
 describe("reviewer includes its author's body", () => {
-  it("is an author-neutral intro, the implementer's body verbatim, then its duties", () => {
-    // The author body is the development variant: a reviewer has no report to
-    // commit, so the spike opening is not part of it.
-    const implementer = library().render("implementer", {
-      ...ROLES.implementer!,
-      report_path: "",
-    });
-    const at = implementer.indexOf("## This turn");
-    expect(at, "implementer has no turn block").toBeGreaterThan(0);
-    const implementerBody = implementer.slice(0, at);
-    const reviewer = library().render("reviewer", ROLES.reviewer!);
-    const intro = reviewer.slice(0, reviewer.indexOf("\n\n"));
-    expect(intro.startsWith("You review one author's work.")).toBe(true);
-    expect(intro).not.toContain("task diff");
-    expect(reviewer.startsWith(`${intro}\n\n${implementerBody}`)).toBe(true);
-    const duties = reviewer.slice(intro.length + 2 + implementerBody.length);
-    expect(duties.startsWith("## Review\n")).toBe(true);
-    expect(duties).toContain("You review the task diff");
-    expect(duties).toContain(
-      "5. Out-of-area changes, per the scope rule above.",
-    );
-    // The shared fragments arrive once, through the author's body.
-    for (const heading of ["## Code standard", "## Calibration", "## Outcome"])
-      expect(reviewer.split(heading).length - 1, heading).toBe(1);
-    // Only the reviewer's own turn block: the author's stayed out.
-    expect(reviewer.split("## This turn").length - 1).toBe(1);
-    expect(
-      reviewer.split("- `verdict` is used on review steps").length - 1,
-    ).toBe(1);
-  });
-
-  it("fails loudly when the author has no body", () => {
-    expect(() =>
-      library().render("reviewer", { ...ROLES.reviewer!, author: "nobody" }),
-    ).toThrow('Prompt fragment "nobody-body" not found');
-  });
-
-  it("fails loudly, by name, when the author has no duties", () => {
-    const lib = loadPromptLibrary({
-      builtinDir: path.join(packageRoot, "prompts"),
-      overrides: { "nobody-body": "Implementer body." },
-    });
-    expect(() =>
-      lib.render("reviewer", { ...ROLES.reviewer!, author: "nobody" }),
-    ).toThrow('Prompt fragment "review-nobody" not found');
-  });
-
-  it("includes the architect's assignment through fragments, not the whole body", () => {
-    const lib = library();
-    const rendered = lib.render("review-architect", ROLES["review-architect"]!);
-    // The shared assignment, plan standard and plan rules are the standard the
-    // plan must meet; the architect's turn order, steers and tiers are not the
-    // reviewer's.
-    expect(rendered).toContain("You are the architect");
-    expect(rendered).toContain("## Bounds");
-    expect(rendered).toContain("## What the plan carries");
-    expect(rendered).toContain("## Granularity and dispatch");
-    expect(rendered).toContain("## Debt, parked work and ADRs");
-    expect(rendered).toContain("Temporary debt only with a named remover");
-    expect(rendered).not.toContain("## Turn order");
-    expect(rendered).not.toContain("## Steers and calibration");
-    expect(rendered).not.toContain("You implement one task");
-    expect(rendered).not.toContain("- `verdict` is used on review steps");
-    expect(rendered).toContain("You review the architect's plan");
-    expect(rendered.split("## This turn").length - 1).toBe(1);
-  });
+  reviewerIncludesAuthorSBodyPart1();
+  reviewerIncludesAuthorSBodyPart2();
 });
 
 describe("review findings carry", () => {
-  it("formats the review outcome whole: summary first, then concerns and forward", () => {
-    const summary =
-      "1. src/x.ts:41 needs a null check\n2. test/y.ts:9 asserts nothing";
-    const text = formatReviewFindings(
-      outcome({
-        summary,
-        concerns: [
-          {
-            kind: "debt",
-            calibration: "architect",
-            text: "retry helper duplicates backoff",
-            evidence: "src/z.ts:3",
-          },
-        ],
-        forward: ["split the helper next iteration"],
-      }),
-    );
-    expect(text).toContain(summary);
-    expect(text.split("\n")[0]).toBe("1. src/x.ts:41 needs a null check");
-    const summaryAt = text.indexOf("1. src/x.ts:41");
-    const concernAt = text.indexOf("retry helper duplicates backoff");
-    const forwardAt = text.indexOf("split the helper next iteration");
-    expect(summaryAt).toBeGreaterThanOrEqual(0);
-    expect(concernAt).toBeGreaterThan(summaryAt);
-    expect(forwardAt).toBeGreaterThan(concernAt);
-  });
-
-  it("carries a summary-only changes review into findings and prior_findings", async () => {
-    const { repo, goal } = setupFlowRepo();
-    try {
-      const runtime = await makeRuntime(repo, goal, {
-        fake: new FakeHarness({ id: "fake" }),
-      });
-      const taskFile = task("alpha", { scope: ["alpha-area"] });
-      const flow = runtime.configs.process.flows["implement-review"]!;
-      const summary = "1. src/x.ts:41 needs a null check";
-      const records = [
-        rec(1, { slug: "alpha", step: "implement", round: 1 }),
-        rec(2, {
-          slug: "alpha",
-          step: "review",
-          round: 1,
-          outcome: outcome({ summary, verdict: "changes" }),
-        }),
-      ];
-      const vars = promptVars(
-        runtime,
-        taskFile,
-        "/worktrees/demo-tasks/alpha",
-        records,
-        2,
-        flow,
-      );
-      expect(vars.findings).toContain(summary);
-      expect(vars.prior_findings).toContain(summary);
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 60_000);
-
-  it("keeps gate-failure findings when red checks are the latest record", async () => {
-    const { repo, goal } = setupFlowRepo();
-    try {
-      const runtime = await makeRuntime(repo, goal, {
-        fake: new FakeHarness({ id: "fake" }),
-      });
-      const taskFile = task("alpha", { scope: ["alpha-area"] });
-      const flow = runtime.configs.process.flows["implement-review"]!;
-      const summary = "1. src/x.ts:41 needs a null check";
-      const records = [
-        rec(1, { slug: "alpha", step: "implement", round: 1 }),
-        rec(2, {
-          slug: "alpha",
-          step: "review",
-          round: 1,
-          outcome: outcome({ summary, verdict: "changes" }),
-        }),
-        rec(3, {
-          slug: "alpha",
-          step: "checks",
-          round: 1,
-          actor: "script",
-          alias: undefined,
-          model: undefined,
-          ok: false,
-          checks: [
-            {
-              name: "test",
-              ok: false,
-              summary: "exit 1",
-              output: "(fail) alpha > one",
-              fingerprint: "test:(fail) alpha > one",
-            },
-          ],
-        }),
-      ];
-      const vars = promptVars(
-        runtime,
-        taskFile,
-        "/worktrees/demo-tasks/alpha",
-        records,
-        2,
-        flow,
-      );
-      expect(vars.findings).toContain("### test: exit 1");
-      expect(vars.findings).not.toContain(summary);
-      expect(vars.prior_findings).toContain(summary);
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 60_000);
-
-  it("tells the reviewer to write numbered findings in its summary", () => {
-    const rendered = library().render("reviewer", ROLES.reviewer!);
-    expect(rendered).toContain("numbered list in your outcome `summary`");
-    expect(rendered).not.toContain("next implementer receives");
-  });
-
-  it("switches the reviewer decision to ship-or-park on the last call", () => {
-    const normal = library().render("reviewer", ROLES.reviewer!);
-    expect(normal).toContain(
-      "- `changes`: actionable findings for the next round.",
-    );
-    expect(normal).not.toContain("This is the last call");
-
-    const last = library().render("reviewer", {
-      ...ROLES.reviewer!,
-      last_call: "true",
-    });
-    expect(last).toContain("This is the last call");
-    expect(last).toContain(
-      "`changes` is not an accepted outcome — outcome validation refuses it.",
-    );
-    expect(last).toContain(
-      "- `reject`: park, keeping the branch; the work must not merge.",
-    );
-    expect(last).not.toContain(
-      "- `changes`: actionable findings for the next round.",
-    );
-  });
-
-  it("marks findings empty before the first acceptance, not per fix round", () => {
-    const rendered = library().render("implementer", ROLES.implementer!);
-    expect(rendered).not.toContain("empty on the first turn");
-    expect(rendered).toContain("empty before the first acceptance");
-  });
+  registerReviewFindingsCarryPart1();
+  registerReviewFindingsCarryPart2();
+  registerReviewFindingsCarryPart3();
+  registerReviewFindingsCarryPart4();
 });
 
 describe("preset snapshots", () => {
@@ -600,50 +393,7 @@ describe("prompt debloat", () => {
 
   // One entry per original sentence class: where an input came from, how it
   // was produced, or what the kernel/next role does with the output.
-  const PROVENANCE_OR_DOWNSTREAM = [
-    "implemented and merged after gates",
-    "the front's briefing for this goal",
-    "review summary, then concerns and forward",
-    "You get the task file or plan",
-    "next implementer receives",
-    "Each tier gets two turns",
-    "the ladder climbs",
-    "fallbacks already absorbed",
-    "A pending task in this list is not dispatched",
-    "runs its flow to the end",
-    "keeps running to exhaustion",
-    "outbox response",
-    "landed outcome is answered to the owner later",
-    "The next boundary presents the steer verbatim",
-    "the hold drains the goal",
-    "the next boundary sees your reason",
-    "the next reconcile never cancels them",
-    "a fresh session at the same tier",
-    "writes were rolled back",
-    "Records follow the kernel step record",
-    "the previous launch being summarised",
-    "replaces the scripted pack",
-    "it briefs the implementer",
-    "after this turn the script runs",
-    "records hold the history",
-    "Parked tasks come from the pack with a cause",
-    "the rest continues unless the steer blocks the goal",
-    "There is no diff and no task file to judge",
-    "next implementers receive only what its bullets say",
-    "The plan stands or changes on the architect's decision",
-    "The dispatch set ran out",
-    "before the architect is consulted",
-    "the kernel throws away whatever you write outside the outcome",
-    "everything else stays on the record",
-    "the fix round's per-finding disposition claims",
-    "the escalation ask for a standalone task",
-    "red before this diff",
-    "status, hashes, paths, evidence; drill in by path",
-    "stays on the record",
-    "waits for the next architect turn",
-    "a concern costs the next stage attention",
-    "deserves the next stage's attention",
-  ];
+  const PROVENANCE_OR_DOWNSTREAM = PROVENANCE_OR_DOWNSTREAMFixture;
 
   it("drops input provenance and downstream steps from every rendered prompt", () => {
     const rendered = renderedPrompts();
@@ -680,131 +430,10 @@ describe("prompt debloat", () => {
 });
 
 describe("fix dispositions carry", () => {
-  it("carries the current fix round's dispositions into fix_dispositions", async () => {
-    const { repo, goal } = setupFlowRepo();
-    try {
-      const runtime = await makeRuntime(repo, goal, {
-        fake: new FakeHarness({ id: "fake" }),
-      });
-      const taskFile = task("alpha", { scope: ["alpha-area"] });
-      const flow = runtime.configs.process.flows["implement-review"]!;
-      const dispositions =
-        "F1 fixed in src/x.ts:41; F2 out of scope per done-when";
-      const replies = [
-        { finding: 1, reply: "null check added at src/x.ts:41" },
-        { finding: 2, reply: "the assertion moves to test/y.ts:9" },
-      ];
-      const records = [
-        rec(1, { slug: "alpha", step: "implement", round: 1 }),
-        rec(2, {
-          slug: "alpha",
-          step: "review",
-          round: 1,
-          outcome: outcome({
-            summary: "1. src/x.ts:41 needs a null check",
-            verdict: "changes",
-          }),
-        }),
-        rec(3, {
-          slug: "alpha",
-          step: "implement",
-          round: 2,
-          outcome: outcome({ summary: dispositions, replies }),
-        }),
-      ];
-      const vars = promptVars(
-        runtime,
-        taskFile,
-        "/worktrees/demo-tasks/alpha",
-        records,
-        2,
-        flow,
-      );
-      expect(vars.fix_dispositions).toContain(dispositions);
-      for (const reply of replies) {
-        expect(vars.fix_dispositions).toContain(
-          `finding ${reply.finding}: ${reply.reply}`,
-        );
-      }
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 60_000);
-
-  it("renders each reply by its finding number after the fix summary", () => {
-    const summary = "replied without a change";
-    const text = formatFixDispositions(
-      outcome({
-        summary,
-        replies: [
-          { finding: 1, reply: "already guarded" },
-          { finding: 2, reply: "already asserted" },
-        ],
-      }),
-    );
-    expect(text).toBe(
-      "replied without a change\n- finding 1: already guarded\n- finding 2: already asserted",
-    );
-  });
-
-  it("leaves fix_dispositions empty without a current-round fix", async () => {
-    const { repo, goal } = setupFlowRepo();
-    try {
-      const runtime = await makeRuntime(repo, goal, {
-        fake: new FakeHarness({ id: "fake" }),
-      });
-      const taskFile = task("alpha", { scope: ["alpha-area"] });
-      const flow = runtime.configs.process.flows["implement-review"]!;
-      const first = [
-        rec(1, {
-          slug: "alpha",
-          step: "implement",
-          round: 1,
-          outcome: outcome({ summary: "implemented" }),
-        }),
-      ];
-      const round1 = promptVars(
-        runtime,
-        taskFile,
-        "/worktrees/demo-tasks/alpha",
-        first,
-        1,
-        flow,
-      );
-      expect(round1.fix_dispositions).toBe("");
-      const stale = promptVars(
-        runtime,
-        taskFile,
-        "/worktrees/demo-tasks/alpha",
-        first,
-        2,
-        flow,
-      );
-      expect(stale.fix_dispositions).toBe("");
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 60_000);
-
-  it("renders the fix-dispositions line in the reviewer prompt", () => {
-    const rendered = library().render("reviewer", {
-      ...ROLES.reviewer!,
-      fix_dispositions: "F1 fixed",
-    });
-    expect(rendered).toContain("F1 fixed");
-    expect(rendered).toContain(
-      "Re-judge each finding against the diff or its reply",
-    );
-    expect(rendered).toContain("a reply is judged on its argument");
-  });
-
-  it("tells the implementer a reply-only round is done", () => {
-    const rendered = library().render("implementer", ROLES.implementer!);
-    expect(rendered).toContain(
-      "each is answered by a change, a reply in `replies`, or both",
-    );
-    expect(rendered).toContain("a reply-only round is `done`");
-  });
+  registerFixDispositionsCarryPart1();
+  registerFixDispositionsCarryPart2();
+  registerFixDispositionsCarryPart3();
+  registerFixDispositionsCarryPart4();
 });
 
 describe("scope as predicted area", () => {
@@ -923,80 +552,8 @@ describe("architect horizon", () => {
 });
 
 describe("architect and subarchitect share fragments", () => {
-  function bounds(rendered: string): string {
-    const start = rendered.indexOf("## Bounds\n");
-    expect(start, "no bounds").toBeGreaterThanOrEqual(0);
-    return rendered.slice(start, rendered.indexOf("\n## ", start + 1));
-  }
-
-  function body(rendered: string): string {
-    const start = rendered.indexOf("## Turn order\n");
-    expect(start, "no turn order").toBeGreaterThanOrEqual(0);
-    const outcome = rendered.indexOf("## Outcome\n", start);
-    expect(outcome, "no outcome").toBeGreaterThan(start);
-    const end = rendered.indexOf("\n## ", outcome + 1);
-    return rendered.slice(start, end === -1 ? undefined : end);
-  }
-
-  it("renders the bounds and the whole body identically in both", () => {
-    const architect = library().render("architect", ROLES.architect!);
-    const subarchitect = library().render("subarchitect", ROLES.subarchitect!);
-    expect(bounds(subarchitect).trimEnd()).toBe(bounds(architect).trimEnd());
-    expect(body(subarchitect).trimEnd()).toBe(body(architect).trimEnd());
-    for (const rendered of [architect, subarchitect]) {
-      for (const heading of [
-        "## Bounds\n",
-        "## Turn order\n",
-        "## Outcome\n",
-      ]) {
-        expect(rendered.split(heading).length - 1, heading).toBe(1);
-      }
-    }
-  });
-
-  it("adds only its own scope and reporting line", () => {
-    const architect = library().render("architect", ROLES.architect!);
-    const subarchitect = library().render("subarchitect", ROLES.subarchitect!);
-    expect(architect.startsWith("You are the architect:")).toBe(true);
-    expect(architect).toContain("### Architect register");
-    expect(architect).toContain("## Steers");
-    expect(architect).not.toContain("You are the subarchitect");
-    expect(architect).not.toContain("## Upward brief");
-    expect(
-      subarchitect.startsWith("You are the subarchitect of epic `auth`"),
-    ).toBe(true);
-    expect(subarchitect).toContain("You report to the architect above you");
-    expect(subarchitect).toContain("## Your epic");
-    expect(subarchitect).toContain("## Upward brief");
-    expect(subarchitect).toContain("the one brief the parent reads");
-    expect(subarchitect).toContain("it is never the goal's done");
-    expect(subarchitect).toContain("never sideways");
-    expect(subarchitect).not.toContain("### Architect register");
-    expect(subarchitect).not.toContain("## Steers\n");
-  });
-
-  it("names each turn's own plan and the parent plan below the top", () => {
-    const architect = library().render("architect", ROLES.architect!);
-    const subarchitect = library().render("subarchitect", ROLES.subarchitect!);
-    expect(architect).toContain("- plan: `/goal/plan.md` (edit this file)");
-    expect(architect).not.toContain("parent plan");
-    const turn = subarchitect.slice(subarchitect.indexOf("## This turn"));
-    expect(turn).toContain("- epic: `auth`");
-    expect(turn).toContain(
-      "- plan: `/goal/epics/auth.md` (your epic plan; edit this file)",
-    );
-    expect(turn).toContain("- parent plan: `/goal/plan.md` (read-only)");
-  });
-
-  it("keeps the architect register out of a depth-1 goal", () => {
-    const depth1 = library().render("architect", {
-      ...ROLES.architect!,
-      depth: "1",
-    });
-    expect(depth1).not.toContain("Architect register");
-    expect(depth1).not.toContain("epics/");
-    expect(depth1).toContain("## Steers");
-  });
+  architectSubarchitectSharePart1();
+  architectSubarchitectSharePart2();
 });
 
 describe("outcome protocol in prompts", () => {
@@ -1171,9 +728,161 @@ function crossFragmentRepeats(
 }
 
 describe("prompt single definitions", () => {
-  // Units (normalized, 8+ words, sentence or clause) allowed to repeat,
-  // keyed by fragment name. A repeat is excused when any fragment or role
-  // holding it lists it here. Empty: every rule lives in exactly one fragment.
+  promptSingleDefinitionsPart1();
+  promptSingleDefinitionsPart2();
+});
+
+function reviewerIncludesAuthorSBodyPart1() {
+  it("is an author-neutral intro, the implementer's body verbatim, then its duties", () => {
+    // The author body is the development variant: a reviewer has no report to
+    // commit, so the spike opening is not part of it.
+    const implementer = library().render("implementer", {
+      ...ROLES.implementer!,
+      report_path: "",
+    });
+    const at = implementer.indexOf("## This turn");
+    expect(at, "implementer has no turn block").toBeGreaterThan(0);
+    const implementerBody = implementer.slice(0, at);
+    const reviewer = library().render("reviewer", ROLES.reviewer!);
+    const intro = reviewer.slice(0, reviewer.indexOf("\n\n"));
+    expect(intro.startsWith("You review one author's work.")).toBe(true);
+    expect(intro).not.toContain("task diff");
+    expect(reviewer.startsWith(`${intro}\n\n${implementerBody}`)).toBe(true);
+    const duties = reviewer.slice(intro.length + 2 + implementerBody.length);
+    expect(duties.startsWith("## Review\n")).toBe(true);
+    expect(duties).toContain("You review the task diff");
+    expect(duties).toContain(
+      "5. Out-of-area changes, per the scope rule above.",
+    );
+    // The shared fragments arrive once, through the author's body.
+    for (const heading of ["## Code standard", "## Calibration", "## Outcome"])
+      expect(reviewer.split(heading).length - 1, heading).toBe(1);
+    // Only the reviewer's own turn block: the author's stayed out.
+    expect(reviewer.split("## This turn").length - 1).toBe(1);
+    expect(
+      reviewer.split("- `verdict` is used on review steps").length - 1,
+    ).toBe(1);
+  });
+
+  it("fails loudly when the author has no body", () => {
+    expect(() =>
+      library().render("reviewer", { ...ROLES.reviewer!, author: "nobody" }),
+    ).toThrow('Prompt fragment "nobody-body" not found');
+  });
+}
+
+function reviewerIncludesAuthorSBodyPart2() {
+  it("fails loudly, by name, when the author has no duties", () => {
+    const lib = loadPromptLibrary({
+      builtinDir: path.join(packageRoot, "prompts"),
+      overrides: { "nobody-body": "Implementer body." },
+    });
+    expect(() =>
+      lib.render("reviewer", { ...ROLES.reviewer!, author: "nobody" }),
+    ).toThrow('Prompt fragment "review-nobody" not found');
+  });
+
+  it("includes the architect's assignment through fragments, not the whole body", () => {
+    const lib = library();
+    const rendered = lib.render("review-architect", ROLES["review-architect"]!);
+    // The shared assignment, plan standard and plan rules are the standard the
+    // plan must meet; the architect's turn order, steers and tiers are not the
+    // reviewer's.
+    expect(rendered).toContain("You are the architect");
+    expect(rendered).toContain("## Bounds");
+    expect(rendered).toContain("## What the plan carries");
+    expect(rendered).toContain("## Granularity and dispatch");
+    expect(rendered).toContain("## Debt, parked work and ADRs");
+    expect(rendered).toContain("Temporary debt only with a named remover");
+    expect(rendered).not.toContain("## Turn order");
+    expect(rendered).not.toContain("## Steers and calibration");
+    expect(rendered).not.toContain("You implement one task");
+    expect(rendered).not.toContain("- `verdict` is used on review steps");
+    expect(rendered).toContain("You review the architect's plan");
+    expect(rendered.split("## This turn").length - 1).toBe(1);
+  });
+}
+
+function architectSubarchitectSharePart1() {
+  function bounds(rendered: string): string {
+    const start = rendered.indexOf("## Bounds\n");
+    expect(start, "no bounds").toBeGreaterThanOrEqual(0);
+    return rendered.slice(start, rendered.indexOf("\n## ", start + 1));
+  }
+
+  function body(rendered: string): string {
+    const start = rendered.indexOf("## Turn order\n");
+    expect(start, "no turn order").toBeGreaterThanOrEqual(0);
+    const outcome = rendered.indexOf("## Outcome\n", start);
+    expect(outcome, "no outcome").toBeGreaterThan(start);
+    const end = rendered.indexOf("\n## ", outcome + 1);
+    return rendered.slice(start, end === -1 ? undefined : end);
+  }
+
+  it("renders the bounds and the whole body identically in both", () => {
+    const architect = library().render("architect", ROLES.architect!);
+    const subarchitect = library().render("subarchitect", ROLES.subarchitect!);
+    expect(bounds(subarchitect).trimEnd()).toBe(bounds(architect).trimEnd());
+    expect(body(subarchitect).trimEnd()).toBe(body(architect).trimEnd());
+    for (const rendered of [architect, subarchitect]) {
+      for (const heading of [
+        "## Bounds\n",
+        "## Turn order\n",
+        "## Outcome\n",
+      ]) {
+        expect(rendered.split(heading).length - 1, heading).toBe(1);
+      }
+    }
+  });
+}
+
+function architectSubarchitectSharePart2() {
+  it("adds only its own scope and reporting line", () => {
+    const architect = library().render("architect", ROLES.architect!);
+    const subarchitect = library().render("subarchitect", ROLES.subarchitect!);
+    expect(architect.startsWith("You are the architect:")).toBe(true);
+    expect(architect).toContain("### Architect register");
+    expect(architect).toContain("## Steers");
+    expect(architect).not.toContain("You are the subarchitect");
+    expect(architect).not.toContain("## Upward brief");
+    expect(
+      subarchitect.startsWith("You are the subarchitect of epic `auth`"),
+    ).toBe(true);
+    expect(subarchitect).toContain("You report to the architect above you");
+    expect(subarchitect).toContain("## Your epic");
+    expect(subarchitect).toContain("## Upward brief");
+    expect(subarchitect).toContain("the one brief the parent reads");
+    expect(subarchitect).toContain("it is never the goal's done");
+    expect(subarchitect).toContain("never sideways");
+    expect(subarchitect).not.toContain("### Architect register");
+    expect(subarchitect).not.toContain("## Steers\n");
+  });
+
+  it("names each turn's own plan and the parent plan below the top", () => {
+    const architect = library().render("architect", ROLES.architect!);
+    const subarchitect = library().render("subarchitect", ROLES.subarchitect!);
+    expect(architect).toContain("- plan: `/goal/plan.md` (edit this file)");
+    expect(architect).not.toContain("parent plan");
+    const turn = subarchitect.slice(subarchitect.indexOf("## This turn"));
+    expect(turn).toContain("- epic: `auth`");
+    expect(turn).toContain(
+      "- plan: `/goal/epics/auth.md` (your epic plan; edit this file)",
+    );
+    expect(turn).toContain("- parent plan: `/goal/plan.md` (read-only)");
+  });
+
+  it("keeps the architect register out of a depth-1 goal", () => {
+    const depth1 = library().render("architect", {
+      ...ROLES.architect!,
+      depth: "1",
+    });
+    expect(depth1).not.toContain("Architect register");
+    expect(depth1).not.toContain("epics/");
+    expect(depth1).toContain("## Steers");
+  });
+}
+
+function promptSingleDefinitionsPart1() {
   const ALLOWED_REPEATS: Record<string, string[]> = {};
 
   it("defines every 8-word sentence and clause once: no repeat inside one rendered prompt or across two fragments", () => {
@@ -1216,7 +925,9 @@ describe("prompt single definitions", () => {
       "a real rule sentence with more than eight words lives here plainly",
     ]);
   });
+}
 
+function promptSingleDefinitionsPart2() {
   it("catches a shared clause inside two differently worded sentences", () => {
     const fragments = new Map([
       [
@@ -1253,4 +964,338 @@ describe("prompt single definitions", () => {
       }),
     ).toEqual([]);
   });
-});
+}
+
+const PROVENANCE_OR_DOWNSTREAMFixture = [
+  "implemented and merged after gates",
+  "the front's briefing for this goal",
+  "review summary, then concerns and forward",
+  "You get the task file or plan",
+  "next implementer receives",
+  "Each tier gets two turns",
+  "the ladder climbs",
+  "fallbacks already absorbed",
+  "A pending task in this list is not dispatched",
+  "runs its flow to the end",
+  "keeps running to exhaustion",
+  "outbox response",
+  "landed outcome is answered to the owner later",
+  "The next boundary presents the steer verbatim",
+  "the hold drains the goal",
+  "the next boundary sees your reason",
+  "the next reconcile never cancels them",
+  "a fresh session at the same tier",
+  "writes were rolled back",
+  "Records follow the kernel step record",
+  "the previous launch being summarised",
+  "replaces the scripted pack",
+  "it briefs the implementer",
+  "after this turn the script runs",
+  "records hold the history",
+  "Parked tasks come from the pack with a cause",
+  "the rest continues unless the steer blocks the goal",
+  "There is no diff and no task file to judge",
+  "next implementers receive only what its bullets say",
+  "The plan stands or changes on the architect's decision",
+  "The dispatch set ran out",
+  "before the architect is consulted",
+  "the kernel throws away whatever you write outside the outcome",
+  "everything else stays on the record",
+  "the fix round's per-finding disposition claims",
+  "the escalation ask for a standalone task",
+  "red before this diff",
+  "status, hashes, paths, evidence; drill in by path",
+  "stays on the record",
+  "waits for the next architect turn",
+  "a concern costs the next stage attention",
+  "deserves the next stage's attention",
+];
+
+function registerReviewFindingsCarryPart1(): void {
+  it("formats the review outcome whole: summary first, then concerns and forward", () => {
+    const summary =
+      "1. src/x.ts:41 needs a null check\n2. test/y.ts:9 asserts nothing";
+    const text = formatReviewFindings(
+      outcome({
+        summary,
+        concerns: [
+          {
+            kind: "debt",
+            calibration: "architect",
+            text: "retry helper duplicates backoff",
+            evidence: "src/z.ts:3",
+          },
+        ],
+        forward: ["split the helper next iteration"],
+      }),
+    );
+    expect(text).toContain(summary);
+    expect(text.split("\n")[0]).toBe("1. src/x.ts:41 needs a null check");
+    const summaryAt = text.indexOf("1. src/x.ts:41");
+    const concernAt = text.indexOf("retry helper duplicates backoff");
+    const forwardAt = text.indexOf("split the helper next iteration");
+    expect(summaryAt).toBeGreaterThanOrEqual(0);
+    expect(concernAt).toBeGreaterThan(summaryAt);
+    expect(forwardAt).toBeGreaterThan(concernAt);
+  });
+}
+
+function registerReviewFindingsCarryPart2(): void {
+  it("carries a summary-only changes review into findings and prior_findings", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const runtime = await makeRuntime(repo, goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      const taskFile = task("alpha", { scope: ["alpha-area"] });
+      const flow = runtime.configs.process.flows["implement-review"]!;
+      const summary = "1. src/x.ts:41 needs a null check";
+      const records = [
+        rec(1, { slug: "alpha", step: "implement", round: 1 }),
+        rec(2, {
+          slug: "alpha",
+          step: "review",
+          round: 1,
+          outcome: outcome({ summary, verdict: "changes" }),
+        }),
+      ];
+      const vars = promptVars(
+        runtime,
+        taskFile,
+        "/worktrees/demo-tasks/alpha",
+        records,
+        2,
+        flow,
+      );
+      expect(vars.findings).toContain(summary);
+      expect(vars.prior_findings).toContain(summary);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+function registerReviewFindingsCarryPart3(): void {
+  it("keeps gate-failure findings when red checks are the latest record", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const runtime = await makeRuntime(repo, goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      const taskFile = task("alpha", { scope: ["alpha-area"] });
+      const flow = runtime.configs.process.flows["implement-review"]!;
+      const summary = "1. src/x.ts:41 needs a null check";
+      const records = [
+        rec(1, { slug: "alpha", step: "implement", round: 1 }),
+        rec(2, {
+          slug: "alpha",
+          step: "review",
+          round: 1,
+          outcome: outcome({ summary, verdict: "changes" }),
+        }),
+        rec(3, {
+          slug: "alpha",
+          step: "checks",
+          round: 1,
+          actor: "script",
+          alias: undefined,
+          model: undefined,
+          ok: false,
+          checks: [
+            {
+              name: "test",
+              ok: false,
+              summary: "exit 1",
+              output: "(fail) alpha > one",
+              fingerprint: "test:(fail) alpha > one",
+            },
+          ],
+        }),
+      ];
+      const vars = promptVars(
+        runtime,
+        taskFile,
+        "/worktrees/demo-tasks/alpha",
+        records,
+        2,
+        flow,
+      );
+      expect(vars.findings).toContain("### test: exit 1");
+      expect(vars.findings).not.toContain(summary);
+      expect(vars.prior_findings).toContain(summary);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+function registerReviewFindingsCarryPart4(): void {
+  it("tells the reviewer to write numbered findings in its summary", () => {
+    const rendered = library().render("reviewer", ROLES.reviewer!);
+    expect(rendered).toContain("numbered list in your outcome `summary`");
+    expect(rendered).not.toContain("next implementer receives");
+  });
+
+  it("switches the reviewer decision to ship-or-park on the last call", () => {
+    const normal = library().render("reviewer", ROLES.reviewer!);
+    expect(normal).toContain(
+      "- `changes`: actionable findings for the next round.",
+    );
+    expect(normal).not.toContain("This is the last call");
+
+    const last = library().render("reviewer", {
+      ...ROLES.reviewer!,
+      last_call: "true",
+    });
+    expect(last).toContain("This is the last call");
+    expect(last).toContain(
+      "`changes` is not an accepted outcome — outcome validation refuses it.",
+    );
+    expect(last).toContain(
+      "- `reject`: park, keeping the branch; the work must not merge.",
+    );
+    expect(last).not.toContain(
+      "- `changes`: actionable findings for the next round.",
+    );
+  });
+
+  it("marks findings empty before the first acceptance, not per fix round", () => {
+    const rendered = library().render("implementer", ROLES.implementer!);
+    expect(rendered).not.toContain("empty on the first turn");
+    expect(rendered).toContain("empty before the first acceptance");
+  });
+}
+
+function registerFixDispositionsCarryPart1(): void {
+  it("carries the current fix round's dispositions into fix_dispositions", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const runtime = await makeRuntime(repo, goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      const taskFile = task("alpha", { scope: ["alpha-area"] });
+      const flow = runtime.configs.process.flows["implement-review"]!;
+      const dispositions =
+        "F1 fixed in src/x.ts:41; F2 out of scope per done-when";
+      const replies = [
+        { finding: 1, reply: "null check added at src/x.ts:41" },
+        { finding: 2, reply: "the assertion moves to test/y.ts:9" },
+      ];
+      const records = [
+        rec(1, { slug: "alpha", step: "implement", round: 1 }),
+        rec(2, {
+          slug: "alpha",
+          step: "review",
+          round: 1,
+          outcome: outcome({
+            summary: "1. src/x.ts:41 needs a null check",
+            verdict: "changes",
+          }),
+        }),
+        rec(3, {
+          slug: "alpha",
+          step: "implement",
+          round: 2,
+          outcome: outcome({ summary: dispositions, replies }),
+        }),
+      ];
+      const vars = promptVars(
+        runtime,
+        taskFile,
+        "/worktrees/demo-tasks/alpha",
+        records,
+        2,
+        flow,
+      );
+      expect(vars.fix_dispositions).toContain(dispositions);
+      for (const reply of replies) {
+        expect(vars.fix_dispositions).toContain(
+          `finding ${reply.finding}: ${reply.reply}`,
+        );
+      }
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+function registerFixDispositionsCarryPart2(): void {
+  it("renders each reply by its finding number after the fix summary", () => {
+    const summary = "replied without a change";
+    const text = formatFixDispositions(
+      outcome({
+        summary,
+        replies: [
+          { finding: 1, reply: "already guarded" },
+          { finding: 2, reply: "already asserted" },
+        ],
+      }),
+    );
+    expect(text).toBe(
+      "replied without a change\n- finding 1: already guarded\n- finding 2: already asserted",
+    );
+  });
+}
+
+function registerFixDispositionsCarryPart3(): void {
+  it("leaves fix_dispositions empty without a current-round fix", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const runtime = await makeRuntime(repo, goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      const taskFile = task("alpha", { scope: ["alpha-area"] });
+      const flow = runtime.configs.process.flows["implement-review"]!;
+      const first = [
+        rec(1, {
+          slug: "alpha",
+          step: "implement",
+          round: 1,
+          outcome: outcome({ summary: "implemented" }),
+        }),
+      ];
+      const round1 = promptVars(
+        runtime,
+        taskFile,
+        "/worktrees/demo-tasks/alpha",
+        first,
+        1,
+        flow,
+      );
+      expect(round1.fix_dispositions).toBe("");
+      const stale = promptVars(
+        runtime,
+        taskFile,
+        "/worktrees/demo-tasks/alpha",
+        first,
+        2,
+        flow,
+      );
+      expect(stale.fix_dispositions).toBe("");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+function registerFixDispositionsCarryPart4(): void {
+  it("renders the fix-dispositions line in the reviewer prompt", () => {
+    const rendered = library().render("reviewer", {
+      ...ROLES.reviewer!,
+      fix_dispositions: "F1 fixed",
+    });
+    expect(rendered).toContain("F1 fixed");
+    expect(rendered).toContain(
+      "Re-judge each finding against the diff or its reply",
+    );
+    expect(rendered).toContain("a reply is judged on its argument");
+  });
+
+  it("tells the implementer a reply-only round is done", () => {
+    const rendered = library().render("implementer", ROLES.implementer!);
+    expect(rendered).toContain(
+      "each is answered by a change, a reply in `replies`, or both",
+    );
+    expect(rendered).toContain("a reply-only round is `done`");
+  });
+}

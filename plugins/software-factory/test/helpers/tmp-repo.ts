@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -100,21 +99,9 @@ function sweepStaleProbeDirs(): void {
   } catch {}
 }
 
-export function createTmpRepo(options?: {
-  initialCommitMessage?: string;
-}): TmpRepo {
-  // Normalize the tmp base: os.tmpdir() inherits TMPDIR, and head-guard path
-  // math breaks when TMPDIR sits under `/.factory-runtime`. Fall back to /tmp
-  // whenever the inherited dir looks factory-owned or is missing.
-  const rawTmp = os.tmpdir() ?? "";
-  const baseTmp =
-    rawTmp && fs.existsSync(rawTmp) && !rawTmp.includes(".factory")
-      ? rawTmp
-      : "/tmp";
-  const dir = fs.mkdtempSync(path.join(baseTmp, "factory-test-repo-"));
-  const worktrees: string[] = [];
-
-  function runGit(
+/** A repo's git runner, with the test env and TMPDIR normalization applied. */
+function makeGitRunner(dir: string): TmpRepo["git"] {
+  return function runGit(
     args: string | string[],
     opts: {
       cwd?: string;
@@ -133,7 +120,6 @@ export function createTmpRepo(options?: {
       ...(opts.env ?? {}),
     };
     const argsArr = Array.isArray(args) ? args : [args];
-
     try {
       const stdout = execFileSync("git", argsArr, {
         cwd,
@@ -154,22 +140,17 @@ export function createTmpRepo(options?: {
         code: err.status ?? 1,
       };
     }
-  }
+  };
+}
 
-  // Initialize repo on branch main
-  runGit(["init", "-b", "main"]);
-  runGit(["config", "user.name", "Factory Test"]);
-  runGit(["config", "user.email", "test@factory.local"]);
-
-  // Create initial commit
-  fs.writeFileSync(path.join(dir, "README.md"), "# Test Repository\n", "utf8");
-  runGit(["add", "README.md"]);
-  runGit(["commit", "-m", options?.initialCommitMessage ?? "Initial commit"]);
-
-  const repo: TmpRepo = {
-    dir,
+/** The repo operations that close over its dir, worktrees and git runner. */
+function makeRepoOps(
+  dir: string,
+  worktrees: string[],
+  runGit: TmpRepo["git"],
+): Omit<TmpRepo, "dir" | "git" | "cleanup"> {
+  return {
     worktrees,
-
     writeFile(relPath: string, content: string): void {
       const fullPath = path.resolve(dir, relPath);
       fs.mkdirSync(path.dirname(fullPath), { recursive: true });
@@ -206,18 +187,38 @@ export function createTmpRepo(options?: {
       worktrees.push(targetPath);
       return targetPath;
     },
+  };
+}
 
-    git(
-      args: string[],
-      opts?: {
-        allowFail?: boolean;
-        env?: Record<string, string>;
-        cwd?: string;
-      },
-    ) {
-      return runGit(args, opts);
-    },
+export function createTmpRepo(options?: {
+  initialCommitMessage?: string;
+}): TmpRepo {
+  // Normalize the tmp base: os.tmpdir() inherits TMPDIR, and head-guard path
+  // math breaks when TMPDIR sits under `/.factory-runtime`. Fall back to /tmp
+  // whenever the inherited dir looks factory-owned or is missing.
+  const rawTmp = os.tmpdir() ?? "";
+  const baseTmp =
+    rawTmp && fs.existsSync(rawTmp) && !rawTmp.includes(".factory")
+      ? rawTmp
+      : "/tmp";
+  const dir = fs.mkdtempSync(path.join(baseTmp, "factory-test-repo-"));
+  const worktrees: string[] = [];
+  const runGit = makeGitRunner(dir);
 
+  // Initialize repo on branch main
+  runGit(["init", "-b", "main"]);
+  runGit(["config", "user.name", "Factory Test"]);
+  runGit(["config", "user.email", "test@factory.local"]);
+
+  // Create initial commit
+  fs.writeFileSync(path.join(dir, "README.md"), "# Test Repository\n", "utf8");
+  runGit(["add", "README.md"]);
+  runGit(["commit", "-m", options?.initialCommitMessage ?? "Initial commit"]);
+
+  const repo: TmpRepo = {
+    dir,
+    ...makeRepoOps(dir, worktrees, runGit),
+    git: runGit,
     cleanup(): void {
       unregisterCleanup();
       removeWorktrees(worktrees, runGit);

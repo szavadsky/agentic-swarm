@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -101,6 +100,124 @@ describe("pool reset window", () => {
 });
 
 describe("exhausted-pool persistence", () => {
+  registerExhaustedPoolPersistencePart1();
+  registerExhaustedPoolPersistencePart2();
+  registerExhaustedPoolPersistencePart3();
+});
+
+async function skipsPoolRelaunchBeforeStoredResetPart1(
+  goal: ReturnType<typeof makeGoal>,
+  paths: ReturnType<typeof resolveGoalPaths>,
+) {
+  const first = new FakeHarness({ id: "fake" });
+  first.script((req, ctx) => {
+    writePlan(
+      goal.goalDir,
+      "# Milestone 1\n\n## alpha\nCreate alpha.txt.\nDone when: alpha.txt exists.\n",
+    );
+    ctx.writeOutcome(
+      outcome({ summary: "planned alpha", decision: "continue" }),
+    );
+    return fakeTurnResult(req);
+  });
+  first.script((req, ctx) => {
+    writeGoalTask(goal.goalDir, simpleTask("alpha", "alpha.txt"));
+    ctx.writeOutcome(outcome({ summary: "filed alpha" }));
+    return fakeTurnResult(req);
+  });
+  first.scriptResult({
+    stop: {
+      kind: "infra",
+      cause: "quota",
+      details: RETRY_AFTER_TEXT,
+    },
+  });
+  first.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "alpha on the fallback tier" }));
+    return fakeTurnResult(req);
+  });
+  first.script((req, ctx) => {
+    ctx.writeOutcome(
+      outcome({ summary: "alpha approved", verdict: "approve" }),
+    );
+    return fakeTurnResult(req);
+  });
+  const before = Date.now();
+  await expectLaunch(3, goal.repo, first);
+
+  // Launch 1 stored the provider's stated 38,240,413 ms, not the configured
+  // 45-minute fallback.
+  const stored = yaml.parse(fs.readFileSync(quotaPoolsPath(paths), "utf8"));
+  const resetAt = Date.parse(stored.pools["fake+fake-impl"].resetAt);
+  expect(resetAt).toBeGreaterThanOrEqual(before + 38_240_413);
+  expect(resetAt).toBeLessThanOrEqual(Date.now() + 38_240_413);
+
+  // Launch 2: a fresh process would read the session store; a fresh runtime does the same.
+  const second = new FakeHarness({ id: "fake" });
+
+  return { second };
+}
+
+async function skipsPoolRelaunchBeforeStoredResetPart2(
+  goal: ReturnType<typeof makeGoal>,
+  scope: Awaited<ReturnType<typeof skipsPoolRelaunchBeforeStoredResetPart1>>,
+) {
+  const { second } = scope;
+  second.script((req, ctx) => {
+    writePlan(
+      goal.goalDir,
+      "# Milestone 1\n\n## alpha\nCreate alpha.txt.\n\n## beta\nCreate beta.txt.\n",
+    );
+    ctx.writeOutcome(
+      outcome({ summary: "plan carries both tasks", decision: "continue" }),
+    );
+    return fakeTurnResult(req);
+  });
+  second.script((req, ctx) => {
+    writeGoalTask(goal.goalDir, simpleTask("beta", "beta.txt"));
+    ctx.writeOutcome(outcome({ summary: "filed beta" }));
+    return fakeTurnResult(req);
+  });
+  second.script((req, ctx) => {
+    expect(req.model.id).toBe("fake-impl-2");
+    fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "beta on the recovered tier" }));
+    return fakeTurnResult(req);
+  });
+  second.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "beta approved", verdict: "approve" }));
+    return fakeTurnResult(req);
+  });
+  await expectLaunch(3, goal.repo, second);
+
+  expect(second.calls.filter((call) => call.model.id === "fake-impl")).toEqual(
+    [],
+  );
+  expect(
+    second.calls.filter((call) => call.model.id === "fake-impl-2"),
+  ).toHaveLength(1);
+}
+
+async function skipsPoolRelaunchBeforeStoredResetPart3(
+  paths: ReturnType<typeof resolveGoalPaths>,
+) {
+  fs.writeFileSync(
+    quotaPoolsPath(paths),
+    yaml.stringify({
+      pools: {
+        "fake+fake-impl": {
+          resetAt: new Date(Date.now() - 60_000).toISOString(),
+        },
+      },
+    }),
+    "utf8",
+  );
+  const reloaded = await loadPoolResets(paths);
+  expect(reloaded.has("fake+fake-impl")).toBe(false);
+}
+
+function registerExhaustedPoolPersistencePart1(): void {
   it("stores a quota stop with its reset time in the session store", async () => {
     const { repo, goal } = setupFlowRepo({
       aliases: {
@@ -153,7 +270,9 @@ describe("exhausted-pool persistence", () => {
       cleanupFlowRepo(repo);
     }
   });
+}
 
+function registerExhaustedPoolPersistencePart2(): void {
   it("drops a stored reset that already passed and refuses a corrupt file", async () => {
     const { repo, goal } = setupFlowRepo();
     const paths = resolveGoalPaths(loadConfigs(repo.dir), repo.dir, goal);
@@ -184,7 +303,9 @@ describe("exhausted-pool persistence", () => {
       cleanupFlowRepo(repo);
     }
   });
+}
 
+function registerExhaustedPoolPersistencePart3(): void {
   it("skips the pool on a relaunch before its stored reset, then uses it again", async () => {
     const goal = makeGoal({
       runYaml: [
@@ -213,105 +334,11 @@ describe("exhausted-pool persistence", () => {
       "demo",
     );
     try {
-      // Launch 1: the primary answers quota, the fallback delivers alpha.
-      const first = new FakeHarness({ id: "fake" });
-      first.script((req, ctx) => {
-        writePlan(
-          goal.goalDir,
-          "# Milestone 1\n\n## alpha\nCreate alpha.txt.\nDone when: alpha.txt exists.\n",
-        );
-        ctx.writeOutcome(
-          outcome({ summary: "planned alpha", decision: "continue" }),
-        );
-        return fakeTurnResult(req);
-      });
-      first.script((req, ctx) => {
-        writeGoalTask(goal.goalDir, simpleTask("alpha", "alpha.txt"));
-        ctx.writeOutcome(outcome({ summary: "filed alpha" }));
-        return fakeTurnResult(req);
-      });
-      first.scriptResult({
-        stop: {
-          kind: "infra",
-          cause: "quota",
-          details: RETRY_AFTER_TEXT,
-        },
-      });
-      first.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "alpha on the fallback tier" }));
-        return fakeTurnResult(req);
-      });
-      first.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "alpha approved", verdict: "approve" }),
-        );
-        return fakeTurnResult(req);
-      });
-      const before = Date.now();
-      await expectLaunch(3, goal.repo, first);
-
-      // Launch 1 stored the provider's stated 38,240,413 ms, not the configured
-      // 45-minute fallback.
-      const stored = yaml.parse(fs.readFileSync(quotaPoolsPath(paths), "utf8"));
-      const resetAt = Date.parse(stored.pools["fake+fake-impl"].resetAt);
-      expect(resetAt).toBeGreaterThanOrEqual(before + 38_240_413);
-      expect(resetAt).toBeLessThanOrEqual(Date.now() + 38_240_413);
-
-      // Launch 2: a fresh process would read the session store; a fresh runtime does the same.
-      const second = new FakeHarness({ id: "fake" });
-      second.script((req, ctx) => {
-        writePlan(
-          goal.goalDir,
-          "# Milestone 1\n\n## alpha\nCreate alpha.txt.\n\n## beta\nCreate beta.txt.\n",
-        );
-        ctx.writeOutcome(
-          outcome({ summary: "plan carries both tasks", decision: "continue" }),
-        );
-        return fakeTurnResult(req);
-      });
-      second.script((req, ctx) => {
-        writeGoalTask(goal.goalDir, simpleTask("beta", "beta.txt"));
-        ctx.writeOutcome(outcome({ summary: "filed beta" }));
-        return fakeTurnResult(req);
-      });
-      second.script((req, ctx) => {
-        expect(req.model.id).toBe("fake-impl-2");
-        fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "beta on the recovered tier" }));
-        return fakeTurnResult(req);
-      });
-      second.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "beta approved", verdict: "approve" }),
-        );
-        return fakeTurnResult(req);
-      });
-      await expectLaunch(3, goal.repo, second);
-
-      expect(
-        second.calls.filter((call) => call.model.id === "fake-impl"),
-      ).toEqual([]);
-      expect(
-        second.calls.filter((call) => call.model.id === "fake-impl-2"),
-      ).toHaveLength(1);
-
-      // Past the reset the pool serves again: the same store, read as expired.
-      fs.writeFileSync(
-        quotaPoolsPath(paths),
-        yaml.stringify({
-          pools: {
-            "fake+fake-impl": {
-              resetAt: new Date(Date.now() - 60_000).toISOString(),
-            },
-          },
-        }),
-        "utf8",
-      );
-      const reloaded = await loadPoolResets(paths);
-      expect(reloaded.has("fake+fake-impl")).toBe(false);
+      const scope1 = await skipsPoolRelaunchBeforeStoredResetPart1(goal, paths);
+      await skipsPoolRelaunchBeforeStoredResetPart2(goal, scope1);
+      await skipsPoolRelaunchBeforeStoredResetPart3(paths);
     } finally {
       cleanup(goal);
     }
   }, 60_000);
-});
+}

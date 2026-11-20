@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import fs from "node:fs";
 import path from "node:path";
 import { runWorktreeSetup } from "../core/checks/setup.js";
@@ -260,15 +259,20 @@ async function runBaseGates(
  * reused. A run that could not execute is infra: it is warned about and never
  * cached as base-red.
  */
-export async function checkBase(
-  configs: ConfigBundle,
-  store: ArtifactStore,
+/** The commit and branch the follow lands on, plus base when it must merge. */
+interface BaseTarget {
+  target: string;
+  targetBranch: string;
+  mergeFrom: string | undefined;
+}
+
+/** Resolves the integration head the follow produces from base and commit. */
+async function baseTarget(
   repoRoot: string,
   baseBranch: string,
   commit: string,
-): Promise<BaselineResult> {
-  // Same naming as resolveGoalPaths: the goal's stable integration branch.
-  const integrationBranch = `factory/${path.basename(store.goalDir)}`;
+  integrationBranch: string,
+): Promise<BaseTarget> {
   const integrationCommit = await resolveBaseCommit(
     repoRoot,
     integrationBranch,
@@ -290,16 +294,108 @@ export async function checkBase(
     if (!(await isAncestor(repoRoot, commit, integrationCommit)))
       mergeFrom = commit;
   }
+  return { target, targetBranch, mergeFrom };
+}
 
+/** The reusable baseline record for this target, or undefined when stale. */
+async function reusableBaseline(
+  store: ArtifactStore,
+  target: string,
+  mergeFrom: string | undefined,
+): Promise<StepRecord | undefined> {
   // A merge preview is a function of base too, so a record keyed by the
   // integration commit alone may predate the base it was gated with. A record
   // from before run roots were stored is stale: reusing it would collapse its
   // basename-only paths into current runs, so it is re-gated instead.
-  const found = mergeFrom
+  if (mergeFrom) return undefined;
+  const found = baselineRecord(await store.listRecords(), target);
+  return found && (found.checks ?? []).some(isStaleGateCheck)
     ? undefined
-    : baselineRecord(await store.listRecords(), target);
-  const existing =
-    found && (found.checks ?? []).some(isStaleGateCheck) ? undefined : found;
+    : found;
+}
+
+/** Records a baseline that could not run as infra and warns, never red. */
+async function recordInfraBase(
+  store: ArtifactStore,
+  target: string,
+  described: string,
+  checks: CheckResult[],
+  infraChecks: CheckResult[],
+): Promise<BaselineResult> {
+  await store.appendRecord(
+    {
+      iteration: 0,
+      step: BASELINE_INFRA_STEP,
+      round: 1,
+      actor: "script",
+      base: target,
+    },
+    { ok: false, checks },
+  );
+  console.warn(
+    [
+      `[factory] ${described} could not be checked; not recorded as red, retried next launch.`,
+      ...infraChecks.map((c) => `  ${c.name}: ${c.summary}`),
+    ].join("\n"),
+  );
+  return { commit: target, ok: false, checks, fresh: true, infra: true };
+}
+
+/** Records a base-gate run and warns once when it is red. */
+async function recordBaseResult(
+  store: ArtifactStore,
+  target: string,
+  described: string,
+  checks: CheckResult[],
+): Promise<boolean> {
+  const ok = checks.every((c) => c.ok);
+  const meta: RecordStart = {
+    iteration: 0,
+    step: "baseline",
+    round: 1,
+    actor: "script",
+    base: target,
+  };
+  await store.appendRecord(meta, { ok, checks });
+  if (!ok) {
+    const red = checks.filter((c) => !c.ok);
+    console.warn(
+      [
+        `[factory] ${described} is red; recorded once, continuing.`,
+        ...red.map((c) => `  ${c.name}: ${c.summary}`),
+      ].join("\n"),
+    );
+  }
+  return ok;
+}
+
+/**
+ * Runs the repo's setup + gates once on the head tasks start from, in a scratch
+ * worktree. Tasks branch from the integration head, not from the base branch,
+ * and recovery follows base into that head before dispatching: a fast-forward
+ * when the integration only lags, a merge when it has diverged. The divergent
+ * case is gated with that merge staged, so base's own red is not blamed on the
+ * first task. A red base is recorded and warned about, never fatal; an existing
+ * record for the same state means the result was already reported and is
+ * reused. A run that could not execute is infra: it is warned about and never
+ * cached as base-red.
+ */
+export async function checkBase(
+  configs: ConfigBundle,
+  store: ArtifactStore,
+  repoRoot: string,
+  baseBranch: string,
+  commit: string,
+): Promise<BaselineResult> {
+  // Same naming as resolveGoalPaths: the goal's stable integration branch.
+  const integrationBranch = `factory/${path.basename(store.goalDir)}`;
+  const { target, targetBranch, mergeFrom } = await baseTarget(
+    repoRoot,
+    baseBranch,
+    commit,
+    integrationBranch,
+  );
+  const existing = await reusableBaseline(store, target, mergeFrom);
   if (existing)
     return {
       commit: target,
@@ -313,45 +409,9 @@ export async function checkBase(
     : `base "${targetBranch}" at ${target.slice(0, 8)}`;
   const checks = await runBaseGates(configs, repoRoot, target, mergeFrom);
   const infraChecks = checks.filter(isInfraCheck);
-  if (infraChecks.length > 0) {
-    await store.appendRecord(
-      {
-        iteration: 0,
-        step: BASELINE_INFRA_STEP,
-        round: 1,
-        actor: "script",
-        base: target,
-      },
-      { ok: false, checks },
-    );
-    console.warn(
-      [
-        `[factory] ${described} could not be checked; not recorded as red, retried next launch.`,
-        ...infraChecks.map((c) => `  ${c.name}: ${c.summary}`),
-      ].join("\n"),
-    );
-    return { commit: target, ok: false, checks, fresh: true, infra: true };
-  }
-
-  const ok = checks.every((c) => c.ok);
-  const meta: RecordStart = {
-    iteration: 0,
-    step: "baseline",
-    round: 1,
-    actor: "script",
-    base: target,
-  };
-  await store.appendRecord(meta, { ok, checks });
-
-  if (!ok) {
-    const red = checks.filter((c) => !c.ok);
-    console.warn(
-      [
-        `[factory] ${described} is red; recorded once, continuing.`,
-        ...red.map((c) => `  ${c.name}: ${c.summary}`),
-      ].join("\n"),
-    );
-  }
+  if (infraChecks.length > 0)
+    return await recordInfraBase(store, target, described, checks, infraChecks);
+  const ok = await recordBaseResult(store, target, described, checks);
   return { commit: target, ok, checks, fresh: true };
 }
 

@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -94,65 +93,12 @@ describe("merge-check skip", () => {
       gates: [{ id: "green", command: greenCommand(probe) }],
     });
     try {
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "v1" }));
-        return fakeTurnResult(req);
-      });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
-        return fakeTurnResult(req);
-      });
-
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
-      const result = await runDispatch(runtime, { iteration: 1 });
-      expect(result.reason).toBe("boundary");
-
-      const records = await runtime.store.listRecords();
-      const state = derive(
-        await runtime.store.listTasks(),
-        records,
-        runtime.configs.process.flows,
+      const scope1 = await skipsMergeChecksWhenMergedTreePart1(
+        repo,
+        goal,
+        probe,
       );
-      expect(state.tasks.task!.status).toBe("merged");
-
-      // No gate run on the merged tree: only the task-checks run happened.
-      expect(runs(probe)).toBe(1);
-      expect(
-        records.filter((r) => r.slug === "task" && r.step === "merge-checks"),
-      ).toHaveLength(0);
-
-      const merge = records.find(
-        (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
-      );
-      expect(merge).toBeDefined();
-      expect(causeText(merge!.cause)).toContain("skipped merge-checks");
-      expect(causeText(merge!.cause)).toContain(
-        "merged tree equals checked tree",
-      );
-      expect(merge!.checks).toHaveLength(1);
-      expect(merge!.checks![0]!.ok).toBe(true);
-
-      // Tree equality, not commit: the squash commit differs from the tip.
-      const checks = records.find(
-        (r) => r.slug === "task" && r.step === "checks",
-      );
-      const checkedTree = checks?.tree;
-      expect(checkedTree).toBeDefined();
-      const tip = repo
-        .git(["rev-parse", "factory-task/demo/task"])
-        .stdout.trim();
-      expect(merge!.commit).toBeDefined();
-      expect(merge!.commit).not.toBe(tip);
-      const tipTree = repo.git(["rev-parse", `${tip}^{tree}`]).stdout.trim();
-      const mergeTree = repo
-        .git(["rev-parse", `${merge!.commit}^{tree}`])
-        .stdout.trim();
-      expect(tipTree).toBe(checkedTree!);
-      expect(mergeTree).toBe(checkedTree!);
-      expect(causeText(merge!.cause)).toContain(checkedTree!);
+      await skipsMergeChecksWhenMergedTreePart2(repo, scope1);
     } finally {
       cleanupFlowRepo(repo);
       cleanupProbe(probe);
@@ -166,74 +112,12 @@ describe("merge-check skip", () => {
     });
     const checkout = goalCheckout(repo, goal);
     try {
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script((req, ctx) => {
-        fs.writeFileSync(
-          path.join(req.cwd!, "feature.txt"),
-          "feature\n",
-          "utf8",
-        );
-        ctx.writeOutcome(outcome({ summary: "feature implemented" }));
-        return fakeTurnResult(req);
-      });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
-        return fakeTurnResult(req);
-      });
-
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      const file = task("task", { scope: ["feature.txt"] });
-      await writeTask(runtime, file);
-      await step(runtime, file, {
-        kind: "step",
-        slug: "task",
-        step: "implement",
-        round: 1,
-      });
-      // No separate checks step: the implement turn already gated its tree.
-      await step(runtime, file, {
-        kind: "step",
-        slug: "task",
-        step: "review",
-        round: 1,
-      });
-
-      // A concurrent landing moves the head: the squash tree now differs.
-      fs.writeFileSync(path.join(checkout, "other.txt"), "other\n", "utf8");
-      repo.git(["add", "other.txt"], { cwd: checkout });
-      repo.git(["commit", "-m", "concurrent landing"], { cwd: checkout });
-
-      await step(runtime, file, { kind: "merge", slug: "task" });
-
-      const records = await runtime.store.listRecords();
-      const state = derive(
-        await runtime.store.listTasks(),
-        records,
-        runtime.configs.process.flows,
+      const scope1 = await runsMergeChecksWhenMergedTreePart1(
+        repo,
+        goal,
+        checkout,
       );
-      expect(state.tasks.task!.status).toBe("merged");
-
-      const mergeChecks = records.filter(
-        (r) => r.slug === "task" && r.step === "merge-checks",
-      );
-      expect(mergeChecks).toHaveLength(1);
-      expect(mergeChecks[0]!.ok).toBe(true);
-      expect(runs(probe)).toBe(2);
-
-      const merge = records.find(
-        (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
-      );
-      expect(merge).toBeDefined();
-      expect(merge!.cause ?? "").not.toContain("skipped merge-checks");
-
-      const checks = records.find(
-        (r) => r.slug === "task" && r.step === "checks",
-      );
-      const mergeTree = repo
-        .git(["rev-parse", `${merge!.commit}^{tree}`])
-        .stdout.trim();
-      expect(checks?.tree).toBeDefined();
-      expect(mergeTree).not.toBe(checks!.tree);
+      await runsMergeChecksWhenMergedTreePart2(repo, probe, scope1);
     } finally {
       cleanupFlowRepo(repo);
       cleanupProbe(probe);
@@ -250,50 +134,13 @@ describe("merge-check skip", () => {
       ],
     });
     try {
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "v1" }));
-        return fakeTurnResult(req);
-      });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
-        return fakeTurnResult(req);
-      });
-
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
-      const result = await runDispatch(runtime, { iteration: 1 });
-      expect(result.reason).toBe("boundary");
-
-      const records = await runtime.store.listRecords();
-      const state = derive(
-        await runtime.store.listTasks(),
-        records,
-        runtime.configs.process.flows,
+      const scope1 = await countsGateFlakeReRunAsCheckedTreePart1(
+        repo,
+        goal,
+        flaky,
+        green,
       );
-      expect(state.tasks.task!.status).toBe("merged");
-
-      const checks = records.filter(
-        (r) => r.slug === "task" && r.step === "checks",
-      );
-      expect(checks).toHaveLength(1);
-      expect(checks[0]!.ok).toBe(true);
-      expect(
-        records.filter((r) => r.slug === "task" && r.step === "gate-flake"),
-      ).toHaveLength(1);
-
-      // The flake re-run closed the tree green, so the merge skips its gates:
-      // flaky ran checks + re-run, green ran checks, neither ran at merge.
-      expect(runs(flaky)).toBe(2);
-      expect(runs(green)).toBe(1);
-      expect(
-        records.filter((r) => r.slug === "task" && r.step === "merge-checks"),
-      ).toHaveLength(0);
-      const merge = records.find(
-        (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
-      );
-      expect(causeText(merge?.cause)).toContain("skipped merge-checks");
+      await countsGateFlakeReRunAsCheckedTreePart2(scope1);
     } finally {
       cleanupFlowRepo(repo);
       cleanupProbe(green);
@@ -301,3 +148,210 @@ describe("merge-check skip", () => {
     }
   }, 60_000);
 });
+
+async function skipsMergeChecksWhenMergedTreePart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+  probe: ReturnType<typeof makeProbe>,
+) {
+  const harness = new FakeHarness({ id: "fake" });
+  harness.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "v1" }));
+    return fakeTurnResult(req);
+  });
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+    return fakeTurnResult(req);
+  });
+
+  const runtime = await makeRuntime(repo, goal, { fake: harness });
+  await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+  const result = await runDispatch(runtime, { iteration: 1 });
+  expect(result.reason).toBe("boundary");
+
+  const records = await runtime.store.listRecords();
+  const state = derive(
+    await runtime.store.listTasks(),
+    records,
+    runtime.configs.process.flows,
+  );
+  expect(state.tasks.task!.status).toBe("merged");
+
+  // No gate run on the merged tree: only the task-checks run happened.
+  expect(runs(probe)).toBe(1);
+  expect(
+    records.filter((r) => r.slug === "task" && r.step === "merge-checks"),
+  ).toHaveLength(0);
+
+  const merge = records.find(
+    (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
+  );
+  expect(merge).toBeDefined();
+  expect(causeText(merge!.cause)).toContain("skipped merge-checks");
+  expect(causeText(merge!.cause)).toContain("merged tree equals checked tree");
+  expect(merge!.checks).toHaveLength(1);
+  expect(merge!.checks![0]!.ok).toBe(true);
+
+  // Tree equality, not commit: the squash commit differs from the tip.
+  const checks = records.find((r) => r.slug === "task" && r.step === "checks");
+  const checkedTree = checks?.tree;
+  expect(checkedTree).toBeDefined();
+
+  return { merge, checkedTree };
+}
+
+async function skipsMergeChecksWhenMergedTreePart2(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  scope: Awaited<ReturnType<typeof skipsMergeChecksWhenMergedTreePart1>>,
+) {
+  const { merge, checkedTree } = scope;
+  const tip = repo.git(["rev-parse", "factory-task/demo/task"]).stdout.trim();
+  expect(merge!.commit).toBeDefined();
+  expect(merge!.commit).not.toBe(tip);
+  const tipTree = repo.git(["rev-parse", `${tip}^{tree}`]).stdout.trim();
+  const mergeTree = repo
+    .git(["rev-parse", `${merge!.commit}^{tree}`])
+    .stdout.trim();
+  expect(tipTree).toBe(checkedTree!);
+  expect(mergeTree).toBe(checkedTree!);
+  expect(causeText(merge!.cause)).toContain(checkedTree!);
+}
+
+async function runsMergeChecksWhenMergedTreePart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+  checkout: string,
+) {
+  const harness = new FakeHarness({ id: "fake" });
+  harness.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "feature.txt"), "feature\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "feature implemented" }));
+    return fakeTurnResult(req);
+  });
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+    return fakeTurnResult(req);
+  });
+
+  const runtime = await makeRuntime(repo, goal, { fake: harness });
+  const file = task("task", { scope: ["feature.txt"] });
+  await writeTask(runtime, file);
+  await step(runtime, file, {
+    kind: "step",
+    slug: "task",
+    step: "implement",
+    round: 1,
+  });
+  // No separate checks step: the implement turn already gated its tree.
+  await step(runtime, file, {
+    kind: "step",
+    slug: "task",
+    step: "review",
+    round: 1,
+  });
+
+  // A concurrent landing moves the head: the squash tree now differs.
+  fs.writeFileSync(path.join(checkout, "other.txt"), "other\n", "utf8");
+  repo.git(["add", "other.txt"], { cwd: checkout });
+  repo.git(["commit", "-m", "concurrent landing"], { cwd: checkout });
+
+  await step(runtime, file, { kind: "merge", slug: "task" });
+
+  const records = await runtime.store.listRecords();
+  const state = derive(
+    await runtime.store.listTasks(),
+    records,
+    runtime.configs.process.flows,
+  );
+  expect(state.tasks.task!.status).toBe("merged");
+
+  return { records };
+}
+
+async function runsMergeChecksWhenMergedTreePart2(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  probe: ReturnType<typeof makeProbe>,
+  scope: Awaited<ReturnType<typeof runsMergeChecksWhenMergedTreePart1>>,
+) {
+  const { records } = scope;
+  const mergeChecks = records.filter(
+    (r) => r.slug === "task" && r.step === "merge-checks",
+  );
+  expect(mergeChecks).toHaveLength(1);
+  expect(mergeChecks[0]!.ok).toBe(true);
+  expect(runs(probe)).toBe(2);
+
+  const merge = records.find(
+    (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
+  );
+  expect(merge).toBeDefined();
+  expect(merge!.cause ?? "").not.toContain("skipped merge-checks");
+
+  const checks = records.find((r) => r.slug === "task" && r.step === "checks");
+  const mergeTree = repo
+    .git(["rev-parse", `${merge!.commit}^{tree}`])
+    .stdout.trim();
+  expect(checks?.tree).toBeDefined();
+  expect(mergeTree).not.toBe(checks!.tree);
+}
+
+async function countsGateFlakeReRunAsCheckedTreePart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+  flaky: ReturnType<typeof makeProbe>,
+  green: ReturnType<typeof makeProbe>,
+) {
+  const harness = new FakeHarness({ id: "fake" });
+  harness.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "v1" }));
+    return fakeTurnResult(req);
+  });
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+    return fakeTurnResult(req);
+  });
+
+  const runtime = await makeRuntime(repo, goal, { fake: harness });
+  await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+  const result = await runDispatch(runtime, { iteration: 1 });
+  expect(result.reason).toBe("boundary");
+
+  const records = await runtime.store.listRecords();
+  const state = derive(
+    await runtime.store.listTasks(),
+    records,
+    runtime.configs.process.flows,
+  );
+  expect(state.tasks.task!.status).toBe("merged");
+
+  const checks = records.filter(
+    (r) => r.slug === "task" && r.step === "checks",
+  );
+  expect(checks).toHaveLength(1);
+  expect(checks[0]!.ok).toBe(true);
+  expect(
+    records.filter((r) => r.slug === "task" && r.step === "gate-flake"),
+  ).toHaveLength(1);
+
+  // The flake re-run closed the tree green, so the merge skips its gates:
+  // flaky ran checks + re-run, green ran checks, neither ran at merge.
+  expect(runs(flaky)).toBe(2);
+  expect(runs(green)).toBe(1);
+  expect(
+    records.filter((r) => r.slug === "task" && r.step === "merge-checks"),
+  ).toHaveLength(0);
+
+  return { records };
+}
+
+async function countsGateFlakeReRunAsCheckedTreePart2(
+  scope: Awaited<ReturnType<typeof countsGateFlakeReRunAsCheckedTreePart1>>,
+) {
+  const { records } = scope;
+  const merge = records.find(
+    (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
+  );
+  expect(causeText(merge?.cause)).toContain("skipped merge-checks");
+}

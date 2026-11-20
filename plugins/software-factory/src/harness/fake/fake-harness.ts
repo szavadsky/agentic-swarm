@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: split-rest-functions
 import fs from "node:fs";
 import path from "node:path";
 import type {
@@ -199,10 +198,11 @@ export class FakeHarness implements Harness {
     return this.capsConfig;
   }
 
-  async turn(req: TurnRequest): Promise<TurnResult> {
-    this.calls.push(req);
-    if (req.onLive && this.live) req.onLive(await this.live(req));
-    const n = this.calls.length;
+  /** Consumes the handler that serves this request, or throws when none does. */
+  private takeHandler(
+    req: TurnRequest,
+    n: number,
+  ): (typeof this.handlers)[number] {
     // The match runs synchronously at call time, so concurrent turns cannot
     // interleave between the scan and the splice. A fallback bound to this
     // request beats an unbound positional script, while an explicit binding
@@ -229,22 +229,11 @@ export class FakeHarness implements Harness {
     const entry = this.handlers[index];
     if (!entry) throw new Error("FakeHarness: handler index out of range");
     if (!entry.fallback) this.handlers.splice(index, 1);
+    return entry;
+  }
 
-    const outcome = await entry.handler(req, {
-      n,
-      writeOutcome: (value) => {
-        if (!req.outcomePath) {
-          throw new Error("FakeHarness: request has no outcomePath");
-        }
-        fs.mkdirSync(path.dirname(req.outcomePath), { recursive: true });
-        fs.writeFileSync(
-          req.outcomePath,
-          `${JSON.stringify(value, null, 2)}\n`,
-          "utf8",
-        );
-      },
-    });
-
+  /** Resolves the session a turn reports, keeping or refreshing its lifetime. */
+  private resolveSession(req: TurnRequest, outcome: TurnResult): SessionRef {
     // A resumed request keeps its id, cwd and compacted flag, but the request
     // restarts the cache lifetime, as the real adapters report. Only a
     // handler-set session (a different ref than the request carried) passes
@@ -258,7 +247,32 @@ export class FakeHarness implements Harness {
       ? base
       : { ...base, lastRequestStartedAt: new Date().toISOString() };
     this.sessions.set(session.id, session);
+    return session;
+  }
 
+  /** Writes the handler's outcome JSON to the request's outcome path. */
+  private writeOutcome(req: TurnRequest, value: unknown): void {
+    if (!req.outcomePath) {
+      throw new Error("FakeHarness: request has no outcomePath");
+    }
+    fs.mkdirSync(path.dirname(req.outcomePath), { recursive: true });
+    fs.writeFileSync(
+      req.outcomePath,
+      `${JSON.stringify(value, null, 2)}\n`,
+      "utf8",
+    );
+  }
+
+  async turn(req: TurnRequest): Promise<TurnResult> {
+    this.calls.push(req);
+    if (req.onLive && this.live) req.onLive(await this.live(req));
+    const n = this.calls.length;
+    const entry = this.takeHandler(req, n);
+    const outcome = await entry.handler(req, {
+      n,
+      writeOutcome: (value) => this.writeOutcome(req, value),
+    });
+    const session = this.resolveSession(req, outcome);
     return {
       ...outcome,
       stop: outcome.stop as Stop,
