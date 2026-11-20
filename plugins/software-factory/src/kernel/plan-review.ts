@@ -9,12 +9,13 @@ import {
 import { architectureTarget } from "./flow-context.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import {
+  restorePlans,
   restoreTasks,
   restoreTurn,
-  snapshotTasks,
   snapshotTurn,
+  type TurnSnapshot,
 } from "./pm.js";
-import type { PlanFile } from "./plan-file.js";
+import { type PlanFile, registeredPlans } from "./plan-file.js";
 import { outcomeRepairSchemaVar } from "./prompt-schema.js";
 import { scriptMeta } from "./record.js";
 import { MAIN_ARCHITECT } from "./tasks.js";
@@ -34,6 +35,22 @@ export const PLAN_REVIEW_STEP = ARCHITECTURE_STEPS[0];
 
 /** Agent step of the architect's one turn on the review's technical findings. */
 export const PLAN_RETURN_STEP = ARCHITECTURE_STEPS[1];
+
+/**
+ * The target plan plus every plan the register names, deduplicated. A review
+ * or return turn owns one plan; the rest are snapshotted so a foreign write is
+ * discarded. Read-only resolution, so a plan not on disk stays a path.
+ */
+function planSet(runtime: KernelRuntime, target: PlanFile): PlanFile[] {
+  const plans = [target];
+  const seen = new Set([target.rel]);
+  for (const plan of registeredPlans(runtime.store.goalDir)) {
+    if (seen.has(plan.rel)) continue;
+    seen.add(plan.rel);
+    plans.push(plan);
+  }
+  return plans;
+}
 
 /** The reviewers that delivered findings, and what they found. */
 export interface PlanReviewRound {
@@ -134,7 +151,14 @@ async function recordMissing(
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: one reviewer turn, its read-only reconcile and its missing record
 export async function runPlanReview(
   runtime: KernelRuntime,
-  opts: { iteration: number; packRel: string; plan: PlanFile },
+  opts: {
+    iteration: number;
+    packRel: string;
+    /** The plan under review: the goal's or one epic's. */
+    plan: PlanFile;
+    /** The architect that owns the plan; absent is the main architect. */
+    architect?: string;
+  },
 ): Promise<PlanReviewRound> {
   const plan = opts.plan;
   const reviewers = runtime.configs.process.architecture.reviewers;
@@ -148,11 +172,16 @@ export async function runPlanReview(
       alias,
       opts.iteration,
     );
-    const snapshot = await snapshotTurn(runtime, [plan]);
+    const snapshot = await snapshotTurn(runtime, planSet(runtime, plan));
     const result = await runAgentTurn(runtime, {
       target,
       cwd: runtime.paths.goalCheckout,
-      meta: { iteration: opts.iteration, step: PLAN_REVIEW_STEP, round: 1 },
+      meta: {
+        iteration: opts.iteration,
+        step: PLAN_REVIEW_STEP,
+        round: 1,
+        ...(opts.architect ? { architect: opts.architect } : {}),
+      },
       vars: {
         iteration: String(opts.iteration),
         intent_path: path.join(runtime.store.goalDir, "intent.md"),
@@ -219,13 +248,19 @@ export async function runPlanReview(
   };
 }
 
-/** The architect return owns the plan, never a task file: discard its task writes. */
-async function discardTaskWrites(
+/** The return owns one plan, never a task file or another scope's plan. */
+async function discardForeignWrites(
   runtime: KernelRuntime,
   iteration: number,
-  before: Map<string, string>,
+  snapshot: TurnSnapshot,
+  keepRel: string,
 ): Promise<void> {
-  const touched = await restoreTasks(runtime, before);
+  const tasks = await restoreTasks(runtime, snapshot.tasks);
+  const plans = await restorePlans(
+    snapshot.plans,
+    (plan) => plan.rel === keepRel,
+  );
+  const touched = [...plans, ...tasks.map((slug) => `${slug}.md`)].sort();
   if (touched.length === 0) return;
   await runtime.store.appendRecord(
     scriptMeta(iteration, "plan-return-reconcile", { round: 1 }),
@@ -233,9 +268,7 @@ async function discardTaskWrites(
       ok: false,
       cause: makeCause(
         "invalid-outcome",
-        `architect return task writes discarded: ${touched
-          .map((slug) => `${slug}.md`)
-          .join(", ")}; only the PM writes tasks`,
+        `architect return writes discarded: ${touched.join(", ")}; the return owns ${keepRel} only`,
       ),
     },
   );
@@ -256,6 +289,8 @@ export async function runArchitectReturn(
     plan: PlanFile;
     findings: PlanReviewOutcome;
     reviewers: readonly string[];
+    /** The architect that owns the plan; absent is the main architect. */
+    architect?: string;
   },
 ): Promise<void> {
   const plan = opts.plan;
@@ -272,7 +307,7 @@ export async function runArchitectReturn(
       ? "none"
       : matching.map(formatPlanFinding).join("\n");
   };
-  const tasksBefore = await snapshotTasks(runtime);
+  const snapshot = await snapshotTurn(runtime, planSet(runtime, plan));
   const result = await runAgentTurn(runtime, {
     target,
     cwd: runtime.paths.goalCheckout,
@@ -280,7 +315,7 @@ export async function runArchitectReturn(
       iteration: opts.iteration,
       step: PLAN_RETURN_STEP,
       round: 1,
-      architect: MAIN_ARCHITECT,
+      architect: opts.architect ?? MAIN_ARCHITECT,
     },
     vars: {
       iteration: String(opts.iteration),
@@ -296,7 +331,7 @@ export async function runArchitectReturn(
     expectation: KERNEL_TURN_STEPS[PLAN_RETURN_STEP],
     validate: (outcome) => validatePlanReturnDelivery(opts.findings, outcome),
   });
-  await discardTaskWrites(runtime, opts.iteration, tasksBefore);
+  await discardForeignWrites(runtime, opts.iteration, snapshot, plan.rel);
   const stop = result.record.stop;
   if (stop?.kind === "infra") {
     const cause = makeCause(
@@ -322,6 +357,25 @@ export async function runArchitectReturn(
   );
 }
 
+/** Whether a return turn in this iteration answered one plan scope's review. */
+function reviewAnswered(
+  records: readonly StepRecord[],
+  iteration: number,
+  scope: string,
+  lastReview: number,
+): boolean {
+  return records.some(
+    (record) =>
+      record.step === PLAN_RETURN_STEP &&
+      record.actor === "agent" &&
+      record.endedAt &&
+      record.iteration === iteration &&
+      (record.architect ?? MAIN_ARCHITECT) === scope &&
+      record.seq > lastReview &&
+      (record.outcome?.planReviewMarks?.length ?? 0) > 0,
+  );
+}
+
 /**
  * The latest plan-review round the architect has not yet answered. A return
  * turn in the same iteration marks the findings, so they do not reappear in
@@ -343,29 +397,47 @@ export function latestPlanReview(
   // any reviewer delivered: a failed round must hide an older round's findings,
   // because the plan may have changed since.
   const iteration = Math.max(...attempts.map((record) => record.iteration));
-  const byAlias = new Map<string, PlanReviewOutcome>();
-  let lastReview = 0;
+  // Findings group by plan owner and reviewer alias: one alias reviews every
+  // plan, so an alias-only map would keep the last plan's findings, while an
+  // owner-only map would append a newer attempt to a stale one. A return
+  // answers only its own plan, so an answered epic hides no other plan's
+  // findings from the next pack.
+  const byAttempt = new Map<
+    string,
+    { scope: string; alias: string; findings: PlanReviewOutcome }
+  >();
+  const lastReviewByScope = new Map<string, number>();
   for (const record of attempts
     .filter((entry) => entry.iteration === iteration)
     .sort((a, b) => a.seq - b.seq)) {
-    lastReview = Math.max(lastReview, record.seq);
-    if (record.outcome?.status === "done" && record.outcome.planReview) {
-      byAlias.set(record.alias ?? "plan-reviewer", record.outcome.planReview);
-    }
+    const scope = record.architect ?? MAIN_ARCHITECT;
+    lastReviewByScope.set(scope, record.seq);
+    if (record.outcome?.status !== "done" || !record.outcome.planReview)
+      continue;
+    const alias = record.alias ?? "plan-reviewer";
+    byAttempt.set(`${scope}\u0000${alias}`, {
+      scope,
+      alias,
+      findings: record.outcome.planReview,
+    });
   }
-  if (byAlias.size === 0) return undefined;
-  const technical = [...byAlias.values()].flatMap((entry) => entry.technical);
-  const planNotes = [...byAlias.values()].flatMap((entry) => entry.planNotes);
-  if (technical.length + planNotes.length === 0) return undefined;
-  const answered = records.some(
-    (record) =>
-      record.step === PLAN_RETURN_STEP &&
-      record.actor === "agent" &&
-      record.endedAt &&
-      record.iteration === iteration &&
-      record.seq > lastReview &&
-      (record.outcome?.planReviewMarks?.length ?? 0) > 0,
+  const unanswered = [...byAttempt.values()].filter(
+    (attempt) =>
+      !reviewAnswered(
+        records,
+        iteration,
+        attempt.scope,
+        lastReviewByScope.get(attempt.scope) ?? 0,
+      ),
   );
-  if (answered) return undefined;
-  return { iteration, reviewers: [...byAlias.keys()], technical, planNotes };
+  if (unanswered.length === 0) return undefined;
+  const technical = unanswered.flatMap((entry) => entry.findings.technical);
+  const planNotes = unanswered.flatMap((entry) => entry.findings.planNotes);
+  if (technical.length + planNotes.length === 0) return undefined;
+  return {
+    iteration,
+    reviewers: [...new Set(unanswered.map((entry) => entry.alias))],
+    technical,
+    planNotes,
+  };
 }

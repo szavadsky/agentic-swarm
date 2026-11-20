@@ -53,6 +53,7 @@ import {
 } from "./signals.js";
 import { statusSource, writeStatus } from "./status.js";
 import { createFolderStore } from "./store.js";
+import { writeEpicSummaries } from "./epic-summary.js";
 import { writeIterationSummary } from "./summary.js";
 import type {
   Cause,
@@ -335,6 +336,7 @@ async function writeIterationFacts(
     priceIds,
     humanInterventions,
   });
+  await writeEpicSummaries(runtime.store, { iteration, state, records });
   await writeStatus(statusSource(runtime));
   return summary;
 }

@@ -4,6 +4,7 @@ import { recordedBaseGates } from "./baseline.js";
 import { formatCause } from "./cause.js";
 import { summaryRelPath } from "./context-pack.js";
 import { derive, materialOpenDebts } from "./derive.js";
+import { writeEpicSummaries } from "./epic-summary.js";
 import {
   costText,
   DEFAULT_ROLE_BY_STEP,
@@ -455,6 +456,11 @@ export async function backfillSummaries(runtime: KernelRuntime): Promise<void> {
       roleByStep,
       prices,
       priceIds,
+    });
+    await writeEpicSummaries(runtime.store, {
+      iteration: n,
+      state,
+      records,
     });
     await writeMetrics(runtime.store, {
       iteration: n,

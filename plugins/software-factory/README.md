@@ -123,6 +123,9 @@ architecture:                   # the plan review flow, before the PM derives ta
   reviewers: [plan-reviewer]    # one fresh read-only review turn per alias
   architectReturn: on-technical-concerns  # or never
   planReturn: { prompt: architect-review-return, deliverable: "plan edit and marks" }
+hierarchy:                      # 1 architect (the norm), or 2 with one subarchitect per epic
+  depth: 1
+  subarchitect: { prompt: subarchitect, repairPrompt: architect-repair, deliverable: "epic plan edit or stop decision" }
 ```
 
 A step may name `repairPrompt` (the template its in-session repair ask
@@ -140,6 +143,18 @@ through QA and review before it lands. A step that names no
 template renders the process-level `repairPrompt` (default `delivery-repair`).
 The architect names `architect-repair` because its ask also requires the plan
 edit on disk; the default template then carries no role branch.
+
+`hierarchy.depth: 2` makes the architect register in `plan.md` live: one
+bullet per epic (`- epic \`auth\` | architect \`subarchitect\` | plan
+\`epics/auth.md\` | scope \`src/auth/**\` | opened i7 | active`). The boundary
+runs the main architect, then one subarchitect turn per active
+`subarchitect` row on the architect alias — each with its own resumable,
+compacted session and its own epic plan — then a plan review for every plan
+that changed, then the PM. A subarchitect whose last decision was `done` and
+whose epic has no open task is left out until a task reopens it. Each
+subarchitect's outcome paragraph is written to
+`iterations/<n>/epics/<epic>/summary.md`. Depth 1 never parses the register
+and keeps today's single-architect flow.
 
 The `architecture` flow completes before the PM derives tasks. Each alias in
 `reviewers` gets one fresh read-only review turn that delivers `planReview`

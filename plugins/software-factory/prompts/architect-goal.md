@@ -12,7 +12,7 @@ Keep one register under `## Architect register` in `plan.md`, one bullet per epi
 - epic `billing` | architect `main` | plan `plan.md` | scope `src/billing/**` | opened i8 | active
 ```
 
-- A subarchitect owns `epics/<epic>.md`: never edit it. Read its summary and its concerns, not every task in the epic.
+- A subarchitect owns `epics/<epic>.md`: never edit it. Its status summary for an iteration is `iterations/<n>/epics/<epic>/summary.md`; read the previous one and its concerns, not every task in the epic.
 - `opened i<N>` is the iteration the row first appeared. Close a row with `closed i<N>: <reason>` only when the epic has no non-terminal task; a closed name is never reopened.
 - `decision: done` requires no active epic with a non-terminal task.
   {%- endif %}

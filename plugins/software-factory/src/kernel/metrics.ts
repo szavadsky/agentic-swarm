@@ -185,6 +185,7 @@ export function rolesByStep(
 export const DEFAULT_ROLE_BY_STEP: Record<string, string> = {
   architect: "architect",
   planreturn: "architect",
+  subarchitect: "subarchitect",
   pm: "pm",
   digest: "digest",
   implement: "implementer",

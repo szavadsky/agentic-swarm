@@ -569,6 +569,32 @@ export function boundaryTarget(
 }
 
 /**
+ * The epic architect's consult: the configured subarchitect prompt on the
+ * architect boundary step's alias, so depth 2 needs no second run-config
+ * alias. A missing prompt is a config defect, never a silent depth-1 turn.
+ */
+export function subarchitectTarget(
+  runtime: KernelRuntime,
+  iteration: number,
+): TurnTarget {
+  const spec = runtime.configs.process.hierarchy?.subarchitect;
+  if (!spec)
+    throw new Error(
+      "process config has no hierarchy.subarchitect prompt for hierarchy depth 2",
+    );
+  return {
+    ...resolveTurn(
+      runtime,
+      spec.prompt,
+      runtime.configs.process.boundary.architect.alias,
+      undefined,
+      iteration,
+    ),
+    ...repairFields(spec),
+  };
+}
+
+/**
  * Resolves one architecture-flow turn: the reviewers supply the review alias,
  * the architect boundary step supplies the return alias. The architecture
  * block owns the prompts, so the plan review is a flow, not a kernel constant.

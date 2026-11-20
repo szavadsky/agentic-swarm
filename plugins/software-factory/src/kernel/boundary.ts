@@ -24,9 +24,15 @@ import {
 } from "./context-pack.js";
 import { derive, openDebts } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
-import { boundaryTarget, compactSession, stepTarget } from "./flow-context.js";
+import {
+  boundaryTarget,
+  compactSession,
+  stepTarget,
+  subarchitectTarget,
+} from "./flow-context.js";
 import { runKeptLand } from "./integrate.js";
 import { runBoundaryTurn } from "./integration-lock.js";
+import { type EpicRow, parseArchitectRegister } from "./register.js";
 import {
   collectSteerRoutes,
   expireHold,
@@ -43,7 +49,13 @@ import {
   writeOutbox,
 } from "./mailbox.js";
 import { next } from "./next.js";
-import { goalPlan, registeredPlans } from "./plan-file.js";
+import {
+  goalPlan,
+  type PlanFile,
+  planFilesOnDisk,
+  registeredPlans,
+  resolvePlan,
+} from "./plan-file.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { PACK_PREP_STEP, runPackPreparer } from "./pack-prep.js";
 import {
@@ -60,7 +72,13 @@ import {
   runArchitectReturn,
   runPlanReview,
 } from "./plan-review.js";
-import { type PmRung, runPm } from "./pm.js";
+import {
+  type PlanSnapshot,
+  type PmRung,
+  restorePlans,
+  runPm,
+  snapshotPlans,
+} from "./pm.js";
 import { scriptMeta } from "./record.js";
 import { spikeFinding } from "./spike-report.js";
 import { MAIN_ARCHITECT } from "./tasks.js";
@@ -73,6 +91,7 @@ import type {
   State,
   StepRecord,
   TaskFile,
+  TaskStatus,
 } from "./types.js";
 import { formatCause, makeCause } from "./cause.js";
 import { integrationHead } from "./worktree.js";
@@ -307,6 +326,239 @@ function unavailableAliases(
   return causes;
 }
 
+/** Task statuses that still owe their epic a live subarchitect. */
+const OPEN_TASK_STATUSES: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
+  "pending",
+  "ready",
+  "running",
+  "parked",
+]);
+
+/** The plan one epic's subarchitect owns. */
+function epicPlan(goalDir: string, epic: string): PlanFile {
+  return resolvePlan(goalDir, { kind: "epic", epic });
+}
+
+/**
+ * Whether the top architect may leave an epic's subarchitect out: its last
+ * completed decision was `done` and no task in the epic is still open. A task
+ * that becomes ready or parked brings the consult back; a merely pending epic
+ * with no turn yet is not done.
+ */
+function epicJobDone(
+  state: State,
+  records: readonly StepRecord[],
+  epic: string,
+): boolean {
+  const last = records
+    .filter(
+      (record) =>
+        record.step === "subarchitect" &&
+        record.architect === epic &&
+        record.endedAt,
+    )
+    .sort((a, b) => a.seq - b.seq)
+    .at(-1);
+  if (last?.outcome?.decision !== "done") return false;
+  return !Object.values(state.tasks).some(
+    (task) => task.epic === epic && OPEN_TASK_STATUSES.has(task.status),
+  );
+}
+
+/**
+ * The register as the boundary reads it. Depth 1 never reads one, so today's
+ * single-architect goal is unchanged. History never blocks an edit: only an
+ * open task naming an unknown or closed epic is a finding. Plan presence is
+ * checked after the consult because the first turn creates the epic plan.
+ */
+function parseRegister(
+  plan: PlanFile,
+  depth: 1 | 2,
+  tasks: readonly TaskFile[],
+  state: State,
+): { epics: EpicRow[]; findings: string[] } {
+  if (depth === 1) return { epics: [], findings: [] };
+  const rows = tasks.flatMap((task) => {
+    const status = state.tasks[task.slug]?.status;
+    if (status === undefined || !OPEN_TASK_STATUSES.has(status)) return [];
+    return [{ slug: task.slug, ...(task.epic ? { epic: task.epic } : {}) }];
+  });
+  return parseArchitectRegister(fs.readFileSync(plan.path, "utf8"), {
+    depth,
+    tasks: rows,
+    exists: () => true,
+  });
+}
+
+/**
+ * Rolls back every plan a turn changed or created beyond the one it owns and
+ * names what it restored. A plan that appeared during the turn is deleted, so
+ * a consult cannot seed a second scope's plan behind its owner's back.
+ */
+async function discardForeignPlanWrites(
+  runtime: KernelRuntime,
+  snapshot: readonly PlanSnapshot[],
+  keepRel: string,
+): Promise<string[]> {
+  const restored = await restorePlans(snapshot, (plan) => plan.rel === keepRel);
+  const known = new Set(snapshot.map((entry) => entry.plan.rel));
+  for (const plan of planFilesOnDisk(runtime.store.goalDir)) {
+    if (plan.rel === keepRel || known.has(plan.rel)) continue;
+    fs.rmSync(plan.path, { force: true });
+    restored.push(plan.rel);
+  }
+  return restored.sort();
+}
+
+/** A consult that must stop the iteration, with the infra facts when it has them. */
+interface ConsultFailure {
+  cause: string;
+  stop?: { cause: string; details?: string };
+}
+
+/** One epic that ran its subarchitect this iteration. */
+interface EpicConsult {
+  epic: string;
+  plan: PlanFile;
+  /** The epic plan changed during the turn; the architecture flow reviews it. */
+  changed: boolean;
+}
+
+/**
+ * One subarchitect turn for one epic: its own resumable session on the
+ * architect alias, its own plan, and the goal pack. It may edit only its epic
+ * plan; a foreign plan write is rolled back and recorded, and a task write
+ * blocks the iteration like the main architect's.
+ */
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: one consult, its ownership reconcile and its failure handling
+async function runEpicConsult(
+  runtime: KernelRuntime,
+  opts: {
+    iteration: number;
+    epic: string;
+    packRel: string;
+    goalPlanFile: PlanFile;
+    digestPath?: string;
+    records: readonly StepRecord[];
+    turn: string;
+  },
+): Promise<{ consult?: EpicConsult; failure?: ConsultFailure }> {
+  const plan = epicPlan(runtime.store.goalDir, opts.epic);
+  const target = subarchitectTarget(runtime, opts.iteration);
+  const planBefore = snapshotPlan(plan.path);
+  const plansBefore = snapshotPlans(planFilesOnDisk(runtime.store.goalDir));
+  const tasksBefore = await taskSnapshot(runtime.store.goalDir);
+  const session = await resumableSession(
+    runtime,
+    opts.records,
+    (record) =>
+      record.step === "subarchitect" && record.architect === opts.epic,
+    target,
+  );
+  const result = await runBoundaryTurn(
+    runtime,
+    { iteration: opts.iteration, step: "subarchitect" },
+    () =>
+      runAgentTurn(runtime, {
+        target,
+        cwd: runtime.paths.goalCheckout,
+        meta: {
+          iteration: opts.iteration,
+          step: "subarchitect",
+          round: 1,
+          architect: opts.epic,
+        },
+        vars: {
+          turn: opts.turn,
+          iteration: String(opts.iteration),
+          epic: opts.epic,
+          intent_path: path.join(runtime.store.goalDir, "intent.md"),
+          plan_path: plan.path,
+          parent_plan_path: opts.goalPlanFile.path,
+          checkout: runtime.paths.goalCheckout,
+          pack_path: path.join(runtime.store.goalDir, opts.packRel),
+          digest_path: opts.digestPath ?? "",
+        },
+        expectation: KERNEL_TURN_STEPS.subarchitect,
+        session,
+        settle: async (_record, outcome, live) => {
+          if (!live || outcome?.decision === undefined) return {};
+          // Every decided consult's session is compacted at its end, `done`
+          // included: a task that reopens the epic later reuses the context.
+          const compacted = await compactSession(runtime, live);
+          if (!compacted) return {};
+          return {
+            session: compacted.session,
+            ...(compacted.usage ? { compactUsage: compacted.usage } : {}),
+          };
+        },
+      }),
+  );
+  const restored = await discardForeignPlanWrites(
+    runtime,
+    plansBefore,
+    plan.rel,
+  );
+  if (restored.length > 0) {
+    await runtime.store.appendRecord(
+      scriptMeta(opts.iteration, "subarchitect-reconcile", {
+        architect: opts.epic,
+      }),
+      {
+        ok: false,
+        cause: makeCause(
+          "invalid-outcome",
+          `subarchitect ${opts.epic} wrote plan(s) it does not own: ${restored.join(", ")}; restored`,
+        ),
+      },
+    );
+  }
+  const touched = snapshotDiff(
+    tasksBefore,
+    await taskSnapshot(runtime.store.goalDir),
+  );
+  if (touched) {
+    return {
+      failure: {
+        cause: `subarchitect ${opts.epic} modified task file ${touched}; only the PM writes tasks`,
+      },
+    };
+  }
+  const stop = result.record.stop;
+  if (stop?.kind === "infra" && !result.outcome?.decision) {
+    return {
+      failure: {
+        cause: `subarchitect ${opts.epic} stopped on infrastructure: ${infraCause(stop)}`,
+        stop: { cause: stop.cause, details: stop.details },
+      },
+    };
+  }
+  const decision = result.outcome?.decision;
+  if (!decision) {
+    return {
+      failure: {
+        cause: `subarchitect ${opts.epic} produced no decision: ${result.outcome?.summary ?? "no outcome"}`,
+      },
+    };
+  }
+  if (decision === "continue") {
+    const finding = missingPlanFinding(
+      plan.path,
+      decision,
+      planBefore,
+      "subarchitect",
+    );
+    if (finding) return { failure: { cause: `${opts.epic}: ${finding}` } };
+  }
+  return {
+    consult: {
+      epic: opts.epic,
+      plan,
+      changed: snapshotPlan(plan.path) !== planBefore,
+    },
+  };
+}
+
 /**
  * One architect consult: digest on a relaunch, inbox, deterministic pack,
  * architect turn (plan edited in place), steer answers, then the PM turn and
@@ -531,15 +783,24 @@ export async function runBoundary(
   }
 
   const tasksBefore = await taskSnapshot(runtime.store.goalDir);
-  const session = await resumableSession(runtime, records, iteration);
+  const plansBefore = snapshotPlans(planFilesOnDisk(runtime.store.goalDir));
+  const session = await resumableSession(
+    runtime,
+    records,
+    (record) => record.step === "architect",
+    boundaryTarget(runtime, "architect", iteration),
+  );
   // The guard inside the turn owns the plan-edit rule and its repair ask; the
   // post-turn check below is the same rule as a backstop for a halted turn
   // that kept its continue decision, so both compare against these pre-turn bytes.
   const planBefore = snapshotPlan(plan.path);
+  const depth = runtime.configs.process.hierarchy?.depth ?? 1;
 
   const architectTurn = (resume: SessionRef | undefined) =>
     runBoundaryTurn(runtime, { iteration, step: "architect" }, () =>
       runAgentTurn(runtime, {
+        // Resolved per attempt: a quota death exhausts the alias, so the
+        // de-novo retry must see the pool the first call recorded.
         target: boundaryTarget(runtime, "architect", iteration),
         cwd: runtime.paths.goalCheckout,
         meta: {
@@ -557,6 +818,7 @@ export async function runBoundary(
           pack_path: path.join(runtime.store.goalDir, packRel),
           digest_path: digestPath ?? "",
           steers: formatSteers(forArchitect),
+          depth: String(depth),
         },
         expectation: KERNEL_TURN_STEPS.architect,
         session: resume,
@@ -598,6 +860,27 @@ export async function runBoundary(
       packPath: packRel,
       seenSteers,
     };
+  }
+
+  // The main architect owns `plan.md`; an epic plan belongs to its
+  // subarchitect. A foreign write is rolled back as a finding, not kept, so
+  // the review below sees exactly the plans their owners changed.
+  const restoredPlans = await discardForeignPlanWrites(
+    runtime,
+    plansBefore,
+    plan.rel,
+  );
+  if (restoredPlans.length > 0) {
+    await runtime.store.appendRecord(
+      scriptMeta(iteration, "architect-reconcile", { round: 1 }),
+      {
+        ok: false,
+        cause: makeCause(
+          "invalid-outcome",
+          `architect wrote plan(s) a subarchitect owns: ${restoredPlans.join(", ")}; restored`,
+        ),
+      },
+    );
   }
 
   const responses = result.outcome
@@ -721,32 +1004,122 @@ export async function runBoundary(
     };
   }
 
-  // R14: the plan gets a second reading after the architect turn, and when it
-  // raises technical concerns the architect answers them before the PM derives
-  // tasks. The review is advisory: neither step can block the iteration. Both
-  // turns run in the integration checkout under the merge lock; pre-flight
-  // requires the reviewer alias, so the review step cannot be skipped.
-  const review = await runBoundaryTurn(
-    runtime,
-    { iteration, step: PLAN_REVIEW_STEP },
-    () => runPlanReview(runtime, { iteration, packRel, plan }),
-  );
-  const policy = runtime.configs.process.architecture.architectReturn;
-  if (
-    review.findings &&
-    review.findings.technical.length > 0 &&
-    policy === "on-technical-concerns"
-  ) {
-    const findings = review.findings;
-    await runBoundaryTurn(runtime, { iteration, step: PLAN_RETURN_STEP }, () =>
-      runArchitectReturn(runtime, {
-        iteration,
-        packRel,
-        plan,
-        findings,
-        reviewers: review.reviewers,
-      }),
+  // Depth 2: the register the main architect just wrote names one subarchitect
+  // per active epic. Each consult runs before the review and the PM, so the PM
+  // derives tasks from every plan this iteration. A row owned by `main` stays
+  // in `plan.md`; an epic whose subarchitect said `done` and whose tasks are
+  // terminal is left out until a task reopens it.
+  const register = parseRegister(plan, depth, tasks, state);
+  if (register.findings.length > 0) {
+    return {
+      iteration,
+      decision: "blocked",
+      cause: `architect register: ${register.findings.join("; ")}`,
+      outcome: result.outcome,
+      packPath: packRel,
+      seenSteers,
+    };
+  }
+  const activeSubarchitects = register.epics
+    .filter(
+      (row) => row.closed === undefined && row.architect === "subarchitect",
+    )
+    .sort((a, b) => a.epic.localeCompare(b.epic));
+  const consults: EpicConsult[] = [];
+  for (const row of activeSubarchitects) {
+    if (epicJobDone(state, records, row.epic)) continue;
+    const prior = records.some(
+      (record) =>
+        record.step === "subarchitect" &&
+        record.architect === row.epic &&
+        record.endedAt,
     );
+    const epicTurn = !prior ? "first" : opts.relaunch ? "relaunch" : "boundary";
+    const consult = await runEpicConsult(runtime, {
+      iteration,
+      epic: row.epic,
+      packRel,
+      goalPlanFile: plan,
+      ...(digestPath ? { digestPath } : {}),
+      records,
+      turn: epicTurn,
+    });
+    if (consult.failure) {
+      return {
+        iteration,
+        decision: "blocked",
+        cause: consult.failure.cause,
+        ...(consult.failure.stop ? { stop: consult.failure.stop } : {}),
+        outcome: result.outcome,
+        packPath: packRel,
+        seenSteers,
+      };
+    }
+    if (consult.consult) consults.push(consult.consult);
+  }
+  // The first consult creates an epic plan; a row that never gets one is a
+  // register defect, not a plan the PM can derive tasks from.
+  for (const row of activeSubarchitects) {
+    const epic = epicPlan(runtime.store.goalDir, row.epic);
+    if (fs.existsSync(epic.path)) continue;
+    return {
+      iteration,
+      decision: "blocked",
+      cause: `epic "${row.epic}" plan "${epic.rel}" does not exist after its consult; the subarchitect creates it`,
+      outcome: result.outcome,
+      packPath: packRel,
+      seenSteers,
+    };
+  }
+
+  // Every plan that changed this consult gets a review; an unchanged plan is
+  // not re-read. The goal plan is always changed on a continue (the guard
+  // above); an epic plan only when its subarchitect's turn edited it.
+  const changedPlans: Array<{ plan: PlanFile; architect?: string }> = [];
+  if (snapshotPlan(plan.path) !== planBefore) changedPlans.push({ plan });
+  for (const consult of consults) {
+    if (!consult.changed) continue;
+    changedPlans.push({ plan: consult.plan, architect: consult.epic });
+  }
+
+  // R14: each changed plan gets a second reading, and when it raises technical
+  // concerns its owner answers them before the PM derives tasks. The review is
+  // advisory: neither step can block the iteration. Both turns run in the
+  // integration checkout under the merge lock; pre-flight requires the
+  // reviewer alias, so the review step cannot be skipped.
+  const policy = runtime.configs.process.architecture.architectReturn;
+  for (const entry of changedPlans) {
+    const review = await runBoundaryTurn(
+      runtime,
+      { iteration, step: PLAN_REVIEW_STEP },
+      () =>
+        runPlanReview(runtime, {
+          iteration,
+          packRel,
+          plan: entry.plan,
+          ...(entry.architect ? { architect: entry.architect } : {}),
+        }),
+    );
+    if (
+      review.findings &&
+      review.findings.technical.length > 0 &&
+      policy === "on-technical-concerns"
+    ) {
+      const findings = review.findings;
+      await runBoundaryTurn(
+        runtime,
+        { iteration, step: PLAN_RETURN_STEP },
+        () =>
+          runArchitectReturn(runtime, {
+            iteration,
+            packRel,
+            plan: entry.plan,
+            findings,
+            reviewers: review.reviewers,
+            ...(entry.architect ? { architect: entry.architect } : {}),
+          }),
+      );
+    }
   }
 
   const pm = await runBoundaryTurn(runtime, { iteration, step: "pm" }, () =>

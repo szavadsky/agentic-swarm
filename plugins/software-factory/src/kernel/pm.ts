@@ -88,19 +88,24 @@ export async function snapshotTasks(
   return readTaskTexts(runtime);
 }
 
+/** Each plan's bytes before a turn; an absent plan is restored by deleting it. */
+export function snapshotPlans(plans: readonly PlanFile[]): PlanSnapshot[] {
+  return plans.map((plan) => {
+    const exists = fs.existsSync(plan.path);
+    return {
+      plan,
+      exists,
+      text: exists ? fs.readFileSync(plan.path, "utf8") : "",
+    };
+  });
+}
+
 export async function snapshotTurn(
   runtime: KernelRuntime,
   plans: readonly PlanFile[],
 ): Promise<TurnSnapshot> {
   return {
-    plans: plans.map((plan) => {
-      const exists = fs.existsSync(plan.path);
-      return {
-        plan,
-        exists,
-        text: exists ? fs.readFileSync(plan.path, "utf8") : "",
-      };
-    }),
+    plans: snapshotPlans(plans),
     tasks: await snapshotTasks(runtime),
   };
 }
@@ -132,21 +137,21 @@ export async function restoreTasks(
 }
 
 /**
- * Restores every plan and task file a turn changed or created, byte for byte,
- * and names what it restored. The PM task turn uses it to roll back a failed
- * rung; the steer turn uses it to undo a write that must not happen.
+ * Restores every snapshotted plan a turn changed or created, byte for byte,
+ * and names what it restored. `keep` skips the plan the turn owns: a consult
+ * may write its own plan and nothing else. A plan the turn created is deleted
+ * rather than left behind as an empty file.
  */
-export async function restoreTurn(
-  runtime: KernelRuntime,
-  snapshot: TurnSnapshot,
-): Promise<{ plans: string[]; tasks: string[] }> {
+export async function restorePlans(
+  snapshot: readonly PlanSnapshot[],
+  keep?: (plan: PlanFile) => boolean,
+): Promise<string[]> {
   const plans: string[] = [];
-  for (const before of snapshot.plans) {
+  for (const before of snapshot) {
+    if (keep?.(before.plan)) continue;
     const existsNow = fs.existsSync(before.plan.path);
     const textNow = existsNow ? fs.readFileSync(before.plan.path, "utf8") : "";
     if (!before.exists) {
-      // A plan the turn created would send the next front to the boundary; it
-      // must be gone, not left behind as an empty file.
       if (existsNow) {
         fs.rmSync(before.plan.path, { force: true });
         plans.push(before.plan.rel);
@@ -156,9 +161,20 @@ export async function restoreTurn(
       plans.push(before.plan.rel);
     }
   }
+  return plans.sort();
+}
 
+/**
+ * Restores every plan and task file a turn changed or created, byte for byte,
+ * and names what it restored. The PM task turn uses it to roll back a failed
+ * rung; the steer turn uses it to undo a write that must not happen.
+ */
+export async function restoreTurn(
+  runtime: KernelRuntime,
+  snapshot: TurnSnapshot,
+): Promise<{ plans: string[]; tasks: string[] }> {
   return {
-    plans: plans.sort(),
+    plans: await restorePlans(snapshot.plans),
     tasks: await restoreTasks(runtime, snapshot.tasks),
   };
 }

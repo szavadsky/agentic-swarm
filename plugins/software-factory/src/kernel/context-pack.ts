@@ -167,6 +167,11 @@ export function summaryRelPath(iteration: number): string {
   return `iterations/${iteration}/summary.md`;
 }
 
+/** Goal-relative path one subarchitect's iteration status summary is written to. */
+export function epicSummaryRelPath(iteration: number, epic: string): string {
+  return `iterations/${iteration}/epics/${epic}/summary.md`;
+}
+
 function short(hash: string | undefined): string {
   return hash ? hash.slice(0, 10) : "-";
 }

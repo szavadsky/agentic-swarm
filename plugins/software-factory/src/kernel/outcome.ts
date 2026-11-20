@@ -146,6 +146,7 @@ export const KERNEL_TURN_STEPS = {
   planreview: "any",
   pm: "any",
   steward: "any",
+  subarchitect: "architect",
 } as const satisfies Record<KernelStep, OutcomeExpectation>;
 
 export type KernelTurnStep = keyof typeof KERNEL_TURN_STEPS;

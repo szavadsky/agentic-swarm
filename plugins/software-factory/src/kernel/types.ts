@@ -468,8 +468,19 @@ export type BoundaryStep = (typeof BOUNDARY_STEPS)[number];
 /** Kernel turns owned by the architecture flow rather than the boundary block. */
 export const ARCHITECTURE_STEPS = ["planreview", "planreturn"] as const;
 
+/**
+ * The epic architect's consult, run only at hierarchy depth 2. It is not a
+ * boundary-block step: it runs on the architect's alias, so no run config
+ * needs a second alias, and its records carry `architect: <epic>`.
+ */
+export const HIERARCHY_STEPS = ["subarchitect"] as const;
+
 /** Every kernel turn outside a task flow; none starts a task turn. */
-export const KERNEL_STEPS = [...BOUNDARY_STEPS, ...ARCHITECTURE_STEPS] as const;
+export const KERNEL_STEPS = [
+  ...BOUNDARY_STEPS,
+  ...ARCHITECTURE_STEPS,
+  ...HIERARCHY_STEPS,
+] as const;
 export type KernelStep = (typeof KERNEL_STEPS)[number];
 
 /** A boundary- or architecture-turn prompt; the alias is named elsewhere. */
@@ -489,6 +500,17 @@ export interface ArchitectureConfig {
   reviewers: string[];
   architectReturn: "on-technical-concerns" | "never";
   planReturn?: PromptSpec;
+}
+
+/**
+ * Hierarchy depth and the epic architect's prompt. Depth 1 (the default) is
+ * one architect; depth 2 adds one subarchitect consult per active epic. The
+ * subarchitect runs on the boundary architect's alias, so only the prompt
+ * differs.
+ */
+export interface HierarchyConfig {
+  depth: 1 | 2;
+  subarchitect: PromptSpec;
 }
 
 export interface FlowStep extends RepairSpec {
@@ -852,6 +874,8 @@ export interface ProcessConfig {
   boundary: Record<BoundaryStep, TurnSpec>;
   /** The plan review flow that completes before the PM derives tasks. */
   architecture: ArchitectureConfig;
+  /** Hierarchy depth and the epic architect's prompt; absent reads as depth 1. */
+  hierarchy?: HierarchyConfig;
   /** Repair template a step renders when it names none; defaults to `delivery-repair`. */
   repairPrompt?: string;
   /** Outcome reminders after the first attempt; a task file's `repairTurns` overrides it for that task's turns only. */

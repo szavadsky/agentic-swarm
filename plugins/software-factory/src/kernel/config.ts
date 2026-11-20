@@ -238,6 +238,22 @@ export const architectureOverrideSchema = z
   })
   .strict();
 
+/** The hierarchy knob: depth 1 (the norm) or 2, and the epic architect's prompt. */
+export const hierarchySchema = z
+  .object({
+    depth: z.union([z.literal(1), z.literal(2)]),
+    subarchitect: promptSpecSchema,
+  })
+  .strict();
+
+/** A repo override may set the depth without restating the prompt. */
+export const hierarchyOverrideSchema = z
+  .object({
+    depth: z.union([z.literal(1), z.literal(2)]).optional(),
+    subarchitect: promptSpecSchema.optional(),
+  })
+  .strict();
+
 /** Process layer: package default deep-merged with an optional repo override. */
 export const processConfigSchema = z
   .object({
@@ -246,6 +262,15 @@ export const processConfigSchema = z
     boundary: boundarySchema,
     /** The plan review flow that completes before the PM derives tasks. */
     architecture: architectureSchema,
+    /** Depth and the epic architect's prompt; depth 1 is one architect. */
+    hierarchy: hierarchySchema.default({
+      depth: 1,
+      subarchitect: {
+        prompt: "subarchitect",
+        repairPrompt: "architect-repair",
+        deliverable: "epic plan edit or stop decision",
+      },
+    }),
     /** Repair template a step renders when it names none. */
     repairPrompt: z.string().min(1).optional(),
     reminders: z.number().int().nonnegative().default(1),
@@ -273,6 +298,7 @@ export const processConfigSchema = z
 export const processOverrideSchema = processConfigSchema.extend({
   boundary: boundaryOverrideSchema.optional(),
   architecture: architectureOverrideSchema.optional(),
+  hierarchy: hierarchyOverrideSchema.optional(),
 });
 
 /** Run layer: not tracked; aliases, price ids, limits, session store, scout pin. */

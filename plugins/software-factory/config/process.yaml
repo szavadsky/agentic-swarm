@@ -77,6 +77,12 @@ architecture:
   reviewers: [plan-reviewer]
   architectReturn: on-technical-concerns
   planReturn: { prompt: architect-review-return, deliverable: "plan edit and marks" }
+# Hierarchy depth: 1 is the norm (one architect); 2 adds one subarchitect
+# consult per active epic in the architect register, on the architect's alias.
+# At depth 1 nothing in this block runs.
+hierarchy:
+  depth: 1
+  subarchitect: { prompt: subarchitect, repairPrompt: architect-repair, deliverable: "epic plan edit or stop decision" }
 # A task file names one type; the type owns its flow, kind and output schema.
 # `development` merges, `spike` finishes with findings, `trivial` runs the
 # front's single-step path.

@@ -101,7 +101,7 @@ export interface AgentTurnResult {
 }
 
 /** Boundary steps that run on the iteration's pack; only they measure it. */
-const PACK_STEPS = new Set(["architect", "pm"]);
+const PACK_STEPS = new Set(["architect", "pm", "subarchitect"]);
 
 /**
  * The pack is the boundary consult's shared context: the architect reads it,
@@ -347,7 +347,10 @@ export async function runAgentTurn(
   };
 
   // The plan snapshot is taken once before the first attempt, so the repair
-  // turn compares against the pre-turn plan, not the first attempt's.
+  // turn compares against the pre-turn plan, not the first attempt's. The epic
+  // consult enforces the same rule on its own plan.
+  const planWho =
+    spec.meta.step === "subarchitect" ? "subarchitect" : "architect";
   const planBefore =
     spec.expectation === "architect" ? snapshotPlan(spec.vars.plan_path) : null;
   const first = await callChain(0, prompt, spec.session);
@@ -463,6 +466,7 @@ export async function runAgentTurn(
         spec.vars.plan_path,
         outcome?.decision,
         planBefore,
+        planWho,
       );
       if (planFinding) findings.push(planFinding);
     }

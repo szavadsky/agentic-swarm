@@ -64,6 +64,28 @@ export function existingPlans(plans: readonly PlanFile[]): PlanFile[] {
   return plans.filter((plan) => fs.existsSync(plan.path));
 }
 
+/**
+ * Every plan file on disk: `plan.md` first, then every `epics/*.md`. This is
+ * the ownership view, not the register view: a consult snapshots it so a
+ * subarchitect that writes a foreign plan (or the main that writes an epic
+ * plan) is rolled back even when the register does not name that file.
+ */
+export function planFilesOnDisk(goalDir: string): PlanFile[] {
+  const plans = [goalPlan(goalDir)];
+  let names: string[];
+  try {
+    names = fs.readdirSync(path.join(goalDir, "epics"));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return plans;
+    throw err;
+  }
+  for (const name of names.sort()) {
+    if (!name.endsWith(".md")) continue;
+    plans.push(resolvePlan(goalDir, { kind: "epic", epic: name.slice(0, -3) }));
+  }
+  return plans;
+}
+
 /** Whether a goal-relative path is an architect plan: `plan.md` or `epics/<epic>.md`. */
 export function isPlanPath(rel: string): boolean {
   return rel === "plan.md" || /^epics\/[a-z0-9-]+\.md$/.test(rel);

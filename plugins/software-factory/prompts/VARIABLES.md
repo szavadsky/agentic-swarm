@@ -55,7 +55,7 @@ One epic's architect, below the top architect: the same bounds, turn order, plan
 - `parent_plan_path` — path to the top architect's `plan.md`; read-only to the subarchitect
 - `checkout` — path to the stable goal checkout (integration worktree)
 - `pack_path` — path to this epic's context pack
-- `digest_path` — path to the previous launch's epic digest; empty string on a first launch
+- `digest_path` — path to the previous launch's digest; empty string when this launch has none
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default

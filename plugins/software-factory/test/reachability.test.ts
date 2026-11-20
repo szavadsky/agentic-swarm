@@ -130,16 +130,6 @@ const PROMPT_DOCS: Record<string, string> = {
   "VARIABLES.md": "prompt variable reference for authors, never rendered",
 };
 
-/**
- * Role prompts that land before the kernel role that renders them. One reason
- * per entry; the task that wires the role removes the entry, and this test
- * fails if the prompt is rendered or included first so the entry cannot rot.
- */
-const PENDING_ROLE_PROMPTS: Record<string, string> = {
-  subarchitect:
-    "epic scope; the saga boundary adds the subarchitect turn that renders it",
-};
-
 /** Matches Liquid includes: `{% include 'name' %}` (either quote, `-` trims allowed). */
 const INCLUDE_SPECIFIER = /\{%\s*include\s*['"]([^'"]+)['"]/g;
 /** Matches direct fragment renders in src: `.render("name"` and `.placeholders("name"`. */
@@ -247,29 +237,10 @@ function entryFragments(): Set<string> {
 describe("prompt fragment reachability", () => {
   const fragments = promptFragments();
   const used = new Set([...includedFragments(), ...entryFragments()]);
-  const dead = fragments.filter(
-    (fragment) => !used.has(fragment) && !(fragment in PENDING_ROLE_PROMPTS),
-  );
+  const dead = fragments.filter((fragment) => !used.has(fragment));
 
   it("fails on a prompt fragment no template includes and no entrypoint renders", () => {
     expect(dead).toEqual([]);
-  });
-
-  it("keeps every pending role prompt unrendered and present", () => {
-    for (const [fragment, reason] of Object.entries(PENDING_ROLE_PROMPTS)) {
-      expect(
-        reason.trim().length,
-        `pending prompt ${fragment} has no reason`,
-      ).toBeGreaterThan(0);
-      expect(
-        fs.existsSync(path.join(PACKAGE_ROOT, "prompts", `${fragment}.md`)),
-        `pending prompt ${fragment} no longer exists`,
-      ).toBe(true);
-      expect(
-        used.has(fragment),
-        `stale pending prompt ${fragment} is now rendered or included (${reason}); remove it from the pending list`,
-      ).toBe(false);
-    }
   });
 
   it("keeps every prompt doc unrendered and present", () => {

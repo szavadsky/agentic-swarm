@@ -187,6 +187,47 @@ describe("plan review findings", () => {
     expect(latestPlanReview([first, second, answered])).toBeUndefined();
   });
 
+  it("answers one plan without hiding another plan's findings", () => {
+    const epicFinding = {
+      planLine: "epics/auth.md:8",
+      finding: "the epic plan assumes an interface the goal plan never fixes",
+    };
+    const goal = rec(1, {
+      slug: undefined,
+      iteration: 2,
+      step: PLAN_REVIEW_STEP,
+      alias: "plan-reviewer",
+      outcome: reviewed("goal review", {
+        technical: [FINDINGS.technical[0]!],
+        planNotes: [],
+      }),
+    });
+    const epic = rec(2, {
+      slug: undefined,
+      iteration: 2,
+      step: PLAN_REVIEW_STEP,
+      alias: "plan-reviewer",
+      architect: "auth",
+      outcome: reviewed("epic review", {
+        technical: [epicFinding],
+        planNotes: [],
+      }),
+    });
+    const goalReturn = rec(3, {
+      slug: undefined,
+      iteration: 2,
+      step: PLAN_RETURN_STEP,
+      alias: "architect",
+      outcome: outcome({
+        summary: "answered the goal plan",
+        planReviewMarks: [{ finding: 1, mark: "helpful" }],
+      }) as Outcome,
+    });
+    const remaining = latestPlanReview([goal, epic, goalReturn]);
+    expect(remaining?.technical).toEqual([epicFinding]);
+    expect(remaining?.reviewers).toEqual(["plan-reviewer"]);
+  });
+
   it("hides an older round when the newest one delivered nothing", () => {
     const older = rec(1, {
       slug: undefined,
