@@ -51,6 +51,7 @@ import {
   type DrainController,
   type DrainSignal,
 } from "./signals.js";
+import { statusSource, writeStatus } from "./status.js";
 import { createFolderStore } from "./store.js";
 import { writeIterationSummary } from "./summary.js";
 import type {
@@ -323,7 +324,7 @@ async function writeIterationFacts(
     priceIds,
     humanInterventions,
   });
-  return writeIterationSummary(runtime.store, {
+  const summary = await writeIterationSummary(runtime.store, {
     iteration,
     state,
     records,
@@ -334,6 +335,8 @@ async function writeIterationFacts(
     priceIds,
     humanInterventions,
   });
+  await writeStatus(statusSource(runtime));
+  return summary;
 }
 
 async function safeSummary(

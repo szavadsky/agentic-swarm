@@ -647,7 +647,7 @@ export function iterationMetrics(
   };
 }
 
-function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
+export function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
   let usage = zeroUsage();
   let tokens = 0;
   let turns = 0;

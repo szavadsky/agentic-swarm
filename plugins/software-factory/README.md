@@ -21,7 +21,7 @@ the fallback is recorded as a glitch.
 cd plugins/software-factory
 bun bin/factory.ts init   --repo <path> --goal <name> [--intent <file>]
 bun bin/factory.ts run    --repo <path> --goal <name> --run-config <file> [--iterations N]
-bun bin/factory.ts status --repo <path> --goal <name>
+bun bin/factory.ts status --repo <path> --goal <name> [--json]
 bun bin/factory.ts benchmark --repo <path> --goal <name>
 bun bin/factory.ts steer  --repo <path> --goal <name> <file | ->
 bun bin/factory.ts validate [--step <id>] <file>
@@ -32,7 +32,9 @@ bun bin/factory.ts variables --out <file>
 `init` writes `.factory/repo.yaml` if missing, creates the goal directory and
 copies the intent (or writes a template). `run` pre-flights, takes the goal
 lock, recovers interrupted work and runs the iteration loop. `status` prints
-derived state and parked causes; `benchmark` prints one goal's benchmark rows;
+derived state and parked causes; `--json` prints `status.json`, the snapshot
+the kernel rewrites after each agent launch and finish; `benchmark` prints one
+goal's benchmark rows;
 `steer` drops a file into the inbox atomically. `validate` checks one
 schema-enforced file with the gate's validators (tasks/*.md with its
 directory's dependency graph and flow existence against the merged process
@@ -326,6 +328,7 @@ Gates run once on the base; a red base is recorded and warned once, not fatal.
   mailbox/{inbox,processed,outbox}/
   iterations/<n>/{context-pack.md,summary.md,metrics.yaml}
   metrics.yaml
+  status.json              # machine-readable snapshot for the CLI and dashboard
 ```
 
 ## Steering

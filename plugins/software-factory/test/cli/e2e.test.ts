@@ -250,6 +250,29 @@ describe("CLI end to end — init, steer, run, status", () => {
       expect(status.out).toContain("alpha: merged");
       expect(status.out).toContain("iterations/1/summary.md");
 
+      // The kernel's status.json is the data behind the text view: the same
+      // merged task, the iteration's cost and work, and --json prints it.
+      const statusJson = await capturedLog(async () =>
+        dispatch(["status", "--repo", repo.dir, "--goal", "demo", "--json"], {
+          priceSource: testPriceSource(repo.dir),
+        }),
+      );
+      expect(statusJson.code).toBe(0);
+      const snapshot = JSON.parse(statusJson.out);
+      expect(snapshot.goal).toBe("demo");
+      expect(snapshot.status).toBe("active");
+      expect(snapshot.iteration).toBe(1);
+      expect(
+        snapshot.tasks.merged.map((t: { slug: string }) => t.slug),
+      ).toEqual(["alpha"]);
+      expect(snapshot.cost.byRole.implementer.turns).toBe(1);
+      expect(snapshot.work.byModel["fake-impl"].edits).toBeGreaterThanOrEqual(
+        1,
+      );
+      expect(
+        fs.readFileSync(path.join(goalDir, "status.json"), "utf8").trim(),
+      ).toBe(statusJson.out.trim());
+
       const close = await capturedLog(async () =>
         dispatch(["run", "--repo", repo.dir, "--goal", "demo"], {
           harnesses: { fake: doneHarness() },

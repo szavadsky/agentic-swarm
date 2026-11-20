@@ -38,6 +38,8 @@ export interface ParsedArgs {
   step?: string;
   /** Output directory for `factory schemas`. */
   out?: string;
+  /** `factory status --json`: print the machine-readable snapshot. */
+  json?: boolean;
   help: boolean;
   version: boolean;
 }
@@ -93,10 +95,11 @@ file. Exit: 0 done, 1 failure, 2 blocked, 3 iteration limit, 130/143 signal.
 `;
 
 const STATUS_USAGE = `
-factory status --repo <path> --goal <name>
+factory status --repo <path> --goal <name> [--json]
 
 Prints the state derived from task files and records, every parked cause, and
-the path of the last iteration summary.
+the path of the last iteration summary. --json prints status.json, the
+kernel's machine-readable snapshot written after each agent launch and finish.
 `;
 
 const BENCHMARK_USAGE = `
@@ -227,6 +230,8 @@ export function parseCliArgs(args: string[]): ParsedArgs {
       result.out = parsed.value;
       i = parsed.next;
       if (!result.out) throw new Error("--out requires a path");
+    } else if (arg === "--json") {
+      result.json = true;
     } else if (arg === "-" || !arg.startsWith("-")) {
       positional.push(arg);
     }
@@ -365,7 +370,12 @@ export async function dispatch(
     }
     if (parsed.command === "status") {
       if (!parsed.goal) throw new Error("status requires --goal <name>");
-      printStatus(await statusGoal(parsed.repo, parsed.goal));
+      const status = await statusGoal(parsed.repo, parsed.goal, {
+        json: parsed.json,
+        priceSource: deps.priceSource,
+      });
+      if (status.statusJson !== undefined) console.log(status.statusJson);
+      else printStatus(status);
       return 0;
     }
     if (parsed.command === "benchmark") {

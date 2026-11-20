@@ -32,6 +32,7 @@ import { pricedServed, pricedUsage } from "./pricing.js";
 import { outcomeRepairSchemaVar } from "./prompt-schema.js";
 import { markPoolExhausted, poolResetAt } from "./quota-pools.js";
 import { appendPark } from "./record.js";
+import { statusSource, writeStatus } from "./status.js";
 import {
   DEFAULT_TIMEOUTS,
   type KernelRuntime,
@@ -227,6 +228,7 @@ export async function runAgentTurn(
     alias,
     model,
   });
+  await writeStatus(statusSource(runtime));
   // Every tier is exhausted: no call may run. The record names the cause so
   // dispatch defers the slug and the launch reports why, instead of probing a
   // tier already known dead.
@@ -238,6 +240,7 @@ export async function runAgentTurn(
         details: spec.target.unavailable,
       },
     });
+    await writeStatus(statusSource(runtime));
     return { record, outcome: undefined, text: "" };
   }
   const outcomePath = started.outcomePath;
@@ -599,5 +602,6 @@ export async function runAgentTurn(
       makeCause("overflow", ""),
     );
   }
+  await writeStatus(statusSource(runtime));
   return { record, outcome: outcome ?? undefined, text };
 }

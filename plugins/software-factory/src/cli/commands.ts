@@ -32,13 +32,20 @@ import {
   validatePlanReviewDelivery,
 } from "../kernel/plan-review.js";
 import { isLastReviewCall } from "../kernel/review.js";
+import { collectStatus, readStatus, renderStatus } from "../kernel/status.js";
 import { createFolderStore } from "../kernel/store.js";
 import {
   parseTaskFile,
   validateTaskFlows,
   validateTaskGraph,
 } from "../kernel/tasks.js";
-import type { ProcessConfig, State } from "../kernel/types.js";
+import type {
+  ArtifactStore,
+  ConfigBundle,
+  ProcessConfig,
+  State,
+} from "../kernel/types.js";
+import type { PriceSource } from "../kernel/openrouter.js";
 
 export interface InitResult {
   goalDir: string;
@@ -120,12 +127,21 @@ export interface StatusResult {
   state: State;
   lastSummary?: string;
   goalDir: string;
+  /** The status.json text `factory status --json` prints; set when asked. */
+  statusJson?: string;
+}
+
+export interface StatusOptions {
+  json?: boolean;
+  /** Price cache and fetcher for a snapshot derived before the kernel ever ran. */
+  priceSource?: PriceSource;
 }
 
 /** Derived state only: status reads tasks + records and never launches anything. */
 export async function statusGoal(
   repo: string,
   goal: string,
+  opts: StatusOptions = {},
 ): Promise<StatusResult> {
   const repoRoot = path.resolve(repo);
   const configs = loadConfigs(repoRoot);
@@ -156,7 +172,37 @@ export async function statusGoal(
       break;
     }
   }
-  return { goal, state, lastSummary, goalDir: paths.goalDir };
+  const statusJson = opts.json
+    ? await statusTextFor(store, configs, opts.priceSource)
+    : undefined;
+  return {
+    goal,
+    state,
+    lastSummary,
+    goalDir: paths.goalDir,
+    ...(statusJson !== undefined ? { statusJson } : {}),
+  };
+}
+
+/**
+ * The kernel's stored snapshot, or the same document derived now when no
+ * launch has written one: `--json` never answers a missing file with nothing.
+ */
+async function statusTextFor(
+  store: ArtifactStore,
+  configs: ConfigBundle,
+  priceSource: PriceSource | undefined,
+): Promise<string> {
+  const stored = await readStatus(store);
+  if (stored !== null) return stored;
+  return renderStatus(
+    await collectStatus({
+      store,
+      flows: configs.process.flows,
+      priceIds: configs.run.priceIds,
+      priceSource,
+    }),
+  );
 }
 
 export type SteerSource = { text: string; source: string };
