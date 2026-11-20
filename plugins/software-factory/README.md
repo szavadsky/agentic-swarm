@@ -324,6 +324,7 @@ Gates run once on the base; a red base is recorded and warned once, not fatal.
 ```
 <artifactRoot>/<goal>/
   intent.md plan.md tasks/
+  epics/<epic>.md           # one plan per architect scope; the goal plan's register names them
   records/                  # one directory per settled step and round: started/end/outcome
   mailbox/{inbox,processed,outbox}/
   iterations/<n>/{context-pack.md,summary.md,metrics.yaml}

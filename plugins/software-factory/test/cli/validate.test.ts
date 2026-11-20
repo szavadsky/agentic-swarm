@@ -684,6 +684,26 @@ describe("factory validate", () => {
       const accepted = await runValidate(inside);
       expect(accepted.code).toBe(0);
       expect(accepted.out).toContain(": valid");
+
+      // A follow-up the epic plan names is inside the plan set.
+      writeFile(
+        root,
+        "plan.md",
+        "# Plan\n\n## Architect register\n\n- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `src/auth/**` | opened i1 | active\n",
+      );
+      writeFile(
+        root,
+        "epics/auth.md",
+        "# Epic auth\n\n- auth.login — Add login.\n",
+      );
+      const epic = writeFile(
+        root,
+        `${record}/outcome.yaml`,
+        "status: done\nsummary: checked\nplanCheck:\n  verdict: progress\n  evidence: []\n  followUps:\n    - kind: amend\n      slug: auth.login\n      reason: retry the turn\n",
+      );
+      const epicRes = await runValidate(epic);
+      expect(epicRes.code).toBe(0);
+      expect(epicRes.out).toContain(": valid");
     }),
   );
 

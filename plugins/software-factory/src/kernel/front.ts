@@ -10,6 +10,7 @@ import {
   readFrontClass,
 } from "./flow-context.js";
 import { scanInbox } from "./mailbox.js";
+import { goalPlan } from "./plan-file.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import {
   parseTaskFile,
@@ -42,7 +43,6 @@ interface FrontRunOptions {
   state: State;
 }
 
-const PLAN_FILE = "plan.md";
 const CLASS_FILE = "class.yaml";
 
 /**
@@ -207,8 +207,7 @@ export async function runFront(
 ): Promise<FrontResult> {
   const goalDir = runtime.store.goalDir;
   try {
-    if (fs.existsSync(path.join(goalDir, PLAN_FILE)))
-      return { action: "boundary" };
+    if (fs.existsSync(goalPlan(goalDir).path)) return { action: "boundary" };
     // The front has no steer variable and cannot answer one; the architect
     // boundary is the only steer consumer, so a pending steer must not be
     // skipped by a class that would dispatch without it.
@@ -236,7 +235,7 @@ export async function runFront(
       vars: {
         iteration: String(opts.iteration),
         intent_path: path.join(goalDir, "intent.md"),
-        plan_path: path.join(goalDir, PLAN_FILE),
+        plan_path: goalPlan(goalDir).path,
         tasks_dir: runtime.store.tasksDir,
         class_path: path.join(goalDir, CLASS_FILE),
         pack_path: path.join(goalDir, packRel),

@@ -14,6 +14,7 @@ import {
   runPlanCheckPm,
   snapshotTurn,
 } from "./pm.js";
+import { existingPlans, formatPlanList, registeredPlans } from "./plan-file.js";
 import { scriptMeta } from "./record.js";
 import { recordDirName } from "./store.js";
 import type {
@@ -45,9 +46,8 @@ const OPEN_STATUSES: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
 const PLAN_BULLET = /^-\s+(\S+)\s+—/u;
 
 /**
- * The slugs the plan names as task bullets. Prose mentions and nested bullets
+ * The slugs one plan names as task bullets. Prose mentions and nested bullets
  * (`  - done: …`) name no task, so a follow-up cannot hide behind them.
- * `plan-scopes` generalizes this parser once every scope has its own plan.
  */
 export function planSlugs(plan: string): Set<string> {
   const slugs = new Set<string>();
@@ -59,14 +59,18 @@ export function planSlugs(plan: string): Set<string> {
 }
 
 /**
- * Findings for a plan-check report whose follow-ups reach outside the plan:
- * each follow-up's own slug must be a `- <slug> —` bullet. A `missing-dep`
- * follow-up's dead dependency may be absent from the plan; it is the dep, not
- * the slug acted on. Only a `done` outcome carries a report to check.
+ * Findings for a plan-check report whose follow-ups reach outside every active
+ * plan: each follow-up's own slug must be a `- <slug> —` bullet in one of them.
+ * A `missing-dep` follow-up's dead dependency may be absent from the plans; it
+ * is the dep, not the slug acted on. Only a `done` outcome carries a report to
+ * check.
  */
-export function validatePlanCheck(plan: string, outcome: Outcome): string[] {
+export function validatePlanCheck(
+  plans: readonly string[],
+  outcome: Outcome,
+): string[] {
   if (outcome.status !== "done" || !outcome.planCheck) return [];
-  const named = planSlugs(plan);
+  const named = new Set(plans.flatMap((plan) => [...planSlugs(plan)]));
   const outside = [
     ...new Set(
       outcome.planCheck.followUps
@@ -209,11 +213,10 @@ export async function runPlanCheck(
   runtime: KernelRuntime,
   opts: { iteration: number; round: number; state: State },
 ): Promise<PlanCheckTurn> {
-  const planPath = path.join(runtime.store.goalDir, "plan.md");
-  const plan = fs.existsSync(planPath)
-    ? await fs.promises.readFile(planPath, "utf8")
-    : "";
-  const snapshot = await snapshotTurn(runtime, planPath);
+  const allPlans = registeredPlans(runtime.store.goalDir);
+  const plans = existingPlans(allPlans);
+  const texts = plans.map((plan) => fs.readFileSync(plan.path, "utf8"));
+  const snapshot = await snapshotTurn(runtime, allPlans);
   const tasks = await runtime.store.listTasks();
   const gateRecord = lastGateRecord(
     await runtime.store.listRecords(),
@@ -230,20 +233,17 @@ export async function runPlanCheck(
     vars: {
       iteration: String(opts.iteration),
       intent_path: path.join(runtime.store.goalDir, "intent.md"),
-      plan_path: planPath,
+      plans: formatPlanList(plans),
       checkout: runtime.paths.goalCheckout,
       tasks_dir: runtime.store.tasksDir,
       existing_tasks: planCheckBrief(opts.state, tasks),
       gate_record_path: gateRecord ?? "none recorded",
     },
     expectation: KERNEL_TURN_STEPS[PLAN_CHECK_STEP],
-    validate: (outcome) => validatePlanCheck(plan, outcome),
+    validate: (outcome) => validatePlanCheck(texts, outcome),
   });
   const restored = await restoreTurn(runtime, snapshot);
-  const touched = [
-    ...(restored.plan ? ["plan.md"] : []),
-    ...restored.tasks,
-  ].sort();
+  const touched = [...restored.plans, ...restored.tasks].sort();
   if (touched.length > 0) {
     await runtime.store.appendRecord(
       scriptMeta(opts.iteration, "plan-check-reconcile", {

@@ -1561,8 +1561,27 @@ describe("plan checker", () => {
         ],
       },
     });
-    expect(validatePlanCheck(plan, check)).toEqual([
+    expect(validatePlanCheck([plan], check)).toEqual([
       'follow-up slug "gamma" has no "- gamma —" bullet in the plan; merged and retired slugs are history',
+    ]);
+  });
+
+  it("accepts a follow-up named by any active plan and rejects one named by none", () => {
+    const goal =
+      "# Goal\n\n## Architect register\n\n- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `src/auth/**` | opened i1 | active\n";
+    const auth = "# Epic auth\n\n- auth.login — Add login.\n";
+    const check = outcome({
+      planCheck: {
+        verdict: "progress",
+        evidence: [],
+        followUps: [
+          { kind: "amend", slug: "auth.login", reason: "retry the turn" },
+          { kind: "replace", slug: "retired", reason: "not in any plan" },
+        ],
+      },
+    });
+    expect(validatePlanCheck([goal, auth], check)).toEqual([
+      'follow-up slug "retired" has no "- retired —" bullet in the plan; merged and retired slugs are history',
     ]);
   });
 

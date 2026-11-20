@@ -30,7 +30,7 @@ Renderer defaults live outside any `This turn` block and the renderer supplies t
 - `turn` — `first` on a new goal's first turn; `relaunch` on the first turn of a relaunch of the same goal; `boundary` otherwise
 - `iteration` — 1-based iteration number of this launch
 - `intent_path` — path to the goal's `intent.md`
-- `plan_path` — path to the goal's single markdown plan; the file to edit
+- `plan_path` — path to the goal's own markdown plan; the file to edit
 - `checkout` — path to the stable goal checkout (integration worktree)
 - `pack_path` — path to the iteration context pack (index: status, short hashes, per-task rounds, infra, code facts, paths)
 - `digest_path` — path to the previous launch's digest; empty string on a first launch
@@ -65,7 +65,7 @@ One epic's architect, below the top architect: the same bounds, turn order, plan
 
 - `iteration` — 1-based iteration number of this launch
 - `intent_path` — path to the goal's `intent.md`
-- `plan_path` — path to the goal's markdown plan; may not exist yet
+- `plan_path` — path to the goal's own markdown plan; may not exist yet
 - `tasks_dir` — directory where the one task file is written, `<slug>.md`
 - `class_path` — path to `class.yaml`: `{ class: trivial|task|bigger, slug? }` beside the plan
 - `pack_path` — path to the iteration context pack the front writes: the architect's input on `bigger`, the implementer's briefing on `trivial`/`task`
@@ -84,7 +84,7 @@ One epic's architect, below the top architect: the same bounds, turn order, plan
 
 - `iteration` — 1-based iteration number of this launch
 - `intent_path` — path to the goal's `intent.md`, for resolving wording only
-- `plan_path` — path to the plan to derive from; read-only to the PM
+- `plans` — the active plans, one `- goal: <path>` or ``- epic `<epic>`: <path>`` line each; derive every bullet from the plan that carries it; read-only to the PM
 - `tasks_dir` — directory where task files are written, one `<slug>.md` per task
 - `existing_tasks` — existing task files as `- slug | status | hash | deps: a,b` lines (`none` when empty); merged/finished lines end `frozen (read-only)`, cancelled `read-only (spent)`, steer tasks `steer <id>`, stall continuations `stall <n>`, plan-check follow-ups `plan-check <n>`
 - `repair` — the script validator's findings from the previous ask; empty string on the first ask and on steer turns
@@ -155,7 +155,7 @@ The plan-review prompt the architecture flow renders on each reviewer alias. It 
 
 - `iteration` — 1-based iteration number of this launch
 - `intent_path` — path to the goal's `intent.md`
-- `plan_path` — path to the plan under review; read-only to the reviewer
+- `plan_path` — path to the goal plan under review; read-only to the reviewer
 - `pack_path` — path to the iteration context pack the architect planned from
 - `worktree` — goal checkout; the reviewer reads the repo from it
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
@@ -211,7 +211,7 @@ The flow's `resolve` step renders this same prompt with the same variables: the 
 
 - `iteration` — 1-based iteration number of this launch
 - `intent_path` — path to the goal's `intent.md`, for resolving wording only
-- `plan_path` — path to the plan to verify against the repo; read-only to the checker
+- `plans` — the active plans, one `- goal: <path>` or ``- epic `<epic>`: <path>`` line each; verify every plan against the repo; read-only to the checker
 - `checkout` — path to the stable goal checkout (integration worktree)
 - `tasks_dir` — directory holding one `<slug>.md` task file per task
 - `existing_tasks` — existing task files as `- slug | status | hash | deps: a,b` lines (`none` when empty), then parked slugs with their cause

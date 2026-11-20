@@ -3,6 +3,7 @@ import path from "node:path";
 import { runAgentTurn } from "./agent.js";
 import { boundaryTarget } from "./flow-context.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
+import { goalPlan } from "./plan-file.js";
 import type { KernelRuntime } from "./types.js";
 
 /** Agent step of the pack-preparer boundary turn; slug-less, outside task turn counts. */
@@ -28,7 +29,7 @@ export async function runPackPreparer(
     vars: {
       iteration: String(opts.iteration),
       intent_path: path.join(runtime.store.goalDir, "intent.md"),
-      plan_path: path.join(runtime.store.goalDir, "plan.md"),
+      plan_path: goalPlan(runtime.store.goalDir).path,
       context_data_path: path.join(runtime.store.goalDir, opts.dataRel),
       pack_path: packPath,
       checkout: runtime.paths.goalCheckout,

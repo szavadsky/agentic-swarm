@@ -43,6 +43,7 @@ import {
   writeOutbox,
 } from "./mailbox.js";
 import { next } from "./next.js";
+import { goalPlan, registeredPlans } from "./plan-file.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { PACK_PREP_STEP, runPackPreparer } from "./pack-prep.js";
 import {
@@ -330,10 +331,10 @@ export async function runBoundary(
   // is answered only when that spike ends, so the pair can never finish. Clear
   // one a pre-fix PM left before the pack and the next dispatch read holds.
   await expireSelfHolds(runtime, tasks, iteration);
-  const planPath = path.join(runtime.store.goalDir, "plan.md");
+  const plan = goalPlan(runtime.store.goalDir);
   const steers = await scanInbox(runtime.store);
   const gate = consultGate({
-    plan: fs.existsSync(planPath),
+    plan: fs.existsSync(plan.path),
     open: openWork(state),
     steerWaiting: steers.length > 0,
     records,
@@ -462,14 +463,16 @@ export async function runBoundary(
             ),
           })
         : undefined;
-    const planText = fs.existsSync(planPath)
-      ? fs.readFileSync(planPath, "utf8")
-      : "";
+    // A debt any active plan owns leaves the register, whichever architect wrote it.
+    const planText = registeredPlans(runtime.store.goalDir)
+      .filter((file) => fs.existsSync(file.path))
+      .map((file) => fs.readFileSync(file.path, "utf8"))
+      .join("\n");
     const packInput: ContextPackInput = {
       goal: path.basename(runtime.paths.goalDir),
       iteration,
       intentPath: path.join(runtime.store.goalDir, "intent.md"),
-      planPath: path.join(runtime.store.goalDir, "plan.md"),
+      planPath: plan.path,
       checkout: runtime.paths.goalCheckout,
       integrationBranch: runtime.paths.integrationBranch,
       headHash: head,
@@ -532,7 +535,7 @@ export async function runBoundary(
   // The guard inside the turn owns the plan-edit rule and its repair ask; the
   // post-turn check below is the same rule as a backstop for a halted turn
   // that kept its continue decision, so both compare against these pre-turn bytes.
-  const planBefore = snapshotPlan(planPath);
+  const planBefore = snapshotPlan(plan.path);
 
   const architectTurn = (resume: SessionRef | undefined) =>
     runBoundaryTurn(runtime, { iteration, step: "architect" }, () =>
@@ -549,7 +552,7 @@ export async function runBoundary(
           turn,
           iteration: String(iteration),
           intent_path: path.join(runtime.store.goalDir, "intent.md"),
-          plan_path: path.join(runtime.store.goalDir, "plan.md"),
+          plan_path: plan.path,
           checkout: runtime.paths.goalCheckout,
           pack_path: path.join(runtime.store.goalDir, packRel),
           digest_path: digestPath ?? "",
@@ -706,7 +709,7 @@ export async function runBoundary(
     };
   }
 
-  const planFinding = missingPlanFinding(planPath, decision, planBefore);
+  const planFinding = missingPlanFinding(plan.path, decision, planBefore);
   if (planFinding) {
     return {
       iteration,
@@ -726,7 +729,7 @@ export async function runBoundary(
   const review = await runBoundaryTurn(
     runtime,
     { iteration, step: PLAN_REVIEW_STEP },
-    () => runPlanReview(runtime, { iteration, packRel }),
+    () => runPlanReview(runtime, { iteration, packRel, plan }),
   );
   const policy = runtime.configs.process.architecture.architectReturn;
   if (
@@ -739,6 +742,7 @@ export async function runBoundary(
       runArchitectReturn(runtime, {
         iteration,
         packRel,
+        plan,
         findings,
         reviewers: review.reviewers,
       }),
@@ -749,7 +753,6 @@ export async function runBoundary(
     runPm(runtime, {
       iteration,
       state,
-      planPath,
       cwd: runtime.paths.goalCheckout,
     }),
   );

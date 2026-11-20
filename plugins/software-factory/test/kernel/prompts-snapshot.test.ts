@@ -103,7 +103,7 @@ const ROLES: Record<string, Record<string, string>> = {
   pm: {
     iteration: "3",
     intent_path: "/goal/intent.md",
-    plan_path: "/goal/plan.md",
+    plans: "- goal: /goal/plan.md\n  - epic `auth`: /goal/epics/auth.md",
     tasks_dir: "/goal/tasks",
     existing_tasks: "- alpha | merged | abcdef1234 | deps: none | frozen",
     repair: '- task "beta" depends on missing task "ghost"',
@@ -178,7 +178,7 @@ const ROLES: Record<string, Record<string, string>> = {
   "plan-checker": {
     iteration: "3",
     intent_path: "/goal/intent.md",
-    plan_path: "/goal/plan.md",
+    plans: "- goal: /goal/plan.md\n  - epic `auth`: /goal/epics/auth.md",
     checkout: "/worktrees/demo",
     tasks_dir: "/goal/tasks",
     existing_tasks: "- alpha | merged | abcdef1234 | deps: none | frozen",

@@ -27,6 +27,7 @@ import {
   validateExpectation,
 } from "../kernel/outcome.js";
 import { PLAN_CHECK_STEP, validatePlanCheck } from "../kernel/plan-check.js";
+import { existingPlans, registeredPlans } from "../kernel/plan-file.js";
 import {
   PLAN_REVIEW_STEP,
   validatePlanReviewDelivery,
@@ -410,14 +411,16 @@ export interface ValidateResult {
 }
 
 /**
- * The plan a record outcome was delivered against. Records live at
- * `<goal>/records/<record>/outcome.yaml`, the goal's plan at `<goal>/plan.md`;
- * a file outside a goal layout has no plan to check against.
+ * The plans a record outcome was delivered against. Records live at
+ * `<goal>/records/<record>/outcome.yaml`; the goal plan's register names every
+ * active plan. A file outside a goal layout has no plan to check against.
  */
-function recordPlanPath(abs: string): string | undefined {
+function recordPlans(abs: string): string[] {
   const recordDir = path.dirname(abs);
-  const plan = path.join(path.dirname(path.dirname(recordDir)), "plan.md");
-  return fs.existsSync(plan) ? plan : undefined;
+  const goalDir = path.dirname(path.dirname(recordDir));
+  return existingPlans(registeredPlans(goalDir)).map((plan) =>
+    fs.readFileSync(plan.path, "utf8"),
+  );
 }
 
 /**
@@ -466,11 +469,9 @@ async function outcomeResult(
     if (step === PLAN_REVIEW_STEP) {
       findings.push(...validatePlanReviewDelivery(outcome));
     }
-    const plan = step === PLAN_CHECK_STEP ? recordPlanPath(abs) : undefined;
-    if (plan) {
-      findings.push(
-        ...validatePlanCheck(fs.readFileSync(plan, "utf8"), outcome),
-      );
+    if (step === PLAN_CHECK_STEP) {
+      const plans = recordPlans(abs);
+      if (plans.length > 0) findings.push(...validatePlanCheck(plans, outcome));
     }
     return { findings: findings.map((finding) => `${abs}: ${finding}`) };
   } catch (err) {

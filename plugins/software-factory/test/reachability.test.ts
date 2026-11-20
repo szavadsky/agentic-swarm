@@ -16,8 +16,6 @@ const ALLOWLIST: Record<string, string> = {
     "test double: imported only by tests, never by production code",
   "src/harness/fake/index.ts":
     "test double barrel: imported only by tests, never by production code",
-  "src/kernel/register.ts":
-    "no production caller until M11 wires the architect register",
   "src/schema-check.ts":
     "standalone schema-validation entrypoint invoked by bun, not imported by production",
   "src/harness/lsp/frontmatter.ts":

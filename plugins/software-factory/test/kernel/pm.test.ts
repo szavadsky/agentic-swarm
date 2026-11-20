@@ -175,7 +175,6 @@ describe("PM turn reconciliation", () => {
       const result = await runPm(runtime, {
         iteration: 1,
         state: derive([], []),
-        planPath,
         cwd: root,
       });
       expect(result.status).toBe("exhausted");
@@ -282,7 +281,6 @@ describe("PM turn reconciliation", () => {
       const result = await runPm(runtime, {
         iteration: 1,
         state,
-        planPath,
         cwd: root,
       });
       expect(result.status).toBe("done");
@@ -384,7 +382,6 @@ describe("PM turn reconciliation", () => {
       const result = await runPm(runtime, {
         iteration: 1,
         state,
-        planPath,
         cwd: root,
       });
       expect(result.status).toBe("done");
@@ -456,7 +453,6 @@ describe("PM turn reconciliation", () => {
       const result = await runPm(runtime, {
         iteration: 1,
         state,
-        planPath,
         cwd: root,
       });
       expect(result.status).toBe("done");
@@ -553,7 +549,6 @@ describe("PM turn reconciliation", () => {
       const result = await runPm(runtime, {
         iteration: 2,
         state,
-        planPath,
         cwd: root,
       });
       expect(result.status).toBe("done");
@@ -619,7 +614,6 @@ describe("PM turn reconciliation", () => {
           await runtime.store.listTasks(),
           await runtime.store.listRecords(),
         ),
-        planPath,
         cwd: root,
       });
       expect(result.status).toBe("done");
@@ -674,7 +668,6 @@ describe("PM turn reconciliation", () => {
       await runPm(runtime, {
         iteration: 1,
         state: derive([], []),
-        planPath,
         cwd: root,
       });
       expect(fs.readFileSync(planPath, "utf8")).toBe(plan);
@@ -761,7 +754,6 @@ describe("PM turn reconciliation", () => {
       const result = await runPm(runtime, {
         iteration: 1,
         state: derive([], []),
-        planPath,
         cwd: root,
       });
       expect(result.status).toBe("done");
@@ -827,7 +819,6 @@ describe("PM turn reconciliation", () => {
       const result = await runPm(runtime, {
         iteration: 1,
         state: derive([], []),
-        planPath,
         cwd: root,
       });
       expect(result.status).toBe("done");
@@ -888,7 +879,6 @@ describe("PM turn reconciliation", () => {
       const result = await runPm(runtime, {
         iteration: 1,
         state: derive([], []),
-        planPath,
         cwd: root,
       });
       expect(result.status).toBe("done");
@@ -933,7 +923,6 @@ describe("PM turn reconciliation", () => {
       const result = await runPm(runtime, {
         iteration: 1,
         state: derive([], []),
-        planPath,
         cwd: root,
       });
       expect(result.status).toBe("asked");
@@ -1114,7 +1103,6 @@ describe("PM turn reconciliation", () => {
       const result = await runPm(runtime, {
         iteration: 1,
         state: derive([], []),
-        planPath,
         cwd: root,
       });
       expect(result.status).toBe("infra");
@@ -1161,7 +1149,6 @@ describe("PM turn reconciliation", () => {
       const result = await runPm(runtime, {
         iteration: 1,
         state: derive([], []),
-        planPath,
         cwd: root,
       });
       expect(result.status).toBe("done");
@@ -1218,7 +1205,6 @@ describe("PM turn reconciliation", () => {
       const result = await runPm(runtime, {
         iteration: 1,
         state,
-        planPath,
         cwd: root,
       });
       expect(result.status).toBe("done");
@@ -1341,7 +1327,6 @@ describe("PM turn reconciliation", () => {
       const result = await runPm(runtime, {
         iteration: 1,
         state: derive([], []),
-        planPath,
         cwd: root,
       });
       expect(result.status).toBe("exhausted");
@@ -1399,7 +1384,6 @@ describe("PM ladder baseline", () => {
       const result = await runPm(runtime, {
         iteration: 1,
         state,
-        planPath,
         cwd: root,
       });
       expect(result.status).toBe("architect");
@@ -1450,7 +1434,6 @@ describe("PM ladder baseline", () => {
       const result = await runPm(runtime, {
         iteration: 1,
         state,
-        planPath,
         cwd: root,
       });
       expect(fake.calls.map((call) => call.model.id)).toEqual([
@@ -1491,7 +1474,6 @@ describe("PM ladder baseline", () => {
       const result = await runPm(runtime, {
         iteration: 1,
         state,
-        planPath,
         cwd: root,
       });
       expect(result.status).toBe("architect");
@@ -2816,4 +2798,182 @@ describe("stall PM validation", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+});
+
+describe("PM over plan scopes", () => {
+  function scopedRuntime(): {
+    root: string;
+    runtime: KernelRuntime;
+    fake: FakeHarness;
+  } {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-pm-scopes-"));
+    const fake = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
+    const runtime = runtimeFor(fake, root);
+    fs.mkdirSync(path.join(runtime.store.goalDir, "epics"), {
+      recursive: true,
+    });
+    fs.mkdirSync(runtime.store.tasksDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(runtime.store.goalDir, "plan.md"),
+      [
+        "# Plan",
+        "",
+        "## Architect register",
+        "",
+        "- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `src/auth/**` | opened i1 | active",
+        "- epic `billing` | architect `subarchitect` | plan `epics/billing.md` | scope `src/billing/**` | opened i1 | active",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(runtime.store.goalDir, "epics/auth.md"),
+      "# Epic auth\n\n- auth.login — Add login.\n",
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(runtime.store.goalDir, "epics/billing.md"),
+      "# Epic billing\n\n- billing.invoice — Add invoices.\n",
+      "utf8",
+    );
+    return { root, runtime, fake };
+  }
+
+  it("derives tasks from both epic plans and names each plan in the prompt", async () => {
+    const { root, runtime, fake } = scopedRuntime();
+    try {
+      const authPlan = path.join(runtime.store.goalDir, "epics/auth.md");
+      const billingPlan = path.join(runtime.store.goalDir, "epics/billing.md");
+      fake.script((req, ctx) => {
+        expect(req.prompt).toContain(`- epic \`auth\`: ${authPlan}`);
+        expect(req.prompt).toContain(`- epic \`billing\`: ${billingPlan}`);
+        for (const [epic, planPath] of [
+          ["auth", authPlan],
+          ["billing", billingPlan],
+        ] as const) {
+          const plan = fs.readFileSync(planPath, "utf8");
+          for (const match of plan.matchAll(/^- (\S+) —/gmu)) {
+            const slug = match[1]!;
+            const taskFile = task(slug, {
+              epic,
+              scope: [`src/${epic}/${slug.split(".")[1]}.ts`],
+              source: "plan",
+            });
+            fs.writeFileSync(
+              path.join(runtime.store.tasksDir, `${slug}.md`),
+              renderTaskFile(taskFile),
+              "utf8",
+            );
+          }
+        }
+        ctx.writeOutcome(outcome({ summary: "derived both epic plans" }));
+        return fakeTurnResult(req);
+      });
+
+      const result = await runPm(runtime, {
+        iteration: 1,
+        state: derive([], []),
+        cwd: root,
+      });
+      expect(result.status).toBe("done");
+      const tasks = await runtime.store.listTasks();
+      expect(tasks.map((entry) => [entry.slug, entry.epic])).toEqual([
+        ["auth.login", "auth"],
+        ["billing.invoice", "billing"],
+      ]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("restores an edit to any epic plan and reports which plan changed", async () => {
+    const { root, runtime, fake } = scopedRuntime();
+    try {
+      const authPlan = path.join(runtime.store.goalDir, "epics/auth.md");
+      const billingPlan = path.join(runtime.store.goalDir, "epics/billing.md");
+      const authBefore = fs.readFileSync(authPlan, "utf8");
+      const billingBefore = fs.readFileSync(billingPlan, "utf8");
+      fake.script((req, ctx) => {
+        fs.appendFileSync(authPlan, "\n## smuggled\n", "utf8");
+        fs.appendFileSync(billingPlan, "\n## smuggled\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "edited both plans" }));
+        return fakeTurnResult(req);
+      });
+      fake.script((req, ctx) => {
+        expect(req.prompt).toContain(
+          "epics/auth.md changed during the PM turn; restored",
+        );
+        expect(req.prompt).toContain(
+          "epics/billing.md changed during the PM turn; restored",
+        );
+        ctx.writeOutcome(outcome({ summary: "left the plans alone" }));
+        return fakeTurnResult(req);
+      });
+
+      const result = await runPm(runtime, {
+        iteration: 1,
+        state: derive([], []),
+        cwd: root,
+      });
+      expect(result.status).toBe("done");
+      expect(fs.readFileSync(authPlan, "utf8")).toBe(authBefore);
+      expect(fs.readFileSync(billingPlan, "utf8")).toBe(billingBefore);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("applies each plan's cancellation only to the tasks that plan owns", async () => {
+    const { root, runtime, fake } = scopedRuntime();
+    try {
+      await runtime.store.writeTask(
+        task("auth.old", {
+          epic: "auth",
+          scope: ["src/auth/old.ts"],
+          body: "Old auth work.\nDone when: it works.",
+        }),
+      );
+      await runtime.store.writeTask(
+        task("billing.old", {
+          epic: "billing",
+          scope: ["src/billing/old.ts"],
+          body: "Old billing work.\nDone when: it works.",
+        }),
+      );
+      fs.appendFileSync(
+        path.join(runtime.store.goalDir, "epics/auth.md"),
+        [
+          "cancelled: auth.old — auth replaced it",
+          "cancelled: billing.old — an epic plan cannot retire this",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      fs.appendFileSync(
+        path.join(runtime.store.goalDir, "epics/billing.md"),
+        "cancelled: billing.old — billing replaced it\n",
+        "utf8",
+      );
+      fake.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "applied both plans" }));
+        return fakeTurnResult(req);
+      });
+
+      const result = await runPm(runtime, {
+        iteration: 1,
+        state: derive(await runtime.store.listTasks(), []),
+        cwd: root,
+      });
+      expect(result.status).toBe("done");
+      const cancels = (await runtime.store.listRecords())
+        .filter((record) => record.step === "cancel")
+        .map((record) => [record.slug, causeText(record.cause)]);
+      expect(cancels).toEqual([
+        ["auth.old", "auth replaced it"],
+        ["billing.old", "billing replaced it"],
+      ]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

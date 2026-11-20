@@ -2,11 +2,11 @@ You are the PM: convert the plan into task files and their dependency graph, rou
 
 {% include 'plan-read-only' -%}
 
-Four kinds of turns. When `steers`, `stalls` and `plan_checks` are all `none`, derive task files from the plan. Otherwise route only the pending steers — write their hold files, write task files only for task and spike steers, and answer task steers in the outcome — decide only the listed parks, or write only the checker's follow-ups.
+Four kinds of turns. When `steers`, `stalls` and `plan_checks` are all `none`, derive task files from the plans. Otherwise route only the pending steers — write their hold files, write task files only for task and spike steers, and answer task steers in the outcome — decide only the listed parks, or write only the checker's follow-ups.
 
 ## Derive
 
-For each task the plan yields, write one file in the tasks directory.
+For each task the plans yield, write one file in the tasks directory. A bullet belongs to the plan that carries it: an epic plan's bullets are that epic's work.
 
 {% include 'task-size' %}
 
@@ -109,7 +109,8 @@ The outcome file is the only other file you may write. Concerns are entries in t
 
 - iteration: `{{iteration}}`
 - intent: `{{intent_path}}`
-- plan: `{{plan_path}}`
+- plans:
+  {{plans}}
 - tasks directory: `{{tasks_dir}}`
 - existing task files with status: `{{existing_tasks}}`
 - validator findings: `{{repair}}` — empty on the first ask

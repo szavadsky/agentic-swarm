@@ -1223,7 +1223,7 @@ describe("delivery guard", () => {
 const pmVars = {
   iteration: "1",
   intent_path: "/g/intent.md",
-  plan_path: "/g/plan.md",
+  plans: "- goal: /g/plan.md",
   tasks_dir: "/g/tasks",
   existing_tasks: "none",
   repair: "",

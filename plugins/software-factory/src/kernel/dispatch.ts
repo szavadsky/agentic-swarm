@@ -1,6 +1,4 @@
 // biome-ignore-all lint/complexity: split-flow-dispatch
-import fs from "node:fs";
-import path from "node:path";
 import { isTransientInfraCause } from "../harness/fallback.js";
 import { formatCause, makeCause } from "./cause.js";
 import { derive } from "./derive.js";
@@ -10,18 +8,19 @@ import type { MergeResult } from "./integrate.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import { type Hold, readHolds, type Steer, scanInbox } from "./mailbox.js";
 import { next } from "./next.js";
+import { loadPriceTable } from "./openrouter.js";
 import {
   openWork,
   PLAN_CHECK_STEP,
   planChecksSinceConsult,
   runPlanCheckRound,
 } from "./plan-check.js";
+import { existingPlans, registeredPlans } from "./plan-file.js";
 import { runStallPm, runSteerPm, STALL_ROUTES_STEP } from "./pm.js";
-import { loadPriceTable } from "./openrouter.js";
 import { type PriceTable, pricedRecord } from "./pricing.js";
 import { scriptMeta } from "./record.js";
-import { runSteward } from "./steward.js";
 import type { DrainController } from "./signals.js";
+import { runSteward } from "./steward.js";
 import type {
   Action,
   Cause,
@@ -855,8 +854,8 @@ export async function runDispatch(
       // Without a plan there is nothing to verify, so the front path dispatches
       // as before instead of spending a checker turn. The alias is required by
       // pre-flight, so only the plan's presence gates the turn itself.
-      const planPath = path.join(runtime.store.goalDir, "plan.md");
-      if (!opts.signals?.shouldStop() && fs.existsSync(planPath)) {
+      const plans = existingPlans(registeredPlans(runtime.store.goalDir));
+      if (!opts.signals?.shouldStop() && plans.length > 0) {
         const checkTasks = await runtime.store.listTasks();
         const checkRecords = await runtime.store.listRecords();
         const checkState = derive(

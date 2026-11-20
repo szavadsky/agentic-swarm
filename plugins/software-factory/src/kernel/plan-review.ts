@@ -14,6 +14,7 @@ import {
   snapshotTasks,
   snapshotTurn,
 } from "./pm.js";
+import type { PlanFile } from "./plan-file.js";
 import { outcomeRepairSchemaVar } from "./prompt-schema.js";
 import { scriptMeta } from "./record.js";
 import { MAIN_ARCHITECT } from "./tasks.js";
@@ -133,9 +134,9 @@ async function recordMissing(
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: one reviewer turn, its read-only reconcile and its missing record
 export async function runPlanReview(
   runtime: KernelRuntime,
-  opts: { iteration: number; packRel: string },
+  opts: { iteration: number; packRel: string; plan: PlanFile },
 ): Promise<PlanReviewRound> {
-  const planPath = path.join(runtime.store.goalDir, "plan.md");
+  const plan = opts.plan;
   const reviewers = runtime.configs.process.architecture.reviewers;
   const technical: PlanReviewFinding[] = [];
   const planNotes: PlanReviewFinding[] = [];
@@ -147,7 +148,7 @@ export async function runPlanReview(
       alias,
       opts.iteration,
     );
-    const snapshot = await snapshotTurn(runtime, planPath);
+    const snapshot = await snapshotTurn(runtime, [plan]);
     const result = await runAgentTurn(runtime, {
       target,
       cwd: runtime.paths.goalCheckout,
@@ -155,7 +156,7 @@ export async function runPlanReview(
       vars: {
         iteration: String(opts.iteration),
         intent_path: path.join(runtime.store.goalDir, "intent.md"),
-        plan_path: planPath,
+        plan_path: plan.path,
         pack_path: path.join(runtime.store.goalDir, opts.packRel),
         worktree: runtime.paths.goalCheckout,
         outcome_schema: outcomeRepairSchemaVar(target.prompt, "any"),
@@ -164,10 +165,7 @@ export async function runPlanReview(
       validate: validatePlanReviewDelivery,
     });
     const restored = await restoreTurn(runtime, snapshot);
-    const touched = [
-      ...(restored.plan ? ["plan.md"] : []),
-      ...restored.tasks,
-    ].sort();
+    const touched = [...restored.plans, ...restored.tasks].sort();
     if (touched.length > 0) {
       await runtime.store.appendRecord(
         scriptMeta(opts.iteration, "plan-review-reconcile", { round: 1 }),
@@ -255,11 +253,12 @@ export async function runArchitectReturn(
   opts: {
     iteration: number;
     packRel: string;
+    plan: PlanFile;
     findings: PlanReviewOutcome;
     reviewers: readonly string[];
   },
 ): Promise<void> {
-  const planPath = path.join(runtime.store.goalDir, "plan.md");
+  const plan = opts.plan;
   const target = architectureTarget(
     runtime,
     "planReturn",
@@ -286,7 +285,7 @@ export async function runArchitectReturn(
     vars: {
       iteration: String(opts.iteration),
       intent_path: path.join(runtime.store.goalDir, "intent.md"),
-      plan_path: planPath,
+      plan_path: plan.path,
       pack_path: path.join(runtime.store.goalDir, opts.packRel),
       reviewers: opts.reviewers.join(", "),
       technical_findings: lines("technical"),

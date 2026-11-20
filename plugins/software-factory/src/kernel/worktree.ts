@@ -6,6 +6,7 @@ import { runWorktreeSetup, type SetupResult } from "../core/checks/setup.js";
 import { isAncestor } from "../core/git/commit.js";
 import { GitError, git } from "../core/git/exec.js";
 import { parseWorktreeList } from "../core/git/status.js";
+import { isPlanPath } from "./plan-file.js";
 import { sealedRecordDirs } from "./store.js";
 import { makeCause } from "./cause.js";
 import type {
@@ -556,7 +557,7 @@ function pmWroteDuring(
 
 function pmOwned(rel: string): boolean {
   return (
-    rel === "plan.md" ||
+    isPlanPath(rel) ||
     rel.startsWith("tasks/") ||
     rel.startsWith("mailbox/holds/")
   );

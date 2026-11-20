@@ -16,8 +16,8 @@ import {
   isArchitectRoute,
   markProcessed,
   planCheckProvenance,
-  selfHeldSlugs,
   type Steer,
+  selfHeldSlugs,
   stallProvenance,
   steerProvenance,
   writeOutbox,
@@ -25,6 +25,7 @@ import {
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { formatParkDefault } from "./park-route.js";
 import { PLAN_CHECK_STEP } from "./plan-check.js";
+import { formatPlanList, type PlanFile, registeredPlans } from "./plan-file.js";
 import { appendCancel, scriptMeta } from "./record.js";
 import {
   doneWhen,
@@ -68,12 +69,16 @@ async function readTaskTexts(
   return out;
 }
 
-/** The plan and every task file as they stood before a turn. */
+/** One plan and its bytes before a turn; an absent plan is restored by deleting it. */
+export interface PlanSnapshot {
+  plan: PlanFile;
+  text: string;
+  exists: boolean;
+}
+
+/** The plans and every task file as they stood before a turn. */
 export interface TurnSnapshot {
-  planPath: string;
-  plan: string;
-  /** An absent plan is restored by deleting the file, not by emptying it. */
-  planExists: boolean;
+  plans: PlanSnapshot[];
   tasks: Map<string, string>;
 }
 
@@ -85,13 +90,17 @@ export async function snapshotTasks(
 
 export async function snapshotTurn(
   runtime: KernelRuntime,
-  planPath: string,
+  plans: readonly PlanFile[],
 ): Promise<TurnSnapshot> {
-  const planExists = fs.existsSync(planPath);
   return {
-    planPath,
-    plan: planExists ? fs.readFileSync(planPath, "utf8") : "",
-    planExists,
+    plans: plans.map((plan) => {
+      const exists = fs.existsSync(plan.path);
+      return {
+        plan,
+        exists,
+        text: exists ? fs.readFileSync(plan.path, "utf8") : "",
+      };
+    }),
     tasks: await snapshotTasks(runtime),
   };
 }
@@ -123,33 +132,33 @@ export async function restoreTasks(
 }
 
 /**
- * Restores the plan and every task file a turn changed or created, byte for
- * byte, and names what it restored. The PM task turn uses it to roll back a
- * failed rung; the steer turn uses it to undo a write that must not happen.
+ * Restores every plan and task file a turn changed or created, byte for byte,
+ * and names what it restored. The PM task turn uses it to roll back a failed
+ * rung; the steer turn uses it to undo a write that must not happen.
  */
 export async function restoreTurn(
   runtime: KernelRuntime,
   snapshot: TurnSnapshot,
-): Promise<{ plan: boolean; tasks: string[] }> {
-  const planExistsNow = fs.existsSync(snapshot.planPath);
-  const planNow = planExistsNow
-    ? fs.readFileSync(snapshot.planPath, "utf8")
-    : "";
-  let planChanged = false;
-  if (!snapshot.planExists) {
-    // A plan the turn created would send the next front to the boundary; it
-    // must be gone, not left behind as an empty file.
-    if (planExistsNow) {
-      fs.rmSync(snapshot.planPath, { force: true });
-      planChanged = true;
+): Promise<{ plans: string[]; tasks: string[] }> {
+  const plans: string[] = [];
+  for (const before of snapshot.plans) {
+    const existsNow = fs.existsSync(before.plan.path);
+    const textNow = existsNow ? fs.readFileSync(before.plan.path, "utf8") : "";
+    if (!before.exists) {
+      // A plan the turn created would send the next front to the boundary; it
+      // must be gone, not left behind as an empty file.
+      if (existsNow) {
+        fs.rmSync(before.plan.path, { force: true });
+        plans.push(before.plan.rel);
+      }
+    } else if (!existsNow || textNow !== before.text) {
+      await writeTextAtomic(before.plan.path, before.text);
+      plans.push(before.plan.rel);
     }
-  } else if (planNow !== snapshot.plan) {
-    await writeTextAtomic(snapshot.planPath, snapshot.plan);
-    planChanged = true;
   }
 
   return {
-    plan: planChanged,
+    plans: plans.sort(),
     tasks: await restoreTasks(runtime, snapshot.tasks),
   };
 }
@@ -249,19 +258,27 @@ function planCancellations(plan: string): Map<string, string> {
  */
 async function reconcile(
   runtime: KernelRuntime,
-  opts: { iteration: number; state: State; planPath: string; round: number },
-  planBefore: string,
+  opts: { iteration: number; state: State; round: number },
+  plansBefore: readonly PlanSnapshot[],
   taskSnapshot: Map<string, string>,
 ): Promise<string[]> {
   const findings: string[] = [];
-  const planNow = fs.existsSync(opts.planPath)
-    ? fs.readFileSync(opts.planPath, "utf8")
-    : "";
-  if (planNow !== planBefore) {
-    await writeTextAtomic(opts.planPath, planBefore);
-    findings.push(
-      "plan.md changed during the PM turn; restored: only the architect edits the plan",
-    );
+  for (const before of plansBefore) {
+    const existsNow = fs.existsSync(before.plan.path);
+    const textNow = existsNow ? fs.readFileSync(before.plan.path, "utf8") : "";
+    if (!before.exists) {
+      if (existsNow) {
+        fs.rmSync(before.plan.path, { force: true });
+        findings.push(
+          `${before.plan.rel} was created during the PM turn; removed: only the architect edits the plan`,
+        );
+      }
+    } else if (!existsNow || textNow !== before.text) {
+      await writeTextAtomic(before.plan.path, before.text);
+      findings.push(
+        `${before.plan.rel} changed during the PM turn; restored: only the architect edits the plan`,
+      );
+    }
   }
 
   const texts = await readTaskTexts(runtime);
@@ -339,11 +356,11 @@ async function reconcile(
  */
 async function graphFindings(
   runtime: KernelRuntime,
-  opts: { iteration: number; state: State; planPath: string; round: number },
-  planBefore: string,
+  opts: { iteration: number; state: State; round: number },
+  plansBefore: readonly PlanSnapshot[],
   taskSnapshot: Map<string, string>,
 ): Promise<string[]> {
-  const findings = await reconcile(runtime, opts, planBefore, taskSnapshot);
+  const findings = await reconcile(runtime, opts, plansBefore, taskSnapshot);
   const { tasks, findings: parseFindings } = parseTasks(
     await readTaskTexts(runtime),
     runtime.configs.process.taskTypes,
@@ -374,32 +391,46 @@ function unfixedBaseline(baseline: string[], findings: string[]): string[] {
   return baseline.filter((finding) => present.has(findingKey(finding)));
 }
 
+/** Whether a cancellation line in this plan may retire the task it names. */
+function planOwnsTask(plan: PlanFile, task: Pick<TaskFile, "epic">): boolean {
+  if (plan.scope.kind === "goal") return true;
+  return task.epic === plan.scope.epic;
+}
+
 /**
- * Applies the plan's explicit cancellations. A task whose bullet disappears
- * stays open: only the architect's `cancelled:` line or a PM leave decision
- * retires it, so dropping a bullet never silently strands a branch or spends a
- * slug. A merged or finished task is history and a cancelled slug is spent, so
- * neither is touched again.
+ * Applies every active plan's explicit cancellations. A task whose bullet
+ * disappears stays open: only the architect's `cancelled:` line or a PM leave
+ * decision retires it, so dropping a bullet never silently strands a branch or
+ * spends a slug. An epic plan retires only its own tasks; the goal plan may
+ * retire any. A merged or finished task is history and a cancelled slug is
+ * spent, so neither is touched again.
  */
 async function cancelPlanNamed(
   runtime: KernelRuntime,
   state: State,
-  plan: string,
+  plans: readonly PlanSnapshot[],
   iteration: number,
 ): Promise<void> {
-  for (const [slug, reason] of planCancellations(plan)) {
-    const task = state.tasks[slug];
-    if (
-      task === undefined ||
-      task.status === "cancelled" ||
-      isFrozenStatus(task.status)
-    )
-      continue;
-    await appendCancel(
-      runtime.store,
-      { iteration, slug, round: task.round, architect: task.epic },
-      makeCause("note", reason),
-    );
+  const applied = new Set<string>();
+  for (const before of plans) {
+    if (!before.exists) continue;
+    for (const [slug, reason] of planCancellations(before.text)) {
+      const task = state.tasks[slug];
+      if (
+        task === undefined ||
+        task.status === "cancelled" ||
+        isFrozenStatus(task.status) ||
+        applied.has(slug) ||
+        !planOwnsTask(before.plan, task)
+      )
+        continue;
+      applied.add(slug);
+      await appendCancel(
+        runtime.store,
+        { iteration, slug, round: task.round, architect: task.epic },
+        makeCause("note", reason),
+      );
+    }
   }
 }
 
@@ -548,15 +579,19 @@ function ladderNote(
  */
 export async function runPm(
   runtime: KernelRuntime,
-  opts: { iteration: number; state: State; planPath: string; cwd: string },
+  opts: { iteration: number; state: State; cwd: string },
 ): Promise<PmRun> {
-  const snapshot = await snapshotTurn(runtime, opts.planPath);
-  const planBefore = snapshot.plan;
+  const plans = registeredPlans(runtime.store.goalDir);
+  const snapshot = await snapshotTurn(runtime, plans);
+  const plansBefore = snapshot.plans;
+  const planList = formatPlanList(
+    plansBefore.filter((before) => before.exists).map((before) => before.plan),
+  );
   const taskSnapshot = snapshot.tasks;
   const baseline = await graphFindings(
     runtime,
     { ...opts, round: 1 },
-    planBefore,
+    plansBefore,
     taskSnapshot,
   );
   const baselineKeys = new Set(baseline.map(findingKey));
@@ -577,7 +612,7 @@ export async function runPm(
       vars: {
         iteration: String(opts.iteration),
         intent_path: `${runtime.store.goalDir}/intent.md`,
-        plan_path: opts.planPath,
+        plans: planList,
         tasks_dir: runtime.store.tasksDir,
         existing_tasks: existingTasks(opts.state, tasks),
         repair: round === 1 ? "" : ladderNote(rung, target, failure),
@@ -591,7 +626,7 @@ export async function runPm(
     const findings = await graphFindings(
       runtime,
       { ...opts, round },
-      planBefore,
+      plansBefore,
       taskSnapshot,
     );
     const introduced = introducedFindings(findings, baselineKeys);
@@ -599,9 +634,9 @@ export async function runPm(
     const stop = result.record.stop;
 
     if (outcome?.status === "done" && introduced.length === 0) {
-      // The turn's writes are usable: keep them and run the plan's
+      // The turn's writes are usable: keep them and run every plan's
       // cancellations. Only a finding the turn did not introduce remains.
-      await cancelPlanNamed(runtime, opts.state, planBefore, opts.iteration);
+      await cancelPlanNamed(runtime, opts.state, plansBefore, opts.iteration);
       const remaining = unfixedBaseline(baseline, findings);
       if (remaining.length > 0)
         return { status: "architect", findings: remaining, rungs };
@@ -751,15 +786,14 @@ async function validateSteerTurn(
   opts: {
     iteration: number;
     state: State;
-    planPath: string;
     round: number;
     claim: Steer[];
   },
-  planBefore: string,
+  plansBefore: readonly PlanSnapshot[],
   taskSnapshot: Map<string, string>,
   outcome: Outcome | undefined,
 ): Promise<string[]> {
-  const findings = await reconcile(runtime, opts, planBefore, taskSnapshot);
+  const findings = await reconcile(runtime, opts, plansBefore, taskSnapshot);
   const texts = await readTaskTexts(runtime);
   const { tasks, findings: parseFindings } = parseTasks(
     texts,
@@ -948,14 +982,17 @@ export async function runSteerPm(
     cwd: string;
   },
 ): Promise<SteerPmRun> {
-  const planPath = path.join(runtime.store.goalDir, "plan.md");
-  const snapshot = await snapshotTurn(runtime, planPath);
-  const planBefore = snapshot.plan;
+  const plans = registeredPlans(runtime.store.goalDir);
+  const snapshot = await snapshotTurn(runtime, plans);
+  const plansBefore = snapshot.plans;
+  const planList = formatPlanList(
+    plansBefore.filter((before) => before.exists).map((before) => before.plan),
+  );
   const taskSnapshot = snapshot.tasks;
   const baseline = await graphFindings(
     runtime,
-    { iteration: opts.iteration, state: opts.state, planPath, round: 1 },
-    planBefore,
+    { iteration: opts.iteration, state: opts.state, round: 1 },
+    plansBefore,
     taskSnapshot,
   );
   const baselineKeys = new Set(baseline.map(findingKey));
@@ -976,7 +1013,7 @@ export async function runSteerPm(
       vars: {
         iteration: String(opts.iteration),
         intent_path: path.join(runtime.store.goalDir, "intent.md"),
-        plan_path: planPath,
+        plans: planList,
         tasks_dir: runtime.store.tasksDir,
         existing_tasks: existingTasks(opts.state, tasks),
         repair: round === 1 ? "" : steerLadderNote(rung, target, failure),
@@ -991,7 +1028,7 @@ export async function runSteerPm(
     if (outcome?.steerRoutes === undefined) {
       const restored = await restoreTurn(runtime, snapshot);
       const files = [
-        ...(restored.plan ? ["plan.md"] : []),
+        ...restored.plans,
         ...restored.tasks.map((slug) => `tasks/${slug}.md`),
       ];
       if (files.length > 0) {
@@ -1020,11 +1057,10 @@ export async function runSteerPm(
       {
         iteration: opts.iteration,
         state: opts.state,
-        planPath,
         round,
         claim: opts.steers,
       },
-      planBefore,
+      plansBefore,
       taskSnapshot,
       outcome,
     );
@@ -1458,15 +1494,14 @@ async function validateStallTurn(
   opts: {
     iteration: number;
     state: State;
-    planPath: string;
     round: number;
     slugs: string[];
   },
-  planBefore: string,
+  plansBefore: readonly PlanSnapshot[],
   taskSnapshot: Map<string, string>,
   outcome: Outcome | undefined,
 ): Promise<string[]> {
-  const findings = await reconcile(runtime, opts, planBefore, taskSnapshot);
+  const findings = await reconcile(runtime, opts, plansBefore, taskSnapshot);
   const texts = await readTaskTexts(runtime);
   const { tasks, findings: parseFindings } = parseTasks(
     texts,
@@ -1610,16 +1645,19 @@ export async function runStallPm(
   },
 ): Promise<StallResult> {
   const left = [...opts.slugs].sort();
-  const planPath = path.join(runtime.store.goalDir, "plan.md");
-  const snapshot = await snapshotTurn(runtime, planPath);
-  const planBefore = snapshot.plan;
+  const plans = registeredPlans(runtime.store.goalDir);
+  const snapshot = await snapshotTurn(runtime, plans);
+  const plansBefore = snapshot.plans;
+  const planList = formatPlanList(
+    plansBefore.filter((before) => before.exists).map((before) => before.plan),
+  );
   const taskSnapshot = snapshot.tasks;
   const baselineKeys = new Set(
     (
       await graphFindings(
         runtime,
-        { iteration: opts.iteration, state: opts.state, planPath, round: 1 },
-        planBefore,
+        { iteration: opts.iteration, state: opts.state, round: 1 },
+        plansBefore,
         taskSnapshot,
       )
     ).map(findingKey),
@@ -1641,7 +1679,7 @@ export async function runStallPm(
       vars: {
         iteration: String(opts.iteration),
         intent_path: path.join(runtime.store.goalDir, "intent.md"),
-        plan_path: planPath,
+        plans: planList,
         tasks_dir: runtime.store.tasksDir,
         existing_tasks: existingTasks(opts.state, tasks),
         repair: round === 1 ? "" : stallLadderNote(rung, target, failure),
@@ -1656,8 +1694,8 @@ export async function runStallPm(
     const findings = introducedFindings(
       await validateStallTurn(
         runtime,
-        { ...opts, planPath, round },
-        planBefore,
+        { ...opts, round },
+        plansBefore,
         taskSnapshot,
         outcome,
       ),
@@ -1841,15 +1879,14 @@ async function validatePlanCheckTurn(
   opts: {
     iteration: number;
     state: State;
-    planPath: string;
     round: number;
     followUps: PlanCheckFollowUp[];
   },
-  planBefore: string,
+  plansBefore: readonly PlanSnapshot[],
   taskSnapshot: Map<string, string>,
   outcome: Outcome | undefined,
 ): Promise<string[]> {
-  const findings = await reconcile(runtime, opts, planBefore, taskSnapshot);
+  const findings = await reconcile(runtime, opts, plansBefore, taskSnapshot);
   const texts = await readTaskTexts(runtime);
   const { tasks, findings: parseFindings } = parseTasks(
     texts,
@@ -2057,14 +2094,17 @@ export async function runPlanCheckPm(
 ): Promise<PlanCheckPmResult> {
   const slugs = [...new Set(opts.followUps.map((item) => item.slug))].sort();
   const left = [...slugs];
-  const planPath = path.join(runtime.store.goalDir, "plan.md");
-  const snapshot = await snapshotTurn(runtime, planPath);
-  const planBefore = snapshot.plan;
+  const plans = registeredPlans(runtime.store.goalDir);
+  const snapshot = await snapshotTurn(runtime, plans);
+  const plansBefore = snapshot.plans;
+  const planList = formatPlanList(
+    plansBefore.filter((before) => before.exists).map((before) => before.plan),
+  );
   const taskSnapshot = snapshot.tasks;
   const baseline = await graphFindings(
     runtime,
-    { ...opts, planPath, round: 1 },
-    planBefore,
+    { ...opts, round: 1 },
+    plansBefore,
     taskSnapshot,
   );
   const baselineKeys = new Set(baseline.map(findingKey));
@@ -2085,7 +2125,7 @@ export async function runPlanCheckPm(
       vars: {
         iteration: String(opts.iteration),
         intent_path: path.join(runtime.store.goalDir, "intent.md"),
-        plan_path: planPath,
+        plans: planList,
         tasks_dir: runtime.store.tasksDir,
         existing_tasks: existingTasks(opts.state, tasks),
         repair: round === 1 ? "" : planCheckLadderNote(rung, target, failure),
@@ -2099,8 +2139,8 @@ export async function runPlanCheckPm(
     const outcome = result.outcome;
     const findings = await validatePlanCheckTurn(
       runtime,
-      { ...opts, planPath, round },
-      planBefore,
+      { ...opts, round },
+      plansBefore,
       taskSnapshot,
       outcome,
     );

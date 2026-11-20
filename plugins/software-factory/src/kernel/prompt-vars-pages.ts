@@ -44,7 +44,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       turn: "`first` on a new goal's first turn; `relaunch` on the first turn of a relaunch of the same goal; `boundary` otherwise",
       iteration: "1-based iteration number of this launch",
       intent_path: "path to the goal's `intent.md`",
-      plan_path: "path to the goal's single markdown plan; the file to edit",
+      plan_path: "path to the goal's own markdown plan; the file to edit",
       checkout: "path to the stable goal checkout (integration worktree)",
       pack_path:
         "path to the iteration context pack (index: status, short hashes, per-task rounds, infra, code facts, paths)",
@@ -100,7 +100,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     variables: {
       iteration: "1-based iteration number of this launch",
       intent_path: "path to the goal's `intent.md`",
-      plan_path: "path to the goal's markdown plan; may not exist yet",
+      plan_path: "path to the goal's own markdown plan; may not exist yet",
       tasks_dir: "directory where the one task file is written, `<slug>.md`",
       class_path:
         "path to `class.yaml`: `{ class: trivial|task|bigger, slug? }` beside the plan",
@@ -130,7 +130,8 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     variables: {
       iteration: "1-based iteration number of this launch",
       intent_path: "path to the goal's `intent.md`, for resolving wording only",
-      plan_path: "path to the plan to derive from; read-only to the PM",
+      plans:
+        "the active plans, one `- goal: <path>` or ``- epic `<epic>`: <path>`` line each; derive every bullet from the plan that carries it; read-only to the PM",
       tasks_dir:
         "directory where task files are written, one `<slug>.md` per task",
       existing_tasks:
@@ -257,7 +258,8 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     variables: {
       iteration: "1-based iteration number of this launch",
       intent_path: "path to the goal's `intent.md`",
-      plan_path: "path to the plan under review; read-only to the reviewer",
+      plan_path:
+        "path to the goal plan under review; read-only to the reviewer",
       pack_path:
         "path to the iteration context pack the architect planned from",
       worktree: "goal checkout; the reviewer reads the repo from it",
@@ -345,8 +347,8 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     variables: {
       iteration: "1-based iteration number of this launch",
       intent_path: "path to the goal's `intent.md`, for resolving wording only",
-      plan_path:
-        "path to the plan to verify against the repo; read-only to the checker",
+      plans:
+        "the active plans, one `- goal: <path>` or ``- epic `<epic>`: <path>`` line each; verify every plan against the repo; read-only to the checker",
       checkout: "path to the stable goal checkout (integration worktree)",
       tasks_dir: "directory holding one `<slug>.md` task file per task",
       existing_tasks:
