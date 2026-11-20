@@ -128,13 +128,12 @@ stays the step's: the retry changes the model, not the role.
 **Run** — transient, passed with `--run-config`:
 
 ```yaml
+extends: base.yaml                                   # inherit the shared aliases, harnesses and roots
 aliases:
   architect: { harness: opencode, model: opencode/minimax-m3.1-flash-free, effort: high }
   implementer: { harness: opencode, model: opencode/deepseek-v4.1-flash-free }
-prices:
-  opencode/minimax-m3.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
-  opencode/deepseek-v4.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
-  opencode-go/deepseek-v4.1-flash: { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
+priceIds:                                            # harness model id -> OpenRouter id, when matching cannot resolve
+  opencode/beam-free: reflection/beam-1.0-501b-a23b
 limits:
   concurrency: { overall: 3, perSubscription: { opencode-go: 2 }, perModel: {} }
   iterations: 1
@@ -150,11 +149,11 @@ portability: [{ from: opencode, to: omp }]           # sessions cross only decla
 `extends: <file>` composes the run layer from a base. The path resolves relative
 to the file that names it, a base may extend another, and the child's keys win.
 Objects merge key by key and arrays replace, so a variant restates only the
-alias field, harness entry or price row it changes; a `null` removes an
+alias field, harness entry or price-id row it changes; a `null` removes an
 inherited key (`scouts: null`, `fallbacks: null`). A missing base and an
 `extends` cycle are refused when the config loads, naming the file.
 `bootstrap/run/base.yaml` carries the shared self-run aliases, the unattended
-omp policy, the price rows and the roots; every other shipped file is a thin
+omp policy, the price-id rows and the roots; every other shipped file is a thin
 overlay.
 
 A task session resumes on the harness that recorded it. `portability: [{from, to}]`
