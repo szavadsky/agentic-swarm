@@ -327,6 +327,38 @@ describe("pre-flight", () => {
     }
   });
 
+  it("refuses a follow-up on a trivial-flow step, naming the step", async () => {
+    const f = await fixture(
+      RUN_HEAD_NO_HIGHEST,
+      undefined,
+      "flows:\n  just-implement:\n    steps:\n      - id: implement\n        prompt: implementer\n        alias: implementer\n        followUp: { mode: de-novo }\n      - id: resolve\n        prompt: steward\n        alias: steward\n",
+    );
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual({
+        file: path.join(f.repo.dir, ".factory", "process.yaml"),
+        key: "flows.just-implement.steps.implement.followUp",
+        message:
+          'step "implement" of flow "just-implement" declares a follow-up, but a trivial task implements in the front\'s session and never follows up',
+      });
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("accepts a follow-up on a flow that runs its own steps", async () => {
+    const f = await fixture();
+    try {
+      f.configs.process.flows["implement-review"]!.steps[0]!.followUp = {
+        mode: "different-model",
+        alias: "implementer-b",
+      };
+      await expect(preflight(f.input)).resolves.toBeDefined();
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
   for (const [step, alias] of [
     ["packprep", "pack-preparer"],
     ["plancheck", "plan-checker"],

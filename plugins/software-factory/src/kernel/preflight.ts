@@ -12,6 +12,7 @@ import {
 } from "./baseline.js";
 import { configFilePaths } from "./config.js";
 import { type Finding, formatFindings } from "./findings.js";
+import { FRONT_CLASS_FLOWS } from "./front.js";
 import { outcomeSchemaFor, outcomeSchemaNames } from "./outcome-schemas.js";
 import {
   type AliasContext,
@@ -210,6 +211,28 @@ function requiredAliases(process: ProcessConfig): Map<string, string> {
   return refs;
 }
 
+/**
+ * The front's trivial class implements in the front's own session, so no step
+ * in that flow ever follows up: a `different-model` or `de-novo` follow-up
+ * there would read as applied and change nothing. Pre-flight refuses it
+ * rather than let the config claim a follow-up the turn ignores.
+ */
+function trivialFollowUpFindings(
+  process: ProcessConfig,
+  file: string,
+): Finding[] {
+  const flowName = FRONT_CLASS_FLOWS.trivial;
+  const flow = process.flows[flowName];
+  if (!flow) return [];
+  return flow.steps
+    .filter((step) => step.followUp !== undefined)
+    .map((step) => ({
+      file,
+      key: `flows.${flowName}.steps.${step.id}.followUp`,
+      message: `step "${step.id}" of flow "${flowName}" declares a follow-up, but a trivial task implements in the front's session and never follows up`,
+    }));
+}
+
 function inside(child: string, parent: string): boolean {
   const rel = path.relative(path.resolve(parent), path.resolve(child));
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
@@ -319,25 +342,30 @@ export async function preflight(
   // A task type owns its flow and output schema. A type naming either one
   // wrongly would quarantine every task of that type or fail mid-turn, after
   // the plan spent, so pre-flight refuses the config instead.
-  const taskTypeFile = fs.existsSync(files.processOverride)
+  const processFile = fs.existsSync(files.processOverride)
     ? files.processOverride
     : files.processDefault;
   for (const [name, definition] of Object.entries(configs.process.taskTypes)) {
     if (!Object.hasOwn(configs.process.flows, definition.flow)) {
       findings.push({
-        file: taskTypeFile,
+        file: processFile,
         key: `taskTypes.${name}.flow`,
         message: `flow "${definition.flow}" is not configured`,
       });
     }
     if (!outcomeSchemaFor(definition.schema)) {
       findings.push({
-        file: taskTypeFile,
+        file: processFile,
         key: `taskTypes.${name}.schema`,
         message: `schema "${definition.schema}" is not a kernel outcome schema (${outcomeSchemaNames()})`,
       });
     }
   }
+
+  // A trivial task implements in the front's session, so a follow-up declared
+  // on a step of that flow would never run: refuse it instead of letting the
+  // config claim a mode the turn ignores.
+  findings.push(...trivialFollowUpFindings(configs.process, processFile));
 
   // A task tier names a run-config alias directly; an escalated task that names
   // one the run config lacks would fail only mid-turn, after the plan spent.

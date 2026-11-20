@@ -198,7 +198,9 @@ alias; `de-novo` starts fresh; `different-model` runs the later turn on
 `alias` without a session, or with `keepSession: true` continues the step's
 compacted session across the switch when the portability graph admits it (the
 same harness always, another harness only along a declared edge). The prompt
-stays the step's: the retry changes the model, not the role.
+stays the step's: the retry changes the model, not the role. Pre-flight refuses
+`followUp` on a step of the trivial flow (`just-implement`): a trivial task
+implements in the front's session, so the step never follows up.
 
 **Run** — transient, passed with `--run-config`:
 
