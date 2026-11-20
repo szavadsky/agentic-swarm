@@ -267,6 +267,8 @@ export function loadPrompts(
       base_gates: BASE_GATES_NOT_RECORDED,
       // No hierarchy is the default; the epic consult passes `2` on its turn.
       depth: "1",
+      // No steered subarchitects by default; the steered hierarchy renders the block.
+      subarchitect_block: "",
     },
   });
 }

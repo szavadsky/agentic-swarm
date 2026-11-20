@@ -15,6 +15,7 @@
   "src/kernel/mailbox.ts": "split-rest",
   "src/kernel/metrics.ts": "split-rest",
   "src/kernel/preflight.ts": "split-rest",
+  "src/kernel/prompt-vars-pages.ts": "split-rest",
   "src/kernel/steward.ts": "split-rest",
   "src/kernel/store.ts": "split-rest",
   "src/kernel/types.ts": "split-rest",

@@ -11,6 +11,7 @@
       "src/**",
       "test/**",
       "prompts/**",
+      "!prompts/subarchitect-agent.md",
       "scripts/**",
       "*.json",
       "*.ts",

@@ -84,6 +84,9 @@ export async function runOmpTurn(
     extraArgs.push("--append-system-prompt", systemFile);
   }
   for (const dir of addDirs) extraArgs.push("--add-dir", dir);
+  if (opaque.agents !== undefined && opaque.agents.length > 0) {
+    extraArgs.push("-e", runtime.agentsDir(opaque.agents));
+  }
 
   if (
     req.session &&
@@ -213,6 +216,38 @@ export async function runOmpTurn(
   // The signal may have fired while the child was launching, when `rpc` was
   // still undefined: stop it now instead of running the turn.
   if (aborted) return cancelBeforePrompt();
+  const live = rpc;
+  if (req.onLive) {
+    req.onLive({
+      list: async () => {
+        const frame = await live.request("get_subagents", {}, 10_000);
+        if (!frame.success) {
+          throw new Error(String(frame.error ?? "get_subagents failed"));
+        }
+        const subs: any[] = Array.isArray(frame.data?.subagents)
+          ? frame.data.subagents
+          : [];
+        return subs.map((sub) => ({
+          id: String(sub.id),
+          agent: String(sub.agent ?? ""),
+          status: String(sub.status ?? ""),
+          ...(typeof sub.sessionFile === "string"
+            ? { sessionFile: sub.sessionFile }
+            : {}),
+        }));
+      },
+      steer: async (id, message) => {
+        const frame = await live.request(
+          "steer_subagent",
+          { subagentId: id, message },
+          10_000,
+        );
+        if (!frame.success) {
+          throw new Error(String(frame.error ?? `steer_subagent ${id} failed`));
+        }
+      },
+    });
+  }
   // Idle resets on every frame, including streamed deltas the RPC discards.
   rpc.setOnFrame((frame: any) => {
     if (finished) return;
@@ -280,10 +315,14 @@ export async function runOmpTurn(
   }
 
   if (promptResult?.sessionSettled === false) {
+    // A subarchitect child keeps the session open after the parent yields; the
+    // wall bound, not a fixed minute, is when the launch is truly over.
+    const settleBoundMs =
+      req.timeouts.wallMs > 0 ? req.timeouts.wallMs : 60_000;
     await rpc
       .awaitFrame(
         (frame) => frame.type === "session_settled",
-        60_000,
+        settleBoundMs,
         "session_settled",
       )
       .catch(() => undefined);

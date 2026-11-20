@@ -66,6 +66,7 @@ const ROLES: Record<string, Record<string, string>> = {
     task_types: TASK_TYPES,
     tiers: TIERS,
     depth: "2",
+    subarchitect_block: "",
   },
   subarchitect: {
     turn: "boundary",

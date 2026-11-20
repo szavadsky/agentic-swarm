@@ -42,6 +42,19 @@ Renderer defaults live outside any `This turn` block and the renderer supplies t
 - `task_types` — configured task types with their flow, kind and schema; renderer default
 - `tiers` — run-config alias names; renderer default
 - `depth` — `2` renders the architect register; `1` (renderer default) leaves it out
+- `subarchitect_block` — the rendered launch block naming each live subarchitect with its agent id and spawn name; empty when the harness cannot steer or no epic has a plan to review
+
+## architect-subarchitects.md
+
+The steered hierarchy's launch block: rendered once per architect turn and passed to `architect.md` as `subarchitect_block`, so the top architect launches or revives one named subarchitect per active epic in its own session.
+
+- `subarchitects` — one row per epic: the epic id, the agent id `subarchitect`, and the exact spawn name the script steers
+
+## subarchitect-agent.md
+
+The transient omp agent definition the steered hierarchy installs with `-e`. Its body is the standing role; the per-iteration consult arrives over IRC, so it reads no turn variables.
+
+The file opens with the agent's YAML frontmatter, so `biome.json` excludes it from markdown formatting: the formatter would re-indent the definition.
 
 ## subarchitect.md
 

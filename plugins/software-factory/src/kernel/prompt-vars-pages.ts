@@ -63,7 +63,27 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       tiers: "run-config alias names; renderer default",
       depth:
         "`2` renders the architect register; `1` (renderer default) leaves it out",
+      subarchitect_block:
+        "the rendered launch block naming each live subarchitect with its agent id and spawn name; empty when the harness cannot steer or no epic has a plan to review",
     },
+  },
+  {
+    file: "architect-subarchitects.md",
+    prompt: "architect-subarchitects",
+    intro:
+      "The steered hierarchy's launch block: rendered once per architect turn and passed to `architect.md` as `subarchitect_block`, so the top architect launches or revives one named subarchitect per active epic in its own session.",
+    variables: {
+      subarchitects:
+        "one row per epic: the epic id, the agent id `subarchitect`, and the exact spawn name the script steers",
+    },
+  },
+  {
+    file: "subarchitect-agent.md",
+    prompt: "subarchitect-agent",
+    intro:
+      "The transient omp agent definition the steered hierarchy installs with `-e`. Its body is the standing role; the per-iteration consult arrives over IRC, so it reads no turn variables.",
+    note: "The file opens with the agent's YAML frontmatter, so `biome.json` excludes it from markdown formatting: the formatter would re-indent the definition.",
+    variables: {},
   },
   {
     file: "subarchitect.md",

@@ -158,12 +158,17 @@ edit on disk; the default template then carries no role branch.
 `hierarchy.depth: 2` makes the architect register in `plan.md` live: one
 bullet per epic (`- epic \`auth\` | architect \`subarchitect\` | plan
 \`epics/auth.md\` | scope \`src/auth/**\` | opened i7 | active`). The boundary
-runs the main architect, then one subarchitect turn per active
-`subarchitect` row on the architect alias — each with its own resumable,
-compacted session and its own epic plan — then a plan review for every plan
-that changed, then the PM. A subarchitect whose last decision was `done` and
-whose epic has no open task is left out until a task reopens it. Each
-subarchitect's outcome paragraph is written to
+runs the main architect, then one subarchitect consult per active
+`subarchitect` row on the architect alias — each with its own epic plan and
+its own resumable, compacted session — then a plan review for every plan
+that changed, then the PM. An epic with a prior plan is steered on a harness
+whose caps advertise `subagents: steer` (omp with the subagent RPC surface):
+the main architect launches it as a named child of its own session, the
+script sends the consult over IRC, and the child's context is compacted
+before the next launch revives it by name. Every other harness, and a new
+epic's first consult, runs the separate written-report turn. A subarchitect
+whose last decision was `done` and whose epic has no open task is left out
+until a task reopens it. Each subarchitect's outcome paragraph is written to
 `iterations/<n>/epics/<epic>/summary.md`. Depth 1 never parses the register
 and keeps today's single-architect flow.
 

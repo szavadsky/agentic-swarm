@@ -5,6 +5,7 @@ import type {
   Caps,
   CompactResult,
   Harness,
+  LiveAgents,
   ModelRef,
   SessionRef,
   Stop,
@@ -25,6 +26,11 @@ export const DEFAULT_FAKE_CAPS: Caps = {
 export interface FakeHarnessOptions {
   id?: string;
   caps?: Partial<Caps>;
+  /**
+   * The live handle the fake offers to a request that asks for `onLive`; tests
+   * use it to simulate children, spawns and steers.
+   */
+  live?: (req: TurnRequest) => LiveAgents | Promise<LiveAgents>;
 }
 
 export interface FakeTurnContext {
@@ -152,10 +158,14 @@ export class FakeHarness implements Harness {
     fallback: boolean;
   }[] = [];
   private readonly sessions = new Map<string, SessionRef>();
+  private readonly live?: (
+    req: TurnRequest,
+  ) => LiveAgents | Promise<LiveAgents>;
   private sessionCounter = 0;
 
   constructor(opts: FakeHarnessOptions = {}) {
     this.id = opts.id ?? "fake";
+    this.live = opts.live;
     this.capsConfig = {
       ...DEFAULT_FAKE_CAPS,
       ...opts.caps,
@@ -191,6 +201,7 @@ export class FakeHarness implements Harness {
 
   async turn(req: TurnRequest): Promise<TurnResult> {
     this.calls.push(req);
+    if (req.onLive && this.live) req.onLive(await this.live(req));
     const n = this.calls.length;
     // The match runs synchronously at call time, so concurrent turns cannot
     // interleave between the scan and the splice. A fallback bound to this

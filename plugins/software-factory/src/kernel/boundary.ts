@@ -1,8 +1,9 @@
 // biome-ignore-all lint/complexity: split-flow-dispatch
 import fs from "node:fs";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { git } from "../core/git/exec.js";
-import type { SessionRef } from "../harness/types.js";
+import type { LiveAgents, SessionRef, SubagentInfo } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
 import {
   missingPlanFinding,
@@ -60,7 +61,13 @@ import {
   registeredPlans,
   resolvePlan,
 } from "./plan-file.js";
-import { KERNEL_TURN_STEPS } from "./outcome.js";
+import { subarchitectDelivery } from "./hierarchy.js";
+import {
+  KERNEL_TURN_STEPS,
+  OutcomeInvalidError,
+  readDeliveredOutcome,
+  validateExpectation,
+} from "./outcome.js";
 import { PACK_PREP_STEP, runPackPreparer } from "./pack-prep.js";
 import {
   consultGate,
@@ -390,20 +397,324 @@ function parseRegister(
   });
 }
 
+/** The agent id every steered subarchitect is launched under. */
+const SUBARCHITECT_AGENT = "subarchitect";
+
+/** The name the architect and the script address one epic's child by. */
+function subarchitectName(epic: string): string {
+  return `epic-${epic.replace(/[^a-zA-Z0-9_-]+/g, "-")}`;
+}
+
+/** One epic's consult, handed to a live child of the architect's session. */
+interface SteeredConsult {
+  epic: string;
+  plan: PlanFile;
+  planBefore: string | null;
+  name: string;
+  outcomePath: string;
+  /** The full consult the script steers over IRC. */
+  prompt: string;
+  promptBytes: number;
+  child?: SubagentInfo;
+}
+
 /**
- * Rolls back every plan a turn changed or created beyond the one it owns and
+ * The steered half of the hierarchy: the architect's live session hosts one
+ * named subarchitect per epic that already has a plan to review, and the script
+ * steers this iteration's consult over IRC. Prepared before the architect turn
+ * because the prompt must name the children and their definitions travel with
+ * the launch.
+ */
+interface SteeredHosting {
+  consults: SteeredConsult[];
+  agents: { name: string; markdown: string }[];
+  /** The architect prompt's block: one launch row per child, empty without children. */
+  block: string;
+  /** Starts the IRC monitor; a child is steered when the registry admits it. */
+  start(agents: LiveAgents): void;
+  /** Ends the monitor after the owning turn closes and reports why a child was not steered. */
+  stop(): Promise<string[]>;
+}
+
+/** Steers each expected child once, retrying until the registry admits it or the turn closes. */
+async function monitorSteers(
+  agents: LiveAgents,
+  consults: readonly SteeredConsult[],
+  cancelled: () => boolean,
+): Promise<string[]> {
+  const pending = new Map(consults.map((consult) => [consult.name, consult]));
+  const failures: string[] = [];
+  const note = (line: string) => {
+    if (failures.length < 20) failures.push(line);
+  };
+  while (pending.size > 0 && !cancelled()) {
+    let listed: SubagentInfo[];
+    try {
+      listed = await agents.list();
+    } catch (error) {
+      note(`list: ${(error as Error).message}`);
+      await sleep(250);
+      continue;
+    }
+    for (const child of listed) {
+      const consult = pending.get(child.id);
+      if (!consult) continue;
+      consult.child = child;
+      try {
+        await agents.steer(child.id, consult.prompt);
+        pending.delete(child.id);
+      } catch (error) {
+        // The child exists but is not admitted yet; the next poll retries.
+        note(`steer ${child.id}: ${(error as Error).message}`);
+      }
+    }
+    if (pending.size > 0) await sleep(250);
+  }
+  for (const consult of pending.values()) {
+    note(`no live child ${consult.name}`);
+  }
+  return failures.slice(-5);
+}
+
+/**
+ * Prepares the steered consults for the epics that already have a plan to
+ * review. A malformed register is left to the post-turn parse, which turns it
+ * into a finding; no child is launched for epics whose job is already done.
+ */
+async function steeredHosting(
+  runtime: KernelRuntime,
+  opts: {
+    iteration: number;
+    turn: string;
+    packRel: string;
+    goalPlanFile: PlanFile;
+    digestPath?: string;
+    tasks: readonly TaskFile[];
+    state: State;
+    records: readonly StepRecord[];
+  },
+): Promise<SteeredHosting | undefined> {
+  if (!fs.existsSync(opts.goalPlanFile.path)) return undefined;
+  let register: { epics: EpicRow[] };
+  try {
+    register = parseRegister(opts.goalPlanFile, 2, opts.tasks, opts.state);
+  } catch {
+    return undefined;
+  }
+  const rows = register.epics.filter(
+    (row) =>
+      row.closed === undefined &&
+      row.architect === "subarchitect" &&
+      !epicJobDone(opts.state, row.epic) &&
+      opts.records.some(
+        (record) =>
+          record.step === "subarchitect" &&
+          record.architect === row.epic &&
+          record.endedAt,
+      ),
+  );
+  if (rows.length === 0) return undefined;
+  const target = subarchitectTarget(runtime, opts.iteration);
+  const outcomeDir = path.join(runtime.paths.sessionsDir, "subarchitect");
+  fs.mkdirSync(outcomeDir, { recursive: true });
+  const consults = rows.map((row): SteeredConsult => {
+    const plan = epicPlan(runtime.store.goalDir, row.epic);
+    const outcomePath = path.join(
+      outcomeDir,
+      `i${opts.iteration}-${row.epic}.yaml`,
+    );
+    fs.rmSync(outcomePath, { force: true });
+    const prompt = runtime.prompts.render(target.prompt, {
+      turn: opts.turn,
+      iteration: String(opts.iteration),
+      epic: row.epic,
+      intent_path: path.join(runtime.store.goalDir, "intent.md"),
+      plan_path: plan.path,
+      parent_plan_path: opts.goalPlanFile.path,
+      checkout: runtime.paths.goalCheckout,
+      pack_path: path.join(runtime.store.goalDir, opts.packRel),
+      digest_path: opts.digestPath ?? "",
+      outcome_path: outcomePath,
+    });
+    return {
+      epic: row.epic,
+      plan,
+      planBefore: snapshotPlan(plan.path),
+      name: subarchitectName(row.epic),
+      outcomePath,
+      prompt,
+      promptBytes: Buffer.byteLength(prompt, "utf8"),
+    };
+  });
+  let cancelled = false;
+  let running: Promise<string[]> | undefined;
+  return {
+    consults,
+    agents: [
+      {
+        name: SUBARCHITECT_AGENT,
+        markdown: runtime.prompts.render("subarchitect-agent", {}),
+      },
+    ],
+    block: `${runtime.prompts.render("architect-subarchitects", {
+      subarchitects: consults
+        .map(
+          (consult) =>
+            `- epic \`${consult.epic}\` — agent \`${SUBARCHITECT_AGENT}\`, name \`${consult.name}\``,
+        )
+        .join("\n"),
+    })}\n`,
+    start(agents) {
+      // One monitor per hosting: a repair turn reuses the same live process,
+      // and a second monitor would steer the same child twice.
+      if (running !== undefined) return;
+      running = monitorSteers(agents, consults, () => cancelled);
+    },
+    async stop() {
+      if (running === undefined) {
+        return [`no live handle for ${consults.length} subarchitect(s)`];
+      }
+      // The owning process has closed, but a child admitted just before the
+      // close still gets its steer: give the monitor a few poll intervals,
+      // then cancel and report whatever it could not reach.
+      const early = await Promise.race([
+        running,
+        sleep(5_000).then(() => undefined),
+      ]);
+      if (early !== undefined) return early;
+      cancelled = true;
+      return await running;
+    },
+  };
+}
+
+/** The child transcript next to the parent's, for a child that finished between polls. */
+function parentChildFile(
+  transcript: string | undefined,
+  name: string,
+): string | undefined {
+  if (!transcript) return undefined;
+  const file = path.join(path.dirname(transcript), `${name}.jsonl`);
+  return fs.existsSync(file) ? file : undefined;
+}
+
+/**
+ * Reads what the steered children delivered. A child that wrote no valid
+ * outcome is not recorded: the written-report consult then runs for that epic,
+ * so a silent child never makes an epic look planned. A `continue` with an
+ * unchanged epic plan fails the iteration exactly as the report consult does.
+ */
+async function collectSteered(
+  runtime: KernelRuntime,
+  hosting: SteeredHosting,
+  opts: { iteration: number; parent?: SessionRef; transcript?: string },
+): Promise<{ delivered: Map<string, EpicConsult>; failure?: ConsultFailure }> {
+  const delivered = new Map<string, EpicConsult>();
+  const target = subarchitectTarget(runtime, opts.iteration);
+  for (const consult of hosting.consults) {
+    let source: ReturnType<typeof readDeliveredOutcome>;
+    try {
+      source = readDeliveredOutcome(consult.outcomePath, "");
+    } catch (error) {
+      if (!(error instanceof OutcomeInvalidError)) throw error;
+      source = null;
+    }
+    if (!source) {
+      fs.rmSync(consult.outcomePath, { force: true });
+      continue;
+    }
+    // A closure cites an id ingest assigned to an earlier record, so the check
+    // needs the record tree; a child's invalid outcome falls back to the report
+    // turn, which can repair it in-session.
+    const debtRecords = source.outcome.debtClosed?.length
+      ? await runtime.store.listRecords()
+      : undefined;
+    const findings = validateExpectation(
+      source.outcome,
+      KERNEL_TURN_STEPS.subarchitect,
+      debtRecords ? { records: debtRecords } : {},
+    );
+    if (findings.length > 0) {
+      fs.rmSync(consult.outcomePath, { force: true });
+      continue;
+    }
+    const decision = source.outcome.decision;
+    if (decision === "continue") {
+      const finding = missingPlanFinding(
+        consult.plan.path,
+        decision,
+        consult.planBefore,
+        "subarchitect",
+      );
+      if (finding) {
+        return { delivered, failure: { cause: `${consult.epic}: ${finding}` } };
+      }
+    }
+    // The child's context is compacted before the next launch revives it by
+    // name; the session id is the child transcript the child itself wrote.
+    const childFile =
+      consult.child?.sessionFile ??
+      parentChildFile(opts.transcript, consult.name);
+    let session: SessionRef | undefined;
+    if (childFile) {
+      const ref: SessionRef = {
+        harness: target.harness.id,
+        id: childFile,
+        cwd: runtime.paths.goalCheckout,
+        model: opts.parent?.model ?? target.model,
+        lastRequestStartedAt: new Date().toISOString(),
+        retentionTier: opts.parent?.retentionTier ?? "short",
+        dir: path.dirname(childFile),
+        compacted: false,
+      };
+      const compacted = await compactSession(runtime, ref);
+      session = compacted?.session ?? ref;
+    }
+    await runtime.store.appendRecord(
+      {
+        iteration: opts.iteration,
+        step: "subarchitect",
+        round: 1,
+        actor: "agent",
+        architect: consult.epic,
+        alias: target.alias,
+        model: opts.parent?.model ?? target.model,
+      },
+      {
+        stop: { kind: "done" },
+        outcome: source.outcome,
+        ...(session ? { session } : {}),
+        ...(childFile ? { transcript: childFile } : {}),
+        promptBytes: consult.promptBytes,
+      },
+    );
+    delivered.set(consult.epic, {
+      epic: consult.epic,
+      plan: consult.plan,
+      changed: snapshotPlan(consult.plan.path) !== consult.planBefore,
+    });
+    fs.rmSync(consult.outcomePath, { force: true });
+  }
+  return { delivered };
+}
+
+/**
+ * Rolls back every plan a turn changed or created beyond the ones it owns and
  * names what it restored. A plan that appeared during the turn is deleted, so
- * a consult cannot seed a second scope's plan behind its owner's back.
+ * a consult cannot seed a second scope's plan behind its owner's back. The
+ * architect turn keeps the steered epics' plans too: their subarchitects wrote
+ * them inside that same session.
  */
 async function discardForeignPlanWrites(
   runtime: KernelRuntime,
   snapshot: readonly PlanSnapshot[],
-  keepRel: string,
+  keepRels: readonly string[],
 ): Promise<string[]> {
-  const restored = await restorePlans(snapshot, (plan) => plan.rel === keepRel);
+  const keep = new Set(keepRels);
+  const restored = await restorePlans(snapshot, (plan) => keep.has(plan.rel));
   const known = new Set(snapshot.map((entry) => entry.plan.rel));
   for (const plan of planFilesOnDisk(runtime.store.goalDir)) {
-    if (plan.rel === keepRel || known.has(plan.rel)) continue;
+    if (keep.has(plan.rel) || known.has(plan.rel)) continue;
     fs.rmSync(plan.path, { force: true });
     restored.push(plan.rel);
   }
@@ -561,11 +872,9 @@ async function runEpicConsult(
         },
       }),
   );
-  const restored = await discardForeignPlanWrites(
-    runtime,
-    plansBefore,
+  const restored = await discardForeignPlanWrites(runtime, plansBefore, [
     plan.rel,
-  );
+  ]);
   if (restored.length > 0) {
     await runtime.store.appendRecord(
       scriptMeta(opts.iteration, "subarchitect-reconcile", {
@@ -865,6 +1174,26 @@ export async function runBoundary(
   // that kept its continue decision, so both compare against these pre-turn bytes.
   const planBefore = snapshotPlan(plan.path);
   const depth = runtime.configs.process.hierarchy?.depth ?? 1;
+  // Only a harness that advertises `subagents: "steer"` hosts its subarchitects
+  // as named children of this session; every other harness gets the written
+  // report turn. The strategy reads the architect alias's caps.
+  const delivery =
+    depth === 2
+      ? await subarchitectDelivery(subarchitectTarget(runtime, iteration))
+      : "report";
+  const steered =
+    delivery === "steer"
+      ? await steeredHosting(runtime, {
+          iteration,
+          turn,
+          packRel,
+          goalPlanFile: plan,
+          ...(digestPath ? { digestPath } : {}),
+          tasks,
+          state,
+          records,
+        })
+      : undefined;
 
   const architectTurn = (resume: SessionRef | undefined) =>
     runBoundaryTurn(runtime, { iteration, step: "architect" }, () =>
@@ -889,9 +1218,16 @@ export async function runBoundary(
           digest_path: digestPath ?? "",
           steers: formatSteers(forArchitect),
           depth: String(depth),
+          subarchitect_block: steered?.block ?? "",
         },
         expectation: KERNEL_TURN_STEPS.architect,
         session: resume,
+        ...(steered
+          ? {
+              opaque: { agents: steered.agents },
+              onLive: (agents: LiveAgents) => steered.start(agents),
+            }
+          : {}),
         settle: async (_record, outcome, live) => {
           if (!live || outcome?.decision !== "continue") return {};
           const compacted = await compactSession(runtime, live);
@@ -919,6 +1255,44 @@ export async function runBoundary(
     stopBeforeRetry.cause === "overflow";
   if (!overflowTerminal && infraDied(result))
     result = await architectTurn(undefined);
+
+  // The architect's process closes here, so the live handle is over. Whatever a
+  // child delivered is a real subarchitect consult; an epic without one falls
+  // through to the written-report turn below.
+  const steerFailures = (await steered?.stop()) ?? [];
+  if (steerFailures.length > 0) {
+    await runtime.store.appendRecord(
+      scriptMeta(iteration, "subarchitect-steer"),
+      {
+        ok: false,
+        cause: makeCause(
+          "steer",
+          `steered subarchitect(s) not reached: ${steerFailures.join("; ")}`,
+        ),
+      },
+    );
+  }
+  const collected = steered
+    ? await collectSteered(runtime, steered, {
+        iteration,
+        ...(result.record.session ? { parent: result.record.session } : {}),
+        ...(result.record.transcript
+          ? { transcript: result.record.transcript }
+          : {}),
+      })
+    : undefined;
+  if (collected?.failure) {
+    return {
+      iteration,
+      decision: "blocked",
+      cause: collected.failure.cause,
+      ...(collected.failure.stop ? { stop: collected.failure.stop } : {}),
+      outcome: result.outcome,
+      packPath: packRel,
+      seenSteers,
+    };
+  }
+  const steeredDone = collected?.delivered ?? new Map<string, EpicConsult>();
   const architectStop = result.record.stop;
   if (architectStop?.kind === "infra" && !result.outcome?.decision) {
     return {
@@ -935,11 +1309,10 @@ export async function runBoundary(
   // The main architect owns `plan.md`; an epic plan belongs to its
   // subarchitect. A foreign write is rolled back as a finding, not kept, so
   // the review below sees exactly the plans their owners changed.
-  const restoredPlans = await discardForeignPlanWrites(
-    runtime,
-    plansBefore,
+  const restoredPlans = await discardForeignPlanWrites(runtime, plansBefore, [
     plan.rel,
-  );
+    ...[...steeredDone.values()].map((consult) => consult.plan.rel),
+  ]);
   if (restoredPlans.length > 0) {
     await runtime.store.appendRecord(
       scriptMeta(iteration, "architect-reconcile", { round: 1 }),
@@ -1101,6 +1474,13 @@ export async function runBoundary(
   const planText = ownedPlanText(runtime);
   const consults: EpicConsult[] = [];
   for (const row of activeSubarchitects) {
+    // A steered child already ran this epic's consult inside the architect's
+    // session; its record is on disk and its plan edit is the consult's.
+    const delivered = steeredDone.get(row.epic);
+    if (delivered) {
+      consults.push(delivered);
+      continue;
+    }
     if (epicJobDone(state, row.epic)) continue;
     const prior = consultRecords.some(
       (record) =>

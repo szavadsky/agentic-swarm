@@ -41,7 +41,7 @@ export class OmpHarness implements Harness {
     return {
       resume: true,
       compact: "server",
-      subagents: "spawn",
+      subagents: (await this.runtime.supportsSteering()) ? "steer" : "spawn",
       structuredOutput: "none",
       effort: Array.isArray(found?.thinking) ? [...found.thinking] : [],
       usage: { cache: true, cost: true },

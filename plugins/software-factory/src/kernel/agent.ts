@@ -4,6 +4,7 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { z } from "zod";
 import {
+  type LiveAgents,
   type ModelRef,
   portable,
   type ServedUsage,
@@ -76,6 +77,14 @@ export interface AgentTurnSpec {
   timeouts?: { idleMs: number; wallMs: number };
   /** Outcome reminders after the first attempt; defaults to process `reminders`. */
   repairTurns?: number;
+  /**
+   * Per-turn adapter options that override the tier's. The omp hierarchy uses
+   * it for the transient subarchitect agent definitions; every other adapter
+   * ignores keys it does not know.
+   */
+  opaque?: unknown;
+  /** Steerable harnesses only: the live children handle is passed through. */
+  onLive?: (agents: LiveAgents) => void;
   /**
    * Runs after the turn and before the end record commits. `settle` sees the
    * accepted outcome and the live session, so it can compact and return the
@@ -206,6 +215,26 @@ async function turnWithTimeout(
   }
 }
 
+/**
+ * The tier's opaque options plus this turn's own. Objects merge, so a steered
+ * architect's agent definitions ride along with an acpx tier's config instead
+ * of replacing it; a non-object on either side wins over the merge.
+ */
+function turnOpaque(tier: unknown, turn: unknown): unknown {
+  if (turn === undefined) return tier;
+  if (
+    tier !== null &&
+    turn !== null &&
+    typeof tier === "object" &&
+    typeof turn === "object" &&
+    !Array.isArray(tier) &&
+    !Array.isArray(turn)
+  ) {
+    return { ...tier, ...turn };
+  }
+  return turn;
+}
+
 /** Union per-model splits across calls, summing a model that served twice. */
 function mergeServed(
   total: readonly ServedUsage[],
@@ -301,7 +330,8 @@ export async function runAgentTurn(
           : {}),
         outcomePath,
         timeouts,
-        opaque: tier.opaque,
+        opaque: turnOpaque(tier.opaque, spec.opaque),
+        ...(spec.onLive ? { onLive: spec.onLive } : {}),
       });
       for (const attempt of result.attempts ?? []) {
         chainAttempts.push({ ...attempt, harness: tier.harness.id });
