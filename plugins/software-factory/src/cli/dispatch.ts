@@ -10,6 +10,7 @@ import {
 } from "../kernel/launch.js";
 import type { ModelCatalog } from "../kernel/preflight.js";
 import type { PriceSource } from "../kernel/openrouter.js";
+import { writePromptVariables } from "../kernel/prompt-vars.js";
 import { writeKernelSchemas } from "../kernel/schemas.js";
 import type { DrainController } from "../kernel/signals.js";
 import { benchmarkGoal, formatBenchmark } from "./benchmark.js";
@@ -63,11 +64,12 @@ Commands:
   steer                    Drop a steering file into the goal inbox
   validate                 Validate one schema-enforced file with the gate's validators
   schemas                  Write every kernel schema as JSON Schema
+  variables                Render prompts/VARIABLES.md from the typed descriptor
 
 Options:
   --repo <path>            Repository root (defaults to the current directory)
   --goal <name>            Goal directory name under the repo's artifact root
-  --out <dir>              Output directory for \`schemas\`
+  --out <path>             Output directory for \`schemas\`, file for \`variables\`
   --help, -h               Show this help message
   --version, -v            Show version
 `;
@@ -126,6 +128,15 @@ started.yaml; a standalone outcome without either gets step-independent checks
 only. Exit: 0 valid, 1 invalid or unknown kind.
 `;
 
+const VARIABLES_USAGE = `
+factory variables --out <file>
+
+Renders the prompt-variable reference from the kernel's typed descriptor and
+writes it to <file>: one line per variable, no padded columns. The prompt tests
+compare the written file with the render and fail when they differ, so a
+variable change is one descriptor line plus this render. Exit: 0 written.
+`;
+
 const SCHEMAS_USAGE = `
 factory schemas --out <dir>
 
@@ -143,6 +154,7 @@ function usageFor(command: string | undefined): string {
   if (command === "steer") return STEER_USAGE;
   if (command === "validate") return VALIDATE_USAGE;
   if (command === "schemas") return SCHEMAS_USAGE;
+  if (command === "variables") return VARIABLES_USAGE;
   return ROOT_USAGE;
 }
 
@@ -214,7 +226,7 @@ export function parseCliArgs(args: string[]): ParsedArgs {
       const parsed = flagValue(arg, "--out", args, i);
       result.out = parsed.value;
       i = parsed.next;
-      if (!result.out) throw new Error("--out requires a directory");
+      if (!result.out) throw new Error("--out requires a path");
     } else if (arg === "-" || !arg.startsWith("-")) {
       positional.push(arg);
     }
@@ -317,6 +329,7 @@ export async function dispatch(
       "steer",
       "validate",
       "schemas",
+      "variables",
     ];
     if (!parsed.command || known.includes(parsed.command)) {
       console.log(usageFor(parsed.command));
@@ -387,6 +400,12 @@ export async function dispatch(
           `${parsed.file}: no --step and no started.yaml: step-independent checks only`,
         );
       console.log(`${parsed.file}: valid`);
+      return 0;
+    }
+    if (parsed.command === "variables") {
+      if (!parsed.out) throw new Error("variables requires --out <file>");
+      const written = writePromptVariables(parsed.out);
+      console.log(`variables: ${written}`);
       return 0;
     }
     if (parsed.command === "schemas") {
