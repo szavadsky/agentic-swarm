@@ -32,6 +32,7 @@ import {
 } from "./context-pack.js";
 import { derive, openDebts } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
+import { carryIntentSteers, intentChanges } from "./intent.js";
 import { runKeptLand } from "./integrate.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import {
@@ -201,9 +202,29 @@ async function steerAction(
   return "handled";
 }
 
-/** Splits the inbox: answered steers leave it, architect/unrouted ones stay. */
+/**
+ * Splits the inbox: answered steers leave it, architect/unrouted ones stay.
+ * An intent steer is carried here only when the steer PM crashed before its
+ * own carry landed; the pack still shows the architect the diff and the steer.
+ */
 export async function partitionSteers(context: ConsultContext): Promise<void> {
   const routes = collectSteerRoutes(context.records);
+  // The steer PM carries an intent steer when it commits the route; this call
+  // repairs a route whose turn crashed before its record landed. Either way
+  // the pack below shows the architect the diff and the still-pending steer.
+  await carryIntentSteers(context.runtime, {
+    iteration: context.iteration,
+    steers: context.steers,
+    routes,
+    records: context.records,
+  });
+  context.records = await context.runtime.store.listRecords();
+  context.intentChanges = intentChanges({
+    records: context.records,
+    steers: context.steers,
+    routes,
+    recordsDir: context.runtime.store.recordsDir,
+  });
   for (const steer of context.steers) {
     const action = await steerAction(context, routes, steer);
     if (action === "architect") context.forArchitect.push(steer);
@@ -257,6 +278,7 @@ async function packInput(context: ConsultContext): Promise<ContextPackInput> {
     steers: context.forArchitect,
     holds,
     pmAnswers: context.pmAnswers,
+    intentChanges: context.intentChanges,
     ...(await packGovernance(context, planText)),
     agedReady: aged,
   };

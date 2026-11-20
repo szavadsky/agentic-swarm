@@ -52,20 +52,21 @@ export async function stallHoldProblem(
 export async function architectHoldProblem(
   runtime: KernelRuntime,
   steerId: string,
+  label: "intent" | "architect" = "architect",
 ): Promise<string | undefined> {
   const hold = await parseHoldFile(runtime, steerId);
   if (hold.status === "missing") return undefined;
   if (hold.status === "bad") {
-    return `architect steer "${steerId}" hold is not valid YAML: ${hold.message}`;
+    return `${label} steer "${steerId}" hold is not valid YAML: ${hold.message}`;
   }
   if (
     !Array.isArray(hold.slugs) ||
     !hold.slugs.every((slug) => typeof slug === "string")
   ) {
-    return `architect steer "${steerId}" hold slugs must be a list of task slugs; an architect steer that voids nothing holds nothing with slugs: []`;
+    return `${label} steer "${steerId}" hold slugs must be a list of task slugs; a ${label} steer that voids nothing holds nothing with slugs: []`;
   }
   if (hold.goal !== false) {
-    return `architect steer "${steerId}" hold has no goal: false; goal: true stays reserved for stall`;
+    return `${label} steer "${steerId}" hold has no goal: false; goal: true stays reserved for stall`;
   }
   return undefined;
 }

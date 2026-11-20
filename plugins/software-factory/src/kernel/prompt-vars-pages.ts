@@ -145,6 +145,25 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     },
   },
   {
+    file: "intent.md",
+    prompt: "intent",
+    variables: {
+      iteration:
+        "1-based iteration number of the consult that carries the steer",
+      intent_path:
+        "path to the goal's `intent.md`, the only file the turn may edit",
+      steer:
+        "the pending steer as `- <id> (<relPath>):` plus its full indented text",
+      outcome_path:
+        "path where the outcome file must be written when the harness asks for a file",
+      validate_cmd:
+        "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
+      outcome_schema:
+        "outcome YAML skeleton from the kernel schema; renderer default",
+    },
+    note: "The turn's record carries the unified diff of the edit; the next architect pack renders it beside the pending steer.",
+  },
+  {
     file: "pm.md",
     prompt: "pm",
     variables: {

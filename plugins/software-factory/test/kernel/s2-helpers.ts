@@ -109,6 +109,7 @@ export function whenTurn(want: {
   };
 }
 
+/** The full boundary and flow vocabulary every direct-runtime fixture wires. */
 const DEFAULT_ALIASES: NonNullable<FlowRepoOptions["aliases"]> = {
   architect: { harness: "fake", model: "fake-architect" },
   pm: { harness: "fake", model: "fake-pm" },
@@ -120,6 +121,7 @@ const DEFAULT_ALIASES: NonNullable<FlowRepoOptions["aliases"]> = {
   qa: { harness: "fake", model: "fake-qa" },
   steward: { harness: "fake", model: "fake-steward" },
   "plan-checker": { harness: "fake", model: "fake-check" },
+  intent: { harness: "fake", model: "fake-intent" },
   "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
   "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
 };

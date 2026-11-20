@@ -6,6 +6,7 @@
  */
 
 import type { EpicConsult } from "./boundary-consult.js";
+import type { IntentChange } from "./context-pack.js";
 import type { Steer } from "./mailbox.js";
 import type { PlanFile } from "./plan-file.js";
 import type { PlanSnapshot } from "./pm.js";
@@ -63,6 +64,8 @@ export interface ConsultContext {
   seenSteers: string[];
   forArchitect: Steer[];
   pmAnswers: string[];
+  /** Pending steers the intent agent carried (or failed to carry) before this pack. */
+  intentChanges?: IntentChange[];
   digestPath?: string;
   packRel?: string;
   /** Files and plans the architect turn must not have touched or written. */

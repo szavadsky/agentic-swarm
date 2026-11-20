@@ -46,6 +46,7 @@ const CROSS_HARNESS_ARCHITECT_RUN = [
   "      - { harness: fake, model: fake-architect }",
   "  pm: { harness: fake, model: fake-pm }",
   "  digest: { harness: fake, model: fake-digest }",
+  "  intent: { harness: fake, model: fake-intent }",
   "  implementer: { harness: fake, model: fake-impl }",
   "  implementer-b: { harness: fake, model: fake-impl-b }",
   "  researcher: { harness: fake, model: fake-research }",
@@ -326,6 +327,7 @@ const PLAN_REVIEW_ALIASES = {
   reviewer: { harness: "fake", model: "fake-review" },
   steward: { harness: "fake", model: "fake-steward" },
   "plan-checker": { harness: "fake", model: "fake-check" },
+  intent: { harness: "fake", model: "fake-intent" },
   "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
   "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
 };

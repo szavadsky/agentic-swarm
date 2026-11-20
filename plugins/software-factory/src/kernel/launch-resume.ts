@@ -131,8 +131,8 @@ export async function steersWaiting(
 }
 
 /**
- * A pending steer a PM turn already routed to the architect (directly or via a
- * stall) has no other consumer. A resumed pass never runs a front turn, so
+ * A pending steer a PM turn already routed to the architect (directly, through
+ * the intent agent or via a stall) has no other consumer. A resumed pass never runs a front turn, so
  * without the boundary that route would wait for a consult the launch does not
  * reach.
  */
@@ -145,7 +145,8 @@ export async function architectRouteWaiting(
   return pending.some((steer) => {
     const route = routes.get(steer.id)?.route;
     return (
-      route !== undefined && (isArchitectRoute(route) || route === "stall")
+      route !== undefined &&
+      (route === "intent" || isArchitectRoute(route) || route === "stall")
     );
   });
 }

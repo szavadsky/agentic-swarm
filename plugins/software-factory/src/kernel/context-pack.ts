@@ -127,6 +127,23 @@ export interface SpikeFinding {
 }
 
 /**
+ * One pending steer the intent agent carried into the goal's intent, or tried
+ * and failed to carry. The architect plans from the diff and sees the steer
+ * itself in the pending list.
+ */
+export interface IntentChange {
+  steer: string;
+  /** Goal-relative steer file, for the architect to read beside the diff. */
+  relPath: string;
+  /** Absolute record directory of the intent turn. */
+  record: string;
+  /** Unified diff the turn carried; absent when it carried nothing. */
+  diff?: string;
+  /** Why the turn carried nothing; the steer still needs the architect. */
+  failure?: string;
+}
+
+/**
  * A ready task that started no task turn in the segment before this pack, and
  * what withheld it. Dispatch decides admission from these facts; the pack only
  * reports them, so an aging task cannot stay invisible across boundaries.
@@ -184,6 +201,8 @@ export interface ContextPackInput {
   holds?: { steer: string; slugs: readonly string[]; goal: boolean }[];
   /** The PM's routed answers, one line per steer, for architect context. */
   pmAnswers?: string[];
+  /** Pending steers the intent agent carried or failed to carry before this pack. */
+  intentChanges?: IntentChange[];
   setup: string[];
   gates: { id: string; command: string }[];
   /** Last recorded pre-flight base run; absent when it was skipped. */
@@ -458,6 +477,25 @@ export function renderContextPack(input: ContextPackInput): string {
       ? input.pmAnswers.join("\n")
       : "- none",
   );
+
+  if (input.intentChanges && input.intentChanges.length > 0) {
+    lines.push(
+      "",
+      "## Intent changes (carried by the intent agent; the plan follows the diff)",
+    );
+    for (const change of input.intentChanges) {
+      lines.push(
+        `- ${change.steer} (${change.relPath}) — intent turn ${change.record}`,
+      );
+      if (change.diff !== undefined) {
+        lines.push("", "```diff", ...change.diff.split("\n"), "```");
+      } else {
+        lines.push(
+          `  - not carried: ${change.failure ?? "no outcome recorded"}; the steer still needs the architect`,
+        );
+      }
+    }
+  }
 
   if (input.spikeFindings && input.spikeFindings.length > 0) {
     lines.push("", "## Spike findings");

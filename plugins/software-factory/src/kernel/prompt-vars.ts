@@ -58,6 +58,10 @@ export const PROMPT_COMPOSITIONS: readonly PromptComposition[] = [
     ],
   },
   {
+    prompt: "intent",
+    partials: ["`calibration`", "`outcome`"],
+  },
+  {
     prompt: "pm",
     partials: [
       "`task-size`",

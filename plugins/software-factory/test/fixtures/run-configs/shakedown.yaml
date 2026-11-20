@@ -30,6 +30,15 @@ aliases:
     timeouts:
       idleMs: 1200000
       wallMs: 3600000
+  intent:
+    harness: opencode
+    model: opencode/beam-free
+    rotate: []
+    fallbacks:
+      - model: opencode-go/deepseek-v4.1-flash
+    timeouts:
+      idleMs: 1200000
+      wallMs: 3600000
   implementer:
     harness: opencode
     model: opencode/deepseek-v4.1-flash-free

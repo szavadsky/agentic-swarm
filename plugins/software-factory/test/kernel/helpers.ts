@@ -39,6 +39,7 @@ export const TEST_BOUNDARY: Record<BoundaryStep, TurnSpec> = {
     alias: "front",
     deliverable: "class, task, and pack",
   },
+  intent: { prompt: "intent", alias: "intent", deliverable: "intent edit" },
   packprep: {
     prompt: "pack-preparer",
     alias: "pack-preparer",

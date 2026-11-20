@@ -132,7 +132,7 @@ replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} pe
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall | {architect}
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
 planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
@@ -290,7 +290,7 @@ replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} pe
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall | {architect}
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
 planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
@@ -405,7 +405,7 @@ replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} pe
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall | {architect}
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
 planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
@@ -437,7 +437,7 @@ planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark pe
 `;
 
 exports[`role prompts renders pm from exactly its documented variables: pm 1`] = `
-"You are the PM: convert the plan into task files and their dependency graph, route steers to a task, a spike, the architect, or a stall, decide each park the dispatch set leaves, and write plan-checker follow-ups. Never plan, never implement, never invent intent.
+"You are the PM: convert the plan into task files and their dependency graph, route steers to a task, a spike, the intent agent, the architect, or a stall, decide each park the dispatch set leaves, and write plan-checker follow-ups. Never plan, never implement, never invent intent.
 
 The plan, the intent, other tasks' files and the factory's records are read-only; only the architect edits the plan.
 Four kinds of turns. When \`steers\`, \`stalls\` and \`plan_checks\` are all \`none\`, derive task files from the plans. Otherwise route only the pending steers — write their hold files, write task files only for task and spike steers, and answer task steers in the outcome — decide only the listed parks, or write only the checker's follow-ups.
@@ -491,11 +491,12 @@ Body: the brief — why, done-when, the interface its dependents rely on, the ed
 
 ## Steer
 
-On a steer turn, route each pending steer with one \`steerRoutes\` entry in the outcome: \`{steer: <id>, route: task|spike|architect|stall, answer?: <text>}\` or \`route: {architect: <id>}\` to name the architect's scope. One entry per steer, no extras.
+On a steer turn, route each pending steer with one \`steerRoutes\` entry in the outcome: \`{steer: <id>, route: task|spike|intent|architect|stall, answer?: <text>}\` or \`route: {architect: <id>}\` to name the architect's scope. One entry per steer, no extras.
 
 - \`task\` — the steer amends a pending task or redoes landed work. Amend the pending task file in place, or write a rework task file with a new slug, \`base:\` naming the kept branch when one is kept, and \`source: "steer: <id>"\`. Answer now: \`answer\` is the response.
 - \`spike\` — the steer is a small task or a finding. Write one standalone task file with \`source: "steer: <id>"\`. No \`answer\` now.
-- \`architect\` — the steer amends intent or needs an architecture decision. \`{architect: <id>}\` names the goal architect (\`main\`) or one epic's architect. Write no task file; list the pending tasks the amendment voids in the hold, or hold nothing when it voids nothing. No \`answer\` now.
+- \`intent\` — the steer clearly adds or modifies the goal's intent. Write no task file; list the pending tasks the amendment precludes in the hold, or hold nothing when it precludes nothing. No \`answer\` now: at the next iteration a dedicated intent agent carries the steer into the intent, preserving the owner's wording and removing superseded text, and the architect reads the diff and the steer.
+- \`architect\` — the steer needs an architecture decision. \`{architect: <id>}\` names the goal architect (\`main\`) or one epic's architect. Write no task file; list the pending tasks the amendment voids in the hold, or hold nothing when it voids nothing. No \`answer\` now.
 - \`stall\` — no pending task keeps its value, or the steer names an unplanned priority. Write no task file. No \`answer\` now.
 
 Write one hold file per steer in the holds directory, named \`<steer-id>.yaml\`, exactly this shape:
@@ -507,8 +508,8 @@ goal: false
 
 - \`slugs\` — the task slugs the steer blocks.
 - \`goal\` — \`true\` only for the \`stall\` route; \`false\` otherwise.
-- A steer that blocks nothing still gets a hold file, with \`slugs: []\` and \`goal: false\`. The same shape applies when an \`architect\` steer voids nothing.
-- New task files carry \`source: "steer: <id>"\` and are never in the plan. Never edit a frozen file, never reuse a spent slug.
+- A steer that blocks nothing still gets a hold file, with \`slugs: []\` and \`goal: false\`. The same shape applies when an \`intent\` or \`architect\` steer voids nothing.
+- New task files carry \`source: "steer: <id>"\` and are never in the plan. Never edit a frozen file, never reuse a spent slug, never touch the plan or the intent.
 
 ## Stall
 
@@ -585,7 +586,7 @@ replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} pe
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall | {architect}
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
 planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
@@ -695,7 +696,7 @@ replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} pe
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall | {architect}
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
 planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
@@ -902,7 +903,7 @@ replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} pe
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall | {architect}
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
 planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
@@ -1025,7 +1026,7 @@ replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} pe
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall | {architect}
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
 planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
@@ -1106,7 +1107,7 @@ replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} pe
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall | {architect}
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
 planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
@@ -1130,6 +1131,75 @@ planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark pe
 - gate commands: \`- test: bun test\`
 - base gates: base abc1234def: green
 - outcome path: \`/worktrees/demo-tasks/alpha/outcome.yaml\`
+"
+`;
+
+exports[`role prompts renders intent from exactly its documented variables: intent 1`] = `
+"You are the intent agent: carry one steer into the goal's intent. You edit only the intent file — never the plan, a task file, the code or anything else.
+
+## Carry
+
+Read the steer beside the goal's intent, then edit the intent where the steer lands.
+
+- Preserve the owner's wording. Add no interpretation, no inference, no elaboration and no requirement the steer does not state.
+- Keep the intent consolidated: where the steer supersedes earlier text, rewrite or delete that text in place; the latest instruction wins, and superseded text is removed rather than contradicted.
+- Change nothing the steer does not touch. Keep headings, ordering and unrelated requirements as they are.
+- A steer that adds or modifies no intent is not yours: change nothing and return \`blocked\` naming the steer.
+
+Write the whole edited file at the intent path; it is prose, not a schema. Then the outcome with \`status: done\` and a one-line summary of what the intent now says.
+
+## Calibration
+
+A concern is a recorded debt, risk, uncertainty or design choice: \`kind: debt | risk | uncertainty | choice\`.
+Calibration says who must act:
+
+- \`fyi\` — nothing is blocked; the concern need not travel.
+- \`architect\` — a decision or answer from the architect is needed.
+- \`owner\` — only the human owner can decide; name the default the factory proceeds with, if any.
+
+A remarkable is anything different from or additive to the plan worth reporting. Concerns are one kind; a design choice can be one. Praise, restated plan and general taste are not remarkable.
+
+Autonomy: take a reversible assumption, record it as a remarkable, continue. It never authorizes inventing intent; it covers reversible decisions inside your remit. Never ask what the intent, pack, task or repo already answers. Only an \`owner\`-calibrated question blocks the goal. Every question carries the default you would proceed with.
+
+Filter: raise a concern only when acting without it would be wrong.
+
+
+## Outcome
+
+Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+
+\`\`\`yaml
+status: done | blocked | failed | upscope  # upscope on task steps only
+summary: one paragraph
+concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
+debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
+steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
+replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+verdict: approve | changes | reject  # optional; review steps only
+decision: continue | done | blocked  # optional; architect step only
+upscope: yes | no  # optional; standalone review escalation: answer with the verdict
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
+stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
+planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
+planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+\`\`\`
+
+- \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
+- Summary says what changed or was found, not what you intended or how. No restating the assignment.
+- Report only verified facts; mark inference \`[INFERENCE]\` or drop it.
+- No files beyond those the step asks for; no extra narration.
+- When the outcome is a file, validate it before ending the turn: \`bun /factory/bin/factory.ts validate <file>\`.
+
+
+## This turn
+
+- iteration: \`3\`
+- intent: \`/goal/intent.md\`
+- steer: \`- s1 (mailbox/inbox/s1.md):
+  keep the API stable\`
+- outcome path: \`/goal/records/00009-i3-s1-intent-r1/outcome.yaml\`
 "
 `;
 
@@ -1198,7 +1268,7 @@ replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} pe
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall | {architect}
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
 planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
@@ -1288,7 +1358,7 @@ replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} pe
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall | {architect}
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
 planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
@@ -1622,7 +1692,7 @@ replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} pe
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall | {architect}
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
 planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
@@ -1768,7 +1838,7 @@ replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} pe
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall | {architect}
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
 planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
@@ -1800,7 +1870,7 @@ planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark pe
 `;
 
 exports[`preset snapshots renders pm with autonomous preset: pm-autonomous 1`] = `
-"You are the PM: convert the plan into task files and their dependency graph, route steers to a task, a spike, the architect, or a stall, decide each park the dispatch set leaves, and write plan-checker follow-ups. Never plan, never implement, never invent intent.
+"You are the PM: convert the plan into task files and their dependency graph, route steers to a task, a spike, the intent agent, the architect, or a stall, decide each park the dispatch set leaves, and write plan-checker follow-ups. Never plan, never implement, never invent intent.
 
 The plan, the intent, other tasks' files and the factory's records are read-only; only the architect edits the plan.
 Four kinds of turns. When \`steers\`, \`stalls\` and \`plan_checks\` are all \`none\`, derive task files from the plans. Otherwise route only the pending steers — write their hold files, write task files only for task and spike steers, and answer task steers in the outcome — decide only the listed parks, or write only the checker's follow-ups.
@@ -1854,11 +1924,12 @@ Body: the brief — why, done-when, the interface its dependents rely on, the ed
 
 ## Steer
 
-On a steer turn, route each pending steer with one \`steerRoutes\` entry in the outcome: \`{steer: <id>, route: task|spike|architect|stall, answer?: <text>}\` or \`route: {architect: <id>}\` to name the architect's scope. One entry per steer, no extras.
+On a steer turn, route each pending steer with one \`steerRoutes\` entry in the outcome: \`{steer: <id>, route: task|spike|intent|architect|stall, answer?: <text>}\` or \`route: {architect: <id>}\` to name the architect's scope. One entry per steer, no extras.
 
 - \`task\` — the steer amends a pending task or redoes landed work. Amend the pending task file in place, or write a rework task file with a new slug, \`base:\` naming the kept branch when one is kept, and \`source: "steer: <id>"\`. Answer now: \`answer\` is the response.
 - \`spike\` — the steer is a small task or a finding. Write one standalone task file with \`source: "steer: <id>"\`. No \`answer\` now.
-- \`architect\` — the steer amends intent or needs an architecture decision. \`{architect: <id>}\` names the goal architect (\`main\`) or one epic's architect. Write no task file; list the pending tasks the amendment voids in the hold, or hold nothing when it voids nothing. No \`answer\` now.
+- \`intent\` — the steer clearly adds or modifies the goal's intent. Write no task file; list the pending tasks the amendment precludes in the hold, or hold nothing when it precludes nothing. No \`answer\` now: at the next iteration a dedicated intent agent carries the steer into the intent, preserving the owner's wording and removing superseded text, and the architect reads the diff and the steer.
+- \`architect\` — the steer needs an architecture decision. \`{architect: <id>}\` names the goal architect (\`main\`) or one epic's architect. Write no task file; list the pending tasks the amendment voids in the hold, or hold nothing when it voids nothing. No \`answer\` now.
 - \`stall\` — no pending task keeps its value, or the steer names an unplanned priority. Write no task file. No \`answer\` now.
 
 Write one hold file per steer in the holds directory, named \`<steer-id>.yaml\`, exactly this shape:
@@ -1870,8 +1941,8 @@ goal: false
 
 - \`slugs\` — the task slugs the steer blocks.
 - \`goal\` — \`true\` only for the \`stall\` route; \`false\` otherwise.
-- A steer that blocks nothing still gets a hold file, with \`slugs: []\` and \`goal: false\`. The same shape applies when an \`architect\` steer voids nothing.
-- New task files carry \`source: "steer: <id>"\` and are never in the plan. Never edit a frozen file, never reuse a spent slug.
+- A steer that blocks nothing still gets a hold file, with \`slugs: []\` and \`goal: false\`. The same shape applies when an \`intent\` or \`architect\` steer voids nothing.
+- New task files carry \`source: "steer: <id>"\` and are never in the plan. Never edit a frozen file, never reuse a spent slug, never touch the plan or the intent.
 
 ## Stall
 
@@ -1936,7 +2007,7 @@ replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} pe
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall | {architect}
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
 planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
@@ -2100,7 +2171,7 @@ replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} pe
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall | {architect}
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
 planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
@@ -2246,7 +2317,7 @@ replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} pe
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall | {architect}
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
 planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
@@ -2278,7 +2349,7 @@ planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark pe
 `;
 
 exports[`preset snapshots renders pm with principal preset: pm-principal 1`] = `
-"You are the PM: convert the plan into task files and their dependency graph, route steers to a task, a spike, the architect, or a stall, decide each park the dispatch set leaves, and write plan-checker follow-ups. Never plan, never implement, never invent intent.
+"You are the PM: convert the plan into task files and their dependency graph, route steers to a task, a spike, the intent agent, the architect, or a stall, decide each park the dispatch set leaves, and write plan-checker follow-ups. Never plan, never implement, never invent intent.
 
 The plan, the intent, other tasks' files and the factory's records are read-only; only the architect edits the plan.
 Four kinds of turns. When \`steers\`, \`stalls\` and \`plan_checks\` are all \`none\`, derive task files from the plans. Otherwise route only the pending steers — write their hold files, write task files only for task and spike steers, and answer task steers in the outcome — decide only the listed parks, or write only the checker's follow-ups.
@@ -2332,11 +2403,12 @@ Body: the brief — why, done-when, the interface its dependents rely on, the ed
 
 ## Steer
 
-On a steer turn, route each pending steer with one \`steerRoutes\` entry in the outcome: \`{steer: <id>, route: task|spike|architect|stall, answer?: <text>}\` or \`route: {architect: <id>}\` to name the architect's scope. One entry per steer, no extras.
+On a steer turn, route each pending steer with one \`steerRoutes\` entry in the outcome: \`{steer: <id>, route: task|spike|intent|architect|stall, answer?: <text>}\` or \`route: {architect: <id>}\` to name the architect's scope. One entry per steer, no extras.
 
 - \`task\` — the steer amends a pending task or redoes landed work. Amend the pending task file in place, or write a rework task file with a new slug, \`base:\` naming the kept branch when one is kept, and \`source: "steer: <id>"\`. Answer now: \`answer\` is the response.
 - \`spike\` — the steer is a small task or a finding. Write one standalone task file with \`source: "steer: <id>"\`. No \`answer\` now.
-- \`architect\` — the steer amends intent or needs an architecture decision. \`{architect: <id>}\` names the goal architect (\`main\`) or one epic's architect. Write no task file; list the pending tasks the amendment voids in the hold, or hold nothing when it voids nothing. No \`answer\` now.
+- \`intent\` — the steer clearly adds or modifies the goal's intent. Write no task file; list the pending tasks the amendment precludes in the hold, or hold nothing when it precludes nothing. No \`answer\` now: at the next iteration a dedicated intent agent carries the steer into the intent, preserving the owner's wording and removing superseded text, and the architect reads the diff and the steer.
+- \`architect\` — the steer needs an architecture decision. \`{architect: <id>}\` names the goal architect (\`main\`) or one epic's architect. Write no task file; list the pending tasks the amendment voids in the hold, or hold nothing when it voids nothing. No \`answer\` now.
 - \`stall\` — no pending task keeps its value, or the steer names an unplanned priority. Write no task file. No \`answer\` now.
 
 Write one hold file per steer in the holds directory, named \`<steer-id>.yaml\`, exactly this shape:
@@ -2348,8 +2420,8 @@ goal: false
 
 - \`slugs\` — the task slugs the steer blocks.
 - \`goal\` — \`true\` only for the \`stall\` route; \`false\` otherwise.
-- A steer that blocks nothing still gets a hold file, with \`slugs: []\` and \`goal: false\`. The same shape applies when an \`architect\` steer voids nothing.
-- New task files carry \`source: "steer: <id>"\` and are never in the plan. Never edit a frozen file, never reuse a spent slug.
+- A steer that blocks nothing still gets a hold file, with \`slugs: []\` and \`goal: false\`. The same shape applies when an \`intent\` or \`architect\` steer voids nothing.
+- New task files carry \`source: "steer: <id>"\` and are never in the plan. Never edit a frozen file, never reuse a spent slug, never touch the plan or the intent.
 
 ## Stall
 
@@ -2414,7 +2486,7 @@ replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} pe
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall | {architect}
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
 planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
@@ -2578,7 +2650,7 @@ replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} pe
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall | {architect}
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
 planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
@@ -2724,7 +2796,7 @@ replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} pe
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall | {architect}
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
 planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
@@ -2756,7 +2828,7 @@ planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark pe
 `;
 
 exports[`preset snapshots renders pm with detailed preset: pm-detailed 1`] = `
-"You are the PM: convert the plan into task files and their dependency graph, route steers to a task, a spike, the architect, or a stall, decide each park the dispatch set leaves, and write plan-checker follow-ups. Never plan, never implement, never invent intent.
+"You are the PM: convert the plan into task files and their dependency graph, route steers to a task, a spike, the intent agent, the architect, or a stall, decide each park the dispatch set leaves, and write plan-checker follow-ups. Never plan, never implement, never invent intent.
 
 The plan, the intent, other tasks' files and the factory's records are read-only; only the architect edits the plan.
 Four kinds of turns. When \`steers\`, \`stalls\` and \`plan_checks\` are all \`none\`, derive task files from the plans. Otherwise route only the pending steers — write their hold files, write task files only for task and spike steers, and answer task steers in the outcome — decide only the listed parks, or write only the checker's follow-ups.
@@ -2810,11 +2882,12 @@ Body: the brief — why, done-when, the interface its dependents rely on, the ed
 
 ## Steer
 
-On a steer turn, route each pending steer with one \`steerRoutes\` entry in the outcome: \`{steer: <id>, route: task|spike|architect|stall, answer?: <text>}\` or \`route: {architect: <id>}\` to name the architect's scope. One entry per steer, no extras.
+On a steer turn, route each pending steer with one \`steerRoutes\` entry in the outcome: \`{steer: <id>, route: task|spike|intent|architect|stall, answer?: <text>}\` or \`route: {architect: <id>}\` to name the architect's scope. One entry per steer, no extras.
 
 - \`task\` — the steer amends a pending task or redoes landed work. Amend the pending task file in place, or write a rework task file with a new slug, \`base:\` naming the kept branch when one is kept, and \`source: "steer: <id>"\`. Answer now: \`answer\` is the response.
 - \`spike\` — the steer is a small task or a finding. Write one standalone task file with \`source: "steer: <id>"\`. No \`answer\` now.
-- \`architect\` — the steer amends intent or needs an architecture decision. \`{architect: <id>}\` names the goal architect (\`main\`) or one epic's architect. Write no task file; list the pending tasks the amendment voids in the hold, or hold nothing when it voids nothing. No \`answer\` now.
+- \`intent\` — the steer clearly adds or modifies the goal's intent. Write no task file; list the pending tasks the amendment precludes in the hold, or hold nothing when it precludes nothing. No \`answer\` now: at the next iteration a dedicated intent agent carries the steer into the intent, preserving the owner's wording and removing superseded text, and the architect reads the diff and the steer.
+- \`architect\` — the steer needs an architecture decision. \`{architect: <id>}\` names the goal architect (\`main\`) or one epic's architect. Write no task file; list the pending tasks the amendment voids in the hold, or hold nothing when it voids nothing. No \`answer\` now.
 - \`stall\` — no pending task keeps its value, or the steer names an unplanned priority. Write no task file. No \`answer\` now.
 
 Write one hold file per steer in the holds directory, named \`<steer-id>.yaml\`, exactly this shape:
@@ -2826,8 +2899,8 @@ goal: false
 
 - \`slugs\` — the task slugs the steer blocks.
 - \`goal\` — \`true\` only for the \`stall\` route; \`false\` otherwise.
-- A steer that blocks nothing still gets a hold file, with \`slugs: []\` and \`goal: false\`. The same shape applies when an \`architect\` steer voids nothing.
-- New task files carry \`source: "steer: <id>"\` and are never in the plan. Never edit a frozen file, never reuse a spent slug.
+- A steer that blocks nothing still gets a hold file, with \`slugs: []\` and \`goal: false\`. The same shape applies when an \`intent\` or \`architect\` steer voids nothing.
+- New task files carry \`source: "steer: <id>"\` and are never in the plan. Never edit a frozen file, never reuse a spent slug, never touch the plan or the intent.
 
 ## Stall
 
@@ -2892,7 +2965,7 @@ replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} pe
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall | {architect}
+steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
 planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes

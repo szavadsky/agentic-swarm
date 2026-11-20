@@ -558,10 +558,11 @@ function recordsInFlight(
 }
 
 /**
- * The PM owns the plan, the task files and the holds, and a steer turn may run
- * while a task turn is in flight. Its writes are not the task's.
+ * A steer turn owns the goal surface it edits: the PM writes the plan, task
+ * files and holds, and the intent agent writes the intent. Either may run while
+ * a task turn is in flight, so its writes are not the task's.
  */
-function pmWroteDuring(
+function steerTurnWroteDuring(
   records: readonly StepRecord[],
   at: string,
   now: string,
@@ -570,15 +571,17 @@ function pmWroteDuring(
     (r) =>
       (r.step === "pm" ||
         r.step === "pm-validate" ||
-        r.step === "steer-reconcile") &&
+        r.step === "steer-reconcile" ||
+        r.step === "intent") &&
       r.startedAt <= now &&
       (!r.endedAt || r.endedAt >= at),
   );
 }
 
-function pmOwned(rel: string): boolean {
+function steerTurnOwned(rel: string): boolean {
   return (
     isPlanPath(rel) ||
+    rel === "intent.md" ||
     rel.startsWith("tasks/") ||
     rel.startsWith("mailbox/holds/")
   );
@@ -623,14 +626,14 @@ function artifactBreaches(
     sealed: ReadonlySet<string>;
     records: readonly StepRecord[];
     declared: readonly DeclaredWrite[];
-    pmActive: boolean;
+    steerActive: boolean;
   },
 ): string[] {
   const live = new Map<number, StepRecord>();
   for (const record of opts.records) live.set(record.seq, record);
   const ignored = (rel: string): boolean => {
     if (kernelDeclared(rel, opts.declared, opts.at)) return true;
-    if (opts.pmActive && pmOwned(rel)) return true;
+    if (opts.steerActive && steerTurnOwned(rel)) return true;
     const dir = recordDirOf(rel);
     if (dir !== undefined && opts.sealed.has(dir)) return true;
     const seq = recordSeqOf(rel);
@@ -773,7 +776,7 @@ export async function containmentViolation(
           sealed: snapshot.sealed,
           records,
           declared: runtime.store.declaredWrites(),
-          pmActive: pmWroteDuring(
+          steerActive: steerTurnWroteDuring(
             records,
             snapshot.at,
             new Date().toISOString(),

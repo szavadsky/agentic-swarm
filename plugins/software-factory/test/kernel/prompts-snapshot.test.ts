@@ -196,6 +196,14 @@ const ROLES: Record<string, Record<string, string>> = {
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: OUTCOME_SCHEMA,
   },
+  intent: {
+    iteration: "3",
+    intent_path: "/goal/intent.md",
+    steer: "- s1 (mailbox/inbox/s1.md):\n  keep the API stable",
+    outcome_path: "/goal/records/00009-i3-s1-intent-r1/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
+    outcome_schema: OUTCOME_SCHEMA,
+  },
   "plan-checker": {
     iteration: "3",
     intent_path: "/goal/intent.md",

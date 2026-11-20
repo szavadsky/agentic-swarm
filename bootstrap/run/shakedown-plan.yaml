@@ -20,6 +20,13 @@ aliases:
     effort: null
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
+  # This overlay deliberately unmaps `opencode/beam-free`, so the inherited
+  # intent alias must use the same mechanical model as pm and digest.
+  intent:
+    model: opencode-go/beam-free
+    effort: null
+    fallbacks:
+      - model: opencode-go/deepseek-v4.1-flash
   implementer:
     model: opencode-go/deepseek-v4.1-flash
     fallbacks:

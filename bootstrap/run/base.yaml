@@ -27,6 +27,13 @@ aliases:
     effort: max
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
+  # The intent agent carries an intent-amending steer into the goal's intent:
+  # prose copying, so the cheap free model, never the architect.
+  intent:
+    harness: opencode
+    model: opencode/beam-free
+    fallbacks:
+      - model: opencode-go/deepseek-v4.1-flash
   implementer:
     harness: opencode
     model: opencode/deepseek-v4.1-flash-free

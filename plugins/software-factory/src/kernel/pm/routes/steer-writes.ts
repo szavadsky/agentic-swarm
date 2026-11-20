@@ -119,7 +119,7 @@ function taskSteerFindings(
   }
   if (!hasTask && !hasSpike && (changed.length > 0 || created.length > 0)) {
     return [
-      "task files changed but no steer routed to task or spike; architect and stall steers write no task file",
+      "task files changed but no steer routed to task or spike; intent, architect and stall steers write no task file",
     ];
   }
   return [];

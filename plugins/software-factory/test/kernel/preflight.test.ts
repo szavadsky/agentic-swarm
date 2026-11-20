@@ -38,6 +38,7 @@ const RUN_HEAD_NO_HIGHEST_WITH_HIGHEST = `aliases:
   qa: { harness: fake, model: qa }
   steward: { harness: fake, model: steward }
   plan-checker: { harness: fake, model: check }
+  intent: { harness: fake, model: intent }
   plan-reviewer: { harness: fake, model: plan-review }
   pack-preparer: { harness: fake, model: pack-prep }
 limits: { concurrency: { overall: 2 }, iterations: 1 }
@@ -54,6 +55,7 @@ const RUN_HEAD_NO_HIGHEST = `aliases:
   qa: { harness: fake, model: qa }
   steward: { harness: fake, model: steward }
   plan-checker: { harness: fake, model: check }
+  intent: { harness: fake, model: intent }
   plan-reviewer: { harness: fake, model: plan-review }
   pack-preparer: { harness: fake, model: pack-prep }
 limits: { concurrency: { overall: 2 }, iterations: 1 }

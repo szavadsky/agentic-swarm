@@ -416,6 +416,7 @@ describe("three config layers", () => {
       "architect",
       "digest",
       "front",
+      "intent",
       "packprep",
       "plancheck",
       "pm",
@@ -431,6 +432,11 @@ describe("three config layers", () => {
       prompt: "front",
       alias: "pm",
       deliverable: "class, task, and pack",
+    });
+    expect(boundary.intent).toEqual({
+      prompt: "intent",
+      alias: "intent",
+      deliverable: "intent edit",
     });
     fs.rmSync(root, { recursive: true, force: true });
   });

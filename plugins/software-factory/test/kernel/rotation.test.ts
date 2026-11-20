@@ -81,6 +81,7 @@ describe("alias rotation", () => {
         reviewer: { harness: "a", model: "ma-review" },
         steward: { harness: "a", model: "ma-steward" },
         "plan-checker": { harness: "a", model: "ma-check" },
+        intent: { harness: "a", model: "ma-intent" },
         "plan-reviewer": { harness: "a", model: "ma-plan-review" },
         "pack-preparer": { harness: "a", model: "ma-pack-prep" },
         implementer: {

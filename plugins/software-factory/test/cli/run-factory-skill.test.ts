@@ -45,6 +45,7 @@ function runYaml(repo: TmpRepo): string {
     "  architect: { harness: fake, model: fake-architect }",
     "  pm: { harness: fake, model: fake-pm }",
     "  digest: { harness: fake, model: fake-digest }",
+    "  intent: { harness: fake, model: fake-intent }",
     "  implementer: { harness: fake, model: fake-impl }",
     "  implementer-b: { harness: fake, model: fake-impl-b }",
     "  researcher: { harness: fake, model: fake-research }",

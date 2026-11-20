@@ -140,6 +140,7 @@ export const KERNEL_TURN_STEPS = {
   architect: "architect",
   digest: "any",
   front: "any",
+  intent: "any",
   packprep: "any",
   plancheck: "any",
   planreturn: "any",

@@ -75,6 +75,7 @@ boundary:
   architect: { prompt: architect, alias: architect, repairPrompt: architect-repair, deliverable: "plan edit or stop decision" }
   digest: { prompt: digest, alias: digest }
   front: { prompt: front, alias: pm, deliverable: "class, task, and pack" }
+  intent: { prompt: intent, alias: intent, deliverable: "intent edit" }
   packprep: { prompt: pack-preparer, alias: pack-preparer, deliverable: "context pack" }
   plancheck: { prompt: plan-checker, alias: plan-checker, deliverable: "plan verdict" }
   pm: { prompt: pm, alias: pm, deliverable: "task files" }

@@ -1,5 +1,6 @@
 import type { AgentTurnResult } from "../../agent.js";
 import { makeCause } from "../../cause.js";
+import { carryIntentSteers } from "../../intent.js";
 import { boundaryTarget, type TurnTarget } from "../../flow-context.js";
 import {
   expireHold,
@@ -136,7 +137,7 @@ function unroutedSteerFindings(
   for (const steer of claim) {
     if (!routeOf.has(steer.id)) {
       findings.push(
-        `steer "${steer.id}" has no route; route each claimed steer as task|spike|architect|stall or {architect: id}`,
+        `steer "${steer.id}" has no route; route each claimed steer as task|spike|intent|architect|stall or {architect: id}`,
       );
     }
   }
@@ -186,8 +187,9 @@ async function steerHoldFindings(
     const problem = await stallHoldProblem(runtime, entry.steer);
     if (problem) findings.push(problem);
   }
-  if (isArchitectRoute(entry.route)) {
-    const problem = await architectHoldProblem(runtime, entry.steer);
+  if (entry.route === "intent" || isArchitectRoute(entry.route)) {
+    const label = entry.route === "intent" ? "intent" : "architect";
+    const problem = await architectHoldProblem(runtime, entry.steer, label);
     if (problem) findings.push(problem);
   }
   const selfHeld = await selfHoldProblem(runtime, entry.steer, tasks);
@@ -358,6 +360,33 @@ async function steerWithoutRoutes(
   };
 }
 
+/**
+ * Carries every accepted intent steer into the goal's intent before anything
+ * else reads it: the edit lands now, and the next boundary shows the architect
+ * the diff and the steer. The boundary retries only a route that crashed
+ * between its commit and this turn.
+ */
+async function carryAcceptedIntents(
+  runtime: KernelRuntime,
+  iteration: number,
+  claim: ReadonlyMap<string, Steer>,
+  accepted: NonNullable<Outcome["steerRoutes"]>,
+): Promise<void> {
+  const intentRoutes = accepted.filter((entry) => entry.route === "intent");
+  if (intentRoutes.length === 0) return;
+  await carryIntentSteers(runtime, {
+    iteration,
+    steers: intentRoutes.flatMap((entry) => {
+      const steer = claim.get(entry.steer);
+      return steer ? [steer] : [];
+    }),
+    routes: new Map(
+      intentRoutes.map((entry) => [entry.steer, { route: entry.route }]),
+    ),
+    records: await runtime.store.listRecords(),
+  });
+}
+
 /** Commits the accepted routes, applies their holds or answers, and exits. */
 async function acceptSteerRoutes(
   runtime: KernelRuntime,
@@ -400,11 +429,15 @@ async function acceptSteerRoutes(
       await ensureSteerHold(runtime, steer.id, entry.route);
     }
   }
+  await carryAcceptedIntents(runtime, opts.iteration, claim, accepted);
   const remaining = unfixedBaseline(baseline, findings);
-  // `stall` drains the goal and waits for the architect too; both are the
-  // same outlet, so the caller runs the boundary for either.
+  // `stall` drains the goal and an intent steer still needs its next consult;
+  // both are the same outlet as architect, so the caller runs the boundary.
   const architectRoute = accepted.some(
-    (entry) => isArchitectRoute(entry.route) || entry.route === "stall",
+    (entry) =>
+      entry.route === "intent" ||
+      isArchitectRoute(entry.route) ||
+      entry.route === "stall",
   );
   return architectRoute || remaining.length > 0
     ? { status: "architect", routes: accepted, findings: remaining }

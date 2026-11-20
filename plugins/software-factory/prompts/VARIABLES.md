@@ -7,6 +7,7 @@ Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable
 - `architect` — `architect-assignment` (`architect-bounds`), `architect-goal`, `architect-body` (`architect-turn`, `plan-standard` (`task-size`), `architect-scope` (`plan-rules`, `calibration`)), `outcome`, `plan-review-marks`, `verdict`
 - `subarchitect` — `architect-bounds`, `architect-epic`, `architect-body` (`architect-turn`, `plan-standard` (`task-size`), `architect-scope` (`plan-rules`, `calibration`)), `outcome`
 - `front` — `task-size`, `plan-read-only`, `calibration`, `outcome`, `task-frontmatter`
+- `intent` — `calibration`, `outcome`
 - `pm` — `task-size`, `plan-read-only`, `spike-report-general`, `calibration`, `outcome`, `task-frontmatter`
 - `implementer` — `implementer-body`, `clean-code`, `scope` (`plan-read-only`), `calibration`, `outcome`
 - `qa` — `implementer-body`, `finding-standards`, `outcome`
@@ -93,6 +94,17 @@ One epic's architect, below the top architect: the same bounds, turn order, plan
 - `task_types` — configured task types with their flow, kind and schema; renderer default
 - `tiers` — run-config alias names; renderer default
 - `class_types` — class-to-task-type mapping, rendered by the front turn
+
+## intent.md
+
+- `iteration` — 1-based iteration number of the consult that carries the steer
+- `intent_path` — path to the goal's `intent.md`, the only file the turn may edit
+- `steer` — the pending steer as `- <id> (<relPath>):` plus its full indented text
+- `outcome_path` — path where the outcome file must be written when the harness asks for a file
+- `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
+- `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default
+
+The turn's record carries the unified diff of the edit; the next architect pack renders it beside the pending steer.
 
 ## pm.md
 

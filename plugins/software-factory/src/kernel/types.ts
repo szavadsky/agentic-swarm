@@ -49,12 +49,12 @@ export const replySchema = z.object({
   reply: z.string().min(1),
 });
 /**
- * Where the PM's steer turn sends one steer: handled now, a new task, an
- * architect (the goal architect, or `{architect: id}` for one scope), or
- * drain-then-architect.
+ * Where the PM's steer turn sends one steer: handled now, a new task, carried
+ * into the goal's intent by the intent agent, an architect (the goal architect,
+ * or `{architect: id}` for one scope), or drain-then-architect.
  */
 export const steerRouteSchema = z.union([
-  z.enum(["task", "spike", "architect", "stall"]),
+  z.enum(["task", "spike", "intent", "architect", "stall"]),
   z
     .object({ architect: z.string().min(1) })
     .strict()
@@ -474,6 +474,7 @@ export const BOUNDARY_STEPS = [
   "architect",
   "digest",
   "front",
+  "intent",
   "packprep",
   "plancheck",
   "pm",
@@ -696,6 +697,8 @@ export interface StepRecord {
   commit?: string;
   /** Spike finish only: `<commit>:<report path>`, the finding's one copy. */
   report?: string;
+  /** Intent turn only: the unified diff the turn carried into the goal's intent. */
+  diff?: string;
   /** UTF-8 bytes of the rendered prompt sent to the harness (agent steps only). */
   promptBytes?: number;
   /** Boundary roles only: UTF-8 bytes of the iteration context pack. */
@@ -782,6 +785,8 @@ export interface RecordEnd {
   commit?: string;
   /** Spike finish only: `<commit>:<report path>`, the finding's one copy. */
   report?: string;
+  /** Intent turn only: the unified diff the turn carried into the goal's intent. */
+  diff?: string;
   tree?: string;
   /** base-advance only: integration head tree at the creation advance. */
   headTree?: string;

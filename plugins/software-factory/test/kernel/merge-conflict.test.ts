@@ -192,6 +192,7 @@ describe("merge conflicts", () => {
         reviewer: { harness: "fake", model: "fake-review" },
         steward: { harness: "fake", model: "fake-steward" },
         "plan-checker": { harness: "fake", model: "fake-check" },
+        intent: { harness: "fake", model: "fake-intent" },
         "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
         "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
       },
@@ -236,6 +237,7 @@ describe("merge conflicts", () => {
         reviewer: { harness: "fake", model: "fake-review" },
         steward: { harness: "fake", model: "fake-steward" },
         "plan-checker": { harness: "fake", model: "fake-check" },
+        intent: { harness: "fake", model: "fake-intent" },
         "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
         "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
       },
@@ -292,6 +294,7 @@ describe("steward", () => {
     reviewer: { harness: "fake", model: "fake-review" },
     steward: { harness: "fake", model: "fake-steward" },
     "plan-checker": { harness: "fake", model: "fake-check" },
+    intent: { harness: "fake", model: "fake-intent" },
     "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
     "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
   };
