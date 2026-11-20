@@ -29,10 +29,12 @@ import {
   expireHold,
   formatPmAnswers,
   formatSteers,
+  type Hold,
   markProcessed,
   readHolds,
   type Steer,
   scanInbox,
+  selfHeldSlugs,
   steerProvenance,
   steerResponses,
   writeOutbox,
@@ -170,6 +172,41 @@ function spikeLinkedTasks(tasks: TaskFile[], steerId: string): TaskFile[] {
   return tasks.filter((task) => steerProvenance(task.source) === steerId);
 }
 
+/**
+ * Expires a hold naming a task its own steer created. Such a hold can never
+ * lapse: a spike steer is answered only when that task ends, so the hold waits
+ * for the steer while the task waits for the hold. A pre-fix PM wrote these;
+ * the boundary clears one before dispatch reads holds again, and the spike it
+ * created can then run and answer its steer.
+ */
+async function expireSelfHolds(
+  runtime: KernelRuntime,
+  tasks: readonly TaskFile[],
+  iteration: number,
+): Promise<void> {
+  let holds: Hold[];
+  try {
+    ({ holds } = await readHolds(runtime.store));
+  } catch (err) {
+    console.warn(
+      `[factory] holds unreadable for self-hold expiry: ${(err as Error).message}`,
+    );
+    return;
+  }
+  for (const hold of holds) {
+    const own = selfHeldSlugs(hold.steer, hold.slugs, tasks);
+    if (own.length === 0) continue;
+    await expireHold(runtime.store, hold.steer);
+    await runtime.store.appendRecord(
+      scriptMeta(iteration, "hold-self-expire", { slug: hold.steer }),
+      {
+        ok: false,
+        cause: `steer ${JSON.stringify(hold.steer)} hold named task(s) it creates: ${own.join(", ")}; hold expired so the task can run`,
+      },
+    );
+  }
+}
+
 function spikeTerminal(state: State, linked: TaskFile[]): boolean {
   if (linked.length === 0) return false;
   return linked.every((task) => {
@@ -269,6 +306,10 @@ export async function runBoundary(
   await runKeptLand(runtime, iteration);
   records = await runtime.store.listRecords();
   state = derive(tasks, records, runtime.configs.process.flows);
+  // A steer's hold must never gate the task its own route created: the steer
+  // is answered only when that spike ends, so the pair can never finish. Clear
+  // one a pre-fix PM left before the pack and the next dispatch read holds.
+  await expireSelfHolds(runtime, tasks, iteration);
   const planPath = path.join(runtime.store.goalDir, "plan.md");
   const steers = await scanInbox(runtime.store);
   const gate = consultGate({

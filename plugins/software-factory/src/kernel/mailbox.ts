@@ -567,6 +567,25 @@ export function steerProvenance(source: string): string | undefined {
   return id ? id : undefined;
 }
 
+/**
+ * Slugs a steer's hold names that the same steer created (`source: steer:
+ * <id>`). A spike steer is answered only when its task ends, so holding that
+ * task deadlocks both: the hold waits for the steer and the task waits for the
+ * hold. Every such slug is a hold bug, never a legitimate block.
+ */
+export function selfHeldSlugs(
+  steer: string,
+  slugs: readonly string[],
+  tasks: readonly { slug: string; source: string }[],
+): string[] {
+  const own = new Set(
+    tasks
+      .filter((task) => steerProvenance(task.source) === steer)
+      .map((task) => task.slug),
+  );
+  return slugs.filter((slug) => own.has(slug));
+}
+
 /** A PM-created stall continuation's provenance: its `source` is `stall: <iteration>`. */
 export function stallProvenance(source: string): string | undefined {
   const match = /^stall:\s*(.+)$/.exec(source.trim());

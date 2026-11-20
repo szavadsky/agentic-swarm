@@ -16,6 +16,8 @@ import {
   quarantineDir,
   scanInbox,
 } from "../../src/kernel/mailbox.js";
+import { scriptMeta } from "../../src/kernel/record.js";
+import { spikeReportPath } from "../../src/kernel/spike-report.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -596,6 +598,125 @@ describe("mid-run steer holds", () => {
       const state = await tasks(runtime);
       expect(state.tasks.alpha!.status).toBe("merged");
       expect(state.tasks.beta!.status).toBe("merged");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("expires a hold that names its own steer's spike and dispatches the spike", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      writePlan(runtime);
+      await writeTask(
+        runtime,
+        task("no-outcome-forensics-spike", {
+          title: "no-outcome forensics spike",
+          kind: "spike",
+          flow: "spike",
+          scope: ["probe.txt"],
+          source: "steer: no-outcome-forensics",
+          body: "Investigate the outcome detector.\nDone when: findings reported.",
+        }),
+      );
+      await postSteer(
+        runtime.store,
+        "no-outcome-forensics",
+        "Investigate why no-outcome findings are detector-wrong.",
+      );
+      // The state the pre-fix PM left: the spike route committed, and its hold
+      // naming the very task the steer created.
+      await runtime.store.appendRecord(
+        scriptMeta(1, "steer-routes", { round: 1 }),
+        {
+          ok: true,
+          outcome: outcome({
+            summary: "steer routes: no-outcome-forensics=spike",
+            steerRoutes: [{ steer: "no-outcome-forensics", route: "spike" }],
+          }),
+        },
+      );
+      writeHold(runtime, "no-outcome-forensics", [
+        "no-outcome-forensics-spike",
+      ]);
+      const holdPath = path.join(
+        holdsDir(runtime.store),
+        "no-outcome-forensics.yaml",
+      );
+
+      // The i5 deadlock: dispatch can start nothing, because the spike is held
+      // by the steer that is waiting for that spike.
+      const blocked = await runDispatch(runtime, {
+        iteration: 1,
+        seenSteers: ["no-outcome-forensics"],
+      });
+      expect(blocked.reason).toBe("boundary");
+      expect(blocked.allReadyHeld).toBe(true);
+      expect(blocked.cause).toContain(
+        "no-outcome-forensics holds no-outcome-forensics-spike",
+      );
+      expect(
+        (await tasks(runtime)).tasks["no-outcome-forensics-spike"]!.status,
+      ).toBe("ready");
+
+      harness.script((req, ctx) => {
+        editPlan(runtime);
+        ctx.writeOutcome(
+          outcome({ summary: "self-hold cleared", decision: "continue" }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "tasks unchanged" }));
+        return fakeTurnResult(req);
+      });
+
+      const boundary = await runBoundary(runtime, {
+        relaunch: false,
+        iteration: 1,
+      });
+      expect(boundary.decision).toBe("continue");
+      // The self-hold is gone, with the record that explains its expiry.
+      expect(fs.existsSync(holdPath)).toBe(false);
+      const expired = (await runtime.store.listRecords()).filter(
+        (record) => record.step === "hold-self-expire",
+      );
+      expect(expired).toHaveLength(1);
+      expect(expired[0]!.slug).toBe("no-outcome-forensics");
+      expect(expired[0]!.cause).toContain("no-outcome-forensics-spike");
+
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "probe.txt"), "finding\n", "utf8");
+        const report = path.join(
+          req.cwd!,
+          spikeReportPath("no-outcome-forensics-spike"),
+        );
+        fs.mkdirSync(path.dirname(report), { recursive: true });
+        fs.writeFileSync(report, "# Finding\n\nKeep the detector.\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "keep the detector" }));
+        return fakeTurnResult(req);
+      });
+      harness.script(approver("finding is solid"));
+
+      const dispatched = await runDispatch(runtime, {
+        iteration: 1,
+        seenSteers: boundary.seenSteers,
+      });
+      expect(dispatched.reason).toBe("boundary");
+      expect(
+        (await tasks(runtime)).tasks["no-outcome-forensics-spike"]!.status,
+      ).toBe("finished");
+      expect(
+        (await runtime.store.listRecords()).some(
+          (record) =>
+            record.slug === "no-outcome-forensics-spike" &&
+            record.step === "implement" &&
+            record.outcome?.status === "done",
+        ),
+      ).toBe(true);
     } finally {
       cleanupFlowRepo(repo);
     }

@@ -380,6 +380,93 @@ describe("steer PM routing", () => {
     }
   }, 60_000);
 
+  it("refuses a hold naming the spike task its own steer creates", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      writePlan(runtime);
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      const spikeFile = path.join(
+        runtime.store.tasksDir,
+        "no-outcome-forensics-spike.md",
+      );
+      const writeSpikeHoldingItself: FakeTurnHandler = (req, ctx) => {
+        fs.writeFileSync(
+          spikeFile,
+          [
+            "---",
+            "slug: no-outcome-forensics-spike",
+            "title: no-outcome forensics spike",
+            "kind: spike",
+            "flow: spike",
+            "deps: []",
+            "scope: [probe.txt]",
+            "source: 'steer: no-outcome-forensics'",
+            "---",
+            "",
+            "Investigate the outcome detector.",
+            "Done when: findings reported.",
+            "",
+          ].join("\n"),
+          "utf8",
+        );
+        writeHold(runtime, "no-outcome-forensics", [
+          "no-outcome-forensics-spike",
+        ]);
+        ctx.writeOutcome(
+          outcome({
+            summary: "wrote the spike",
+            steerRoutes: [{ steer: "no-outcome-forensics", route: "spike" }],
+          }),
+        );
+        return fakeTurnResult(req);
+      };
+
+      harness.script(
+        implementer("alpha.txt", async () => {
+          await postSteer(
+            runtime.store,
+            "no-outcome-forensics",
+            "Investigate why no-outcome findings are detector-wrong.",
+          );
+        }),
+      );
+      // Both rungs write the self-hold: each is refused, so the route is never
+      // committed and the created task is rolled back with the rung.
+      harness.script(writeSpikeHoldingItself, {
+        when: whenTurn({ step: "pm" }),
+      });
+      harness.script(writeSpikeHoldingItself, {
+        when: whenTurn({ step: "pm" }),
+      });
+      harness.script(approver("alpha is correct"));
+
+      const dispatched = await runDispatch(runtime, { iteration: 1 });
+      expect(dispatched.reason).toBe("boundary");
+
+      const records = await runtime.store.listRecords();
+      const refused = records.filter(
+        (record) => record.step === "pm-validate" && record.ok === false,
+      );
+      expect(refused).toHaveLength(2);
+      for (const record of refused) {
+        expect(record.cause).toContain(
+          "hold names task(s) it creates: no-outcome-forensics-spike",
+        );
+      }
+      expect(records.some((record) => record.step === "steer-routes")).toBe(
+        false,
+      );
+      expect(fs.existsSync(spikeFile)).toBe(false);
+      expect(inboxHas(runtime, "no-outcome-forensics")).toBe(true);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
   it("pack lists only architect-routed steers plus every PM answer", async () => {
     const { repo, goal } = setupFlowRepo({
       limits: { concurrency: { overall: 1 } },

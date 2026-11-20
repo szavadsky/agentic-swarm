@@ -13,6 +13,7 @@ import {
   holdsDir,
   markProcessed,
   planCheckProvenance,
+  selfHeldSlugs,
   type Steer,
   stallProvenance,
   steerProvenance,
@@ -700,6 +701,26 @@ function architectHoldProblem(
   return undefined;
 }
 
+/**
+ * A hold that names a task its own steer created. The steer stays pending
+ * until its spike task ends, and the held task never starts: the two wait on
+ * each other, so the hold must be refused instead of written.
+ */
+function selfHoldProblem(
+  runtime: KernelRuntime,
+  steerId: string,
+  tasks: readonly TaskFile[],
+): string | undefined {
+  const hold = parseHoldFile(runtime, steerId);
+  if (hold.status !== "ok" || !Array.isArray(hold.slugs)) return undefined;
+  const slugs = hold.slugs.filter(
+    (slug): slug is string => typeof slug === "string",
+  );
+  const own = selfHeldSlugs(steerId, slugs, tasks);
+  if (own.length === 0) return undefined;
+  return `steer "${steerId}" hold names task(s) it creates: ${own.join(", ")}; a steer never holds its own task — leave those slugs out of the hold`;
+}
+
 async function validateSteerTurn(
   runtime: KernelRuntime,
   opts: {
@@ -772,6 +793,8 @@ async function validateSteerTurn(
       const problem = architectHoldProblem(runtime, entry.steer);
       if (problem) findings.push(problem);
     }
+    const selfHeld = selfHoldProblem(runtime, entry.steer, tasks);
+    if (selfHeld) findings.push(selfHeld);
   }
 
   if (parseFindings.length === 0) {
