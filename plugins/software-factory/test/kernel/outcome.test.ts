@@ -28,6 +28,34 @@ describe("outcome delivery", () => {
     expect(() => parseOutcome("status: nope\nsummary: x\n")).toThrow(/status/);
   });
 
+  it("parses a steer route that names one architect", () => {
+    const routed = parseOutcome(
+      [
+        "status: done",
+        "summary: routed the steer",
+        "steerRoutes:",
+        "  - steer: s1",
+        "    route:",
+        "      architect: auth",
+      ].join("\n"),
+    );
+    expect(routed.steerRoutes).toEqual([
+      { steer: "s1", route: { architect: "auth" } },
+    ]);
+    expect(() =>
+      parseOutcome(
+        [
+          "status: done",
+          "summary: routed the steer",
+          "steerRoutes:",
+          "  - steer: s1",
+          "    route:",
+          '      architect: ""',
+        ].join("\n"),
+      ),
+    ).toThrow(/route/);
+  });
+
   it("reads the retired continue route as a replace, and refuses unknown actions", () => {
     const legacy = parseOutcome(
       [

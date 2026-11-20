@@ -24,6 +24,7 @@ A bullet deleted from the plan cancels nothing: its task stays open and dispatch
 - `flow` — the flow named on the bullet, or the marked default when the bullet names none.
 - `deps` — slugs that must merge first, per the order above.
 - `scope` — the predicted area you formalized; never empty. If the bullet names no work you can locate, file no task and record the concern.
+- `epic` — the epic that owns the task, when you derive it from an epic plan; the slug must start with `<epic>.`. Omit it for a goal-level bullet.
 - `tier` — `default` unless the plan names one of the configured tiers.
 - `base` — the parked task this continues, only when the plan names one.
 
@@ -33,11 +34,11 @@ Body: the brief — why, done-when, the interface its dependents rely on, the ed
 
 ## Steer
 
-On a steer turn, route each pending steer with one `steerRoutes` entry in the outcome: `{steer: <id>, route: task|spike|architect|stall, answer?: <text>}`. One entry per steer, no extras.
+On a steer turn, route each pending steer with one `steerRoutes` entry in the outcome: `{steer: <id>, route: task|spike|architect|stall, answer?: <text>}` or `route: {architect: <id>}` to name the architect's scope. One entry per steer, no extras.
 
 - `task` — the steer amends a pending task or redoes landed work. Amend the pending task file in place, or write a rework task file with a new slug, `base:` naming the kept branch when one is kept, and `source: "steer: <id>"`. Answer now: `answer` is the response.
 - `spike` — the steer is a small task or a finding. Write one standalone task file with `source: "steer: <id>"`. No `answer` now.
-- `architect` — the steer amends intent or needs an architecture decision. Write no task file; list the pending tasks the amendment voids in the hold, or hold nothing when it voids nothing. No `answer` now.
+- `architect` — the steer amends intent or needs an architecture decision. `{architect: <id>}` names the goal architect (`main`) or one epic's architect. Write no task file; list the pending tasks the amendment voids in the hold, or hold nothing when it voids nothing. No `answer` now.
 - `stall` — no pending task keeps its value, or the steer names an unplanned priority. Write no task file. No `answer` now.
 
 Write one hold file per steer in the holds directory, named `<steer-id>.yaml`, exactly this shape:

@@ -10,8 +10,10 @@ import { DEFAULT_PARK_AMENDS } from "./config.js";
 import { boundaryTarget, type TurnTarget } from "./flow-context.js";
 import {
   expireHold,
+  formatSteerRoute,
   formatSteerTurn,
   holdsDir,
+  isArchitectRoute,
   markProcessed,
   planCheckProvenance,
   selfHeldSlugs,
@@ -395,7 +397,7 @@ async function cancelPlanNamed(
       continue;
     await appendCancel(
       runtime.store,
-      { iteration, slug, round: task.round },
+      { iteration, slug, round: task.round, architect: task.epic },
       makeCause("note", reason),
     );
   }
@@ -654,7 +656,7 @@ function steerLadderNote(
     );
   }
   notes.push(
-    "Restated PM steer contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Route each pending steer as task|spike|architect|stall, write one hold file per steer, write task files only for task and spike steers with source steer: <id>, then the outcome with steerRoutes.",
+    "Restated PM steer contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Route each pending steer as task|spike|architect|stall (or {architect: id}), write one hold file per steer, write task files only for task and spike steers with source steer: <id>, then the outcome with steerRoutes.",
   );
   if (failure.length > 0)
     notes.push("", "Findings:", ...failure.map((reason) => `- ${reason}`));
@@ -790,7 +792,7 @@ async function validateSteerTurn(
   for (const steer of opts.claim) {
     if (!seen.has(steer.id)) {
       findings.push(
-        `steer "${steer.id}" has no route; route each claimed steer as task|spike|architect|stall`,
+        `steer "${steer.id}" has no route; route each claimed steer as task|spike|architect|stall or {architect: id}`,
       );
     }
   }
@@ -805,14 +807,14 @@ async function validateSteerTurn(
       }
     } else if (answer) {
       findings.push(
-        `steer "${entry.steer}" routed ${entry.route} must not carry an answer; only task answers now`,
+        `steer "${entry.steer}" routed ${formatSteerRoute(entry.route)} must not carry an answer; only task answers now`,
       );
     }
     if (entry.route === "stall") {
       const problem = stallHoldProblem(runtime, entry.steer);
       if (problem) findings.push(problem);
     }
-    if (entry.route === "architect") {
+    if (isArchitectRoute(entry.route)) {
       const problem = architectHoldProblem(runtime, entry.steer);
       if (problem) findings.push(problem);
     }
@@ -846,8 +848,9 @@ async function validateSteerTurn(
       }
       const route = routeOf.get(provenance);
       if (route !== "task" && route !== "spike") {
+        const routed = route === undefined ? "none" : formatSteerRoute(route);
         findings.push(
-          `new task "${slug}" names steer "${provenance}" routed ${route}; only task and spike steers create tasks`,
+          `new task "${slug}" names steer "${provenance}" routed ${routed}; only task and spike steers create tasks`,
         );
       }
     }
@@ -1038,7 +1041,7 @@ export async function runSteerPm(
           ok: true,
           outcome: {
             status: "done",
-            summary: `steer routes: ${accepted.map((entry) => `${entry.steer}=${entry.route}`).join(", ")}`,
+            summary: `steer routes: ${accepted.map((entry) => `${entry.steer}=${formatSteerRoute(entry.route)}`).join(", ")}`,
             concerns: [],
             forward: [],
             steerRoutes: accepted,
@@ -1065,7 +1068,7 @@ export async function runSteerPm(
       // `stall` drains the goal and waits for the architect too; both are the
       // same outlet, so the caller runs the boundary for either.
       const architectRoute = accepted.some(
-        (entry) => entry.route === "architect" || entry.route === "stall",
+        (entry) => isArchitectRoute(entry.route) || entry.route === "stall",
       );
       return architectRoute || remaining.length > 0
         ? { status: "architect", routes: accepted, findings: remaining }
@@ -1563,7 +1566,12 @@ async function cancelRoutes(
   for (const { slug, cause } of cancellations) {
     await appendCancel(
       runtime.store,
-      { iteration, slug, round: state.tasks[slug]?.round ?? 1 },
+      {
+        iteration,
+        slug,
+        round: state.tasks[slug]?.round ?? 1,
+        architect: state.tasks[slug]?.epic,
+      },
       makeCause("note", cause),
     );
   }

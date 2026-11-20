@@ -337,6 +337,7 @@ export function derive(
   }
 
   const taskStates: Record<string, TaskState> = {};
+  const epics: Record<string, string[]> = {};
   for (const task of tasks) {
     const reduction = reductions.get(task.slug)!;
     const terminal = reduction.terminal;
@@ -346,6 +347,7 @@ export function derive(
     statuses.set(task.slug, status);
     taskStates[task.slug] = {
       status,
+      ...(task.epic !== undefined ? { epic: task.epic } : {}),
       cause: terminal?.cause ?? reduction.park,
       turns: reduction.turns,
       round: reduction.round,
@@ -359,6 +361,11 @@ export function derive(
       gateFix: terminal ? undefined : reduction.gateFix,
       gateLastCall: terminal ? undefined : reduction.gateLastCall,
     };
+    if (task.epic !== undefined) {
+      const group = epics[task.epic] ?? [];
+      group.push(task.slug);
+      epics[task.epic] = group;
+    }
   }
   for (const slug of [...orphanSlugs].sort()) {
     const reduction = orphanReductions.get(slug)!;
@@ -398,5 +405,6 @@ export function derive(
     terminal: goal !== "active",
     interrupted,
     tasks: taskStates,
+    epics,
   };
 }

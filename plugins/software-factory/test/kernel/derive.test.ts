@@ -75,6 +75,29 @@ describe("derive", () => {
     expect(state.tasks.b!.status).toBe("pending");
     expect(state.tasks.a!.phase).toBe("implement");
     expect(state.tasks.a!.round).toBe(1);
+    expect(state.epics).toEqual({});
+  });
+
+  it("groups one task in each of two epics and keeps goal work ungrouped", () => {
+    const tasks = [
+      task("auth.login", { epic: "auth" }),
+      task("billing.invoice", { epic: "billing" }),
+      task("goal-close"),
+    ];
+    const state = derive(tasks, []);
+    expect(state.tasks["auth.login"]).toMatchObject({
+      status: "ready",
+      epic: "auth",
+    });
+    expect(state.tasks["billing.invoice"]).toMatchObject({
+      status: "ready",
+      epic: "billing",
+    });
+    expect(state.tasks["goal-close"]!.epic).toBeUndefined();
+    expect(state.epics).toEqual({
+      auth: ["auth.login"],
+      billing: ["billing.invoice"],
+    });
   });
 
   it("makes a dependent ready only after its dependency merged", () => {

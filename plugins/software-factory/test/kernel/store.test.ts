@@ -181,6 +181,14 @@ describe("createFolderStore", () => {
     expect(records[0]!.outcome).toBeUndefined();
   });
 
+  it("round-trips the architect that owns a record", async () => {
+    const store = createFolderStore(goalDir, undefined, {});
+    const turn = await store.startRecord(start({ architect: "auth" }));
+    expect(turn.meta.architect).toBe("auth");
+    const records = await store.listRecords();
+    expect(records[0]!.architect).toBe("auth");
+  });
+
   it("finishes atomically: outcome.yaml, then end.yaml with endedAt", async () => {
     const store = createFolderStore(goalDir, undefined, {});
     const turn = await store.startRecord(start());
@@ -449,6 +457,7 @@ describe("createFolderStore", () => {
         terminal: false,
         interrupted: false,
         tasks: {},
+        epics: {},
       },
       records,
     });

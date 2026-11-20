@@ -627,6 +627,16 @@ export function collectSteerRoutes(
   return out;
 }
 
+/** True when a route waits for an architect, generic or a named scope. */
+export function isArchitectRoute(route: SteerRoute): boolean {
+  return route === "architect" || typeof route === "object";
+}
+
+/** A route as one token for prompts, records and summaries. */
+export function formatSteerRoute(route: SteerRoute): string {
+  return typeof route === "object" ? `architect ${route.architect}` : route;
+}
+
 /** One line per PM-routed steer for the architect's pack; sorted by steer id. */
 export function formatPmAnswers(
   routes: Map<string, { route: SteerRoute; answer?: string }>,
@@ -634,6 +644,8 @@ export function formatPmAnswers(
   return [...routes.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([steer, { route, answer }]) =>
-      answer ? `- ${steer} [${route}]: ${answer}` : `- ${steer} [${route}]`,
+      answer
+        ? `- ${steer} [${formatSteerRoute(route)}]: ${answer}`
+        : `- ${steer} [${formatSteerRoute(route)}]`,
     );
 }

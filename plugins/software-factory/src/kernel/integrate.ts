@@ -21,6 +21,7 @@ import {
   scriptMeta,
   startChecks,
 } from "./record.js";
+import { taskArchitect } from "./tasks.js";
 import type {
   Cause,
   KernelRuntime,
@@ -136,7 +137,11 @@ async function recordMerge(
   end: RecordEnd,
 ): Promise<void> {
   await runtime.store.appendRecord(
-    scriptMeta(iteration, "merge", { slug: task.slug, round }),
+    scriptMeta(iteration, "merge", {
+      slug: task.slug,
+      round,
+      architect: taskArchitect(task),
+    }),
     end,
   );
 }
@@ -357,14 +362,24 @@ export async function mergeTask(
       }
       const gate = await startChecks(
         runtime.store,
-        { iteration, slug: task.slug, round },
+        {
+          iteration,
+          slug: task.slug,
+          round,
+          architect: taskArchitect(task),
+        },
         { step: "merge-checks" },
       );
       let ran = await runGates(runtime, scratch);
       if (opts.keptLand) {
         ran = await rerunRedKeptGates(
           runtime,
-          { iteration, slug: task.slug, round },
+          {
+            iteration,
+            slug: task.slug,
+            round,
+            architect: taskArchitect(task),
+          },
           scratch,
           ran,
           preexisting,
@@ -386,7 +401,11 @@ export async function mergeTask(
 
     const commit = await headSha(scratch);
     const turn = await runtime.store.startRecord({
-      ...scriptMeta(iteration, "merge", { slug: task.slug, round }),
+      ...scriptMeta(iteration, "merge", {
+        slug: task.slug,
+        round,
+        architect: taskArchitect(task),
+      }),
       commit,
     });
     try {
@@ -419,7 +438,12 @@ export async function mergeTask(
  */
 async function rerunRedKeptGates(
   runtime: KernelRuntime,
-  meta: { iteration: number; slug: string; round: number },
+  meta: {
+    iteration: number;
+    slug: string;
+    round: number;
+    architect?: string;
+  },
   scratch: string,
   checks: CheckResult[],
   preexisting: ReadonlySet<string>,
@@ -590,6 +614,7 @@ export async function runKeptLand(
         scriptMeta(iteration, "kept-land", {
           slug: task.slug,
           round: taskState.round,
+          architect: taskArchitect(task),
         }),
         {
           ok: false,
@@ -607,6 +632,7 @@ export async function runKeptLand(
         scriptMeta(iteration, "kept-land", {
           slug: task.slug,
           round: taskState.round,
+          architect: taskArchitect(task),
         }),
         { ok: true, cause: makeCause("note", "skipped: deterministic-red") },
       );
@@ -620,6 +646,7 @@ export async function runKeptLand(
         scriptMeta(iteration, "kept-land", {
           slug: task.slug,
           round: taskState.round,
+          architect: taskArchitect(task),
         }),
         {
           ok: false,
@@ -639,6 +666,7 @@ export async function runKeptLand(
           scriptMeta(iteration, "kept-land", {
             slug: task.slug,
             round: taskState.round,
+            architect: taskArchitect(task),
           }),
           {
             ok: true,
@@ -663,6 +691,7 @@ export async function runKeptLand(
             scriptMeta(iteration, "kept-land", {
               slug: task.slug,
               round: taskState.round,
+              architect: taskArchitect(task),
             }),
             {
               ok: false,

@@ -62,6 +62,7 @@ import {
 import { type PmRung, runPm } from "./pm.js";
 import { scriptMeta } from "./record.js";
 import { spikeFinding } from "./spike-report.js";
+import { MAIN_ARCHITECT } from "./tasks.js";
 import type {
   ArtifactStore,
   GoalDecision,
@@ -527,7 +528,12 @@ export async function runBoundary(
       runAgentTurn(runtime, {
         target: boundaryTarget(runtime, "architect", iteration),
         cwd: runtime.paths.goalCheckout,
-        meta: { iteration, step: "architect", round: 1 },
+        meta: {
+          iteration,
+          step: "architect",
+          round: 1,
+          architect: MAIN_ARCHITECT,
+        },
         vars: {
           turn,
           iteration: String(iteration),

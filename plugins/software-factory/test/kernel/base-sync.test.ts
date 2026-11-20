@@ -5,6 +5,7 @@ import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
+import { executeTaskAction } from "../../src/kernel/flow.js";
 import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
 import { task, causeText } from "./helpers.js";
 import {
@@ -111,6 +112,59 @@ describe("parked continuation syncs to the integration head", () => {
       expect(repo.git(["show", "factory/demo:beta.txt"]).stdout.trim()).toBe(
         "beta",
       );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("stamps the architect on a checks-created base conflict", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
+    try {
+      const runtime = await makeRuntime(repo, goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      const checkout = goalCheckout(repo, goal);
+      repo.git(["checkout", "-b", "factory-task/demo/alpha", "main"], {
+        cwd: repo.dir,
+      });
+      fs.writeFileSync(path.join(repo.dir, "clash.txt"), "alpha\n", "utf8");
+      repo.git(["add", "clash.txt"], { cwd: repo.dir });
+      repo.git(["commit", "-m", "alpha clash"], { cwd: repo.dir });
+      repo.git(["checkout", "main"], { cwd: repo.dir });
+      commitIn(
+        repo,
+        checkout,
+        "clash.txt",
+        "integration\n",
+        "factory: integration clash",
+      );
+
+      const taskFile = task("beta", {
+        base: "alpha",
+        scope: ["clash.txt"],
+        epic: "auth",
+      });
+      await writeTask(runtime, taskFile);
+      const state = derive(
+        await runtime.store.listTasks(),
+        [],
+        runtime.configs.process.flows,
+      ).tasks.beta!;
+      await executeTaskAction(
+        runtime,
+        taskFile,
+        { kind: "checks", slug: "beta" },
+        1,
+        state,
+      );
+
+      const park = (await runtime.store.listRecords()).find(
+        (record) => record.slug === "beta" && record.step === "park",
+      );
+      expect(park?.cause?.kind).toBe("base-conflict");
+      expect(park?.architect).toBe("auth");
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -315,6 +369,10 @@ describe("parked continuation syncs to the integration head", () => {
       expect(causeText(state.tasks.beta!.cause)).toContain(
         "base-conflict: clash.txt",
       );
+      const park = records.find(
+        (record) => record.slug === "beta" && record.step === "park",
+      );
+      expect(park?.architect).toBe("main");
       expect(
         records.filter((r) => r.slug === "beta" && r.actor === "agent"),
       ).toHaveLength(1);

@@ -594,6 +594,7 @@ export async function runAgentTurn(
         slug: spec.meta.slug,
         round: spec.meta.round,
         revision: spec.meta.revision ?? 0,
+        architect: spec.meta.architect,
       },
       makeCause("overflow", ""),
     );

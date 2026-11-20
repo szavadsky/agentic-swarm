@@ -19,7 +19,12 @@ import type {
 export function scriptMeta(
   iteration: number,
   step: string,
-  opts: { slug?: string; round?: number; revision?: number } = {},
+  opts: {
+    slug?: string;
+    round?: number;
+    revision?: number;
+    architect?: string;
+  } = {},
 ): RecordStart {
   return {
     iteration,
@@ -28,13 +33,19 @@ export function scriptMeta(
     actor: "script",
     ...(opts.slug ? { slug: opts.slug } : {}),
     ...(opts.revision !== undefined ? { revision: opts.revision } : {}),
+    ...(opts.architect ? { architect: opts.architect } : {}),
   };
 }
 
 /** Opens a checks record before the gate run; `finishChecks` closes it after. */
 export async function startChecks(
   store: ArtifactStore,
-  meta: { iteration: number; slug: string; round: number },
+  meta: {
+    iteration: number;
+    slug: string;
+    round: number;
+    architect?: string;
+  },
   opts: { step?: string } = {},
 ) {
   return store.startRecord(
@@ -80,7 +91,12 @@ export interface GateFlake {
  */
 export async function appendGateFlake(
   store: ArtifactStore,
-  meta: { iteration: number; slug: string; round: number },
+  meta: {
+    iteration: number;
+    slug: string;
+    round: number;
+    architect?: string;
+  },
   flake: { tree?: string; flakes: GateFlake[]; checks: CheckResult[] },
 ): Promise<void> {
   const cause = flake.flakes
@@ -120,7 +136,12 @@ export async function commitEdits(
 /** The last-call reviewer concerns, recorded as debt once the item merges. */
 export async function appendDebt(
   store: ArtifactStore,
-  meta: { iteration: number; slug: string; round: number },
+  meta: {
+    iteration: number;
+    slug: string;
+    round: number;
+    architect?: string;
+  },
   concerns: Concern[],
   fallback: string,
 ): Promise<void> {
@@ -170,7 +191,13 @@ export function parkLaunchKind(cause: Cause): LaunchKind {
  */
 export async function appendPark(
   store: ArtifactStore,
-  meta: { iteration: number; slug: string; round: number; revision: number },
+  meta: {
+    iteration: number;
+    slug: string;
+    round: number;
+    revision: number;
+    architect?: string;
+  },
   cause: Cause,
 ): Promise<void> {
   await store.appendRecord(
@@ -178,6 +205,7 @@ export async function appendPark(
       slug: meta.slug,
       round: meta.round,
       revision: meta.revision,
+      architect: meta.architect,
     }),
     {
       ok: true,
@@ -189,7 +217,12 @@ export async function appendPark(
 
 export async function appendFinish(
   store: ArtifactStore,
-  meta: { iteration: number; slug: string; round: number },
+  meta: {
+    iteration: number;
+    slug: string;
+    round: number;
+    architect?: string;
+  },
   task: TaskFile,
   commit?: string,
 ): Promise<void> {
@@ -219,7 +252,12 @@ async function spikeFinishReport(
 /** A task an explicit leave decision cancels; the slug stays spent. */
 export async function appendCancel(
   store: ArtifactStore,
-  meta: { iteration: number; slug: string; round: number },
+  meta: {
+    iteration: number;
+    slug: string;
+    round: number;
+    architect?: string;
+  },
   cause: Cause,
 ): Promise<void> {
   await store.appendRecord(scriptMeta(meta.iteration, "cancel", meta), {

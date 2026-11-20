@@ -64,6 +64,37 @@ describe("task files", () => {
     expect(round).toEqual(parsed);
   });
 
+  it("parses, renders and hashes the owning epic", () => {
+    const withEpic = TEXT.replace("tier: default", "epic: auth\ntier: default");
+    const parsed = parseTaskFile(withEpic, "auth.token-refresh");
+    expect(parsed.epic).toBe("auth");
+    expect(renderTaskFile(parsed)).toContain("epic: auth");
+    const round = parseTaskFile(renderTaskFile(parsed), parsed.slug);
+    expect(round.epic).toBe("auth");
+    expect(materialHash({ ...parsed, epic: "billing" })).not.toBe(
+      materialHash(parsed),
+    );
+    expect(parseTaskFile(TEXT, "auth.token-refresh").epic).toBeUndefined();
+  });
+
+  it("requires an epic's tasks to be namespaced under it", () => {
+    expect(
+      validateTaskGraph([task("auth.login", { epic: "auth", scope: ["x"] })]),
+    ).toEqual([]);
+    expect(
+      validateTaskGraph([
+        task("billing.login", { epic: "auth", scope: ["x"] }),
+      ]),
+    ).toContain(
+      'task "billing.login" names epic "auth": an epic\'s tasks are named "auth.<name>"',
+    );
+    expect(
+      validateTaskGraph([task("auth.login", { epic: "Auth", scope: ["x"] })]),
+    ).toContain(
+      'task "auth.login" names epic "Auth": an epic id is [a-z0-9-]+',
+    );
+  });
+
   it("resolves a task type into its flow and kind and renders only the type", () => {
     const parsed = parseTaskFile(TYPED, "auth.probe", TYPES);
     expect(parsed.type).toBe("spike");

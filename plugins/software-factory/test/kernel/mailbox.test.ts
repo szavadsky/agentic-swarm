@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  formatPmAnswers,
   formatSteers,
   formatSteerTurn,
   holdsDir,
@@ -208,6 +209,22 @@ describe("mailbox", () => {
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it("names a targeted architect in its pack answer line", () => {
+    expect(
+      formatPmAnswers(
+        new Map([
+          ["s2", { route: "architect" as const }],
+          ["s1", { route: { architect: "auth" } }],
+          ["s3", { route: "task" as const, answer: "amended alpha" }],
+        ]),
+      ),
+    ).toEqual([
+      "- s1 [architect auth]",
+      "- s2 [architect]",
+      "- s3 [task]: amended alpha",
+    ]);
   });
 
   it("answers from steerAnswers, and a typed answer wins over a legacy forward line", () => {

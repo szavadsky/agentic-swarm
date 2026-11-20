@@ -14,6 +14,14 @@ import type {
 /** The flow a task file gets when its frontmatter names none. */
 export const DEFAULT_FLOW = "implement-review";
 
+/** The goal architect's id; an epic's architect id is its epic name. */
+export const MAIN_ARCHITECT = "main";
+
+/** The architect that owns a task's scope: its epic's id, or the goal's. */
+export function taskArchitect(task: Pick<TaskFile, "epic">): string {
+  return task.epic ?? MAIN_ARCHITECT;
+}
+
 /**
  * Task frontmatter shape: the one schema that validates task files and
  * renders the prompt skeleton. Unknown keys are refused, so an undeclared
@@ -49,6 +57,11 @@ export const taskFrontmatterSchema = z
       .array(z.string().describe("a slug that must merge first"))
       .default([]),
     scope: z.array(z.string().describe("a predicted area")).default([]),
+    epic: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("the epic that owns this task; absent means goal-level work"),
     tier: z
       .string()
       .min(1)
@@ -263,6 +276,7 @@ export function renderTaskFile(task: TaskFile): string {
   }
   front.deps = task.deps;
   front.scope = task.scope;
+  if (task.epic !== undefined) front.epic = task.epic;
   if (task.tier) front.tier = task.tier;
   if (task.revision > 0) front.revision = task.revision;
   if (task.base) front.base = task.base;
@@ -280,8 +294,8 @@ export function doneWhen(body: string): string {
 
 /**
  * Material hash: frozen-task comparisons must ignore cosmetic edits but catch
- * a changed dependency set, scope, type, flow, tier, revision, kind, slug or
- * done-when.
+ * a changed dependency set, scope, epic, type, flow, tier, revision, kind,
+ * slug or done-when.
  */
 export function materialHash(task: TaskFile): string {
   const canonical = JSON.stringify([
@@ -291,6 +305,7 @@ export function materialHash(task: TaskFile): string {
     task.type ?? "",
     [...task.deps].sort(),
     [...task.scope],
+    task.epic ?? "",
     task.tier ?? "",
     task.revision,
     task.base ?? "",
@@ -352,6 +367,17 @@ export function validateTaskGraph(
     }
     if (bySlug.has(task.slug)) {
       findings.push(`slug "${task.slug}" is declared twice`);
+    }
+    if (task.epic !== undefined) {
+      if (!/^[a-z0-9-]+$/.test(task.epic)) {
+        findings.push(
+          `task "${task.slug}" names epic "${task.epic}": an epic id is [a-z0-9-]+`,
+        );
+      } else if (!task.slug.startsWith(`${task.epic}.`)) {
+        findings.push(
+          `task "${task.slug}" names epic "${task.epic}": an epic's tasks are named "${task.epic}.<name>"`,
+        );
+      }
     }
     bySlug.set(task.slug, task);
   }

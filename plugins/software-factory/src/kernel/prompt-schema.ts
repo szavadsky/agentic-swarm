@@ -18,6 +18,7 @@ import {
 interface JsonNode {
   type?: string;
   enum?: unknown[];
+  anyOf?: JsonNode[];
   description?: string;
   properties?: Record<string, JsonNode>;
   required?: string[];
@@ -64,6 +65,7 @@ export function renderSkeleton(
   const inline = (raw: JsonNode): string => {
     const node = resolve(raw);
     if (node.enum) return node.enum.map(String).join(" | ");
+    if (node.anyOf) return node.anyOf.map(inline).join(" | ");
     if (node.type === "array" && node.items) {
       const item = resolve(node.items);
       if (item.type === "object" && item.properties) return `[${inline(item)}]`;
@@ -88,6 +90,22 @@ export function renderSkeleton(
   // Nested enum values, collected as `path: a | b` notes for the line comment.
   const enumNotes = (raw: JsonNode, path: string): string[] => {
     const node = resolve(raw);
+    if (node.anyOf) {
+      const parts: string[] = [];
+      const nested: string[] = [];
+      for (const branch of node.anyOf) {
+        const sub = resolve(branch);
+        if (sub.enum) parts.push(sub.enum.map(String).join(" | "));
+        else if (sub.type === "object" && sub.properties)
+          parts.push(`{${Object.keys(sub.properties).join(", ")}}`);
+        else nested.push(...enumNotes(sub, path));
+      }
+      if (parts.length > 0)
+        nested.unshift(
+          path ? `${path}: ${parts.join(" | ")}` : parts.join(" | "),
+        );
+      return nested;
+    }
     if (node.type === "array" && node.items) return enumNotes(node.items, path);
     if (node.type === "object" && node.properties) {
       const notes: string[] = [];

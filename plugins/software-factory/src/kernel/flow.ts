@@ -61,7 +61,7 @@ import {
   startChecks,
 } from "./record.js";
 import { checkSpikeReport } from "./spike-report.js";
-import { materialHash } from "./tasks.js";
+import { materialHash, taskArchitect } from "./tasks.js";
 import { isLastReviewCall, reviewRoundLimit } from "./review.js";
 import type {
   Action,
@@ -174,7 +174,12 @@ function markInfraGates(checks: CheckResult[]): void {
 async function runTaskGates(
   runtime: KernelRuntime,
   task: TaskFile,
-  meta: { iteration: number; slug: string; round: number },
+  meta: {
+    iteration: number;
+    slug: string;
+    round: number;
+    architect?: string;
+  },
   worktree: string,
   preexisting: ReadonlySet<string>,
   prior: readonly StepRecord[],
@@ -261,7 +266,13 @@ function redGateCause(
 async function finishCleanResolve(
   runtime: KernelRuntime,
   task: TaskFile,
-  meta: { iteration: number; slug: string; round: number; revision: number },
+  meta: {
+    iteration: number;
+    slug: string;
+    round: number;
+    revision: number;
+    architect?: string;
+  },
   worktree: string,
   preexisting: ReadonlySet<string>,
   prior: readonly StepRecord[],
@@ -403,6 +414,7 @@ async function handleStepResult(
     slug: task.slug,
     round: state.round,
     revision: task.revision,
+    architect: taskArchitect(task),
   };
   const infraResult =
     stop?.kind === "infra"
@@ -520,6 +532,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
         slug: task.slug,
         round: state.round,
         revision: task.revision,
+        architect: taskArchitect(task),
       },
       makeCause("setup", ensured.error),
     );
@@ -528,7 +541,11 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   if (ensured.setup && !ensured.setup.ok) {
     const cause = makeCause("setup", ensured.setup.error ?? "unknown");
     await runtime.store.appendRecord(
-      scriptMeta(iteration, "setup", { slug: task.slug, round: state.round }),
+      scriptMeta(iteration, "setup", {
+        slug: task.slug,
+        round: state.round,
+        architect: taskArchitect(task),
+      }),
       {
         ok: false,
         cause,
@@ -541,6 +558,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
         slug: task.slug,
         round: state.round,
         revision: task.revision,
+        architect: taskArchitect(task),
       },
       cause,
     );
@@ -552,6 +570,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     slug: task.slug,
     round: state.round,
     revision: task.revision,
+    architect: taskArchitect(task),
   };
   const fix = isFixTurn(flow, state, step.id);
   const resolveStep = step.id === "resolve";
@@ -602,6 +621,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       scriptMeta(iteration, "base-advance", {
         slug: task.slug,
         round: state.round,
+        architect: taskArchitect(task),
       }),
       { ok: true, commit, tree, headTree },
     );
@@ -654,6 +674,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
           scriptMeta(iteration, "base-advance", {
             slug: task.slug,
             round: state.round,
+            architect: taskArchitect(task),
           }),
           { ok: true, commit, tree },
         );
@@ -1017,6 +1038,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
           scriptMeta(iteration, "base-advance", {
             slug: task.slug,
             round: state.round,
+            architect: taskArchitect(task),
           }),
           { ok: true, commit, tree, headTree },
         );
@@ -1025,6 +1047,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
           scriptMeta(iteration, "base-advance", {
             slug: task.slug,
             round: state.round,
+            architect: taskArchitect(task),
           }),
           { ok: true, commit, tree },
         );
@@ -1061,6 +1084,7 @@ async function runChecks(
         slug: task.slug,
         round: state.round,
         revision: task.revision,
+        architect: taskArchitect(task),
       },
       makeCause("setup", ensured.error),
     );
@@ -1069,7 +1093,11 @@ async function runChecks(
   if (ensured.setup && !ensured.setup.ok) {
     const cause = makeCause("setup", ensured.setup.error ?? "unknown");
     await runtime.store.appendRecord(
-      scriptMeta(iteration, "setup", { slug: task.slug, round: state.round }),
+      scriptMeta(iteration, "setup", {
+        slug: task.slug,
+        round: state.round,
+        architect: taskArchitect(task),
+      }),
       {
         ok: false,
         cause,
@@ -1082,6 +1110,7 @@ async function runChecks(
         slug: task.slug,
         round: state.round,
         revision: task.revision,
+        architect: taskArchitect(task),
       },
       cause,
     );
@@ -1099,6 +1128,7 @@ async function runChecks(
         slug: task.slug,
         round: state.round,
         revision: task.revision,
+        architect: taskArchitect(task),
       },
       makeCause("base-conflict", named),
     );
@@ -1115,6 +1145,7 @@ async function runChecks(
         slug: task.slug,
         round: state.round,
         revision: task.revision,
+        architect: taskArchitect(task),
       },
       makeCause("base-conflict", named),
     );
@@ -1129,6 +1160,7 @@ async function runChecks(
       scriptMeta(iteration, "base-advance", {
         slug: task.slug,
         round: state.round,
+        architect: taskArchitect(task),
       }),
       { ok: true, commit, tree },
     );
@@ -1138,7 +1170,12 @@ async function runChecks(
   await runTaskGates(
     runtime,
     task,
-    { iteration, slug: task.slug, round: state.round },
+    {
+      iteration,
+      slug: task.slug,
+      round: state.round,
+      architect: taskArchitect(task),
+    },
     ensured.path,
     preexisting,
     prior,
@@ -1168,7 +1205,12 @@ export async function executeTaskAction(
   if (action.kind === "finish") {
     await appendFinish(
       runtime.store,
-      { iteration, slug: task.slug, round: state.round },
+      {
+        iteration,
+        slug: task.slug,
+        round: state.round,
+        architect: taskArchitect(task),
+      },
       task,
       state.commit,
     );
@@ -1182,6 +1224,7 @@ export async function executeTaskAction(
         slug: task.slug,
         round: state.round,
         revision: task.revision,
+        architect: taskArchitect(task),
       },
       action.cause,
     );

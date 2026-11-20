@@ -516,6 +516,38 @@ describe("worktree setup", () => {
       );
       expect(state.tasks.task!.status).toBe("merged");
       expect(harness.calls.length).toBe(2);
+      expect(state.epics).toEqual({});
+      expect(state.tasks.task!.epic).toBeUndefined();
+      const taskRecords = (await runtime.store.listRecords()).filter(
+        (record) => record.slug === "task",
+      );
+      expect(taskRecords.length).toBeGreaterThan(0);
+      expect(taskRecords.map((record) => record.architect)).toEqual(
+        taskRecords.map(() => "main"),
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("parks a failed setup with the task's architect", async () => {
+    const { repo, goal } = setupFlowRepo({ setup: ["false"] });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      scriptStallLeave(harness, ["auth.alpha"]);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(
+        runtime,
+        task("auth.alpha", { scope: ["task.txt"], epic: "auth" }),
+      );
+      await runDispatch(runtime, { iteration: 1 });
+
+      const records = await runtime.store.listRecords();
+      const park = records.find(
+        (record) => record.slug === "auth.alpha" && record.step === "park",
+      );
+      expect(park?.cause?.kind).toBe("setup");
+      expect(park?.architect).toBe("auth");
     } finally {
       cleanupFlowRepo(repo);
     }

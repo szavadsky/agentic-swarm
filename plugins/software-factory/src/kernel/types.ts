@@ -47,8 +47,18 @@ export const replySchema = z.object({
   finding: z.number().int().positive(),
   reply: z.string().min(1),
 });
-/** Where the PM's steer turn sends one steer: handled now, a new task, the architect, or drain-then-architect. */
-export const steerRouteSchema = z.enum(["task", "spike", "architect", "stall"]);
+/**
+ * Where the PM's steer turn sends one steer: handled now, a new task, an
+ * architect (the goal architect, or `{architect: id}` for one scope), or
+ * drain-then-architect.
+ */
+export const steerRouteSchema = z.union([
+  z.enum(["task", "spike", "architect", "stall"]),
+  z
+    .object({ architect: z.string().min(1) })
+    .strict()
+    .describe("one architect's scope: `main` or an epic id"),
+]);
 export type SteerRoute = z.infer<typeof steerRouteSchema>;
 
 export const steerRouteEntrySchema = z.object({
@@ -271,6 +281,8 @@ export interface TaskFile {
   flow: string;
   deps: string[];
   scope: string[];
+  /** The epic that owns this task; absent means goal-level work. */
+  epic?: string;
   tier?: string;
   /**
    * The decider's revision of this task, 0 until it amends a park under the
@@ -372,6 +384,8 @@ export type Cause = z.infer<typeof causeSchema>;
 
 export interface TaskState {
   status: TaskStatus;
+  /** The task file's epic, copied so a consumer reading state keeps the owner. */
+  epic?: string;
   cause?: Cause;
   /** Agent turns spent on this slug, a spend fact only: no bound reads it. */
   turns: number;
@@ -402,6 +416,8 @@ export interface State {
   /** The current iteration was interrupted with ready work left; a relaunch resumes it. */
   interrupted: boolean;
   tasks: Record<string, TaskState>;
+  /** Task slugs grouped by epic; goal-level tasks appear only in `tasks`. */
+  epics: Record<string, string[]>;
 }
 
 export type Action =
@@ -585,6 +601,11 @@ export interface StepRecord {
   step: string;
   round: number;
   actor: StepActor;
+  /**
+   * The architect that owns this record's work: `main` for goal-level work or
+   * an epic's id for epic work.
+   */
+  architect?: string;
   /** Agent steps only; `model` is the model actually used when reported. */
   alias?: string;
   model?: ModelRef;
@@ -668,6 +689,8 @@ export interface RecordStart {
   step: string;
   round: number;
   actor: StepActor;
+  /** The architect that owns this record's work; see `StepRecord.architect`. */
+  architect?: string;
   alias?: string;
   model?: ModelRef;
   taskHash?: string;

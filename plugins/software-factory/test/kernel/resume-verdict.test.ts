@@ -20,6 +20,7 @@ function state(...ready: string[]): State {
     tasks: Object.fromEntries(
       ready.map((slug) => [slug, { status: "ready" } as TaskState]),
     ),
+    epics: {},
   };
 }
 

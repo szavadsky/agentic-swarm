@@ -16,6 +16,7 @@ import {
 } from "./pm.js";
 import { outcomeRepairSchemaVar } from "./prompt-schema.js";
 import { scriptMeta } from "./record.js";
+import { MAIN_ARCHITECT } from "./tasks.js";
 import {
   ARCHITECTURE_STEPS,
   type Cause,
@@ -276,7 +277,12 @@ export async function runArchitectReturn(
   const result = await runAgentTurn(runtime, {
     target,
     cwd: runtime.paths.goalCheckout,
-    meta: { iteration: opts.iteration, step: PLAN_RETURN_STEP, round: 1 },
+    meta: {
+      iteration: opts.iteration,
+      step: PLAN_RETURN_STEP,
+      round: 1,
+      architect: MAIN_ARCHITECT,
+    },
     vars: {
       iteration: String(opts.iteration),
       intent_path: path.join(runtime.store.goalDir, "intent.md"),

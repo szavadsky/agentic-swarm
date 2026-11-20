@@ -25,6 +25,7 @@ import {
   type Hold,
   type Steer,
   collectSteerRoutes,
+  isArchitectRoute,
   readHolds,
   scanInbox,
   sweepHolds,
@@ -222,7 +223,9 @@ async function architectRouteWaiting(
   const routes = collectSteerRoutes(await store.listRecords());
   return pending.some((steer) => {
     const route = routes.get(steer.id)?.route;
-    return route === "architect" || route === "stall";
+    return (
+      route !== undefined && (isArchitectRoute(route) || route === "stall")
+    );
   });
 }
 
