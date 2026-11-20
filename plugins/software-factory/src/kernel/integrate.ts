@@ -5,6 +5,7 @@ import { commitAll, isAncestor } from "../core/git/commit.js";
 import { GitError, git } from "../core/git/exec.js";
 import { unmergedFiles } from "../core/git/merge.js";
 import { preexistingRed, recordedBaseGates } from "./baseline.js";
+import { makeCause } from "./cause.js";
 import { derive } from "./derive.js";
 import { DEFAULT_FLOWS } from "./derive-task.js";
 import {
@@ -21,6 +22,7 @@ import {
   startChecks,
 } from "./record.js";
 import type {
+  Cause,
   KernelRuntime,
   RecordEnd,
   StepRecord,
@@ -73,14 +75,17 @@ async function syncCheckout(
 
 /** An outside commit moved the integration branch while the queue was building a merge. */
 class IntegrationMovedError extends Error {
+  /** The cause detail, without the kind prefix the error message carries. */
+  readonly detail: string;
   constructor(
     readonly expected: string,
     readonly actual: string,
   ) {
-    super(
-      `integration moved: expected ${expected.slice(0, 10)}, found ${actual ? actual.slice(0, 10) : "a missing ref"}; ` +
-        "an outside commit is on the integration branch and this merge left it untouched",
-    );
+    const detail =
+      `expected ${expected.slice(0, 10)}, found ${actual ? actual.slice(0, 10) : "a missing ref"}; ` +
+      "an outside commit is on the integration branch and this merge left it untouched";
+    super(`integration moved: ${detail}`);
+    this.detail = detail;
     this.name = "IntegrationMovedError";
   }
 }
@@ -192,7 +197,7 @@ async function recoverOpenMerge(
       // A failure record parks the task; the stale open record stays inert.
       await recordMerge(runtime, task, iteration, round, {
         ok: false,
-        cause: err.message,
+        cause: makeCause("integration-moved", err.detail),
       });
       return true;
     }
@@ -201,7 +206,7 @@ async function recoverOpenMerge(
   await recordMerge(runtime, task, iteration, round, {
     ok: true,
     commit,
-    cause: "recovered merge after crash",
+    cause: makeCause("note", "recovered merge after crash"),
   });
   return true;
 }
@@ -260,7 +265,7 @@ export async function mergeTask(
     if (!(await branchExists(runtime, branch))) {
       await recordMerge(runtime, task, iteration, round, {
         ok: false,
-        cause: `merge failed: branch "${branch}" does not exist`,
+        cause: makeCause("merge-failed", `branch "${branch}" does not exist`),
       });
       return {};
     }
@@ -279,7 +284,11 @@ export async function mergeTask(
       await removeMergeScratch(runtime);
       await recordMerge(runtime, task, iteration, round, {
         ok: false,
-        cause: `conflict: ${paths.join(", ") || "squash merge conflicts with the integration head"}`,
+        cause: makeCause(
+          "conflict",
+          paths.join(", ") ||
+            "squash merge conflicts with the integration head",
+        ),
       });
       return {};
     }
@@ -291,7 +300,10 @@ export async function mergeTask(
       await removeMergeScratch(runtime);
       await recordMerge(runtime, task, iteration, round, {
         ok: false,
-        cause: "no-progress: task branch has no changes since dispatch",
+        cause: makeCause(
+          "no-progress",
+          "task branch has no changes since dispatch",
+        ),
       });
       return {};
     }
@@ -306,7 +318,7 @@ export async function mergeTask(
         await removeMergeScratch(runtime);
         await recordMerge(runtime, task, iteration, round, {
           ok: false,
-          cause: "no-progress: squash merge produced no commit",
+          cause: makeCause("no-progress", "squash merge produced no commit"),
         });
         return {};
       }
@@ -314,7 +326,7 @@ export async function mergeTask(
       await removeMergeScratch(runtime);
       await recordMerge(runtime, task, iteration, round, {
         ok: false,
-        cause: `merge failed: ${causeOf(err)}`,
+        cause: makeCause("merge-failed", causeOf(err)),
       });
       return {};
     }
@@ -323,10 +335,13 @@ export async function mergeTask(
     const preexisting = preexistingRed(recordedBaseGates(records));
     const judged = judgedChecks(records, task.slug, mergedTree, preexisting);
     let checks: CheckResult[];
-    let skipCause: string | undefined;
+    let skipCause: Cause | undefined;
     if (judged) {
       checks = judged.checks ?? [];
-      skipCause = `skipped merge-checks: merged tree equals checked tree ${mergedTree}`;
+      skipCause = makeCause(
+        "note",
+        `skipped merge-checks: merged tree equals checked tree ${mergedTree}`,
+      );
     } else {
       const setup = await runWorktreeSetup({
         commands: runtime.configs.repo.setup,
@@ -336,7 +351,7 @@ export async function mergeTask(
         await removeMergeScratch(runtime);
         await recordMerge(runtime, task, iteration, round, {
           ok: false,
-          cause: `setup: ${setup.error ?? "unknown"}`,
+          cause: makeCause("setup", setup.error ?? "unknown"),
         });
         return {};
       }
@@ -361,7 +376,7 @@ export async function mergeTask(
         await removeMergeScratch(runtime);
         await recordMerge(runtime, task, iteration, round, {
           ok: false,
-          cause: `gates: ${red.map((c) => c.name).join(", ")}`,
+          cause: makeCause("gates", red.map((c) => c.name).join(", ")),
           checks: ran,
         });
         return {};
@@ -379,7 +394,10 @@ export async function mergeTask(
     } catch (err) {
       if (!(err instanceof IntegrationMovedError)) throw err;
       await removeMergeScratch(runtime);
-      await turn.finish({ ok: false, cause: err.message });
+      await turn.finish({
+        ok: false,
+        cause: makeCause("integration-moved", err.detail),
+      });
       return {};
     }
     await syncCheckout(runtime, commit);
@@ -575,7 +593,7 @@ export async function runKeptLand(
         }),
         {
           ok: false,
-          cause: `kept-land failed: branch "${branch}" does not exist`,
+          cause: makeCause("merge-failed", `branch "${branch}" does not exist`),
         },
       );
       continue;
@@ -590,7 +608,7 @@ export async function runKeptLand(
           slug: task.slug,
           round: taskState.round,
         }),
-        { ok: true, cause: "skipped: deterministic-red" },
+        { ok: true, cause: makeCause("note", "skipped: deterministic-red") },
       );
       continue;
     }
@@ -603,7 +621,10 @@ export async function runKeptLand(
           slug: task.slug,
           round: taskState.round,
         }),
-        { ok: false, cause: `kept-land failed: ${causeOf(err)}` },
+        {
+          ok: false,
+          cause: makeCause("merge-failed", causeOf(err)),
+        },
       );
       continue;
     }
@@ -622,7 +643,10 @@ export async function runKeptLand(
           {
             ok: true,
             commit: merge.commit,
-            cause: `approved ${tip} landed as ${merge.commit}`,
+            cause: makeCause(
+              "note",
+              `approved ${tip} landed as ${merge.commit}`,
+            ),
           },
         );
       } else {
@@ -640,7 +664,15 @@ export async function runKeptLand(
               slug: task.slug,
               round: taskState.round,
             }),
-            { ok: false, cause: merge.cause ?? "merge failed" },
+            {
+              ok: false,
+              cause:
+                merge.cause ??
+                makeCause(
+                  "merge-failed",
+                  "merge failed with no recorded cause",
+                ),
+            },
           );
         }
       }

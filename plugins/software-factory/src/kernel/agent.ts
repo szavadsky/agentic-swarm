@@ -15,6 +15,7 @@ import {
 } from "../harness/types.js";
 import { addUsage, reportsUsage, zeroUsage } from "../harness/usage.js";
 import { missingPlanFinding, snapshotPlan } from "./architect-session.js";
+import { makeCause } from "./cause.js";
 import { contextPackRelPath } from "./context-pack.js";
 import { type TurnTarget, tierPoolKey } from "./flow-context.js";
 import { launchKindOf } from "./metrics.js";
@@ -594,7 +595,7 @@ export async function runAgentTurn(
         round: spec.meta.round,
         revision: spec.meta.revision ?? 0,
       },
-      "overflow",
+      makeCause("overflow", ""),
     );
   }
   return { record, outcome: outcome ?? undefined, text };

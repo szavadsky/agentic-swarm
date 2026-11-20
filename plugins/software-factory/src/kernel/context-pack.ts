@@ -1,11 +1,13 @@
 // biome-ignore-all lint/complexity: split-rest
 import type { ConcernKind } from "../core/concern-types.js";
 import { concernFingerprint } from "../core/concerns.js";
+import { formatCause, makeCause } from "./cause.js";
 import type { BaseGateState } from "./baseline.js";
 import type { OpenDebt } from "./derive.js";
 import type { Steer } from "./mailbox.js";
 import { KERNEL_STEPS } from "./types.js";
 import type {
+  Cause,
   PlanCheckEvidence,
   PlanReviewFinding,
   State,
@@ -97,6 +99,11 @@ export interface ReadyAgingInput {
   holds: readonly { steer: string; slugs: readonly string[] }[];
   /** Ready tasks whose next agent step has no live tier, by slug. */
   unavailableAliases?: ReadonlyMap<string, string>;
+}
+
+/** One parked task's cause as the pack reads it. */
+function parkedCauseText(cause: Cause | undefined): string {
+  return cause ? formatCause(cause) : "no recorded cause";
 }
 
 export interface ContextPackInput {
@@ -224,7 +231,7 @@ export function renderContextPack(input: ContextPackInput): string {
     .filter((t) => input.state.tasks[t.slug]?.status === "parked")
     .map(
       (t) =>
-        `- ${t.slug}: ${input.state.tasks[t.slug]?.cause ?? "no recorded cause"}`,
+        `- ${t.slug}: ${parkedCauseText(input.state.tasks[t.slug]?.cause)}`,
     );
   if (parked.length > 0)
     lines.push(
@@ -409,7 +416,7 @@ export function renderContextData(input: ContextPackInput): string {
     .filter((task) => task.status === "parked")
     .map((task) => ({
       slug: task.slug,
-      cause: task.cause ?? "no recorded cause",
+      cause: task.cause ?? makeCause("unknown", "no recorded cause"),
     }));
   const pending = statuses
     .filter((task) => task.status === "pending" || task.status === "ready")

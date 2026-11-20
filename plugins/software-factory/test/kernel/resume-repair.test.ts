@@ -22,6 +22,8 @@ import {
   digestScoutTurn,
   addAlias,
 } from "./resume-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
+import { cause, causeText } from "./helpers.js";
 
 describe("resume repair — nothing dispatchable", () => {
   describe("resume repair — nothing dispatchable", () => {
@@ -309,8 +311,9 @@ Create delta.txt.
           },
           {
             ok: false,
-            cause:
+            cause: cause(
               'merge failed: branch "factory-task/demo/beta" does not exist',
+            ),
           },
         );
 
@@ -368,7 +371,7 @@ Create delta.txt.
         const records = await store.listRecords();
         const state = derive(await store.listTasks(), records);
         expect(state.tasks.beta!.status).toBe("parked");
-        expect(state.tasks.beta!.cause).toContain("does not exist");
+        expect(causeText(state.tasks.beta!.cause)).toContain("does not exist");
         expect(state.tasks.gamma!.status).toBe("pending");
         expect(state.tasks.delta!.status).toBe("merged");
         // The resume's architect route reached the boundary in iteration 1

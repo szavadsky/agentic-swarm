@@ -1,6 +1,7 @@
 // biome-ignore-all lint/complexity: split-rest
 import path from "node:path";
 import { recordedBaseGates } from "./baseline.js";
+import { formatCause } from "./cause.js";
 import { summaryRelPath } from "./context-pack.js";
 import { derive, materialOpenDebts } from "./derive.js";
 import {
@@ -16,6 +17,8 @@ import { loadPriceTable } from "./openrouter.js";
 import type { PriceTable } from "./pricing.js";
 import type {
   ArtifactStore,
+  Cause,
+  CauseKind,
   GoalDecision,
   KernelRuntime,
   State,
@@ -34,7 +37,7 @@ export interface SummaryInput {
   records: StepRecord[];
   decision?: GoalDecision;
   /** Boundary/launch cause shown as a remarkable (PM ladder, crash). */
-  cause?: string;
+  cause?: Cause;
   /** Launch result; wins over `decision`, which is display-only. */
   status?: SummaryStatus;
   /** Step id -> role, from the process flow config. */
@@ -134,11 +137,10 @@ export async function writeIterationSummary(
     .filter((r) => r.step === "architect" && r.outcome)
     .at(-1);
   const status = input.status ?? defaultStatus(input.decision);
-  // Dispatch marks a drain from the USD brake with a `budget:` cause; it is a
+  // Dispatch marks a drain from the USD brake with a `budget` cause; it is a
   // spend fact, so it gets its own metrics line instead of the boundary remark.
-  const budgetStop = input.cause
-    ? /^budget:\s*(.+)$/i.exec(input.cause)?.[1]?.trim()
-    : undefined;
+  const budgetStop =
+    input.cause?.kind === "budget" ? input.cause.detail : undefined;
 
   const merged = recs
     .filter((r) => r.step === "merge" && r.ok === true)
@@ -146,11 +148,16 @@ export async function writeIterationSummary(
   const finished = recs
     .filter((r) => r.step === "finish" && r.ok === true)
     .map((r) => r.slug!);
-  const parkedByCause = new Map<string, string[]>();
+  // Root causes group by kind: rewording a park's detail never splits a group.
+  const parkedByKind = new Map<CauseKind, { slug: string; detail: string }[]>();
   for (const rec of recs) {
     if (rec.step !== "park" || !rec.endedAt || !rec.slug) continue;
-    const cause = rec.cause ?? "no recorded cause";
-    parkedByCause.set(cause, [...(parkedByCause.get(cause) ?? []), rec.slug]);
+    const kind = rec.cause?.kind ?? "unknown";
+    const detail = rec.cause?.detail ?? "no recorded cause";
+    parkedByKind.set(kind, [
+      ...(parkedByKind.get(kind) ?? []),
+      { slug: rec.slug, detail },
+    ]);
   }
   const pending: string[] = [];
   const parkedAll: string[] = [];
@@ -188,7 +195,9 @@ export async function writeIterationSummary(
   );
 
   const remarks: string[] = [];
-  if (input.cause && !budgetStop) remarks.push(`boundary: ${input.cause}`);
+  if (input.cause && !budgetStop) {
+    remarks.push(`boundary: ${formatCause(input.cause)}`);
+  }
   if (architect?.outcome) {
     remarks.push(`architect: ${architect.outcome.summary}`);
     for (const forward of architect.outcome.forward) {
@@ -198,7 +207,7 @@ export async function writeIterationSummary(
   }
   for (const rec of recs) {
     if (rec.actor === "script" && rec.ok === false && rec.cause) {
-      remarks.push(`${rec.step}: ${rec.cause}`);
+      remarks.push(`${rec.step}: ${formatCause(rec.cause)}`);
     }
   }
 
@@ -317,11 +326,17 @@ export async function writeIterationSummary(
     ...baseLines,
     "",
     "## Parked by root cause",
-    ...(parkedByCause.size
-      ? [...parkedByCause.entries()].flatMap(([cause, slugs]) => [
-          `- ${cause}`,
-          `  - ${slugs.join(", ")}`,
-        ])
+    ...(parkedByKind.size
+      ? [...parkedByKind.entries()]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .flatMap(([kind, parks]) => [
+            `- ${kind}`,
+            ...parks.map((park) =>
+              park.detail
+                ? `  - ${park.slug}: ${park.detail}`
+                : `  - ${park.slug}`,
+            ),
+          ])
       : ["- none"]),
     "",
     "## Debt opened",
@@ -372,7 +387,7 @@ export async function writeIterationSummary(
           }`,
         ]
       : []),
-    `- merged: ${merged.length}; parked: ${[...parkedByCause.values()].flat().length}; pending: ${pending.length}`,
+    `- merged: ${merged.length}; parked: ${[...parkedByKind.values()].flat().length}; pending: ${pending.length}`,
     "",
     "## Incidents",
     ...incidentLines(incidents, loopIncidents),

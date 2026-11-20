@@ -2,8 +2,10 @@ import type { CheckResult } from "../core/checks/types.js";
 import { git } from "../core/git/exec.js";
 import { newGateFailures } from "./gates.js";
 import { committedSpikeReport, spikeReportRef } from "./spike-report.js";
+import { makeCause } from "./cause.js";
 import type {
   ArtifactStore,
+  Cause,
   Concern,
   LaunchKind,
   Outcome,
@@ -86,7 +88,7 @@ export async function appendGateFlake(
     .join("; ");
   await store.appendRecord(scriptMeta(meta.iteration, "gate-flake", meta), {
     ok: true,
-    cause,
+    cause: makeCause("gate-flake", cause),
     checks: flake.checks,
     ...(flake.tree !== undefined ? { tree: flake.tree } : {}),
   });
@@ -149,17 +151,16 @@ export async function appendDebt(
 }
 
 /**
- * A park's launch kind from its cause: infra-like parks are glitches, the
- * round limit reached after a review `changes` verdict is a change request,
- * everything else failed. Only that exact cause is a change request: a failure
- * summary quoting the verdict enum (`approve | changes | reject`) stays a
- * failure.
+ * A park's launch kind from its kind: infra-like parks are glitches, review
+ * rounds spent on change requests are change requests, everything else failed.
+ * The kind is the closed vocabulary, so a detail quoting the verdict enum
+ * (`approve | changes | reject`) never decides the launch kind.
  */
-export function parkLaunchKind(cause: string): LaunchKind {
-  if (/^(overflow\b|infra-repeat:)/i.test(cause)) return "glitch";
-  if (/^review round limit reached after verdict "changes"/i.test(cause)) {
-    return "change-request";
+export function parkLaunchKind(cause: Cause): LaunchKind {
+  if (cause.kind === "overflow" || cause.kind === "infra-repeat") {
+    return "glitch";
   }
+  if (cause.kind === "change-requests-exhausted") return "change-request";
   return "failure";
 }
 
@@ -170,7 +171,7 @@ export function parkLaunchKind(cause: string): LaunchKind {
 export async function appendPark(
   store: ArtifactStore,
   meta: { iteration: number; slug: string; round: number; revision: number },
-  cause: string,
+  cause: Cause,
 ): Promise<void> {
   await store.appendRecord(
     scriptMeta(meta.iteration, "park", {
@@ -219,7 +220,7 @@ async function spikeFinishReport(
 export async function appendCancel(
   store: ArtifactStore,
   meta: { iteration: number; slug: string; round: number },
-  cause: string,
+  cause: Cause,
 ): Promise<void> {
   await store.appendRecord(scriptMeta(meta.iteration, "cancel", meta), {
     ok: true,

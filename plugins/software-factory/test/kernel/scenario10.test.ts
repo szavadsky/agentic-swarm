@@ -5,7 +5,7 @@ import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
-import { task } from "./helpers.js";
+import { causeText, task } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -124,7 +124,7 @@ describe("KERNEL0 scenario 10 — review reply round-trip", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toStartWith("empty-diff:");
+      expect(causeText(state.tasks.task!.cause)).toStartWith("empty-diff:");
       expect(
         records.filter((r) => r.slug === "task" && r.step === "review"),
       ).toHaveLength(1);

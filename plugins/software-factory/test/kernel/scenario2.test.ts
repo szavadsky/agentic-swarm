@@ -7,7 +7,7 @@ import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { next } from "../../src/kernel/next.js";
 import { writeIterationSummary } from "../../src/kernel/summary.js";
-import { task } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -16,6 +16,7 @@ import {
   setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 describe("KERNEL0 scenario 2 — last-call review decisions", () => {
   it("parks a last-call reject, leaves its dependent pending and merges an independent task", async () => {
@@ -104,7 +105,7 @@ describe("KERNEL0 scenario 2 — last-call review decisions", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.alpha!.status).toBe("parked");
-      expect(state.tasks.alpha!.cause).toContain("review rejected");
+      expect(causeText(state.tasks.alpha!.cause)).toContain("review-rejected");
       expect(state.tasks.beta!.status).toBe("merged");
       expect(state.tasks.gamma!.status).toBe("pending");
       expect(state.tasks.gamma!.phase).toBe("implement");
@@ -115,7 +116,7 @@ describe("KERNEL0 scenario 2 — last-call review decisions", () => {
       const park = (await runtime.store.listRecords()).find(
         (r) => r.slug === "alpha" && r.step === "park",
       );
-      expect(park?.cause).toContain("review rejected");
+      expect(causeText(park?.cause)).toContain("review-rejected");
       const commits = (await runtime.store.listRecords()).filter(
         (r) => r.slug === "alpha" && r.step === "commit",
       );
@@ -139,7 +140,7 @@ describe("KERNEL0 scenario 2 — last-call review decisions", () => {
         "utf8",
       );
       expect(summary).toContain("## Parked by root cause");
-      expect(summary).toMatch(/review rejected: not salvageable\n {2}- alpha/);
+      expect(summary).toMatch(/review-rejected\n {2}- alpha: not salvageable/);
     } finally {
       cleanupFlowRepo(repo);
     }

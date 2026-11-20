@@ -17,7 +17,7 @@ import {
   containmentViolation,
   ensureTaskWorktree,
 } from "../../src/kernel/worktree.js";
-import { task } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   goalCheckout,
@@ -28,6 +28,7 @@ import {
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 describe("agent containment", () => {
   it("parks a turn that writes outside its worktree and switches branch", async () => {
@@ -56,11 +57,11 @@ describe("agent containment", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain("containment:");
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain("containment:");
+      expect(causeText(state.tasks.task!.cause)).toContain(
         'not the task branch "factory-task/demo/task"',
       );
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "files changed outside the worktree",
       );
       expect(harness.calls.length).toBe(2);
@@ -140,7 +141,7 @@ describe("agent containment", () => {
         (r) => r.slug === "task" && r.step === "containment",
       );
       expect(incidents).toHaveLength(1);
-      expect(incidents[0]!.cause).toContain("HEAD moved in");
+      expect(causeText(incidents[0]!.cause)).toContain("HEAD moved in");
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -173,10 +174,10 @@ describe("agent containment", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "goal artifacts changed outside the worktree",
       );
-      expect(state.tasks.task!.cause).toContain("created plan.md");
+      expect(causeText(state.tasks.task!.cause)).toContain("created plan.md");
       expect(
         records.filter((r) => r.slug === "task" && r.step === "park"),
       ).toHaveLength(1);
@@ -209,10 +210,12 @@ describe("agent containment", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "goal artifacts changed outside the worktree",
       );
-      expect(state.tasks.task!.cause).toContain("changed tasks/task.md");
+      expect(causeText(state.tasks.task!.cause)).toContain(
+        "changed tasks/task.md",
+      );
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -312,10 +315,10 @@ describe("agent containment", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "goal artifacts changed outside the worktree",
       );
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "created records/00099-i1-task-merge-r1/end.yaml",
       );
     } finally {
@@ -347,10 +350,10 @@ describe("agent containment", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "commit on the integration checkout",
       );
-      expect(state.tasks.task!.cause).toContain(checkout);
+      expect(causeText(state.tasks.task!.cause)).toContain(checkout);
       expect(records.filter((r) => r.step === "merge")).toHaveLength(0);
       expect(
         repo.git(["log", "-1", "--format=%s", "factory/demo"]).stdout.trim(),
@@ -385,7 +388,7 @@ describe("agent containment", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "integration branch moved outside the merge queue",
       );
     } finally {
@@ -730,10 +733,10 @@ describe("agent containment", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "goal artifacts changed outside the worktree",
       );
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "created finish/probe/report.md",
       );
     } finally {
@@ -771,7 +774,7 @@ describe("agent containment", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "changed iterations/1/summary.md",
       );
     } finally {
@@ -978,12 +981,18 @@ describe("agent containment", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain("integration moved");
+      expect(state.tasks.task!.cause?.kind).toBe("merge-failed");
+      expect(causeText(state.tasks.task!.cause)).toContain(
+        "merge-failed: integration-moved: expected ",
+      );
       const failed = records.filter(
         (r) => r.slug === "task" && r.step === "merge" && r.ok === false,
       );
       expect(failed).toHaveLength(1);
-      expect(failed[0]!.cause).toContain("integration moved");
+      expect(failed[0]!.cause?.kind).toBe("integration-moved");
+      expect(causeText(failed[0]!.cause)).toMatch(
+        /^integration-moved: expected /,
+      );
       expect(
         repo.git(["log", "-1", "--format=%s", "factory/demo"]).stdout.trim(),
       ).toBe("outside");

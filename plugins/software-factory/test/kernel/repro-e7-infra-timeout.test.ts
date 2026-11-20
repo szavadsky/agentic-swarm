@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
-import { task } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -12,6 +12,7 @@ import {
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 /**
  * E7 inverted: an infra timeout or crash counts as a turn and parks the step
@@ -71,7 +72,9 @@ describe("E7 inverted — infra timeouts and crashes count as turn repeats", () 
         );
         expect(state.tasks.alpha!.turns).toBe(2);
         expect(state.tasks.alpha!.phase).toBe("parked");
-        expect(state.tasks.alpha!.park).toContain(`infra-repeat: ${cause}`);
+        expect(causeText(state.tasks.alpha!.park)).toContain(
+          `infra-repeat: ${cause}`,
+        );
 
         // The parked step is not re-dispatched by a third launch.
         const third = await runDispatch(runtime, { iteration: 3 });
@@ -118,8 +121,10 @@ describe("E7 inverted — infra timeouts and crashes count as turn repeats", () 
       // dispatch defers the task and names the dead alias instead of spending
       // a re-dispatch on it.
       expect(result.reason).toBe("infra");
-      expect(result.cause).toContain('alias "implementer" has no live tier');
-      expect(result.cause).toContain("fake+fake-impl resets at");
+      expect(causeText(result.cause)).toContain(
+        'alias "implementer" has no live tier',
+      );
+      expect(causeText(result.cause)).toContain("fake+fake-impl resets at");
       expect(harness.calls).toHaveLength(1);
 
       const records = await runtime.store.listRecords();

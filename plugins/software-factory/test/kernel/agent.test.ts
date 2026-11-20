@@ -29,7 +29,7 @@ import type {
   RunConfig,
 } from "../../src/kernel/types.js";
 import { createAcpxStub } from "../harness/acpx-stub.js";
-import { TEST_ARCHITECTURE, TEST_BOUNDARY, task } from "./helpers.js";
+import { TEST_ARCHITECTURE, TEST_BOUNDARY, task, cause } from "./helpers.js";
 
 function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
   const process: ProcessConfig = {
@@ -482,10 +482,12 @@ describe("agent turn outcome delivery", () => {
       expect(fake.calls).toHaveLength(1);
       expect(result.record.stop).toEqual({ kind: "infra", cause: "overflow" });
       const records = await runtime.store.listRecords();
-      expect(records.find((r) => r.step === "park")?.cause).toBe("overflow");
+      expect(records.find((r) => r.step === "park")?.cause).toEqual(
+        cause("overflow"),
+      );
       const state = derive([task("a")], records, flows);
       expect(state.tasks.a!.status).toBe("parked");
-      expect(state.tasks.a!.cause).toBe("overflow");
+      expect(state.tasks.a!.cause).toEqual(cause("overflow"));
       expect(state.tasks.a!.turns).toBe(0);
       fs.rmSync(root, { recursive: true, force: true });
     });
@@ -519,7 +521,7 @@ describe("agent turn outcome delivery", () => {
         flows,
       );
       expect(state.tasks.a!.status).toBe("parked");
-      expect(state.tasks.a!.cause).toBe("overflow");
+      expect(state.tasks.a!.cause).toEqual(cause("overflow"));
       fs.rmSync(root, { recursive: true, force: true });
     });
 
@@ -1947,36 +1949,40 @@ describe("repair findings and launch kinds", () => {
   it("stores a typed kind on every park", async () => {
     const { root, runtime } = await setup();
     try {
-      expect(parkLaunchKind("overflow")).toBe("glitch");
-      expect(parkLaunchKind("infra-repeat: timeout")).toBe("glitch");
+      expect(parkLaunchKind(cause("overflow"))).toBe("glitch");
+      expect(parkLaunchKind(cause("infra-repeat: timeout"))).toBe("glitch");
       expect(
         parkLaunchKind(
-          'review round limit reached after verdict "changes" (2 rounds)',
+          cause(
+            'review round limit reached after verdict "changes" (2 rounds)',
+          ),
         ),
       ).toBe("change-request");
-      expect(parkLaunchKind("failed: no plan")).toBe("failure");
+      expect(parkLaunchKind(cause("failed: no plan"))).toBe("failure");
       // A failure summary quoting the verdict enum is not a change request.
       expect(
-        parkLaunchKind("failed: missing verdict (approve | changes | reject)"),
+        parkLaunchKind(
+          cause("failed: missing verdict (approve | changes | reject)"),
+        ),
       ).toBe("failure");
-      expect(parkLaunchKind("review rejected: changes requested")).toBe(
+      expect(parkLaunchKind(cause("review rejected: changes requested"))).toBe(
         "failure",
       );
 
       await appendPark(
         runtime.store,
         { iteration: 1, slug: "a", round: 1, revision: 0 },
-        "overflow",
+        cause("overflow"),
       );
       await appendPark(
         runtime.store,
         { iteration: 1, slug: "b", round: 1, revision: 0 },
-        'review round limit reached after verdict "changes" (2 rounds)',
+        cause('review round limit reached after verdict "changes" (2 rounds)'),
       );
       await appendPark(
         runtime.store,
         { iteration: 1, slug: "c", round: 1, revision: 0 },
-        "failed: no plan",
+        cause("failed: no plan"),
       );
       const records = await runtime.store.listRecords();
       expect(records.find((r) => r.slug === "a")?.launchKind).toBe("glitch");

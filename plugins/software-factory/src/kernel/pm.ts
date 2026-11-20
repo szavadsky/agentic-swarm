@@ -5,6 +5,7 @@ import yaml from "yaml";
 import { writeTextAtomic } from "../core/records/io.js";
 import type { Stop } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
+import { formatCause, makeCause } from "./cause.js";
 import { DEFAULT_PARK_AMENDS } from "./config.js";
 import { boundaryTarget, type TurnTarget } from "./flow-context.js";
 import {
@@ -33,6 +34,7 @@ import {
 } from "./tasks.js";
 import type {
   AliasConfig,
+  Cause,
   KernelRuntime,
   Outcome,
   PlanCheckFollowUp,
@@ -321,7 +323,7 @@ async function reconcile(
   if (findings.length > 0) {
     await runtime.store.appendRecord(
       scriptMeta(opts.iteration, "pm-reconcile", { round: opts.round }),
-      { ok: false, cause: findings.join("; ") },
+      { ok: false, cause: makeCause("invalid-outcome", findings.join("; ")) },
     );
   }
   return findings;
@@ -394,7 +396,7 @@ async function cancelPlanNamed(
     await appendCancel(
       runtime.store,
       { iteration, slug, round: task.round },
-      reason,
+      makeCause("note", reason),
     );
   }
 }
@@ -616,7 +618,7 @@ export async function runPm(
       scriptMeta(opts.iteration, "pm-validate", { round }),
       {
         ok: false,
-        cause: failureText,
+        cause: makeCause("invalid-outcome", failureText),
       },
     );
     await restoreTurn(runtime, snapshot);
@@ -994,7 +996,10 @@ export async function runSteerPm(
           scriptMeta(opts.iteration, "steer-reconcile"),
           {
             ok: false,
-            cause: `steer turn changed ${files.join(", ")}; restored: a steer structures holds and writes no task file or plan`,
+            cause: makeCause(
+              "invalid-outcome",
+              `steer turn changed ${files.join(", ")}; restored: a steer structures holds and writes no task file or plan`,
+            ),
           },
         );
       }
@@ -1070,7 +1075,7 @@ export async function runSteerPm(
     const reasons = failureReasons(outcome, introduced, result.record);
     await runtime.store.appendRecord(
       scriptMeta(opts.iteration, "pm-validate", { round }),
-      { ok: false, cause: reasons.join("; ") },
+      { ok: false, cause: makeCause("invalid-outcome", reasons.join("; ")) },
     );
     await restoreTurn(runtime, snapshot);
     if (result.record.stop?.kind === "infra")
@@ -1198,7 +1203,8 @@ function slugFactLines(
   slug: string,
 ): string[] {
   const parked = opts.state.tasks[slug];
-  const cause = parked?.cause ?? "no recorded cause";
+  const cause: Cause =
+    parked?.cause ?? makeCause("unknown", "no recorded cause");
   const paths = facts.records
     .filter(
       (record) =>
@@ -1213,7 +1219,7 @@ function slugFactLines(
   const used = facts.amends.get(slug) ?? 0;
   const bound = runtime.limits.parkAmends ?? DEFAULT_PARK_AMENDS;
   return [
-    `  cause: ${cause}`,
+    `  cause: ${formatCause(cause)}`,
     `  records: ${paths.length > 0 ? paths.join(", ") : "none"}`,
     `  branch: ${taskBranchName(runtime, slug)}`,
     `  turns: ${parked?.turns ?? 0} spent`,
@@ -1558,7 +1564,7 @@ async function cancelRoutes(
     await appendCancel(
       runtime.store,
       { iteration, slug, round: state.tasks[slug]?.round ?? 1 },
-      cause,
+      makeCause("note", cause),
     );
   }
 }
@@ -1697,13 +1703,13 @@ export async function runStallPm(
     const reasons = failureReasons(outcome, findings, result.record);
     await runtime.store.appendRecord(
       scriptMeta(opts.iteration, "pm-validate", { round }),
-      { ok: false, cause: reasons.join("; ") },
+      { ok: false, cause: makeCause("invalid-outcome", reasons.join("; ")) },
     );
     await restoreTurn(runtime, snapshot);
     if (result.record.stop?.kind === "infra") {
       await runtime.store.appendRecord(
         scriptMeta(opts.iteration, STALL_ROUTES_STEP, { round }),
-        { ok: false, cause: reasons.join("; ") },
+        { ok: false, cause: makeCause("invalid-outcome", reasons.join("; ")) },
       );
       return { continued: [], left };
     }
@@ -1713,7 +1719,10 @@ export async function runStallPm(
     scriptMeta(opts.iteration, STALL_ROUTES_STEP),
     {
       ok: false,
-      cause: failure.join("; ") || "stall PM ladder exhausted",
+      cause: makeCause(
+        "invalid-outcome",
+        failure.join("; ") || "stall PM ladder exhausted",
+      ),
     },
   );
   return { continued: [], left };
@@ -2145,13 +2154,13 @@ export async function runPlanCheckPm(
     const reasons = failureReasons(outcome, introduced, result.record);
     await runtime.store.appendRecord(
       scriptMeta(opts.iteration, "pm-validate", { round }),
-      { ok: false, cause: reasons.join("; ") },
+      { ok: false, cause: makeCause("invalid-outcome", reasons.join("; ")) },
     );
     await restoreTurn(runtime, snapshot);
     if (result.record.stop?.kind === "infra") {
       await runtime.store.appendRecord(
         scriptMeta(opts.iteration, PLAN_CHECK_ROUTES_STEP, { round }),
-        { ok: false, cause: reasons.join("; ") },
+        { ok: false, cause: makeCause("invalid-outcome", reasons.join("; ")) },
       );
       return { status: "infra", continued: [], left };
     }
@@ -2161,7 +2170,10 @@ export async function runPlanCheckPm(
     scriptMeta(opts.iteration, PLAN_CHECK_ROUTES_STEP),
     {
       ok: false,
-      cause: failure.join("; ") || "plan-check PM ladder exhausted",
+      cause: makeCause(
+        "invalid-outcome",
+        failure.join("; ") || "plan-check PM ladder exhausted",
+      ),
     },
   );
   return { status: "exhausted", continued: [], left };

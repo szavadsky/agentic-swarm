@@ -16,6 +16,8 @@ import {
   stateOf,
 } from "./e2e-helpers.js";
 import { scriptStallLeave } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
+import { causeText } from "./helpers.js";
 
 const PLAN_1 = `# Milestone 1
 
@@ -229,11 +231,10 @@ describe("cross-slice E2E — init, steer and three launches through S2/S3/S4", 
       let state = await stateOf(goalDir);
       expect(state.tasks.alpha!.status).toBe("merged");
       expect(state.tasks.beta!.status).toBe("parked");
-      expect(state.tasks.beta!.cause).toContain("review rejected");
+      expect(causeText(state.tasks.beta!.cause)).toContain("review-rejected");
       expect(state.tasks.gamma!.status).toBe("pending");
-      expect(summaryOf(goalDir, 1)).toContain(
-        "review rejected: not salvageable",
-      );
+      const summary = summaryOf(goalDir, 1);
+      expect(summary).toContain("- review-rejected\n  - beta: not salvageable");
       expect(summaryOf(goalDir, 1)).toContain("- merged: alpha");
       expect(
         fs.existsSync(

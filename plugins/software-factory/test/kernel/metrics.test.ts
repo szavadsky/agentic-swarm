@@ -28,7 +28,13 @@ import type {
 } from "../../src/kernel/types.js";
 import { createTmpRepo } from "../helpers/tmp-repo.js";
 import { expectDispatch } from "./e2e-helpers.js";
-import { rec, script, TEST_ARCHITECTURE, TEST_BOUNDARY } from "./helpers.js";
+import {
+  rec,
+  script,
+  TEST_ARCHITECTURE,
+  TEST_BOUNDARY,
+  cause,
+} from "./helpers.js";
 
 const PLAN = `# Milestone 1 — alpha
 
@@ -301,7 +307,7 @@ describe("iteration metrics", () => {
           step: "park",
           slug: "a",
           ok: true,
-          cause: "no-progress: same gate failed twice",
+          cause: cause("no-progress: same gate failed twice"),
         }),
         script(5, { step: "merge", slug: "b", ok: true, commit: "abc" }),
       ];
@@ -360,16 +366,18 @@ describe("iteration metrics", () => {
           slug: "broken",
           step: "task-quarantine",
           ok: false,
-          cause:
+          cause: cause(
             'task file "broken.md" quarantined at tasks/quarantine/broken.md: no frontmatter',
+          ),
         }),
         script(2, {
           iteration: 2,
           slug: "torn",
           step: "task-quarantine",
           ok: false,
-          cause:
+          cause: cause(
             'task file "torn.md" is unreadable; left in tasks/ because its slug already has a terminal record (merged): torn',
+          ),
         }),
       ];
       await writeMetrics(store, {
@@ -525,14 +533,15 @@ describe("record cost truth", () => {
           slug: "wt-a",
           step: "containment",
           ok: true,
-          cause: "outside-change: files changed in /repo",
+          cause: cause("outside-change: files changed in /repo"),
         }),
         script(9, {
           slug: "b",
           step: "merge",
           ok: false,
-          cause:
+          cause: cause(
             "integration moved: expected aaa, found bbb; an outside commit is on the integration branch and this merge left it untouched",
+          ),
         }),
       ];
       await writeMetrics(store, {

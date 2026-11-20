@@ -11,7 +11,7 @@ import {
   treeSha,
 } from "../../src/kernel/worktree.js";
 import { expectLaunch, stateOf, writePlan } from "./e2e-helpers.js";
-import { recordStart, task as taskFile } from "./helpers.js";
+import { recordStart, task as taskFile, cause } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -134,7 +134,7 @@ describe("hostile shakedown", () => {
         (r) => r.slug === "alpha" && r.step === "merge" && r.ok === true,
       );
       expect(recovered).toHaveLength(1);
-      expect(recovered[0]!.cause).toBe("recovered merge after crash");
+      expect(recovered[0]!.cause).toEqual(cause("recovered merge after crash"));
       expect(records.filter((r) => r.step === "park")).toHaveLength(0);
       expect(
         repo

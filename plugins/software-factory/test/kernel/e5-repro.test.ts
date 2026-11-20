@@ -9,7 +9,7 @@ import { executeTaskAction } from "../../src/kernel/flow.js";
 import { GATE_LAST_CALL_TEXT } from "../../src/kernel/prompts.js";
 import type { Action } from "../../src/kernel/types.js";
 import { integrationHead } from "../../src/kernel/worktree.js";
-import { task } from "./helpers.js";
+import { task, cause, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   goalCheckout,
@@ -19,6 +19,7 @@ import {
   scriptStallLeave,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 // One coarse gate, like the self repo's former single `package` gate: it is red
 // for whichever file is present and names the reason on stdout.
@@ -140,7 +141,7 @@ describe("E5 inverted — inherited red is matched per failing signature", () =>
       );
 
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toBe("gates: package");
+      expect(state.tasks.task!.cause).toEqual(cause("gates: package"));
       expect(merges.map((r) => r.ok)).toEqual([false, false]);
       expect(mergeChecks.map((r) => r.ok)).toEqual([false, false]);
       expect(mergeChecks[0]!.checks![0]!.output).toContain("reason Y");
@@ -233,7 +234,7 @@ describe("E5 inverted — inherited red is matched per failing signature", () =>
       );
 
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "empty-diff: implement r1 committed no changes after red checks: package",
       );
       // Reason Y is absent from base, so the first branch check is the task's own.
@@ -319,7 +320,7 @@ describe("E5 inverted — inherited red is matched per failing signature", () =>
         (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
       );
       expect(merges).toHaveLength(1);
-      expect(merges[0]!.cause).toContain("skipped merge-checks");
+      expect(causeText(merges[0]!.cause)).toContain("skipped merge-checks");
       expect(
         repo.git(["show", "factory/demo:base-broken.txt"], { allowFail: true })
           .code,
@@ -387,7 +388,7 @@ describe("E5 inverted — inherited red is matched per failing signature", () =>
 
       // Verify task parked after 3rd red fix
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toBe("gates: package");
+      expect(state.tasks.task!.cause).toEqual(cause("gates: package"));
 
       // Verify harness was called 4 times (1 initial + 3 fixes)
       expect(promptsSeen).toHaveLength(4);

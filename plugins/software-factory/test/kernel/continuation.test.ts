@@ -8,7 +8,7 @@ import { contextPackRelPath } from "../../src/kernel/context-pack.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { workCalls } from "./fake-defaults.js";
-import { task } from "./helpers.js";
+import { task, cause, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   goalCheckout,
@@ -29,6 +29,7 @@ import {
   scriptImplementApprove,
   implementThenLand,
 } from "./continuation-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 describe("parked continuation", () => {
   it("continues a task with base from the parked task's kept branch", async () => {
@@ -144,9 +145,9 @@ describe("kept-land", () => {
       expect((await stateOf(runtime)).tasks["kept-flake"]!.status).toBe(
         "parked",
       );
-      expect((await stateOf(runtime)).tasks["kept-flake"]!.cause).toContain(
-        "gates: unit",
-      );
+      expect(
+        causeText((await stateOf(runtime)).tasks["kept-flake"]!.cause),
+      ).toContain("gates: unit");
       expect(workCalls(harness)).toHaveLength(4);
 
       scriptContinueBoundary(harness, runtime);
@@ -314,8 +315,8 @@ describe("kept-land", () => {
       );
       expect(failed).toHaveLength(1);
       expect(failed[0]!.ok).toBe(false);
-      expect(failed[0]!.cause).toBe(merge!.cause!);
-      expect(failed[0]!.cause).toContain("gates: unit");
+      expect(failed[0]!.cause).toEqual(merge!.cause!);
+      expect(causeText(failed[0]!.cause)).toContain("gates: unit");
       expect(workCalls(harness)).toHaveLength(6);
       const pack = fs.readFileSync(
         path.join(runtime.store.goalDir, contextPackRelPath(2)),
@@ -350,7 +351,7 @@ describe("kept-land", () => {
       );
       expect(skipped).toHaveLength(1);
       expect(skipped[0]!.ok).toBe(true);
-      expect(skipped[0]!.cause).toBe("skipped: deterministic-red");
+      expect(skipped[0]!.cause).toEqual(cause("skipped: deterministic-red"));
       expect(workCalls(harness)).toHaveLength(8);
     } finally {
       cleanupFlowRepo(repo);

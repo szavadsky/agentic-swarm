@@ -286,10 +286,12 @@ function wallMsOf(rec: StepRecord): number {
 }
 
 function isOutsideAct(rec: StepRecord): boolean {
-  if (rec.step === "containment" && rec.cause?.startsWith("outside-change:"))
+  if (rec.step === "containment" && rec.cause?.kind === "outside-change") {
     return true;
-  if (rec.step === "merge" && rec.cause?.startsWith("integration moved:"))
+  }
+  if (rec.step === "merge" && rec.cause?.kind === "integration-moved") {
     return true;
+  }
   return false;
 }
 
@@ -384,22 +386,33 @@ function attemptIncidents(recs: StepRecord[], incidents: IncidentCounts): void {
 
 function parkIncidents(all: StepRecord[], incidents: IncidentCounts): void {
   for (const rec of all) {
-    if (rec.step === "merge" && rec.cause?.startsWith("conflict:")) {
+    if (rec.step === "merge" && rec.cause?.kind === "conflict") {
       incidents.mergeConflicts += 1;
     } else if (rec.step === "merge-checks" && rec.ok === false && !rec.cause) {
       incidents.mergedGateFailures += 1;
     } else if (rec.step === "gate-flake" && rec.endedAt) {
       incidents.gateFlakes += 1;
     } else if (rec.step === "park" && rec.endedAt) {
-      const cause = rec.cause ?? "";
-      if (/^review round limit reached/i.test(cause))
-        incidents.roundLimitParks += 1;
-      else if (/no[- ]progress/i.test(cause)) incidents.noProgressParks += 1;
-      // An empty-diff park is a loop signal: the turn consumed budget without
-      // producing work. A spike's empty turn is a normal `finish` record, not a
-      // park, so it never reaches this count.
-      else if (/^empty-diff:/i.test(cause)) incidents.emptyDiffParks += 1;
-      else if (/^overflow\b/i.test(cause)) incidents.overflowParks += 1;
+      switch (rec.cause?.kind) {
+        case "round-limit":
+        case "change-requests-exhausted":
+          incidents.roundLimitParks += 1;
+          break;
+        case "no-progress":
+          incidents.noProgressParks += 1;
+          break;
+        // An empty-diff park is a loop signal: the turn consumed budget
+        // without producing work. A spike's empty turn is a normal `finish`
+        // record, not a park, so it never reaches this count.
+        case "empty-diff":
+          incidents.emptyDiffParks += 1;
+          break;
+        case "overflow":
+          incidents.overflowParks += 1;
+          break;
+        default:
+          break;
+      }
     }
   }
 }

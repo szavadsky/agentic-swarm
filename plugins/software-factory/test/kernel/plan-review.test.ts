@@ -18,7 +18,7 @@ import {
   validatePlanReviewMarks,
 } from "../../src/kernel/plan-review.js";
 import type { Outcome, PlanReviewOutcome } from "../../src/kernel/types.js";
-import { rec } from "./helpers.js";
+import { rec, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -285,8 +285,10 @@ describe("architecture flow", () => {
       ]);
       expect(fs.existsSync(strayPath)).toBe(false);
       expect(
-        records.find((record) => record.step === "plan-return-reconcile")
-          ?.cause,
+        causeText(
+          records.find((record) => record.step === "plan-return-reconcile")
+            ?.cause,
+        ),
       ).toContain("stray.md");
       // The return answered the findings, so the next pack does not re-ask.
       expect(latestPlanReview(records)).toBeUndefined();

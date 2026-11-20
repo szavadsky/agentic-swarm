@@ -9,7 +9,7 @@ import { executeTaskAction } from "../../src/kernel/flow.js";
 import { GATE_LAST_CALL_TEXT } from "../../src/kernel/prompts.js";
 import { writeIterationSummary } from "../../src/kernel/summary.js";
 import type { Action } from "../../src/kernel/types.js";
-import { task } from "./helpers.js";
+import { task, cause, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   goalCheckout,
@@ -19,6 +19,7 @@ import {
   setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 function scriptFix(harness: FakeHarness): void {
   harness.script((req, ctx) => {
@@ -207,7 +208,7 @@ describe("just-implement", () => {
         (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
       );
       expect(merges.length).toBe(1);
-      expect(merges[0]!.cause).toContain("skipped merge-checks");
+      expect(causeText(merges[0]!.cause)).toContain("skipped merge-checks");
 
       await writeIterationSummary(runtime.store, {
         iteration: 1,
@@ -286,7 +287,9 @@ describe("just-implement", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain("gates: poison-gate");
+      expect(causeText(state.tasks.task!.cause)).toContain(
+        "gates: poison-gate",
+      );
       expect(state.tasks.task!.round).toBe(1);
       expect(harness.calls.length).toBe(3);
       expect(
@@ -585,7 +588,7 @@ describe("checks step bound and last call", () => {
       );
 
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toBe("gates: unit");
+      expect(state.tasks.task!.cause).toEqual(cause("gates: unit"));
 
       // Initial + Fix 1 + Fix 2 = 3 turns
       expect(prompts).toHaveLength(3);

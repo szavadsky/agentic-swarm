@@ -18,7 +18,7 @@ import {
 } from "../../src/kernel/mailbox.js";
 import { scriptMeta } from "../../src/kernel/record.js";
 import { spikeReportPath } from "../../src/kernel/spike-report.js";
-import { task } from "./helpers.js";
+import { task, cause, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -36,6 +36,7 @@ import {
   implementer,
   approver,
 } from "./steer-holds-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 describe("mid-run steer holds", () => {
   it("holds unstarted tasks without parking the in-flight one, and still reaches the architect", async () => {
@@ -202,8 +203,8 @@ describe("mid-run steer holds", () => {
       expect(dispatched.reason).toBe("boundary");
       const state = await tasks(runtime);
       expect(state.tasks.alpha!.status).toBe("parked");
-      expect(state.tasks.alpha!.cause).toBe(
-        "empty-diff: implement r1 committed no changes",
+      expect(state.tasks.alpha!.cause).toEqual(
+        cause("empty-diff: implement r1 committed no changes"),
       );
       const records = await runtime.store.listRecords();
       expect(
@@ -211,7 +212,7 @@ describe("mid-run steer holds", () => {
       ).toHaveLength(1);
       expect(
         records.find((r) => r.slug === "alpha" && r.step === "park")?.cause,
-      ).toBe("empty-diff: implement r1 committed no changes");
+      ).toEqual(cause("empty-diff: implement r1 committed no changes"));
       expect(
         records.some((r) => r.slug === "alpha" && r.step === "merge"),
       ).toBe(false);
@@ -319,7 +320,7 @@ describe("mid-run steer holds", () => {
 
       const dispatched = await runDispatch(runtime, { iteration: 1 });
       expect(dispatched.reason).toBe("drained");
-      expect(dispatched.cause).toBe("steer: s1 goal hold");
+      expect(dispatched.cause).toEqual(cause("steer: s1 goal hold"));
       const state = await tasks(runtime);
       expect(state.tasks.alpha!.status).toBe("merged");
       expect(state.tasks.alpha!.park).toBeUndefined();
@@ -364,7 +365,7 @@ describe("mid-run steer holds", () => {
 
       const dispatched = await runDispatch(runtime, { iteration: 1 });
       expect(dispatched.reason).toBe("drained");
-      expect(dispatched.cause).toBe("steer: s1 marked urgent");
+      expect(dispatched.cause).toEqual(cause("steer: s1 marked urgent"));
 
       const state = await tasks(runtime);
       expect(state.tasks.alpha!.status).toBe("merged");
@@ -413,7 +414,7 @@ describe("mid-run steer holds", () => {
 
       const dispatched = await runDispatch(runtime, { iteration: 1 });
       expect(dispatched.reason).toBe("drained");
-      expect(dispatched.cause).toContain(
+      expect(causeText(dispatched.cause)).toContain(
         "budget: iteration USD limit $5.0000 reached",
       );
       const state = await tasks(runtime);
@@ -466,7 +467,7 @@ describe("mid-run steer holds", () => {
       const records = await runtime.store.listRecords();
       const guard = records.find((record) => record.step === "steer-reconcile");
       expect(guard?.ok).toBe(false);
-      expect(guard?.cause).toContain("tasks/alpha.md");
+      expect(causeText(guard?.cause)).toContain("tasks/alpha.md");
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -513,7 +514,7 @@ describe("mid-run steer holds", () => {
         (record) => record.step === "steer-reconcile",
       );
       expect(guard?.ok).toBe(false);
-      expect(guard?.cause).toContain("plan.md");
+      expect(causeText(guard?.cause)).toContain("plan.md");
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -655,7 +656,7 @@ describe("mid-run steer holds", () => {
       });
       expect(blocked.reason).toBe("boundary");
       expect(blocked.allReadyHeld).toBe(true);
-      expect(blocked.cause).toContain(
+      expect(causeText(blocked.cause)).toContain(
         "no-outcome-forensics holds no-outcome-forensics-spike",
       );
       expect(
@@ -686,7 +687,9 @@ describe("mid-run steer holds", () => {
       );
       expect(expired).toHaveLength(1);
       expect(expired[0]!.slug).toBe("no-outcome-forensics");
-      expect(expired[0]!.cause).toContain("no-outcome-forensics-spike");
+      expect(causeText(expired[0]!.cause)).toContain(
+        "no-outcome-forensics-spike",
+      );
 
       harness.script((req, ctx) => {
         fs.writeFileSync(path.join(req.cwd!, "probe.txt"), "finding\n", "utf8");

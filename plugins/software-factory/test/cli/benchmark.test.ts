@@ -9,7 +9,7 @@ import { type GoalMetrics, writeMetrics } from "../../src/kernel/metrics.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type { ArtifactStore, StepRecord } from "../../src/kernel/types.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
-import { rec, script } from "../kernel/helpers.js";
+import { rec, script, cause } from "../kernel/helpers.js";
 
 interface FixtureGoal {
   repo: TmpRepo;
@@ -149,7 +149,7 @@ describe("benchmark command", () => {
           slug: "alpha",
           step: "merge",
           ok: false,
-          cause: "conflict: alpha.txt",
+          cause: cause("conflict: alpha.txt"),
           startedAt: "2026-01-01T02:01:00.000Z",
           endedAt: "2026-01-01T02:10:00.000Z",
         }),
@@ -158,7 +158,7 @@ describe("benchmark command", () => {
           slug: "beta",
           step: "park",
           ok: true,
-          cause: "review rejected: out of scope",
+          cause: cause("review rejected: out of scope"),
           startedAt: "2026-01-01T03:00:00.000Z",
           endedAt: "2026-01-01T03:05:00.000Z",
         }),
@@ -225,21 +225,21 @@ describe("benchmark command", () => {
           slug: "alpha",
           step: "park",
           ok: true,
-          cause: "no-progress: implement r2 repeats r1 (deadbeef)",
+          cause: cause("no-progress: implement r2 repeats r1 (deadbeef)"),
         }),
         script(4, {
           iteration: 1,
           slug: "beta",
           step: "park",
           ok: true,
-          cause: "empty-diff: implement r1 committed no changes",
+          cause: cause("empty-diff: implement r1 committed no changes"),
         }),
         script(5, {
           iteration: 1,
           slug: "gamma",
           step: "park",
           ok: true,
-          cause: "overflow",
+          cause: cause("overflow"),
         }),
         // A spike produces knowledge: its empty finish is not an empty-diff park.
         script(6, { iteration: 1, slug: "probe", step: "finish", ok: true }),

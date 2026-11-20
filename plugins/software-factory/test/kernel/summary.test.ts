@@ -8,7 +8,7 @@ import { statusForIteration } from "../../src/kernel/launch.js";
 import { postSteer } from "../../src/kernel/mailbox.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { writeIterationSummary } from "../../src/kernel/summary.js";
-import { rec, script, task } from "./helpers.js";
+import { rec, script, task, cause } from "./helpers.js";
 
 describe("iteration summary", () => {
   it("is derived from records: decision, debt, parked root causes, owner attention, metrics", async () => {
@@ -54,7 +54,7 @@ describe("iteration summary", () => {
           slug: "parked1",
           step: "park",
           ok: true,
-          cause: "review rejected: missing test",
+          cause: cause("review rejected: missing test"),
         }),
         rec(4, {
           slug: "merged1",
@@ -94,7 +94,7 @@ describe("iteration summary", () => {
       expect(text).toContain("architect: the goal is met");
       expect(text).toContain("kept the old storage format");
       expect(text).toContain("## Parked by root cause");
-      expect(text).toContain("review rejected: missing test");
+      expect(text).toContain("- review-rejected\n  - parked1: missing test");
       expect(text).toContain("parked1");
       expect(text).toContain("- pending: pending1");
       expect(text).toContain("cache invalidation needs a follow-up");
@@ -159,8 +159,9 @@ describe("iteration summary", () => {
           slug: "broken",
           step: "task-quarantine",
           ok: false,
-          cause:
+          cause: cause(
             'task file "broken.md" quarantined at tasks/quarantine/broken.md: no frontmatter',
+          ),
         }),
       ];
       const state = derive(tasks, records);
@@ -173,7 +174,7 @@ describe("iteration summary", () => {
       const text = fs.readFileSync(path.join(store.goalDir, rel), "utf8");
       expect(text).toContain("- quarantined: broken");
       expect(text).toContain(
-        'task-quarantine: task file "broken.md" quarantined at',
+        'task-quarantine: quarantine: task file "broken.md" quarantined at',
       );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
@@ -192,7 +193,7 @@ describe("iteration summary", () => {
           slug: "parked1",
           step: "park",
           ok: true,
-          cause: "review rejected: missing test",
+          cause: cause("review rejected: missing test"),
         }),
         rec(2, {
           slug: "pending1",
@@ -324,14 +325,14 @@ describe("iteration summary", () => {
           slug: "old-park",
           step: "park",
           ok: true,
-          cause: "round limit reached",
+          cause: cause("round limit reached"),
         }),
         script(2, {
           iteration: 2,
           slug: "new-park",
           step: "park",
           ok: true,
-          cause: "review rejected: missing test",
+          cause: cause("review rejected: missing test"),
         }),
       ];
       const state = derive(tasks, records);

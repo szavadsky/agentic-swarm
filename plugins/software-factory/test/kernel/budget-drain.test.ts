@@ -12,7 +12,7 @@ import { runDispatch } from "../../src/kernel/dispatch.js";
 import { iterationMetrics } from "../../src/kernel/metrics.js";
 import { loadPriceTable } from "../../src/kernel/openrouter.js";
 import { writeIterationSummary } from "../../src/kernel/summary.js";
-import { task } from "./helpers.js";
+import { task, cause } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -77,8 +77,8 @@ describe("iteration USD brake", () => {
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("drained");
-      expect(result.cause).toBe(
-        "budget: iteration USD limit $1.0000 reached (spent $1.1000)",
+      expect(result.cause).toEqual(
+        cause("budget: iteration USD limit $1.0000 reached (spent $1.1000)"),
       );
       // a's review ran after the brake fired: started work finishes, b never starts.
       expect(harness.calls.length).toBe(2);
@@ -182,8 +182,8 @@ describe("iteration USD brake", () => {
       // $0.50 from the harness-priced first call plus $4.00 from the
       // OpenRouter-priced second: `usage`'s $4.00 last call is not added a second time.
       expect(result.reason).toBe("drained");
-      expect(result.cause).toBe(
-        "budget: iteration USD limit $1.0000 reached (spent $4.5000)",
+      expect(result.cause).toEqual(
+        cause("budget: iteration USD limit $1.0000 reached (spent $4.5000)"),
       );
     } finally {
       cleanupFlowRepo(repo);
@@ -280,8 +280,8 @@ describe("iteration USD brake", () => {
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("drained");
       // $1.00 of OpenRouter-priced input crossed the $1 brake; the review then finished.
-      expect(result.cause).toBe(
-        "budget: iteration USD limit $1.0000 reached (spent $1.0000)",
+      expect(result.cause).toEqual(
+        cause("budget: iteration USD limit $1.0000 reached (spent $1.0000)"),
       );
       expect(harness.calls.length).toBe(2);
 

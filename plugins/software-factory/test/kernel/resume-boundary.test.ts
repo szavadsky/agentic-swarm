@@ -10,9 +10,10 @@ import {
 import { derive } from "../../src/kernel/derive.js";
 import { spikeReportPath } from "../../src/kernel/spike-report.js";
 import { createFolderStore } from "../../src/kernel/store.js";
-import type { Outcome } from "../../src/kernel/types.js";
+import type { Cause, Outcome } from "../../src/kernel/types.js";
 import { expectDispatch } from "./e2e-helpers.js";
 import { whenTurn } from "./s2-helpers.js";
+import { cause } from "./helpers.js";
 import {
   digestScoutTurn,
   digestSteerId,
@@ -97,7 +98,7 @@ async function deltaI5Goal(liveFinding: boolean): Promise<{
     step: string,
     slug: string,
     ok: boolean,
-    cause?: string,
+    cause?: Cause,
   ) =>
     store.appendRecord(
       { iteration, step, round: 1, actor: "script", slug },
@@ -113,21 +114,39 @@ async function deltaI5Goal(liveFinding: boolean): Promise<{
     );
 
   await architect(1, "iteration one boundary");
-  await script(1, "cancel", "handoff-log", false, "landed as handoff-land");
+  await script(
+    1,
+    "cancel",
+    "handoff-log",
+    false,
+    cause("landed as handoff-land"),
+  );
   await script(1, "merge", "handoff-land", true);
-  await script(1, "cancel", "kept-live", false, "replaced by kept-land-fix");
-  await script(1, "park", "kept-land-fix", false, "kept for a later base");
+  await script(
+    1,
+    "cancel",
+    "kept-live",
+    false,
+    cause("replaced by kept-land-fix"),
+  );
+  await script(
+    1,
+    "park",
+    "kept-land-fix",
+    false,
+    cause("kept for a later base"),
+  );
   await script(
     1,
     "cancel",
     "metrics-attrib",
     false,
-    "landed as metrics-attrib-land",
+    cause("landed as metrics-attrib-land"),
   );
   await script(1, "merge", "metrics-attrib-land", true);
   if (liveFinding) {
-    await script(1, "cancel", "gone", false, "spent");
-    await script(1, "park", "gamma", false, "needs the base ruling");
+    await script(1, "cancel", "gone", false, cause("spent"));
+    await script(1, "park", "gamma", false, cause("needs the base ruling"));
   }
   // The interrupted iteration opened with a boundary and died before dispatch.
   await architect(2, "iteration two boundary");

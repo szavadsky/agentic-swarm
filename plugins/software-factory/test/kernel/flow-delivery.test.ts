@@ -20,7 +20,7 @@ import type {
   TaskState,
 } from "../../src/kernel/types.js";
 import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
-import { task } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -38,6 +38,7 @@ import {
   stateOf,
   writeTask as writeGoalTask,
 } from "./e2e-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 describe("delivery guard", () => {
   it("parks an implement turn that delivers no outcome, naming the outcome", async () => {
@@ -63,7 +64,9 @@ describe("delivery guard", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain("no outcome after repair");
+      expect(causeText(state.tasks.task!.cause)).toContain(
+        "no outcome after repair",
+      );
       expect(harness.calls).toHaveLength(3);
       expect(harness.calls[1]!.prompt).toContain(
         "You are the implementer. Your turn did not deliver its outcome.",
@@ -107,7 +110,9 @@ describe("delivery guard", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain("verdict is required");
+      expect(causeText(state.tasks.task!.cause)).toContain(
+        "verdict is required",
+      );
       expect(harness.calls).toHaveLength(4);
       expect(harness.calls[2]!.prompt).toContain(
         "You are the reviewer. Your turn did not deliver its verdict.",
@@ -187,7 +192,7 @@ describe("delivery guard", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain("no outcome");
+      expect(causeText(state.tasks.task!.cause)).toContain("no outcome");
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -334,9 +339,9 @@ describe("gate flake re-run", () => {
         (r) => r.slug === "task" && r.step === "gate-flake",
       );
       expect(flakes).toHaveLength(1);
-      expect(flakes[0]!.cause).toContain("flaky");
-      expect(flakes[0]!.cause).toContain("src/a.test.ts");
-      expect(flakes[0]!.cause).toContain("flaky test");
+      expect(causeText(flakes[0]!.cause)).toContain("flaky");
+      expect(causeText(flakes[0]!.cause)).toContain("src/a.test.ts");
+      expect(causeText(flakes[0]!.cause)).toContain("flaky test");
 
       // Only the red gate re-ran, and the merge skipped its gates on the
       // already-judged tree: flaky ran first + re-run, green ran checks.
@@ -597,7 +602,7 @@ describe("standalone upscope", () => {
       const store = createFolderStore(goal.goalDir, undefined, {});
       const escalated = await stateOf(goal.goalDir);
       expect(escalated.tasks.solo!.status).toBe("parked");
-      expect(escalated.tasks.solo!.cause).toMatch(/^upscope: /);
+      expect(causeText(escalated.tasks.solo!.cause)).toMatch(/^upscope: /);
       expect(escalated.goal).toBe("active");
       expect(escalated.terminal).toBe(false);
       expect(readClass(goal.goalDir)).toEqual({ class: "bigger" });
@@ -712,7 +717,7 @@ describe("standalone upscope", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.planned!.status).toBe("parked");
-      expect(state.tasks.planned!.cause).toMatch(/^upscope: /);
+      expect(causeText(state.tasks.planned!.cause)).toMatch(/^upscope: /);
       expect(fs.existsSync(path.join(goalDir, "class.yaml"))).toBe(false);
     } finally {
       cleanupFlowRepo(repo);

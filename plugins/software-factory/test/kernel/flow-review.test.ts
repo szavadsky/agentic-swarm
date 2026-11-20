@@ -11,7 +11,7 @@ import {
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { spikeReportPath } from "../../src/kernel/spike-report.js";
-import { task } from "./helpers.js";
+import { task, cause, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   goalCheckout,
@@ -21,6 +21,7 @@ import {
   setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 describe("empty diff", () => {
   it("parks a task whose implement turn commits nothing instead of running the reviewer", async () => {
@@ -47,7 +48,7 @@ describe("empty diff", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause!.startsWith("empty-diff:")).toBe(true);
+      expect(state.tasks.task!.cause?.kind === "empty-diff").toBe(true);
       expect(harness.calls.length).toBe(2);
       expect(
         records.filter((r) => r.slug === "task" && r.step === "review"),
@@ -57,7 +58,7 @@ describe("empty diff", () => {
           (r) =>
             r.slug === "task" &&
             r.step === "park" &&
-            r.cause?.startsWith("empty-diff:"),
+            r.cause?.kind === "empty-diff",
         ),
       ).toHaveLength(1);
       expect(
@@ -399,8 +400,10 @@ describe("continuation carry", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.beta!.status).toBe("parked");
-      expect(state.tasks.beta!.cause).toStartWith("empty-diff:");
-      expect(state.tasks.beta!.cause).toContain("already on the head");
+      expect(causeText(state.tasks.beta!.cause)).toStartWith("empty-diff:");
+      expect(causeText(state.tasks.beta!.cause)).toContain(
+        "already on the head",
+      );
       expect(
         records.filter((r) => r.slug === "beta" && r.step === "review"),
       ).toEqual([]);
@@ -568,7 +571,7 @@ describe("review last call", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.probe!.status).toBe("parked");
-      expect(state.tasks.probe!.cause).toContain("review rejected");
+      expect(causeText(state.tasks.probe!.cause)).toContain("review-rejected");
       expect(
         repo.git(["show", "factory-task/demo/probe:finding.md"]).stdout.trim(),
       ).toBe("# Finding\n\nUse the cache.");

@@ -8,7 +8,7 @@ import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { TIMEOUT_SETTLE_GRACE_MS } from "../../src/kernel/flow.js";
 import { ensureTaskWorktree, treeSha } from "../../src/kernel/worktree.js";
-import { task } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -18,6 +18,7 @@ import {
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 describe("turn failures — outcome, crash and wall-clock handling", () => {
   it("times out a never-resolving harness after the bound plus grace and moves the launch on", async () => {
@@ -147,7 +148,7 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("drained");
-      expect(result.cause).toContain("wall limit");
+      expect(causeText(result.cause)).toContain("wall limit");
       expect(harness.calls).toHaveLength(0);
     } finally {
       cleanupFlowRepo(repo);

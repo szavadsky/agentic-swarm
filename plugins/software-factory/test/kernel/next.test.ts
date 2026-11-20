@@ -3,7 +3,8 @@ import { describe, expect, it } from "bun:test";
 import { derive } from "../../src/kernel/derive.js";
 import { next } from "../../src/kernel/next.js";
 import type { Limits, StepRecord } from "../../src/kernel/types.js";
-import { rec, script, task } from "./helpers.js";
+import { rec, script, task, cause, causeText } from "./helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 const limits: Limits = {
   flows: {
@@ -152,16 +153,17 @@ describe("next", () => {
         review(9, "changes", 3),
       ],
     );
-    expect(lastCallChanges.tasks.a!.park).toContain(
-      "invalid outcome: changes on the last review call",
+    expect(causeText(lastCallChanges.tasks.a!.park)).toContain(
+      "invalid-outcome: changes on the last review call",
     );
     expect(next(lastCallChanges, limits, new Set())).toEqual([
       {
         kind: "park",
         slug: "a",
-        cause: expect.stringContaining(
-          "invalid outcome: changes on the last review call",
-        ),
+        cause: {
+          kind: "invalid-outcome",
+          detail: expect.stringContaining("changes on the last review call"),
+        },
       },
     ]);
 
@@ -193,7 +195,7 @@ describe("next", () => {
   it("does not dispatch a task whose dependency is parked", () => {
     const state = derive(
       [task("a"), task("b", { deps: ["a"] })],
-      [script(1, { step: "park", ok: true, cause: "review rejected" })],
+      [script(1, { step: "park", ok: true, cause: cause("review rejected") })],
     );
     expect(state.tasks.b!.status).toBe("pending");
     expect(next(state, limits, new Set())).toEqual([{ kind: "boundary" }]);

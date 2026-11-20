@@ -2,6 +2,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { runAgentTurn } from "./agent.js";
+import { makeCause } from "./cause.js";
+import { formatCause } from "./cause.js";
 import type { PlanCheckPack } from "./context-pack.js";
 import { boundaryTarget } from "./flow-context.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
@@ -15,6 +17,7 @@ import {
 import { scriptMeta } from "./record.js";
 import { recordDirName } from "./store.js";
 import type {
+  Cause,
   KernelRuntime,
   Outcome,
   PlanCheck,
@@ -162,6 +165,11 @@ export function lastGateRecord(
     : undefined;
 }
 
+/** One parked task's cause as the brief reads it. */
+function parkedCauseText(cause: Cause | undefined): string {
+  return cause ? formatCause(cause) : "no recorded cause";
+}
+
 /**
  * The checker's brief: every task file with status, then parked slugs with
  * the cause that parked them. The causes let the checker tell a mechanical
@@ -175,7 +183,7 @@ export function planCheckBrief(state: State, tasks: TaskFile[]): string {
     .sort((a, b) => a.slug.localeCompare(b.slug))
     .map(
       (task) =>
-        `- ${task.slug}: ${state.tasks[task.slug]?.cause ?? "no recorded cause"}`,
+        `- ${task.slug}: ${parkedCauseText(state.tasks[task.slug]?.cause)}`,
     );
   if (parked.length > 0) lines.push("", "Parked by cause:", ...parked);
   return lines.join("\n");
@@ -243,7 +251,10 @@ export async function runPlanCheck(
       }),
       {
         ok: false,
-        cause: `checker writes discarded: ${touched.join(", ")}; the checker is read-only`,
+        cause: makeCause(
+          "invalid-outcome",
+          `checker writes discarded: ${touched.join(", ")}; the checker is read-only`,
+        ),
       },
     );
   }

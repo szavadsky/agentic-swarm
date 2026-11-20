@@ -8,7 +8,7 @@ import {
   shallowCodeMap,
 } from "../../src/kernel/context-pack.js";
 import { derive, openDebts } from "../../src/kernel/derive.js";
-import { rec, script, task } from "./helpers.js";
+import { rec, script, task, cause } from "./helpers.js";
 
 const tasks = [task("a"), task("b", { deps: ["a"] })];
 
@@ -25,7 +25,12 @@ describe("context pack", () => {
           verdict: "approve",
         },
       }),
-      script(2, { step: "park", ok: true, cause: "round limit", slug: "b" }),
+      script(2, {
+        step: "park",
+        ok: true,
+        cause: cause("round limit"),
+        slug: "b",
+      }),
     ];
     const input = {
       goal: "demo",
@@ -166,7 +171,11 @@ describe("context pack", () => {
     );
     expect(codeMap).toHaveLength(60);
     const records = [
-      script(1, { step: "park", slug: "bulk-003", cause: "round limit" }),
+      script(1, {
+        step: "park",
+        slug: "bulk-003",
+        cause: cause("round limit"),
+      }),
     ];
     const data = JSON.parse(
       renderContextData({
@@ -218,7 +227,9 @@ describe("context pack", () => {
       slug: "bulk-119",
       status: "pending",
     });
-    expect(data.parked).toEqual([{ slug: "bulk-003", cause: "round limit" }]);
+    expect(data.parked).toEqual([
+      { slug: "bulk-003", cause: cause("round limit") },
+    ]);
     expect(data.codeMap).toEqual(codeMap);
     expect(data.codeMap.join("\n")).not.toContain("more groups");
     expect(data.paths.plan).toBe("/goal/plan.md");

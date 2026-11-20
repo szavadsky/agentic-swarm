@@ -11,7 +11,9 @@ import {
   isLastChecksFixCall,
   isLastReviewCall,
 } from "./review.js";
+import { formatCause, makeCause } from "./cause.js";
 import type {
+  Cause,
   FlowDefinition,
   ProgressRepeat,
   ReviewVerdict,
@@ -59,7 +61,7 @@ export const DEFAULT_FLOWS: Record<string, FlowDefinition> = {
 
 export interface TerminalFact {
   status: TaskStatus;
-  cause?: string;
+  cause?: Cause;
   commit?: string;
 }
 
@@ -70,7 +72,7 @@ export interface TaskReduction {
   turns: number;
   verdict?: ReviewVerdict;
   commit?: string;
-  park?: string;
+  park?: Cause;
   loop?: ProgressRepeat;
   gateFix?: boolean;
   gateLastCall?: boolean;
@@ -108,12 +110,15 @@ export function terminalFactFromRecords(
     if (rec.step === "park") {
       out = {
         status: "parked",
-        cause: rec.cause ?? "parked without a recorded cause",
+        cause:
+          rec.cause ?? makeCause("unknown", "parked without a recorded cause"),
       };
     } else if (rec.step === "cancel") {
       out = {
         status: "cancelled",
-        cause: rec.cause ?? "cancelled without a recorded cause",
+        cause:
+          rec.cause ??
+          makeCause("unknown", "cancelled without a recorded cause"),
       };
     } else if (rec.step === "merge" && rec.ok === true) {
       out = {
@@ -186,8 +191,8 @@ function committedNothing(
  * reds, so read the names from the cause.
  */
 function mergeGateNames(rec: StepRecord): string[] {
-  const names = (rec.cause ?? "")
-    .slice("gates:".length)
+  const cause = rec.cause?.kind === "gates" ? rec.cause.detail : "";
+  const names = cause
     .split(",")
     .map((name) => name.trim())
     .filter(Boolean);
@@ -286,7 +291,7 @@ export function reduceTask(
   let stepIndex = 0;
   let verdict: ReviewVerdict | undefined;
   let commit: string | undefined;
-  let park: string | undefined;
+  let park: Cause | undefined;
   let loop: ProgressRepeat | undefined;
   let gateFix = false;
   let gateLastCall = false;
@@ -329,7 +334,10 @@ export function reduceTask(
     if (outside.length > 0) {
       if (reviewIndex < 0) {
         // No review step to judge the un-reviewed work: never land it silently.
-        park = `review: resolve changed files outside the conflict set: ${outside.join(", ")}`;
+        park = makeCause(
+          "stuck",
+          `resolve changed files outside the conflict set and the flow has no review step: ${outside.join(", ")}`,
+        );
         phase = "parked";
       } else {
         round = Math.max(round, rec.round + 1);
@@ -380,7 +388,10 @@ export function reduceTask(
         if (rec.ok === false && red.length > 0 && red.every(isInfraCheck)) {
           // A gate that could not start is not a red verdict on the task:
           // looping the implementer ends in an empty-diff park (B6).
-          park = `infra: gate could not start: ${red.map((c) => c.name).join(", ")}`;
+          park = makeCause(
+            "infra",
+            `gate could not start: ${red.map((c) => c.name).join(", ")}`,
+          );
           phase = "parked";
         } else if (rec.ok === false) {
           const deferred = pendingChecks.emptyFix;
@@ -392,15 +403,17 @@ export function reduceTask(
             // deterministic red the fix did not address. A red without a
             // comparable baseline (merge gates with no recorded checks)
             // parks the same way; green and changed reds move on below.
-            park =
+            park = makeCause(
+              "empty-diff",
               gateFailure !== undefined
-                ? `empty-diff: ${deferred.step} r${deferred.round} committed no changes after red checks: ${gateFailure}`
-                : `empty-diff: ${deferred.step} r${deferred.round} committed no changes`;
+                ? `${deferred.step} r${deferred.round} committed no changes after red checks: ${gateFailure}`
+                : `${deferred.step} r${deferred.round} committed no changes`,
+            );
             phase = "parked";
           } else {
             gateFixCount += 1;
             if (gateFixCount > checksFixLimit(flow)) {
-              park = `gates: ${parkedGateNames(task, red)}`;
+              park = makeCause("gates", parkedGateNames(task, red));
               phase = "parked";
               gateFix = false;
               gateLastCall = false;
@@ -446,8 +459,8 @@ export function reduceTask(
         pendingChecks = null;
         phase = "done";
       } else if (rec.ok === false) {
-        const cause = rec.cause ?? "";
-        if (cause.startsWith("gates:")) {
+        const cause = rec.cause;
+        if (cause?.kind === "gates") {
           gateFixCount += 1;
           gatesFailures += 1;
           if (gatesFailures === 1 && gateFixCount <= checksFixLimit(flow)) {
@@ -470,7 +483,7 @@ export function reduceTask(
             gateFix = false;
             gateLastCall = false;
           }
-        } else if (cause.startsWith("conflict:")) {
+        } else if (cause?.kind === "conflict") {
           const resolveStep = flow.steps.some((step) => step.id === "resolve");
           if (resolveRan || !resolveStep) {
             // The one resolve turn already ran for this merge attempt, or the
@@ -485,13 +498,19 @@ export function reduceTask(
             pendingChecks = null;
             phase = "resolve";
           }
-        } else if (cause.startsWith("no-progress:")) {
+        } else if (cause?.kind === "no-progress") {
+          park = cause;
+          phase = "parked";
+        } else if (cause?.kind === "merge-failed") {
           park = cause;
           phase = "parked";
         } else {
           park = cause
-            ? `merge failed: ${cause}`
-            : "merge failed without a recorded cause";
+            ? makeCause("merge-failed", formatCause(cause))
+            : makeCause(
+                "merge-failed",
+                "merge failed without a recorded cause",
+              );
           phase = "parked";
         }
       }
@@ -527,7 +546,10 @@ export function reduceTask(
         }
         turns += 1;
         if (infraRepeatCount >= 2) {
-          park = `infra-repeat: ${scriptStop.cause}${scriptStop.details ? `: ${scriptStop.details}` : ""}`;
+          park = makeCause(
+            "infra-repeat",
+            `${scriptStop.cause}${scriptStop.details ? `: ${scriptStop.details}` : ""}`,
+          );
           phase = "parked";
         }
       }
@@ -557,7 +579,10 @@ export function reduceTask(
         }
         turns += 1;
         if (infraRepeatCount >= 2) {
-          park = `infra-repeat: ${stop.cause}${stop.details ? `: ${stop.details}` : ""}`;
+          park = makeCause(
+            "infra-repeat",
+            `${stop.cause}${stop.details ? `: ${stop.details}` : ""}`,
+          );
           phase = "parked";
         }
       }
@@ -653,17 +678,17 @@ export function reduceTask(
     round = Math.max(round, rec.round);
     commit = rec.commit ?? commit;
     if (rec.stop?.kind === "refusal") {
-      park = `refused: ${rec.stop.details ?? "no details"}`;
+      park = makeCause("refused", rec.stop.details ?? "no details");
       phase = "parked";
       continue;
     }
     if (status === "blocked" || status === "failed") {
-      park = `${status}: ${outcome?.summary ?? "no summary"}`;
+      park = makeCause(status, outcome?.summary ?? "no summary");
       phase = "parked";
       continue;
     }
     if (status === "upscope") {
-      park = `upscope: ${outcome?.summary ?? "no summary"}`;
+      park = makeCause("upscope", outcome?.summary ?? "no summary");
       phase = "parked";
       continue;
     }
@@ -680,7 +705,10 @@ export function reduceTask(
     if (!step.review && committedNothing(task.kind, rec, priorTree)) {
       if (carriedWork !== true && (!changesPending || replyCount === 0)) {
         if (carriedWork === false) {
-          park = `empty-diff: ${rec.step} r${rec.round} kept work is already on the head`;
+          park = makeCause(
+            "empty-diff",
+            `${rec.step} r${rec.round} kept work is already on the head`,
+          );
           phase = "parked";
           continue;
         }
@@ -689,7 +717,10 @@ export function reduceTask(
           // normal productive path below so the following checks settle it.
           deferredEmpty = { step: rec.step, round: rec.round };
         } else {
-          park = `empty-diff: ${rec.step} r${rec.round} committed no changes`;
+          park = makeCause(
+            "empty-diff",
+            `${rec.step} r${rec.round} committed no changes`,
+          );
           phase = "parked";
           continue;
         }
@@ -705,7 +736,7 @@ export function reduceTask(
       // class rewrite is flow's side effect; derive only parks. Non-review
       // steps ignore the field.
       if (outcome?.upscope === "yes") {
-        park = `upscope: ${outcome?.summary ?? "no summary"}`;
+        park = makeCause("upscope", outcome?.summary ?? "no summary");
         phase = "parked";
         continue;
       }
@@ -722,7 +753,10 @@ export function reduceTask(
         if (isLastReviewCall(step, rec.round)) {
           // The outcome validator refuses this; a recorded changes on the
           // last call is a contract breach, never a merge.
-          park = `invalid outcome: changes on the last review call: ${outcome?.summary ?? "no summary"}`;
+          park = makeCause(
+            "invalid-outcome",
+            `changes on the last review call: ${outcome?.summary ?? "no summary"}`,
+          );
           phase = "parked";
           changesPending = false;
           pendingChecks = null;
@@ -737,7 +771,7 @@ export function reduceTask(
           pendingChecks = null;
         }
       } else if (verdict === "reject") {
-        park = `review rejected: ${outcome?.summary ?? "no summary"}`;
+        park = makeCause("review-rejected", outcome?.summary ?? "no summary");
         phase = "parked";
       }
       // No `else`: a done review always carries a verdict — outcome repair

@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { isTransientInfraCause } from "../harness/fallback.js";
+import { formatCause, makeCause } from "./cause.js";
 import { derive } from "./derive.js";
 import { executeTaskAction, type TaskActionResult } from "./flow.js";
 import { stepTarget } from "./flow-context.js";
@@ -23,6 +24,7 @@ import { runSteward } from "./steward.js";
 import type { DrainController } from "./signals.js";
 import type {
   Action,
+  Cause,
   KernelRuntime,
   State,
   StepRecord,
@@ -32,7 +34,7 @@ import type {
 
 export interface DispatchResult {
   reason: "boundary" | "drained" | "terminal" | "infra" | "cancelled";
-  cause?: string;
+  cause?: Cause;
   /** Completed agent turns in this iteration. */
   turns: number;
   /** Started task turns in this iteration. */
@@ -185,7 +187,7 @@ async function recordCrash(
       ),
       {
         ok: false,
-        cause,
+        cause: makeCause("error", cause),
         stop: { kind: "infra", cause: "crash", details: message },
       },
     );
@@ -227,10 +229,7 @@ function activeHolds(holds: Hold[], pending: ReadonlySet<string>): ActiveHolds {
  * exhausts. A hold that voids every pending task ends the iteration early at
  * the boundary with this cause; a partial hold reports the same way.
  */
-function heldBoundaryCause(
-  hold: ActiveHolds,
-  state: State,
-): string | undefined {
+function heldBoundaryCause(hold: ActiveHolds, state: State): Cause | undefined {
   const bySteer = new Map<string, string[]>();
   for (const [slug, steer] of hold.slugs) {
     const status = state.tasks[slug]?.status;
@@ -247,13 +246,13 @@ function heldBoundaryCause(
     bySteer.set(steer, list);
   }
   if (bySteer.size === 0) return undefined;
-  return [...bySteer.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(
-      ([steer, slugs]) =>
-        `steer: ${steer} holds ${[...slugs].sort().join(", ")}`,
-    )
-    .join("; ");
+  return makeCause(
+    "steer",
+    [...bySteer.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([steer, slugs]) => `${steer} holds ${[...slugs].sort().join(", ")}`)
+      .join("; "),
+  );
 }
 
 /**
@@ -323,9 +322,12 @@ export async function runDispatch(
   let planCheckVerdict: "progress" | "architect" | undefined;
   const planCheckFindings: string[] = [];
   /** The plan-check PM's unfixed findings, once, as the summary cause. */
-  const planCheckCause = (): string | undefined =>
+  const planCheckCause = (): Cause | undefined =>
     planCheckFindings.length > 0
-      ? `PM ladder routed to the architect: ${[...new Set(planCheckFindings)].join("; ")}`
+      ? makeCause(
+          "boundary",
+          `PM ladder routed to the architect: ${[...new Set(planCheckFindings)].join("; ")}`,
+        )
       : undefined;
   const running = new Map<string, Running>();
   const started = new Set(
@@ -366,7 +368,7 @@ export async function runDispatch(
   };
 
   let cancelled = false;
-  let drain: string | undefined;
+  let drain: Cause | undefined;
   const usdLimit = runtime.limits.iterationUsd;
 
   // Only the ids the boundary actually read are the boundary's. A steer that
@@ -386,7 +388,7 @@ export async function runDispatch(
     // dispatched this iteration; the launch surfaces the infra stop.
     return {
       reason: "infra",
-      cause: `steer holds: ${(err as Error).message}`,
+      cause: makeCause("error", `steer holds: ${(err as Error).message}`),
       turns: settledTurns(initialRecords, iteration),
       taskTurnsStarted: 0,
       allReadyHeld: false,
@@ -543,7 +545,7 @@ export async function runDispatch(
       const turns = settledTurns(await runtime.store.listRecords(), iteration);
       return {
         reason: "infra",
-        cause: polled.holdError,
+        cause: makeCause("error", polled.holdError),
         turns,
         taskTurnsStarted,
         allReadyHeld: false,
@@ -576,22 +578,28 @@ export async function runDispatch(
       if (polled.urgent !== undefined) {
         // An urgent steer ends the iteration early: started work runs to the
         // end, nothing new starts, and the next consult sees the steer.
-        drain = `steer: ${polled.urgent} marked urgent`;
+        drain = makeCause("steer", `${polled.urgent} marked urgent`);
       } else if (hold.goal !== undefined) {
         // A goal hold is a drain with a name: started tasks run their flow to
         // the end, nothing new starts, and the architect sees the remainder.
         // Parks happen only through the existing park causes, never from a hold.
-        drain = `steer: ${hold.goal} goal hold`;
+        drain = makeCause("steer", `${hold.goal} goal hold`);
       } else if (
         runtime.limits.iterationTurns !== undefined &&
         turnsUsed >= runtime.limits.iterationTurns
       ) {
-        drain = `iteration turn limit ${runtime.limits.iterationTurns} reached`;
+        drain = makeCause(
+          "boundary",
+          `iteration turn limit ${runtime.limits.iterationTurns} reached`,
+        );
       } else if (
         iterationWallMs !== undefined &&
         elapsedMs >= iterationWallMs
       ) {
-        drain = `iteration wall limit ${iterationWallMs}ms reached`;
+        drain = makeCause(
+          "boundary",
+          `iteration wall limit ${iterationWallMs}ms reached`,
+        );
       } else if (usdLimit !== undefined) {
         const spent = iterationSpend(
           records,
@@ -600,7 +608,10 @@ export async function runDispatch(
           runtime.configs.run.priceIds,
         );
         if (spent >= usdLimit) {
-          drain = `budget: iteration USD limit $${usdLimit.toFixed(4)} reached (spent $${spent.toFixed(4)})`;
+          drain = makeCause(
+            "budget",
+            `iteration USD limit $${usdLimit.toFixed(4)} reached (spent $${spent.toFixed(4)})`,
+          );
         }
       }
     }
@@ -620,7 +631,7 @@ export async function runDispatch(
       // A signal raised while a turn was awaited must refuse the next start.
       // Draining here, per admission, closes the window a wave-top check misses.
       if (drain === undefined && opts.signals?.shouldStop()) {
-        drain = "signal: drain requested";
+        drain = makeCause("boundary", "signal: drain requested");
       }
       const task = effectiveTasks.find((t) => t.slug === action.slug);
       if (!task) throw new Error(`action names unknown task "${action.slug}"`);
@@ -747,7 +758,12 @@ export async function runDispatch(
         const checked = planCheckCause();
         return {
           reason: "drained",
-          cause: checked ? `${drain}; ${checked}` : drain,
+          cause: checked
+            ? makeCause(
+                drain.kind === "budget" ? "budget" : "boundary",
+                `${formatCause(drain)}; ${formatCause(checked)}`,
+              )
+            : drain,
           turns: turnsUsed,
           taskTurnsStarted,
           allReadyHeld: false,
@@ -775,7 +791,7 @@ export async function runDispatch(
         );
         return {
           reason: "infra",
-          cause: `steward: ${cause}`,
+          cause: makeCause("error", `steward: ${cause}`),
           turns,
           taskTurnsStarted,
           allReadyHeld: false,
@@ -888,7 +904,7 @@ export async function runDispatch(
         );
         return {
           reason: "infra",
-          cause: causes.join("; "),
+          cause: makeCause("boundary", causes.join("; ")),
           turns,
           taskTurnsStarted,
           allReadyHeld: false,
@@ -897,11 +913,17 @@ export async function runDispatch(
       const heldCause = heldBoundaryCause(hold, state);
       const planCheckFinding = planCheckCause();
       const causes = [heldCause, planCheckFinding].filter(
-        (cause): cause is string => cause !== undefined,
+        (cause): cause is Cause => cause !== undefined,
       );
+      const boundaryCause =
+        causes.length === 1
+          ? causes[0]
+          : causes.length > 1
+            ? makeCause("boundary", causes.map(formatCause).join("; "))
+            : undefined;
       return {
         reason: "boundary",
-        ...(causes.length > 0 ? { cause: causes.join("; ") } : {}),
+        ...(boundaryCause ? { cause: boundaryCause } : {}),
         turns,
         taskTurnsStarted,
         planCheck: planCheckVerdict,

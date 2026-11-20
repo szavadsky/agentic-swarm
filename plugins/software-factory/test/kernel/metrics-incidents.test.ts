@@ -14,7 +14,7 @@ import {
 } from "../../src/kernel/metrics.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { writeIterationSummary } from "../../src/kernel/summary.js";
-import { rec, script, task } from "./helpers.js";
+import { rec, script, task, cause } from "./helpers.js";
 
 function usage(costUsd: number, tin: number, out: number): Usage {
   return {
@@ -97,34 +97,36 @@ function incidentRecords() {
       slug: "a",
       step: "merge",
       ok: false,
-      cause: "conflict: alpha.txt",
+      cause: cause("conflict: alpha.txt"),
     }),
     script(6, { slug: "a", step: "merge-checks", ok: false, checks: [] }),
     script(12, {
       slug: "a",
       step: "gate-flake",
       ok: true,
-      cause: "unit: src/a.test.ts > suite > flaky test",
+      cause: cause("unit: src/a.test.ts > suite > flaky test"),
     }),
     script(7, {
       slug: "b",
       step: "park",
       ok: true,
-      cause: 'review round limit reached after verdict "changes" (2 rounds)',
+      cause: cause(
+        'review round limit reached after verdict "changes" (2 rounds)',
+      ),
     }),
     script(8, {
       slug: "c",
       step: "park",
       ok: true,
-      cause: "no-progress: implement r2 repeats r1 (deadbeef)",
+      cause: cause("no-progress: implement r2 repeats r1 (deadbeef)"),
     }),
     script(10, {
       slug: "e",
       step: "park",
       ok: true,
-      cause: "empty-diff: implement r1 committed no changes",
+      cause: cause("empty-diff: implement r1 committed no changes"),
     }),
-    script(11, { slug: "f", step: "park", ok: true, cause: "overflow" }),
+    script(11, { slug: "f", step: "park", ok: true, cause: cause("overflow") }),
   ];
 }
 
@@ -269,7 +271,7 @@ describe("iteration metrics incidents and spend tables", () => {
           slug: "a",
           step: "park",
           ok: true,
-          cause: "empty-diff: implement r1 committed no changes",
+          cause: cause("empty-diff: implement r1 committed no changes"),
         }),
         // A spike produces knowledge: no commit is a normal finish, not a park.
         script(3, { slug: "probe", step: "finish", ok: true }),
@@ -277,7 +279,7 @@ describe("iteration metrics incidents and spend tables", () => {
           slug: "b",
           step: "park",
           ok: true,
-          cause: "no-progress: implement r2 repeats r1 (deadbeef)",
+          cause: cause("no-progress: implement r2 repeats r1 (deadbeef)"),
         }),
       ];
 
@@ -350,7 +352,7 @@ describe("iteration metrics incidents and spend tables", () => {
           slug: "b",
           step: "park",
           ok: true,
-          cause: "review rejected: missing test",
+          cause: cause("review rejected: missing test"),
         }),
       ];
 

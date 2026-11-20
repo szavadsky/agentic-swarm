@@ -6,7 +6,7 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
-import { task } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   goalCheckout,
@@ -17,6 +17,7 @@ import {
   writeTask,
 } from "./s2-helpers.js";
 import { head, commitIn, parkAlpha } from "./base-sync-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 describe("parked continuation syncs to the integration head", () => {
   it("sees a commit merged after the park and reviews from that head", async () => {
@@ -311,7 +312,9 @@ describe("parked continuation syncs to the integration head", () => {
       );
       expect(sawAsk).toBe(true);
       expect(state.tasks.beta!.status).toBe("parked");
-      expect(state.tasks.beta!.cause).toContain("base-conflict: clash.txt");
+      expect(causeText(state.tasks.beta!.cause)).toContain(
+        "base-conflict: clash.txt",
+      );
       expect(
         records.filter((r) => r.slug === "beta" && r.actor === "agent"),
       ).toHaveLength(1);
@@ -381,7 +384,9 @@ describe("parked continuation syncs to the integration head", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.beta!.status).toBe("parked");
-      expect(state.tasks.beta!.cause).toContain("base-conflict: clash.txt");
+      expect(causeText(state.tasks.beta!.cause)).toContain(
+        "base-conflict: clash.txt",
+      );
       const betaWt = path.join(
         runtime.paths.worktreeRoot,
         `${goal}-tasks`,

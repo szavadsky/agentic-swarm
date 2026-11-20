@@ -24,6 +24,8 @@ import {
   writeTask,
 } from "./e2e-helpers.js";
 import { scriptStallLeave } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
+import { causeText } from "./helpers.js";
 
 function writeClass(goal: E2EGoal, text: string): void {
   fs.writeFileSync(path.join(goal.goalDir, "class.yaml"), text, "utf8");
@@ -587,7 +589,9 @@ describe("front ladder", () => {
         (r) => r.slug === "tiny" && r.step === "park",
       );
       expect(parks).toHaveLength(1);
-      expect(parks[0]?.cause).toContain("no front session to resume");
+      expect(causeText(parks[0]?.cause)).toContain(
+        "no front session to resume",
+      );
       expect(
         records.some(
           (r) => r.slug === "tiny" && r.step === "merge" && r.ok === true,
@@ -620,7 +624,7 @@ describe("front ladder", () => {
         (r) => r.slug === "tiny" && r.step === "park",
       );
       expect(parks).toHaveLength(1);
-      expect(parks[0]?.cause).toContain("cannot resume sessions");
+      expect(causeText(parks[0]?.cause)).toContain("cannot resume sessions");
       expect(
         records.some(
           (r) => r.slug === "tiny" && r.step === "merge" && r.ok === true,
@@ -655,7 +659,7 @@ describe("front ladder", () => {
         (r) => r.slug === "tiny" && r.step === "park",
       );
       expect(parks).toHaveLength(1);
-      expect(parks[0]?.cause).toContain("containment:");
+      expect(causeText(parks[0]?.cause)).toContain("containment:");
       expect(
         records.some(
           (r) => r.slug === "tiny" && r.step === "merge" && r.ok === true,

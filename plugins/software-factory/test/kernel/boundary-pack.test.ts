@@ -19,7 +19,7 @@ import {
 } from "../../src/kernel/plan-review.js";
 import type { Outcome } from "../../src/kernel/types.js";
 import { postSteer } from "../../src/kernel/mailbox.js";
-import { rec, task } from "./helpers.js";
+import { rec, task, cause, causeText } from "./helpers.js";
 import { scriptMeta } from "../../src/kernel/record.js";
 import { createFolderStore, recordDirName } from "../../src/kernel/store.js";
 import {
@@ -229,8 +229,8 @@ describe("boundary context pack", () => {
       );
       expect(fallback?.ok).toBe(false);
       expect(fallback?.launchKind).toBe("glitch");
-      expect(fallback?.cause).toContain("turn wrote no pack");
-      expect(fallback?.cause).toContain("script render");
+      expect(causeText(fallback?.cause)).toContain("turn wrote no pack");
+      expect(causeText(fallback?.cause)).toContain("script render");
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -247,7 +247,7 @@ describe("boundary context pack", () => {
         writeTask(goal.goalDir, simpleTask(slug, `${slug}.txt`));
         await store.appendRecord(scriptMeta(1, "park", { slug }), {
           ok: true,
-          cause: "seeded terminal for pack size",
+          cause: cause("seeded terminal for pack size"),
         });
       }
       const harness = new FakeHarness({ id: "fake" });

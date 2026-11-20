@@ -15,6 +15,7 @@ import {
   preexistingRed,
   recordedBaseGates,
 } from "./baseline.js";
+import { makeCause } from "./cause.js";
 import { contextPackRelPath } from "./context-pack.js";
 import { formatFailingChecks, newGateFailures } from "./gates.js";
 import { launchKindOf } from "./metrics.js";
@@ -29,6 +30,7 @@ import { spikeReportPath } from "./spike-report.js";
 import type {
   AliasConfig,
   BoundaryStep,
+  Cause,
   FlowDefinition,
   FlowStep,
   FollowUp,
@@ -307,7 +309,7 @@ export function countRedGateRequests(
     else if (
       rec.step === "merge" &&
       rec.ok === false &&
-      rec.cause?.startsWith("gates:")
+      rec.cause?.kind === "gates"
     )
       count += 1;
   }
@@ -721,7 +723,7 @@ export function alternatePosition(
     } else if (
       stepId === fixStep &&
       rec.step === "park" &&
-      rec.cause?.startsWith("gates:")
+      rec.cause?.kind === "gates"
     ) {
       // Fix rounds exhausted on red gates: the fix turn ran out of rounds, so
       // the next attempt at the productive step starts on the next alternate.
@@ -914,7 +916,7 @@ export function priorStepCommit(
 }
 
 /** The session a trivial implement turn resumes, or why the task parks instead. */
-export type TrivialResume = { session: SessionRef } | { cause: string };
+export type TrivialResume = { session: SessionRef } | { cause: Cause };
 
 /**
  * The front's own session for a trivial implement turn: the front record's
@@ -941,9 +943,11 @@ export async function trivialResumeSession(
   }
   if (!resumable) {
     return {
-      cause:
+      cause: makeCause(
+        "resume",
         `harness "${target.harness.id}" cannot resume sessions, ` +
-        `so trivial task "${task.slug}" cannot implement in the front's session`,
+          `so trivial task "${task.slug}" cannot implement in the front's session`,
+      ),
     };
   }
   const current = target.harness.id;
@@ -966,24 +970,30 @@ export async function trivialResumeSession(
     const resumed = kept(own) ?? kept(lastFrontRecord(records)?.session);
     if (resumed) return { session: resumed };
     return {
-      cause:
+      cause: makeCause(
+        "resume",
         `trivial task "${task.slug}" has no session to resume ` +
-        `on alias "${target.alias}"`,
+          `on alias "${target.alias}"`,
+      ),
     };
   }
   const front = lastFrontRecord(records)?.session;
   if (!front) {
     return {
-      cause:
+      cause: makeCause(
+        "resume",
         `trivial task "${task.slug}" has no front session to resume; ` +
-        `the front turn left no session record`,
+          `the front turn left no session record`,
+      ),
     };
   }
   if (!portable(front.harness, current, runtime.configs.run.portability)) {
     return {
-      cause:
+      cause: makeCause(
+        "resume",
         `trivial task "${task.slug}" cannot resume its front session: ` +
-        `harness "${front.harness}" is not the front alias harness "${current}"`,
+          `harness "${front.harness}" is not the front alias harness "${current}"`,
+      ),
     };
   }
   return { session: front };

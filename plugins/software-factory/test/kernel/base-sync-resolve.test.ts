@@ -6,7 +6,7 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
-import { task } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   goalCheckout,
@@ -17,6 +17,7 @@ import {
   writeTask,
 } from "./s2-helpers.js";
 import { commitIn, parkAlpha } from "./base-sync-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 describe("parked continuation syncs to the integration head", () => {
   it("resolves a reused-worktree first-turn conflict in the turn", async () => {
@@ -198,7 +199,9 @@ describe("parked continuation syncs to the integration head", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.beta!.status).toBe("parked");
-      expect(state.tasks.beta!.cause).toContain("base-conflict: beta.txt");
+      expect(causeText(state.tasks.beta!.cause)).toContain(
+        "base-conflict: beta.txt",
+      );
       expect(
         records.filter(
           (r) =>
@@ -341,8 +344,8 @@ describe("parked continuation syncs to the integration head", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.beta!.status).toBe("parked");
-      expect(state.tasks.beta!.cause).toContain("empty-diff");
-      expect(state.tasks.beta!.cause).toContain(
+      expect(causeText(state.tasks.beta!.cause)).toContain("empty-diff");
+      expect(causeText(state.tasks.beta!.cause)).toContain(
         "after red checks: no-beta (exit 1)",
       );
       // The fix turn never reached review, so no merge ran.

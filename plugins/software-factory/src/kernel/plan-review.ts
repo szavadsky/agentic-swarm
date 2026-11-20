@@ -1,5 +1,6 @@
 import path from "node:path";
 import { runAgentTurn } from "./agent.js";
+import { makeCause } from "./cause.js";
 import {
   formatPlanFinding,
   numberedPlanFindings,
@@ -17,6 +18,7 @@ import { outcomeRepairSchemaVar } from "./prompt-schema.js";
 import { scriptMeta } from "./record.js";
 import {
   ARCHITECTURE_STEPS,
+  type Cause,
   type KernelRuntime,
   type Outcome,
   type PlanReviewFinding,
@@ -113,7 +115,7 @@ async function recordMissing(
   runtime: KernelRuntime,
   iteration: number,
   step: string,
-  cause: string,
+  cause: Cause,
 ): Promise<void> {
   await runtime.store.appendRecord(scriptMeta(iteration, step, { round: 1 }), {
     ok: false,
@@ -170,15 +172,21 @@ export async function runPlanReview(
         scriptMeta(opts.iteration, "plan-review-reconcile", { round: 1 }),
         {
           ok: false,
-          cause: `plan reviewer ${alias} writes discarded: ${touched.join(", ")}; the reviewer is read-only`,
+          cause: makeCause(
+            "invalid-outcome",
+            `plan reviewer ${alias} writes discarded: ${touched.join(", ")}; the reviewer is read-only`,
+          ),
         },
       );
     }
     const stop = result.record.stop;
     if (stop?.kind === "infra") {
-      const cause = `plan review by ${alias} stopped on infrastructure: ${
-        stop.details ? `${stop.cause}: ${stop.details}` : stop.cause
-      }`;
+      const cause = makeCause(
+        "infra",
+        `plan review by ${alias} stopped on infrastructure: ${
+          stop.details ? `${stop.cause}: ${stop.details}` : stop.cause
+        }`,
+      );
       await recordMissing(
         runtime,
         opts.iteration,
@@ -198,9 +206,12 @@ export async function runPlanReview(
       runtime,
       opts.iteration,
       "plan-review-missing",
-      `plan review by ${alias} produced no findings: ${
-        outcome?.summary ?? "no outcome"
-      }`,
+      makeCause(
+        "invalid-outcome",
+        `plan review by ${alias} produced no findings: ${
+          outcome?.summary ?? "no outcome"
+        }`,
+      ),
     );
   }
   return {
@@ -221,9 +232,12 @@ async function discardTaskWrites(
     scriptMeta(iteration, "plan-return-reconcile", { round: 1 }),
     {
       ok: false,
-      cause: `architect return task writes discarded: ${touched
-        .map((slug) => `${slug}.md`)
-        .join(", ")}; only the PM writes tasks`,
+      cause: makeCause(
+        "invalid-outcome",
+        `architect return task writes discarded: ${touched
+          .map((slug) => `${slug}.md`)
+          .join(", ")}; only the PM writes tasks`,
+      ),
     },
   );
 }
@@ -234,6 +248,7 @@ async function discardTaskWrites(
  * decision. A missing or failed return is recorded and the PM still runs:
  * the review advises, it never blocks the iteration.
  */
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: one architect turn, its read-only reconcile and its missing record
 export async function runArchitectReturn(
   runtime: KernelRuntime,
   opts: {
@@ -279,9 +294,12 @@ export async function runArchitectReturn(
   await discardTaskWrites(runtime, opts.iteration, tasksBefore);
   const stop = result.record.stop;
   if (stop?.kind === "infra") {
-    const cause = `architect return stopped on infrastructure: ${
-      stop.details ? `${stop.cause}: ${stop.details}` : stop.cause
-    }`;
+    const cause = makeCause(
+      "infra",
+      `architect return stopped on infrastructure: ${
+        stop.details ? `${stop.cause}: ${stop.details}` : stop.cause
+      }`,
+    );
     await recordMissing(runtime, opts.iteration, "plan-return-missing", cause);
     return;
   }
@@ -292,7 +310,10 @@ export async function runArchitectReturn(
     runtime,
     opts.iteration,
     "plan-return-missing",
-    `architect return produced no marks: ${outcome?.summary ?? "no outcome"}`,
+    makeCause(
+      "invalid-outcome",
+      `architect return produced no marks: ${outcome?.summary ?? "no outcome"}`,
+    ),
   );
 }
 

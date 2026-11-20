@@ -13,7 +13,7 @@ import { runDispatch } from "../../src/kernel/dispatch.js";
 import { postSteer } from "../../src/kernel/mailbox.js";
 import { createDrainController } from "../../src/kernel/signals.js";
 import { spikeReportPath } from "../../src/kernel/spike-report.js";
-import { task } from "./helpers.js";
+import { task, cause, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   filePerTaskHandler,
@@ -27,6 +27,7 @@ import {
   writeTask,
 } from "./s2-helpers.js";
 import { writeHold } from "./steer-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 async function runPair(opts: {
   scopeA: string[];
@@ -392,7 +393,10 @@ describe("dispatch admission", () => {
       });
 
       expect(result.reason).toBe("drained");
-      expect(result.cause).toBe("signal: drain requested");
+      expect(result.cause).toEqual({
+        kind: "boundary",
+        detail: "signal: drain requested",
+      });
       expect(starts).toEqual(["a"]);
       expect(harness.calls.length).toBe(2);
       const records = await runtime.store.listRecords();
@@ -478,7 +482,7 @@ describe("script crash budget", () => {
 
       const first = await runDispatch(runtime, { iteration: 1 });
       expect(first.reason).toBe("infra");
-      expect(first.cause).toContain(
+      expect(causeText(first.cause)).toContain(
         "alpha: crash: simulated pre-harness throw",
       );
       // Script crashes count as a turn but never spend the iteration turn
@@ -505,8 +509,12 @@ describe("script crash budget", () => {
       );
       expect(state.tasks.alpha!.turns).toBe(2);
       expect(state.tasks.alpha!.phase).toBe("parked");
-      expect(state.tasks.alpha!.park).toContain("infra-repeat: crash");
-      expect(state.tasks.alpha!.park).toContain("simulated pre-harness throw");
+      expect(causeText(state.tasks.alpha!.park)).toContain(
+        "infra-repeat: crash",
+      );
+      expect(causeText(state.tasks.alpha!.park)).toContain(
+        "simulated pre-harness throw",
+      );
 
       // The parked step is not re-dispatched by a third launch.
       const third = await runDispatch(runtime, { iteration: 3 });
@@ -564,8 +572,8 @@ describe("script crash budget", () => {
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("infra");
-      expect(result.cause).toContain("a: crash: simulated kill");
-      expect(result.cause).not.toContain("store boom");
+      expect(causeText(result.cause)).toContain("a: crash: simulated kill");
+      expect(causeText(result.cause)).not.toContain("store boom");
       expect(crashRecords).toBe(1);
       expect(
         warnings.some(
@@ -611,7 +619,7 @@ describe("script crash budget", () => {
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("infra");
-      expect(result.cause).toContain("a: crash: simulated kill");
+      expect(causeText(result.cause)).toContain("a: crash: simulated kill");
       const logged = warnings.find((w) => w.includes("recordCrash"));
       expect(logged).toBeDefined();
       expect(logged).toContain("store string boom");
@@ -966,7 +974,7 @@ describe("dispatch pass signals", () => {
       });
 
       expect(result.reason).toBe("boundary");
-      expect(result.cause).toBe("steer: s1 holds a, b");
+      expect(result.cause).toEqual(cause("steer: s1 holds a, b"));
       expect(result.allReadyHeld).toBe(true);
       expect(result.taskTurnsStarted).toBe(0);
       expect(harness.calls).toHaveLength(0);
@@ -995,7 +1003,7 @@ describe("dispatch pass signals", () => {
 
       // Boundary after work: b's implement and review ran, a stays held.
       expect(result.reason).toBe("boundary");
-      expect(result.cause).toBe("steer: s1 holds a");
+      expect(result.cause).toEqual(cause("steer: s1 holds a"));
       expect(result.allReadyHeld).toBe(true);
       expect(result.taskTurnsStarted).toBe(2);
       const state = derive(

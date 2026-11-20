@@ -12,7 +12,7 @@ import { runDispatch } from "../../src/kernel/dispatch.js";
 import { holdsDir, postSteer } from "../../src/kernel/mailbox.js";
 import { appendPark } from "../../src/kernel/record.js";
 import { spikeReportPath } from "../../src/kernel/spike-report.js";
-import { task } from "./helpers.js";
+import { task, cause, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -32,6 +32,7 @@ import {
   outboxOf,
   inboxHas,
 } from "./steer-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 describe("steer PM routing", () => {
   it("task: amends the pending task file and answers in the outbox", async () => {
@@ -190,7 +191,7 @@ describe("steer PM routing", () => {
       await appendPark(
         runtime.store,
         { iteration: 1, slug: "alpha", round: 1, revision: 0 },
-        "flaky foundation",
+        cause("flaky foundation"),
       );
       expect((await stateOf(runtime)).tasks.alpha!.status).toBe("parked");
 
@@ -453,7 +454,7 @@ describe("steer PM routing", () => {
       );
       expect(refused).toHaveLength(2);
       for (const record of refused) {
-        expect(record.cause).toContain(
+        expect(causeText(record.cause)).toContain(
           "hold names task(s) it creates: no-outcome-forensics-spike",
         );
       }

@@ -1,8 +1,9 @@
 // biome-ignore-all lint/complexity: split-rest
+import { makeCause } from "./cause.js";
 import { agentSteps, reviewRoundLimit } from "./review.js";
-import type { Action, Limits, State } from "./types.js";
+import type { Action, Cause, Limits, State } from "./types.js";
 
-function park(slug: string, cause: string): Action {
+function park(slug: string, cause: Cause): Action {
   return { kind: "park", slug, cause };
 }
 
@@ -43,7 +44,10 @@ export function next(
       actions.push(
         park(
           slug,
-          `no-progress: ${loop.step} r${loop.round} repeats r${loop.firstRound} (${loop.fingerprint.slice(0, 8)})`,
+          makeCause(
+            "no-progress",
+            `${loop.step} r${loop.round} repeats r${loop.firstRound} (${loop.fingerprint.slice(0, 8)})`,
+          ),
         ),
       );
       continue;
@@ -51,7 +55,9 @@ export function next(
 
     const flow = limits.flows[task.flow];
     if (!flow) {
-      actions.push(park(slug, `flow "${task.flow}" is not configured`));
+      actions.push(
+        park(slug, makeCause("stuck", `flow "${task.flow}" is not configured`)),
+      );
       continue;
     }
 
@@ -73,7 +79,10 @@ export function next(
     }
     if (task.phase === "done" || task.phase === "parked") {
       actions.push(
-        park(slug, `stuck: no next action for phase "${task.phase}"`),
+        park(
+          slug,
+          makeCause("stuck", `no next action for phase "${task.phase}"`),
+        ),
       );
       continue;
     }
@@ -81,7 +90,10 @@ export function next(
     const step = agentSteps(flow).find((s) => s.id === task.phase);
     if (!step) {
       actions.push(
-        park(slug, `flow "${task.flow}" has no step "${task.phase}"`),
+        park(
+          slug,
+          makeCause("stuck", `flow "${task.flow}" has no step "${task.phase}"`),
+        ),
       );
       continue;
     }
@@ -91,7 +103,12 @@ export function next(
         actions.push(
           park(
             slug,
-            `review round limit reached after verdict "${task.verdict ?? "none"}" (${roundLimit} rounds)`,
+            makeCause(
+              task.verdict === "changes"
+                ? "change-requests-exhausted"
+                : "round-limit",
+              `after verdict "${task.verdict ?? "none"}" (${roundLimit} rounds)`,
+            ),
           ),
         );
         continue;

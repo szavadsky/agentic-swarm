@@ -10,7 +10,7 @@ import {
   stepTarget,
   trivialResumeSession,
 } from "../../src/kernel/flow-context.js";
-import { task } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
 import { cleanupFlowRepo, makeRuntime, setupFlowRepo } from "./s2-helpers.js";
 
 describe("front prompt handoff", () => {
@@ -238,7 +238,9 @@ describe("trivial session resume", () => {
         1,
       );
       if (!("cause" in resumed)) throw new Error("expected a park cause");
-      expect(resumed.cause).toContain("is not the front alias harness");
+      expect(causeText(resumed.cause)).toContain(
+        "is not the front alias harness",
+      );
     } finally {
       cleanupFlowRepo(repo);
     }

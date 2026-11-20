@@ -25,7 +25,7 @@ import { PLAN_CHECK_ROUTES_STEP, runPlanCheckPm } from "../../src/kernel/pm.js";
 import { appendCancel, scriptMeta } from "../../src/kernel/record.js";
 import { parseTaskFile, renderTaskFile } from "../../src/kernel/tasks.js";
 import { testPriceSource } from "../helpers/price-source.js";
-import { rec, task } from "./helpers.js";
+import { rec, task, cause, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -35,6 +35,7 @@ import {
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 const ALIASES = {
   architect: { harness: "fake", model: "fake-architect" },
@@ -533,8 +534,8 @@ describe("plan checker", () => {
         (r) => r.iteration === 1 && r.step === "plan-check-reconcile",
       );
       expect(reconciled).toHaveLength(1);
-      expect(reconciled[0]!.cause).toContain("plan.md");
-      expect(reconciled[0]!.cause).toContain("beta");
+      expect(causeText(reconciled[0]!.cause)).toContain("plan.md");
+      expect(causeText(reconciled[0]!.cause)).toContain("beta");
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -588,7 +589,7 @@ describe("plan checker", () => {
       await appendCancel(
         runtime.store,
         { iteration: 1, slug: "ghost", round: 1 },
-        "dropped from the plan",
+        cause("dropped from the plan"),
       );
       harness.script((req, ctx) => {
         const fixed = task("app", { scope: ["app.txt"], deps: [] });
@@ -652,7 +653,7 @@ describe("plan checker", () => {
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
       await runtime.store.appendRecord(
         scriptMeta(1, "park", { slug: "beta", round: 1, revision: 0 }),
-        { ok: true, cause: "failed: runner crashed mid-turn" },
+        { ok: true, cause: cause("failed: runner crashed mid-turn") },
       );
       const state = derive(
         await runtime.store.listTasks(),
@@ -832,11 +833,15 @@ describe("plan checker", () => {
       );
       expect(validations).toHaveLength(2);
       for (const { cause } of validations) {
-        expect(cause).toContain(
+        expect(causeText(cause)).toContain(
           'slug "alpha" is amended but its file is unchanged',
         );
-        expect(cause).toContain('slug "beta" is replaced but has no task');
-        expect(cause).toContain('slug "gamma" is split into nothing');
+        expect(causeText(cause)).toContain(
+          'slug "beta" is replaced but has no task',
+        );
+        expect(causeText(cause)).toContain(
+          'slug "gamma" is split into nothing',
+        );
       }
     } finally {
       cleanupFlowRepo(repo);
@@ -910,10 +915,10 @@ describe("plan checker", () => {
       );
       expect(validations).toHaveLength(2);
       for (const { cause } of validations) {
-        expect(cause).toContain(
+        expect(causeText(cause)).toContain(
           'task "alpha" was edited; a plan-check turn never edits a slug it does not amend, and leave keeps this file as it was',
         );
-        expect(cause).toContain(
+        expect(causeText(cause)).toContain(
           'new task "beta-2" continues "beta", which was routed leave; only replace and split write new tasks',
         );
       }
@@ -979,7 +984,7 @@ describe("plan checker", () => {
       const validations = (await runtime.store.listRecords()).filter(
         (r) => r.step === "pm-validate",
       );
-      expect(validations[0]!.cause).toContain("amend is refused");
+      expect(causeText(validations[0]!.cause)).toContain("amend is refused");
       expect(fs.readFileSync(betaPath, "utf8")).toBe(before);
     } finally {
       cleanupFlowRepo(repo);
@@ -1066,7 +1071,8 @@ describe("plan checker", () => {
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
-      expect(result.cause).toBe(
+      expect(result.cause?.kind).toBe("boundary");
+      expect(result.cause?.detail).toBe(
         `PM ladder routed to the architect: ${missingDepFinding("beta", "gone")}`,
       );
       expect(
@@ -1151,7 +1157,7 @@ describe("plan checker", () => {
       );
       await runtime.store.appendRecord(
         scriptMeta(1, "park", { slug: "beta", round: 1, revision: 0 }),
-        { ok: true, cause: "failed: runner crashed mid-turn" },
+        { ok: true, cause: cause("failed: runner crashed mid-turn") },
       );
       const state = derive(
         await runtime.store.listTasks(),
@@ -1247,7 +1253,7 @@ describe("plan checker", () => {
       );
       await runtime.store.appendRecord(
         scriptMeta(1, "park", { slug: "beta", round: 1, revision: 0 }),
-        { ok: true, cause: "failed: runner crashed mid-turn" },
+        { ok: true, cause: cause("failed: runner crashed mid-turn") },
       );
       const state = derive(
         await runtime.store.listTasks(),
@@ -1333,8 +1339,12 @@ describe("plan checker", () => {
       );
       expect(validations).toHaveLength(2);
       for (const record of validations) {
-        expect(record.cause).toContain('task "beta-2" depends on itself');
-        expect(record.cause).not.toContain(missingDepFinding("beta", "gone"));
+        expect(causeText(record.cause)).toContain(
+          'task "beta-2" depends on itself',
+        );
+        expect(causeText(record.cause)).not.toContain(
+          missingDepFinding("beta", "gone"),
+        );
       }
       expect(
         fs.existsSync(path.join(runtime.store.tasksDir, "beta-2.md")),
@@ -1482,7 +1492,12 @@ describe("plan checker", () => {
   it("briefs the checker with parked causes", () => {
     const tasks = [task("a"), task("b")];
     const state = derive(tasks, [
-      rec(1, { slug: "a", step: "park", ok: true, cause: "blocked: stuck" }),
+      rec(1, {
+        slug: "a",
+        step: "park",
+        ok: true,
+        cause: cause("blocked: stuck"),
+      }),
     ]);
     const brief = planCheckBrief(state, tasks);
     expect(brief).toContain("- a | parked |");
@@ -1673,7 +1688,7 @@ describe("plan checker", () => {
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
       await runtime.store.appendRecord(
         scriptMeta(1, "park", { slug: "beta", round: 1, revision: 0 }),
-        { ok: true, cause: "failed: runner crashed mid-turn" },
+        { ok: true, cause: cause("failed: runner crashed mid-turn") },
       );
       fs.writeFileSync(
         path.join(runtime.store.goalDir, "plan.md"),

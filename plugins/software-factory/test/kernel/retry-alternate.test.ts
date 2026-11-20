@@ -14,7 +14,7 @@ import {
   stepTarget,
 } from "../../src/kernel/flow-context.js";
 import type { KernelRuntime, StepRecord } from "../../src/kernel/types.js";
-import { rec, script, task } from "./helpers.js";
+import { rec, script, task, cause, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -24,6 +24,7 @@ import {
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 const aliases = {
   architect: { harness: "fake", model: "fake-architect" },
@@ -217,7 +218,7 @@ describe("alternate position", () => {
       const gatePark = script(2, {
         slug: "task",
         step: "park",
-        cause: "gates: readme (red)",
+        cause: cause("gates: readme (red)"),
       });
       expect(alternatePosition([gatePark], "task", "implement", flow)).toBe(1);
       // The park names no step; only the productive step takes the advance.
@@ -229,7 +230,7 @@ describe("alternate position", () => {
             script(2, {
               slug: "task",
               step: "park",
-              cause: "empty-diff: implement r1",
+              cause: cause("empty-diff: implement r1"),
             }),
           ],
           "task",
@@ -291,7 +292,9 @@ describe("alternates switch the alias on retry", () => {
         runtime.configs.process.flows,
       );
       expect(first.tasks.task!.status).toBe("parked");
-      expect(first.tasks.task!.cause).toContain("no outcome after repair");
+      expect(causeText(first.tasks.task!.cause)).toContain(
+        "no outcome after repair",
+      );
       expect(
         alternatePosition(
           await runtime.store.listRecords(),
@@ -389,7 +392,7 @@ describe("alternates switch the alias on retry", () => {
         runtime.configs.process.flows,
       );
       expect(parked.tasks.task!.status).toBe("parked");
-      expect(parked.tasks.task!.cause).toContain("review rejected");
+      expect(causeText(parked.tasks.task!.cause)).toContain("review-rejected");
       const firstImplement = (await runtime.store.listRecords()).find(
         (r) =>
           r.slug === "task" && r.step === "implement" && r.actor === "agent",

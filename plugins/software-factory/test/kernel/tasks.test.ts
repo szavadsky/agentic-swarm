@@ -15,7 +15,8 @@ import {
   validateTaskGraph,
 } from "../../src/kernel/tasks.js";
 import type { TaskStatus } from "../../src/kernel/types.js";
-import { task } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 const TEXT = `---
 slug: auth.token-refresh
@@ -435,7 +436,7 @@ describe("unreadable task files", () => {
       expect(report?.ok).toBe(false);
       expect(report?.iteration).toBe(1);
       expect(report?.slug).toBe("broken");
-      expect(report?.cause).toContain(
+      expect(causeText(report?.cause)).toContain(
         'task "broken" has no --- frontmatter ---',
       );
     } finally {
@@ -487,9 +488,9 @@ describe("unreadable task files", () => {
         (record) => record.step === "task-quarantine",
       );
       expect(reports).toHaveLength(terminal.length);
-      expect(reports.map((record) => record.cause).join("\n")).toContain(
-        "left in tasks/",
-      );
+      expect(
+        reports.map((record) => causeText(record.cause)).join("\n"),
+      ).toContain("left in tasks/");
 
       await store.listTasks();
       expect(

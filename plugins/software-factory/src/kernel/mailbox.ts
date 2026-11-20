@@ -6,6 +6,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import yaml from "yaml";
 import { z } from "zod";
 import { writeTextAtomic } from "../core/records/io.js";
+import { makeCause } from "./cause.js";
 import { scriptMeta } from "./record.js";
 import type {
   ArtifactStore,
@@ -425,7 +426,10 @@ async function quarantineHold(
   const rel = path.relative(store.goalDir, target);
   await store.appendRecord(scriptMeta(iteration, "hold-quarantine"), {
     ok: false,
-    cause: `${finding.kind} hold "${name}" moved to ${rel}: ${finding.reason}`,
+    cause: makeCause(
+      "quarantine",
+      `${finding.kind} hold "${name}" moved to ${rel}: ${finding.reason}`,
+    ),
   });
 }
 

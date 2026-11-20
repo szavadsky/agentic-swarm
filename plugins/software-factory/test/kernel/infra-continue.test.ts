@@ -13,7 +13,7 @@ import {
   runDispatch,
 } from "../../src/kernel/dispatch.js";
 import { PLAN_CHECK_STEP } from "../../src/kernel/plan-check.js";
-import { task } from "./helpers.js";
+import { task, cause, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   type FlowRepoOptions,
@@ -158,7 +158,10 @@ describe("transient infra never ends a launch with dispatchable work left", () =
       });
 
       expect(result.reason).toBe("infra");
-      expect(result.cause).toBe("alpha: network: fetch failed: ECONNRESET");
+      expect(result.cause).toEqual({
+        kind: "boundary",
+        detail: "alpha: network: fetch failed: ECONNRESET",
+      });
       expect(sleeps).toEqual([...INFRA_REDISPATCH_DELAYS_MS]);
       // One attempt plus one per delay: bounded, so a persistent fault cannot
       // spin the iteration.
@@ -227,7 +230,10 @@ describe("transient infra never ends a launch with dispatchable work left", () =
       // Auth is fatal: no backoff, and the fault names the stop only after the
       // wave's recovery ran.
       expect(result.reason).toBe("infra");
-      expect(result.cause).toBe("alpha: auth: invalid api key");
+      expect(result.cause).toEqual({
+        kind: "boundary",
+        detail: "alpha: auth: invalid api key",
+      });
       expect(sleeps).toEqual([]);
 
       const records = await runtime.store.listRecords();
@@ -236,7 +242,7 @@ describe("transient infra never ends a launch with dispatchable work left", () =
           (record) =>
             record.step === "steward" &&
             record.iteration === 1 &&
-            record.cause === "skipped: no conflicts",
+            causeText(record.cause) === "skipped: no conflicts",
         ),
       ).toBe(true);
       const stalls = records.filter(

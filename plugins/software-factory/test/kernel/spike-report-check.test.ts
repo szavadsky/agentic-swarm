@@ -18,7 +18,7 @@ import type {
   StepRecord,
 } from "../../src/kernel/types.js";
 import { createTmpRepo } from "../helpers/tmp-repo.js";
-import { rec, task } from "./helpers.js";
+import { rec, task, cause } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -122,8 +122,8 @@ describe("spike report check", () => {
 
       const parked = (await stateOf(runtime)).tasks.never!;
       expect(parked.status).toBe("parked");
-      expect(parked.cause).toBe(
-        `gates: ${SPIKE_REPORT_CHECK} (${spikeReportPath("never")})`,
+      expect(parked.cause).toEqual(
+        cause(`gates: ${SPIKE_REPORT_CHECK} (${spikeReportPath("never")})`),
       );
       expect(names(await stepsOf(runtime, "never"))).not.toContain("review");
     } finally {

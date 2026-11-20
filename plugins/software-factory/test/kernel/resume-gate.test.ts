@@ -14,6 +14,8 @@ import {
   queueDigestSteer,
   silenceWarn,
 } from "./resume-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
+import { causeText } from "./helpers.js";
 
 const RUN = (iterations: string) => [
   "run",
@@ -88,7 +90,7 @@ describe("resume gate — recorded, bounded attempts", () => {
       const refused = records.filter((r) => r.step === "resume-refused");
       expect(refused).toHaveLength(1);
       expect(refused[0]!.iteration).toBe(1);
-      expect(refused[0]!.cause).toContain("architect");
+      expect(causeText(refused[0]!.cause)).toContain("architect");
       expect(records.some((r) => r.step === "resume")).toBe(false);
       // The front turn is skipped (plan.md exists): the boundary runs at
       // iteration 2 within the same launch, which has a budget of one pass.

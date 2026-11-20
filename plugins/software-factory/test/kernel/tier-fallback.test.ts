@@ -10,7 +10,7 @@ import { runDispatch } from "../../src/kernel/dispatch.js";
 import { resolveTurn } from "../../src/kernel/flow-context.js";
 import type { KernelRuntime } from "../../src/kernel/types.js";
 import type { TmpRepo } from "../helpers/tmp-repo.js";
-import { task } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   type FlowRepoOptions,
@@ -20,6 +20,7 @@ import {
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 const implementerVars = {
   task_path: "/g/tasks/a.md",
@@ -456,9 +457,11 @@ describe("alias fallback tiers", () => {
 
       expect(result.reason).toBe("infra");
       expect(result.taskTurnsStarted).toBe(0);
-      expect(result.cause).toContain("alpha:");
-      expect(result.cause).toContain('alias "implementer" has no live tier');
-      expect(result.cause).toContain(
+      expect(causeText(result.cause)).toContain("alpha:");
+      expect(causeText(result.cause)).toContain(
+        'alias "implementer" has no live tier',
+      );
+      expect(causeText(result.cause)).toContain(
         `fake+fake-impl resets at ${new Date(resetAt).toISOString()}`,
       );
       expect(fake.calls).toHaveLength(0);

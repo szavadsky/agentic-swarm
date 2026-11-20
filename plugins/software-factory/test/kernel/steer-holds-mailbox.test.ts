@@ -15,7 +15,7 @@ import {
   quarantineDir,
   readHolds,
 } from "../../src/kernel/mailbox.js";
-import { task } from "./helpers.js";
+import { task, cause, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -31,6 +31,7 @@ import {
   implementer,
   approver,
 } from "./steer-holds-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 describe("mid-run steer holds", () => {
   it("does not claim a fresh steer that is still growing across the settle interval", async () => {
@@ -189,7 +190,7 @@ describe("mid-run steer holds", () => {
       );
       expect(presented?.ok).toBe(false);
       expect(presented?.slug).toBe("s1");
-      expect(presented?.cause).toContain('"s1"');
+      expect(causeText(presented?.cause)).toContain('"s1"');
       expect(
         (await runtime.store.listRecords()).some(
           (r) => r.step === "steer-unanswered",
@@ -213,7 +214,7 @@ describe("mid-run steer holds", () => {
       );
       expect(expired?.ok).toBe(false);
       expect(expired?.slug).toBe("s1");
-      expect(expired?.cause).toContain('"s1"');
+      expect(causeText(expired?.cause)).toContain('"s1"');
       expect(expired?.outcome?.concerns[0]?.calibration).toBe("architect");
       expect(expired?.outcome?.concerns[0]?.text).toContain("s1");
       expect(expired?.outcome?.concerns[0]?.evidence).toBe(
@@ -421,8 +422,9 @@ describe("mid-run steer holds", () => {
         },
         {
           ok: false,
-          cause:
+          cause: cause(
             'unanswered steer "s2" in mailbox/inbox/s1.md; the next boundary presents it again before its hold expires',
+          ),
         },
       );
 

@@ -35,6 +35,7 @@ import {
   writeTask as writeGoalTask,
   writePlan,
 } from "./e2e-helpers.js";
+import { cause, causeText } from "./helpers.js";
 import { withKernelRoleFallbacks, workCalls } from "./fake-defaults.js";
 import { TEST_ARCHITECTURE, TEST_BOUNDARY, task } from "./helpers.js";
 import {
@@ -44,6 +45,7 @@ import {
   setupFlowRepo,
   whenTurn,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
   const process: ProcessConfig = {
@@ -295,8 +297,8 @@ describe("PM turn reconciliation", () => {
       const records = await runtime.store.listRecords();
       const reconcile = records.find((r) => r.step === "pm-reconcile");
       expect(reconcile?.ok).toBe(false);
-      expect(reconcile?.cause).toContain('frozen task "alpha"');
-      expect(reconcile?.cause).toContain('frozen task "probe"');
+      expect(causeText(reconcile?.cause)).toContain('frozen task "alpha"');
+      expect(causeText(reconcile?.cause)).toContain('frozen task "probe"');
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -565,7 +567,7 @@ describe("PM turn reconciliation", () => {
       expect(after.tasks.ghost!.commit).toBe("c0ffee");
       // Only the explicit line cancels, and its reason is the cause.
       expect(after.tasks.stuck!.status).toBe("cancelled");
-      expect(after.tasks.stuck!.cause).toBe("superseded by work");
+      expect(after.tasks.stuck!.cause).toEqual(cause("superseded by work"));
       // A frozen slug is history; a line missing the em dash is prose.
       expect(after.tasks.old!.status).toBe("merged");
       expect(after.tasks.typo!.status).not.toBe("cancelled");
@@ -1194,7 +1196,7 @@ describe("PM turn reconciliation", () => {
           round: 1,
           actor: "script",
         },
-        { ok: true, cause: "superseded by the new plan" },
+        { ok: true, cause: cause("superseded by the new plan") },
       );
       const state = derive(
         await runtime.store.listTasks(),
@@ -2273,7 +2275,7 @@ describe("stall PM — zero-merge stall in the running iteration", () => {
       );
       expect(routes).toHaveLength(1);
       expect(routes[0]!.ok).toBe(false);
-      expect(routes[0]!.cause).toContain("stallRoutes");
+      expect(causeText(routes[0]!.cause)).toContain("stallRoutes");
       const files = await runtime.store.listDir("tasks");
       expect(files).toEqual(["alpha.md"]);
     } finally {
@@ -2391,7 +2393,7 @@ describe("stall PM validation", () => {
       );
       await runtime.store.appendRecord(
         scriptMeta(1, "park", { slug, round: 1 }),
-        { ok: true, cause: `blocked: ${slug} stuck` },
+        { ok: true, cause: cause(`blocked: ${slug} stuck`) },
       );
     }
     const state = derive(
@@ -2473,7 +2475,7 @@ describe("stall PM validation", () => {
         (r) => r.step === "pm-validate",
       );
       expect(validations).toHaveLength(2);
-      expect(validations[0]!.cause).toContain("done-when");
+      expect(causeText(validations[0]!.cause)).toContain("done-when");
       expect(
         fs.existsSync(path.join(runtime.store.tasksDir, "alpha-2.md")),
       ).toBe(false);
@@ -2520,7 +2522,7 @@ describe("stall PM validation", () => {
       const validations = (await runtime.store.listRecords()).filter(
         (r) => r.step === "pm-validate",
       );
-      expect(validations[0]!.cause).toContain('bumps "revision"');
+      expect(causeText(validations[0]!.cause)).toContain('bumps "revision"');
       expect(
         fs.readFileSync(path.join(runtime.store.tasksDir, "alpha.md"), "utf8"),
       ).not.toContain("Retry with more direction.");
@@ -2596,7 +2598,9 @@ describe("stall PM validation", () => {
       const validations = (await runtime.store.listRecords()).filter(
         (r) => r.step === "pm-validate",
       );
-      expect(validations[0]!.cause).toContain('frozen task "done" was edited');
+      expect(causeText(validations[0]!.cause)).toContain(
+        'frozen task "done" was edited',
+      );
       expect(fs.readFileSync(donePath, "utf8")).toBe(before);
     } finally {
       cleanupFlowRepo(repo);
@@ -2635,7 +2639,10 @@ describe("stall PM validation", () => {
       const cancel = records.find(
         (r) => r.step === "cancel" && r.slug === "alpha",
       );
-      expect(cancel?.cause).toBe("the direction is gone");
+      expect(cancel?.cause).toEqual({
+        kind: "note",
+        detail: "the direction is gone",
+      });
       expect(await runtime.store.listDir("tasks")).toEqual(["alpha.md"]);
       const after = derive(
         await runtime.store.listTasks(),
@@ -2686,7 +2693,7 @@ describe("stall PM validation", () => {
       const validations = (await runtime.store.listRecords()).filter(
         (r) => r.step === "pm-validate",
       );
-      expect(validations[0]!.cause).toContain("never edits");
+      expect(causeText(validations[0]!.cause)).toContain("never edits");
       expect(
         fs.readFileSync(path.join(runtime.store.tasksDir, "alpha.md"), "utf8"),
       ).toBe(before);
@@ -2728,7 +2735,9 @@ describe("stall PM validation", () => {
       const validations = (await runtime.store.listRecords()).filter(
         (r) => r.step === "pm-validate",
       );
-      expect(validations[0]!.cause).toContain('slug "beta" has no route');
+      expect(causeText(validations[0]!.cause)).toContain(
+        'slug "beta" has no route',
+      );
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -2756,7 +2765,7 @@ describe("stall PM validation", () => {
       );
       await runtime.store.appendRecord(
         scriptMeta(1, "park", { slug: "alpha", round: 1 }),
-        { ok: true, cause: "blocked: alpha stuck" },
+        { ok: true, cause: cause("blocked: alpha stuck") },
       );
       await runtime.store.writeTask(
         task("beta", {

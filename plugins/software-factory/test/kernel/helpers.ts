@@ -1,11 +1,29 @@
+import { formatCause, readCause } from "../../src/kernel/cause.js";
 import type {
   ArchitectureConfig,
   BoundaryStep,
+  Cause,
   RecordStart,
   StepRecord,
   TaskFile,
   TurnSpec,
 } from "../../src/kernel/types.js";
+
+/**
+ * A typed cause fixture from the text a record would carry: the same mapping
+ * the store applies to records written before causes were typed, so a fixture's
+ * kind cannot drift from the producer's.
+ */
+export function cause(text: string): Cause {
+  const parsed = readCause(text);
+  if (!parsed) throw new Error(`test cause ${JSON.stringify(text)} is empty`);
+  return parsed;
+}
+
+/** Rendered cause text for assertions; an absent cause renders empty. */
+export function causeText(value: Cause | undefined): string {
+  return value ? formatCause(value) : "";
+}
 
 /** Boundary prompts and aliases the direct-runtime fixtures wire their run config for. */
 export const TEST_BOUNDARY: Record<BoundaryStep, TurnSpec> = {

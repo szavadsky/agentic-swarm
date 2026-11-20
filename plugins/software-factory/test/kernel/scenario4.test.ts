@@ -18,7 +18,7 @@ import {
   writeTask as writeGoalTask,
   writePlan,
 } from "./e2e-helpers.js";
-import { task } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -27,6 +27,7 @@ import {
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 describe("KERNEL0 scenario 4 — infra stops and item turns", () => {
   it("retries an infra stop without counting a turn or a review round", async () => {
@@ -132,8 +133,8 @@ describe("KERNEL0 scenario 4 — infra stops and item turns", () => {
         },
       });
       expect(result.reason).toBe("infra");
-      expect(result.cause).toContain("alpha");
-      expect(result.cause).toContain("network");
+      expect(causeText(result.cause)).toContain("alpha");
+      expect(causeText(result.cause)).toContain("network");
       // The bounded backoffs, then the fault is named: never an endless spin.
       expect(sleeps).toEqual([1_000, 2_000]);
       expect(

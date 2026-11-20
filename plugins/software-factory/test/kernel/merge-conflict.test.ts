@@ -18,7 +18,7 @@ import {
 import type { KernelRuntime } from "../../src/kernel/types.js";
 import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
 import type { TmpRepo } from "../helpers/tmp-repo.js";
-import { task } from "./helpers.js";
+import { task, cause, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   goalCheckout,
@@ -30,6 +30,7 @@ import {
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 function scriptConflict(harness: FakeHarness): void {
   harness.script((req, ctx) => {
@@ -170,9 +171,11 @@ describe("merge conflicts", () => {
       expect(result.reason).toBe("infra");
       // The dead candidate is named: the launch stops for its slug, not for a
       // bare cause that outlived the wave.
-      expect(result.cause).toBe(
-        "task: auth: provider.no-route Model unavailable: opencode/does-not-exist-free",
-      );
+      expect(result.cause).toEqual({
+        kind: "boundary",
+        detail:
+          "task: auth: provider.no-route Model unavailable: opencode/does-not-exist-free",
+      });
       // Implement and review compacted; the infra-stopped steward turn did not.
       expect(harness.compactions).toHaveLength(2);
     } finally {
@@ -263,7 +266,7 @@ describe("merge conflicts", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause!.startsWith("conflict:")).toBe(true);
+      expect(state.tasks.task!.cause?.kind === "conflict").toBe(true);
       expect(
         records.filter(
           (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
@@ -322,7 +325,7 @@ describe("steward", () => {
       expect(state.tasks.task!.status).toBe("merged");
       const skip = records.find((r) => r.step === "steward" && !r.slug);
       expect(skip?.ok).toBe(true);
-      expect(skip?.cause).toBe("skipped: no conflicts");
+      expect(skip?.cause).toEqual(cause("skipped: no conflicts"));
       expect(records.some((r) => r.step === "steward" && r.slug)).toBe(false);
     } finally {
       cleanupFlowRepo(repo);
@@ -388,8 +391,8 @@ describe("steward", () => {
       );
       expect(conflicts).toHaveLength(1);
       const loser = conflicts[0]!.slug!;
-      expect(conflicts[0]!.cause!.startsWith("conflict:")).toBe(true);
-      expect(conflicts[0]!.cause).toContain("conflict.txt");
+      expect(conflicts[0]!.cause?.kind === "conflict").toBe(true);
+      expect(causeText(conflicts[0]!.cause)).toContain("conflict.txt");
 
       const resolveTurns = records.filter(
         (r) => r.slug === loser && r.step === "resolve" && r.actor === "agent",
@@ -461,7 +464,7 @@ describe("steward", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toBe("gates: content");
+      expect(state.tasks.task!.cause).toEqual(cause("gates: content"));
       expect(
         records.filter(
           (r) => r.slug === "task" && r.step === "checks" && r.ok === false,
@@ -624,7 +627,7 @@ describe("steward", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause!.startsWith("conflict:")).toBe(true);
+      expect(state.tasks.task!.cause?.kind === "conflict").toBe(true);
       // One resolve turn: the second conflict at the re-merge is the park.
       expect(
         records.filter(
@@ -674,7 +677,10 @@ describe("steward", () => {
       // Alpha's leg died first, but beta's conflict was still resolved and
       // landed; only then does the launch stop, naming the dead candidate.
       expect(result.reason).toBe("infra");
-      expect(result.cause).toBe("alpha: auth: no route");
+      expect(result.cause).toEqual({
+        kind: "boundary",
+        detail: "alpha: auth: no route",
+      });
 
       const records = await runtime.store.listRecords();
       const state = derive(
@@ -683,7 +689,7 @@ describe("steward", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.alpha!.status).toBe("parked");
-      expect(state.tasks.alpha!.cause!.startsWith("conflict:")).toBe(true);
+      expect(state.tasks.alpha!.cause?.kind === "conflict").toBe(true);
       expect(state.tasks.beta!.status).toBe("merged");
       expect(
         repo.git(["show", "factory/demo:conflict.txt"]).stdout.trim(),

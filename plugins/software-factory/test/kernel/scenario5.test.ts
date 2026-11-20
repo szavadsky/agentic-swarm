@@ -13,7 +13,7 @@ import type {
   TaskState,
 } from "../../src/kernel/types.js";
 import { integrationHead } from "../../src/kernel/worktree.js";
-import { task } from "./helpers.js";
+import { task, cause, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   goalCheckout,
@@ -23,6 +23,7 @@ import {
   scriptStallLeave,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 /** Drives one real action and returns the freshly derived state. */
 async function step(
@@ -124,7 +125,7 @@ describe("KERNEL0 scenario 5 — red gates on the merged result", () => {
         (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
       );
       expect(merges).toHaveLength(1);
-      expect(merges[0]!.cause).toContain("skipped merge-checks");
+      expect(causeText(merges[0]!.cause)).toContain("skipped merge-checks");
       // The inherited red travels with the reused checks.
       expect(merges[0]!.checks![0]!.ok).toBe(false);
       expect(harness.calls.length).toBe(2);
@@ -212,13 +213,13 @@ describe("KERNEL0 scenario 5 — red gates on the merged result", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause!.startsWith("gates:")).toBe(true);
+      expect(state.tasks.task!.cause?.kind === "gates").toBe(true);
 
       const merges = records.filter(
         (r) => r.slug === "task" && r.step === "merge",
       );
       expect(merges.map((r) => r.ok)).toEqual([false, false]);
-      expect(merges.every((r) => r.cause?.startsWith("gates:"))).toBe(true);
+      expect(merges.every((r) => r.cause?.kind === "gates")).toBe(true);
       const mergeChecks = records.filter(
         (r) => r.slug === "task" && r.step === "merge-checks",
       );

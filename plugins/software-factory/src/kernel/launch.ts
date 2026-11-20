@@ -7,6 +7,7 @@ import { Repo } from "../core/git/repo.js";
 import type { Harness, ModelRef } from "../harness/types.js";
 import { type BoundaryResult, runBoundary } from "./boundary.js";
 import { artifactLspConfigPath, writeArtifactLsp } from "./artifact-lsp.js";
+import { formatCause, makeCause } from "./cause.js";
 import { loadConfigs, resolveGoalPaths, toLimits } from "./config.js";
 import { derive, FRONT_STOP_STEP } from "./derive.js";
 import { postLaunchDigest } from "./digest.js";
@@ -52,6 +53,7 @@ import {
 import { createFolderStore } from "./store.js";
 import { writeIterationSummary } from "./summary.js";
 import type {
+  Cause,
   GoalDecision,
   HarnessConfig,
   KernelRuntime,
@@ -297,7 +299,7 @@ async function writeIterationFacts(
   iteration: number,
   status: "goal-met" | "in-progress" | "blocked-by-user" | "stopped-with-debt",
   humanInterventions: number,
-  cause?: string,
+  cause?: Cause,
 ): Promise<string> {
   const records = await runtime.store.listRecords();
   const state = derive(
@@ -335,7 +337,7 @@ async function safeSummary(
   runtime: KernelRuntime,
   iteration: number,
   humanInterventions: number,
-  cause?: string,
+  cause?: Cause,
 ): Promise<void> {
   try {
     await writeIterationFacts(
@@ -492,7 +494,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     let resumeForcedOff = false;
     let lastSummary: string | undefined;
     let ended: "infra" | "cancelled" | undefined;
-    let stopCause: string | undefined;
+    let stopCause: Cause | undefined;
 
     for (let i = 0; i < runtime.limits.iterations; i++) {
       if (signals.shouldStop()) break;
@@ -524,7 +526,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           resume = false;
           await store.appendRecord(
             scriptMeta(before.iteration, RESUME_REFUSED_STEP),
-            { ok: false, cause: gate.refusal },
+            { ok: false, cause: makeCause("resume", gate.refusal) },
           );
         }
       }
@@ -608,9 +610,9 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
               iteration,
               "blocked-by-user",
               0,
-              cause,
+              makeCause("boundary", cause),
             );
-            stopCause = cause;
+            stopCause = makeCause("boundary", cause);
             break;
           }
           if (front.action === "infra") {
@@ -622,10 +624,10 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
               iteration,
               "stopped-with-debt",
               0,
-              cause,
+              makeCause("boundary", cause),
             );
             ended = "infra";
-            stopCause = cause;
+            stopCause = makeCause("boundary", cause);
             break;
           }
         }
@@ -672,12 +674,15 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           seenSteers = boundary.seenSteers;
           if (boundary.stop) {
             ended = "infra";
-            stopCause = `infrastructure stop during iteration ${iteration}: ${infraCause(boundary.stop)}; relaunch to retry`;
+            stopCause = makeCause(
+              "boundary",
+              `infrastructure stop during iteration ${iteration}: ${infraCause(boundary.stop)}; relaunch to retry`,
+            );
           }
         }
         iterations += 1;
 
-        let dispatchCause: string | undefined;
+        let dispatchCause: Cause | undefined;
         let dispatched: DispatchResult | undefined;
         if (
           decision === "continue" &&
@@ -696,9 +701,14 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           ) {
             ended = dispatched.reason;
             if (dispatched.reason === "infra") {
-              dispatchCause = `infrastructure stop during iteration ${iteration}: ${
-                dispatched.cause ?? "unknown cause"
-              }; relaunch to retry`;
+              dispatchCause = makeCause(
+                "boundary",
+                `infrastructure stop during iteration ${iteration}: ${
+                  dispatched.cause
+                    ? formatCause(dispatched.cause)
+                    : "unknown cause"
+                }; relaunch to retry`,
+              );
               stopCause = dispatchCause;
             }
           }
@@ -760,14 +770,19 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         const open = resume ? openTasks(afterStop) : [];
         const stuckCause =
           dispatched?.reason === "boundary" && open.length > 0
-            ? `resumed iteration ${iteration}: nothing dispatchable, non-terminal work remains: ${open.join(", ")}`
+            ? makeCause(
+                "stuck",
+                `resumed iteration ${iteration}: nothing dispatchable, non-terminal work remains: ${open.join(", ")}`,
+              )
             : undefined;
         lastSummary = await writeIterationFacts(
           runtime,
           iteration,
           status,
           humanInterventions,
-          boundary?.cause ?? dispatchCause ?? stuckCause,
+          boundary?.cause
+            ? makeCause("boundary", boundary.cause)
+            : (dispatchCause ?? stuckCause),
         );
         if (decision !== "continue" || stopped || signals.shouldStop()) break;
         if (frontFinished) break;
@@ -804,7 +819,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
           runtime,
           Math.max(1, iteration),
           humanInterventions,
-          (err as Error).message,
+          makeCause("error", (err as Error).message),
         );
         throw err;
       }
@@ -831,7 +846,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
       state,
       lastSummary,
       stop,
-      cause: stopCause,
+      cause: stopCause ? formatCause(stopCause) : undefined,
       interruptedBy: signals.interruptedBy,
       recoveredRecords,
     };

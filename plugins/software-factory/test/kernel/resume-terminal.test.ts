@@ -17,6 +17,8 @@ import {
   queueDigestSteer,
   drainedAfterAlpha,
 } from "./resume-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
+import { causeText } from "./helpers.js";
 
 describe("resume guards — front-stop, holds and terminal", () => {
   it("a resume never writes a front-stop record", async () => {
@@ -107,7 +109,7 @@ describe("resume guards — front-stop, holds and terminal", () => {
       expect(records.filter((r) => r.slug === "beta")).toHaveLength(0);
       const refused = records.filter((r) => r.step === "resume-refused");
       expect(refused).toHaveLength(1);
-      expect(refused[0]!.cause).toContain("holds could not be read");
+      expect(causeText(refused[0]!.cause)).toContain("holds could not be read");
     } finally {
       repo.cleanup();
     }

@@ -11,6 +11,7 @@ import type {
 } from "../harness/types.js";
 import { DEFAULT_TIMEOUTS, runAgentTurn } from "./agent.js";
 import { preexistingRed, recordedBaseGates } from "./baseline.js";
+import { makeCause } from "./cause.js";
 import {
   checksDue,
   compactSession,
@@ -64,6 +65,7 @@ import { materialHash } from "./tasks.js";
 import { isLastReviewCall, reviewRoundLimit } from "./review.js";
 import type {
   Action,
+  Cause,
   FlowDefinition,
   FlowStep,
   KernelRuntime,
@@ -115,8 +117,11 @@ async function commitStep(
   return { commit, tree, edits };
 }
 
-function parkCause(status: string, summary: string | undefined): string {
-  return `${status}: ${summary ?? "no summary"}`;
+function parkCause(
+  status: "blocked" | "failed" | "upscope",
+  summary: string | undefined,
+): Cause {
+  return makeCause(status, summary ?? "no summary");
 }
 
 /**
@@ -239,12 +244,12 @@ async function runTaskGates(
 function redGateCause(
   checks: CheckResult[],
   preexisting: ReadonlySet<string>,
-): string | undefined {
+): Cause | undefined {
   const red = newGateFailures(checks, preexisting).filter(
     (check) => !isInfraCheck(check),
   );
   return red.length > 0
-    ? `gates: ${red.map((check) => check.name).join(", ")}`
+    ? makeCause("gates", red.map((check) => check.name).join(", "))
     : undefined;
 }
 
@@ -275,9 +280,12 @@ async function finishCleanResolve(
       ok: true,
       commit,
       tree,
-      cause: committed
-        ? "auto-merged the integration head without a turn"
-        : "the integration head was already merged",
+      cause: makeCause(
+        "note",
+        committed
+          ? "auto-merged the integration head without a turn"
+          : "the integration head was already merged",
+      ),
     },
   );
   const checks = await runTaskGates(
@@ -418,7 +426,7 @@ async function handleStepResult(
     await appendPark(
       runtime.store,
       meta,
-      `refused: ${stop.details ?? "no details"}`,
+      makeCause("refused", stop.details ?? "no details"),
     );
     return infraResult ?? cancelledResult ?? {};
   }
@@ -447,7 +455,7 @@ async function handleStepResult(
       await appendPark(
         runtime.store,
         meta,
-        `review rejected: ${outcome.summary}`,
+        makeCause("review-rejected", outcome.summary),
       );
     } else if (lastCall && outcome?.verdict === "changes") {
       // The reviewer's outcome validator refuses this; a delivered record is
@@ -455,7 +463,10 @@ async function handleStepResult(
       await appendPark(
         runtime.store,
         meta,
-        `invalid outcome: changes on the last review call: ${outcome.summary}`,
+        makeCause(
+          "invalid-outcome",
+          `changes on the last review call: ${outcome.summary}`,
+        ),
       );
     } else if (
       lastCall &&
@@ -510,12 +521,12 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
         round: state.round,
         revision: task.revision,
       },
-      ensured.error,
+      makeCause("setup", ensured.error),
     );
     return {};
   }
   if (ensured.setup && !ensured.setup.ok) {
-    const cause = `worktree setup failed: ${ensured.setup.error ?? "unknown"}`;
+    const cause = makeCause("setup", ensured.setup.error ?? "unknown");
     await runtime.store.appendRecord(
       scriptMeta(iteration, "setup", { slug: task.slug, round: state.round }),
       {
@@ -563,7 +574,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
         ensured.mergeConflict.paths.join(", ") ||
         "git reported no unmerged paths";
       await abortMerge(ensured.path);
-      await appendPark(runtime.store, meta, `base-conflict: ${named}`);
+      await appendPark(runtime.store, meta, makeCause("base-conflict", named));
       return {};
     }
     pendingResolve = {
@@ -622,7 +633,11 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
         const named =
           attempt.paths.join(", ") || "git reported no unmerged paths";
         await abortMerge(ensured.path);
-        await appendPark(runtime.store, meta, `base-conflict: ${named}`);
+        await appendPark(
+          runtime.store,
+          meta,
+          makeCause("base-conflict", named),
+        );
         return {};
       }
       pendingResolve = { head, paths: attempt.paths };
@@ -668,7 +683,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     const paths = await unmergedFiles(ensured.path);
     const named = paths.join(", ") || "git reported no unmerged paths";
     await abortMerge(ensured.path);
-    await appendPark(runtime.store, meta, `base-conflict: ${named}`);
+    await appendPark(runtime.store, meta, makeCause("base-conflict", named));
     return {};
   }
   const preexisting = preexistingRed(recordedBaseGates(records));
@@ -682,7 +697,11 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       ensured.mergeConflict,
     );
     if (prepared.kind === "error") {
-      await appendPark(runtime.store, meta, `conflict: ${prepared.cause}`);
+      await appendPark(
+        runtime.store,
+        meta,
+        makeCause("conflict", prepared.cause),
+      );
       return {};
     }
     if (prepared.kind === "clean") {
@@ -854,7 +873,9 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
         ensured.branch,
         contained,
       );
-      if (breach) return { ok: false, cause: `containment: ${breach}` };
+      if (breach) {
+        return { ok: false, cause: makeCause("containment", breach) };
+      }
       if (resolve) {
         const settled = await settleMergeTurn(
           runtime,
@@ -913,7 +934,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   }
   if (breach) {
     if (pendingResolve || resolve) await abortMerge(ensured.path);
-    await appendPark(runtime.store, meta, `containment: ${breach}`);
+    await appendPark(runtime.store, meta, makeCause("containment", breach));
     return {};
   }
   if (resolve && !tracked.timedOut()) {
@@ -937,7 +958,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       );
       if (problem) {
         await abortMerge(ensured.path);
-        await appendPark(runtime.store, meta, `conflict: ${problem}`);
+        await appendPark(runtime.store, meta, makeCause("conflict", problem));
         return {};
       }
     } else if (status || stop?.kind === "refusal") {
@@ -968,7 +989,11 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
         const files = flagged.length > 0 ? flagged : pendingResolve.paths;
         const named = files.join(", ") || "git reported no unmerged paths";
         await abortMerge(ensured.path);
-        await appendPark(runtime.store, meta, `base-conflict: ${named}`);
+        await appendPark(
+          runtime.store,
+          meta,
+          makeCause("base-conflict", named),
+        );
         return {};
       }
       // The merge committed with the turn; the empty-diff baseline is this
@@ -1037,12 +1062,12 @@ async function runChecks(
         round: state.round,
         revision: task.revision,
       },
-      ensured.error,
+      makeCause("setup", ensured.error),
     );
     return {};
   }
   if (ensured.setup && !ensured.setup.ok) {
-    const cause = `worktree setup failed: ${ensured.setup.error ?? "unknown"}`;
+    const cause = makeCause("setup", ensured.setup.error ?? "unknown");
     await runtime.store.appendRecord(
       scriptMeta(iteration, "setup", { slug: task.slug, round: state.round }),
       {
@@ -1075,7 +1100,7 @@ async function runChecks(
         round: state.round,
         revision: task.revision,
       },
-      `base-conflict: ${named}`,
+      makeCause("base-conflict", named),
     );
     return {};
   }
@@ -1091,7 +1116,7 @@ async function runChecks(
         round: state.round,
         revision: task.revision,
       },
-      `base-conflict: ${named}`,
+      makeCause("base-conflict", named),
     );
     return {};
   }

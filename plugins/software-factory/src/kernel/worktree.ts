@@ -7,7 +7,9 @@ import { isAncestor } from "../core/git/commit.js";
 import { GitError, git } from "../core/git/exec.js";
 import { parseWorktreeList } from "../core/git/status.js";
 import { sealedRecordDirs } from "./store.js";
+import { makeCause } from "./cause.js";
 import type {
+  Cause,
   DeclaredWrite,
   KernelRuntime,
   StepRecord,
@@ -641,7 +643,7 @@ async function appendContainmentIncident(
   runtime: KernelRuntime,
   taskWorktree: string,
   records: readonly StepRecord[] | undefined,
-  cause: string,
+  cause: Cause,
 ): Promise<void> {
   const slug = path.basename(taskWorktree);
   const all = records ?? (await runtime.store.listRecords());
@@ -810,7 +812,7 @@ export async function containmentViolation(
       runtime,
       taskWorktree,
       records,
-      `outside-change: ${outside.join("; ")}`,
+      makeCause("outside-change", outside.join("; ")),
     );
   }
 

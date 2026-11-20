@@ -18,6 +18,8 @@ import { testPriceSource } from "../helpers/price-source.js";
 import { cleanup, expectDispatch, makeGoal, outcome } from "./e2e-helpers.js";
 import { withKernelRoleFallbacks } from "./fake-defaults.js";
 import { drainedAfterAlpha, queueDigestSteer } from "./resume-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
+import { causeText } from "./helpers.js";
 
 const MALFORMED = "slugs: [unclosed\n";
 const UNKNOWN_SLUG = "slugs: [ghost]\ngoal: false\n";
@@ -107,8 +109,12 @@ describe("hold read pure", () => {
       const records = holdQuarantineRecords(await store.listRecords());
       expect(records.map((r) => r.iteration)).toEqual([4, 4]);
       expect(records[0]?.ok).toBe(false);
-      expect(records[0]?.cause).toContain('malformed hold "s1.yaml"');
-      expect(records[1]?.cause).toContain('unknown-slug hold "s2.yaml"');
+      expect(causeText(records[0]?.cause)).toContain(
+        'malformed hold "s1.yaml"',
+      );
+      expect(causeText(records[1]?.cause)).toContain(
+        'unknown-slug hold "s2.yaml"',
+      );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -188,8 +194,12 @@ describe("hold read pure", () => {
       ]);
       const records = holdQuarantineRecords(await store.listRecords());
       expect(records).toHaveLength(2);
-      expect(records.map((r) => r.cause).join("\n")).toContain("s1.yaml");
-      expect(records.map((r) => r.cause).join("\n")).toContain("s2.yaml");
+      expect(records.map((r) => causeText(r.cause)).join("\n")).toContain(
+        "s1.yaml",
+      );
+      expect(records.map((r) => causeText(r.cause)).join("\n")).toContain(
+        "s2.yaml",
+      );
     } finally {
       cleanup(goal);
     }

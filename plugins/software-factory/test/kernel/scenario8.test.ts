@@ -6,7 +6,7 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { writeIterationSummary } from "../../src/kernel/summary.js";
-import { task } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -15,6 +15,7 @@ import {
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 describe("KERNEL0 scenario 8 — drain", () => {
   it("stops dispatching at the iteration turn limit, lets in-flight work finish and writes the summary", async () => {
@@ -48,7 +49,7 @@ describe("KERNEL0 scenario 8 — drain", () => {
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("drained");
-      expect(result.cause).toContain("turn limit 1");
+      expect(causeText(result.cause)).toContain("turn limit 1");
       expect(harness.calls.length).toBe(2);
 
       const records = await runtime.store.listRecords();
@@ -94,7 +95,7 @@ describe("KERNEL0 scenario 8 — drain", () => {
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("drained");
-      expect(result.cause).toContain("wall limit");
+      expect(causeText(result.cause)).toContain("wall limit");
       expect(harness.calls.length).toBe(0);
       const records = await runtime.store.listRecords();
       expect(records.filter((r) => r.actor === "agent").length).toBe(0);

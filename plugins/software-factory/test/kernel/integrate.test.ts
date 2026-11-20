@@ -13,7 +13,7 @@ import type {
   TaskFile,
   TaskState,
 } from "../../src/kernel/types.js";
-import { task } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   goalCheckout,
@@ -22,6 +22,7 @@ import {
   setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 interface GateProbe {
   dir: string;
@@ -127,8 +128,10 @@ describe("merge-check skip", () => {
         (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
       );
       expect(merge).toBeDefined();
-      expect(merge!.cause).toContain("skipped merge-checks");
-      expect(merge!.cause).toContain("merged tree equals checked tree");
+      expect(causeText(merge!.cause)).toContain("skipped merge-checks");
+      expect(causeText(merge!.cause)).toContain(
+        "merged tree equals checked tree",
+      );
       expect(merge!.checks).toHaveLength(1);
       expect(merge!.checks![0]!.ok).toBe(true);
 
@@ -149,7 +152,7 @@ describe("merge-check skip", () => {
         .stdout.trim();
       expect(tipTree).toBe(checkedTree!);
       expect(mergeTree).toBe(checkedTree!);
-      expect(merge!.cause).toContain(checkedTree!);
+      expect(causeText(merge!.cause)).toContain(checkedTree!);
     } finally {
       cleanupFlowRepo(repo);
       cleanupProbe(probe);
@@ -290,7 +293,7 @@ describe("merge-check skip", () => {
       const merge = records.find(
         (r) => r.slug === "task" && r.step === "merge" && r.ok === true,
       );
-      expect(merge?.cause).toContain("skipped merge-checks");
+      expect(causeText(merge?.cause)).toContain("skipped merge-checks");
     } finally {
       cleanupFlowRepo(repo);
       cleanupProbe(green);

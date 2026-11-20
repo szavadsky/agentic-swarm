@@ -21,6 +21,8 @@ import {
   setupFlowRepo,
   whenTurn,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
+import { causeText } from "./helpers.js";
 
 const PLAN = `# Milestone 1
 
@@ -293,7 +295,7 @@ describe("plan review session hygiene", () => {
         (record) => record.step === "plan-review-reconcile",
       );
       expect(reconciled?.ok).toBe(false);
-      expect(reconciled?.cause).toContain("plan.md");
+      expect(causeText(reconciled?.cause)).toContain("plan.md");
 
       harness.script((req, ctx) => {
         fs.appendFileSync(planPath, "\n## beta\n", "utf8");
@@ -330,7 +332,7 @@ describe("plan review session hygiene", () => {
           record.step === "plan-review-missing" && record.iteration === 2,
       );
       expect(missing?.ok).toBe(false);
-      expect(missing?.cause).toContain("infrastructure: quota");
+      expect(causeText(missing?.cause)).toContain("infrastructure: quota");
       expect(
         records.some(
           (record) =>

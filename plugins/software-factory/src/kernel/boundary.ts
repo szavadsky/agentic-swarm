@@ -71,6 +71,7 @@ import type {
   StepRecord,
   TaskFile,
 } from "./types.js";
+import { formatCause, makeCause } from "./cause.js";
 import { integrationHead } from "./worktree.js";
 
 export interface BoundaryResult {
@@ -207,7 +208,10 @@ async function expireSelfHolds(
       scriptMeta(iteration, "hold-self-expire", { slug: hold.steer }),
       {
         ok: false,
-        cause: `steer ${JSON.stringify(hold.steer)} hold named task(s) it creates: ${own.join(", ")}; hold expired so the task can run`,
+        cause: makeCause(
+          "steer",
+          `${JSON.stringify(hold.steer)} hold named task(s) it creates: ${own.join(", ")}; hold expired so the task can run`,
+        ),
       },
     );
   }
@@ -238,7 +242,7 @@ async function spikeAnswer(
       if (finding) return `${task.slug}: ${finding}`;
       const cause = state.tasks[task.slug]?.cause;
       return cause
-        ? `${task.slug}: ${cause}`
+        ? `${task.slug}: ${formatCause(cause)}`
         : `${task.slug}: no outcome recorded`;
     }),
   );
@@ -501,7 +505,10 @@ export async function runBoundary(
           {
             ok: false,
             launchKind: "glitch",
-            cause: `pack preparer failed: ${prepFailure}; the script render is this iteration's pack`,
+            cause: makeCause(
+              "invalid-outcome",
+              `pack preparer failed: ${prepFailure}; the script render is this iteration's pack`,
+            ),
           },
         );
       }
@@ -610,7 +617,10 @@ export async function runBoundary(
         scriptMeta(iteration, "steer-presented", { slug: steer.id }),
         {
           ok: false,
-          cause: `unanswered steer ${JSON.stringify(steer.id)} in ${steer.relPath}; the next boundary presents it again before its hold expires`,
+          cause: makeCause(
+            "steer",
+            `unanswered steer ${JSON.stringify(steer.id)} in ${steer.relPath}; the next boundary presents it again before its hold expires`,
+          ),
         },
       );
       continue;
@@ -620,7 +630,10 @@ export async function runBoundary(
       scriptMeta(iteration, "steer-unanswered", { slug: steer.id }),
       {
         ok: false,
-        cause: `unanswered steer ${JSON.stringify(steer.id)} in ${steer.relPath}; hold expired after one boundary`,
+        cause: makeCause(
+          "steer",
+          `unanswered steer ${JSON.stringify(steer.id)} in ${steer.relPath}; hold expired after one boundary`,
+        ),
         outcome: {
           status: "done",
           summary: `steer ${steer.id} was left unanswered at two boundaries; its hold expired`,

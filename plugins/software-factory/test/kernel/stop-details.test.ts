@@ -13,6 +13,7 @@ import {
   writeTask as writeGoalTask,
   writePlan,
 } from "./e2e-helpers.js";
+import { cause } from "./helpers.js";
 import { testPriceSource } from "../helpers/price-source.js";
 import { task } from "./helpers.js";
 import {
@@ -45,7 +46,10 @@ describe("infra stop details", () => {
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("infra");
-      expect(result.cause).toBe(`task: auth: ${NO_ROUTE}`);
+      expect(result.cause).toEqual({
+        kind: "boundary",
+        detail: `task: auth: ${NO_ROUTE}`,
+      });
 
       const stepRecord = (await runtime.store.listRecords()).find(
         (r) => r.step === "implement",
@@ -73,7 +77,7 @@ describe("infra stop details", () => {
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("infra");
-      expect(result.cause).toBe("task: auth");
+      expect(result.cause).toEqual({ kind: "boundary", detail: "task: auth" });
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -101,7 +105,9 @@ describe("infra stop details", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toBe("refused: content policy refusal");
+      expect(state.tasks.task!.cause).toEqual(
+        cause("refused: content policy refusal"),
+      );
     } finally {
       cleanupFlowRepo(repo);
     }

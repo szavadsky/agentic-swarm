@@ -1,5 +1,6 @@
 import { KeyedMutex } from "../core/mutex.js";
 import { scriptMeta } from "./record.js";
+import { makeCause } from "./cause.js";
 import type { KernelRuntime } from "./types.js";
 import { containmentSnapshot, containmentViolation } from "./worktree.js";
 
@@ -53,7 +54,13 @@ export async function runBoundaryTurn<T>(
     if (breach) {
       await runtime.store.appendRecord(
         scriptMeta(meta.iteration, "containment"),
-        { ok: false, cause: `boundary-write: ${meta.step}: ${breach}` },
+        {
+          ok: false,
+          cause: makeCause(
+            "containment",
+            `boundary-write: ${meta.step}: ${breach}`,
+          ),
+        },
       );
     }
     return result;

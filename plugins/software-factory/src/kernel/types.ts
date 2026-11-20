@@ -324,9 +324,55 @@ export interface ProgressRepeat {
   firstRound: number;
 }
 
+/**
+ * A park or failure cause, closed by `kind`: the kernel switches on it and
+ * never on `detail`. `detail` is free text for prompts, summaries and records.
+ */
+export const causeKindSchema = z.enum([
+  "gates",
+  "conflict",
+  "base-conflict",
+  "no-progress",
+  "empty-diff",
+  "round-limit",
+  "change-requests-exhausted",
+  "overflow",
+  "infra",
+  "infra-repeat",
+  "setup",
+  "containment",
+  "outside-change",
+  "integration-moved",
+  "budget",
+  "steer",
+  "blocked",
+  "upscope",
+  "failed",
+  "review-rejected",
+  "refused",
+  "invalid-outcome",
+  "merge-failed",
+  "quarantine",
+  "held",
+  "stuck",
+  "resume",
+  "gate-flake",
+  "note",
+  "boundary",
+  "error",
+  "unknown",
+]);
+export type CauseKind = z.infer<typeof causeKindSchema>;
+
+export const causeSchema = z.object({
+  kind: causeKindSchema,
+  detail: z.string(),
+});
+export type Cause = z.infer<typeof causeSchema>;
+
 export interface TaskState {
   status: TaskStatus;
-  cause?: string;
+  cause?: Cause;
   /** Agent turns spent on this slug, a spend fact only: no bound reads it. */
   turns: number;
   /** Current implementation/review round, 1-based. */
@@ -337,7 +383,7 @@ export interface TaskState {
   commit?: string;
   verdict?: ReviewVerdict;
   /** A derived terminal outcome that still needs its park record. */
-  park?: string;
+  park?: Cause;
   /** No-progress over the item's history; the next action is the loop park. */
   loop?: ProgressRepeat;
   /** A red gate run sent the task back to implement: the fix turn resumes its session, and only a merged-result fix skips the next review. */
@@ -363,7 +409,7 @@ export type Action =
   | { kind: "checks"; slug: string }
   | { kind: "merge"; slug: string }
   | { kind: "finish"; slug: string }
-  | { kind: "park"; slug: string; cause: string }
+  | { kind: "park"; slug: string; cause: Cause }
   | { kind: "boundary" }
   | { kind: "exit"; reason: string };
 
@@ -603,7 +649,7 @@ export interface StepRecord {
   wallMs?: number;
   outcome?: RecordedOutcome;
   ok?: boolean;
-  cause?: string;
+  cause?: Cause;
   startedAt: string;
   endedAt?: string;
 }
@@ -673,7 +719,7 @@ export interface RecordEnd {
   wallMs?: number;
   outcome?: Outcome;
   ok?: boolean;
-  cause?: string;
+  cause?: Cause;
 }
 
 /** Handle for an in-flight turn; the directory exists but has no end. */

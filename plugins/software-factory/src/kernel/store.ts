@@ -9,6 +9,8 @@ import {
   writeYamlAtomic,
 } from "../core/records/io.js";
 import { terminalFactFromRecords } from "./derive-task.js";
+import { readCause } from "./cause.js";
+import { makeCause } from "./cause.js";
 import { parseTaskFile, renderTaskFile, TaskFileError } from "./tasks.js";
 import {
   ArtifactStore,
@@ -360,7 +362,10 @@ class FolderStore implements ArtifactStore {
       },
       {
         ok: false,
-        cause: `task file "${name}" quarantined at ${destination}: ${reason}`,
+        cause: makeCause(
+          "quarantine",
+          `task file "${name}" quarantined at ${destination}: ${reason}`,
+        ),
       },
     );
   }
@@ -382,7 +387,9 @@ class FolderStore implements ArtifactStore {
     const marker = `task file "${name}" is unreadable`;
     const alreadyReported = records.some(
       (record) =>
-        record.step === "task-quarantine" && record.cause?.startsWith(marker),
+        record.step === "task-quarantine" &&
+        record.cause?.kind === "quarantine" &&
+        record.cause.detail.startsWith(marker),
     );
     if (alreadyReported) return;
     await this.appendRecord(
@@ -395,7 +402,10 @@ class FolderStore implements ArtifactStore {
       },
       {
         ok: false,
-        cause: `${marker}; left in tasks/ because its slug already has a terminal record (${status}): ${reason}`,
+        cause: makeCause(
+          "quarantine",
+          `${marker}; left in tasks/ because its slug already has a terminal record (${status}): ${reason}`,
+        ),
       },
     );
   }
@@ -525,6 +535,9 @@ class FolderStore implements ArtifactStore {
           throw err;
       }
       const record: StepRecord = { ...base, ...end };
+      // Old records store a message; this is the one ingest point that turns
+      // it into a typed cause. A typed cause passes through unchanged.
+      record.cause = readCause((end as { cause?: unknown }).cause);
       // Script steps carry their outcome in end.yaml; an agent's own
       // outcome.yaml wins when both exist.
       const stored = delivered ?? record.outcome;

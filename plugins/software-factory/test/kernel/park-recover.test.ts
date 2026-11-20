@@ -13,7 +13,7 @@ import { defaultParkRoute } from "../../src/kernel/park-route.js";
 import { runStallPm } from "../../src/kernel/pm.js";
 import { scriptMeta } from "../../src/kernel/record.js";
 import { parseTaskFile, renderTaskFile } from "../../src/kernel/tasks.js";
-import { task } from "./helpers.js";
+import { task, cause, causeText } from "./helpers.js";
 import { withKernelRoleFallbacks } from "./fake-defaults.js";
 import {
   cleanupFlowRepo,
@@ -23,6 +23,7 @@ import {
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 /** One red gate, then the fix arm: the first red asks for a fix, the second parks. */
 const process = {
@@ -85,17 +86,21 @@ describe("per-cause default routing", () => {
   it("leaves review rejections and design blockers to the architect", () => {
     // The task's named edge: a rejected premise or an impossible approach is
     // direction, not a retry.
-    expect(defaultParkRoute("review rejected: premise is wrong").action).toBe(
-      "leave",
-    );
     expect(
-      defaultParkRoute("blocked: the API cannot express this").action,
+      defaultParkRoute(cause("review rejected: premise is wrong")).action,
+    ).toBe("leave");
+    expect(
+      defaultParkRoute(cause("blocked: the API cannot express this")).action,
     ).toBe("leave");
     // The fixable classes keep the branch; the spike's table is the default.
-    expect(defaultParkRoute("gates: unit").action).toBe("amend");
-    expect(defaultParkRoute("base-conflict: clash.txt").action).toBe("amend");
-    expect(defaultParkRoute("failed: no work").action).toBe("replace");
-    expect(defaultParkRoute("anything else").action).toBe("leave");
+    expect(defaultParkRoute(cause("gates: unit")).action).toBe("amend");
+    expect(defaultParkRoute(cause("base-conflict: clash.txt")).action).toBe(
+      "amend",
+    );
+    // Routing reads the kind, never the detail: every failed outcome keeps
+    // the branch unless its own evidence says otherwise.
+    expect(defaultParkRoute(cause("failed: no work")).action).toBe("amend");
+    expect(defaultParkRoute(cause("anything else")).action).toBe("leave");
   });
 });
 
@@ -256,7 +261,7 @@ describe("park recovery inside the running iteration", () => {
         scriptMeta(1, "park", { slug: "alpha" }),
         {
           ok: true,
-          cause: "gates: unit",
+          cause: cause("gates: unit"),
         },
       );
       await runtime.store.appendRecord(
@@ -324,7 +329,7 @@ describe("park recovery inside the running iteration", () => {
       expect(result.left).toEqual(["alpha"]);
       const records = await runtime.store.listRecords();
       const validations = records.filter((r) => r.step === "pm-validate");
-      expect(validations[0]!.cause).toContain("limits.parkAmends");
+      expect(causeText(validations[0]!.cause)).toContain("limits.parkAmends");
       // The refused amend was rolled back: the retry left revision 0.
       const file = path.join(runtime.store.tasksDir, "alpha.md");
       expect(
@@ -451,7 +456,7 @@ describe("park recovery inside the running iteration", () => {
           (r) =>
             r.slug === "beta" &&
             r.step === "park" &&
-            r.cause?.startsWith("base-conflict:"),
+            r.cause?.kind === "base-conflict",
         ),
       ).toBe(false);
       expect(repo.git(["show", "factory/demo:clash.txt"]).stdout.trim()).toBe(

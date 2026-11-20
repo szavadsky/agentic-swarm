@@ -6,7 +6,7 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { runBoundary } from "../../src/kernel/boundary.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { workCalls } from "./fake-defaults.js";
-import { task } from "./helpers.js";
+import { task, cause, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -27,6 +27,7 @@ import {
   scriptImplementApprove,
   implementThenLand,
 } from "./continuation-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 describe("kept-land", () => {
   it("never lands when a later commit voids the approve", async () => {
@@ -60,7 +61,7 @@ describe("kept-land", () => {
       );
       const parked = (await stateOf(runtime)).tasks["kept-void"]!;
       expect(parked.status).toBe("parked");
-      expect(parked.cause).toBe("gates: unit");
+      expect(parked.cause).toEqual(cause("gates: unit"));
 
       scriptContinueBoundary(harness, runtime);
       const boundary = await runBoundary(runtime, { relaunch: false });
@@ -265,7 +266,7 @@ describe("kept-land", () => {
       );
       expect(flakes).toHaveLength(1);
       expect(flakes[0]!.ok).toBe(true);
-      expect(flakes[0]!.cause).toContain("unit");
+      expect(causeText(flakes[0]!.cause)).toContain("unit");
       expect(
         records.filter((r) => r.slug === "kept-flip" && r.actor === "agent"),
       ).toHaveLength(3);
@@ -322,7 +323,7 @@ describe("kept-land", () => {
         (r) => r.slug === "kept-skip" && r.step === "merge" && r.ok === true,
       );
       expect(merge).toBeDefined();
-      expect(merge!.cause).toContain("skipped merge-checks");
+      expect(causeText(merge!.cause)).toContain("skipped merge-checks");
       expect(merge!.checks).toHaveLength(1);
       expect(merge!.checks![0]!.ok).toBe(true);
       expect(workCalls(harness)).toHaveLength(2);

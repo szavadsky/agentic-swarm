@@ -2,7 +2,8 @@
 import { describe, expect, it } from "bun:test";
 import { DEFAULT_FLOWS, reduceTask } from "../../src/kernel/derive-task.js";
 import type { StepRecord } from "../../src/kernel/types.js";
-import { rec, script, task } from "./helpers.js";
+import { rec, script, task, cause, causeText } from "./helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 const implement = (
   seq: number,
@@ -127,8 +128,8 @@ describe("continuation carry", () => {
       flow,
     );
     expect(reduction.phase).toBe("parked");
-    expect(reduction.park).toStartWith("empty-diff:");
-    expect(reduction.park).toContain("already on the head");
+    expect(causeText(reduction.park)).toStartWith("empty-diff:");
+    expect(causeText(reduction.park)).toContain("already on the head");
   });
 
   it("defers a reply-only fix turn in a later round to review instead of parking", () => {
@@ -204,8 +205,8 @@ describe("continuation carry", () => {
       flow,
     );
     expect(reduction.phase).toBe("parked");
-    expect(reduction.park).toBe(
-      "empty-diff: implement r1 committed no changes",
+    expect(reduction.park).toEqual(
+      cause("empty-diff: implement r1 committed no changes"),
     );
   });
 
@@ -291,7 +292,7 @@ describe("empty gate fix deferral", () => {
     script(seq, {
       step: "merge",
       ok: false,
-      cause: "gates: unit",
+      cause: cause("gates: unit"),
       checks: [gate("unit", false)],
       startedAt: new Date(seq).toISOString(),
     });
@@ -367,8 +368,10 @@ describe("empty gate fix deferral", () => {
       flow,
     );
     expect(reduction.phase).toBe("parked");
-    expect(reduction.park).toBe(
-      "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
+    expect(reduction.park).toEqual(
+      cause(
+        "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
+      ),
     );
   });
 
@@ -406,7 +409,9 @@ describe("empty gate fix deferral", () => {
       flow,
     );
     expect(reduction.phase).toBe("parked");
-    expect(reduction.park).toContain("infra: gate could not start: typecheck");
+    expect(causeText(reduction.park)).toContain(
+      "infra: gate could not start: typecheck",
+    );
   });
 
   it("defers an empty gate fix in a later round after a changes verdict", () => {
@@ -466,8 +471,10 @@ describe("empty gate fix deferral", () => {
       flow,
     );
     expect(reduction.phase).toBe("parked");
-    expect(reduction.park).toBe(
-      "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
+    expect(reduction.park).toEqual(
+      cause(
+        "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
+      ),
     );
   });
 

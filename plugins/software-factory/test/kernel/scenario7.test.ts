@@ -17,6 +17,8 @@ import {
   writeTask,
 } from "./e2e-helpers.js";
 import { scriptStallLeave } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
+import { causeText } from "./helpers.js";
 
 const PLAN_1 = `# Milestone 1
 
@@ -195,7 +197,7 @@ describe("KERNEL0 scenario 7 — plan edit between iterations", () => {
         true,
       );
       const reconcile = records.find((r) => r.step === "pm-reconcile");
-      expect(reconcile?.cause).toContain(
+      expect(causeText(reconcile?.cause)).toContain(
         'frozen task "alpha" was edited; restored',
       );
       const summary = fs.readFileSync(

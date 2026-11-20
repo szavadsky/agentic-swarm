@@ -1,4 +1,5 @@
 // biome-ignore-all lint/complexity: split-rest
+import { cause } from "./helpers.js";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -417,7 +418,7 @@ describe("createFolderStore", () => {
     );
     await turn.finish({
       ok: true,
-      cause: "round limit",
+      cause: cause("round limit"),
       outcome: {
         status: "done",
         summary: "script outcome",

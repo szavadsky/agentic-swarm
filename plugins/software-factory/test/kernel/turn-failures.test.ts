@@ -11,7 +11,7 @@ import type { TurnResult } from "../../src/harness/types.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { ensureTaskWorktree, treeSha } from "../../src/kernel/worktree.js";
-import { task } from "./helpers.js";
+import { task, cause, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -21,6 +21,7 @@ import {
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 describe("turn failures — outcome, crash and wall-clock handling", () => {
   it("keeps a valid outcome delivered on an infra stop and advances on the relaunch", async () => {
@@ -171,7 +172,7 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
         records,
         runtime.configs.process.flows,
       );
-      expect(state.tasks.a!.cause ?? "").not.toContain("infra: gate");
+      expect(causeText(state.tasks.a!.cause)).not.toContain("infra: gate");
       expect(state.tasks.a!.status).not.toBe("merged");
     } finally {
       cleanupFlowRepo(repo);
@@ -210,12 +211,14 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.a!.status).toBe("parked");
-      expect(state.tasks.a!.cause).toContain(
+      expect(causeText(state.tasks.a!.cause)).toContain(
         "infra: gate could not start: typecheck",
       );
-      expect(state.tasks.a!.cause).not.toContain("empty-diff");
+      expect(causeText(state.tasks.a!.cause)).not.toContain("empty-diff");
       const park = records.find((r) => r.slug === "a" && r.step === "park");
-      expect(park?.cause).toContain("infra: gate could not start: typecheck");
+      expect(causeText(park?.cause)).toContain(
+        "infra: gate could not start: typecheck",
+      );
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -258,13 +261,18 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("infra");
-      expect(result.cause).toContain("a: crash: simulated kill in a");
+      expect(causeText(result.cause)).toContain(
+        "a: crash: simulated kill in a",
+      );
       const records = await runtime.store.listRecords();
       const aCrash = records.find(
         (r) => r.slug === "a" && r.step === "implement" && r.actor === "script",
       );
       expect(aCrash?.ok).toBe(false);
-      expect(aCrash?.cause).toBe("crash: simulated kill in a");
+      expect(aCrash?.cause).toEqual({
+        kind: "error",
+        detail: "crash: simulated kill in a",
+      });
       expect(aCrash?.stop).toEqual({
         kind: "infra",
         cause: "crash",
@@ -297,12 +305,17 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("infra");
-      expect(result.cause).toContain("crash: simulated non-error failure");
+      expect(causeText(result.cause)).toContain(
+        "crash: simulated non-error failure",
+      );
       const records = await runtime.store.listRecords();
       const crash = records.find(
         (r) => r.slug === "a" && r.step === "implement" && r.actor === "script",
       );
-      expect(crash?.cause).toBe("crash: simulated non-error failure");
+      expect(crash?.cause).toEqual({
+        kind: "error",
+        detail: "crash: simulated non-error failure",
+      });
       expect(crash?.stop).toEqual({
         kind: "infra",
         cause: "crash",

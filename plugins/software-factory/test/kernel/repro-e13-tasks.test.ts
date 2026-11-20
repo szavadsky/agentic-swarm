@@ -7,6 +7,8 @@ import { createFolderStore } from "../../src/kernel/store.js";
 import { cleanup, makeGoal, outcome, writePlan } from "./e2e-helpers.js";
 import { testPriceSource } from "../helpers/price-source.js";
 import { withKernelRoleFallbacks } from "./fake-defaults.js";
+import { formatCause } from "../../src/kernel/cause.js";
+import { causeText } from "./helpers.js";
 
 describe("E13: a half-written task file does not wedge the launch", () => {
   it("quarantines the file, records the report, and runs the iteration", async () => {
@@ -50,7 +52,9 @@ describe("E13: a half-written task file does not wedge the launch", () => {
         await createFolderStore(goal.goalDir, undefined, {}).listRecords()
       ).find((record) => record.step === "task-quarantine");
       expect(report?.ok).toBe(false);
-      expect(report?.cause).toContain('task file "broken.md" quarantined at');
+      expect(causeText(report?.cause)).toContain(
+        'task file "broken.md" quarantined at',
+      );
       // The next launch must find no unreadable file left to wedge it.
       expect((await run()).stop).toBe("blocked");
     } finally {

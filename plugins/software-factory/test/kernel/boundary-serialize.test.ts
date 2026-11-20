@@ -15,7 +15,7 @@ import {
   outcome,
   writePlan,
 } from "./e2e-helpers.js";
-import { task } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   goalCheckout,
@@ -198,8 +198,10 @@ describe("boundary turn containment", () => {
       const breach = records.filter((record) => record.step === "containment");
       expect(breach).toHaveLength(1);
       expect(breach[0]?.ok).toBe(false);
-      expect(breach[0]?.cause).toContain("boundary-write: architect:");
-      expect(breach[0]?.cause).toContain(
+      expect(causeText(breach[0]?.cause)).toContain(
+        "boundary-write: architect:",
+      );
+      expect(causeText(breach[0]?.cause)).toContain(
         `files changed outside the worktree in ${checkout}`,
       );
       // The incident is a record, not a silent repair: the turn's write stands.

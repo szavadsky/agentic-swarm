@@ -7,7 +7,7 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { runBoundary } from "../../src/kernel/boundary.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { holdsDir, postSteer } from "../../src/kernel/mailbox.js";
-import { task } from "./helpers.js";
+import { task, cause, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -145,7 +145,7 @@ describe("steer architect routing", () => {
 
       const dispatched = await runDispatch(runtime, { iteration: 1 });
       expect(dispatched.reason).toBe("drained");
-      expect(dispatched.cause).toBe("steer: s1 goal hold");
+      expect(dispatched.cause).toEqual(cause("steer: s1 goal hold"));
       const after = await stateOf(runtime);
       expect(after.tasks.alpha!.status).toBe("merged");
       expect(after.tasks.gamma!.status).toBe("ready");
@@ -216,8 +216,8 @@ describe("steer architect routing", () => {
 
       const dispatched = await runDispatch(runtime, { iteration: 1 });
       expect(dispatched.reason).toBe("boundary");
-      expect(dispatched.cause ?? "").toContain("s1");
-      expect(dispatched.cause ?? "").toContain("beta");
+      expect(causeText(dispatched.cause)).toContain("s1");
+      expect(causeText(dispatched.cause)).toContain("beta");
       const held = await stateOf(runtime);
       expect(held.tasks.alpha!.status).toBe("merged");
       expect(held.tasks.beta!.status).toBe("ready");
@@ -306,9 +306,9 @@ describe("steer architect routing", () => {
 
       const dispatched = await runDispatch(runtime, { iteration: 1 });
       expect(dispatched.reason).toBe("boundary");
-      expect(dispatched.cause ?? "").toContain("s1");
-      expect(dispatched.cause ?? "").toContain("alpha");
-      expect(dispatched.cause ?? "").toContain("beta");
+      expect(causeText(dispatched.cause)).toContain("s1");
+      expect(causeText(dispatched.cause)).toContain("alpha");
+      expect(causeText(dispatched.cause)).toContain("beta");
       const state = await stateOf(runtime);
       expect(state.tasks.alpha!.status).toBe("ready");
       expect(state.tasks.beta!.status).toBe("ready");
@@ -414,7 +414,10 @@ describe("steer architect routing", () => {
       );
       const after = await stateOf(runtime);
       expect(after.tasks.alpha!.status).toBe("cancelled");
-      expect(after.tasks.alpha!.cause).toBe("the steer voids it");
+      expect(after.tasks.alpha!.cause).toEqual({
+        kind: "note",
+        detail: "the steer voids it",
+      });
       expect(after.tasks.beta!.status).toBe("ready");
       expect(
         fs.readFileSync(path.join(runtime.store.tasksDir, "beta.md"), "utf8"),
@@ -475,7 +478,7 @@ describe("steer architect routing", () => {
       const records = await runtime.store.listRecords();
       const validates = records.filter((r) => r.step === "pm-validate");
       expect(validates).toHaveLength(1);
-      expect(validates[0]!.cause ?? "").toContain(
+      expect(causeText(validates[0]!.cause)).toContain(
         "goal: true stays reserved for stall",
       );
       expect(records.some((r) => r.step === "steer-routes")).toBe(true);

@@ -2,6 +2,7 @@
 import path from "node:path";
 import type { Harness } from "../harness/types.js";
 import { loadConfigs } from "../kernel/config.js";
+import { formatCause } from "../kernel/cause.js";
 import {
   type HarnessFactory,
   type LaunchResult,
@@ -239,7 +240,7 @@ function printStatus(out: Awaited<ReturnType<typeof statusGoal>>): void {
   for (const slug of Object.keys(out.state.tasks).sort()) {
     const task = out.state.tasks[slug]!;
     const commit = task.commit ? ` (commit ${task.commit.slice(0, 8)})` : "";
-    const cause = task.cause ? ` — ${task.cause}` : "";
+    const cause = task.cause ? ` — ${formatCause(task.cause)}` : "";
     console.log(`  ${slug}: ${task.status}${commit}${cause}`);
   }
   console.log(`last summary: ${out.lastSummary ?? "none"}`);

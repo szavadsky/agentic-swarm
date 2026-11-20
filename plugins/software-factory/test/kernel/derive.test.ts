@@ -2,7 +2,9 @@
 import { describe, expect, it } from "bun:test";
 import { derive, hasOpenDebt, openDebts } from "../../src/kernel/derive.js";
 import type { StepRecord } from "../../src/kernel/types.js";
-import { rec, script, task } from "./helpers.js";
+import { rec, script, task, cause, causeText } from "./helpers.js";
+import type { Cause } from "../../src/kernel/types.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 const doneCheck = (seq: number): StepRecord =>
   script(seq, {
@@ -153,8 +155,8 @@ describe("derive", () => {
     ]);
     expect(afterThird.tasks.a!.round).toBe(3);
     expect(afterThird.tasks.a!.phase).toBe("parked");
-    expect(afterThird.tasks.a!.park).toBe(
-      "invalid outcome: changes on the last review call: review r3",
+    expect(afterThird.tasks.a!.park).toEqual(
+      cause("invalid outcome: changes on the last review call: review r3"),
     );
     expect(afterThird.tasks.a!.turns).toBe(6);
   });
@@ -165,12 +167,12 @@ describe("derive", () => {
       [implement(1), doneCheck(2), review(3, "reject")],
     );
     expect(state.tasks.a!.status).toBe("ready");
-    expect(state.tasks.a!.park).toContain("review rejected");
+    expect(causeText(state.tasks.a!.park)).toContain("review-rejected");
     expect(state.tasks.a!.phase).toBe("parked");
   });
 
   it("restarts an amended task after the park its earlier revision ended", () => {
-    const parkRecord = (seq: number, revision: number, cause: string) =>
+    const parkRecord = (seq: number, revision: number, cause: Cause) =>
       script(seq, {
         step: "park",
         ok: true,
@@ -185,7 +187,7 @@ describe("derive", () => {
       implement(4, 2),
       doneCheck(5),
       review(6, "reject", 2),
-      parkRecord(7, 0, "review rejected: not salvageable"),
+      parkRecord(7, 0, cause("review rejected: not salvageable")),
     ];
     const parked = derive([task("a")], firstRevision);
     expect(parked.tasks.a!.status).toBe("parked");
@@ -210,11 +212,11 @@ describe("derive", () => {
       [
         ...firstRevision,
         implement(8, 1, { base: undefined }),
-        parkRecord(9, 1, "blocked: still stuck"),
+        parkRecord(9, 1, cause("blocked: still stuck")),
       ],
     );
     expect(reparked.tasks.a!.status).toBe("parked");
-    expect(reparked.tasks.a!.cause).toBe("blocked: still stuck");
+    expect(reparked.tasks.a!.cause).toEqual(cause("blocked: still stuck"));
     expect(reparked.tasks.a!.turns).toBe(1);
   });
 
@@ -233,7 +235,7 @@ describe("derive", () => {
       ],
     );
     expect(blocked.tasks.a!.status).toBe("ready");
-    expect(blocked.tasks.a!.park).toContain("missing API");
+    expect(causeText(blocked.tasks.a!.park)).toContain("missing API");
 
     const failed = derive(
       [task("a")],
@@ -249,7 +251,7 @@ describe("derive", () => {
       ],
     );
     expect(failed.tasks.a!.status).toBe("ready");
-    expect(failed.tasks.a!.park).toContain("tests red");
+    expect(causeText(failed.tasks.a!.park)).toContain("tests red");
 
     const upscope = derive(
       [task("a")],
@@ -264,14 +266,14 @@ describe("derive", () => {
         }),
       ],
     );
-    expect(upscope.tasks.a!.park).toContain("upscope");
+    expect(causeText(upscope.tasks.a!.park)).toContain("upscope");
 
     const parked = derive(
       [task("a")],
-      [script(1, { step: "park", ok: true, cause: "setup failed" })],
+      [script(1, { step: "park", ok: true, cause: cause("setup failed") })],
     );
     expect(parked.tasks.a!.status).toBe("parked");
-    expect(parked.tasks.a!.cause).toBe("setup failed");
+    expect(parked.tasks.a!.cause).toEqual(cause("setup failed"));
   });
 
   it("ignores unfinished records as orphans so the step is redispatched", () => {
@@ -299,7 +301,11 @@ describe("derive", () => {
         implement(1),
         { ...doneCheck(2), endedAt: undefined },
         {
-          ...script(3, { step: "park", ok: true, cause: "half written" }),
+          ...script(3, {
+            step: "park",
+            ok: true,
+            cause: cause("half written"),
+          }),
           endedAt: undefined,
         },
       ],
@@ -333,7 +339,7 @@ describe("derive", () => {
     const fixed = derive(tasks, [
       implement(1),
       doneCheck(2),
-      script(3, { step: "merge", ok: false, cause: "gates: unit" }),
+      script(3, { step: "merge", ok: false, cause: cause("gates: unit") }),
     ]);
     expect(fixed.tasks.a!.phase).toBe("implement");
     expect(fixed.tasks.a!.round).toBe(1);
@@ -342,13 +348,13 @@ describe("derive", () => {
     const parked = derive(tasks, [
       implement(1),
       doneCheck(2),
-      script(3, { step: "merge", ok: false, cause: "gates: unit" }),
+      script(3, { step: "merge", ok: false, cause: cause("gates: unit") }),
       implement(4),
       doneCheck(5),
-      script(6, { step: "merge", ok: false, cause: "gates: unit" }),
+      script(6, { step: "merge", ok: false, cause: cause("gates: unit") }),
     ]);
     expect(parked.tasks.a!.phase).toBe("parked");
-    expect(parked.tasks.a!.park).toContain("gates: unit");
+    expect(causeText(parked.tasks.a!.park)).toContain("gates: unit");
     expect(parked.tasks.a!.round).toBe(1);
   });
 
@@ -401,7 +407,9 @@ describe("derive", () => {
       ],
     );
     expect(state.tasks.a!.phase).toBe("parked");
-    expect(state.tasks.a!.park).toStartWith("empty-diff: implement r2");
+    expect(causeText(state.tasks.a!.park)).toStartWith(
+      "empty-diff: implement r2",
+    );
   });
 
   it("parks last-call changes after a reply-only fix", () => {
@@ -446,8 +454,8 @@ describe("derive", () => {
     // The reply-only fix returns to review and consumes the single change
     // request, so the next changes is refused instead of looping.
     expect(state.tasks.a!.phase).toBe("parked");
-    expect(state.tasks.a!.park).toContain(
-      "invalid outcome: changes on the last review call",
+    expect(causeText(state.tasks.a!.park)).toContain(
+      "invalid-outcome: changes on the last review call",
     );
     expect(state.tasks.a!.round).toBe(2);
   });
@@ -478,8 +486,10 @@ describe("derive", () => {
       redCheck(4),
     ]);
     expect(state.tasks.a!.phase).toBe("parked");
-    expect(state.tasks.a!.park).toBe(
-      "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
+    expect(state.tasks.a!.park).toEqual(
+      cause(
+        "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
+      ),
     );
   });
 
@@ -530,7 +540,7 @@ describe("derive", () => {
       redCheck(8),
     ]);
     expect(r4.tasks.a!.phase).toBe("parked");
-    expect(r4.tasks.a!.park).toBe("gates: unit");
+    expect(r4.tasks.a!.park).toEqual(cause("gates: unit"));
     expect(r4.tasks.a!.gateFix).toBeUndefined();
     expect(r4.tasks.a!.gateLastCall).toBeUndefined();
   });
@@ -588,7 +598,7 @@ describe("derive", () => {
       flows,
     );
     expect(r3.tasks.a!.phase).toBe("parked");
-    expect(r3.tasks.a!.park).toBe("gates: unit");
+    expect(r3.tasks.a!.park).toEqual(cause("gates: unit"));
   });
 
   it("counts merge-gate failures against the same checks bound", () => {
@@ -602,7 +612,7 @@ describe("derive", () => {
       implement(5, 1, { tree: "tree-3", commit: "c3", base: "c0" }),
       doneCheck(6),
       review(7, "approve"),
-      script(8, { step: "merge", ok: false, cause: "gates: unit" }),
+      script(8, { step: "merge", ok: false, cause: cause("gates: unit") }),
     ];
     // Total red gate requests = 2 checks + 1 merge = 3.
     // Since bound is 2 (limit 3), this is the 3rd fix turn -> gateLastCall = true!
@@ -622,11 +632,11 @@ describe("derive", () => {
       implement(7, 1, { tree: "tree-4", commit: "c4", base: "c0" }),
       doneCheck(8),
       review(9, "approve"),
-      script(10, { step: "merge", ok: false, cause: "gates: unit" }),
+      script(10, { step: "merge", ok: false, cause: cause("gates: unit") }),
     ];
     const r4 = derive(tasks, records4);
     expect(r4.tasks.a!.phase).toBe("parked");
-    expect(r4.tasks.a!.park).toBe("gates: unit");
+    expect(r4.tasks.a!.park).toEqual(cause("gates: unit"));
   });
 
   it("routes a task-checks fix turn to review on green, never skipping to merge", () => {
@@ -649,7 +659,7 @@ describe("derive", () => {
       script(seq, {
         step: "merge",
         ok: false,
-        cause: "gates: unit",
+        cause: cause("gates: unit"),
         checks: [
           {
             name: "unit",
@@ -692,7 +702,7 @@ describe("derive", () => {
       script(9, {
         step: "merge",
         ok: false,
-        cause: "gates: unit",
+        cause: cause("gates: unit"),
         checks: [
           {
             name: "unit",
@@ -711,8 +721,10 @@ describe("derive", () => {
 
     const state = derive(tasks, [...prefix, redCheck(11)]);
     expect(state.tasks.a!.phase).toBe("parked");
-    expect(state.tasks.a!.park).toBe(
-      "empty-diff: implement r2 committed no changes after red checks: unit (exit 1)",
+    expect(state.tasks.a!.park).toEqual(
+      cause(
+        "empty-diff: implement r2 committed no changes after red checks: unit (exit 1)",
+      ),
     );
   });
 
@@ -745,7 +757,7 @@ describe("derive", () => {
       script(4, {
         step: "merge",
         ok: false,
-        cause: "gates: unit",
+        cause: cause("gates: unit"),
         checks: [
           {
             name: "unit",
@@ -773,8 +785,10 @@ describe("derive", () => {
 
     const state = derive(tasks, [...prefix, redCheck(6)]);
     expect(state.tasks.a!.phase).toBe("parked");
-    expect(state.tasks.a!.park).toBe(
-      "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
+    expect(state.tasks.a!.park).toEqual(
+      cause(
+        "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
+      ),
     );
   });
 
@@ -784,8 +798,8 @@ describe("derive", () => {
       [implement(1, 1, { tree: "tree-0", commit: "c0", base: "c0" })],
     );
     expect(state.tasks.a!.phase).toBe("parked");
-    expect(state.tasks.a!.park).toBe(
-      "empty-diff: implement r1 committed no changes",
+    expect(state.tasks.a!.park).toEqual(
+      cause("empty-diff: implement r1 committed no changes"),
     );
   });
 
@@ -844,7 +858,7 @@ describe("derive", () => {
       ],
     );
     expect(state.tasks.a!.status).toBe("ready");
-    expect(state.tasks.a!.park).toContain("failed");
+    expect(causeText(state.tasks.a!.park)).toContain("failed");
     expect(state.tasks.a!.turns).toBe(1);
   });
 
@@ -994,7 +1008,7 @@ describe("derive", () => {
       ],
     );
     expect(state.tasks.a!.phase).toBe("parked");
-    expect(state.tasks.a!.park).toContain(
+    expect(causeText(state.tasks.a!.park)).toContain(
       "infra: gate could not start: typecheck",
     );
   });
@@ -1021,7 +1035,7 @@ describe("derive", () => {
       ],
     );
     expect(state.tasks.a!.phase).toBe("parked");
-    expect(state.tasks.a!.park).toContain(
+    expect(causeText(state.tasks.a!.park)).toContain(
       "infra: gate could not start: typecheck",
     );
   });
@@ -1093,8 +1107,10 @@ describe("derive", () => {
       }),
     ]);
     expect(parked.tasks.a!.phase).toBe("parked");
-    expect(parked.tasks.a!.park).toBe(
-      "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
+    expect(parked.tasks.a!.park).toEqual(
+      cause(
+        "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
+      ),
     );
   });
 

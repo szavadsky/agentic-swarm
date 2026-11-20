@@ -4,6 +4,7 @@ import { git } from "../core/git/exec.js";
 import { unmergedFiles } from "../core/git/merge.js";
 import type { SessionRef } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
+import { formatCause, makeCause } from "./cause.js";
 import { derive } from "./derive.js";
 import { boundaryTarget, compactSession } from "./flow-context.js";
 import { mergeTask } from "./integrate.js";
@@ -12,6 +13,7 @@ import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { scriptMeta } from "./record.js";
 import { materialHash } from "./tasks.js";
 import type {
+  Cause,
   KernelRuntime,
   Outcome,
   StepRecord,
@@ -59,7 +61,7 @@ export interface StewardOptions {
 
 interface StewardAttempt {
   ok: boolean;
-  cause?: string;
+  cause?: Cause;
   infra?: { kind: "infra"; cause: string; details?: string };
   cancelled?: boolean;
   session?: SessionRef;
@@ -69,7 +71,7 @@ interface StewardAttempt {
 
 function pointerConcern(
   slug: string,
-  status: string,
+  status: Cause,
   worktree: string,
   branch: string,
 ): Outcome {
@@ -80,7 +82,7 @@ function pointerConcern(
       {
         kind: "risk",
         calibration: "architect",
-        text: `steward: ${slug} unmerged (${status}); worktree ${worktree}; branch ${branch}`,
+        text: `steward: ${slug} unmerged (${formatCause(status)}); worktree ${worktree}; branch ${branch}`,
         evidence: `records steward ${slug}`,
       },
     ],
@@ -93,7 +95,7 @@ async function commitMerge(
   runtime: KernelRuntime,
   task: TaskFile,
   cwd: string,
-): Promise<{ ok: true } | { ok: false; cause: string }> {
+): Promise<{ ok: true } | { ok: false; cause: Cause }> {
   try {
     const commit = await commitAll(
       runtime.repo,
@@ -101,11 +103,17 @@ async function commitMerge(
       `factory: ${task.slug} merge integration head`,
     );
     if (commit) return { ok: true };
-    return { ok: false, cause: "merge produced no commit" };
+    return {
+      ok: false,
+      cause: makeCause("merge-failed", "merge produced no commit"),
+    };
   } catch (err) {
     return {
       ok: false,
-      cause: `merge commit failed: ${err instanceof Error ? err.message : String(err)}`,
+      cause: makeCause(
+        "merge-failed",
+        `merge commit failed: ${err instanceof Error ? err.message : String(err)}`,
+      ),
     };
   }
 }
@@ -119,12 +127,17 @@ async function attemptStewardMerge(
   session: SessionRef | undefined,
 ): Promise<StewardAttempt> {
   const ensured = await ensureTaskWorktree(runtime, task);
-  if (ensured.error)
-    return { ok: false, cause: ensured.error, agentTurn: false };
+  if (ensured.error) {
+    return {
+      ok: false,
+      cause: makeCause("setup", ensured.error),
+      agentTurn: false,
+    };
+  }
   if (ensured.setup && !ensured.setup.ok) {
     return {
       ok: false,
-      cause: `setup: ${ensured.setup.error ?? "unknown"}`,
+      cause: makeCause("setup", ensured.setup.error ?? "unknown"),
       agentTurn: false,
     };
   }
@@ -133,7 +146,11 @@ async function attemptStewardMerge(
       ensured.mergeConflict.paths.join(", ") ||
       "git reported no unmerged paths";
     await abortMerge(ensured.path);
-    return { ok: false, cause: `base-conflict: ${named}`, agentTurn: false };
+    return {
+      ok: false,
+      cause: makeCause("base-conflict", named),
+      agentTurn: false,
+    };
   }
   const head = await integrationHead(runtime);
   const before = await headSha(ensured.path);
@@ -153,8 +170,10 @@ async function attemptStewardMerge(
     await abortMerge(ensured.path);
     return {
       ok: false,
-      cause:
+      cause: makeCause(
+        "merge-failed",
         merge.stderr.trim().slice(-500) || "merge failed without conflicts",
+      ),
       agentTurn: false,
     };
   }
@@ -194,7 +213,9 @@ async function attemptStewardMerge(
         ensured.branch,
         contained,
       );
-      if (breach) return { ok: false, cause: `containment: ${breach}` };
+      if (breach) {
+        return { ok: false, cause: makeCause("containment", breach) };
+      }
       const settled = await settleMergeTurn(
         runtime,
         { iteration, slug: task.slug, round: state.round },
@@ -214,7 +235,11 @@ async function attemptStewardMerge(
 
   if (breach) {
     await abortMerge(ensured.path);
-    return { ok: false, cause: `containment: ${breach}`, agentTurn: true };
+    return {
+      ok: false,
+      cause: makeCause("containment", breach),
+      agentTurn: true,
+    };
   }
   const stop = result.record.stop;
   if (stop?.kind === "infra") {
@@ -239,7 +264,10 @@ async function attemptStewardMerge(
     await abortMerge(ensured.path);
     return {
       ok: false,
-      cause: result.outcome?.summary ?? "steward made no merge commit",
+      cause: makeCause(
+        "merge-failed",
+        result.outcome?.summary ?? "steward made no merge commit",
+      ),
       ...(storedSession ? { session: storedSession } : {}),
       ...(result.outcome ? { outcome: result.outcome } : {}),
       agentTurn: true,
@@ -254,7 +282,10 @@ async function attemptStewardMerge(
     await abortMerge(ensured.path);
     return {
       ok: false,
-      cause: "merge still in progress after the steward attempt",
+      cause: makeCause(
+        "merge-failed",
+        "merge still in progress after the steward attempt",
+      ),
       ...(storedSession ? { session: storedSession } : {}),
       ...(result.outcome ? { outcome: result.outcome } : {}),
       agentTurn: true,
@@ -282,7 +313,7 @@ async function ensurePointer(
   task: TaskFile,
   iteration: number,
   round: number,
-  status: string,
+  status: Cause,
   worktree: string,
   branch: string,
   outcome: Outcome | undefined,
@@ -292,7 +323,7 @@ async function ensurePointer(
     scriptMeta(iteration, "steward", { slug: task.slug, round }),
     {
       ok: false,
-      cause: `held: ${status}`,
+      cause: makeCause("held", formatCause(status)),
       outcome: pointerConcern(task.slug, status, worktree, branch),
     },
   );
@@ -336,7 +367,7 @@ export async function runSteward(
       const s = state.tasks[t.slug];
       return (
         s?.status === "parked" &&
-        s.cause?.startsWith("conflict:") &&
+        s.cause?.kind === "conflict" &&
         !attemptedThisWave.has(t.slug) &&
         !opts.frozen?.has(t.slug)
       );
@@ -350,7 +381,7 @@ export async function runSteward(
     if (!recorded) {
       await runtime.store.appendRecord(scriptMeta(iteration, "steward"), {
         ok: true,
-        cause: "skipped: no conflicts",
+        cause: makeCause("note", "skipped: no conflicts"),
       });
     }
     return { skipped: true, attempted: [], landed: [], unmerged: [], dead: [] };
@@ -406,7 +437,7 @@ export async function runSteward(
 
     if (!attempt.ok) {
       unmerged.push(slug);
-      const status = attempt.cause ?? "unresolved";
+      const status = attempt.cause ?? makeCause("held", "unresolved");
       if (!attempt.agentTurn) {
         await runtime.store.appendRecord(
           scriptMeta(iteration, "steward", {
@@ -415,7 +446,7 @@ export async function runSteward(
           }),
           {
             ok: false,
-            cause: `held: ${status}`,
+            cause: makeCause("held", formatCause(status)),
             outcome: pointerConcern(slug, status, worktree, branch),
           },
         );
@@ -437,7 +468,10 @@ export async function runSteward(
     if (!attempt.agentTurn) {
       await runtime.store.appendRecord(
         scriptMeta(iteration, "steward", { slug, round: taskState.round }),
-        { ok: true, cause: `auto-merged ${branch} without a turn` },
+        {
+          ok: true,
+          cause: makeCause("note", `auto-merged ${branch} without a turn`),
+        },
       );
     }
     // The branch now carries the head; land through the queue without a second
@@ -474,7 +508,8 @@ export async function runSteward(
       // Parked is terminal: a red gates run cannot ready a fix turn here, so
       // the steward holds and the relaunch happens via a continuation.
       unmerged.push(slug);
-      const status = merge?.cause ?? "merge did not land";
+      const status =
+        merge?.cause ?? makeCause("merge-failed", "merge did not land");
       await ensurePointer(
         runtime,
         task,
