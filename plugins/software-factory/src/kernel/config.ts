@@ -9,6 +9,8 @@ import { acpxConfigSchema } from "../harness/acpx/config.js";
 import { type Finding, formatFindings } from "./findings.js";
 import { DEFAULT_POOL_RESET_MINUTES } from "./quota-pools.js";
 import type {
+  ArtifactBackendConfig,
+  ArtifactLocation,
   BoundaryStep,
   ConfigBundle,
   ConfigFiles,
@@ -70,6 +72,22 @@ export const repoConfigSchema = z
   .object({
     baseBranch: z.string().min(1).default("main"),
     artifactRoot: z.string().min(1).default(".factory/artifacts"),
+    /** Artifact backend by name; absent keeps the plain gitignored folder. */
+    artifacts: z
+      .object({
+        backend: z.enum(["folder", "same-repo", "git-repo"]).default("folder"),
+        root: z.string().min(1).optional(),
+        remote: z.string().min(1).optional(),
+      })
+      .strict()
+      .refine(
+        (value) => value.remote === undefined || value.backend === "git-repo",
+        {
+          message: "remote is only valid for the git-repo backend",
+          path: ["remote"],
+        },
+      )
+      .optional(),
     identity: identitySchema.optional(),
     setup: z.array(z.string().min(1)).default([]),
     gates: z.array(gateSchema).default([]),
@@ -962,6 +980,62 @@ function legacyCheckout(
     : undefined;
 }
 
+/** True when `child` is strictly below `parent`; symlinks are not resolved. */
+function isInside(child: string, parent: string): boolean {
+  const rel = path.relative(parent, child);
+  return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
+/**
+ * A local path remote resolves against the repo; a scheme or scp-style remote
+ * is passed through for git to handle.
+ */
+function resolveRemote(repoRoot: string, remote: string): string {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(remote) || /^[^/]+@[^:]+:/.test(remote))
+    return remote;
+  return path.resolve(repoRoot, expandHome(remote));
+}
+
+/**
+ * The configured backend resolved to one root. A same-repo store must live
+ * inside the repository it is committed to; a separate repository must not sit
+ * inside the main checkout, where a stray `git add` would absorb it.
+ */
+function resolveArtifacts(
+  configs: ConfigBundle,
+  root: string,
+  worktreeRoot: string,
+): ArtifactLocation {
+  const configured: ArtifactBackendConfig = configs.repo.artifacts ?? {
+    backend: "folder",
+  };
+  const fallback =
+    configured.backend === "git-repo"
+      ? path.join(worktreeRoot, "artifacts")
+      : configs.repo.artifactRoot;
+  const location = fromRoot(root, configured.root ?? fallback);
+  if (configured.backend === "same-repo" && !isInside(location, root)) {
+    throw new Error(
+      `artifacts.root "${location}" must be inside the repository for the same-repo backend`,
+    );
+  }
+  if (
+    configured.backend === "git-repo" &&
+    (location === root || isInside(location, root))
+  ) {
+    throw new Error(
+      `artifacts.root "${location}" must be outside the repository for the git-repo backend`,
+    );
+  }
+  return {
+    backend: configured.backend,
+    root: location,
+    ...(configured.remote
+      ? { remote: resolveRemote(root, configured.remote) }
+      : {}),
+  };
+}
+
 export function resolveGoalPaths(
   configs: ConfigBundle,
   repoRoot: string,
@@ -977,12 +1051,10 @@ export function resolveGoalPaths(
     ? fromRoot(root, configs.run.worktreeRoot)
     : path.resolve(root, "..", ".factory-worktrees", path.basename(root));
   const worktreeRoot = path.join(baseRoot, repositoryId(root));
+  const artifacts = resolveArtifacts(configs, root, worktreeRoot);
   return {
     repoRoot: root,
-    goalDir: fromRoot(
-      root,
-      path.join(expandHome(configs.repo.artifactRoot), goal),
-    ),
+    goalDir: path.join(artifacts.root, goal),
     goalCheckout:
       legacyCheckout(baseRoot, goal, root) ?? path.join(worktreeRoot, goal),
     integrationBranch: `factory/${goal}`,
@@ -990,6 +1062,7 @@ export function resolveGoalPaths(
     sessionsDir: configs.run.sessions.dir
       ? fromRoot(root, configs.run.sessions.dir)
       : path.join(worktreeRoot, ".sessions"),
+    artifacts,
   };
 }
 

@@ -7,8 +7,8 @@ layer with the gate's validators.
 
 ## Repo layer — `.factory/repo.yaml`
 
-Tracked. Names the base branch, the artifact root, the setup commands and the
-gates every task branch runs.
+Tracked. Names the base branch, the artifact backend and root, the setup
+commands and the gates every task branch runs.
 
 ```yaml
 baseBranch: main
@@ -37,6 +37,21 @@ cleanliness:                                   # optional
 - Gates run once on the base; a red base is recorded and warned once, not fatal.
 - The tracked layer names no worktree root: checkouts and sessions belong to
   the run layer.
+- `artifacts` selects the store by backend name, not by path:
+
+  ```yaml
+  artifacts:
+    backend: same-repo               # folder (default) | same-repo | git-repo
+    root: .factory/artifacts         # optional; defaults per backend
+    remote: ../factory-artifacts.git # git-repo only: local path or URL
+  ```
+
+  `folder` keeps a plain, gitignored directory. `same-repo` requires a root
+  inside the repo and commits every kernel write to the main checkout's branch,
+  so artifacts never sit unmerged on a task branch. `git-repo` keeps a separate
+  repository (default root `<worktreeRoot>/artifacts`, outside the repo),
+  clones `remote` when absent, and commits and pushes every write. Both git
+  backends never commit sessions, logs or raw agent I/O.
 
 ## Process layer — `config/process.yaml` and `.factory/process.yaml`
 

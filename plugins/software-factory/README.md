@@ -72,6 +72,10 @@ Three layers, all validated with one report naming file and key.
 ```yaml
 baseBranch: main
 artifactRoot: .factory/artifacts
+artifacts:                      # optional; defaults to a gitignored folder
+  backend: folder               # folder | same-repo | git-repo
+  root: .factory/artifacts      # optional; defaults per backend
+  remote: ../factory-artifacts.git  # git-repo only: local path or URL
 setup: [bun install]
 gates:
   - id: unit
@@ -86,6 +90,20 @@ gates:
 
 The tracked repo layer names no worktree root: checkouts, sessions and harness
 policy belong to the run layer, so one checkout never silently shadows another.
+
+`artifacts.backend` selects storage by name, never by where a path happens to
+point. `folder` (the default) keeps the root a plain directory and writes a `*`
+`.gitignore` when it sits inside the repo. `same-repo` requires a root inside
+the repo and commits every kernel write to the main checkout's branch, so
+orchestration artifacts are never left unmerged on a task branch; the store
+replaces its own folder `.gitignore` and commits nothing under `sessions/`,
+`logs/`, `raw/` or a `.jsonl`/`.log`/`.tmp` name. `git-repo` keeps a separate
+repository at `root` (default `<worktreeRoot>/artifacts`, outside the repo),
+clones `remote` when the checkout is absent, commits every write there and
+pushes it; a local bare repository needs no network. A same-repo root must be
+inside the repository and a git-repo root outside it, so one repository never
+absorbs the other's history; the same-repo root must also not be ignored by the
+repository (the store replaces only its own folder `.gitignore`).
 
 Gate runs in different worktrees run in parallel. A gate waits only for the
 mutexes it names in `serial`: within one factory process, gates naming the same
@@ -362,7 +380,7 @@ Gates run once on the base; a red base is recorded and warned once, not fatal.
 ## Goal directory
 
 ```
-<artifactRoot>/<goal>/
+<artifact root>/<goal>/
   intent.md plan.md tasks/
   epics/<epic>.md           # one plan per architect scope; the goal plan's register names them
   records/                  # one directory per settled step and round: started/end/outcome

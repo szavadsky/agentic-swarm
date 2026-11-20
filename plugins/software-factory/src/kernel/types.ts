@@ -1004,6 +1004,12 @@ export interface ArtifactStore {
    * its artifacts while a turn is contained.
    */
   declaredWrites(): readonly DeclaredWrite[];
+  /**
+   * Commit SHAs this store's backend persisted, oldest first. The folder
+   * backend commits nothing; containment uses this to tell a store's own
+   * artifact commit apart from an operator's.
+   */
+  committed(): readonly string[];
 }
 
 /** A runner whose printed failure report the kernel parses by name. */
@@ -1031,10 +1037,48 @@ export interface GateConfig {
   format?: { junit?: string; pattern?: GatePattern };
 }
 
+/**
+ * How the kernel stores one goal's artifacts. The backend is selected by name,
+ * never by where a path happens to point.
+ *
+ * - `folder`: a plain directory, gitignored when it lives inside the repo.
+ * - `same-repo`: a directory inside the repo, committed after every kernel
+ *   write so orchestration artifacts are never left unmerged on a branch.
+ * - `git-repo`: a separate git repository, committed and pushed after every
+ *   write.
+ */
+export type ArtifactBackend = "folder" | "same-repo" | "git-repo";
+
+export interface ArtifactBackendConfig {
+  backend: ArtifactBackend;
+  /**
+   * Store location, repo-relative or absolute. Defaults to `artifactRoot` for
+   * `folder`/`same-repo` and to `<worktreeRoot>/artifacts` for `git-repo`.
+   */
+  root?: string;
+  /**
+   * `git-repo` only: the separate repository to clone and push. A local path is
+   * resolved against the main repository; anything with a scheme is passed
+   * through unchanged.
+   */
+  remote?: string;
+}
+
+/** A backend resolved against one repository and goal. */
+export interface ArtifactLocation {
+  backend: ArtifactBackend;
+  /** Absolute directory holding every goal's artifacts. */
+  root: string;
+  /** `git-repo` only: the resolved remote, when one is configured. */
+  remote?: string;
+}
+
 export interface RepoConfig {
   baseBranch: string;
-  /** Goal directories live at <repo>/<artifactRoot>/<goal>. */
+  /** Goal directories live at <repo>/<artifactRoot>/<goal> unless a backend names another root. */
   artifactRoot: string;
+  /** How artifacts are stored; absent reads as the plain folder backend. */
+  artifacts?: ArtifactBackendConfig;
   identity?: { name: string; email: string };
   setup: string[];
   gates: GateConfig[];
@@ -1190,6 +1234,8 @@ export interface GoalPaths {
   integrationBranch: string;
   worktreeRoot: string;
   sessionsDir: string;
+  /** The resolved artifact backend and the root holding every goal. */
+  artifacts: ArtifactLocation;
 }
 
 /** Everything a boundary or flow step needs; built once by the launch. */

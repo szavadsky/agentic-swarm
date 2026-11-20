@@ -221,6 +221,20 @@ async function readRecordDir(
   };
 }
 
+/**
+ * A backend's persistence hook. The store hands it every settled mutation, so
+ * artifacts are durable where the backend keeps them before the next write.
+ * `prepare` runs before the goal layout is created: it clones or initializes a
+ * separate repository and installs that backend's ignore file.
+ */
+export interface ArtifactWriter {
+  prepare(): Promise<void>;
+  /** Commits the artifact tree; null when nothing changed. */
+  commit(goal: string): Promise<string | null>;
+  /** Commit SHAs this writer made, oldest first. */
+  readonly commits: string[];
+}
+
 class FolderStore implements ArtifactStore {
   readonly goalDir: string;
   readonly tasksDir: string;
@@ -234,6 +248,8 @@ class FolderStore implements ArtifactStore {
   readonly iterations: IterationStore;
   /** Directory holding all goals; its `.gitignore` keeps records out of git. */
   private readonly artifactRoot?: string;
+  /** Backend persistence; absent is the plain gitignored folder backend. */
+  private readonly writer?: ArtifactWriter;
   /** Process task types; a file naming one resolves its flow and kind here. */
   private readonly taskTypes: Record<string, TaskTypeDefinition>;
   /** Concurrent dispatches allocate sequence numbers; one allocator per store. */
@@ -245,6 +261,7 @@ class FolderStore implements ArtifactStore {
     goalDir: string,
     artifactRoot: string | undefined,
     taskTypes: Record<string, TaskTypeDefinition>,
+    writer?: ArtifactWriter,
   ) {
     this.goalDir = goalDir;
     this.tasksDir = path.join(goalDir, "tasks");
@@ -252,12 +269,23 @@ class FolderStore implements ArtifactStore {
     this.mailboxDir = path.join(goalDir, "mailbox");
     this.iterationsDir = path.join(goalDir, "iterations");
     this.artifactRoot = artifactRoot;
+    this.writer = writer;
     this.taskTypes = taskTypes;
     this.records = this.recordArea();
     this.tasks = this.taskArea();
     this.plans = this.planArea();
     this.mailbox = this.mailboxArea();
     this.iterations = this.iterationArea();
+  }
+
+  committed(): readonly string[] {
+    return this.writer?.commits ?? [];
+  }
+
+  /** Makes the artifacts durable; every mutation ends here before it returns. */
+  private async persist(): Promise<void> {
+    if (!this.writer) return;
+    await this.writer.commit(path.basename(this.goalDir));
   }
 
   pathOf(ref: ArtifactRef): string {
@@ -368,6 +396,7 @@ class FolderStore implements ArtifactStore {
   }
 
   async ensureLayout(): Promise<void> {
+    await this.writer?.prepare();
     await Promise.all([
       fs.promises.mkdir(this.tasksDir, { recursive: true }),
       fs.promises.mkdir(this.recordsDir, { recursive: true }),
@@ -383,6 +412,7 @@ class FolderStore implements ArtifactStore {
       fs.promises.mkdir(this.iterationsDir, { recursive: true }),
     ]);
     await this.ensureArtifactIgnore();
+    await this.persist();
   }
 
   /**
@@ -431,6 +461,7 @@ class FolderStore implements ArtifactStore {
     } finally {
       write.endedAt = new Date().toISOString();
     }
+    await this.persist();
   }
 
   async listDir(rel: string): Promise<string[]> {
@@ -628,6 +659,7 @@ class FolderStore implements ArtifactStore {
     } finally {
       write.endedAt = new Date().toISOString();
     }
+    await this.persist();
   }
 
   /**
@@ -658,6 +690,7 @@ class FolderStore implements ArtifactStore {
     } finally {
       write.endedAt = new Date().toISOString();
     }
+    await this.persist();
   }
 
   /** Reads an absolute path; null when absent. */
@@ -706,6 +739,7 @@ class FolderStore implements ArtifactStore {
       endedAt: new Date().toISOString(),
     });
     await sealRecord(dir);
+    await this.persist();
   }
 
   private async nextSeq(): Promise<number> {
@@ -741,6 +775,7 @@ class FolderStore implements ArtifactStore {
       await writeYamlAtomic(path.join(recordDir, "started.yaml"), record);
       return { dir: recordDir, started: record };
     });
+    await this.persist();
     const outcomePath = path.join(dir, "outcome.yaml");
     const finish = async (end: RecordEnd): Promise<StepRecord> => {
       // A kernel-owned rewrite reopens a sealed record and seals it again.
@@ -754,7 +789,16 @@ class FolderStore implements ArtifactStore {
         await sealRecord(dir);
       }
     };
-    return { dir, meta: started, outcomePath, finish };
+    return {
+      dir,
+      meta: started,
+      outcomePath,
+      finish: async (end) => {
+        const record = await finish(end);
+        await this.persist();
+        return record;
+      },
+    };
   }
 
   async appendRecord(meta: RecordStart, end: RecordEnd): Promise<StepRecord> {
@@ -811,6 +855,7 @@ class FolderStore implements ArtifactStore {
     } finally {
       write.endedAt = new Date().toISOString();
     }
+    await this.persist();
   }
 
   private async moveMailbox(
@@ -826,6 +871,7 @@ class FolderStore implements ArtifactStore {
     try {
       await fs.promises.mkdir(path.dirname(target), { recursive: true });
       await fs.promises.rename(source, target);
+      await this.persist();
       return true;
     } catch (err) {
       // A concurrent reader moved it first; the caller has nothing left to do.
@@ -890,6 +936,7 @@ export function createFolderStore(
   goalDir: string,
   artifactRoot: string | undefined,
   taskTypes: Record<string, TaskTypeDefinition>,
+  writer?: ArtifactWriter,
 ): ArtifactStore {
-  return new FolderStore(goalDir, artifactRoot, taskTypes);
+  return new FolderStore(goalDir, artifactRoot, taskTypes, writer);
 }

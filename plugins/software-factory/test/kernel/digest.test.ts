@@ -54,6 +54,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
       integrationBranch: "factory/g",
       worktreeRoot: root,
       sessionsDir: path.join(root, "sessions"),
+      artifacts: { backend: "folder", root },
     },
     configs: { repo, process, run },
     repo: new Repo({ mainRoot: root, worktreeRoot: root }),

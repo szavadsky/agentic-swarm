@@ -9,7 +9,7 @@ import {
   type IncidentCounts,
   type MetricsTotals,
 } from "../kernel/metrics.js";
-import { createFolderStore } from "../kernel/store.js";
+import { createArtifactStore } from "../kernel/store-backend.js";
 import type { StepRecord } from "../kernel/types.js";
 
 export interface BenchmarkRow {
@@ -115,11 +115,7 @@ export async function benchmarkGoal(
   if (!fs.existsSync(paths.goalDir))
     throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
   const taskTypes = configs.process.taskTypes;
-  const store = createFolderStore(
-    paths.goalDir,
-    path.dirname(paths.goalDir),
-    taskTypes,
-  );
+  const store = createArtifactStore(paths, taskTypes);
   const metricsPath = path.join(paths.goalDir, "metrics.yaml");
   const text = await store.readFile("metrics.yaml");
   if (text === null) {

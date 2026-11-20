@@ -1,5 +1,6 @@
 baseBranch: factory-v3
 artifactRoot: .factory/artifacts
+artifacts: { backend: folder }
 setup:
   - bun install --cwd plugins/software-factory --frozen-lockfile --silent
 gates:

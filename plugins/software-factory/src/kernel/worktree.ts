@@ -452,6 +452,27 @@ export interface ContainmentSnapshot {
   checkout: WorktreeState;
 }
 
+/**
+ * Porcelain lines outside the artifact root. A same-repo artifact commit
+ * changes the main checkout's HEAD and dirty set; both are the store's writes,
+ * not the operator's, so containment compares only what lies outside the store.
+ */
+function statusOutsideArtifacts(
+  status: string,
+  repoRoot: string,
+  artifactRoot: string,
+): string {
+  const rel = path.relative(repoRoot, artifactRoot).split(path.sep).join("/");
+  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) return status;
+  return status
+    .split("\n")
+    .filter((line) => {
+      const file = line.slice(3);
+      return file !== rel && !file.startsWith(`${rel}/`);
+    })
+    .join("\n");
+}
+
 async function worktreeState(dir: string): Promise<WorktreeState> {
   const branch = await git(dir, ["rev-parse", "--abbrev-ref", "HEAD"], {
     allowFail: true,
@@ -802,11 +823,22 @@ export async function containmentViolation(
 
   // The operator may commit or edit in the main checkout while a turn runs. The
   // task cannot have made that change and must still merge; record it instead.
+  // A same-repo artifact commit is the store's own write, not the operator's.
   const root = await worktreeState(runtime.paths.repoRoot);
+  const statusKey = (status: string) =>
+    statusOutsideArtifacts(
+      status,
+      runtime.paths.repoRoot,
+      runtime.paths.artifacts.root,
+    );
+  const storeCommit =
+    root.head !== snapshot.root.head &&
+    runtime.store.committed().includes(root.head) &&
+    statusKey(root.status) === statusKey(snapshot.root.status);
   const outside: string[] = [];
-  if (root.head !== snapshot.root.head)
+  if (!storeCommit && root.head !== snapshot.root.head)
     outside.push(`HEAD moved in ${runtime.paths.repoRoot}`);
-  if (root.status !== snapshot.root.status)
+  if (!storeCommit && root.status !== snapshot.root.status)
     outside.push(`files changed in ${runtime.paths.repoRoot}`);
   if (outside.length > 0) {
     await appendContainmentIncident(

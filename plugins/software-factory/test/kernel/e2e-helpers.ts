@@ -32,7 +32,7 @@ export interface GoalOptions {
   classYaml?: string | null;
 }
 
-const DEFAULT_RUN_YAML = [
+export const DEFAULT_RUN_YAML = [
   "aliases:",
   "  architect: { harness: fake, model: fake-architect }",
   "  pm: { harness: fake, model: fake-pm }",

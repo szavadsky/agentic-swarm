@@ -35,7 +35,7 @@ import { loadPoolResets } from "./quota-pools.js";
 import { recoverLaunch } from "./recovery.js";
 import { createLaunchSessions } from "./sessions.js";
 import { createDrainController, type DrainController } from "./signals.js";
-import { createFolderStore } from "./store.js";
+import { createArtifactStore } from "./store-backend.js";
 import type { KernelRuntime } from "./types.js";
 import { BaseFollowConflictError } from "./worktree.js";
 
@@ -45,7 +45,7 @@ interface LaunchSetup {
   paths: KernelRuntime["paths"];
 }
 
-/** Config, goal paths and the two pre-turn refusals: tmp headroom and intent. */
+/** Config, goal paths and the tmp-headroom refusal; the intent refusal is in openStore. */
 function resolveLaunch(opts: RunGoalOptions): LaunchSetup {
   const repoRoot = path.resolve(opts.repo);
   const configs = loadConfigs(repoRoot, {
@@ -61,19 +61,23 @@ function resolveLaunch(opts: RunGoalOptions): LaunchSetup {
     toLimits(configs).minTmpFreeBytes ?? DEFAULT_MIN_TMP_FREE_BYTES,
   );
   if (!headroom.ok) throw new LaunchError(headroom.cause);
-  const intentPath = path.join(paths.goalDir, "intent.md");
-  if (!fs.existsSync(intentPath)) {
-    throw new LaunchError(`goal "${opts.goal}" has no intent: ${intentPath}`);
-  }
   return { repoRoot, configs, paths };
 }
 
-async function openStore(setup: LaunchSetup): Promise<KernelRuntime["store"]> {
-  const store = createFolderStore(
-    setup.paths.goalDir,
-    path.dirname(setup.paths.goalDir),
-    setup.configs.process.taskTypes,
-  );
+async function openStore(
+  opts: RunGoalOptions,
+  setup: LaunchSetup,
+): Promise<KernelRuntime["store"]> {
+  const { paths, configs } = setup;
+  const store = createArtifactStore(paths, configs.process.taskTypes);
+  const intentPath = path.join(paths.goalDir, "intent.md");
+  // A separate artifact repository may have to be cloned before its intent can
+  // be read; every other backend keeps the old check-before-layout order, so a
+  // mistyped goal creates nothing.
+  if (paths.artifacts.backend === "git-repo") await store.ensureLayout();
+  if (!fs.existsSync(intentPath)) {
+    throw new LaunchError(`goal "${opts.goal}" has no intent: ${intentPath}`);
+  }
   await store.ensureLayout();
   return store;
 }
@@ -210,7 +214,7 @@ export async function prepareLaunch(
   opts: RunGoalOptions,
 ): Promise<PreparedLaunch> {
   const setup = resolveLaunch(opts);
-  const store = await openStore(setup);
+  const store = await openStore(opts, setup);
   const sessions = await createLaunchSessions(
     setup.paths.sessionsDir,
     opts.goal,

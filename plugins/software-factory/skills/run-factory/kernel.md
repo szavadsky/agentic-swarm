@@ -32,13 +32,14 @@ bun bin/factory.ts variables --out <file>
 | `schemas` | Writes every kernel schema as JSON Schema (`task`, `outcome`, `hold`, `class`, `repo`, `run`, `process`). |
 | `variables` | Renders `prompts/VARIABLES.md` from the typed prompt-variable descriptor. |
 
-`init` creates the goal directory under the repo's `artifactRoot`
-(`.factory/artifacts` by default). The goal name must be kebab-case.
+`init` creates the goal directory under the configured artifact root
+(`.factory/artifacts` by default; the repo config's `artifacts.backend` may move
+it into the repository or a separate one). The goal name must be kebab-case.
 
 ## Goal layout
 
 ```
-<artifactRoot>/<goal>/
+<artifact root>/<goal>/
   intent.md plan.md tasks/    # intent, plan and one file per task
   epics/<epic>.md             # one plan per architect scope
   class.yaml                  # the front's classification

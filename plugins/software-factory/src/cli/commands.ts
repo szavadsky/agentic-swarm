@@ -36,6 +36,7 @@ import { qaOutcomeSchema } from "../kernel/qa.js";
 import { isAcceptanceStep, isLastReviewCall } from "../kernel/review.js";
 import { collectStatus, readStatus, renderStatus } from "../kernel/status.js";
 import { createFolderStore } from "../kernel/store.js";
+import { createArtifactStore } from "../kernel/store-backend.js";
 import {
   parseTaskFile,
   validateTaskFlows,
@@ -88,27 +89,23 @@ export async function initGoal(opts: {
   const configs = loadConfigs(repoRoot);
   const paths = resolveGoalPaths(configs, repoRoot, opts.goal);
   const taskTypes = configs.process.taskTypes;
-  const store = createFolderStore(
-    paths.goalDir,
-    path.dirname(paths.goalDir),
-    taskTypes,
-  );
+  const store = createArtifactStore(paths, taskTypes);
   await store.ensureLayout();
 
   const intentPath = path.join(paths.goalDir, "intent.md");
   let intentCreated = false;
-  if (!fs.existsSync(intentPath)) {
+  const existing = await store.readFile("intent.md");
+  if (existing === null) {
     const text = opts.intent
       ? await fs.promises.readFile(path.resolve(opts.intent), "utf8")
       : `# Goal: ${opts.goal}\n\nDescribe the outcome this goal must reach, its acceptance criteria and any constraints.\n`;
-    await writeTextAtomic(intentPath, text);
+    await store.writeFile("intent.md", text);
     intentCreated = true;
   } else if (opts.intent) {
     const incoming = await fs.promises.readFile(
       path.resolve(opts.intent),
       "utf8",
     );
-    const existing = await fs.promises.readFile(intentPath, "utf8");
     if (incoming !== existing) {
       throw new Error(
         `intent already exists at ${intentPath}; edit it instead of overwriting it`,
@@ -152,11 +149,7 @@ export async function statusGoal(
   if (!fs.existsSync(paths.goalDir))
     throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
   const taskTypes = configs.process.taskTypes;
-  const store = createFolderStore(
-    paths.goalDir,
-    path.dirname(paths.goalDir),
-    taskTypes,
-  );
+  const store = createArtifactStore(paths, taskTypes);
   const state = derive(
     await store.listTasks(),
     await store.listRecords(),
@@ -231,11 +224,7 @@ export async function steerGoal(
   if (!fs.existsSync(paths.goalDir))
     throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
   const taskTypes = configs.process.taskTypes;
-  const store = createFolderStore(
-    paths.goalDir,
-    path.dirname(paths.goalDir),
-    taskTypes,
-  );
+  const store = createArtifactStore(paths, taskTypes);
   await store.ensureLayout();
 
   const hash = crypto
@@ -244,12 +233,12 @@ export async function steerGoal(
     .digest("hex")
     .slice(0, 8);
   const stamp = new Date().toISOString().replace(/[-:.]/g, "");
-  const rel = `mailbox/inbox/${stamp}-${hash}.md`;
-  await writeTextAtomic(
-    path.join(paths.goalDir, rel),
+  const name = `${stamp}-${hash}.md`;
+  await store.mailbox.publish(
+    name,
     source.text.endsWith("\n") ? source.text : `${source.text}\n`,
   );
-  return path.join(paths.goalDir, rel);
+  return store.pathOf({ area: "mailbox", rel: `inbox/${name}` });
 }
 
 /** One schema-enforced file kind `factory validate` recognizes, by path. */

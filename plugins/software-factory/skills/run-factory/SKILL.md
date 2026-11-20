@@ -7,13 +7,13 @@ description: Operate the software factory on a target repository — place the i
 
 CLI: `bun bin/factory.ts` from `plugins/software-factory`. Goal commands take
 `--repo <target>` and `--goal <kebab-name>`. State is derived from the goal's
-task files and append-only records under `artifactRoot`; there is no daemon and
-no state file to repair.
+task files and append-only records in the configured artifact store (a plain
+folder by default); there is no daemon and no state file to repair.
 
 ## 1. Put the intent
 
 - Write the WHAT, acceptance criteria and constraints in one Markdown file.
-- `init --intent <file>` copies it to `<artifactRoot>/<goal>/intent.md`; without
+- `init --intent <file>` copies it to `<goal>/intent.md` in the artifact store; without
   `--intent` it writes a template. An existing intent is never overwritten.
 - Edit `intent.md` between launches; the intent changes only by owner decision.
 - Never pre-edit `plan.md`: the architect owns it. Plan problems go through
@@ -67,12 +67,12 @@ bun bin/factory.ts benchmark --repo "$REPO" --goal demo
   last summary path. It launches nothing.
 - `status --json` — prints `status.json`, the snapshot the kernel rewrites
   after each agent launch and finish.
-- Dashboard — `<artifactRoot>/<goal>/dashboard.html`, a static page rendered
+- Dashboard — `<artifact root>/<goal>/dashboard.html`, a static page rendered
   beside `status.json`: no server, no external assets. Open it in a browser and
   refresh it; it updates only when the kernel writes a snapshot.
 - `benchmark` — cost, tokens, architect share, cost per merged task, work,
   incidents and wall time.
-- Iteration record — `<artifactRoot>/<goal>/iterations/<n>/summary.md` and
+- Iteration record — `<artifact root>/<goal>/iterations/<n>/summary.md` and
   `metrics.yaml`.
 - [kernel.md](kernel.md) — command surface, goal layout, records, exit codes.
 
