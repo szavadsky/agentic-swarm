@@ -140,6 +140,8 @@ export const flowStepSchema = z
     review: z.boolean().default(false),
     /** QA acceptance step: its own schema, verdict and gate handoff. */
     qa: z.boolean().default(false),
+    /** Review adjudication: `all` cycles or only the last change-bearing one. */
+    adjudicate: z.enum(["last", "all"]).optional(),
     /** Review, QA and checks steps: change requests honored before the last call. */
     changeRequests: z.number().int().nonnegative().optional(),
     /** Aliases later attempts run on after failure-kind launches, in order. */
@@ -164,13 +166,43 @@ export const flowStepSchema = z
   .refine((step) => !(step.review && step.qa), {
     message: "a step is either a review or a QA acceptance step, not both",
     path: ["qa"],
-  });
+  })
+  .refine((step) => !(step.adjudicate && (step.review || step.qa)), {
+    message:
+      "an adjudicate step is neither a review nor a QA step: it re-judges the review before it",
+    path: ["adjudicate"],
+  })
+  .refine(
+    (step) =>
+      step.adjudicate === undefined || step.changeRequests === undefined,
+    {
+      message:
+        "an adjudicate step takes no changeRequests: the review it follows owns the bound",
+      path: ["changeRequests"],
+    },
+  );
 
 export const flowSchema = z
   .object({
     steps: z.array(flowStepSchema).min(1),
   })
-  .strict();
+  .strict()
+  .refine(
+    (flow) => {
+      const steps = flow.steps.filter(
+        (step) => step.id !== "checks" && step.id !== "resolve",
+      );
+      return steps.every(
+        (step, index) =>
+          step.adjudicate === undefined || steps[index - 1]?.review === true,
+      );
+    },
+    {
+      message:
+        "an adjudicate step must directly follow a review step: it adjudicates that review's findings",
+      path: ["steps"],
+    },
+  );
 
 /**
  * One task type: the flow a task runs, whether it is a spike or development

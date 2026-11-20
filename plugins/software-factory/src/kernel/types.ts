@@ -526,6 +526,13 @@ export interface FlowStep extends RepairSpec {
    */
   qa?: boolean;
   /**
+   * Review adjudication: this verdict-only step runs after the preceding
+   * review's change request, re-judges its findings and may discard them.
+   * `all` runs on every change-bearing review cycle; `last` only on the final
+   * one. The step must directly follow the review it adjudicates.
+   */
+  adjudicate?: "last" | "all";
+  /**
    * Review, QA and checks steps: how many change requests this step may issue
    * before its call is the last one. Absent means the default (two).
    */

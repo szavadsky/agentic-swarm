@@ -288,6 +288,30 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     },
   },
   {
+    file: "adjudicator.md",
+    prompt: "adjudicator",
+    intro:
+      "The review-adjudication prompt: a step after a review re-judges that review's `changes` findings and may discard them. Its outcome is the review the implementer sees, so an omitted finding never travels.",
+    variables: {
+      task_path: "path to the task file the diff is judged against",
+      base_hash: "commit hash before this task's first turn",
+      head_hash: "commit hash after the latest turn",
+      round: "1-based review round whose findings are adjudicated",
+      findings:
+        "the reviewed review's summary, concerns and forward lines; the only findings judged",
+      base_gates: "the base tree's recorded gate result",
+      worktree: "path to the task worktree holding the reviewed tree",
+      checks_result:
+        "latest checks text, or `pass` when green (renderer default)",
+      checks_tree: "the checked tree's hash (renderer default)",
+      checks_log: "the checks record's directory (renderer default)",
+      outcome_path: "path for the outcome file the harness asks for",
+      validate_cmd:
+        "absolute validate command for this launch; renderer default",
+      outcome_schema: "outcome YAML skeleton; renderer default",
+    },
+  },
+  {
     file: "review-architect.md",
     prompt: "review-architect",
     intro:

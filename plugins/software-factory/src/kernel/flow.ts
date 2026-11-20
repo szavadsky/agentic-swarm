@@ -66,6 +66,7 @@ import { materialHash, taskArchitect } from "./tasks.js";
 import {
   isAcceptanceStep,
   isLastReviewCall,
+  isVerdictStep,
   reviewRoundLimit,
 } from "./review.js";
 import type {
@@ -536,6 +537,36 @@ async function handleStepResult(
     }
     return infraResult ?? cancelledResult ?? {};
   }
+  if (step.adjudicate !== undefined) {
+    // The adjudicator's verdict ends the review cycle: `approve` ships with
+    // its accepted risks as debt, `changes` sends only its own findings back
+    // (derive owns that route), `reject` keeps the branch.
+    if (outcome?.upscope === "yes") {
+      await appendPark(
+        runtime.store,
+        meta,
+        parkCause("upscope", outcome?.summary),
+      );
+      if (isStandaloneTask(runtime, task)) escalateFrontClassToBigger(runtime);
+      return infraResult ?? cancelledResult ?? {};
+    }
+    if (outcome?.verdict === "reject") {
+      await appendPark(
+        runtime.store,
+        meta,
+        makeCause("review-rejected", outcome.summary),
+      );
+    } else if (outcome?.verdict === "approve" && outcome.concerns.length > 0) {
+      await appendDebt(
+        runtime.store,
+        meta,
+        outcome.concerns,
+        outcome.summary,
+        "adjudicated review concerns recorded as debt",
+      );
+    }
+    return infraResult ?? cancelledResult ?? {};
+  }
   if (checksDue(flow, step.id)) {
     // QA may accept the very tree the preceding checks judged. Its own edits
     // change the tree, so they still gate before the reviewer reads them.
@@ -641,7 +672,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   let resolveIsCreation = false;
   let resolveIsFirstTurn = false;
   if (!resolveStep && ensured.mergeConflict) {
-    if (isAcceptanceStep(step) || fix) {
+    if (isVerdictStep(step) || fix) {
       const named =
         ensured.mergeConflict.paths.join(", ") ||
         "git reported no unmerged paths";
@@ -690,7 +721,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     !pendingResolve &&
     keptBranch &&
     !(ensured.created && task.base !== undefined) &&
-    !isAcceptanceStep(step) &&
+    !isVerdictStep(step) &&
     (await worktreeClean(ensured.path))
   ) {
     const head = await integrationHead(runtime);
@@ -734,12 +765,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       }
     }
   }
-  if (
-    !resolveStep &&
-    !pendingResolve &&
-    keptBranch &&
-    !isAcceptanceStep(step)
-  ) {
+  if (!resolveStep && !pendingResolve && keptBranch && !isVerdictStep(step)) {
     const inFlight = await mergeHeadSha(ensured.path);
     if (inFlight) {
       let paths = await unmergedFiles(ensured.path);
@@ -758,11 +784,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       pendingResolve = { head: inFlight, paths };
     }
   }
-  if (
-    keptBranch &&
-    isAcceptanceStep(step) &&
-    (await mergeHeadSha(ensured.path))
-  ) {
+  if (keptBranch && isVerdictStep(step) && (await mergeHeadSha(ensured.path))) {
     const paths = await unmergedFiles(ensured.path);
     const named = paths.join(", ") || "git reported no unmerged paths";
     await abortMerge(ensured.path);
@@ -938,7 +960,11 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       taskHash: materialHash(task),
     },
     vars,
-    expectation: step.qa ? "qa" : step.review ? "review" : "any",
+    expectation: step.qa
+      ? "qa"
+      : step.review || step.adjudicate !== undefined
+        ? "review"
+        : "any",
     outcomeSchema: step.qa
       ? qaOutcomeSchema
       : taskOutcomeSchema(task, runtime.configs.process.taskTypes),

@@ -27,6 +27,16 @@ flows:
         review: true
         changeRequests: 2
         deliverable: verdict
+      # Optional review adjudication: a verdict-only step placed directly after
+      # a review re-judges the review's change requests and may discard them.
+      # Its outcome is the one the implementer answers, so a discarded finding
+      # never reaches it. `all` runs on every change-bearing cycle; `last` only
+      # on the final one whose change request is still honored.
+      # - id: adjudicate
+      #   prompt: adjudicator
+      #   alias: reviewer
+      #   adjudicate: last
+
       # Runs only after a merge-step conflict: one turn merges the head into
       # the task branch and resolves it, then checks and re-merges. It is not
       # part of the normal agent sequence.

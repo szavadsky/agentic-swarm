@@ -25,7 +25,12 @@ import { CHECK_HANDOFF_DEFAULTS, GATE_LAST_CALL_ASK } from "./prompts.js";
 import { poolExhausted } from "./quota-pools.js";
 import { formatFixDispositions, formatReviewFindings } from "./record.js";
 import { formatAcceptanceFindings } from "./record.js";
-import { agentSteps, isAcceptanceStep, isLastChecksFixCall } from "./review.js";
+import {
+  agentSteps,
+  isAcceptanceStep,
+  isLastChecksFixCall,
+  isVerdictStep,
+} from "./review.js";
 import { sessionCacheHot } from "./sessions.js";
 import { spikeReportPath } from "./spike-report.js";
 import type {
@@ -155,7 +160,7 @@ function lastReview(
   flow: FlowDefinition,
 ): StepRecord | undefined {
   const reviewIds = new Set(
-    flow.steps.filter((s) => s.review).map((s) => s.id),
+    flow.steps.filter((s) => s.review || s.adjudicate).map((s) => s.id),
   );
   return records
     .filter((r) => r.slug === slug && reviewIds.has(r.step) && r.outcome)
@@ -164,20 +169,18 @@ function lastReview(
 }
 
 /**
- * The latest turn that accepted or sent back the work: a review or QA. The
- * author sees its findings; QA sees the findings its next round answers even
- * when the checks record between them is newer.
+ * The latest turn that accepted or sent back the work: a review, QA or review
+ * adjudicator. The author sees its findings; QA sees the findings its next
+ * round answers even when the checks record between them is newer.
  */
 function lastAcceptance(
   records: StepRecord[],
   slug: string,
   flow: FlowDefinition,
 ): StepRecord | undefined {
-  const acceptanceIds = new Set(
-    flow.steps.filter(isAcceptanceStep).map((s) => s.id),
-  );
+  const verdictIds = new Set(flow.steps.filter(isVerdictStep).map((s) => s.id));
   return records
-    .filter((r) => r.slug === slug && acceptanceIds.has(r.step) && r.outcome)
+    .filter((r) => r.slug === slug && verdictIds.has(r.step) && r.outcome)
     .sort(bySeq)
     .at(-1);
 }
@@ -189,7 +192,7 @@ function lastProductiveTurn(
   flow: FlowDefinition,
 ): StepRecord | undefined {
   const productiveIds = new Set(
-    flow.steps.filter((s) => !isAcceptanceStep(s)).map((s) => s.id),
+    flow.steps.filter((s) => !isVerdictStep(s)).map((s) => s.id),
   );
   return records
     .filter(
@@ -743,7 +746,7 @@ export function isTrivialImplementTurn(
 ): boolean {
   const step = findStep(flowOf(runtime, task), stepId);
   return (
-    !isAcceptanceStep(step) &&
+    !isVerdictStep(step) &&
     stepTurn(runtime, task, state, stepId).prompt === "implementer" &&
     frontTaskClass(runtime, task) === "trivial"
   );
@@ -828,7 +831,7 @@ export function stepTarget(
       runtime,
       turn.prompt,
       alias,
-      isAcceptanceStep(step) ? undefined : task.tier,
+      isVerdictStep(step) ? undefined : task.tier,
       iteration,
     ),
     ...repairFields(turn),

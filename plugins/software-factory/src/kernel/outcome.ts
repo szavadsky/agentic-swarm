@@ -170,7 +170,7 @@ export function expectationForStep(
   if (!found) {
     throw new Error(`step "${step}" is not configured in the repo's flows`);
   }
-  if (found.review) return "review";
+  if (found.review || found.adjudicate !== undefined) return "review";
   if (found.qa) return "qa";
   return "any";
 }

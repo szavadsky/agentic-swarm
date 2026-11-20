@@ -160,6 +160,91 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("refuses an adjudicate step that is also a review or QA step", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      [
+        "flows:",
+        "  ambiguous:",
+        "    steps:",
+        "      - id: implement",
+        "        prompt: implementer",
+        "        alias: implementer",
+        "      - id: review",
+        "        prompt: reviewer",
+        "        alias: reviewer",
+        "        review: true",
+        "      - id: adjudicate",
+        "        prompt: adjudicator",
+        "        alias: reviewer",
+        "        adjudicate: all",
+        "        review: true",
+        "",
+      ].join("\n"),
+    );
+    expect(() => loadConfigs(root)).toThrow(
+      /an adjudicate step is neither a review nor a QA/,
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("refuses an adjudicate step that does not directly follow a review", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      [
+        "flows:",
+        "  misplaced:",
+        "    steps:",
+        "      - id: implement",
+        "        prompt: implementer",
+        "        alias: implementer",
+        "      - id: adjudicate",
+        "        prompt: adjudicator",
+        "        alias: reviewer",
+        "        adjudicate: last",
+        "",
+      ].join("\n"),
+    );
+    expect(() => loadConfigs(root)).toThrow(
+      /an adjudicate step must directly follow a review step/,
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("refuses changeRequests on an adjudicate step", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      [
+        "flows:",
+        "  bounded:",
+        "    steps:",
+        "      - id: implement",
+        "        prompt: implementer",
+        "        alias: implementer",
+        "      - id: review",
+        "        prompt: reviewer",
+        "        alias: reviewer",
+        "        review: true",
+        "      - id: adjudicate",
+        "        prompt: adjudicator",
+        "        alias: reviewer",
+        "        adjudicate: all",
+        "        changeRequests: 1",
+        "",
+      ].join("\n"),
+    );
+    expect(() => loadConfigs(root)).toThrow(
+      /an adjudicate step takes no changeRequests/,
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("switches the development implementer on retry", () => {
     const root = tmpRepo();
     const configs = loadConfigs(root);

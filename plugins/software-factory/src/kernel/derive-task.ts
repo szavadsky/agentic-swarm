@@ -6,12 +6,15 @@ import { stepFingerprint } from "./progress.js";
 import { SPIKE_REPORT_CHECK, spikeReportPath } from "./spike-report.js";
 import { qaReportOf } from "./qa.js";
 import {
+  adjudicationDue,
   agentSteps,
   checksFixLimit,
   DEFAULT_CHANGE_REQUESTS,
   isAcceptanceStep,
+  isAdjudicatorStep,
   isLastChecksFixCall,
   isLastReviewCall,
+  isVerdictStep,
 } from "./review.js";
 import { formatCause, makeCause } from "./cause.js";
 import type {
@@ -171,8 +174,13 @@ function phaseAfter(
   kind: TaskFile["kind"],
 ): TaskPhase {
   const steps = agentSteps(flow);
-  if (index >= steps.length) return kind === "spike" ? "finish" : "merge";
-  return steps[index]!.id;
+  // An adjudicator never follows a verdict that did not request changes, so
+  // the normal sequence steps over it; derive selects it explicitly from the
+  // review's `changes` branch.
+  let at = index;
+  while (at < steps.length && isAdjudicatorStep(steps[at])) at += 1;
+  if (at >= steps.length) return kind === "spike" ? "finish" : "merge";
+  return steps[at]!.id;
 }
 
 /**
@@ -646,7 +654,7 @@ export function reduceTask(
     const answeredReview =
       changesPending &&
       answeredStep !== undefined &&
-      !isAcceptanceStep(answeredStep) &&
+      !isVerdictStep(answeredStep) &&
       replyCount > 0 &&
       committedNothing(task.kind, rec, priorTree);
     const emptyGateFix =
@@ -654,12 +662,12 @@ export function reduceTask(
       !changesPending &&
       carriedWork !== true &&
       answeredStep !== undefined &&
-      !isAcceptanceStep(answeredStep) &&
+      !isVerdictStep(answeredStep) &&
       committedNothing(task.kind, rec, priorTree);
     const fp =
       answeredReview ||
       emptyGateFix ||
-      (isAcceptanceStep(answeredStep) && replyOnlyFix)
+      (isVerdictStep(answeredStep) && replyOnlyFix)
         ? null
         : stepFingerprint(task.kind, rec, lastTree);
     if (fp) {
@@ -715,10 +723,7 @@ export function reduceTask(
     // red checks, where the checks that run next decide: the branch may
     // already be done and only a repeated identical red proves the fix empty.
     let deferredEmpty: { step: string; round: number } | null = null;
-    if (
-      !isAcceptanceStep(step) &&
-      committedNothing(task.kind, rec, priorTree)
-    ) {
+    if (!isVerdictStep(step) && committedNothing(task.kind, rec, priorTree)) {
       if (carriedWork !== true && (!changesPending || replyCount === 0)) {
         if (carriedWork === false) {
           park = makeCause(
@@ -817,6 +822,50 @@ export function reduceTask(
       replyOnlyFix = false;
       continue;
     }
+    if (step.adjudicate !== undefined) {
+      // The adjudicated review's findings: this turn is the only acceptance
+      // the implementer sees, so a finding it omits never travels. Its
+      // `changes` spends the review's cycle exactly as the review's would.
+      if (outcome?.upscope === "yes") {
+        park = makeCause("upscope", outcome?.summary ?? "no summary");
+        phase = "parked";
+        continue;
+      }
+      verdict = outcome?.verdict;
+      if (verdict === "approve") {
+        stepIndex = idx + 1;
+        gateFix = false;
+        gateLastCall = false;
+        mergeFix = false;
+        changesPending = false;
+        pendingChecks = null;
+        phase = phaseAfter(flow, stepIndex, task.kind);
+      } else if (verdict === "changes") {
+        round = rec.round + 1;
+        stepIndex = 0;
+        gateFix = false;
+        gateLastCall = false;
+        mergeFix = false;
+        phase = firstStep;
+        changesPending = true;
+        pendingChecks = null;
+      } else if (verdict === "reject") {
+        park = makeCause("review-rejected", outcome?.summary ?? "no summary");
+        phase = "parked";
+        changesPending = false;
+        pendingChecks = null;
+      } else {
+        park = makeCause(
+          "invalid-outcome",
+          `adjudicate turn delivered no review verdict: ${outcome?.summary ?? "no summary"}`,
+        );
+        phase = "parked";
+        changesPending = false;
+        pendingChecks = null;
+      }
+      replyOnlyFix = false;
+      continue;
+    }
     if (step.review) {
       // Standalone escalation (and any review upscope answer): parks with the
       // same cause shape as a status upscope, whatever the verdict says. The
@@ -848,14 +897,26 @@ export function reduceTask(
           changesPending = false;
           pendingChecks = null;
         } else {
-          round = rec.round + 1;
-          stepIndex = 0;
+          const adjudicator = steps[idx + 1];
           gateFix = false;
           gateLastCall = false;
           mergeFix = false;
-          phase = firstStep;
-          changesPending = true;
           pendingChecks = null;
+          changesPending = true;
+          if (
+            adjudicator !== undefined &&
+            isAdjudicatorStep(adjudicator) &&
+            adjudicationDue(adjudicator, step, rec.round)
+          ) {
+            // The findings are not handed to the implementer yet: the
+            // adjudicator re-judges them in the same review cycle.
+            stepIndex = idx;
+            phase = adjudicator.id;
+          } else {
+            round = rec.round + 1;
+            stepIndex = 0;
+            phase = firstStep;
+          }
         }
       } else if (verdict === "reject") {
         park = makeCause("review-rejected", outcome?.summary ?? "no summary");

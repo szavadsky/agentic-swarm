@@ -145,6 +145,7 @@ export async function appendDebt(
   },
   concerns: Concern[],
   fallback: string,
+  summary = "last-call review concerns recorded as debt",
 ): Promise<void> {
   // Concerns already marked debt live on the review record; only the rest need
   // converting, or the summary would report the same debt twice.
@@ -165,7 +166,7 @@ export async function appendDebt(
     ok: true,
     outcome: {
       status: "done",
-      summary: "last-call review concerns recorded as debt",
+      summary,
       concerns: debt,
       forward: [],
     },
