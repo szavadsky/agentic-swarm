@@ -14,16 +14,25 @@ interface Run {
   output: string;
 }
 
-function run(cwd: string, cmd: string, args: string[]): Run {
-  const result = spawnSync(cmd, args, { cwd, encoding: "utf8" });
+function run(
+  cwd: string,
+  cmd: string,
+  args: string[],
+  env?: NodeJS.ProcessEnv,
+): Run {
+  const result = spawnSync(cmd, args, { cwd, encoding: "utf8", env });
   return {
     code: result.status ?? -1,
     output: `${result.stdout ?? ""}${result.stderr ?? ""}`,
   };
 }
 
-function gate(fixture: Fixture, id?: string): Run {
-  return run(fixture.root, "bash", [GATES, "pkg", ...(id ? [id] : [])]);
+function gate(
+  fixture: Pick<Fixture, "root">,
+  id?: string,
+  env?: NodeJS.ProcessEnv,
+): Run {
+  return run(fixture.root, "bash", [GATES, "pkg", ...(id ? [id] : [])], env);
 }
 
 interface Fixture {
@@ -243,6 +252,90 @@ describe("package-only export gate", () => {
       expect(result.stdout).toContain(`tree-root:${repo.dir}`);
     } finally {
       repo.cleanup();
+    }
+  });
+
+  /**
+   * A fixture package holding the real shipped-run-configs helper. The gate
+   * export carries no bootstrap/, so the helper must resolve the tree root the
+   * gate names; the tree carries a base.yaml marker the export cannot have.
+   */
+  function runConfigsFixture(withConfigs: boolean): { root: string } {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gate-run-configs-"));
+    const pkg = path.join(root, "pkg");
+    fs.mkdirSync(path.join(pkg, "test", "helpers"), { recursive: true });
+    fs.copyFileSync(
+      path.join(PACKAGE_ROOT, "test", "helpers", "run-configs.ts"),
+      path.join(pkg, "test", "helpers", "run-configs.ts"),
+    );
+    fs.writeFileSync(
+      path.join(pkg, "package.json"),
+      `${JSON.stringify({
+        name: "gate-run-configs-fixture",
+        private: true,
+        scripts: {
+          typecheck: "true",
+          test: "bun test",
+          "test:gate": "bun test",
+          format: "true",
+          lint: "true",
+          "schema-validation": "true",
+        },
+      })}\n`,
+    );
+    fs.writeFileSync(
+      path.join(pkg, "test", "run-configs.test.ts"),
+      [
+        'import { expect, it } from "bun:test";',
+        'import fs from "node:fs";',
+        'import path from "node:path";',
+        'import { shippedRunConfigsDir } from "./helpers/run-configs.js";',
+        "",
+        'it("reads the tree\'s shipped run configs", () => {',
+        "  const dir = shippedRunConfigsDir();",
+        '  expect(fs.existsSync(path.join(process.cwd(), "bootstrap"))).toBe(false);',
+        '  expect(fs.readFileSync(path.join(dir, "base.yaml"), "utf8")).toContain("architect");',
+        "});",
+        "",
+      ].join("\n"),
+    );
+    if (withConfigs) {
+      const run = path.join(root, "bootstrap", "run");
+      fs.mkdirSync(run, { recursive: true });
+      fs.writeFileSync(
+        path.join(run, "base.yaml"),
+        "aliases:\n  architect:\n    harness: omp\n    model: anthropic/claude-opus-5-5\n",
+      );
+    }
+    return { root };
+  }
+
+  it("reads the shipped run configs from the tree under test", () => {
+    const fixture = runConfigsFixture(true);
+    try {
+      const exported = gate(fixture, "tests", {
+        ...process.env,
+        FACTORY_TREE_ROOT: fixture.root,
+        GIT_CEILING_DIRECTORIES: path.dirname(fixture.root),
+      });
+      expect(exported.code).toBe(0);
+    } finally {
+      fs.rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails the tests gate when the tree names no shipped run configs", () => {
+    const fixture = runConfigsFixture(false);
+    try {
+      const exported = gate(fixture, "tests", {
+        ...process.env,
+        FACTORY_TREE_ROOT: fixture.root,
+        GIT_CEILING_DIRECTORIES: path.dirname(fixture.root),
+      });
+      expect(exported.code).not.toBe(0);
+      expect(exported.output).toContain("shipped run configs not found");
+    } finally {
+      fs.rmSync(fixture.root, { recursive: true, force: true });
     }
   });
 });

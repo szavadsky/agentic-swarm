@@ -14,7 +14,14 @@ mkdir -p "$pins"
 if [ ! -d "$build" ]; then
   tmp="$(mktemp -d "$pins/.tmp.XXXXXX")" # same filesystem as the pins: the final rename is atomic
   trap 'rm -rf "$tmp"' EXIT
-  git -C "$repo" archive "$rev" plugins/software-factory | tar -x -C "$tmp"
+  # The no-model suite asserts on the shipped run configs, which sit at the
+  # tree root; the archive keeps the repo layout so the suite's sibling path
+  # resolves. A rev older than the config library carries neither.
+  paths=(plugins/software-factory)
+  if git -C "$repo" cat-file -e "$rev:bootstrap/run" 2>/dev/null; then
+    paths+=(bootstrap/run)
+  fi
+  git -C "$repo" archive "$rev" "${paths[@]}" | tar -x -C "$tmp"
   pkg="$tmp/plugins/software-factory"
   rm -rf "$pkg/docs" # run baselines are large and not part of the executable
   (cd "$pkg" && bun install --frozen-lockfile --silent && bun run typecheck && bun test)

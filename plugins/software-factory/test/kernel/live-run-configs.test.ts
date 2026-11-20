@@ -1,6 +1,7 @@
 // biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import yaml from "yaml";
 import {
@@ -15,16 +16,14 @@ import {
 } from "../../src/kernel/config.js";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import type { Harness } from "../../src/harness/types.js";
-import { preflight } from "../../src/kernel/preflight.js";
+import { PreflightError, preflight } from "../../src/kernel/preflight.js";
 import { matchPrice, type PriceTable } from "../../src/kernel/pricing.js";
 import { createFolderStore } from "../../src/kernel/store.js";
+import { shippedRunConfigsDir } from "../helpers/run-configs.js";
 import { createTmpRepo } from "../helpers/tmp-repo.js";
 
 const LIVE = process.env.FACTORY_LIVE === "1";
-const BOOTSTRAP_RUN = path.resolve(
-  import.meta.dir,
-  "../../../../bootstrap/run",
-);
+const BOOTSTRAP_RUN = shippedRunConfigsDir();
 const CONFIGS = ["shakedown", "self"] as const;
 describe.skipIf(!LIVE)("bootstrap run configs against the real CLIs", () => {
   for (const name of CONFIGS) {
@@ -37,9 +36,6 @@ describe.skipIf(!LIVE)("bootstrap run configs against the real CLIs", () => {
         );
         repo.commit("factory config");
         const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
-        // Live tests need a full checkout; a package-only export has no bootstrap/.
-        if (!fs.existsSync(runPath)) return;
-        expect(fs.existsSync(runPath)).toBe(true);
         const configs = loadConfigs(repo.dir, { runConfigPath: runPath });
 
         expect(configs.run.limits).toMatchObject({
@@ -187,19 +183,16 @@ const OPENROUTER_IDS: PriceTable = {
   },
 };
 
-const RUN_CONFIGS = fs.existsSync(BOOTSTRAP_RUN)
-  ? fs
-      .readdirSync(BOOTSTRAP_RUN)
-      .filter((name) => name.endsWith(".yaml"))
-      .map((name) => name.slice(0, -".yaml".length))
-      .sort()
-  : [];
+const RUN_CONFIGS = fs
+  .readdirSync(BOOTSTRAP_RUN)
+  .filter((name) => name.endsWith(".yaml"))
+  .map((name) => name.slice(0, -".yaml".length))
+  .sort();
 
 describe("shipped run-config coverage", () => {
   for (const name of RUN_CONFIGS) {
     it(`routes opencode through the acpx raw route: ${name}.yaml`, () => {
       const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
-      if (!fs.existsSync(runPath)) return;
       const run = loadRunConfig(runPath);
       // The built-in acpx opencode route runs 1.19.5; the raw `opencode acp`
       // route runs the installed CLI (acpx-probe §0).
@@ -212,7 +205,6 @@ describe("shipped run-config coverage", () => {
 
     it(`carries the required plan role aliases: ${name}.yaml`, () => {
       const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
-      if (!fs.existsSync(runPath)) return;
       const run = loadRunConfig(runPath);
       expect(run.aliases["plan-checker"]).toBeDefined();
       expect(run.aliases["plan-reviewer"]).toBeDefined();
@@ -228,7 +220,6 @@ describe("shipped run-config coverage", () => {
 
     it(`carries the spike flow's researcher alias: ${name}.yaml`, () => {
       const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
-      if (!fs.existsSync(runPath)) return;
       const run = loadRunConfig(runPath);
       // The spike flow's implement step alternates researcher with the task
       // implementer and reviewer aliases; pre-flight refuses the launch when
@@ -240,7 +231,6 @@ describe("shipped run-config coverage", () => {
 
     it(`carries the development implementer's retry alternate: ${name}.yaml`, () => {
       const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
-      if (!fs.existsSync(runPath)) return;
       const run = loadRunConfig(runPath);
       // Both development flows name implementer-b; a retry must run a model
       // other than the implementer primary that failed.
@@ -251,7 +241,6 @@ describe("shipped run-config coverage", () => {
 
     it(`carries the unattended omp policy when an alias uses omp: ${name}.yaml`, () => {
       const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
-      if (!fs.existsSync(runPath)) return;
       const run = loadRunConfig(runPath);
       const usesOmp = Object.values(run.aliases).some(
         (alias) => alias.harness === "omp",
@@ -270,7 +259,6 @@ describe("shipped run-config coverage", () => {
 
     it(`passes pre-flight: ${name}.yaml`, async () => {
       const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
-      if (!fs.existsSync(runPath)) return;
       const repo = createTmpRepo();
       try {
         repo.writeFile(
@@ -330,8 +318,6 @@ describe("shipped run-config coverage", () => {
 
     it(`resolves every model id: ${name}.yaml`, () => {
       const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
-      // A package-only export has no bootstrap/ sibling.
-      if (!fs.existsSync(runPath)) return;
       const run = loadRunConfig(runPath);
       expect(run.priceIds).toBeDefined();
       const ids = new Set<string>();
@@ -382,7 +368,6 @@ describe("shipped run-config composition", () => {
     it(`resolves ${name}.yaml to its frozen layer`, () => {
       const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
       const frozenPath = path.join(FROZEN_DIR, `${name}.yaml`);
-      if (!fs.existsSync(runPath) || !fs.existsSync(frozenPath)) return;
       expect(loadRunConfig(runPath)).toEqual(
         yaml.parse(fs.readFileSync(frozenPath, "utf8")),
       );
@@ -392,7 +377,6 @@ describe("shipped run-config composition", () => {
   it("keeps self.yaml an empty overlay on the shared base", () => {
     const basePath = path.join(BOOTSTRAP_RUN, "base.yaml");
     const selfPath = path.join(BOOTSTRAP_RUN, "self.yaml");
-    if (!fs.existsSync(basePath) || !fs.existsSync(selfPath)) return;
     expect(loadRunConfig(selfPath)).toEqual(loadRunConfig(basePath));
   });
 });
@@ -401,7 +385,6 @@ describe("self-rotate run config", () => {
   it("is self.yaml with only the implementer rotating across the probe harnesses", () => {
     const selfPath = path.join(BOOTSTRAP_RUN, "self.yaml");
     const rotatePath = path.join(BOOTSTRAP_RUN, "self-rotate.yaml");
-    if (!fs.existsSync(selfPath) || !fs.existsSync(rotatePath)) return;
     const self = loadRunConfig(selfPath);
     const rotating = loadRunConfig(rotatePath);
     const { implementer: selfImplementer, ...selfAliases } = self.aliases;
@@ -420,5 +403,81 @@ describe("self-rotate run config", () => {
     // The owner adopts rotation by pointing a run at self-rotate; self.yaml
     // itself stays unrotated.
     expect(selfImplementer!.rotate).toEqual([]);
+  });
+});
+
+/**
+ * The coverage above only stops a broken shipped config if a launch would be
+ * refused: an overlay that drops an alias the flows name must fail pre-flight,
+ * not run until the step first names it.
+ */
+describe("shipped run config with a missing alias", () => {
+  it("is refused by pre-flight", async () => {
+    const configsDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "factory-run-configs-"),
+    );
+    const repo = createTmpRepo();
+    try {
+      fs.cpSync(BOOTSTRAP_RUN, configsDir, { recursive: true });
+      // `null` deletes an inherited alias, as a variant that narrowed the
+      // alias set would.
+      fs.writeFileSync(
+        path.join(configsDir, "self.yaml"),
+        "extends: base.yaml\naliases:\n  implementer-b: null\n",
+        "utf8",
+      );
+      repo.writeFile(
+        ".factory/repo.yaml",
+        "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n",
+      );
+      repo.commit("factory config");
+      const configs = loadConfigs(repo.dir, {
+        runConfigPath: path.join(configsDir, "self.yaml"),
+      });
+      expect(configs.run.aliases["implementer-b"]).toBeUndefined();
+      // The overlay loaded: the base's own aliases survived, so the refusal
+      // below is about the dropped alias, not a missing file's empty defaults.
+      expect(configs.run.aliases.implementer).toBeDefined();
+      // Keep the probe off the operator's real session/worktree roots.
+      const base = path.basename(repo.dir);
+      configs.run.sessions.dir = path.join(
+        path.dirname(repo.dir),
+        `${base}-missing-sessions`,
+      );
+      configs.run.worktreeRoot = path.join(
+        path.dirname(repo.dir),
+        `${base}-missing-wt`,
+      );
+      const paths = resolveGoalPaths(configs, repo.dir, "missing");
+      fs.mkdirSync(paths.goalDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(paths.goalDir, "intent.md"),
+        "# Goal\n\nMissing-alias probe.\n",
+        "utf8",
+      );
+      const store = createFolderStore(paths.goalDir, undefined, {});
+      await store.ensureLayout();
+      const harnesses = new Map<string, Harness>();
+      for (const id of ["agy", "claude-code", "codex", "omp", "opencode", "pi"])
+        harnesses.set(
+          id,
+          new FakeHarness({
+            id,
+            caps: { effort: ["low", "medium", "high", "max"] },
+          }),
+        );
+      try {
+        await preflight({ configs, paths, store, harnesses });
+        throw new Error("pre-flight accepted a config missing implementer-b");
+      } catch (err) {
+        expect(err).toBeInstanceOf(PreflightError);
+        expect((err as PreflightError).report).toContain(
+          "aliases.implementer-b: required by",
+        );
+      }
+    } finally {
+      repo.cleanup();
+      fs.rmSync(configsDir, { recursive: true, force: true });
+    }
   });
 });
