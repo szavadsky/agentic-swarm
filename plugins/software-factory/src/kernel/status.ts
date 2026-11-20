@@ -325,7 +325,14 @@ export function buildStatus(input: StatusInput): StatusDocument {
     input.priceIds,
   );
   const epics =
-    Object.keys(input.state.epics).length > 0 ? input.state.epics : undefined;
+    Object.keys(input.state.epics).length > 0
+      ? Object.fromEntries(
+          Object.entries(input.state.epics).map(([name, epic]) => [
+            name,
+            epic.tasks,
+          ]),
+        )
+      : undefined;
   return {
     goal: input.goal,
     status: input.state.goal,

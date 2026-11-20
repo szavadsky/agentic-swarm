@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import {
   forwardedConcerns,
   readyAging,
+  recordsForAudience,
   renderContextData,
   renderContextPack,
   shallowCodeMap,
@@ -318,6 +319,183 @@ describe("context pack", () => {
     const forwarded = forwardedConcerns(records);
     expect(forwarded).toHaveLength(25);
     expect(forwarded[0]!.text).toBe("distinct risk 1");
+  });
+
+  it("keeps a task concern inside its epic's pack until the brief carries it up", () => {
+    const chained = [
+      task("alpha.build", { epic: "alpha" }),
+      task("beta.build", { epic: "beta" }),
+      task("goal.close"),
+    ];
+    const concern = (text: string, calibration: "architect" | "owner") => ({
+      kind: "risk" as const,
+      calibration,
+      text,
+    });
+    const records = [
+      rec(1, {
+        slug: "alpha.build",
+        step: "implement",
+        outcome: {
+          status: "done",
+          summary: "alpha shipped",
+          concerns: [concern("alpha task risk", "architect")],
+          forward: [],
+        },
+      }),
+      rec(2, {
+        slug: "beta.build",
+        step: "implement",
+        outcome: {
+          status: "done",
+          summary: "beta shipped",
+          concerns: [concern("beta task risk", "architect")],
+          forward: [],
+        },
+      }),
+      rec(3, {
+        slug: "goal.close",
+        step: "review",
+        outcome: {
+          status: "done",
+          summary: "goal work reviewed",
+          concerns: [concern("goal risk", "owner")],
+          forward: [],
+          verdict: "approve",
+        },
+      }),
+      // The alpha subarchitect filters its epic's risk into the brief upward.
+      rec(4, {
+        slug: undefined,
+        step: "subarchitect",
+        architect: "alpha",
+        outcome: {
+          status: "done",
+          summary: "alpha risk escalated",
+          concerns: [concern("alpha brief risk", "architect")],
+          forward: ["alpha carry"],
+          decision: "done",
+        },
+      }),
+    ];
+    const state = derive(chained, records);
+    const packFor = (epic?: string): string =>
+      renderContextPack({
+        goal: "demo",
+        iteration: 2,
+        ...(epic ? { epic } : {}),
+        intentPath: "/goal/intent.md",
+        planPath: epic ? `/goal/epics/${epic}.md` : "/goal/plan.md",
+        checkout: "/wt/demo",
+        integrationBranch: "factory/demo",
+        headHash: "abcdef1234567890",
+        recordsDir: "/goal/records",
+        tasksDir: "/goal/tasks",
+        tasks: epic ? chained.filter((task) => task.epic === epic) : chained,
+        state,
+        steers: [],
+        setup: [],
+        gates: [],
+        forwarded: forwardedConcerns(records, {
+          tasks: chained,
+          audience: epic ? { kind: "epic", epic } : { kind: "goal" },
+        }),
+        debts: [],
+      });
+
+    const top = packFor();
+    const alpha = packFor("alpha");
+    const beta = packFor("beta");
+
+    expect(alpha).toContain("# Context pack — goal demo, epic `alpha`");
+    expect(alpha).toContain("alpha task risk");
+    expect(alpha).not.toContain("beta task risk");
+    expect(beta).toContain("beta task risk");
+    expect(beta).not.toContain("alpha task risk");
+    expect(top).not.toContain("alpha task risk");
+    expect(top).not.toContain("beta task risk");
+    expect(top).toContain("goal risk");
+    // Carried by the brief: the subarchitect's concern and forward reach the top.
+    expect(top).toContain("alpha brief risk");
+    expect(top).toContain("alpha carry");
+    expect(alpha).not.toContain("alpha carry");
+  });
+
+  it("routes a task debt only to its epic's debt register", () => {
+    const chained = [
+      task("alpha.build", { epic: "alpha" }),
+      task("beta.build", { epic: "beta" }),
+    ];
+    const records = [
+      rec(1, {
+        slug: "alpha.build",
+        step: "implement",
+        outcome: {
+          status: "done",
+          summary: "alpha shipped",
+          concerns: [
+            {
+              kind: "debt" as const,
+              calibration: "architect" as const,
+              text: "alpha-only debt",
+            },
+          ],
+          forward: [],
+        },
+      }),
+      rec(2, {
+        slug: "beta.build",
+        step: "implement",
+        outcome: {
+          status: "done",
+          summary: "beta shipped",
+          concerns: [
+            {
+              kind: "debt" as const,
+              calibration: "architect" as const,
+              text: "beta-only debt",
+            },
+          ],
+          forward: [],
+        },
+      }),
+    ];
+    const state = derive(chained, records);
+    const debtsFor = (epic?: string) =>
+      openDebts(
+        recordsForAudience(
+          records,
+          chained,
+          epic ? { kind: "epic", epic } : { kind: "goal" },
+        ),
+      );
+    const packFor = (epic?: string): string =>
+      renderContextPack({
+        goal: "demo",
+        iteration: 2,
+        ...(epic ? { epic } : {}),
+        intentPath: "/goal/intent.md",
+        planPath: epic ? `/goal/epics/${epic}.md` : "/goal/plan.md",
+        checkout: "/wt/demo",
+        integrationBranch: "factory/demo",
+        headHash: "abcdef1234567890",
+        recordsDir: "/goal/records",
+        tasksDir: "/goal/tasks",
+        tasks: epic ? chained.filter((task) => task.epic === epic) : chained,
+        state,
+        steers: [],
+        setup: [],
+        gates: [],
+        forwarded: [],
+        debts: debtsFor(epic),
+      });
+
+    const top = packFor();
+    const alpha = packFor("alpha");
+    expect(top).not.toContain("alpha-only debt");
+    expect(top).not.toContain("beta-only debt");
+    expect(alpha).toContain("alpha-only debt");
+    expect(alpha).not.toContain("beta-only debt");
   });
 
   it("lists every open debt with its id and drops the closed one", () => {

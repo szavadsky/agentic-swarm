@@ -4,6 +4,7 @@ import { DEFAULT_FLOWS, reduceTask } from "./derive-task.js";
 import type {
   Concern,
   ConcernId,
+  EpicState,
   FlowDefinition,
   GoalDecision,
   GoalStatus,
@@ -20,6 +21,14 @@ import type {
  * decision and `derive` reads it like an architect's.
  */
 export const FRONT_STOP_STEP = "front-stop";
+
+/** Task statuses that still owe their epic a live subarchitect. */
+export const OPEN_TASK_STATUSES: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
+  "pending",
+  "ready",
+  "running",
+  "parked",
+]);
 
 /** Dependency edges are satisfied by merged work and by landed spike findings. */
 function depsSatisfied(
@@ -240,29 +249,12 @@ export function derive(
 ): State {
   const sorted = [...records].sort(bySeq);
   let iteration = 0;
-  let goal: GoalStatus = "active";
   for (const rec of sorted) {
     // A quarantine report rides on the current iteration but starts none:
     // the first launch's preflight quarantine must not number the first
     // real iteration as 2 or mark the launch a relaunch.
     if (rec.step !== "task-quarantine") {
       iteration = Math.max(iteration, rec.iteration);
-    }
-    const decision = recordedDecision(rec);
-    if (decision) {
-      // Done sees open debt: a done recorded while material debt is open is
-      // refused — the goal stays active so the next boundary must plan the
-      // removers. The check reads records up to this decision, so a later
-      // close needs a later done to land.
-      if (decision === "done") {
-        const prior = sorted.filter((r) => r.seq <= rec.seq);
-        if (hasOpenDebt(prior)) continue;
-        goal = "done";
-      } else if (decision === "blocked") {
-        goal = "blocked";
-      } else {
-        goal = "active";
-      }
     }
   }
   const currentIteration = iteration;
@@ -337,7 +329,7 @@ export function derive(
   }
 
   const taskStates: Record<string, TaskState> = {};
-  const epics: Record<string, string[]> = {};
+  const epics: Record<string, EpicState> = {};
   for (const task of tasks) {
     const reduction = reductions.get(task.slug)!;
     const terminal = reduction.terminal;
@@ -362,8 +354,8 @@ export function derive(
       gateLastCall: terminal ? undefined : reduction.gateLastCall,
     };
     if (task.epic !== undefined) {
-      const group = epics[task.epic] ?? [];
-      group.push(task.slug);
+      const group = epics[task.epic] ?? { tasks: [], done: false };
+      group.tasks.push(task.slug);
       epics[task.epic] = group;
     }
   }
@@ -391,6 +383,44 @@ export function derive(
       gateFix: undefined,
       gateLastCall: undefined,
     };
+  }
+
+  // The epic's own architect owns its decision; `done` also waits for every
+  // task in the epic to land, so a reopened task reopens the epic.
+  for (const rec of sorted) {
+    if (rec.step !== "subarchitect" || !rec.architect || !rec.endedAt) continue;
+    const decision = rec.outcome?.decision;
+    if (!decision) continue;
+    const epic = epics[rec.architect] ?? { tasks: [], done: false };
+    epic.decision = decision;
+    epics[rec.architect] = epic;
+  }
+  for (const epic of Object.values(epics)) {
+    epic.done =
+      (epic.decision === undefined || epic.decision === "done") &&
+      !epic.tasks.some((slug) =>
+        OPEN_TASK_STATUSES.has(statuses.get(slug) ?? "pending"),
+      );
+  }
+
+  let goal: GoalStatus = "active";
+  for (const rec of sorted) {
+    const decision = recordedDecision(rec);
+    if (!decision) continue;
+    // Done sees open debt and open epics: a done recorded while either is
+    // open is refused — the goal stays active so the next boundary plans the
+    // removers or lets an epic's architect close it. The check reads records
+    // up to this decision, so a later close needs a later done to land.
+    if (decision === "done") {
+      const prior = sorted.filter((r) => r.seq <= rec.seq);
+      if (hasOpenDebt(prior)) continue;
+      if (Object.values(epics).some((epic) => !epic.done)) continue;
+      goal = "done";
+    } else if (decision === "blocked") {
+      goal = "blocked";
+    } else {
+      goal = "active";
+    }
   }
 
   const interrupted =

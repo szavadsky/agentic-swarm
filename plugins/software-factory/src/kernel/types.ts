@@ -408,6 +408,21 @@ export interface TaskState {
 
 export type GoalStatus = "active" | "done" | "blocked";
 
+/**
+ * One epic's derived state. The epic's last completed subarchitect record owns
+ * its decision; `done` additionally requires every task in the epic to be
+ * terminal, so a task that reopens reopens the epic. An epic without a
+ * subarchitect turn (the top architect owns it) closes on its tasks alone.
+ */
+export interface EpicState {
+  /** The epic's task slugs; goal-level tasks appear only in `tasks`. */
+  tasks: string[];
+  /** The last completed subarchitect decision; absent before the first turn. */
+  decision?: GoalDecision;
+  /** No subarchitect veto and no task in the epic is open. */
+  done: boolean;
+}
+
 export interface State {
   goal: GoalStatus;
   /** Highest iteration seen in records; 0 before the first boundary turn. */
@@ -416,8 +431,8 @@ export interface State {
   /** The current iteration was interrupted with ready work left; a relaunch resumes it. */
   interrupted: boolean;
   tasks: Record<string, TaskState>;
-  /** Task slugs grouped by epic; goal-level tasks appear only in `tasks`. */
-  epics: Record<string, string[]>;
+  /** Every epic the task files and subarchitect records name. */
+  epics: Record<string, EpicState>;
 }
 
 export type Action =

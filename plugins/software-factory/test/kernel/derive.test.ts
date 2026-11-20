@@ -95,9 +95,117 @@ describe("derive", () => {
     });
     expect(state.tasks["goal-close"]!.epic).toBeUndefined();
     expect(state.epics).toEqual({
-      auth: ["auth.login"],
-      billing: ["billing.invoice"],
+      auth: { tasks: ["auth.login"], done: false },
+      billing: { tasks: ["billing.invoice"], done: false },
     });
+  });
+
+  it("closes an epic only when its subarchitect decides done and its tasks land", () => {
+    const tasks = [task("auth.login", { epic: "auth" })];
+    const cancel = script(1, {
+      slug: "auth.login",
+      step: "cancel",
+      ok: true,
+      cause: cause("cancelled"),
+    });
+    const subarchitect = (
+      seq: number,
+      decision: "continue" | "done" | "blocked",
+    ): StepRecord =>
+      rec(seq, {
+        slug: undefined,
+        step: "subarchitect",
+        architect: "auth",
+        outcome: {
+          status: "done",
+          summary: `epic ${decision}`,
+          concerns: [],
+          forward: [],
+          decision,
+        },
+      });
+    const topDone = (seq: number): StepRecord =>
+      rec(seq, {
+        slug: undefined,
+        step: "architect",
+        outcome: {
+          status: "done",
+          summary: "goal met",
+          concerns: [],
+          forward: [],
+          decision: "done",
+        },
+      });
+
+    // A ready task keeps the epic open even after the subarchitect says done.
+    expect(derive(tasks, [subarchitect(1, "done")]).epics.auth).toEqual({
+      tasks: ["auth.login"],
+      decision: "done",
+      done: false,
+    });
+    const landed = derive(tasks, [cancel, subarchitect(2, "done")]);
+    expect(landed.epics.auth?.done).toBe(true);
+    // The subarchitect's done is the epic's, never the goal's.
+    expect(landed.goal).toBe("active");
+    expect(
+      derive(tasks, [cancel, subarchitect(2, "done"), topDone(3)]).goal,
+    ).toBe("done");
+  });
+
+  it("refuses the top architect's done while an epic is open", () => {
+    const tasks = [task("auth.login", { epic: "auth" })];
+    const subarchitect = (
+      seq: number,
+      decision: "continue" | "done",
+    ): StepRecord =>
+      rec(seq, {
+        slug: undefined,
+        step: "subarchitect",
+        architect: "auth",
+        outcome: {
+          status: "done",
+          summary: `epic ${decision}`,
+          concerns: [],
+          forward: [],
+          decision,
+        },
+      });
+    const topDone = rec(2, {
+      slug: undefined,
+      step: "architect",
+      outcome: {
+        status: "done",
+        summary: "goal met",
+        concerns: [],
+        forward: [],
+        decision: "done",
+      },
+    });
+
+    // Task still ready: the epic is open and the goal stays active.
+    expect(derive(tasks, [subarchitect(1, "done"), topDone]).goal).toBe(
+      "active",
+    );
+    // All tasks landed but the subarchitect still wants the epic: same refusal.
+    const cancel = script(1, {
+      slug: "auth.login",
+      step: "cancel",
+      ok: true,
+      cause: cause("cancelled"),
+    });
+    expect(
+      derive(tasks, [cancel, subarchitect(2, "continue"), topDone]).goal,
+    ).toBe("active");
+    // An epic the top architect owns has no subarchitect turn; its landed
+    // tasks close it, so the top's done lands.
+    const owned = [task("billing.invoice", { epic: "billing" })];
+    const billingCancel = script(1, {
+      slug: "billing.invoice",
+      step: "cancel",
+      ok: true,
+      cause: cause("cancelled"),
+    });
+    expect(derive(owned, [billingCancel, topDone]).goal).toBe("done");
   });
 
   it("makes a dependent ready only after its dependency merged", () => {

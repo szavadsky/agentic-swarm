@@ -11,18 +11,22 @@ import {
 } from "./architect-session.js";
 import { recordedBaseGates } from "./baseline.js";
 import {
+  type ConcernAudience,
   type ContextPackInput,
   contextDataRelPath,
   contextPackRelPath,
+  epicContextPackRelPath,
+  epicSummaryRelPath,
   forwardedConcerns,
   readyAging,
+  recordsForAudience,
   renderContextData,
   renderContextPack,
   type SpikeFinding,
   shallowCodeMap,
   summaryRelPath,
 } from "./context-pack.js";
-import { derive, openDebts } from "./derive.js";
+import { derive, OPEN_TASK_STATUSES, openDebts } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
 import {
   boundaryTarget,
@@ -91,7 +95,6 @@ import type {
   State,
   StepRecord,
   TaskFile,
-  TaskStatus,
 } from "./types.js";
 import { formatCause, makeCause } from "./cause.js";
 import { integrationHead } from "./worktree.js";
@@ -140,6 +143,27 @@ function previousWaste(goalDir: string, iteration: number): string | undefined {
   const file = path.join(goalDir, summaryRelPath(iteration));
   if (!fs.existsSync(file)) return undefined;
   return summaryWaste(fs.readFileSync(file, "utf8"));
+}
+
+/** The previous iteration's summary for one epic, when it has one. */
+function previousEpicSummary(
+  goalDir: string,
+  iteration: number,
+  epic: string,
+): string | undefined {
+  if (iteration <= 0) return undefined;
+  const rel = epicSummaryRelPath(iteration, epic);
+  return fs.existsSync(path.join(goalDir, rel))
+    ? path.join(goalDir, rel)
+    : undefined;
+}
+
+/** Every registered plan's text: the ownership view a debt register reads. */
+function ownedPlanText(runtime: KernelRuntime): string {
+  return registeredPlans(runtime.store.goalDir)
+    .filter((file) => fs.existsSync(file.path))
+    .map((file) => fs.readFileSync(file.path, "utf8"))
+    .join("\n");
 }
 
 function rungTrace(rungs: PmRung[]): string {
@@ -326,43 +350,19 @@ function unavailableAliases(
   return causes;
 }
 
-/** Task statuses that still owe their epic a live subarchitect. */
-const OPEN_TASK_STATUSES: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
-  "pending",
-  "ready",
-  "running",
-  "parked",
-]);
-
 /** The plan one epic's subarchitect owns. */
 function epicPlan(goalDir: string, epic: string): PlanFile {
   return resolvePlan(goalDir, { kind: "epic", epic });
 }
 
 /**
- * Whether the top architect may leave an epic's subarchitect out: its last
- * completed decision was `done` and no task in the epic is still open. A task
- * that becomes ready or parked brings the consult back; a merely pending epic
- * with no turn yet is not done.
+ * Whether the top architect may leave an epic's subarchitect out: its derived
+ * epic state is done, which needs no subarchitect veto and no open task. A task
+ * that becomes ready or parked brings the consult back; a merely registered
+ * epic with no turn yet has no state entry and is not done.
  */
-function epicJobDone(
-  state: State,
-  records: readonly StepRecord[],
-  epic: string,
-): boolean {
-  const last = records
-    .filter(
-      (record) =>
-        record.step === "subarchitect" &&
-        record.architect === epic &&
-        record.endedAt,
-    )
-    .sort((a, b) => a.seq - b.seq)
-    .at(-1);
-  if (last?.outcome?.decision !== "done") return false;
-  return !Object.values(state.tasks).some(
-    (task) => task.epic === epic && OPEN_TASK_STATUSES.has(task.status),
-  );
+function epicJobDone(state: State, epic: string): boolean {
+  return state.epics[epic]?.done === true;
 }
 
 /**
@@ -425,8 +425,75 @@ interface EpicConsult {
 }
 
 /**
+ * Writes one subarchitect's pack: its epic's tasks and the concerns raised in
+ * them, plus the goal-level facts both levels share. A task's concern never
+ * appears in another epic's pack or in the top architect's.
+ */
+async function writeEpicPack(
+  runtime: KernelRuntime,
+  opts: {
+    iteration: number;
+    epic: string;
+    tasks: readonly TaskFile[];
+    state: State;
+    records: readonly StepRecord[];
+    planText: string;
+    runConfigPath?: string;
+  },
+): Promise<string> {
+  const epicTasks = opts.tasks.filter((task) => task.epic === opts.epic);
+  const plan = epicPlan(runtime.store.goalDir, opts.epic);
+  const audience: ConcernAudience = { kind: "epic", epic: opts.epic };
+  const openForEpic = (await openRecords(runtime.store)).filter((dir) =>
+    epicTasks.some((task) => path.basename(dir).includes(`-${task.slug}-`)),
+  );
+  const input: ContextPackInput = {
+    goal: path.basename(runtime.paths.goalDir),
+    iteration: opts.iteration,
+    epic: opts.epic,
+    intentPath: path.join(runtime.store.goalDir, "intent.md"),
+    planPath: plan.path,
+    checkout: runtime.paths.goalCheckout,
+    integrationBranch: runtime.paths.integrationBranch,
+    headHash: await integrationHead(runtime),
+    recordsDir: runtime.store.recordsDir,
+    tasksDir: runtime.store.tasksDir,
+    previousSummary: previousEpicSummary(
+      runtime.store.goalDir,
+      opts.iteration - 1,
+      opts.epic,
+    ),
+    tasks: [...epicTasks],
+    state: opts.state,
+    spikeFindings: await spikeFindings(
+      runtime.store,
+      [...opts.records],
+      [...epicTasks],
+    ),
+    codeMap: await codeMap(runtime.paths.goalCheckout),
+    steers: [],
+    setup: runtime.configs.repo.setup,
+    gates: runtime.configs.repo.gates,
+    baseGates: recordedBaseGates([...opts.records]),
+    forwarded: forwardedConcerns([...opts.records], {
+      tasks: opts.tasks,
+      audience,
+    }),
+    debts: openDebts(
+      recordsForAudience(opts.records, opts.tasks, audience),
+      opts.planText,
+    ),
+    openRecords: openForEpic,
+    ...(opts.runConfigPath ? { runConfigPath: opts.runConfigPath } : {}),
+  };
+  const rel = epicContextPackRelPath(opts.iteration, opts.epic);
+  await runtime.store.writeFile(rel, renderContextPack(input));
+  return rel;
+}
+
+/**
  * One subarchitect turn for one epic: its own resumable session on the
- * architect alias, its own plan, and the goal pack. It may edit only its epic
+ * architect alias, its own plan, and its own pack. It may edit only its epic
  * plan; a foreign plan write is rolled back and recorded, and a task write
  * blocks the iteration like the main architect's.
  */
@@ -716,10 +783,7 @@ export async function runBoundary(
           })
         : undefined;
     // A debt any active plan owns leaves the register, whichever architect wrote it.
-    const planText = registeredPlans(runtime.store.goalDir)
-      .filter((file) => fs.existsSync(file.path))
-      .map((file) => fs.readFileSync(file.path, "utf8"))
-      .join("\n");
+    const planText = ownedPlanText(runtime);
     const packInput: ContextPackInput = {
       goal: path.basename(runtime.paths.goalDir),
       iteration,
@@ -743,8 +807,14 @@ export async function runBoundary(
       setup: runtime.configs.repo.setup,
       gates: runtime.configs.repo.gates,
       baseGates: recordedBaseGates(records),
-      forwarded: forwardedConcerns(records),
-      debts: openDebts(records, planText),
+      forwarded: forwardedConcerns(records, {
+        tasks,
+        audience: { kind: "goal" },
+      }),
+      debts: openDebts(
+        recordsForAudience(records, tasks, { kind: "goal" }),
+        planText,
+      ),
       runConfigPath: opts.runConfigPath,
       openRecords: await openRecords(runtime.store),
       planCheck: latestPlanCheck(records),
@@ -1025,23 +1095,36 @@ export async function runBoundary(
       (row) => row.closed === undefined && row.architect === "subarchitect",
     )
     .sort((a, b) => a.epic.localeCompare(b.epic));
+  // The top architect's turn just landed; its record is part of the brief
+  // each subarchitect reads, so read the log again instead of the pre-turn view.
+  const consultRecords = await runtime.store.listRecords();
+  const planText = ownedPlanText(runtime);
   const consults: EpicConsult[] = [];
   for (const row of activeSubarchitects) {
-    if (epicJobDone(state, records, row.epic)) continue;
-    const prior = records.some(
+    if (epicJobDone(state, row.epic)) continue;
+    const prior = consultRecords.some(
       (record) =>
         record.step === "subarchitect" &&
         record.architect === row.epic &&
         record.endedAt,
     );
     const epicTurn = !prior ? "first" : opts.relaunch ? "relaunch" : "boundary";
+    const epicPackRel = await writeEpicPack(runtime, {
+      iteration,
+      epic: row.epic,
+      tasks,
+      state,
+      records: consultRecords,
+      planText,
+      ...(opts.runConfigPath ? { runConfigPath: opts.runConfigPath } : {}),
+    });
     const consult = await runEpicConsult(runtime, {
       iteration,
       epic: row.epic,
-      packRel,
+      packRel: epicPackRel,
       goalPlanFile: plan,
       ...(digestPath ? { digestPath } : {}),
-      records,
+      records: consultRecords,
       turn: epicTurn,
     });
     if (consult.failure) {

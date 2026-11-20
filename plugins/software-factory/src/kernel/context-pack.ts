@@ -3,7 +3,7 @@ import type { ConcernKind } from "../core/concern-types.js";
 import { concernFingerprint } from "../core/concerns.js";
 import { formatCause, makeCause } from "./cause.js";
 import type { BaseGateState } from "./baseline.js";
-import type { OpenDebt } from "./derive.js";
+import { OPEN_TASK_STATUSES, type OpenDebt } from "./derive.js";
 import type { Steer } from "./mailbox.js";
 import { KERNEL_STEPS } from "./types.js";
 import type {
@@ -23,6 +23,55 @@ export interface ForwardedConcern {
   evidence?: string;
   /** Repeat count for the same fingerprint, e.g. the same risk raised twice. */
   occurrences?: number;
+}
+
+/** Whose pack reads a record: the goal's architect or one epic's. */
+export type ConcernAudience = { kind: "goal" } | { kind: "epic"; epic: string };
+
+/** The scope a pack reader sees, for filtering records before they render. */
+export interface ConcernScope {
+  /** Every task, so a record's slug maps to the epic that owns it. */
+  tasks?: readonly TaskFile[];
+  /** Absent keeps every record, the depth-1 pack. */
+  audience?: ConcernAudience;
+}
+
+/** Task slug -> owning epic, from every task file. */
+function epicByTask(tasks: readonly TaskFile[]): Map<string, string> {
+  const bySlug = new Map<string, string>();
+  for (const task of tasks) {
+    if (task.epic !== undefined) bySlug.set(task.slug, task.epic);
+  }
+  return bySlug;
+}
+
+/**
+ * A goal-level record is readable at every level. A task's record belongs to
+ * its task's epic; a subarchitect's record is that epic's brief upward, so the
+ * goal architect reads it too. One epic never reads another's task records.
+ */
+function visibleToAudience(
+  record: StepRecord,
+  bySlug: ReadonlyMap<string, string>,
+  audience: ConcernAudience,
+): boolean {
+  if (record.step === "subarchitect")
+    return audience.kind === "goal" || record.architect === audience.epic;
+  const epic = record.slug ? bySlug.get(record.slug) : undefined;
+  if (epic === undefined) return true;
+  return audience.kind === "epic" && audience.epic === epic;
+}
+
+/** The records one pack may read: everything `audience` is allowed to see. */
+export function recordsForAudience(
+  records: readonly StepRecord[],
+  tasks: readonly TaskFile[],
+  audience: ConcernAudience,
+): StepRecord[] {
+  const bySlug = epicByTask(tasks);
+  return records.filter((record) =>
+    visibleToAudience(record, bySlug, audience),
+  );
 }
 
 /** The latest plan-check turn's report, for the architect that it summoned. */
@@ -109,6 +158,8 @@ function parkedCauseText(cause: Cause | undefined): string {
 export interface ContextPackInput {
   goal: string;
   iteration: number;
+  /** The one epic this pack serves; absent for the goal architect's pack. */
+  epic?: string;
   intentPath: string;
   planPath: string;
   checkout: string;
@@ -172,6 +223,14 @@ export function epicSummaryRelPath(iteration: number, epic: string): string {
   return `iterations/${iteration}/epics/${epic}/summary.md`;
 }
 
+/** Goal-relative path one subarchitect's iteration pack is written to. */
+export function epicContextPackRelPath(
+  iteration: number,
+  epic: string,
+): string {
+  return `iterations/${iteration}/epics/${epic}/context-pack.md`;
+}
+
 function short(hash: string | undefined): string {
   return hash ? hash.slice(0, 10) : "-";
 }
@@ -203,8 +262,9 @@ function formatDebt(debt: OpenDebt): string {
  * pack.
  */
 export function renderContextPack(input: ContextPackInput): string {
+  const epicScope = input.epic ? `, epic \`${input.epic}\`` : "";
   const lines: string[] = [
-    `# Context pack — goal ${input.goal}, iteration ${input.iteration}`,
+    `# Context pack — goal ${input.goal}${epicScope}, iteration ${input.iteration}`,
     "",
     "## Paths",
     `- intent: ${input.intentPath}`,
@@ -233,6 +293,23 @@ export function renderContextPack(input: ContextPackInput): string {
     );
   }
   if (input.tasks.length === 0) lines.push("| (none yet) | | | | | | |");
+
+  const epicNames = Object.keys(input.state.epics)
+    .filter((name) => input.epic === undefined || name === input.epic)
+    .sort();
+  if (epicNames.length > 0) {
+    lines.push("", input.epic ? "## Epic" : "## Epics");
+    for (const name of epicNames) {
+      const epic = input.state.epics[name]!;
+      const open = epic.tasks.filter((slug) =>
+        OPEN_TASK_STATUSES.has(input.state.tasks[slug]?.status ?? "pending"),
+      ).length;
+      const total = epic.tasks.length;
+      lines.push(
+        `- \`${name}\`: ${epic.done ? "done" : "open"} — subarchitect ${epic.decision ?? "no turn"}; ${open} of ${total} ${total === 1 ? "task" : "tasks"} open`,
+      );
+    }
+  }
 
   const parked = input.tasks
     .filter((t) => input.state.tasks[t.slug]?.status === "parked")
@@ -457,6 +534,7 @@ export function renderContextData(input: ContextPackInput): string {
   const data = {
     goal: input.goal,
     iteration: input.iteration,
+    epic: input.epic ?? null,
     paths: {
       intent: input.intentPath,
       plan: input.planPath,
@@ -471,6 +549,7 @@ export function renderContextData(input: ContextPackInput): string {
       runConfig: input.runConfigPath ?? null,
     },
     tasks: statuses,
+    epics: input.state.epics,
     parked,
     pending,
     agedReady: input.agedReady ?? null,
@@ -629,12 +708,24 @@ function fingerprintOf(kind: string, text: string, evidence?: string): string {
 }
 
 /**
- * Collects forwarded concerns from records, deduplicated by the kept concern
- * fingerprint. The same text raised every round is one line with a count; an
- * owner calibration outranks an architect one. FYI entries do not travel here;
- * the debt register lists them.
+ * Collects forwarded concerns from the records an audience may read,
+ * deduplicated by the kept concern fingerprint. The same text raised every
+ * round is one line with a count; an owner calibration outranks an architect
+ * one. FYI entries do not travel here; the debt register lists them. Without
+ * an audience, every record counts: the depth-1 pack's single architect.
  */
-export function forwardedConcerns(records: StepRecord[]): ForwardedConcern[] {
+export function forwardedConcerns(
+  records: StepRecord[],
+  scope: ConcernScope = {},
+): ForwardedConcern[] {
+  const bySlug = epicByTask(scope.tasks ?? []);
+  const visible = (record: StepRecord): boolean => {
+    if (scope.audience === undefined) return true;
+    // A subarchitect's concerns are its brief upward, never its own input.
+    if (scope.audience.kind === "epic" && record.step === "subarchitect")
+      return false;
+    return visibleToAudience(record, bySlug, scope.audience);
+  };
   const byFingerprint = new Map<string, ForwardedConcern>();
   const add = (concern: ForwardedConcern, fingerprint: string): void => {
     const existing = byFingerprint.get(fingerprint);
@@ -656,10 +747,10 @@ export function forwardedConcerns(records: StepRecord[]): ForwardedConcern[] {
   };
 
   for (const rec of records) {
-    if (!rec.outcome) continue;
+    if (!rec.outcome || !visible(rec)) continue;
     for (const concern of rec.outcome.concerns) {
       if (concern.calibration === "fyi") continue;
-      const source = `${rec.slug ?? "goal"} ${rec.step} r${rec.round}`;
+      const source = `${rec.slug ?? rec.architect ?? "goal"} ${rec.step} r${rec.round}`;
       const fingerprint = fingerprintOf(
         concern.kind,
         concern.text,
@@ -677,7 +768,7 @@ export function forwardedConcerns(records: StepRecord[]): ForwardedConcern[] {
       );
     }
     for (const forwarded of rec.outcome.forward) {
-      const source = `${rec.slug ?? "goal"} ${rec.step} r${rec.round}`;
+      const source = `${rec.slug ?? rec.architect ?? "goal"} ${rec.step} r${rec.round}`;
       const fingerprint = fingerprintOf("forward", forwarded);
       add(
         { source, calibration: "architect", kind: "forward", text: forwarded },

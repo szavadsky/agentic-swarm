@@ -8,9 +8,17 @@ import type {
   TaskStatus,
 } from "./types.js";
 
-/** The epic summary's status vocabulary: its architect's decision, not the goal's. */
-function epicStatus(decision: GoalDecision | undefined): string {
-  if (decision === "done") return "epic-met";
+/**
+ * The epic summary's status vocabulary: its architect's decision, not the
+ * goal's. `epic-met` waits for the epic's last task to land, so a `done`
+ * recorded while work is still open reports in progress.
+ */
+function epicStatus(
+  state: State,
+  epic: string,
+  decision: GoalDecision | undefined,
+): string {
+  if (state.epics[epic]?.done) return "epic-met";
   if (decision === "blocked") return "epic-blocked";
   return "in-progress";
 }
@@ -55,7 +63,7 @@ function epicSummaryText(
   return [
     `# Iteration ${iteration} summary — epic \`${epic}\``,
     "",
-    `status: ${epicStatus(outcome.decision)}`,
+    `status: ${epicStatus(state, epic, outcome.decision)}`,
     `decision: ${outcome.decision ?? "none"}`,
     `architect: ${epic}`,
     "",
