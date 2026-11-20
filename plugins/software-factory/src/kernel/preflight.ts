@@ -16,6 +16,7 @@ import { outcomeSchemaFor, outcomeSchemaNames } from "./outcome-schemas.js";
 import {
   type AliasContext,
   checkAlias,
+  checkPortability,
   checkScouts,
   type ModelCatalog,
 } from "./preflight-aliases.js";
@@ -427,6 +428,7 @@ export async function preflight(
     await checkAlias(ctx, name, alias, resolvedAliases);
   }
   await checkScouts(ctx, configs, resolvedAliases);
+  checkPortability(ctx, configs);
 
   const worktreeProblem = inside(paths.worktreeRoot, paths.repoRoot)
     ? undefined

@@ -716,6 +716,32 @@ describe("pre-flight", () => {
     }
   });
 
+  it("refuses a portability edge naming an unregistered harness", async () => {
+    const f = await fixture(
+      RUN_HEAD_NO_HIGHEST.replace(
+        "limits:",
+        "portability:\n  - { from: ghost, to: fake }\n  - { from: fake, to: phantom }\nlimits:",
+      ),
+    );
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "portability.0.from",
+          message: 'harness "ghost" is not registered (registered: fake)',
+        }),
+      );
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "portability.1.to",
+          message: 'harness "phantom" is not registered (registered: fake)',
+        }),
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
   it("resolves each fallback effort against its own harness caps", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace(

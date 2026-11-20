@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { SessionRef } from "../harness/types.js";
+import { portable, type SessionRef } from "../harness/types.js";
 import { boundaryTarget } from "./flow-context.js";
 import type { KernelRuntime, Outcome, StepRecord } from "./types.js";
 
@@ -53,7 +53,8 @@ export function missingPlanFinding(
 /**
  * The session ref is re-derived from the last architect record, never kept in
  * memory: a relaunch reads it off disk. Resume is cwd- and model-bound, and
- * only when the harness says it can.
+ * only when the harness says it can and the run config's portability graph
+ * admits the recorded harness's session.
  */
 export async function resumableSession(
   runtime: KernelRuntime,
@@ -74,7 +75,8 @@ export async function resumableSession(
   }
   if (!resume) return undefined;
   const session = last.session;
-  if (session.harness !== harness.id) return undefined;
+  if (!portable(session.harness, harness.id, runtime.configs.run.portability))
+    return undefined;
   if (path.resolve(session.cwd) !== path.resolve(runtime.paths.goalCheckout))
     return undefined;
   if (session.model.id !== model.id) return undefined;

@@ -194,7 +194,8 @@ overlay.
 
 A task session resumes on the harness that recorded it. `portability: [{from, to}]`
 declares further directional edges: a session recorded on `from` may resume on
-`to`, while every other pair starts de novo with the rendered prompt.
+`to`, while every other pair starts de novo with the rendered prompt. Pre-flight
+refuses an edge whose endpoint names no registered harness.
 
 `lsp: true` enables artifact diagnostics where the harness supports them. At
 launch the factory writes every kernel schema as JSON Schema and one omp LSP

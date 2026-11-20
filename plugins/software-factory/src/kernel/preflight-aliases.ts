@@ -368,6 +368,30 @@ function runsOnOmp(aliases: Record<string, AliasConfig>): boolean {
   return false;
 }
 
+/**
+ * A portability edge names the harness a session may cross from and to. An
+ * endpoint no harness registers is a typo that would otherwise parse clean and
+ * mean "no edge", so the crossing it was declared to allow would restart de
+ * novo with no finding.
+ */
+export function checkPortability(
+  ctx: AliasContext,
+  configs: ConfigBundle,
+): void {
+  const registered = [...ctx.harnesses.keys()].join(", ") || "none";
+  for (const [index, edge] of (configs.run.portability ?? []).entries()) {
+    for (const side of ["from", "to"] as const) {
+      const harness = edge[side];
+      if (ctx.harnesses.has(harness)) continue;
+      add(
+        ctx,
+        `portability.${index}.${side}`,
+        `harness "${harness}" is not registered (registered: ${registered})`,
+      );
+    }
+  }
+}
+
 export async function checkScouts(
   ctx: AliasContext,
   configs: ConfigBundle,

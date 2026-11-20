@@ -8,6 +8,7 @@ import { PLAN_REVIEW_STEP } from "../../src/kernel/plan-review.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import {
   cleanup,
+  expectDispatch,
   expectLaunch,
   makeGoal,
   outcome,
@@ -29,6 +30,35 @@ const PLAN = `# Milestone 1
 ## later
 Nothing to dispatch yet; the plan is the architect's.
 `;
+
+/**
+ * The architect rotates across harnesses with the same model id, so iteration 1
+ * runs on `fake` and iteration 2 on `other`; the declared edge admits the
+ * crossing in that direction only.
+ */
+const CROSS_HARNESS_ARCHITECT_RUN = [
+  "aliases:",
+  "  architect:",
+  "    harness: other",
+  "    model: fake-architect",
+  "    rotate:",
+  "      - { harness: other, model: fake-architect }",
+  "      - { harness: fake, model: fake-architect }",
+  "  pm: { harness: fake, model: fake-pm }",
+  "  digest: { harness: fake, model: fake-digest }",
+  "  implementer: { harness: fake, model: fake-impl }",
+  "  implementer-b: { harness: fake, model: fake-impl-b }",
+  "  researcher: { harness: fake, model: fake-research }",
+  "  reviewer: { harness: fake, model: fake-review }",
+  "  steward: { harness: fake, model: fake-steward }",
+  "  plan-checker: { harness: fake, model: fake-check }",
+  "  plan-reviewer: { harness: fake, model: fake-plan-review }",
+  "  pack-preparer: { harness: fake, model: fake-pack-prep }",
+  "portability:",
+  "  - { from: fake, to: other }",
+  "limits: { iterations: 1, concurrency: { overall: 1 } }",
+  "",
+].join("\n");
 
 describe("architect session continuity", () => {
   it("stores the compacted ref, re-derives it after a restart, and backfills a missing summary", async () => {
@@ -128,6 +158,58 @@ describe("architect session continuity", () => {
       cleanup(goal);
     }
   }, 60_000);
+
+  it("resumes the architect across a declared portability edge", async () => {
+    const goal = makeGoal({ runYaml: CROSS_HARNESS_ARCHITECT_RUN });
+    try {
+      const first = new FakeHarness({ id: "fake" });
+      first.script((req, ctx) => {
+        writePlan(goal.goalDir, PLAN);
+        ctx.writeOutcome(outcome({ summary: "planned", decision: "continue" }));
+        return fakeTurnResult(req);
+      });
+      first.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "nothing to file" }));
+        return fakeTurnResult(req);
+      });
+      await expectDispatch(
+        3,
+        ["run", "--repo", goal.repo.dir, "--goal", "demo"],
+        { harnesses: { fake: first, other: new FakeHarness({ id: "other" }) } },
+      );
+
+      const store = createFolderStore(goal.goalDir, undefined, {});
+      const prior = (await store.listRecords()).find(
+        (r) => r.step === "architect",
+      )?.session;
+      expect(prior?.harness).toBe("fake");
+      expect(prior?.compacted).toBe(true);
+
+      const second = new FakeHarness({ id: "fake" });
+      const other = new FakeHarness({ id: "other" });
+      scriptDigest(second, goal.goalDir, 2);
+      let resumedHarness: string | undefined;
+      let resumedId: string | undefined;
+      other.script((req, ctx) => {
+        resumedHarness = req.session?.harness;
+        resumedId = req.session?.id;
+        ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
+        return fakeTurnResult(req);
+      });
+      await expectDispatch(
+        0,
+        ["run", "--repo", goal.repo.dir, "--goal", "demo"],
+        { harnesses: { fake: second, other } },
+      );
+
+      // The second iteration's architect runs on `other` and continues the
+      // compacted session the first iteration recorded on `fake`.
+      expect(resumedHarness).toBe("fake");
+      expect(resumedId).toBe(prior?.id);
+    } finally {
+      cleanup(goal);
+    }
+  }, 90_000);
 });
 
 describe("delivery guard", () => {
