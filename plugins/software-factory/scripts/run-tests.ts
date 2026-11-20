@@ -17,6 +17,12 @@ import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import {
+  failedFiles,
+  failedTests,
+  parseJunit,
+  type ParsedJunit,
+} from "../src/core/checks/junit.js";
 
 /** Parallel test workers; tuned for this suite on a many-core box. */
 const WORKERS = 8;
@@ -46,50 +52,21 @@ function slowestFiles(
   }
 }
 
-/** File suites that recorded a failure in bun's JUnit report. */
-function failedFiles(junitPath: string): string[] {
-  let raw: string;
+/**
+ * The run's JUnit report. Bun writes none when a worker crashes, and a killed
+ * worker can leave one cut mid-element; both are failures the caller reports
+ * from its own lines, not an exception out of the gate.
+ */
+function readReport(): ParsedJunit | undefined {
+  if (!fs.existsSync(junitPath)) return undefined;
   try {
-    raw = fs.readFileSync(junitPath, "utf8");
-  } catch {
-    return [];
+    return parseJunit(fs.readFileSync(junitPath, "utf8"));
+  } catch (error) {
+    console.error(
+      `tests gate: cannot read ${junitPath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return undefined;
   }
-  const files = new Set<string>();
-  for (const match of raw.matchAll(/<testsuite\b[^>]*>/g)) {
-    const file = /\bfile="([^"]+)"/.exec(match[0])?.[1];
-    const failures = Number(/\bfailures="(\d+)"/.exec(match[0])?.[1] ?? 0);
-    if (file && failures > 0) files.add(file);
-  }
-  return [...files];
-}
-
-/** Individual failed tests recorded in bun's JUnit report. */
-function getFailedTests(junitPath: string): string[] {
-  let raw: string;
-  try {
-    raw = fs.readFileSync(junitPath, "utf8");
-  } catch {
-    return [];
-  }
-  const failedTests: string[] = [];
-  // Find testsuites
-  for (const suiteMatch of raw.matchAll(
-    /<testsuite\b[^>]*\bfile="([^"]+)"[^>]*>([\s\S]*?)<\/testsuite>/g,
-  )) {
-    const file = suiteMatch[1]!;
-    const suiteContent = suiteMatch[2]!;
-    // Find failed testcases within this suite
-    for (const caseMatch of suiteContent.matchAll(
-      /<testcase\b[^>]*\bname="([^"]+)"[^>]*>([\s\S]*?)<\/testcase>/g,
-    )) {
-      const name = caseMatch[1]!;
-      const caseContent = caseMatch[2]!;
-      if (caseContent.includes("<failure")) {
-        failedTests.push(`${file} > ${name}`);
-      }
-    }
-  }
-  return failedTests;
 }
 
 interface RunResult {
@@ -99,7 +76,17 @@ interface RunResult {
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-tests-"));
 const timingsPath = path.join(tmpDir, "timings.json");
-const junitPath = path.join(tmpDir, "junit.xml");
+/**
+ * Where this run writes its JUnit report. A gate that declares
+ * `format: { junit: ... }` passes the absolute path in the environment; the
+ * report then stays there for the kernel to read, so the bun gate is read from
+ * the same file it wrote. A direct run keeps it in its own temp dir.
+ */
+const declaredJunit = process.env.FACTORY_JUNIT_PATH;
+const junitPath = declaredJunit
+  ? path.resolve(declaredJunit)
+  : path.join(tmpDir, "junit.xml");
+if (declaredJunit) fs.mkdirSync(path.dirname(junitPath), { recursive: true });
 const forwarded = process.argv.slice(2);
 const runs: string[][] =
   forwarded.length > 0
@@ -121,7 +108,20 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   });
 }
 
+/**
+ * The test process's environment. The report variable names this gate's
+ * report; a test that spawns another runner must not overwrite it, so the
+ * child does not inherit it.
+ */
+function testEnv(): Record<string, string | undefined> {
+  const env = { ...process.env };
+  delete env.FACTORY_JUNIT_PATH;
+  return env;
+}
+
 function runBun(argv: string[]): Promise<RunResult> {
+  // Each run's report must describe that run, not the previous shard's.
+  fs.rmSync(junitPath, { force: true });
   return new Promise((resolve, reject) => {
     const child = spawn(
       "bun",
@@ -134,7 +134,7 @@ function runBun(argv: string[]): Promise<RunResult> {
         `--reporter-outfile=${junitPath}`,
         ...argv,
       ],
-      { stdio: "inherit" },
+      { stdio: "inherit", env: testEnv() },
     );
     active = child;
     child.on("error", reject);
@@ -145,19 +145,28 @@ function runBun(argv: string[]): Promise<RunResult> {
   });
 }
 
+/** The report the one retry wrote, so a flake that passed no longer reads red. */
+function rerunRed(red: readonly string[]): number | null {
+  fs.rmSync(junitPath, { force: true });
+  return spawnSync(
+    "bun",
+    ["test", "--reporter=junit", `--reporter-outfile=${junitPath}`, ...red],
+    { stdio: "inherit", env: testEnv() },
+  ).status;
+}
+
 try {
   let failed = false;
   for (const argv of runs) {
     if (interrupted) break;
     const result = await runBun(argv);
     if (result.signal !== null || result.code !== 0) {
-      const red = failedFiles(junitPath);
+      const red = failedFiles(readReport());
       if (red.length > 0) {
         console.log(
           `tests gate: run red; re-running ${red.length} failed file(s) once: ${red.join(", ")}`,
         );
-        const rerun = spawnSync("bun", ["test", ...red], { stdio: "inherit" });
-        if (rerun.status !== 0) {
+        if (rerunRed(red) !== 0) {
           failed = true;
           break;
         }
@@ -174,6 +183,7 @@ try {
       }
     }
   }
+  const report = readReport();
   const wall = (performance.now() - started) / 1000;
   const slowest = slowestFiles(timingsPath, 5)
     .map(([file, ms]) => `${file} ${(ms / 1000).toFixed(1)}s`)
@@ -184,7 +194,7 @@ try {
       : `--parallel=${WORKERS}; serial: ${SERIAL.length} files; slowest: ${slowest}`;
   console.error(`tests gate: wall ${wall.toFixed(1)}s (${shape})`);
   if (failed) {
-    for (const test of getFailedTests(junitPath)) {
+    for (const test of failedTests(report)) {
       console.error(test);
     }
   }

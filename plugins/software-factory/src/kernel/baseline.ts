@@ -16,7 +16,7 @@ import {
   gateSignatures,
   isInfraCheck,
   isStaleGateCheck,
-  runGateCommand,
+  runDeclaredGate,
   UNIDENTIFIED_GATE_FAILURE,
 } from "./gates.js";
 import type {
@@ -116,34 +116,17 @@ export function preexistingRed(base: BaseGateState | undefined): Set<string> {
   return inherited;
 }
 
-/**
- * One baseline check. `roots` is the scratch worktree the gate ran from, so the
- * same failure in a task worktree normalises to the same identity.
- */
-function result(
-  name: string,
-  ok: boolean,
-  summary: string,
-  output = "",
-  roots: readonly string[] = [],
-): CheckResult {
-  const capped = capGateOutput(output, roots);
-  return {
-    name,
-    ok,
-    summary,
-    output: capped.output,
-    fingerprint: fingerprintText(`${name}:${ok}:${summary}`, {
-      lowercase: false,
-    }),
-    details: { roots: [...roots], truncated: capped.truncated },
-  };
-}
-
 /** A check that could not run; `checkBase` refuses to record it as red. */
 function infra(name: string, cause: string, output = ""): CheckResult {
+  const capped = capGateOutput(output);
   return {
-    ...result(name, false, cause, output),
+    name,
+    ok: false,
+    summary: cause,
+    output: capped.output,
+    fingerprint: fingerprintText(`${name}:false:${cause}`, {
+      lowercase: false,
+    }),
     details: { kind: "infra", cause } satisfies GateInfra,
   };
 }
@@ -236,23 +219,22 @@ async function runBaseGates(
     }
     const checks: CheckResult[] = [];
     for (const gate of configs.repo.gates) {
-      const res = await runGateCommand(repoRoot, dir, gate, gate.command);
-      const output = `${res.stdout}\n${res.stderr}`.trim();
+      const { res, check } = await runDeclaredGate(repoRoot, dir, gate);
       if (res.timedOut) {
         checks.push(
-          infra(gate.id, `timed out after ${GATE_TIMEOUT_SEC}s`, output),
+          infra(gate.id, `timed out after ${GATE_TIMEOUT_SEC}s`, check.output),
         );
         continue;
       }
       // 126/127 means the command itself could not start: an environment
       // failure, not a verdict on the tree under test.
       if (res.code === 126 || res.code === 127) {
-        checks.push(infra(gate.id, `could not run: exit ${res.code}`, output));
+        checks.push(
+          infra(gate.id, `could not run: exit ${res.code}`, check.output),
+        );
         continue;
       }
-      checks.push(
-        result(gate.id, res.code === 0, `exit ${res.code}`, output, [dir]),
-      );
+      checks.push(check);
     }
     return checks;
   } finally {

@@ -56,6 +56,17 @@ const MISSING_IMPORT =
   'import { nope } from "./missing.js";\n' +
   'it("loads", () => { expect(nope).toBe(1); });\n';
 
+/** What pytest writes: no file attribute; the classname names the module. */
+const PYTEST_JUNIT = `<testsuites>
+  <testsuite name="pytest" errors="0" failures="1" skipped="0" tests="2">
+    <testcase classname="tests.test_calc" name="test_add" />
+    <testcase classname="tests.test_calc" name="test_sub" time="0.002">
+      <failure message="assert 1 == 2">tests/test_calc.py:9: AssertionError</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
+`;
+
 /** A real bun run in `root`; it must be red for the mixed report under test. */
 function bunRun(root: string): string {
   const run = Bun.spawnSync(["bun", "test"], {
@@ -573,6 +584,77 @@ describe("inherited red is matched per signature, not per gate", () => {
           "line: cannot read <root>/src/x.txt",
         ]);
         expect(newGateFailures([run!], preexistingRed(recorded))).toEqual([]);
+      } finally {
+        fs.rmSync(taskRoot, { recursive: true, force: true });
+      }
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("records a pytest JUnit report on base so its failing case matches the task", async () => {
+    const { repo, goal } = setupFlowRepo({
+      gates: [
+        {
+          id: "py",
+          command: "mkdir -p reports && cp pytest-junit.xml reports/junit.xml",
+          format: { junit: "reports/junit.xml" },
+        },
+      ],
+    });
+    try {
+      repo.writeFile("pytest-junit.xml", PYTEST_JUNIT);
+      const commit = repo.commit("pytest fixture");
+      const runtime = await makeRuntime(repo, goal, {});
+      const warn = console.warn;
+      console.warn = () => {};
+      let baseline: { ok: boolean };
+      try {
+        baseline = await checkBase(
+          runtime.configs,
+          runtime.store,
+          repo.dir,
+          "main",
+          commit,
+        );
+      } finally {
+        console.warn = warn;
+      }
+      expect(baseline.ok).toBe(false);
+      const recorded = recordedBaseGates(await runtime.store.listRecords())!;
+      // The base record carries the report's cases, not only its output lines.
+      expect(recorded.checks[0]!.details).toMatchObject({
+        junit: { truncated: false },
+      });
+      expect([...gateSignatures(recorded.checks[0]!)]).toEqual([
+        "py > tests.test_calc > test_sub",
+      ]);
+      expect(recorded.checks[0]!.summary).toBe(
+        "1 failing: tests.test_calc > test_sub",
+      );
+
+      // The task worktree is a different absolute root and runs the same gate;
+      // the failing case name, not a root-bearing output line, is the identity.
+      const taskRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gate-task-"));
+      try {
+        fs.writeFileSync(path.join(taskRoot, "pytest-junit.xml"), PYTEST_JUNIT);
+        const [run] = await runGates(runtime, taskRoot);
+        expect([...gateSignatures(run!)]).toEqual([
+          "py > tests.test_calc > test_sub",
+        ]);
+        expect(newGateFailures([run!], preexistingRed(recorded))).toEqual([]);
+
+        // A different failing case under the same gate is the task's own red.
+        fs.writeFileSync(
+          path.join(taskRoot, "pytest-junit.xml"),
+          PYTEST_JUNIT.replace('"test_sub"', '"test_new"'),
+        );
+        const [fresh] = await runGates(runtime, taskRoot);
+        expect(
+          newGateFailures([fresh!], preexistingRed(recorded)).map(
+            (c) => c.name,
+          ),
+        ).toEqual(["py"]);
       } finally {
         fs.rmSync(taskRoot, { recursive: true, force: true });
       }

@@ -26,20 +26,24 @@ const identitySchema = z
   .object({ name: z.string().min(1), email: z.string().min(1) })
   .strict();
 /**
- * A gate's scratch directory: relative to its worktree, so the same declaration
- * gives every worktree its own directory. Absolute, `~` and `..` paths would
- * let two concurrent gate runs share one, which is what `env` exists to prevent.
+ * A gate path that must stay inside its worktree. Absolute, `~` and `..`
+ * paths would let two concurrent gate runs share one directory (which is what
+ * `env` exists to prevent) or write and read outside the tree.
  */
-const gateEnvDirSchema = z
-  .string()
-  .min(1)
-  .refine(
-    (value) =>
-      !path.isAbsolute(value) &&
-      !value.startsWith("~") &&
-      !value.split(/[\\/]/).includes(".."),
-    { message: "env dirs must be worktree-relative (no absolute, ~ or ..)" },
-  );
+function worktreePath(label: string) {
+  return z
+    .string()
+    .min(1)
+    .refine(
+      (value) =>
+        !path.isAbsolute(value) &&
+        !value.startsWith("~") &&
+        !value.split(/[\\/]/).includes(".."),
+      { message: `${label} must be worktree-relative (no absolute, ~ or ..)` },
+    );
+}
+const gateEnvDirSchema = worktreePath("env dirs");
+const gateJunitPathSchema = worktreePath("junit path");
 const gateSchema = z
   .object({
     id: z.string().min(1),
@@ -50,7 +54,7 @@ const gateSchema = z
       .optional(),
     format: z
       .object({
-        junit: z.string().min(1).optional(),
+        junit: gateJunitPathSchema.optional(),
         pattern: z.enum(["pytest", "jest", "cargo"]).optional(),
       })
       .strict()

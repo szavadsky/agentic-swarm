@@ -3,14 +3,15 @@ import fs from "node:fs";
 import path from "node:path";
 import type { CheckResult } from "../core/checks/types.js";
 import {
+  capJunit,
   parseJunit,
-  buildGateWithJunitCommand,
+  type ParsedCase,
   type ParsedJunit,
 } from "../core/checks/junit.js";
 import { fingerprintText } from "../core/fingerprint.js";
 import { KeyedMutex } from "../core/mutex.js";
 import { runProcess, type ProcessResult } from "../core/proc.js";
-import type { GateConfig, KernelRuntime } from "./types.js";
+import type { GateConfig, GatePattern, KernelRuntime } from "./types.js";
 
 export const GATE_TIMEOUT_SEC = 900;
 /** Characters of gate output a fix turn gets to read. */
@@ -88,18 +89,27 @@ interface GateCheckMeta {
   roots: string[];
   /** The output is the tail of a longer report; its head is gone. */
   truncated: boolean;
+  /** The runner whose printed failure report the output carries. */
+  pattern?: GatePattern;
 }
+
+const GATE_PATTERNS: readonly GatePattern[] = ["pytest", "jest", "cargo"];
 
 function gateCheckMeta(check: CheckResult): GateCheckMeta {
   const details = check.details;
   if (typeof details !== "object" || details === null)
     return { roots: [], truncated: false };
-  const meta = details as { roots?: unknown; truncated?: unknown };
+  const meta = details as {
+    roots?: unknown;
+    truncated?: unknown;
+    pattern?: unknown;
+  };
   return {
     roots: Array.isArray(meta.roots)
       ? meta.roots.filter((root): root is string => typeof root === "string")
       : [],
     truncated: meta.truncated === true,
+    pattern: GATE_PATTERNS.find((pattern) => pattern === meta.pattern),
   };
 }
 
@@ -185,6 +195,80 @@ export function isStaleGateCheck(check: CheckResult): boolean {
   return ABSOLUTE_PATH_TEST.test(check.output);
 }
 
+function junitDetails(check: CheckResult): ParsedJunit | undefined {
+  const details = check.details;
+  if (typeof details !== "object" || details === null) return undefined;
+  const junit = (details as { junit?: unknown }).junit;
+  if (typeof junit !== "object" || junit === null) return undefined;
+  return Array.isArray((junit as { cases?: unknown }).cases)
+    ? (junit as ParsedJunit)
+    : undefined;
+}
+
+/**
+ * pytest's `FAILED tests/a.py::test - assertion detail` summary and its verbose
+ * `tests/a.py::test FAILED` line. The assertion text after ` - ` drifts with
+ * the values under test, so the node id is the identity.
+ */
+function pytestSignatures(lines: readonly string[]): Set<string> {
+  const signatures = new Set<string>();
+  for (const line of lines) {
+    const summary = /^(?:FAILED|ERROR)\s+(\S+?)(?:\s+-\s+.*)?$/.exec(line);
+    if (summary) {
+      signatures.add(summary[1]!);
+      continue;
+    }
+    const verbose = /^(\S+)\s+(?:FAILED|ERROR)(?:\s|$)/.exec(line);
+    if (verbose) signatures.add(verbose[1]!);
+  }
+  return signatures;
+}
+
+/**
+ * jest's `FAIL src/a.test.ts` header followed by `● suite › test` bullets. The
+ * bullet repeats before each assertion of one failure; the set keeps one.
+ */
+function jestSignatures(lines: readonly string[]): Set<string> {
+  const signatures = new Set<string>();
+  let file = "";
+  for (const line of lines) {
+    const failedFile = /^FAIL\s+(\S+)$/.exec(line);
+    if (failedFile) {
+      file = failedFile[1]!;
+      continue;
+    }
+    const bullet = /^[●✕]\s+(.+)$/u.exec(line);
+    if (bullet) {
+      signatures.add(file ? `${file} > ${bullet[1]}` : `test: ${bullet[1]}`);
+    }
+  }
+  return signatures;
+}
+
+/** libtest's `test tests::alpha ... FAILED`; passed tests name no failure. */
+function cargoSignatures(lines: readonly string[]): Set<string> {
+  const signatures = new Set<string>();
+  for (const line of lines) {
+    const failed = /^test\s+(.+?)\s+\.\.\.\s+FAILED$/.exec(line);
+    if (failed) signatures.add(failed[1]!);
+  }
+  return signatures;
+}
+
+function patternSignatures(
+  pattern: GatePattern,
+  lines: readonly string[],
+): Set<string> {
+  switch (pattern) {
+    case "pytest":
+      return pytestSignatures(lines);
+    case "jest":
+      return jestSignatures(lines);
+    case "cargo":
+      return cargoSignatures(lines);
+  }
+}
+
 /**
  * Failure identities of one gate run: tsc diagnostics collapse to
  * `file:line code`, bun failures to `file > test`, bun's file-level load errors
@@ -192,6 +276,12 @@ export function isStaleGateCheck(check: CheckResult): boolean {
  * kept as `line: ...` after its run root is normalised. A red gate is inherited
  * only for the signatures it was red for, so a new failure under the same gate
  * still counts.
+ *
+ * A JUnit report or a declared `format.pattern` is the identity when it names a
+ * failure: its case names survive timing and assertion-value drift, which raw
+ * output lines do not. A report with no failure and a pattern that matched
+ * nothing fall back to the output lines, so a gate that exits red for a reason
+ * no case records is still identifiable.
  *
  * In a capped report the head is gone, so the file a line belongs to is
  * unknown until the next bun file header. Until then only lines that name
@@ -202,27 +292,30 @@ export function isStaleGateCheck(check: CheckResult): boolean {
  * nothing names itself the gate matches as an unidentified failure.
  */
 export function gateSignatures(check: CheckResult): Set<string> {
-  const { roots, truncated } = gateCheckMeta(check);
+  const meta = gateCheckMeta(check);
   const lines = check.output
     .split("\n")
-    .map((line) => normaliseRoots(line.replace(ANSI, "").trim(), roots));
+    .map((line) => normaliseRoots(line.replace(ANSI, "").trim(), meta.roots));
   const signatures = new Set<string>();
 
-  if (
-    check.details &&
-    typeof check.details === "object" &&
-    "junit" in check.details &&
-    (check.details as { junit: unknown }).junit
-  ) {
-    const parsed = (check.details as { junit: ParsedJunit }).junit;
-    for (const c of parsed.cases) {
-      if (c.status === "fail") signatures.add(`${check.name} > ${c.name}`);
+  const junit = junitDetails(check);
+  if (junit) {
+    for (const c of junit.cases) {
+      if (c.status === "fail")
+        signatures.add(`${check.name} > ${caseLabel(c)}`);
     }
-    if (parsed.suiteFailed && signatures.size === 0) {
+    if (junit.suiteFailed && signatures.size === 0) {
       signatures.add(`${check.name} > suite-failure`);
     }
+    if (signatures.size > 0) return signatures;
   }
 
+  if (meta.pattern) {
+    const fromPattern = patternSignatures(meta.pattern, lines);
+    if (fromPattern.size > 0) return fromPattern;
+  }
+
+  const { truncated } = meta;
   let file = "";
   // Inside a bun file report. Its detail lines only repeat the failure the
   // header, `(fail)` line or unhandled block already names, and their line
@@ -362,11 +455,12 @@ function gateEnvDirs(
  * pair in different order cannot deadlock; a gate holds them only for its own
  * command, so the rest of the run — and every other worktree's run — proceeds.
  */
-export function runGateCommand(
+function runGateCommand(
   repoRoot: string,
   cwd: string,
   gate: GateConfig,
   command: string,
+  extraEnv?: Record<string, string>,
 ): Promise<ProcessResult> {
   const ordered = [...new Set(gate.serial)].sort();
   const launch = (index: number): Promise<ProcessResult> => {
@@ -388,6 +482,7 @@ export function runGateCommand(
           durationMs: 0,
         });
       }
+      if (extraEnv) env = { ...env, ...extraEnv };
       return runProcess({
         cmd: command,
         cwd,
@@ -401,6 +496,137 @@ export function runGateCommand(
     );
   };
   return launch(0);
+}
+
+/** A case's identity within its gate: the report's file, then its name. */
+function caseLabel(c: ParsedCase): string {
+  return c.file ? `${c.file} > ${c.name}` : c.name;
+}
+
+/** Cases a red gate's summary names before it counts the rest. */
+const SUMMARY_CASES = 5;
+/** Characters of one case name in a summary. */
+const SUMMARY_NAME_CHARS = 120;
+
+/** A red gate's summary names what failed; `exit 0` says nothing. */
+function junitSummary(parsed: ParsedJunit, code: number | null): string {
+  const failing = parsed.cases
+    .filter((c) => c.status === "fail")
+    .map(caseLabel);
+  if (failing.length > 0) {
+    const shown = failing
+      .slice(0, SUMMARY_CASES)
+      .map((name) => name.slice(0, SUMMARY_NAME_CHARS));
+    const rest = failing.length - shown.length;
+    return `${failing.length} failing: ${shown.join(", ")}${rest > 0 ? `, +${rest} more` : ""}`;
+  }
+  if (parsed.suiteFailed) return "suite failure";
+  if (parsed.cases.length === 0) return "empty JUnit report";
+  return `exit ${code}`;
+}
+
+/** A red JUnit gate's identity: its failing cases, never its passing ones. */
+function junitIdentity(parsed: ParsedJunit | undefined): string {
+  if (!parsed) return "";
+  const failing = parsed.cases
+    .filter((c) => c.status === "fail")
+    .map(caseLabel)
+    .sort();
+  if (failing.length > 0) return failing.join(",");
+  return parsed.suiteFailed ? "suite-failure" : "";
+}
+
+/** One declared gate run: its command result and the check built from it. */
+export interface DeclaredGateRun {
+  res: ProcessResult;
+  check: CheckResult;
+}
+
+/**
+ * Runs one gate as declared and records what it produced. A `format.junit`
+ * gate writes its report to the declared worktree-relative path — the kernel
+ * exports the absolute path as `FACTORY_JUNIT_PATH` for runners that honour it
+ * and reads the same file for the case identities. A `format.pattern` gate's
+ * runner is recorded so `gateSignatures` reads its printed failures. Both
+ * `runGates` and the baseline use this, so a gate executes and is recorded
+ * identically on base and in a task worktree.
+ */
+export async function runDeclaredGate(
+  repoRoot: string,
+  cwd: string,
+  gate: GateConfig,
+): Promise<DeclaredGateRun> {
+  const junitPath = gate.format?.junit
+    ? path.resolve(cwd, gate.format.junit)
+    : undefined;
+  if (junitPath) fs.rmSync(junitPath, { force: true });
+  const res = await runGateCommand(
+    repoRoot,
+    cwd,
+    gate,
+    gate.command,
+    junitPath ? { FACTORY_JUNIT_PATH: junitPath } : undefined,
+  );
+
+  let parsed: ParsedJunit | undefined;
+  let junitError: string | undefined;
+  if (junitPath) {
+    try {
+      if (fs.existsSync(junitPath)) {
+        parsed = parseJunit(fs.readFileSync(junitPath, "utf8"));
+      } else {
+        junitError = "JUnit report not generated";
+      }
+    } catch (error) {
+      junitError = `JUnit report unreadable: ${error instanceof Error ? error.message : String(error)}`;
+    } finally {
+      fs.rmSync(junitPath, { force: true });
+    }
+  }
+
+  const capped = capGateOutput(`${res.stdout}\n${res.stderr}`, [cwd]);
+  const ok =
+    !res.timedOut &&
+    res.code === 0 &&
+    junitError === undefined &&
+    !(parsed?.suiteFailed ?? false) &&
+    !(parsed?.cases.some((c) => c.status === "fail") ?? false) &&
+    !(parsed !== undefined && parsed.cases.length === 0);
+  const summary = ok
+    ? "pass"
+    : res.timedOut
+      ? `timed out after ${GATE_TIMEOUT_SEC}s`
+      : res.code === 126 || res.code === 127
+        ? `exit ${res.code}`
+        : junitError
+          ? junitError
+          : parsed
+            ? junitSummary(parsed, res.code)
+            : `exit ${res.code}`;
+
+  const details: Record<string, unknown> = {
+    roots: [cwd],
+    truncated: capped.truncated,
+  };
+  if (gate.format?.pattern) details.pattern = gate.format.pattern;
+  // The record keeps a capped report; the verdict above read every case.
+  if (parsed) details.junit = capJunit(parsed);
+  if (junitError) details.error = junitError;
+
+  return {
+    res,
+    check: {
+      name: gate.id,
+      ok,
+      summary,
+      output: capped.output,
+      fingerprint: fingerprintText(
+        `${gate.id}:${junitIdentity(parsed) || capped.output}`,
+        { lowercase: false },
+      ),
+      details,
+    },
+  };
 }
 
 /**
@@ -421,64 +647,8 @@ export async function runGates(
       ? runtime.configs.repo.gates
       : runtime.configs.repo.gates.filter((gate) => only.has(gate.id));
   for (const gate of gates) {
-    let command = gate.command;
-    let junitPath: string | undefined;
-    if (gate.format?.junit) {
-      junitPath = path.join(cwd, gate.format.junit);
-      command = buildGateWithJunitCommand(command, junitPath);
-    }
-
-    const res = await runGateCommand(
-      runtime.paths.repoRoot,
-      cwd,
-      gate,
-      command,
-    );
-    let ok = !res.timedOut && res.code === 0;
-
-    const details: Record<string, unknown> = { roots: [cwd] };
-
-    if (junitPath && fs.existsSync(junitPath)) {
-      const xml = fs.readFileSync(junitPath, "utf8");
-      const parsed = parseJunit(xml);
-      details.junit = parsed;
-      if (
-        parsed.suiteFailed ||
-        parsed.cases.some((c) => c.status === "fail") ||
-        parsed.cases.length === 0
-      ) {
-        ok = false;
-      }
-      fs.unlinkSync(junitPath);
-    } else if (junitPath) {
-      ok = false;
-      details.error = "JUnit report not generated";
-    }
-
-    const capped = capGateOutput(`${res.stdout}\n${res.stderr}`, [cwd]);
-    let identity = capped.output;
-    if (details.junit) {
-      const parsed = details.junit as ParsedJunit;
-      identity = parsed.cases
-        .map((c) => `${c.name}:${c.status}`)
-        .sort()
-        .join(",");
-    }
-
-    results.push({
-      name: gate.id,
-      ok,
-      summary: ok
-        ? "pass"
-        : res.timedOut
-          ? `timed out after ${GATE_TIMEOUT_SEC}s`
-          : `exit ${res.code}`,
-      output: capped.output,
-      fingerprint: fingerprintText(`${gate.id}:${identity}`, {
-        lowercase: false,
-      }),
-      details: { ...details, truncated: capped.truncated },
-    });
+    const { check } = await runDeclaredGate(runtime.paths.repoRoot, cwd, gate);
+    results.push(check);
   }
   return results;
 }

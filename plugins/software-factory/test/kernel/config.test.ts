@@ -603,6 +603,27 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("rejects a junit report path outside the worktree", () => {
+    for (const junit of ["/tmp/junit.xml", "../junit.xml", "~/junit.xml"]) {
+      const root = tmpRepo();
+      fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+      fs.writeFileSync(
+        path.join(root, ".factory/repo.yaml"),
+        [
+          "gates:",
+          "  - id: unit",
+          "    command: echo unit",
+          `    format: { junit: "${junit}" }`,
+          "",
+        ].join("\n"),
+      );
+      expect(() => loadConfigs(root)).toThrow(
+        /junit path must be worktree-relative/,
+      );
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("keeps the pre-serial gates shape valid and defaults serial to empty", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });

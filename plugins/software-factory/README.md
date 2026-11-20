@@ -54,11 +54,12 @@ baseBranch: main
 artifactRoot: .factory/artifacts
 setup: [bun install]
 gates:
-  - id: typecheck
-    command: bun run typecheck
-    format: { junit: junit.xml }
+  - id: unit
+    command: pytest --junitxml=reports/junit.xml
+    format: { junit: reports/junit.xml }         # report the command writes
   - id: integration
-    command: bun run test:integration
+    command: jest --ci
+    format: { pattern: jest }                    # runner whose output it parses
     serial: [database]                          # gates naming a mutex never overlap
     env: { TMPDIR: .cache/gate }                # per-worktree scratch directory
 ```
@@ -71,6 +72,21 @@ mutexes it names in `serial`: within one factory process, gates naming the same
 mutex are serialized, and a gate that names none never waits. `env` maps
 variable names to worktree-relative directories; the kernel creates them and
 exports absolute paths, so two worktrees get two directories.
+
+A gate's `format` gives its failures identities that survive assertion values
+and timings, so a red inherited from the base is not blamed on the task:
+
+- `junit: <path>` names a worktree-relative report the command writes before it
+  exits. The kernel exports the absolute path as `FACTORY_JUNIT_PATH`, reads the
+  same file after the run, and stores its cases (capped, failing cases first).
+  Any runner that emits JUnit works: bun, pytest, jest-junit, nextest.
+- `pattern: pytest | jest | cargo` parses that runner's printed failure lines
+  when it writes no report. A gate may declare both; the report wins when it
+  names a failure.
+
+A JUnit red's summary names its failing cases, and a missing, empty or
+unreadable report is red rather than a silent pass. Records written before
+`details.junit` existed still classify by their output lines.
 
 **Process** — package `config/process.yaml`, optionally overridden by
 `.factory/process.yaml`:

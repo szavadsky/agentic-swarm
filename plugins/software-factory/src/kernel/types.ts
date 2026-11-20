@@ -727,6 +727,9 @@ export interface ArtifactStore {
   declaredWrites(): readonly DeclaredWrite[];
 }
 
+/** A runner whose printed failure report the kernel parses by name. */
+export type GatePattern = "pytest" | "jest" | "cargo";
+
 /** One repo gate command and the shared resources it needs to itself. */
 export interface GateConfig {
   id: string;
@@ -742,7 +745,11 @@ export interface GateConfig {
    * creates them and exports absolute paths, so two worktrees get two dirs.
    */
   env?: Record<string, string>;
-  format?: { junit?: string; pattern?: "pytest" | "jest" | "cargo" };
+  /**
+   * `junit` names the worktree-relative report the command writes before it
+   * exits; `pattern` names a runner whose printed failures the kernel reads.
+   */
+  format?: { junit?: string; pattern?: GatePattern };
 }
 
 export interface RepoConfig {
