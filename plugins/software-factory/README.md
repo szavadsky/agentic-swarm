@@ -343,9 +343,10 @@ list; its effort must be one omp's `--thinking` flag parses (`off`, `minimal`,
 `low`, `medium`, `high`, `xhigh`, `max`, `auto`) — or absent.
 
 `harnesses.<id>` binds an adapter (`acpx:`) or executable and carries
-`options` passed untouched: acpx reads `args`/`env`, omp merges the keys into
-its launch overlay (`sessions.retention` still owns
-`providers.cacheRetention`). The shipped `bootstrap/run/base.yaml` keeps the
+`options` passed untouched: acpx reads `args`/`env` (pre-flight refuses an
+`args` that is not a string array or an `env` that is not a string-to-string
+map), omp merges the keys into its launch overlay (`sessions.retention` still
+owns `providers.cacheRetention`). The shipped `bootstrap/run/base.yaml` keeps the
 unattended omp policy there — memory/auto-learn/skills off, approval, disabled
 providers, retry — so no policy is compiled in.
 

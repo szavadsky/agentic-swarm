@@ -402,8 +402,9 @@ export const harnessEntrySchema = z
      */
     binary: z.string().min(1).optional(),
     /**
-     * Adapter-specific keys, never interpreted by the kernel: acpx reads
-     * `args`/`env`, omp merges the rest into its launch overlay.
+     * Adapter-specific keys, opaque to the kernel except pre-flight's shape
+     * check of the acpx `args`/`env`; omp merges the rest into its launch
+     * overlay.
      */
     options: z.record(z.string(), z.unknown()).optional(),
   })

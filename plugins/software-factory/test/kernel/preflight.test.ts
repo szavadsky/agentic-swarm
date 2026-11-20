@@ -3,7 +3,10 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { resolveHarnessBinaries } from "../../src/cli/harnesses.js";
+import {
+  createRealHarnesses,
+  resolveHarnessBinaries,
+} from "../../src/cli/harnesses.js";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import type { Harness } from "../../src/harness/types.js";
 import { recordedBaseGates } from "../../src/kernel/baseline.js";
@@ -18,6 +21,7 @@ import {
   type PreflightInput,
   preflight,
 } from "../../src/kernel/preflight.js";
+import { runGoal } from "../../src/kernel/launch.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { task } from "./helpers.js";
@@ -155,6 +159,84 @@ describe("pre-flight", () => {
       const result = await preflight(f.input);
       expect(result.aliases.architect).toBe("max");
       expect(f.configs.run.aliases.architect!.effort).toBe("max");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("refuses malformed acpx option shapes, naming the key", async () => {
+    const runYaml = `${RUN_HEAD_NO_HIGHEST}harnesses:
+  opencode:
+    acpx: { agent: opencode }
+    options:
+      args: "--approve-all"
+      env: { TOKEN: 1 }
+      approveAll: true
+`;
+    const f = await fixture(runYaml);
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual({
+        file: path.join(f.repo.dir, ".factory", "run.yaml"),
+        key: "harnesses.opencode.options.args",
+        message: 'Invalid "args" option: expected string array, got string',
+      });
+      expect(err.findings).toContainEqual({
+        file: path.join(f.repo.dir, ".factory", "run.yaml"),
+        key: "harnesses.opencode.options.env",
+        message:
+          'Invalid "env" option: expected string-to-string object, got object with non-string values',
+      });
+      expect(
+        err.findings.some(
+          (finding) => finding.key === "harnesses.opencode.options.approveAll",
+        ),
+      ).toBe(false);
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("runGoal reports malformed acpx options before constructing adapters", async () => {
+    const runYaml = `${RUN_HEAD_NO_HIGHEST}worktreeRoot: WORKTREE_ROOT
+sessions: { dir: SESSIONS_DIR }
+harnesses:
+  opencode:
+    acpx: { agent: opencode }
+    options: { args: "--approve-all" }
+`;
+    const f = await fixture(runYaml);
+    try {
+      const failed = await runGoal({
+        repo: f.repo.dir,
+        goal: "demo",
+        iterations: 1,
+        harnessFactory: createRealHarnesses,
+        baseGates: false,
+      }).catch((err) => err);
+      expect(failed).toBeInstanceOf(PreflightError);
+      expect((failed as PreflightError).findings).toContainEqual({
+        file: path.join(f.repo.dir, ".factory", "run.yaml"),
+        key: "harnesses.opencode.options.args",
+        message: 'Invalid "args" option: expected string array, got string',
+      });
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("accepts string acpx args and env and leaves other option keys opaque", async () => {
+    const runYaml = `${RUN_HEAD_NO_HIGHEST}harnesses:
+  opencode:
+    acpx: { agent: opencode }
+    options:
+      args: ["--approve-all"]
+      env: { TOKEN: "value" }
+      approveAll: true
+`;
+    const f = await fixture(runYaml);
+    try {
+      await expect(preflight(f.input)).resolves.toBeDefined();
     } finally {
       f.repo.cleanup();
     }

@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { resolveAcpxCommand } from "../harness/acpx/command.js";
+import { acpxOptionProblems } from "../harness/acpx/options.js";
 import { OMP_ID } from "../harness/omp/types.js";
 import type { Harness } from "../harness/types.js";
 import { YAML_LSP_BINARY, yamlLspBinary } from "./artifact-lsp.js";
@@ -27,6 +28,7 @@ import {
   BOUNDARY_STEPS,
   type ConfigBundle,
   type GoalPaths,
+  type HarnessConfig,
   type ProcessConfig,
 } from "./types.js";
 
@@ -233,6 +235,30 @@ function trivialFollowUpFindings(
     }));
 }
 
+/**
+ * The acpx adapter reads `options.args` and `options.env`; every other option
+ * key is opaque. The shapes are checked here so a launch refuses a malformed
+ * value with the config key, before an adapter is constructed or a child is
+ * spawned.
+ */
+export function acpxOptionFindings(
+  harnesses: Record<string, HarnessConfig> | undefined,
+  file: string,
+): Finding[] {
+  const findings: Finding[] = [];
+  for (const [id, entry] of Object.entries(harnesses ?? {})) {
+    if (!entry.acpx) continue;
+    for (const problem of acpxOptionProblems(entry.options)) {
+      findings.push({
+        file,
+        key: `harnesses.${id}.options.${problem.key}`,
+        message: problem.message,
+      });
+    }
+  }
+  return findings;
+}
+
 function inside(child: string, parent: string): boolean {
   const rel = path.relative(path.resolve(parent), path.resolve(child));
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
@@ -338,6 +364,7 @@ export async function preflight(
 
   findings.push(...escalationFindings(configs.run.aliases, files.run));
   findings.push(...fallbackAliasFindings(configs.run.aliases, files.run));
+  findings.push(...acpxOptionFindings(configs.run.harnesses, files.run));
 
   // A task type owns its flow and output schema. A type naming either one
   // wrongly would quarantine every task of that type or fail mid-turn, after

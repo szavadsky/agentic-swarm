@@ -8,7 +8,12 @@ import type { Harness, ModelRef } from "../harness/types.js";
 import { type BoundaryResult, runBoundary } from "./boundary.js";
 import { artifactLspConfigPath, writeArtifactLsp } from "./artifact-lsp.js";
 import { formatCause, makeCause } from "./cause.js";
-import { loadConfigs, resolveGoalPaths, toLimits } from "./config.js";
+import {
+  configFilePaths,
+  loadConfigs,
+  resolveGoalPaths,
+  toLimits,
+} from "./config.js";
 import { derive, FRONT_STOP_STEP } from "./derive.js";
 import { postLaunchDigest } from "./digest.js";
 import { readFrontClass } from "./flow-context.js";
@@ -35,8 +40,10 @@ import type { PriceSource } from "./openrouter.js";
 import { loadPriceTable } from "./openrouter.js";
 import { runSteerPm, type SteerPmRun } from "./pm.js";
 import {
+  acpxOptionFindings,
   DEFAULT_MIN_TMP_FREE_BYTES,
   type ModelCatalog,
+  PreflightError,
   preflight,
   tmpHeadroom,
 } from "./preflight.js";
@@ -402,6 +409,14 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
 
   let harnesses: Record<string, Harness> = opts.harnesses ?? {};
   if (!opts.harnesses && opts.harnessFactory) {
+    // The acpx adapter refuses a malformed `args`/`env` when constructed, and
+    // that happens before pre-flight; report the same shape as a finding so the
+    // operator sees the config key instead of a constructor stack.
+    const optionFindings = acpxOptionFindings(
+      configs.run.harnesses,
+      (configs.files ?? configFilePaths(repoRoot)).run,
+    );
+    if (optionFindings.length > 0) throw new PreflightError(optionFindings);
     harnesses = await opts.harnessFactory({
       sessionDir: sessions.dir,
       scouts: configs.run.scouts
