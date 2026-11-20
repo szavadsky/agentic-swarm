@@ -328,7 +328,6 @@ export async function runOmpTurn(
       });
 
   const turnText = summary.assistantText ?? "";
-  const text = textFrame?.data?.text ?? turnText;
 
   const failure: OmpTurnFailure | undefined =
     promptFailed instanceof OmpRpcExit
@@ -356,6 +355,14 @@ export async function runOmpTurn(
           usage,
           text: turnText,
         });
+
+  // `get_last_assistant_text` answers for the whole session, so on resume it
+  // holds a prior turn's answer. A glitch turn produced nothing at all: never
+  // report that stale text beside the infra stop.
+  const text =
+    stop.kind === "infra" && stop.cause === "glitch"
+      ? ""
+      : (textFrame?.data?.text ?? turnText);
 
   const sessionId: string | undefined =
     state?.sessionId ?? postStats?.sessionId ?? (resume as string | undefined);
