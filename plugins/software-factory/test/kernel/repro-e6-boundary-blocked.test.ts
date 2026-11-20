@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   FakeHarness,
   type FakeTurnHandler,
+  fakeTurnIdentity,
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
 import type { SessionRef } from "../../src/harness/types.js";
@@ -51,6 +52,13 @@ function diesOn(
     fakeTurnResult(req, { stop: { kind: "infra", cause, details } });
 }
 
+/** Architect turns only: the boundary's digest and pack preparer also call the harness. */
+function architectCalls(harness: FakeHarness) {
+  return harness.calls.filter(
+    (call) => fakeTurnIdentity(call).step === "architect",
+  );
+}
+
 /**
  * A first launch that plans and files no tasks: it ends iteration-limit and
  * leaves a compacted architect session the next launch resumes.
@@ -92,6 +100,7 @@ const PM_CHAIN_YAML = [
   "  steward: { harness: fake, model: fake-steward }",
   "  plan-checker: { harness: fake, model: fake-check }",
   "  plan-reviewer: { harness: fake, model: fake-plan-review }",
+  "  pack-preparer: { harness: fake, model: fake-pack-prep }",
   "  digest: { harness: fake, model: fake-digest }",
   "limits: { iterations: 1, concurrency: { overall: 1 } }",
   "",
@@ -176,8 +185,9 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
         priceSource: testPriceSource(goal.repo.dir),
       });
       const summary = facts(goal.goalDir, 2);
-      expect(harness.calls[1]?.session?.id).toBe(resumed.id);
-      expect(harness.calls[2]?.session).toBeUndefined();
+      const architects = architectCalls(harness);
+      expect(architects[0]?.session?.id).toBe(resumed.id);
+      expect(architects[1]?.session).toBeUndefined();
       expect(result.stop).toBe("iteration-limit");
       expect(summary).not.toContain("blocked-by-user");
       expect(summary).not.toContain("stopped-with-debt");
@@ -214,8 +224,9 @@ describe("E6 inverted: an architect infra death is infra, not blocked-by-user", 
       const summary = facts(goal.goalDir, 2);
       expect(result.stop).toBe("infra");
       expect(result.cause).toContain("overflow");
-      expect(harness.calls[1]?.session?.id).toBe(resumed.id);
-      expect(harness.calls[2]?.session).toBeUndefined();
+      const architects = architectCalls(harness);
+      expect(architects[0]?.session?.id).toBe(resumed.id);
+      expect(architects[1]?.session).toBeUndefined();
       expect(workCalls(harness)).toHaveLength(2);
       expect(summary).toContain("status: stopped-with-debt");
       expect(summary).not.toContain("blocked-by-user");

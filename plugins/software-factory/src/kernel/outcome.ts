@@ -137,6 +137,7 @@ export const KERNEL_TURN_STEPS = {
   architect: "architect",
   digest: "any",
   front: "any",
+  packprep: "any",
   plancheck: "any",
   planreturn: "any",
   planreview: "any",

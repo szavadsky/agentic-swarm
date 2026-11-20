@@ -33,6 +33,7 @@ const RUN_HEAD_NO_HIGHEST_WITH_HIGHEST = `aliases:
   steward: { harness: fake, model: steward }
   plan-checker: { harness: fake, model: check }
   plan-reviewer: { harness: fake, model: plan-review }
+  pack-preparer: { harness: fake, model: pack-prep }
 limits: { concurrency: { overall: 2 }, iterations: 1 }
 `;
 
@@ -47,6 +48,7 @@ const RUN_HEAD_NO_HIGHEST = `aliases:
   steward: { harness: fake, model: steward }
   plan-checker: { harness: fake, model: check }
   plan-reviewer: { harness: fake, model: plan-review }
+  pack-preparer: { harness: fake, model: pack-prep }
 limits: { concurrency: { overall: 2 }, iterations: 1 }
 `;
 
@@ -323,21 +325,27 @@ describe("pre-flight", () => {
     }
   });
 
-  it("refuses the missing plan-checker alias its boundary step names", async () => {
-    const f = await fixture();
-    try {
-      delete f.configs.run.aliases["plan-checker"];
-      const err = await refusal(f.input);
-      expect(err.findings).toContainEqual({
-        file: path.join(f.repo.dir, ".factory/run.yaml"),
-        key: "aliases.plan-checker",
-        message: 'required by boundary step "plancheck" but missing',
-      });
-      expect(err.report).toContain('boundary step "plancheck"');
-    } finally {
-      f.repo.cleanup();
-    }
-  });
+  for (const [step, alias] of [
+    ["packprep", "pack-preparer"],
+    ["plancheck", "plan-checker"],
+  ] as const) {
+    it(`refuses the missing ${alias} alias its boundary step names`, async () => {
+      const f = await fixture();
+      try {
+        delete f.configs.run.aliases[alias];
+        const err = await refusal(f.input);
+        expect(err.findings).toContainEqual({
+          file: path.join(f.repo.dir, ".factory/run.yaml"),
+          key: `aliases.${alias}`,
+          message: `required by boundary step "${step}" but missing`,
+        });
+        expect(err.report).toContain(`aliases.${alias}`);
+        expect(err.report).toContain(`boundary step "${step}"`);
+      } finally {
+        f.repo.cleanup();
+      }
+    });
+  }
 
   it("refuses the missing plan reviewer alias the architecture flow names", async () => {
     const f = await fixture();

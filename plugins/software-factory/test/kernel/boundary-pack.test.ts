@@ -8,7 +8,11 @@ import {
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
 import { runBoundary } from "../../src/kernel/boundary.js";
-import { contextPackRelPath } from "../../src/kernel/context-pack.js";
+import {
+  contextDataRelPath,
+  contextPackRelPath,
+} from "../../src/kernel/context-pack.js";
+import { PACK_PREP_STEP } from "../../src/kernel/pack-prep.js";
 import {
   latestPlanReview,
   PLAN_REVIEW_STEP,
@@ -79,8 +83,156 @@ describe("boundary context pack", () => {
         `- run config: ${path.join(goal.repo.dir, ".factory/run.yaml")}`,
       );
       expect(pack).toContain("## Open records (started, no end)\n- none");
+      // The first iteration's pack is the script render, never a preparer turn.
+      expect(
+        harness.calls.some(
+          (call) => fakeTurnIdentity(call).step === PACK_PREP_STEP,
+        ),
+      ).toBe(false);
     } finally {
       cleanup(goal);
+    }
+  }, 90_000);
+
+  it("has the preparer write the index pack from the full status data", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeRuntimeTask(runtime, task("alpha"));
+      fs.writeFileSync(
+        path.join(runtime.store.goalDir, "plan.md"),
+        PLAN,
+        "utf8",
+      );
+      const packRel = contextPackRelPath(2);
+      const dataRel = contextDataRelPath(2);
+      const prepared = "# Prepared pack\n\n## Paths\n- plan: /goal/plan.md\n";
+      let prepPrompt = "";
+      harness.script(
+        (req, ctx) => {
+          prepPrompt = req.prompt;
+          const data = JSON.parse(
+            fs.readFileSync(path.join(runtime.store.goalDir, dataRel), "utf8"),
+          );
+          expect(data.tasks).toContainEqual(
+            expect.objectContaining({ slug: "alpha", status: "ready" }),
+          );
+          fs.writeFileSync(
+            path.join(runtime.store.goalDir, packRel),
+            prepared,
+            "utf8",
+          );
+          ctx.writeOutcome(outcome({ summary: "prepared the index" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: PACK_PREP_STEP }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          expect(
+            fs.readFileSync(path.join(runtime.store.goalDir, packRel), "utf8"),
+          ).toBe(prepared);
+          fs.appendFileSync(
+            path.join(runtime.store.goalDir, "plan.md"),
+            "\n## architect edit\n",
+            "utf8",
+          );
+          ctx.writeOutcome(
+            outcome({ summary: "planned", decision: "continue" }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "architect" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
+
+      const boundary = await runBoundary(runtime, {
+        relaunch: false,
+        iteration: 2,
+      });
+      expect(boundary.decision).toBe("continue");
+      expect(boundary.packPath).toBe(packRel);
+      expect(
+        fs.readFileSync(path.join(runtime.store.goalDir, packRel), "utf8"),
+      ).toBe(prepared);
+      expect(prepPrompt).toContain("You prepare the context pack");
+      expect(prepPrompt).toContain(path.join(runtime.store.goalDir, dataRel));
+      expect(prepPrompt).toContain(path.join(runtime.store.goalDir, packRel));
+      const records = await runtime.store.listRecords();
+      const prep = records.find(
+        (record) => record.step === PACK_PREP_STEP && record.actor === "agent",
+      );
+      expect(prep?.alias).toBe("pack-preparer");
+      expect(prep?.outcome?.status).toBe("done");
+      expect(
+        records.some((record) => record.step === "packprep-fallback"),
+      ).toBe(false);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 90_000);
+
+  it("falls back to the script render and records a glitch when the preparer writes no pack", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeRuntimeTask(runtime, task("alpha"));
+      fs.writeFileSync(
+        path.join(runtime.store.goalDir, "plan.md"),
+        PLAN,
+        "utf8",
+      );
+      harness.script(
+        (req, ctx) => {
+          fs.appendFileSync(
+            path.join(runtime.store.goalDir, "plan.md"),
+            "\n## architect edit\n",
+            "utf8",
+          );
+          ctx.writeOutcome(
+            outcome({ summary: "planned", decision: "continue" }),
+          );
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "architect" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          ctx.writeOutcome(outcome({ summary: "no tasks to file" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
+
+      const boundary = await runBoundary(runtime, {
+        relaunch: false,
+        iteration: 2,
+      });
+      expect(boundary.decision).toBe("continue");
+      const pack = fs.readFileSync(
+        path.join(runtime.store.goalDir, contextPackRelPath(2)),
+        "utf8",
+      );
+      expect(pack).toContain("# Context pack — goal demo, iteration 2");
+      expect(pack).toContain("## Task status");
+      expect(pack).toContain("| alpha |");
+      const fallback = (await runtime.store.listRecords()).find(
+        (record) => record.step === "packprep-fallback",
+      );
+      expect(fallback?.ok).toBe(false);
+      expect(fallback?.launchKind).toBe("glitch");
+      expect(fallback?.cause).toContain("turn wrote no pack");
+      expect(fallback?.cause).toContain("script render");
+    } finally {
+      cleanupFlowRepo(repo);
     }
   }, 90_000);
 
@@ -423,6 +575,7 @@ const PLAN_REVIEW_ALIASES = {
   steward: { harness: "fake", model: "fake-steward" },
   "plan-checker": { harness: "fake", model: "fake-check" },
   "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+  "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
 };
 
 describe("boundary plan review", () => {

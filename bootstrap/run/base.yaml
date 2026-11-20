@@ -66,6 +66,11 @@ aliases:
     model: opencode/deepseek-v4.1-flash-free
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
+  pack-preparer:
+    harness: opencode
+    model: opencode/deepseek-v4.1-flash-free
+    fallbacks:
+      - model: opencode-go/deepseek-v4.1-flash
   escalation:
     harness: omp
     model: anthropic/claude-sonnet-5-5

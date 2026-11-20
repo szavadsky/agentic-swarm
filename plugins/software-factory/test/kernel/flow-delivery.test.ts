@@ -621,7 +621,9 @@ describe("standalone upscope", () => {
       expect(architect?.iteration).toBe(2);
       expect((await stateOf(goal.goalDir)).goal).toBe("done");
       expect(first.calls).toHaveLength(3);
-      expect(second.calls).toHaveLength(2);
+      // digest, the pack preparer and the architect: iteration 2 prepares its
+      // index from the script data before the consult.
+      expect(second.calls).toHaveLength(3);
     } finally {
       cleanupGoal(goal);
     }

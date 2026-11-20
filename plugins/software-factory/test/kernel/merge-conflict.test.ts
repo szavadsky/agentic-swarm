@@ -190,6 +190,7 @@ describe("merge conflicts", () => {
         steward: { harness: "fake", model: "fake-steward" },
         "plan-checker": { harness: "fake", model: "fake-check" },
         "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+        "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
       },
     });
     const checkout = goalCheckout(repo, goal);
@@ -233,6 +234,7 @@ describe("merge conflicts", () => {
         steward: { harness: "fake", model: "fake-steward" },
         "plan-checker": { harness: "fake", model: "fake-check" },
         "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+        "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
       },
     });
     const checkout = goalCheckout(repo, goal);
@@ -288,6 +290,7 @@ describe("steward", () => {
     steward: { harness: "fake", model: "fake-steward" },
     "plan-checker": { harness: "fake", model: "fake-check" },
     "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+    "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
   };
 
   it("skips (and records) when the wave merges clean and green", async () => {

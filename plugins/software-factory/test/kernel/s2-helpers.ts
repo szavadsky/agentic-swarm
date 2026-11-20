@@ -109,6 +109,20 @@ export function whenTurn(want: {
   };
 }
 
+const DEFAULT_ALIASES: NonNullable<FlowRepoOptions["aliases"]> = {
+  architect: { harness: "fake", model: "fake-architect" },
+  pm: { harness: "fake", model: "fake-pm" },
+  digest: { harness: "fake", model: "fake-digest" },
+  implementer: { harness: "fake", model: "fake-impl" },
+  "implementer-b": { harness: "fake", model: "fake-impl-b" },
+  researcher: { harness: "fake", model: "fake-research" },
+  reviewer: { harness: "fake", model: "fake-review" },
+  steward: { harness: "fake", model: "fake-steward" },
+  "plan-checker": { harness: "fake", model: "fake-check" },
+  "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+  "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
+};
+
 export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
   const goal = opts.goal ?? "demo";
   const repo = createTmpRepo();
@@ -129,18 +143,7 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
       ...(opts.identity ? { identity: opts.identity } : {}),
     }),
   );
-  const aliases = opts.aliases ?? {
-    architect: { harness: "fake", model: "fake-architect" },
-    pm: { harness: "fake", model: "fake-pm" },
-    digest: { harness: "fake", model: "fake-digest" },
-    implementer: { harness: "fake", model: "fake-impl" },
-    "implementer-b": { harness: "fake", model: "fake-impl-b" },
-    researcher: { harness: "fake", model: "fake-research" },
-    reviewer: { harness: "fake", model: "fake-review" },
-    steward: { harness: "fake", model: "fake-steward" },
-    "plan-checker": { harness: "fake", model: "fake-check" },
-    "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
-  };
+  const aliases = opts.aliases ?? DEFAULT_ALIASES;
   repo.writeFile(
     ".factory/run.yaml",
     yaml.stringify({

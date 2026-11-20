@@ -10,7 +10,10 @@ and on its step's next alternate. When open work remains, the boundary runs
 the plan checker first: a `progress` verdict resumes dispatch without a
 consult, bounded by `limits.planCheckRounds`; the consult runs on `architect`,
 when nothing is open, or when the bound is hit. State is derived from task
-files and append-only records; there is no state file to repair.
+files and append-only records; there is no state file to repair. After the
+first iteration a pack-preparer turn turns the script's full status data into
+the iteration's index pack; when it fails, the script render is the pack and
+the fallback is recorded as a glitch.
 
 ## Commands
 
@@ -104,6 +107,7 @@ boundary:                       # the kernel turns outside any task flow
   architect: { prompt: architect, alias: architect, repairPrompt: architect-repair, deliverable: "plan edit or stop decision" }
   digest: { prompt: digest, alias: digest }
   front: { prompt: front, alias: pm, deliverable: "class, task, and pack" }
+  packprep: { prompt: pack-preparer, alias: pack-preparer, deliverable: "context pack" }
   plancheck: { prompt: plan-checker, alias: plan-checker, deliverable: "plan verdict" }
   pm: { prompt: pm, alias: pm, deliverable: "task files" }
   steward: { prompt: steward, alias: steward, deliverable: "merge resolution" }

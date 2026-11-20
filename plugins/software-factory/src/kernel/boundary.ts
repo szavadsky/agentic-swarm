@@ -11,9 +11,12 @@ import {
 } from "./architect-session.js";
 import { recordedBaseGates } from "./baseline.js";
 import {
+  type ContextPackInput,
+  contextDataRelPath,
   contextPackRelPath,
   forwardedConcerns,
   readyAging,
+  renderContextData,
   renderContextPack,
   type SpikeFinding,
   shallowCodeMap,
@@ -41,6 +44,7 @@ import {
 } from "./mailbox.js";
 import { next } from "./next.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
+import { PACK_PREP_STEP, runPackPreparer } from "./pack-prep.js";
 import {
   consultGate,
   latestPlanCheck,
@@ -446,7 +450,7 @@ export async function runBoundary(
     const planText = fs.existsSync(planPath)
       ? fs.readFileSync(planPath, "utf8")
       : "";
-    const pack = renderContextPack({
+    const packInput: ContextPackInput = {
       goal: path.basename(runtime.paths.goalDir),
       iteration,
       intentPath: path.join(runtime.store.goalDir, "intent.md"),
@@ -475,8 +479,33 @@ export async function runBoundary(
       planCheck: latestPlanCheck(records),
       planReview: latestPlanReview(records),
       agedReady: aged,
-    });
-    await runtime.store.writeFile(packRel, pack);
+    };
+    const dataRel = contextDataRelPath(iteration);
+    await runtime.store.writeFile(dataRel, renderContextData(packInput));
+    // After the first iteration a cheap agent turns the full status into the
+    // index. The script render is the first iteration's pack, when no front
+    // wrote one, and every failed preparer's fallback.
+    const prepFailure =
+      iteration > 1
+        ? await runBoundaryTurn(
+            runtime,
+            { iteration, step: PACK_PREP_STEP },
+            () => runPackPreparer(runtime, { iteration, packRel, dataRel }),
+          )
+        : undefined;
+    if (iteration === 1 || prepFailure !== undefined) {
+      await runtime.store.writeFile(packRel, renderContextPack(packInput));
+      if (prepFailure !== undefined) {
+        await runtime.store.appendRecord(
+          scriptMeta(iteration, "packprep-fallback"),
+          {
+            ok: false,
+            launchKind: "glitch",
+            cause: `pack preparer failed: ${prepFailure}; the script render is this iteration's pack`,
+          },
+        );
+      }
+    }
   }
 
   const tasksBefore = await taskSnapshot(runtime.store.goalDir);

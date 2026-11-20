@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import {
   forwardedConcerns,
   readyAging,
+  renderContextData,
   renderContextPack,
   shallowCodeMap,
 } from "../../src/kernel/context-pack.js";
@@ -152,6 +153,89 @@ describe("context pack", () => {
     for (const t of many) expect(pack).toContain(`| ${t.slug} |`);
     expect(pack).toContain("| bulk-119 |");
     expect(pack).toContain("src/mod0/ — 17 files");
+  });
+
+  it("writes every derived fact as data, with no code-map cap", () => {
+    const many = Array.from({ length: 120 }, (_, i) =>
+      task(`bulk-${String(i).padStart(3, "0")}`, {
+        deps: i === 0 ? [] : [`bulk-${String(i - 1).padStart(3, "0")}`],
+      }),
+    );
+    const codeMap = shallowCodeMap(
+      Array.from({ length: 60 }, (_, i) => `mod${i}/file${i}.ts`),
+    );
+    expect(codeMap).toHaveLength(60);
+    const records = [
+      script(1, { step: "park", slug: "bulk-003", cause: "round limit" }),
+    ];
+    const data = JSON.parse(
+      renderContextData({
+        goal: "demo",
+        iteration: 4,
+        intentPath: "/goal/intent.md",
+        planPath: "/goal/plan.md",
+        checkout: "/wt/demo",
+        integrationBranch: "factory/demo",
+        headHash: "abcdef1234567890",
+        recordsDir: "/goal/records",
+        tasksDir: "/goal/tasks",
+        previousSummary: "/goal/iterations/3/summary.md",
+        digestPath: "/goal/iterations/4/digest.md",
+        runConfigPath: "/repo/bootstrap/run/self-quota.yaml",
+        tasks: many,
+        state: derive(many, records),
+        codeMap,
+        steers: [
+          {
+            id: "s1",
+            file: "s1.md",
+            relPath: "mailbox/inbox/s1.md",
+            text: "keep the API",
+            hash: "abc",
+            urgent: true,
+          },
+          {
+            id: "s2",
+            file: "s2.md",
+            relPath: "mailbox/inbox/s2.md",
+            text: "hold the area",
+            hash: "def",
+            urgent: false,
+          },
+        ],
+        holds: [
+          { steer: "s1", slugs: [], goal: true },
+          { steer: "s2", slugs: ["bulk-050"], goal: false },
+        ],
+        setup: ["bun install"],
+        gates: [{ id: "test", command: "bun test" }],
+        forwarded: [],
+        debts: [],
+      }),
+    );
+    expect(data.tasks).toHaveLength(120);
+    expect(data.tasks.at(-1)).toMatchObject({
+      slug: "bulk-119",
+      status: "pending",
+    });
+    expect(data.parked).toEqual([{ slug: "bulk-003", cause: "round limit" }]);
+    expect(data.codeMap).toEqual(codeMap);
+    expect(data.codeMap.join("\n")).not.toContain("more groups");
+    expect(data.paths.plan).toBe("/goal/plan.md");
+    expect(data.paths.runConfig).toBe("/repo/bootstrap/run/self-quota.yaml");
+    expect(data.steers).toEqual([
+      { id: "s1", path: "mailbox/inbox/s1.md", urgent: true, holds: "goal" },
+      {
+        id: "s2",
+        path: "mailbox/inbox/s2.md",
+        urgent: false,
+        holds: ["bulk-050"],
+      },
+    ]);
+    expect(data.infra).toEqual({
+      setup: ["bun install"],
+      gates: [{ id: "test", command: "bun test" }],
+    });
   });
 
   it("deduplicates forwarded concerns by fingerprint and drops fyi", () => {

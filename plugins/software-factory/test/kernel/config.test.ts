@@ -279,10 +279,17 @@ describe("three config layers", () => {
       "architect",
       "digest",
       "front",
+      "packprep",
       "plancheck",
       "pm",
       "steward",
     ]);
+    // The pack preparer runs on its own cheap alias.
+    expect(boundary.packprep).toEqual({
+      prompt: "pack-preparer",
+      alias: "pack-preparer",
+      deliverable: "context pack",
+    });
     expect(boundary.front).toEqual({
       prompt: "front",
       alias: "pm",

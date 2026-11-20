@@ -3,6 +3,7 @@ import {
   fakeTurnIdentity,
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
+import { PACK_PREP_STEP } from "../../src/kernel/pack-prep.js";
 import { PLAN_CHECK_STEP } from "../../src/kernel/plan-check.js";
 import { PLAN_REVIEW_STEP } from "../../src/kernel/plan-review.js";
 
@@ -12,7 +13,12 @@ const EMPTY = {
   concerns: [],
   forward: [],
 };
-const BACKGROUND_STEPS = new Set([PLAN_CHECK_STEP, PLAN_REVIEW_STEP, "digest"]);
+const BACKGROUND_STEPS = new Set([
+  PLAN_CHECK_STEP,
+  PLAN_REVIEW_STEP,
+  PACK_PREP_STEP,
+  "digest",
+]);
 
 /**
  * Every run config requires the full boundary vocabulary. Tests focused on
@@ -43,6 +49,16 @@ export function scriptKernelRoleFallbacks(harness: FakeHarness): void {
     },
     {
       when: (req) => fakeTurnIdentity(req).step === PLAN_REVIEW_STEP,
+      fallback: true,
+    },
+  );
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(EMPTY);
+      return fakeTurnResult(req);
+    },
+    {
+      when: (req) => fakeTurnIdentity(req).step === PACK_PREP_STEP,
       fallback: true,
     },
   );

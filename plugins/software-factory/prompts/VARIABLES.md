@@ -14,6 +14,7 @@ Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable
 | digest                  | `calibration`, `outcome`                                                                                                             |
 | steward                 | `clean-code`, `calibration`, `outcome`                                                                                               |
 | plan-checker            | `calibration`, `outcome`                                                                                                             |
+| pack-preparer           | `calibration`, `outcome`                                                                                                             |
 
 The shared definitions exist once as partials: `scope` (the predicted-area rule: out-of-area judgement, upscope condition, plan read-only), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract, shape rendered from the kernel outcome schema), `task-frontmatter` (the task-file frontmatter shape rendered from the kernel task schema, plus the configured task types and tiers; included by the authoring roles), `clean-code` (the code standard), `remarkable` (the remarkable definition), `spike-report-general` (what a spike's done-when says; included by `pm` and `architect-body`), `verdict` (which step each of `verdict` and `decision` belongs to, for review and architect steps) and the role bodies `implementer-body` and `architect-body` (everything before the role's turn block; a reviewer includes its author's body by role name, so the plan review reuses the reviewer template over `architect-body`).
 
@@ -238,6 +239,20 @@ wave-end steward and the in-flow resolve turn own one conflict ask.
 | `outcome_path`     | path where the outcome file must be written when the harness asks for a file                                                 |
 | `validate_cmd`     | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                                             |
 | `outcome_schema`   | outcome YAML skeleton from the kernel schema; renderer default                                                               |
+
+## pack-preparer.md
+
+| variable            | meaning                                                                                              |
+| ------------------- | ---------------------------------------------------------------------------------------------------- |
+| `iteration`         | 1-based iteration number of this launch                                                              |
+| `context_data_path` | the script's full derived status for this iteration as JSON; the preparer's input                    |
+| `pack_path`         | path of the context pack to write; the one artifact the turn authors (the outcome file is the other) |
+| `intent_path`       | path to the goal's `intent.md`; a pointer, never pasted                                              |
+| `plan_path`         | path to the current plan; a pointer, never pasted                                                    |
+| `checkout`          | path to the stable goal checkout (integration worktree)                                              |
+| `outcome_path`      | path where the outcome file must be written when the harness asks for a file                         |
+| `validate_cmd`      | absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default                     |
+| `outcome_schema`    | outcome YAML skeleton from the kernel schema; renderer default                                       |
 
 ## delivery-repair.md
 

@@ -143,11 +143,14 @@ export interface ContextPackInput {
   agedReady?: ReadyAgingTask[];
 }
 
-const CODE_MAP_ENTRIES = 40;
-
 /** Goal-relative path the boundary renders an iteration's pack to. */
 export function contextPackRelPath(iteration: number): string {
   return `iterations/${iteration}/context-pack.md`;
+}
+
+/** Goal-relative path the script writes an iteration's full derived status to. */
+export function contextDataRelPath(iteration: number): string {
+  return `iterations/${iteration}/context-data.json`;
 }
 
 /** Goal-relative path an iteration's guaranteed summary is written to. */
@@ -376,6 +379,101 @@ export function renderContextPack(input: ContextPackInput): string {
   return lines.join("\n") + "\n";
 }
 
+/**
+ * The derived state behind the pack as JSON: every task, hold, debt and
+ * pointer, with no cap. The pack preparer reads it to decide what the index
+ * keeps in full and what it names with a pointer and a summary; the fallback
+ * render above consumes the same input.
+ */
+export function renderContextData(input: ContextPackInput): string {
+  const statuses = [...input.tasks]
+    .sort((a, b) => a.slug.localeCompare(b.slug))
+    .map((task) => {
+      const state = input.state.tasks[task.slug];
+      return {
+        slug: task.slug,
+        title: task.title,
+        scope: task.scope,
+        status: input.running?.includes(task.slug)
+          ? "running"
+          : (state?.status ?? "unknown"),
+        kind: task.kind,
+        round: state?.round ?? 1,
+        turns: state?.turns ?? 0,
+        deps: task.deps,
+        commit: state?.commit ?? null,
+        cause: state?.cause ?? null,
+      };
+    });
+  const parked = statuses
+    .filter((task) => task.status === "parked")
+    .map((task) => ({
+      slug: task.slug,
+      cause: task.cause ?? "no recorded cause",
+    }));
+  const pending = statuses
+    .filter((task) => task.status === "pending" || task.status === "ready")
+    .map((task) => {
+      const waitsOn = task.deps.filter((dep) => {
+        const status = input.state.tasks[dep]?.status;
+        return status !== "merged" && status !== "finished";
+      });
+      return { slug: task.slug, waitsOn };
+    });
+  const heldBySteer = new Map(
+    (input.holds ?? []).map((hold) => [hold.steer, hold]),
+  );
+  const steers = input.steers.map((steer) => {
+    const hold = heldBySteer.get(steer.id);
+    return {
+      id: steer.id,
+      path: steer.relPath,
+      urgent: steer.urgent,
+      holds: hold ? (hold.goal ? "goal" : [...hold.slugs].sort()) : [],
+    };
+  });
+  const data = {
+    goal: input.goal,
+    iteration: input.iteration,
+    paths: {
+      intent: input.intentPath,
+      plan: input.planPath,
+      checkout: input.checkout,
+      integrationBranch: input.integrationBranch,
+      headHash: input.headHash,
+      records: input.recordsDir,
+      tasks: input.tasksDir,
+      previousSummary: input.previousSummary ?? null,
+      previousDigest: input.digestPath ?? null,
+      runConfig: input.runConfigPath ?? null,
+    },
+    tasks: statuses,
+    parked,
+    pending,
+    agedReady: input.agedReady ?? null,
+    planCheck: input.planCheck ?? null,
+    planReview: input.planReview ?? null,
+    forwarded: input.forwarded,
+    debts: input.debts,
+    openRecords: input.openRecords ?? [],
+    codeMap: input.codeMap ?? [],
+    infra: { setup: input.setup, gates: input.gates },
+    baseGates: input.baseGates ?? null,
+    steers,
+    pmAnswers: input.pmAnswers ?? [],
+    spikeFindings: [...(input.spikeFindings ?? [])].sort((a, b) =>
+      a.slug.localeCompare(b.slug),
+    ),
+    taskFiles: [...input.tasks]
+      .sort((a, b) => a.slug.localeCompare(b.slug))
+      .map((task) => ({
+        slug: task.slug,
+        path: `${input.tasksDir}/${task.slug}.md`,
+      })),
+  };
+  return `${JSON.stringify(data, null, 2)}\n`;
+}
+
 /** Boundary and architecture roles run between segments and never start a task turn. */
 const KERNEL_STEP_IDS: ReadonlySet<string> = new Set(KERNEL_STEPS);
 
@@ -473,11 +571,9 @@ export function readyAging(input: ReadyAgingInput): ReadyAgingTask[] {
 /**
  * Groups repository-relative paths into a shallow directory index. The
  * architect gets shapes and paths, never file bodies; scouting reads them.
+ * Every group is kept: the pack preparer decides what the index shows.
  */
-export function shallowCodeMap(
-  paths: string[],
-  maxEntries = CODE_MAP_ENTRIES,
-): string[] {
+export function shallowCodeMap(paths: string[]): string[] {
   const counts = new Map<string, number>();
   for (const raw of paths) {
     const clean = raw.replace(/\\/g, "/").replace(/^\.\//, "");
@@ -487,15 +583,9 @@ export function shallowCodeMap(
     const key = parts.length === 1 ? "(root)" : `${parts[0]}/${parts[1]}/`;
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
-  const entries = [...counts.entries()].sort((a, b) =>
-    a[0].localeCompare(b[0]),
-  );
-  const kept = entries
-    .slice(0, maxEntries)
+  return [...counts.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([key, n]) => `${key} — ${n} file${n === 1 ? "" : "s"}`);
-  if (entries.length > maxEntries)
-    kept.push(`… ${entries.length - maxEntries} more groups`);
-  return kept;
 }
 
 function calibrationRank(calibration: string): number {

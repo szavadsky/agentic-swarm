@@ -54,6 +54,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
       steward: { harness: "fake", model: "fake-steward" },
       "plan-checker": { harness: "fake", model: "fake-check" },
       "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+      "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
       front: { harness: "fake", model: "fake-front" },
     },
     limits: {

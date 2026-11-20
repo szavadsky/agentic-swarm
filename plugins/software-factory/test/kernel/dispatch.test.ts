@@ -218,6 +218,7 @@ describe("dispatch admission", () => {
         steward: { harness: "fake", model: "fake-steward" },
         "plan-checker": { harness: "fake", model: "fake-check" },
         "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+        "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
       },
     });
     expect(run.max).toBe(1);
@@ -241,6 +242,7 @@ describe("dispatch admission", () => {
         steward: { harness: "fake", model: "fake-steward" },
         "plan-checker": { harness: "fake", model: "fake-check" },
         "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+        "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
         "tier-a": { harness: "fake", model: "fake-a", subscription: "pool-a" },
         "tier-b": { harness: "fake", model: "fake-b", subscription: "pool-b" },
       },
@@ -265,6 +267,7 @@ describe("dispatch admission", () => {
         steward: { harness: "fake", model: "fake-steward" },
         "plan-checker": { harness: "fake", model: "fake-check" },
         "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+        "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
       },
     });
     expect(run.max).toBe(1);

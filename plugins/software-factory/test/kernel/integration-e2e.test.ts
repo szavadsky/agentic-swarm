@@ -111,6 +111,7 @@ function runYaml(repoDir: string): string {
     "  steward: { harness: fake, model: fake-steward }",
     "  plan-checker: { harness: fake, model: fake-check }",
     "  plan-reviewer: { harness: fake, model: fake-plan-review }",
+    "  pack-preparer: { harness: fake, model: fake-pack-prep }",
     "  digest: { harness: fake, model: fake-digest }",
     "limits: { iterations: 1, concurrency: { overall: 1 } }",
     `worktreeRoot: ../${base}-wt`,
@@ -377,7 +378,7 @@ describe("cross-slice E2E — init, steer and three launches through S2/S3/S4", 
       expect(summaryOf(goalDir, 2)).toContain("merged: beta2, gamma");
       const two = await metricsOf(goalDir);
       expect(two.iterations.map((i) => i.n)).toEqual([1, 2]);
-      expect(two.iterations[1]!.turns).toBe(9);
+      expect(two.iterations[1]!.turns).toBe(10);
       expect(two.iterations[1]!.humanInterventions).toBe(1);
       expect(two.iterations[1]!.merged).toEqual(["beta2", "gamma"]);
       expect(two.totals.merged).toEqual(["alpha", "beta2", "gamma"]);
@@ -406,7 +407,7 @@ describe("cross-slice E2E — init, steer and three launches through S2/S3/S4", 
       ).toBe(true);
       const three = await metricsOf(goalDir);
       expect(three.iterations.map((i) => i.n)).toEqual([1, 2, 3]);
-      expect(three.iterations[2]!.turns).toBe(2);
+      expect(three.iterations[2]!.turns).toBe(3);
       expect(three.totals.parked).toEqual(["beta"]);
       expect(three.totals.loopIncidents).toBe(0);
     } finally {

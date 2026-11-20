@@ -54,6 +54,7 @@ describe("front prompt handoff", () => {
       steward: { harness: "fake", model: "fake-steward" },
       "plan-checker": { harness: "fake", model: "fake-check" },
       "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+      "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
     };
     const { repo, goalDir } = setupFlowRepo({
       aliases,
@@ -127,6 +128,7 @@ describe("trivial session resume", () => {
     steward: { harness: "fake", model: "fake-steward" },
     "plan-checker": { harness: "fake", model: "fake-check" },
     "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+    "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
   };
 
   function session(id: string, cwd: string, harness = "fake"): SessionRef {

@@ -396,6 +396,7 @@ export const BOUNDARY_STEPS = [
   "architect",
   "digest",
   "front",
+  "packprep",
   "plancheck",
   "pm",
   "steward",

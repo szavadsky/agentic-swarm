@@ -39,6 +39,7 @@ const ALIASES: FlowRepoOptions["aliases"] = {
   steward: { harness: "fake", model: "fake-steward" },
   "plan-checker": { harness: "fake", model: "fake-check" },
   "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+  "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
 };
 
 const RESET = {
