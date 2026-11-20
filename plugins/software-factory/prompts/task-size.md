@@ -1,0 +1,1 @@
+One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.

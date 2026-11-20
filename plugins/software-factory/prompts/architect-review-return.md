@@ -8,7 +8,7 @@ The plan review raised technical concerns. This is your one turn on them, before
 
 - Address every technical finding: edit the plan, or leave the plan and say why in your summary. A finding you judge wrong is still answered, with your reason.
 - Use the plan notes where they improve the plan; they are advisory.
-- Mark every finding, 1..{{finding_count}}, in `planReviewMarks` — one `{finding, mark}` entry per number, `helpful` or `unhelpful`. `helpful` means it caught a real issue or changed the plan; `unhelpful` means it was wrong, stale or noise. Findings are advisory: you decide, and the mark records whether the finding helped, not whether you obeyed it.
+- Mark every finding, 1..{{finding_count}}, in `planReviewMarks`. {% include 'plan-review-marks' -%}
 - Edit the plan in place. The PM reads it right after you and never sees these findings.
 - No decision and no verdict this turn.
 

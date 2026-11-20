@@ -2,26 +2,26 @@
 
 Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable = render error; unknown filter = render error). `{{ name }}` interpolates one value; `{% include 'partial-name' %}` inlines `prompts/partial-name.md`. Every prompt is stable text up to its final `## This turn` block; turn variables live there so providers can cache the prefix, except the implementer's spike opening sentence, which names `report_path` before the body so the commit-first instruction is read first. Renderer defaults also appear above the block, so the prefix is stable only within one checkout and launch.
 
-| prompt                  | partials                                                                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| architect               | `architect-body` (`architect-assignment`, `architect-turn`, `plan-standard`, `architect-scope`), `calibration`, `outcome`, `verdict` |
-| front                   | `calibration`, `outcome`, `task-frontmatter`                                                                                         |
-| pm                      | `spike-report-general`, `calibration`, `outcome`, `task-frontmatter`                                                                 |
-| implementer             | `implementer-body`, `clean-code`, `scope`, `calibration`, `outcome`                                                                  |
-| reviewer                | `<author>-body` (`implementer-body` by default), `review-<author>` duties, `review-<author>-turn` inputs, `verdict`                  |
-| review-architect        | `architect-assignment`, `plan-standard`, `plan-rules`, `outcome`                                                                     |
-| architect-review-return | `architect-assignment`, `calibration`, `outcome`                                                                                     |
-| digest                  | `calibration`, `outcome`                                                                                                             |
-| steward                 | `clean-code`, `calibration`, `outcome`                                                                                               |
-| plan-checker            | `calibration`, `outcome`                                                                                                             |
-| pack-preparer           | `calibration`, `outcome`                                                                                                             |
+| prompt                  | partials                                                                                                                                                                |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| architect               | `architect-body` (`architect-assignment`, `architect-turn`, `plan-standard` (`task-size`), `architect-scope`), `plan-review-marks`, `calibration`, `outcome`, `verdict` |
+| front                   | `task-size`, `plan-read-only`, `calibration`, `outcome`, `task-frontmatter`                                                                                             |
+| pm                      | `task-size`, `plan-read-only`, `spike-report-general`, `calibration`, `outcome`, `task-frontmatter`                                                                     |
+| implementer             | `implementer-body`, `clean-code`, `scope` (`plan-read-only`), `calibration`, `outcome`                                                                                  |
+| reviewer                | `<author>-body` (`implementer-body` by default), `review-<author>` duties, `review-<author>-turn` inputs, `verdict`                                                     |
+| review-architect        | `architect-assignment`, `plan-standard` (`task-size`), `plan-rules`, `finding-standards`, `outcome`                                                                     |
+| architect-review-return | `architect-assignment`, `plan-review-marks`, `calibration`, `outcome`                                                                                                   |
+| digest                  | `calibration`, `outcome`                                                                                                                                                |
+| steward                 | `clean-code`, `calibration`, `outcome`                                                                                                                                  |
+| plan-checker            | `calibration`, `outcome`                                                                                                                                                |
+| pack-preparer           | `calibration`, `outcome`                                                                                                                                                |
 
-The shared definitions exist once as partials: `scope` (the predicted-area rule: out-of-area judgement, upscope condition, plan read-only), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract, shape rendered from the kernel outcome schema), `task-frontmatter` (the task-file frontmatter shape rendered from the kernel task schema, plus the configured task types and tiers; included by the authoring roles), `clean-code` (the code standard), `remarkable` (the remarkable definition), `spike-report-general` (what a spike's done-when says; included by `pm` and `architect-body`), `verdict` (which step each of `verdict` and `decision` belongs to, for review and architect steps) and the role bodies `implementer-body` and `architect-body` (everything before the role's turn block; a reviewer includes its author's body by role name, so the plan review reuses the reviewer template over `architect-body`).
+The shared definitions exist once as partials: `scope` (the predicted-area rule: out-of-area judgement, upscope condition; includes `plan-read-only`), `plan-read-only` (the plan, intent, other task files and records are read-only), `task-size` (what one task is: one implementer session, one seam, one reviewable diff, one done-when, and the split/merge criteria; included by `front`, `plan-standard` and `pm`), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract, shape rendered from the kernel outcome schema), `task-frontmatter` (the task-file frontmatter shape rendered from the kernel task schema, plus the configured task types and tiers; included by the authoring roles), `clean-code` (the code standard), `remarkable` (the remarkable definition), `finding-standards` (the no-praise, no-restating, no-taste rule shared by both reviews), `plan-review-marks` (the plan-review mark meaning, shared by the architect's turn and return), `spike-report-general` (what a spike's done-when says; included by `pm` and `architect-body`), `verdict` (which step each of `verdict` and `decision` belongs to, for review and architect steps) and the role bodies `implementer-body` and `architect-body` (everything before the role's turn block; a reviewer includes its author's body by role name, so the plan review reuses the reviewer template over `architect-body`).
 
 The architect's body is assembled from fragments so a reviewer can share only
 the assignment: `architect-assignment` (the role and its bounds),
 `architect-turn` (the consult's turn order), `plan-standard` (what the plan
-carries and its granularity), `plan-rules` (debt, parked work and ADRs) and
+carries and its granularity, with `task-size`), `plan-rules` (debt, parked work and ADRs) and
 `architect-scope` (tiers, steers and calibration). The plan reviewer includes
 `architect-assignment`, `plan-standard` and `plan-rules`; the architect's
 return includes `architect-assignment`.

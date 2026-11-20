@@ -614,8 +614,8 @@ describe("prompt debloat", () => {
     const rendered = renderedPrompts();
     const keeps: [string, string][] = [
       ["architect", "Nothing asks mid-flight"],
-      ["architect", "plan the road to completion as far as uncertainty allows"],
-      ["front", "no design decision, no ordering and no review"],
+      ["architect", "Plan the road to completion as far as uncertainty allows"],
+      ["front", "no design decision and no review"],
       ["front", "On `trivial` or `task`, carry the area and risks"],
       ["pm", "Write one hold file per steer"],
       ["pm", "Only an escalated ask may put a question"],
@@ -772,7 +772,7 @@ describe("scope as predicted area", () => {
       expect(rendered).not.toContain("Touch only files");
     }
     expect(implementer).toContain(
-      "Fix every finding from the previous review round that the done-when covers, wherever it lives",
+      "Fix every review finding the done-when covers, wherever it lives",
     );
     expect(reviewer).toContain(
       "judge out-of-area changes by the done-when, not by location",
@@ -780,17 +780,69 @@ describe("scope as predicted area", () => {
     expect(reviewer).not.toContain("Scope creep");
   });
 
-  it("carries an area, not file globs, in the authoring roles", () => {
+  it("formalizes area in the PM, not in the plan bullet", () => {
     const architect = library().render("architect", ROLES.architect!);
-    expect(architect).toContain("the predicted area this task works in");
-    expect(architect).toContain("must declare disjoint areas");
+    expect(architect).not.toContain("the predicted area this task works in");
+    expect(architect).not.toContain("must declare disjoint areas");
     expect(architect).not.toContain("must not overlap in scope");
     const pm = library().render("pm", ROLES.pm!);
-    expect(pm).toContain("the predicted area, from the task's stated area");
+    expect(pm).toContain(
+      "Area — `scope`: the predicted area at module granularity",
+    );
+    expect(pm).toContain("Tasks that run together get disjoint areas");
+    expect(pm).toContain("the predicted area you formalized");
+    expect(pm).not.toContain("from the task's stated area");
     expect(pm).not.toContain("globs the task may touch");
     const front = library().render("front", ROLES.front!);
     expect(front).toContain("`scope` (the predicted area)");
     expect(front).not.toContain("globs the task may touch");
+  });
+});
+
+describe("task size", () => {
+  it("defines one task once and includes it in front, architect and plan review", () => {
+    const definition =
+      "one implementer session, one seam, one reviewable diff, one done-when";
+    const split =
+      "Split when a done-when needs two independent observables or crosses two interface seams";
+    for (const role of ["front", "architect", "review-architect"] as const) {
+      const rendered = library().render(role, ROLES[role]!);
+      expect(rendered.split(definition).length - 1, role).toBe(1);
+      expect(rendered.split(split).length - 1, role).toBe(1);
+    }
+  });
+});
+
+describe("architect bullet", () => {
+  it("asks for what, why, done-when and an interface or approach only when he has one", () => {
+    const architect = library().render("architect", ROLES.architect!);
+    expect(architect).toContain("1. What and why — two lines.");
+    expect(architect).toContain(
+      "2. Done-when — observable behaviour or a command.",
+    );
+    expect(architect).toContain(
+      "3. Interface or approach — only when you have one",
+    );
+    expect(architect).not.toContain(
+      "Area — the predicted area this task works in",
+    );
+    expect(architect).not.toContain("Non-obvious edge cases that must hold.");
+    expect(architect).not.toContain("Ordering and what must not be touched");
+    expect(architect).toContain(
+      "The PM derives the area, the edge cases and the dependency order",
+    );
+  });
+});
+
+describe("PM formalization", () => {
+  it("owns area, edges and order from the short bullet", () => {
+    const pm = library().render("pm", ROLES.pm!);
+    expect(pm).toContain("Edges — the non-obvious cases the done-when implies");
+    expect(pm).toContain(
+      "Order — `deps`: the tasks the bullet names as interfaces or predecessors",
+    );
+    expect(pm).toContain("per the order above");
+    expect(pm).toContain("the edges and the order you formalized");
   });
 });
 
@@ -891,43 +943,78 @@ describe("prompt structure", () => {
 });
 
 const SINGLE_DEFINITION_WORDS = 8;
+/** A repeated rule hides in a clause of two differently worded sentences. */
+const CLAUSE_BOUNDARY = /[;:—–()]| - /;
 
-function promptSentences(text: string): string[] {
+function promptLines(text: string): string[] {
   const stripped = text
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/\{\{[\s\S]*?\}\}/g, " ")
     .replace(/\{%[\s\S]*?%\}/g, " ");
+  return stripped
+    .split("\n")
+    .map((line) =>
+      line.replace(/^\s*(#{1,6}\s+|\d+[.)]\s+|[-*]\s+)/, "").trim(),
+    )
+    .filter(Boolean);
+}
+
+function longEnough(part: string): boolean {
+  return part.split(/\s+/).length >= SINGLE_DEFINITION_WORDS;
+}
+
+function normalizePart(part: string): string {
+  return part
+    .replace(/[`*["\]]/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s.;:,—–-]+|[\s.;:,—–-]+$/g, "")
+    .toLowerCase();
+}
+
+function promptSentences(text: string): string[] {
   const sentences: string[] = [];
-  for (const line of stripped.split("\n")) {
-    const cleaned = line
-      .replace(/^\s*(#{1,6}\s+|\d+[.)]\s+|[-*]\s+)/, "")
-      .trim();
-    if (!cleaned) continue;
-    for (const part of cleaned.split(/(?<=[.!?])\s+/)) {
-      const sentence = part.replace(/\s+/g, " ").trim().toLowerCase();
-      if (sentence && sentence.split(/\s+/).length >= SINGLE_DEFINITION_WORDS) {
-        sentences.push(sentence);
-      }
+  for (const line of promptLines(text)) {
+    for (const part of line.split(/(?<=[.!?])\s+/)) {
+      const sentence = normalizePart(part);
+      if (sentence && longEnough(sentence)) sentences.push(sentence);
     }
   }
   return sentences;
 }
 
+function promptClauses(text: string): string[] {
+  const clauses: string[] = [];
+  for (const line of promptLines(text)) {
+    for (const sentence of line.split(/(?<=[.!?])\s+/)) {
+      for (const part of sentence.split(CLAUSE_BOUNDARY)) {
+        const clause = normalizePart(part);
+        if (clause && longEnough(clause)) clauses.push(clause);
+      }
+    }
+  }
+  return clauses;
+}
+
+/** Sentences and the clauses inside them; a rule must define any of them once. */
+function promptUnits(text: string): string[] {
+  return [...new Set([...promptSentences(text), ...promptClauses(text)])];
+}
+
 function internalRepeats(
   rendered: Map<string, string>,
   allowed: Record<string, string[]>,
-): { sentence: string; holders: string[] }[] {
-  const repeats: { sentence: string; holders: string[] }[] = [];
+): { unit: string; holders: string[] }[] {
+  const repeats: { unit: string; holders: string[] }[] = [];
   for (const [role, text] of rendered) {
     const seen = new Set<string>();
     const dupes = new Set<string>();
-    for (const sentence of promptSentences(text)) {
-      if (seen.has(sentence)) dupes.add(sentence);
-      seen.add(sentence);
+    for (const unit of promptUnits(text)) {
+      if (seen.has(unit)) dupes.add(unit);
+      seen.add(unit);
     }
-    for (const sentence of dupes) {
-      if (!(allowed[role] ?? []).includes(sentence)) {
-        repeats.push({ sentence, holders: [role, role] });
+    for (const unit of dupes) {
+      if (!(allowed[role] ?? []).includes(unit)) {
+        repeats.push({ unit, holders: [role, role] });
       }
     }
   }
@@ -937,31 +1024,31 @@ function internalRepeats(
 function crossFragmentRepeats(
   fragments: Map<string, string>,
   allowed: Record<string, string[]> = {},
-): { sentence: string; holders: string[] }[] {
+): { unit: string; holders: string[] }[] {
   const holders = new Map<string, string[]>();
   for (const [name, text] of fragments) {
-    for (const sentence of new Set(promptSentences(text))) {
-      const list = holders.get(sentence) ?? [];
+    for (const unit of promptUnits(text)) {
+      const list = holders.get(unit) ?? [];
       list.push(name);
-      holders.set(sentence, list);
+      holders.set(unit, list);
     }
   }
   return [...holders]
     .filter(([, names]) => names.length > 1)
     .filter(
-      ([sentence, names]) =>
-        !names.some((name) => (allowed[name] ?? []).includes(sentence)),
+      ([unit, names]) =>
+        !names.some((name) => (allowed[name] ?? []).includes(unit)),
     )
-    .map(([sentence, holders]) => ({ sentence, holders }));
+    .map(([unit, names]) => ({ unit, holders: names }));
 }
 
 describe("prompt single definitions", () => {
-  // Sentences (normalized, 8+ words) allowed to repeat, keyed by fragment
-  // name. A repeat is excused when any fragment or role holding it lists it
-  // here. Empty: every rule lives in exactly one fragment.
+  // Units (normalized, 8+ words, sentence or clause) allowed to repeat,
+  // keyed by fragment name. A repeat is excused when any fragment or role
+  // holding it lists it here. Empty: every rule lives in exactly one fragment.
   const ALLOWED_REPEATS: Record<string, string[]> = {};
 
-  it("defines every 8-word sentence once: no repeat inside one rendered prompt or across two fragments", () => {
+  it("defines every 8-word sentence and clause once: no repeat inside one rendered prompt or across two fragments", () => {
     const rendered = new Map<string, string>();
     for (const [role, vars] of Object.entries(ROLES)) {
       rendered.set(role, library().render(role, vars));
@@ -980,10 +1067,8 @@ describe("prompt single definitions", () => {
       ...crossFragmentRepeats(fragments, ALLOWED_REPEATS),
     ];
     expect(
-      repeats.map(
-        ({ sentence, holders }) => `${holders.join(" + ")}: ${sentence}`,
-      ),
-      "duplicated prompt sentences (move each to the fragment that owns it, or allow-list it)",
+      repeats.map(({ unit, holders }) => `${holders.join(" + ")}: ${unit}`),
+      "duplicated prompt sentences or clauses (move each to the fragment that owns it, or allow-list it)",
     ).toEqual([]);
   });
 
@@ -1000,7 +1085,26 @@ describe("prompt single definitions", () => {
         ].join("\n"),
       ),
     ).toEqual([
-      "a real rule sentence with more than eight words lives here plainly.",
+      "a real rule sentence with more than eight words lives here plainly",
+    ]);
+  });
+
+  it("catches a shared clause inside two differently worded sentences", () => {
+    const fragments = new Map([
+      [
+        "a",
+        "Keep the diff small; the shared clause says exactly what the rule needs to say.",
+      ],
+      [
+        "b",
+        "Keep the test real; the shared clause says exactly what the rule needs to say.",
+      ],
+    ]);
+    expect(crossFragmentRepeats(fragments)).toEqual([
+      {
+        unit: "the shared clause says exactly what the rule needs to say",
+        holders: ["a", "b"],
+      },
     ]);
   });
 
@@ -1011,14 +1115,13 @@ describe("prompt single definitions", () => {
     ]);
     expect(crossFragmentRepeats(fragments)).toEqual([
       {
-        sentence:
-          "a shared rule sentence with more than eight words lives here.",
+        unit: "a shared rule sentence with more than eight words lives here",
         holders: ["a", "b"],
       },
     ]);
     expect(
       crossFragmentRepeats(fragments, {
-        b: ["a shared rule sentence with more than eight words lives here."],
+        b: ["a shared rule sentence with more than eight words lives here"],
       }),
     ).toEqual([]);
   });
