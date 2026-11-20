@@ -49,6 +49,7 @@ function runYaml(repo: TmpRepo): string {
     "  implementer-b: { harness: fake, model: fake-impl-b }",
     "  researcher: { harness: fake, model: fake-research }",
     "  reviewer: { harness: fake, model: fake-review }",
+    "  qa: { harness: fake, model: fake-qa }",
     "  steward: { harness: fake, model: fake-steward }",
     "  plan-checker: { harness: fake, model: fake-check }",
     "  plan-reviewer: { harness: fake, model: fake-plan-review }",

@@ -132,9 +132,9 @@ describe("derive", () => {
     expect(state.tasks.work!.status).toBe("ready");
   });
 
-  it("sends a green implement turn to review and a red one back to implementation", () => {
+  it("sends a green implement turn to QA and a red one back to implementation", () => {
     const green = derive([task("a")], [implement(1), doneCheck(2)]);
-    expect(green.tasks.a!.phase).toBe("review");
+    expect(green.tasks.a!.phase).toBe("qa");
     expect(green.tasks.a!.round).toBe(1);
 
     const red = derive([task("a")], [implement(1), redCheck(2)]);
@@ -381,7 +381,7 @@ describe("derive", () => {
     expect(parked.tasks.a!.round).toBe(1);
   });
 
-  it("sends a reply-only fix round after changes back to review instead of parking", () => {
+  it("sends a reply-only fix round after changes back to QA instead of parking", () => {
     const answered = [
       implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
       script(2, { step: "commit", ok: true, commit: "c1", tree: "tree-1" }),
@@ -412,7 +412,7 @@ describe("derive", () => {
     expect(state.tasks.a!.gateFix).toBeUndefined();
 
     const reviewed = derive([task("a")], [...answered, doneCheck(7)]);
-    expect(reviewed.tasks.a!.phase).toBe("review");
+    expect(reviewed.tasks.a!.phase).toBe("qa");
     expect(reviewed.tasks.a!.round).toBe(2);
     expect(reviewed.tasks.a!.park).toBeUndefined();
     expect(reviewed.tasks.a!.loop).toBeUndefined();
@@ -662,7 +662,7 @@ describe("derive", () => {
     expect(r4.tasks.a!.park).toEqual(cause("gates: unit"));
   });
 
-  it("routes a task-checks fix turn to review on green, never skipping to merge", () => {
+  it("routes a task-checks fix turn to QA on green, never skipping to merge", () => {
     const state = derive(
       [task("a")],
       [
@@ -672,12 +672,12 @@ describe("derive", () => {
         doneCheck(4),
       ],
     );
-    expect(state.tasks.a!.phase).toBe("review");
+    expect(state.tasks.a!.phase).toBe("qa");
     expect(state.tasks.a!.round).toBe(1);
     expect(state.tasks.a!.park).toBeUndefined();
   });
 
-  it("routes a task-checks reroute after a merged-result failure back to review", () => {
+  it("routes a task-checks reroute after a merged-result failure back to QA", () => {
     const mergeFail = (seq: number): StepRecord =>
       script(seq, {
         step: "merge",
@@ -706,7 +706,7 @@ describe("derive", () => {
         doneCheck(8),
       ],
     );
-    expect(state.tasks.a!.phase).toBe("review");
+    expect(state.tasks.a!.phase).toBe("qa");
     expect(state.tasks.a!.round).toBe(1);
     expect(state.tasks.a!.park).toBeUndefined();
   });
@@ -839,7 +839,7 @@ describe("derive", () => {
         doneCheck(7),
       ],
     );
-    expect(state.tasks.a!.phase).toBe("review");
+    expect(state.tasks.a!.phase).toBe("qa");
     expect(state.tasks.a!.round).toBe(2);
     expect(state.tasks.a!.park).toBeUndefined();
   });
@@ -860,7 +860,7 @@ describe("derive", () => {
         ],
       );
       expect(state.tasks.a!.park).toBeUndefined();
-      expect(state.tasks.a!.phase).toBe("review");
+      expect(state.tasks.a!.phase).toBe("qa");
       // Truncated turns consume budget; timeout/crash infra stops always do.
       expect(state.tasks.a!.turns).toBe(stop.kind === "infra" ? 1 : 2);
     }

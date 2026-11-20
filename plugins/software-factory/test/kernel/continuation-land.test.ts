@@ -326,7 +326,7 @@ describe("kept-land", () => {
       expect(causeText(merge!.cause)).toContain("skipped merge-checks");
       expect(merge!.checks).toHaveLength(1);
       expect(merge!.checks![0]!.ok).toBe(true);
-      expect(workCalls(harness)).toHaveLength(2);
+      expect(workCalls(harness)).toHaveLength(3);
     } finally {
       rmCounter(counter);
       cleanupFlowRepo(repo);

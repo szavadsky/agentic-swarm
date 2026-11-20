@@ -65,6 +65,15 @@ aliases:
     timeouts:
       idleMs: 1200000
       wallMs: 3600000
+  qa:
+    harness: opencode
+    model: opencode/minimax-m3.1-flash-free
+    rotate: []
+    fallbacks:
+      - model: opencode-go/deepseek-v4.1-flash
+    timeouts:
+      idleMs: 1200000
+      wallMs: 3600000
   plan-reviewer:
     harness: opencode
     model: opencode/minimax-m3.1-flash-free

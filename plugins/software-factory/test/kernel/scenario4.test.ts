@@ -63,8 +63,8 @@ describe("KERNEL0 scenario 4 — infra stops and item turns", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("merged");
-      // Only the delivered turn and the review count: the rate stop is free.
-      expect(state.tasks.task!.turns).toBe(2);
+      // The delivered implement, QA and review count: the rate stop is free.
+      expect(state.tasks.task!.turns).toBe(3);
       expect(state.tasks.task!.round).toBe(1);
       expect(state.tasks.task!.park).toBeUndefined();
 

@@ -79,7 +79,7 @@ describe("KERNEL0 scenario 10 — review reply round-trip", () => {
       expect(implement[1]!.commit).toBe(implement[0]!.commit);
       expect(implement[1]!.outcome?.replies).toEqual(replies);
 
-      const reviewPrompt = harness.calls[3]!.prompt;
+      const reviewPrompt = harness.calls[5]!.prompt;
       expect(reviewPrompt).toContain(FINDINGS);
       for (const { finding, reply } of replies) {
         expect(reviewPrompt).toContain(`finding ${finding}`);

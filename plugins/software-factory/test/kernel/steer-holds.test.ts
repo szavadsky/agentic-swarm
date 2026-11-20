@@ -239,7 +239,7 @@ describe("mid-run steer holds", () => {
         seenSteers: ["s1"],
       });
       expect(dispatched.reason).toBe("boundary");
-      expect(harness.calls).toHaveLength(2);
+      expect(harness.calls).toHaveLength(3);
       expect(
         (await runtime.store.listRecords()).filter((r) => r.step === "pm"),
       ).toEqual([]);
@@ -333,7 +333,7 @@ describe("mid-run steer holds", () => {
           (r) => r.slug === "alpha" && r.step === "park",
         ),
       ).toBe(false);
-      expect(harness.calls).toHaveLength(3);
+      expect(harness.calls).toHaveLength(4);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -379,7 +379,7 @@ describe("mid-run steer holds", () => {
       expect(pending.map((steer) => [steer.id, steer.urgent])).toEqual([
         ["s1", true],
       ]);
-      expect(harness.calls).toHaveLength(2);
+      expect(harness.calls).toHaveLength(3);
     } finally {
       cleanupFlowRepo(repo);
     }

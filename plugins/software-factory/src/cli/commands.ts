@@ -32,7 +32,8 @@ import {
   PLAN_REVIEW_STEP,
   validatePlanReviewDelivery,
 } from "../kernel/plan-review.js";
-import { isLastReviewCall } from "../kernel/review.js";
+import { qaOutcomeSchema } from "../kernel/qa.js";
+import { isAcceptanceStep, isLastReviewCall } from "../kernel/review.js";
 import { collectStatus, readStatus, renderStatus } from "../kernel/status.js";
 import { createFolderStore } from "../kernel/store.js";
 import {
@@ -40,11 +41,12 @@ import {
   validateTaskFlows,
   validateTaskGraph,
 } from "../kernel/tasks.js";
-import type {
-  ArtifactStore,
-  ConfigBundle,
-  ProcessConfig,
-  State,
+import {
+  outcomeSchema,
+  type ArtifactStore,
+  type ConfigBundle,
+  type ProcessConfig,
+  type State,
 } from "../kernel/types.js";
 import type { PriceSource } from "../kernel/openrouter.js";
 
@@ -434,18 +436,25 @@ async function outcomeResult(
   opts: ValidateFileOptions,
 ): Promise<ValidateResult> {
   try {
-    const outcome = parseOutcome(text);
     const started = startedMeta(abs);
     const step = opts.step ?? started?.step;
-    if (!step) return { findings: [], stepIndependent: true };
+    if (!step) {
+      parseOutcome(text);
+      return { findings: [], stepIndependent: true };
+    }
     const process = processForValidation(path.dirname(abs), opts.repo);
     const flows = process.flows;
+    const stepConfig = flowStepFor(step, flows);
+    const outcome = parseOutcome(
+      text,
+      stepConfig?.qa ? qaOutcomeSchema : outcomeSchema,
+    );
     const expectation = expectationForStep(step, flows);
-    const review = flowStepFor(step, flows);
     const lastCall =
-      review?.review === true &&
       started?.step === step &&
-      isLastReviewCall(review, started.round);
+      stepConfig !== undefined &&
+      isAcceptanceStep(stepConfig) &&
+      isLastReviewCall(stepConfig, started.round);
     // The outcome sits in a record directory under a `records` tree: read the
     // tree so a `debtClosed` id is checked against what ingest assigned. Any
     // other file has no records to resolve an id against, so only the step

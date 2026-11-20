@@ -96,11 +96,13 @@ describe("transient infra never ends a launch with dispatchable work left", () =
       expect(result.reason).toBe("boundary");
       expect(sleeps).toEqual([INFRA_REDISPATCH_DELAYS_MS[0]!]);
       // Primary drew quota, the last tier reset the socket, and the re-dispatch
-      // started on the last tier: the exhausted pool stayed latched.
+      // started on the last tier: the exhausted pool stayed latched. QA then
+      // shares the reviewer alias.
       expect(harness.calls.map((call) => call.model.id)).toEqual([
         "fake-a",
         "fake-b",
         "fake-b",
+        "fake-review",
         "fake-review",
       ]);
       expect(runtime.exhaustedPools.has("fake+fake-a")).toBe(true);
@@ -111,8 +113,9 @@ describe("transient infra never ends a launch with dispatchable work left", () =
         runtime.configs.process.flows,
       );
       expect(state.tasks.alpha!.status).toBe("merged");
-      // The discarded attempt and its two tier hops cost no turn.
-      expect(state.tasks.alpha!.turns).toBe(2);
+      // The discarded attempt and its two tier hops cost no turn; the
+      // delivered implement, QA and review do.
+      expect(state.tasks.alpha!.turns).toBe(3);
 
       const records = await runtime.store.listRecords();
       const implementRecords = records.filter(

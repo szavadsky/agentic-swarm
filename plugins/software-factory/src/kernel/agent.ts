@@ -135,7 +135,11 @@ function overflowed(stop: Stop): boolean {
 function deliverableOf(spec: AgentTurnSpec): string {
   return (
     spec.target.deliverable ??
-    (spec.expectation === "review" ? "verdict" : "outcome")
+    (spec.expectation === "review"
+      ? "verdict"
+      : spec.expectation === "qa"
+        ? "qa verdict"
+        : "outcome")
   );
 }
 

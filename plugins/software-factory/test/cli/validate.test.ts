@@ -767,3 +767,86 @@ describe("factory validate", () => {
     }),
   );
 });
+
+describe("factory validate: QA outcomes", () => {
+  it(
+    "accepts an accept verdict and one finding per change request",
+    withTmp(async (root) => {
+      writeFile(
+        root,
+        "artifacts/demo/records/00001-i1-alpha-qa-r1/started.yaml",
+        STARTED("qa", 1),
+      );
+      const accepted = writeFile(
+        root,
+        "artifacts/demo/records/00001-i1-alpha-qa-r1/outcome.yaml",
+        "status: done\nsummary: accepted\nqa:\n  verdict: accept\n",
+      );
+      expect((await runValidate(accepted)).code).toBe(0);
+
+      const changed = writeFile(
+        root,
+        "artifacts/demo/records/00001-i1-alpha-qa-r1/outcome.yaml",
+        'status: done\nsummary: needs work\nqa:\n  verdict: changes\n  findings: ["task.txt:1 needs v2"]\n',
+      );
+      expect((await runValidate(changed)).code).toBe(0);
+    }),
+  );
+
+  it(
+    "refuses a change verdict with no finding",
+    withTmp(async (root) => {
+      writeFile(
+        root,
+        "artifacts/demo/records/00001-i1-alpha-qa-r1/started.yaml",
+        STARTED("qa", 1),
+      );
+      const file = writeFile(
+        root,
+        "artifacts/demo/records/00001-i1-alpha-qa-r1/outcome.yaml",
+        "status: done\nsummary: needs work\nqa:\n  verdict: changes\n",
+      );
+      const result = await runValidate(file);
+      expect(result.code).toBe(1);
+      expect(result.err).toContain("needs at least one finding");
+    }),
+  );
+
+  it(
+    "refuses a change verdict on the last acceptance call",
+    withTmp(async (root) => {
+      writeFile(
+        root,
+        "artifacts/demo/records/00001-i1-alpha-qa-r1/started.yaml",
+        STARTED("qa", 3),
+      );
+      const file = writeFile(
+        root,
+        "artifacts/demo/records/00001-i1-alpha-qa-r1/outcome.yaml",
+        'status: done\nsummary: needs work\nqa:\n  verdict: changes\n  findings: ["task.txt:1 needs v2"]\n',
+      );
+      const result = await runValidate(file);
+      expect(result.code).toBe(1);
+      expect(result.err).toContain("last acceptance call");
+    }),
+  );
+
+  it(
+    "refuses a QA outcome with no qa report",
+    withTmp(async (root) => {
+      writeFile(
+        root,
+        "artifacts/demo/records/00001-i1-alpha-qa-r1/started.yaml",
+        STARTED("qa", 1),
+      );
+      const file = writeFile(
+        root,
+        "artifacts/demo/records/00001-i1-alpha-qa-r1/outcome.yaml",
+        "status: done\nsummary: no verdict\n",
+      );
+      const result = await runValidate(file);
+      expect(result.code).toBe(1);
+      expect(result.err).toContain("qa verdict is required");
+    }),
+  );
+});

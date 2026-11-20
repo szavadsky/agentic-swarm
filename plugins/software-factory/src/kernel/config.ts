@@ -138,7 +138,9 @@ export const flowStepSchema = z
     /** Product the turn must deliver; defaults by expectation, else `outcome`. */
     deliverable: z.string().min(1).optional(),
     review: z.boolean().default(false),
-    /** Review and checks steps: change requests honored before the last call. */
+    /** QA acceptance step: its own schema, verdict and gate handoff. */
+    qa: z.boolean().default(false),
+    /** Review, QA and checks steps: change requests honored before the last call. */
     changeRequests: z.number().int().nonnegative().optional(),
     /** Aliases later attempts run on after failure-kind launches, in order. */
     alternates: z.array(z.string().min(1)).optional(),
@@ -158,6 +160,10 @@ export const flowStepSchema = z
   .refine((step) => step.alternates === undefined || step.alias !== undefined, {
     message: "alternates need a step alias to alternate with",
     path: ["alternates"],
+  })
+  .refine((step) => !(step.review && step.qa), {
+    message: "a step is either a review or a QA acceptance step, not both",
+    path: ["qa"],
   });
 
 export const flowSchema = z

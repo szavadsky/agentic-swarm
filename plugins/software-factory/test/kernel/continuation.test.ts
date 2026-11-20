@@ -402,7 +402,7 @@ describe("kept-land", () => {
       expect(
         records.filter((r) => r.slug === "kept-reject" && r.step === "merge"),
       ).toHaveLength(0);
-      expect(workCalls(harness)).toHaveLength(5);
+      expect(workCalls(harness)).toHaveLength(6);
     } finally {
       cleanupFlowRepo(repo);
     }

@@ -113,8 +113,8 @@ describe("delivery guard", () => {
       expect(causeText(state.tasks.task!.cause)).toContain(
         "verdict is required",
       );
-      expect(harness.calls).toHaveLength(4);
-      expect(harness.calls[2]!.prompt).toContain(
+      expect(harness.calls).toHaveLength(5);
+      expect(harness.calls[3]!.prompt).toContain(
         "You are the reviewer. Your turn did not deliver its verdict.",
       );
     } finally {
@@ -147,7 +147,7 @@ describe("delivery guard", () => {
       );
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
-      expect(harness.calls).toHaveLength(4);
+      expect(harness.calls).toHaveLength(5);
 
       const records = await runtime.store.listRecords();
       const state = derive(
@@ -160,7 +160,7 @@ describe("delivery guard", () => {
         (r) => r.slug === "task" && r.step === "implement",
       )!;
       expect(implement.attempts).toHaveLength(3);
-      expect(state.tasks.task!.turns).toBe(4);
+      expect(state.tasks.task!.turns).toBe(5);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -325,8 +325,8 @@ describe("gate flake re-run", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("merged");
-      // No fix turn: one implement turn plus its review.
-      expect(harness.calls).toHaveLength(2);
+      // No fix turn: one implement turn, QA and the review.
+      expect(harness.calls).toHaveLength(3);
 
       const checks = records.filter(
         (r) => r.slug === "task" && r.step === "checks",
@@ -625,7 +625,7 @@ describe("standalone upscope", () => {
       expect(architect).toBeDefined();
       expect(architect?.iteration).toBe(2);
       expect((await stateOf(goal.goalDir)).goal).toBe("done");
-      expect(first.calls).toHaveLength(3);
+      expect(first.calls).toHaveLength(4);
       // digest, the pack preparer and the architect: iteration 2 prepares its
       // index from the script data before the consult.
       expect(second.calls).toHaveLength(3);

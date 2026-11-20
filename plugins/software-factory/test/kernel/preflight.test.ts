@@ -30,6 +30,7 @@ const RUN_HEAD_NO_HIGHEST_WITH_HIGHEST = `aliases:
   implementer-b: { harness: fake, model: impl-b }
   researcher: { harness: fake, model: research }
   reviewer: { harness: fake, model: rev }
+  qa: { harness: fake, model: qa }
   steward: { harness: fake, model: steward }
   plan-checker: { harness: fake, model: check }
   plan-reviewer: { harness: fake, model: plan-review }
@@ -45,6 +46,7 @@ const RUN_HEAD_NO_HIGHEST = `aliases:
   implementer-b: { harness: fake, model: impl-b }
   researcher: { harness: fake, model: research }
   reviewer: { harness: fake, model: rev }
+  qa: { harness: fake, model: qa }
   steward: { harness: fake, model: steward }
   plan-checker: { harness: fake, model: check }
   plan-reviewer: { harness: fake, model: plan-review }
@@ -223,7 +225,7 @@ describe("pre-flight", () => {
         expect.objectContaining({
           file: path.join(f.repo.dir, ".factory/process.yaml"),
           key: "taskTypes.odd.schema",
-          message: 'schema "nope" is not a kernel outcome schema (outcome)',
+          message: 'schema "nope" is not a kernel outcome schema (outcome, qa)',
         }),
       );
     } finally {
@@ -244,7 +246,7 @@ describe("pre-flight", () => {
           file: path.join(f.repo.dir, ".factory/process.yaml"),
           key: "taskTypes.odd.schema",
           message:
-            'schema "constructor" is not a kernel outcome schema (outcome)',
+            'schema "constructor" is not a kernel outcome schema (outcome, qa)',
         }),
       );
     } finally {

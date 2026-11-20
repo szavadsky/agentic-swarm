@@ -151,7 +151,8 @@ describe("task tier resolution", () => {
       expect(expensive.calls[0]!.effort).toBe("high");
       // The kernel walks the tiers; the adapter sees one model, no chain.
       expect(expensive.calls[0]!.fallbacks).toBeUndefined();
-      expect(fake.calls).toHaveLength(1);
+      // QA then runs on its own alias, and the review on the reviewer's.
+      expect(fake.calls).toHaveLength(2);
 
       const records = await runtime.store.listRecords();
       const implement = records.find(

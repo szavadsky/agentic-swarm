@@ -215,6 +215,7 @@ describe("front ladder", () => {
         "  implementer-b: { harness: fake, model: fake-impl-b }",
         "  researcher: { harness: fake, model: fake-research }",
         "  reviewer: { harness: fake, model: fake-review }",
+        "  qa: { harness: fake, model: fake-qa }",
         "  steward: { harness: fake, model: fake-steward }",
         "  plan-checker: { harness: fake, model: fake-check }",
         "  plan-reviewer: { harness: fake, model: fake-plan-review }",
@@ -445,7 +446,7 @@ describe("front ladder", () => {
           (r) => r.slug === "alpha" && r.step === "merge" && r.ok === true,
         ),
       ).toBe(true);
-      expect(harness.calls).toHaveLength(3);
+      expect(harness.calls).toHaveLength(4);
     } finally {
       cleanup(goal);
     }

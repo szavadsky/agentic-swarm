@@ -128,7 +128,7 @@ describe("KERNEL0 scenario 5 — red gates on the merged result", () => {
       expect(causeText(merges[0]!.cause)).toContain("skipped merge-checks");
       // The inherited red travels with the reused checks.
       expect(merges[0]!.checks![0]!.ok).toBe(false);
-      expect(harness.calls.length).toBe(2);
+      expect(harness.calls.length).toBe(3);
     } finally {
       cleanupFlowRepo(repo);
     }

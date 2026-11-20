@@ -380,7 +380,7 @@ describe("status refresh points", () => {
       const atImplement = logLaunch(launched[0]!.json);
       expect(atImplement).toEqual({ open: ["task"], turns: 0, merged: [] });
       const atReview = logLaunch(launched[1]!.json);
-      expect(atReview).toEqual({ open: ["task"], turns: 1, merged: [] });
+      expect(atReview).toEqual({ open: ["task"], turns: 2, merged: [] });
       for (const atLaunch of launched) {
         expect(atLaunch.dashboard).toBe(
           renderDashboard(JSON.parse(atLaunch.json)),
@@ -392,9 +392,9 @@ describe("status refresh points", () => {
         "utf8",
       );
       const finished = snapshot(finishedJson);
-      expect(finished.tasks!.open[0]!.turns).toBe(2);
+      expect(finished.tasks!.open[0]!.turns).toBe(3);
       expect(finished.cost!.totalUsd).toBeCloseTo(0.03, 10);
-      expect(finished.work!.turns).toBe(2);
+      expect(finished.work!.turns).toBe(3);
       expect(
         fs.readFileSync(path.join(goalDir, DASHBOARD_REL_PATH), "utf8"),
       ).toBe(renderDashboard(JSON.parse(finishedJson)));

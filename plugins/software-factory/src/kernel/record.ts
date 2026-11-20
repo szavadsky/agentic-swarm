@@ -3,6 +3,7 @@ import { git } from "../core/git/exec.js";
 import { newGateFailures } from "./gates.js";
 import { committedSpikeReport, spikeReportRef } from "./spike-report.js";
 import { makeCause } from "./cause.js";
+import { qaReportOf } from "./qa.js";
 import type {
   ArtifactStore,
   Cause,
@@ -287,4 +288,26 @@ export function formatReviewFindings(outcome: Outcome): string {
     );
   lines.push(...outcome.forward.map((f) => `- forward: ${f}`));
   return lines.join("\n");
+}
+
+/**
+ * QA findings for the author: the summary, then one numbered finding per
+ * entry so a reply's `finding` is the entry's position.
+ */
+export function formatQaFindings(outcome: Outcome): string {
+  const lines: string[] = [];
+  const summary = outcome.summary.trim();
+  if (summary) lines.push(summary);
+  for (const [index, finding] of (
+    qaReportOf(outcome)?.findings ?? []
+  ).entries())
+    lines.push(`${index + 1}. ${finding.trim()}`);
+  return lines.join("\n");
+}
+
+/** The findings the current acceptance step sent back, reviewer or QA. */
+export function formatAcceptanceFindings(outcome: Outcome): string {
+  return qaReportOf(outcome)
+    ? formatQaFindings(outcome)
+    : formatReviewFindings(outcome);
 }

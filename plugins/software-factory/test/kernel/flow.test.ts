@@ -327,20 +327,26 @@ describe("fix-round follow-up modes", () => {
       const review = records
         .filter((r) => r.slug === "task" && r.step === "review")
         .sort((a, b) => a.seq - b.seq);
-      // Each turn compacts its own session at its end; the fix turn resumes the
-      // compacted implement session and the second review resumes the
-      // compacted first review. A resume adds no compaction because the ref it
-      // resumes is already compacted.
+      const qa = records
+        .filter((r) => r.slug === "task" && r.step === "qa")
+        .sort((a, b) => a.seq - b.seq);
+      // Each turn compacts its own session at its end; the fix turn resumes
+      // the compacted implement session, and the second QA and review resume
+      // theirs. A resume adds no compaction because the ref it resumes is
+      // already compacted.
       expect(harness.compactions.map((c) => c.id)).toEqual([
         implement[0]!.session!.id,
+        qa[0]!.session!.id,
         review[0]!.session!.id,
         implement[1]!.session!.id,
+        qa[1]!.session!.id,
         review[1]!.session!.id,
       ]);
       expect(implement.map((r) => r.session?.compacted)).toEqual([true, true]);
+      expect(qa.map((r) => r.session?.compacted)).toEqual([true, true]);
       expect(review.map((r) => r.session?.compacted)).toEqual([true, true]);
 
-      const fix = harness.calls[2]!;
+      const fix = harness.calls[3]!;
       expect(fix.session?.id).toBe(implement[0]?.session?.id);
       expect(fix.session?.compacted).toBe(true);
       expect(implement.map((r) => r.alias)).toEqual([
@@ -515,7 +521,7 @@ describe("worktree setup", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("merged");
-      expect(harness.calls.length).toBe(2);
+      expect(harness.calls.length).toBe(3);
       expect(state.epics).toEqual({});
       expect(state.tasks.task!.epic).toBeUndefined();
       const taskRecords = (await runtime.store.listRecords()).filter(

@@ -2,6 +2,7 @@
 import yaml from "yaml";
 import type { Stop, TurnAttempt, Usage } from "../harness/types.js";
 import { addUsage, countOutcomeRepairs, zeroUsage } from "../harness/usage.js";
+import { qaReportOf } from "./qa.js";
 import { type PriceTable, pricedRecord } from "./pricing.js";
 import type { SummaryStatus } from "./summary.js";
 import type {
@@ -25,6 +26,7 @@ import {
 export interface LaunchCounts {
   glitch: number;
   "change-request": number;
+  "qa-finding": number;
   failure: number;
   unknown: number;
 }
@@ -186,6 +188,7 @@ export const DEFAULT_ROLE_BY_STEP: Record<string, string> = {
   pm: "pm",
   digest: "digest",
   implement: "implementer",
+  qa: "qa",
   review: "reviewer",
 };
 
@@ -272,7 +275,13 @@ function addTurn<T extends GroupMetrics>(
 }
 
 function emptyLaunches(): LaunchCounts {
-  return { glitch: 0, "change-request": 0, failure: 0, unknown: 0 };
+  return {
+    glitch: 0,
+    "change-request": 0,
+    "qa-finding": 0,
+    failure: 0,
+    unknown: 0,
+  };
 }
 
 function emptyGroup(): Omit<GroupMetrics, "turns"> & { turns: number } {
@@ -349,6 +358,8 @@ export function launchKindOf(rec: {
   if (rec.stop?.kind === "infra") return "glitch";
   if (hasFallbackHop(rec.attempts)) return "glitch";
   if (rec.outcome?.verdict === "changes") return "change-request";
+  if (qaReportOf(rec.outcome ?? undefined)?.verdict === "changes")
+    return "qa-finding";
   if (rec.outcome?.status === "failed" || rec.outcome?.status === "blocked") {
     return "failure";
   }
@@ -687,6 +698,7 @@ export function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
     total.testRuns += entry.testRuns;
     total.launches.glitch += entry.launches.glitch;
     total.launches["change-request"] += entry.launches["change-request"];
+    total.launches["qa-finding"] += entry.launches["qa-finding"];
     total.launches.failure += entry.launches.failure;
     total.launches.unknown += entry.launches.unknown;
     for (const reason of WASTE_REASONS) {

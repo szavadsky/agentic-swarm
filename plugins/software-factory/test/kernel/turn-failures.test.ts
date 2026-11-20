@@ -64,7 +64,7 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
         records,
         runtime.configs.process.flows,
       );
-      expect(state.tasks.a!.phase).toBe("review");
+      expect(state.tasks.a!.phase).toBe("qa");
 
       // A relaunch advances on the kept outcome instead of redispatching implement.
       const second = await runDispatch(runtime, { iteration: 2 });
@@ -121,7 +121,7 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
         records,
         runtime.configs.process.flows,
       );
-      expect(state.tasks.a!.phase).toBe("review");
+      expect(state.tasks.a!.phase).toBe("qa");
 
       const second = await runDispatch(runtime, { iteration: 2 });
       records = await runtime.store.listRecords();

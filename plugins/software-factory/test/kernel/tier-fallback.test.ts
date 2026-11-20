@@ -525,9 +525,10 @@ describe("alias fallback tiers", () => {
       expect(state.tasks.alpha!.status).toBe("merged");
       expect(state.tasks.beta!.status).toBe("merged");
 
-      // Alpha's implement fell back to b; beta's started there.
+      // Alpha's implement fell back to b; beta's started there. QA shares the
+      // reviewer's binding, so it ran on b for both tasks too.
       expect(a.calls).toHaveLength(1);
-      expect(b.calls).toHaveLength(4);
+      expect(b.calls).toHaveLength(6);
       expect(
         resolveTurn(runtime, "implementer", "implementer").harness.id,
       ).toBe("b");

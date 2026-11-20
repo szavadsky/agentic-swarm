@@ -50,7 +50,7 @@ describe("KERNEL0 scenario 8 — drain", () => {
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("drained");
       expect(causeText(result.cause)).toContain("turn limit 1");
-      expect(harness.calls.length).toBe(2);
+      expect(harness.calls.length).toBe(3);
 
       const records = await runtime.store.listRecords();
       const state = derive(
@@ -59,7 +59,7 @@ describe("KERNEL0 scenario 8 — drain", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.a!.status).toBe("merged");
-      expect(state.tasks.a!.turns).toBe(2);
+      expect(state.tasks.a!.turns).toBe(3);
       expect(state.tasks.b!.turns).toBe(0);
       expect(state.tasks.c!.turns).toBe(0);
       expect(

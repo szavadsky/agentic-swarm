@@ -9,6 +9,7 @@ import type { OutcomeExpectation } from "../src/kernel/outcome.js";
 import {
   outcomeRepairSchemaVar,
   outcomeSchemaVar,
+  qaOutcomeSchemaVar,
   renderSkeleton,
   taskFrontmatterVar,
   taskTypesVar,
@@ -259,6 +260,20 @@ describe("prompts: schema skeletons", () => {
         "```",
       ].join("\n"),
     );
+  });
+
+  it("renders QA's own schema with its verdict and no reviewer decision line", () => {
+    const skeleton = qaOutcomeSchemaVar();
+    expect(skeletonKeys(skeleton)).toEqual([
+      "status",
+      "summary",
+      "concerns",
+      "qa",
+    ]);
+    expect(skeletonLine(skeleton, "qa")).toContain("verdict: accept | changes");
+    expect(skeletonLine(skeleton, "qa")).toContain("findings");
+    expect(skeleton).not.toContain("decision:");
+    expect(skeleton).not.toContain("verdict: approve");
   });
 
   it("renders the fields a prompt author writes", () => {

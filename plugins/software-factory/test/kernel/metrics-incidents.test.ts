@@ -470,6 +470,20 @@ describe("iteration metrics incidents and spend tables", () => {
           },
         }),
         rec(5, { slug: "d", alias: "cheap", usage: usage(0.01, 10, 1) }),
+        rec(6, {
+          slug: "e",
+          step: "qa",
+          alias: "qa",
+          usage: usage(0.01, 10, 1),
+          launchKind: "qa-finding",
+          outcome: {
+            status: "done",
+            summary: "needs work",
+            concerns: [],
+            forward: [],
+            qa: { verdict: "changes", findings: ["task.txt:1 needs v2"] },
+          } as never,
+        }),
       ];
 
       await writeMetrics(store, {
@@ -484,26 +498,44 @@ describe("iteration metrics incidents and spend tables", () => {
       expect(one.aliases.cheap!.launches).toEqual({
         glitch: 1,
         "change-request": 0,
+        "qa-finding": 0,
         failure: 1,
         unknown: 1,
       });
       expect(one.aliases.reviewer!.launches).toEqual({
         glitch: 0,
         "change-request": 1,
+        "qa-finding": 0,
         failure: 0,
         unknown: 0,
       });
       expect(one.roles.implementer!.launches).toEqual({
         glitch: 1,
         "change-request": 0,
+        "qa-finding": 0,
         failure: 1,
         unknown: 1,
       });
       expect(metrics.totals.aliases.cheap!.launches).toEqual({
         glitch: 1,
         "change-request": 0,
+        "qa-finding": 0,
         failure: 1,
         unknown: 1,
+      });
+      expect(one.roles.qa!.launches).toEqual({
+        glitch: 0,
+        "change-request": 0,
+        "qa-finding": 1,
+        failure: 0,
+        unknown: 0,
+      });
+      expect(one.aliases.qa!.launches).toEqual({
+        glitch: 0,
+        "change-request": 0,
+        "qa-finding": 1,
+        failure: 0,
+        unknown: 0,
       });
 
       const state = derive(
@@ -523,10 +555,11 @@ describe("iteration metrics incidents and spend tables", () => {
       expect(text).toContain("## Launches by role");
       expect(text).toContain("## Launches by alias");
       expect(text).toContain(
-        "| alias | glitch | change-request | failure | unknown |",
+        "| alias | glitch | change-request | qa-finding | failure | unknown |",
       );
-      expect(text).toContain("| cheap | 1 | 0 | 1 | 1 |");
-      expect(text).toContain("| reviewer | 0 | 1 | 0 | 0 |");
+      expect(text).toContain("| cheap | 1 | 0 | 0 | 1 | 1 |");
+      expect(text).toContain("| reviewer | 0 | 1 | 0 | 0 | 0 |");
+      expect(text).toContain("| qa | 0 | 0 | 1 | 0 | 0 |");
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

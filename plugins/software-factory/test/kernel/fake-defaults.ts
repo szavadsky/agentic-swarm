@@ -72,6 +72,24 @@ export function scriptKernelRoleFallbacks(harness: FakeHarness): void {
       fallback: true,
     },
   );
+  // The default development flow includes QA. Tests focused on other steps
+  // still run that acceptance turn; a neutral accept keeps them from consuming
+  // another step's scripted turn. A test that wants QA findings binds its own
+  // handler for the step, which wins over this fallback.
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome({
+        ...EMPTY,
+        summary: "qa accepted",
+        qa: { verdict: "accept", findings: [] },
+      });
+      return fakeTurnResult(req);
+    },
+    {
+      when: (req) => fakeTurnIdentity(req).step === "qa",
+      fallback: true,
+    },
+  );
 }
 
 /** Register the mandatory boundary fallbacks and return the harness inline. */

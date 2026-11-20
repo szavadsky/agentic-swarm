@@ -499,8 +499,13 @@ export interface FlowStep extends RepairSpec {
   /** Review steps carry the verdict contract and consume a review round. */
   review?: boolean;
   /**
-   * Review and checks steps: how many change requests this step may issue before
-   * its call is the last one. Absent means the default (two).
+   * QA steps carry the accept-or-changes contract, consume the same acceptance
+   * round as a review, and gate the tree before the reviewer sees it.
+   */
+  qa?: boolean;
+  /**
+   * Review, QA and checks steps: how many change requests this step may issue
+   * before its call is the last one. Absent means the default (two).
    */
   changeRequests?: number;
   /**
@@ -570,10 +575,11 @@ export type StepActor = "agent" | "script";
 
 /**
  * Why a launch ran again: a technical glitch (infra stop or fallback hop),
- * a bona fide change request (a review `changes`), or a bona fide failure
- * (agent `failed`/`blocked` or no outcome after reminders).
+ * a bona fide change request (a review `changes`), a QA finding that sent the
+ * work back, or a bona fide failure (agent `failed`/`blocked` or no outcome
+ * after reminders).
  */
-export type LaunchKind = "glitch" | "change-request" | "failure";
+export type LaunchKind = "glitch" | "change-request" | "qa-finding" | "failure";
 
 /** Idle is separate from wall: a long tool call streams nothing but is not stuck. */
 export interface Timeouts {

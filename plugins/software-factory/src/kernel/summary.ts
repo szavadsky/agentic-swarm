@@ -82,11 +82,11 @@ function launchTable(
 ): string[] {
   if (rows.length === 0) return ["- none"];
   return [
-    `| ${label} | glitch | change-request | failure | unknown |`,
-    "| --- | --- | --- | --- | --- |",
+    `| ${label} | glitch | change-request | qa-finding | failure | unknown |`,
+    "| --- | --- | --- | --- | --- | --- |",
     ...rows.map(
       (row) =>
-        `| ${row.name} | ${row.launches.glitch} | ${row.launches["change-request"]} | ${row.launches.failure} | ${row.launches.unknown} |`,
+        `| ${row.name} | ${row.launches.glitch} | ${row.launches["change-request"]} | ${row.launches["qa-finding"]} | ${row.launches.failure} | ${row.launches.unknown} |`,
     ),
   ];
 }

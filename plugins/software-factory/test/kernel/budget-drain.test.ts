@@ -80,8 +80,9 @@ describe("iteration USD brake", () => {
       expect(result.cause).toEqual(
         cause("budget: iteration USD limit $1.0000 reached (spent $1.1000)"),
       );
-      // a's review ran after the brake fired: started work finishes, b never starts.
-      expect(harness.calls.length).toBe(2);
+      // a's QA and review ran after the brake fired: started work finishes,
+      // b never starts.
+      expect(harness.calls.length).toBe(3);
 
       const records = await runtime.store.listRecords();
       const state = derive(
@@ -111,7 +112,7 @@ describe("iteration USD brake", () => {
       // priced but their recorded compactions have no OpenRouter entry, so each
       // counts blind too.
       expect(text).toContain(
-        "- budget: iteration USD limit $1.0000 reached (spent $1.1000); brake blind for 3 unpriced turns",
+        "- budget: iteration USD limit $1.0000 reached (spent $1.1000); brake blind for 4 unpriced turns",
       );
       expect(text).not.toContain("boundary: budget");
     } finally {
@@ -238,7 +239,7 @@ describe("iteration USD brake", () => {
       const result = await runDispatch(runtime, { iteration: 2 });
       expect(result.reason).toBe("boundary");
       expect(result.cause).toBeUndefined();
-      expect(harness.calls.length).toBe(4);
+      expect(harness.calls.length).toBe(6);
       const state = derive(
         await runtime.store.listTasks(),
         await runtime.store.listRecords(),
@@ -279,11 +280,12 @@ describe("iteration USD brake", () => {
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("drained");
-      // $1.00 of OpenRouter-priced input crossed the $1 brake; the review then finished.
+      // $1.00 of OpenRouter-priced input crossed the $1 brake; QA and the
+      // review then finished.
       expect(result.cause).toEqual(
         cause("budget: iteration USD limit $1.0000 reached (spent $1.0000)"),
       );
-      expect(harness.calls.length).toBe(2);
+      expect(harness.calls.length).toBe(3);
 
       const records = await runtime.store.listRecords();
       const state = derive(
@@ -307,7 +309,7 @@ describe("iteration USD brake", () => {
         "utf8",
       );
       expect(text).toContain(
-        "- budget: iteration USD limit $1.0000 reached (spent $1.0000); brake blind for 0 unpriced turns",
+        "- budget: iteration USD limit $1.0000 reached (spent $1.0000); brake blind for 1 unpriced turn",
       );
     } finally {
       cleanupFlowRepo(repo);

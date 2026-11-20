@@ -9,6 +9,7 @@ Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable
 - `front` — `task-size`, `plan-read-only`, `calibration`, `outcome`, `task-frontmatter`
 - `pm` — `task-size`, `plan-read-only`, `spike-report-general`, `calibration`, `outcome`, `task-frontmatter`
 - `implementer` — `implementer-body`, `clean-code`, `scope` (`plan-read-only`), `calibration`, `outcome`
+- `qa` — `implementer-body`, `finding-standards`, `outcome`
 - `reviewer` — `<author>-body` (`implementer-body` by default), `review-<author>` duties, `review-<author>-turn` inputs, `verdict`
 - `review-architect` — `architect-assignment`, `plan-standard` (`task-size`), `plan-rules`, `finding-standards`, `outcome`
 - `architect-review-return` — `architect-assignment`, `plan-review-marks`, `calibration`, `outcome`
@@ -23,7 +24,7 @@ The architect's body is assembled from fragments so a reviewer can share only th
 
 `calibration` is the default calibration partial. The process config may replace its content per repo; the prompt template does not change.
 
-Renderer defaults live outside any `This turn` block and the renderer supplies them, so turn code does not pass them: `validate_cmd` (the running build's absolute `bun <build>/bin/factory.ts validate`, stable only within one checkout), `outcome_schema` (the outcome YAML skeleton rendered from the task type's kernel output schema, in the `outcome` partial), `task_frontmatter` (the frontmatter YAML skeleton rendered from the kernel task schema, in the `task-frontmatter` partial), `task_types` (configured task type names in config order with the flow, kind and output schema each supplies, from the process config), `tiers` (run-config alias names in config order; `default` is kernel vocabulary for no tier override and stays literal), `depth` (`1` until the hierarchy config names `2`), `author` (the reviewer's author role; it selects the `<role>-body` and `review-<role>` fragments) and `checks_result`/`checks_tree`/`checks_log` (the latest checks record's result, tree and log; a render with no checks record gets `no checks run`, `unknown` and `unknown`), and `base_gates` (the base tree's recorded gate result; a render with no base record gets `not recorded`, never a clean base). `author` defaults to `implementer`; the plan-review turn overrides it with `architect`. `class_types` is a turn-supplied variable above the block: the front turn renders its class-to-task-type mapping from the same kernel mapping the validator enforces. The delivery-repair ask also supplies its own narrowed `outcome_schema`; it has no role prompt, so its shape must match the turn it repairs.
+Renderer defaults live outside any `This turn` block and the renderer supplies them, so turn code does not pass them: `validate_cmd` (the running build's absolute `bun <build>/bin/factory.ts validate`, stable only within one checkout), `outcome_schema` (the outcome YAML skeleton rendered from the task type's kernel output schema, or the QA step's own schema, in the `outcome` partial), `task_frontmatter` (the frontmatter YAML skeleton rendered from the kernel task schema, in the `task-frontmatter` partial), `task_types` (configured task type names in config order with the flow, kind and output schema each supplies, from the process config), `tiers` (run-config alias names in config order; `default` is kernel vocabulary for no tier override and stays literal), `depth` (`1` until the hierarchy config names `2`), `author` (the reviewer's author role; it selects the `<role>-body` and `review-<role>` fragments) and `checks_result`/`checks_tree`/`checks_log` (the latest checks record's result, tree and log; a render with no checks record gets `no checks run`, `unknown` and `unknown`), and `base_gates` (the base tree's recorded gate result; a render with no base record gets `not recorded`, never a clean base). `author` defaults to `implementer`; the plan-review turn overrides it with `architect`. `class_types` is a turn-supplied variable above the block: the front turn renders its class-to-task-type mapping from the same kernel mapping the validator enforces. The delivery-repair ask also supplies its own narrowed `outcome_schema`; it has no role prompt, so its shape must match the turn it repairs.
 
 ## architect.md
 
@@ -109,10 +110,32 @@ One epic's architect, below the top architect: the same bounds, turn order, plan
 - `setup_command` — worktree bootstrap command (dependencies etc.); `none` when not needed
 - `gate_commands` — configured compile/lint/test commands as `- id: command` lines; `none` when empty
 - `base_gates` — the base tree's recorded gate result: commit plus `green`, or the pre-existing failing checks; `not recorded` when pre-flight has no trustworthy base run
-- `findings` — previous review round's summary and concerns for this task, plus any legacy forward lines (summary first); gate failures when the latest record is red checks; empty string before the first review. Each numbered finding is answered by a change, a reply or both
+- `findings` — previous acceptance round's summary and findings for this task (QA or review), plus any legacy forward lines (summary first); gate failures when the latest record is red checks; empty string before the first acceptance. Each numbered finding is answered by a change, a reply or both
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default
+
+## qa.md
+
+The QA step's acceptance prompt: the implementer's Work, Bounds and Code standard, then the acceptance focus, its own `qa` verdict, and the checks handoff. QA sends actionable findings back to the author or accepts the work; its own test and script edits are gated again before review.
+
+- `task_path` — path to the task file whose done-when this turn accepts
+- `worktree` — path to the task worktree holding the gated tree
+- `base_hash` — commit hash before this task's first turn; the range spans every round
+- `head_hash` — commit hash after the latest turn
+- `round` — 1-based shared acceptance round
+- `max_rounds` — this QA step's total acceptance calls: its change-request bound plus the last call
+- `last_call` — `true` when this QA turn is the step's last call: `qa.verdict changes` is refused
+- `base_gates` — the base tree's recorded gate result: commit plus `green`, the pre-existing failing checks, or `not recorded`
+- `checks_result` — latest checks record's failing-check text, or `pass` when green; `no checks run` without a checks record
+- `checks_tree` — the checked tree's hash; `unknown` without a checks record
+- `checks_log` — the checks record's directory; `unknown` without a checks record
+- `gate_commands` — configured compile/lint/test commands as `- id: command` lines; `none` when empty
+- `prior_findings` — the last acceptance's findings (QA or review), numbered; empty before the first acceptance
+- `fix_dispositions` — the current fix round's summary plus one numbered reply per prior finding; empty in round 1; renderer default
+- `outcome_path` — path where the outcome file must be written when the harness asks for a file
+- `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
+- `outcome_schema` — outcome YAML skeleton narrowed to `status`, `summary`, `concerns` and `qa`; supplied by the turn
 
 ## reviewer.md
 

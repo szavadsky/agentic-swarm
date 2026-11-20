@@ -105,6 +105,7 @@ flows:
   implement-review:
     steps:
       - { id: implement, prompt: implementer, alias: implementer }
+      - { id: qa, prompt: qa, alias: qa, qa: true, changeRequests: 2, deliverable: verdict }
       - { id: review, prompt: reviewer, alias: reviewer, review: true, changeRequests: 2 }
       - { id: resolve, prompt: steward, alias: steward }   # merge-conflict turn only
 taskTypes:
@@ -126,12 +127,16 @@ architecture:                   # the plan review flow, before the PM derives ta
 
 A step may name `repairPrompt` (the template its in-session repair ask
 renders) and `deliverable` (the product the ask and the missing-outcome finding
-name; default `outcome`, or `verdict` on a review step). The `resolve` step is
+name; default `outcome`, or `verdict` on an acceptance step). A `qa: true` step
+carries its own outcome schema (`qa: {verdict: accept | changes, findings}`)
+and acceptance duty; QA and the reviewer share the acceptance round, so a QA
+change request costs the same round budget as a review's. QA's own test and
+script edits are gated again before the reviewer reads the tree. The `resolve` step is
 outside the normal agent sequence: a squash merge that conflicts runs one turn
 that merges the head into the task branch and resolves it, then the task checks
 and the merge retries. A second conflict parks, the wave-end steward remains the
 fallback, and a resolution that changed files outside the conflict set goes
-through review before it lands. A step that names no
+through QA and review before it lands. A step that names no
 template renders the process-level `repairPrompt` (default `delivery-repair`).
 The architect names `architect-repair` because its ask also requires the plan
 edit on disk; the default template then carries no role branch.

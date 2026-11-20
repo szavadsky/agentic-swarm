@@ -274,9 +274,9 @@ describe("parked continuation syncs to the integration head", () => {
       const betaAgents = records.filter(
         (r) => r.slug === "beta" && r.actor === "agent" && r.endedAt,
       );
-      expect(betaAgents).toHaveLength(2);
+      expect(betaAgents).toHaveLength(3);
       // A continuation counts its own turns only; alpha's spend does not carry.
-      expect(state.tasks.beta!.turns).toBe(2);
+      expect(state.tasks.beta!.turns).toBe(3);
       const betaTip = repo
         .git(["rev-parse", "factory-task/demo/beta"])
         .stdout.trim();

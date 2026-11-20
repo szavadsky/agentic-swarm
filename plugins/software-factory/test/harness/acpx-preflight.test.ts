@@ -45,6 +45,7 @@ function runConfig(spec: RunSpec = {}): string {
   implementer-b: { harness: opencode, model: model-a }
   researcher: { harness: opencode, model: model-a }
   reviewer: { harness: opencode, model: model-a${spec.reviewerEffort ? `, effort: ${spec.reviewerEffort}` : ""} }
+  qa: { harness: opencode, model: model-a }
   steward: { harness: opencode, model: model-a }
   plan-checker: { harness: opencode, model: model-a }
   plan-reviewer: { harness: opencode, model: model-a }
@@ -214,6 +215,7 @@ describe("acpx live pre-flight", () => {
   implementer-b: { harness: opencode, model: model-b }
   researcher: { harness: opencode, model: model-a }
   reviewer: { harness: opencode, model: model-a }
+  qa: { harness: opencode, model: model-a }
   steward: { harness: opencode, model: model-a }
   plan-checker: { harness: opencode, model: model-a }
   plan-reviewer: { harness: opencode, model: model-a }

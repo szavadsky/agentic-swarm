@@ -1,6 +1,6 @@
 // biome-ignore-all lint/complexity: split-rest
 import { makeCause } from "./cause.js";
-import { agentSteps, reviewRoundLimit } from "./review.js";
+import { agentSteps, isAcceptanceStep, reviewRoundLimit } from "./review.js";
 import type { Action, Cause, Limits, State } from "./types.js";
 
 function park(slug: string, cause: Cause): Action {
@@ -97,7 +97,7 @@ export function next(
       );
       continue;
     }
-    if (step.review) {
+    if (isAcceptanceStep(step)) {
       const roundLimit = reviewRoundLimit(step);
       if (task.round > roundLimit) {
         actions.push(

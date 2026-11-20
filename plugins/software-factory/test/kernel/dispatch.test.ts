@@ -340,7 +340,9 @@ describe("dispatch admission", () => {
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("drained");
-      expect(result.turns).toBe(2);
+      // Implement, QA and review are the task's turns; architect, PM and the
+      // infra record are not charged.
+      expect(result.turns).toBe(3);
       const state = derive(
         await runtime.store.listTasks(),
         await runtime.store.listRecords(),
@@ -365,9 +367,17 @@ describe("dispatch admission", () => {
       for (let i = 0; i < 4; i += 1) {
         harness.script((req, ctx) => {
           const slug = path.basename(req.cwd!);
-          if (req.prompt.startsWith("You review")) {
+          const step = fakeTurnIdentity(req).step;
+          if (step === "review") {
             ctx.writeOutcome(
               outcome({ summary: `${slug} approved`, verdict: "approve" }),
+            );
+          } else if (step === "qa") {
+            ctx.writeOutcome(
+              outcome({
+                summary: `${slug} qa accepted`,
+                qa: { verdict: "accept" },
+              }),
             );
           } else {
             starts.push(slug);
@@ -398,7 +408,7 @@ describe("dispatch admission", () => {
         detail: "signal: drain requested",
       });
       expect(starts).toEqual(["a"]);
-      expect(harness.calls.length).toBe(2);
+      expect(harness.calls.length).toBe(3);
       const records = await runtime.store.listRecords();
       const state = derive(
         await runtime.store.listTasks(),
@@ -713,7 +723,7 @@ describe("dispatch pass signals", () => {
       expect(result.reason).toBe("boundary");
       expect(stepsCalled(harness, "pm")).toBe(1);
       const records = await runtime.store.listRecords();
-      for (const step of ["implement", "review"]) {
+      for (const step of ["implement", "qa", "review"]) {
         expect(records.some((r) => r.slug === "gamma" && r.step === step)).toBe(
           true,
         );
@@ -725,14 +735,14 @@ describe("dispatch pass signals", () => {
           runtime.configs.process.flows,
         ).tasks.gamma!.status,
       ).toBe("merged");
-      // gamma's implement and review only; the PM turn, checks and merge add none.
-      expect(result.taskTurnsStarted).toBe(2);
+      // gamma's implement, QA and review; the PM turn, checks and merge add none.
+      expect(result.taskTurnsStarted).toBe(3);
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
 
-  it("counts only implement and review turns: checks, merge, finish, plancheck and boundary work do not count", async () => {
+  it("counts only implement, QA and review turns: checks, merge, finish, plancheck and boundary work do not count", async () => {
     const { repo, goal } = setupFlowRepo({
       limits: { concurrency: { overall: 1 }, planCheckRounds: 1 },
     });
@@ -770,15 +780,15 @@ describe("dispatch pass signals", () => {
       expect(ran("merge", "alpha")).toBe(true);
       expect(ran("finish", "probe")).toBe(true);
       expect(stepsCalled(harness, "plancheck")).toBe(1);
-      // alpha and probe each ran implement + review.
+      // alpha ran implement, QA and review; the spike ran implement and review.
       expect(
         records.filter(
           (r) =>
             r.actor === "agent" &&
-            (r.step === "implement" || r.step === "review"),
+            (r.step === "implement" || r.step === "qa" || r.step === "review"),
         ),
-      ).toHaveLength(4);
-      expect(result.taskTurnsStarted).toBe(4);
+      ).toHaveLength(5);
+      expect(result.taskTurnsStarted).toBe(5);
       // A spike's implement turn opens with the report commit: the kernel
       // hands the implementer prompt the task's report path.
       const probeTurn = harness.calls.find((call) => {
@@ -951,7 +961,7 @@ describe("dispatch pass signals", () => {
       const expired = await runDispatch(runtime, { iteration: 1 });
       expect(expired.reason).toBe("boundary");
       expect(expired.allReadyHeld).toBe(false);
-      expect(expired.taskTurnsStarted).toBe(4);
+      expect(expired.taskTurnsStarted).toBe(6);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -1001,11 +1011,11 @@ describe("dispatch pass signals", () => {
         seenSteers: ["s1"],
       });
 
-      // Boundary after work: b's implement and review ran, a stays held.
+      // Boundary after work: b's implement, QA and review ran, a stays held.
       expect(result.reason).toBe("boundary");
       expect(result.cause).toEqual(cause("steer: s1 holds a"));
       expect(result.allReadyHeld).toBe(true);
-      expect(result.taskTurnsStarted).toBe(2);
+      expect(result.taskTurnsStarted).toBe(3);
       const state = derive(
         await runtime.store.listTasks(),
         await runtime.store.listRecords(),

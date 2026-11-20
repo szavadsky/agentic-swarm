@@ -93,7 +93,7 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it("defines just-implement as one implement step with no reviewer", () => {
+  it("defines just-implement as one implement step with no acceptance step", () => {
     const root = tmpRepo();
     const configs = loadConfigs(root);
     expect(configs.process.flows["just-implement"]!.steps).toEqual([
@@ -103,14 +103,60 @@ describe("three config layers", () => {
         alias: "implementer",
         alternates: ["implementer-b"],
         review: false,
+        qa: false,
       },
       {
         id: "resolve",
         prompt: "steward",
         alias: "steward",
         review: false,
+        qa: false,
       },
     ]);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("puts the QA acceptance step between implement and review", () => {
+    const root = tmpRepo();
+    const configs = loadConfigs(root);
+    const steps = configs.process.flows["implement-review"]!.steps;
+    expect(steps.map((step) => step.id)).toEqual([
+      "implement",
+      "qa",
+      "review",
+      "resolve",
+    ]);
+    expect(steps[1]).toMatchObject({
+      prompt: "qa",
+      alias: "qa",
+      qa: true,
+      changeRequests: 2,
+      deliverable: "verdict",
+    });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("refuses a step that is both a review and a QA acceptance", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      [
+        "flows:",
+        "  ambiguous:",
+        "    steps:",
+        "      - id: implement",
+        "        prompt: implementer",
+        "        alias: implementer",
+        "      - id: accept",
+        "        prompt: reviewer",
+        "        alias: reviewer",
+        "        review: true",
+        "        qa: true",
+        "",
+      ].join("\n"),
+    );
+    expect(() => loadConfigs(root)).toThrow(/either a review or a QA/);
     fs.rmSync(root, { recursive: true, force: true });
   });
 
@@ -140,6 +186,7 @@ describe("three config layers", () => {
       alias: "researcher",
       alternates: ["implementer", "reviewer"],
       review: false,
+      qa: false,
     });
     fs.rmSync(root, { recursive: true, force: true });
   });
@@ -232,7 +279,12 @@ describe("three config layers", () => {
     const checks = configs.process.flows.custom!.steps.find(
       (s) => s.id === "checks",
     );
-    expect(checks).toEqual({ id: "checks", review: false, changeRequests: 1 });
+    expect(checks).toEqual({
+      id: "checks",
+      review: false,
+      qa: false,
+      changeRequests: 1,
+    });
     fs.rmSync(root, { recursive: true, force: true });
   });
 

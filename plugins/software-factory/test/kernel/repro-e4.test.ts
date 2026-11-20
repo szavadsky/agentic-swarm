@@ -36,6 +36,7 @@ function setupRepo(): { repo: TmpRepo; goalDir: string; taskDir: string } {
       "  implementer-b: { harness: fake, model: fake-impl-b }",
       "  researcher: { harness: fake, model: fake-research }",
       "  reviewer: { harness: fake, model: fake-review }",
+      "  qa: { harness: fake, model: fake-qa }",
       "  steward: { harness: fake, model: fake-steward }",
       "  plan-checker: { harness: fake, model: fake-check }",
       "  plan-reviewer: { harness: fake, model: fake-plan-review }",
@@ -108,6 +109,18 @@ describe("repro E4: first signal does not stop dispatch admission", () => {
           return fakeTurnResult(req);
         },
         { when: whenTurn({ step: "pm" }) },
+      );
+
+      // The default flow's QA acceptance needs a neutral handler; the test
+      // scripts the implementer and reviewer it asserts on.
+      harness.script(
+        (_req, ctx) => {
+          ctx.writeOutcome(
+            outcome({ summary: "qa accepted", qa: { verdict: "accept" } }),
+          );
+          return fakeTurnResult(_req);
+        },
+        { when: whenTurn({ step: "qa" }), fallback: true },
       );
 
       const implemented: string[] = [];

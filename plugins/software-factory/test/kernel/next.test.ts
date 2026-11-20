@@ -38,6 +38,14 @@ const limits: Limits = {
   planCheckRounds: 2,
 };
 
+/** This file tests `next` against its own flow; derive with the same flow. */
+function deriveFlow(
+  tasks: Parameters<typeof derive>[0],
+  records: StepRecord[],
+) {
+  return derive(tasks, records, limits.flows);
+}
+
 const review = (
   seq: number,
   verdict: "approve" | "changes" | "reject",
@@ -77,15 +85,15 @@ const check = (seq: number): StepRecord =>
 
 describe("next", () => {
   it("asks for the boundary when there is nothing to do", () => {
-    const actions = next(derive([task("a")], []), limits, new Set());
+    const actions = next(deriveFlow([task("a")], []), limits, new Set());
     expect(actions.map((a) => a.kind)).toEqual(["step"]);
-    expect(next(derive([], []), limits, new Set())).toEqual([
+    expect(next(deriveFlow([], []), limits, new Set())).toEqual([
       { kind: "boundary" },
     ]);
   });
 
   it("exits only on a terminal goal", () => {
-    const done = derive(
+    const done = deriveFlow(
       [],
       [
         rec(1, {
@@ -107,14 +115,14 @@ describe("next", () => {
   });
 
   it("dispatches implement, then review, then merge for an approving flow", () => {
-    expect(next(derive([task("a")], []), limits, new Set())).toEqual([
+    expect(next(deriveFlow([task("a")], []), limits, new Set())).toEqual([
       { kind: "step", slug: "a", step: "implement", round: 1 },
     ]);
-    const reviewing = derive([task("a")], [implement(1), check(2)]);
+    const reviewing = deriveFlow([task("a")], [implement(1), check(2)]);
     expect(next(reviewing, limits, new Set())).toEqual([
       { kind: "step", slug: "a", step: "review", round: 1 },
     ]);
-    const merging = derive(
+    const merging = deriveFlow(
       [task("a")],
       [implement(1), check(2), review(3, "approve")],
     );
@@ -125,7 +133,7 @@ describe("next", () => {
 
   it("finishes a spike instead of merging it", () => {
     const spike = task("s", { kind: "spike", flow: "spike" });
-    const state = derive(
+    const state = deriveFlow(
       [spike],
       [
         implement(1, 1, { slug: "s" }),
@@ -139,7 +147,7 @@ describe("next", () => {
   });
 
   it("parks changes on the last call and merges a last-call approve", () => {
-    const lastCallChanges = derive(
+    const lastCallChanges = deriveFlow(
       [task("a")],
       [
         implement(1),
@@ -167,7 +175,7 @@ describe("next", () => {
       },
     ]);
 
-    const lastCallApprove = derive(
+    const lastCallApprove = deriveFlow(
       [task("a")],
       [
         implement(1),
@@ -188,12 +196,12 @@ describe("next", () => {
   });
 
   it("does not redispatch a task that is already running", () => {
-    const state = derive([task("a")], []);
+    const state = deriveFlow([task("a")], []);
     expect(next(state, limits, new Set(["a"]))).toEqual([]);
   });
 
   it("does not dispatch a task whose dependency is parked", () => {
-    const state = derive(
+    const state = deriveFlow(
       [task("a"), task("b", { deps: ["a"] })],
       [script(1, { step: "park", ok: true, cause: cause("review rejected") })],
     );
@@ -203,7 +211,7 @@ describe("next", () => {
 
   it("parks a task whose configured flow is missing", () => {
     const action = next(
-      derive([task("a", { flow: "nope" })], []),
+      deriveFlow([task("a", { flow: "nope" })], []),
       limits,
       new Set(),
     )[0]!;
@@ -212,11 +220,12 @@ describe("next", () => {
 
   it("starts a `base:` continuation's first turn whatever its chain spent", () => {
     const tasks = [task("a"), task("b", { base: "a" })];
-    const state = derive(
-      tasks,
-      [implement(1), check(2), review(3, "changes", 1), implement(4, 2)],
-      limits.flows,
-    );
+    const state = deriveFlow(tasks, [
+      implement(1),
+      check(2),
+      review(3, "changes", 1),
+      implement(4, 2),
+    ]);
     expect(state.tasks.a!.turns).toBeGreaterThan(0);
     expect(state.tasks.b!.turns).toBe(0);
     expect(

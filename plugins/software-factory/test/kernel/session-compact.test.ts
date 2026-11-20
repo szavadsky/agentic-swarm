@@ -274,8 +274,9 @@ describe("end-of-turn compaction", () => {
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
-      // All four turns attempted; every stored ref stays uncompacted.
-      expect(harness.attempts).toBe(4);
+      // Implement, QA, review, the fix and its second QA and review: every
+      // stored ref stays uncompacted when compaction fails.
+      expect(harness.attempts).toBe(6);
       const records = await runtime.store.listRecords();
       const implement = records
         .filter((r) => r.slug === "task" && r.step === "implement")
@@ -288,11 +289,12 @@ describe("end-of-turn compaction", () => {
         false,
       ]);
       expect(review.map((r) => r.session?.compacted)).toEqual([false, false]);
-      // The failed compaction cost no session: both follow-ups still resumed it.
-      expect(harness.calls[2]!.session?.id).toBe(implement[0]!.session?.id);
-      expect(harness.calls[2]!.session?.compacted).toBe(false);
-      expect(harness.calls[3]!.session?.id).toBe(review[0]!.session?.id);
+      // The failed compaction cost no session: the implement fix and the
+      // second review still resume their step's first session.
+      expect(harness.calls[3]!.session?.id).toBe(implement[0]!.session?.id);
       expect(harness.calls[3]!.session?.compacted).toBe(false);
+      expect(harness.calls[5]!.session?.id).toBe(review[0]!.session?.id);
+      expect(harness.calls[5]!.session?.compacted).toBe(false);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -319,7 +321,7 @@ describe("end-of-turn compaction", () => {
         false,
         false,
       ]);
-      expect(harness.calls[2]!.session?.id).toBe(implement[0]!.session?.id);
+      expect(harness.calls[3]!.session?.id).toBe(implement[0]!.session?.id);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -357,8 +359,11 @@ describe("end-of-turn compaction", () => {
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
 
-      // The cold implement turn skips; the hot review turn still compacts.
-      expect(harness.compactions.map((c) => c.id)).toHaveLength(1);
+      // The cold implement turn skips; QA and the review still compact.
+      expect(harness.compactions.map((c) => c.id)).toHaveLength(2);
+      expect(harness.compactions.map((c) => c.id)).not.toContain(
+        "stale-session",
+      );
       const records = await runtime.store.listRecords();
       const implement = records.find(
         (r) => r.slug === "task" && r.step === "implement",
@@ -369,7 +374,9 @@ describe("end-of-turn compaction", () => {
       expect(implement.session?.compacted).toBe(false);
       expect(implement.compactUsage).toBeUndefined();
       expect(review.session?.compacted).toBe(true);
-      expect(harness.compactions[0]!.id).toBe(review.session!.id);
+      expect(harness.compactions.map((c) => c.id)).toContain(
+        review.session!.id,
+      );
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -423,15 +430,22 @@ describe("compaction timing and cost", () => {
       const review = records
         .filter((r) => r.slug === "task" && r.step === "review")
         .sort((a, b) => a.seq - b.seq);
+      const qa = records
+        .filter((r) => r.slug === "task" && r.step === "qa")
+        .sort((a, b) => a.seq - b.seq);
 
-      // Every turn compacts at its end; both follow-ups resume a compacted ref.
+      // Every turn compacts at its end; each step's follow-up resumes its
+      // compacted ref.
       expect(harness.compactions.map((c) => c.id)).toEqual([
         implement[0]!.session!.id,
+        qa[0]!.session!.id,
         review[0]!.session!.id,
         implement[1]!.session!.id,
+        qa[1]!.session!.id,
         review[1]!.session!.id,
       ]);
       expect(implement.map((r) => r.session?.compacted)).toEqual([true, true]);
+      expect(qa.map((r) => r.session?.compacted)).toEqual([true, true]);
       expect(review.map((r) => r.session?.compacted)).toEqual([true, true]);
       expect(sessionCacheHot(implement[0]!.session!)).toBe(true);
       expect(sessionCacheHot(review[0]!.session!)).toBe(true);
@@ -452,10 +466,11 @@ describe("compaction timing and cost", () => {
       });
       expect(review[0]!.compactUsage?.costUsd).toBeCloseTo(0.0048, 10);
 
-      // Both follow-ups resumed a compacted ref; the fix reread a trimmed prefix.
-      expect(harness.calls[2]!.session?.compacted).toBe(true);
+      // The follow-ups resumed a compacted ref; the fix reread a trimmed prefix.
       expect(harness.calls[3]!.session?.compacted).toBe(true);
-      expect(harness.calls[3]!.session?.id).toBe(review[0]!.session!.id);
+      expect(harness.calls[5]!.session?.compacted).toBe(true);
+      expect(harness.calls[3]!.session?.id).toBe(implement[0]!.session!.id);
+      expect(harness.calls[5]!.session?.id).toBe(review[0]!.session!.id);
       expect(implement[1]!.usage?.in).toBe(1_500);
       expect(implement[1]!.usage!.in).toBeLessThan(implement[0]!.usage!.in);
       // A resumed review prices its unsplit prefix at the cached rate.
@@ -543,20 +558,20 @@ describe("review session resume", () => {
       expect(harness.compactions.map((c) => c.id)).toContain(
         review[0]!.session!.id,
       );
-      expect(harness.calls[1]!.session).toBeUndefined();
-      expect(harness.calls[3]!.session?.id).toBe(review[0]!.session!.id);
-      expect(harness.calls[3]!.session?.compacted).toBe(true);
+      expect(harness.calls[2]!.session).toBeUndefined();
+      expect(harness.calls[5]!.session?.id).toBe(review[0]!.session!.id);
+      expect(harness.calls[5]!.session?.compacted).toBe(true);
       expect(review.map((r) => r.alias)).toEqual(["reviewer", "reviewer"]);
       // The r2 record names the resumed session.
       expect(review[1]!.session?.id).toBe(review[0]!.session!.id);
       expect(review[1]!.cachedPrefix).toBe(true);
       // Never the implementer's session, although the fix is more recent.
       expect(review[0]!.session!.id).not.toBe(impl[0]!.session!.id);
-      expect(harness.calls[3]!.session?.id).not.toBe(impl[1]!.session!.id);
+      expect(harness.calls[5]!.session?.id).not.toBe(impl[1]!.session!.id);
 
       // The delta prompt: the diff since r1 plus the fix dispositions.
-      const r1Prompt = harness.calls[1]!.prompt;
-      const r2Prompt = harness.calls[3]!.prompt;
+      const r1Prompt = harness.calls[2]!.prompt;
+      const r2Prompt = harness.calls[5]!.prompt;
       expect(r1Prompt).toContain(`${impl[0]!.base}..${impl[0]!.commit}`);
       expect(r2Prompt).toContain(`${review[0]!.commit}..${impl[1]!.commit}`);
       expect(review[0]!.commit).not.toBe(impl[0]!.base);
@@ -604,7 +619,7 @@ describe("review session resume", () => {
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
 
-      expect(fake.calls).toHaveLength(3);
+      expect(fake.calls).toHaveLength(5);
       expect(other.calls).toHaveLength(1);
       expect(other.calls[0]!.session).toBeUndefined();
       const review = (await runtime.store.listRecords())
@@ -635,7 +650,7 @@ describe("review session resume", () => {
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
 
-      expect(harness.calls[3]!.session).toBeUndefined();
+      expect(harness.calls[5]!.session).toBeUndefined();
       const review = (await runtime.store.listRecords())
         .filter((r) => r.slug === "task" && r.step === "review")
         .sort((a, b) => a.seq - b.seq);

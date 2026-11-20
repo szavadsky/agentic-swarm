@@ -115,7 +115,8 @@ describe("empty diff", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("merged");
-      expect(harness.calls).toHaveLength(3);
+      // Implement, the empty gate fix, QA's acceptance, and the review.
+      expect(harness.calls).toHaveLength(4);
 
       const checks = records.filter(
         (r) => r.slug === "task" && r.step === "checks",

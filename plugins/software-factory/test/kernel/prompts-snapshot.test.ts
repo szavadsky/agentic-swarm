@@ -10,6 +10,7 @@ import { frontClassTypesVar } from "../../src/kernel/front.js";
 import {
   outcomeRepairSchemaVar,
   outcomeSchemaVar,
+  qaOutcomeSchemaVar,
   taskFrontmatterVar,
   taskTypesVar,
   tierNamesVar,
@@ -133,6 +134,25 @@ const ROLES: Record<string, Record<string, string>> = {
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: OUTCOME_SCHEMA,
+  },
+  qa: {
+    task_path: "/goal/tasks/alpha.md",
+    worktree: "/worktrees/demo-tasks/alpha",
+    base_hash: "abc1234",
+    head_hash: "def5678",
+    round: "1",
+    max_rounds: "3",
+    last_call: "false",
+    base_gates: "base abc1234def: green",
+    checks_result: "pass",
+    checks_tree: "3ba247e47772a8ba5874d089990419f572432df8",
+    checks_log: "/goal/records/1/alpha/checks",
+    gate_commands: "- test: bun test",
+    prior_findings: "",
+    fix_dispositions: "",
+    outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
+    outcome_schema: qaOutcomeSchemaVar(),
   },
   reviewer: {
     task_path: "/goal/tasks/alpha.md",
@@ -523,10 +543,10 @@ describe("review findings carry", () => {
     );
   });
 
-  it("marks findings empty before the first review, not per fix round", () => {
+  it("marks findings empty before the first acceptance, not per fix round", () => {
     const rendered = library().render("implementer", ROLES.implementer!);
     expect(rendered).not.toContain("empty on the first turn");
-    expect(rendered).toContain("empty before the first review");
+    expect(rendered).toContain("empty before the first acceptance");
   });
 });
 

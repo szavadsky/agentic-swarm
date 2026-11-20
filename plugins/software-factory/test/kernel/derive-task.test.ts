@@ -59,7 +59,7 @@ const advance = (seq: number, tree: string, headTree?: string): StepRecord =>
   });
 
 describe("continuation carry", () => {
-  it("carries a no-change first turn past checks to review when the branch holds work beyond the head", () => {
+  it("carries a no-change first turn past checks to QA when the branch holds work beyond the head", () => {
     const t = task("beta", { base: "alpha" });
     const flow = DEFAULT_FLOWS["implement-review"]!;
     const first = reduceTask(
@@ -83,7 +83,7 @@ describe("continuation carry", () => {
       flow,
     );
     expect(afterChecks.park).toBeUndefined();
-    expect(afterChecks.phase).toBe("review");
+    expect(afterChecks.phase).toBe("qa");
   });
 
   it("carries a no-change first turn past checks to merge on just-implement", () => {
@@ -316,7 +316,7 @@ describe("empty gate fix deferral", () => {
     expect(reduction.gateFix).toBe(true);
   });
 
-  it("green checks after an empty gate fix proceed to review with no extra round", () => {
+  it("green checks after an empty gate fix proceed to QA with no extra round", () => {
     const t = task("a");
     const flow = DEFAULT_FLOWS["implement-review"]!;
     const reduction = reduceTask(
@@ -329,7 +329,7 @@ describe("empty gate fix deferral", () => {
       ],
       flow,
     );
-    expect(reduction.phase).toBe("review");
+    expect(reduction.phase).toBe("qa");
     expect(reduction.round).toBe(1);
     expect(reduction.park).toBeUndefined();
     expect(reduction.loop).toBeUndefined();
@@ -430,7 +430,7 @@ describe("empty gate fix deferral", () => {
       ],
       flow,
     );
-    expect(reduction.phase).toBe("review");
+    expect(reduction.phase).toBe("qa");
     expect(reduction.round).toBe(2);
     expect(reduction.verdict).toBe("changes");
     expect(reduction.park).toBeUndefined();
@@ -478,11 +478,11 @@ describe("empty gate fix deferral", () => {
     );
   });
 
-  it("replays m5-kept-land 01140-01146 to review", () => {
+  it("replays m5-kept-land 01140-01146 to QA", () => {
     // i30: implement r1 left tree 31d8285c, checks 01140 went red on tests, the
     // fix turn verified the work and committed nothing, checks 01146 came back
     // green on the same tree — and derive parked empty-diff without reading
-    // them. The replay reaches review with the red and the fix on record.
+    // them. The replay reaches QA with the red and the fix on record.
     const t = task("m5-kept-land");
     const flow = DEFAULT_FLOWS["implement-review"]!;
     const tree = "31d8285c153e37894c67f932b0a26681dde05da9";
@@ -510,7 +510,7 @@ describe("empty gate fix deferral", () => {
       ],
       flow,
     );
-    expect(reduction.phase).toBe("review");
+    expect(reduction.phase).toBe("qa");
     expect(reduction.round).toBe(1);
     expect(reduction.park).toBeUndefined();
     expect(reduction.loop).toBeUndefined();

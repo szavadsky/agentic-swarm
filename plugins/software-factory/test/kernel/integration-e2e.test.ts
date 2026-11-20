@@ -110,6 +110,7 @@ function runYaml(repoDir: string): string {
     "  implementer-b: { harness: fake, model: fake-impl-b }",
     "  researcher: { harness: fake, model: fake-research }",
     "  reviewer: { harness: fake, model: fake-review }",
+    "  qa: { harness: fake, model: fake-qa }",
     "  steward: { harness: fake, model: fake-steward }",
     "  plan-checker: { harness: fake, model: fake-check }",
     "  plan-reviewer: { harness: fake, model: fake-plan-review }",
@@ -243,7 +244,7 @@ describe("cross-slice E2E — init, steer and three launches through S2/S3/S4", 
       ).toBe(true);
       const one = await metricsOf(goalDir);
       expect(one.iterations.map((i) => i.n)).toEqual([1]);
-      expect(one.iterations[0]!.turns).toBe(11);
+      expect(one.iterations[0]!.turns).toBe(14);
       expect(one.iterations[0]!.merged).toEqual(["alpha"]);
       expect(one.iterations[0]!.parked).toEqual(["beta"]);
       const betaTip = repo
@@ -379,7 +380,7 @@ describe("cross-slice E2E — init, steer and three launches through S2/S3/S4", 
       expect(summaryOf(goalDir, 2)).toContain("merged: beta2, gamma");
       const two = await metricsOf(goalDir);
       expect(two.iterations.map((i) => i.n)).toEqual([1, 2]);
-      expect(two.iterations[1]!.turns).toBe(10);
+      expect(two.iterations[1]!.turns).toBe(12);
       expect(two.iterations[1]!.humanInterventions).toBe(1);
       expect(two.iterations[1]!.merged).toEqual(["beta2", "gamma"]);
       expect(two.totals.merged).toEqual(["alpha", "beta2", "gamma"]);

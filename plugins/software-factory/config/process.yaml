@@ -11,6 +11,16 @@ flows:
         prompt: implementer
         alias: implementer
         alternates: [implementer-b]
+      # QA accepts the work before the reviewer reads it: it gets the checks
+      # result and log, verifies the done-when, adds tests where coverage
+      # requires them, and sends actionable findings back to the implementer.
+      # QA edits to tests and scripts are gated again before review.
+      - id: qa
+        prompt: qa
+        alias: qa
+        qa: true
+        changeRequests: 2
+        deliverable: verdict
       - id: review
         prompt: reviewer
         alias: reviewer

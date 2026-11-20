@@ -714,6 +714,7 @@ describe("pricing in a launch", () => {
           "  implementer-b: { harness: fake, model: paid/two }",
           "  researcher: { harness: fake, model: paid/one }",
           "  reviewer: { harness: fake, model: paid/one }",
+          "  qa: { harness: fake, model: paid/one }",
           "  steward: { harness: fake, model: fake-steward }",
           "  plan-checker: { harness: fake, model: fake-check }",
           "  plan-reviewer: { harness: fake, model: fake-plan-review }",

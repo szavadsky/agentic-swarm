@@ -51,6 +51,13 @@ aliases:
     model: opencode/minimax-m3.1-flash-free
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
+  # QA inherits the reviewer's model here; a variant that wants model
+  # diversity for QA overrides this alias like any other.
+  qa:
+    harness: opencode
+    model: opencode/minimax-m3.1-flash-free
+    fallbacks:
+      - model: opencode-go/deepseek-v4.1-flash
   plan-reviewer:
     harness: opencode
     model: opencode/minimax-m3.1-flash-free

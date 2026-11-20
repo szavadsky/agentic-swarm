@@ -4,10 +4,12 @@ import { isInfraCheck } from "./gates.js";
 import { countOutcomeRepairs } from "../harness/usage.js";
 import { stepFingerprint } from "./progress.js";
 import { SPIKE_REPORT_CHECK, spikeReportPath } from "./spike-report.js";
+import { qaReportOf } from "./qa.js";
 import {
   agentSteps,
   checksFixLimit,
   DEFAULT_CHANGE_REQUESTS,
+  isAcceptanceStep,
   isLastChecksFixCall,
   isLastReviewCall,
 } from "./review.js";
@@ -29,6 +31,14 @@ export const DEFAULT_FLOWS: Record<string, FlowDefinition> = {
   "implement-review": {
     steps: [
       { id: "implement", prompt: "implementer", alias: "implementer" },
+      {
+        id: "qa",
+        prompt: "qa",
+        alias: "qa",
+        qa: true,
+        changeRequests: DEFAULT_CHANGE_REQUESTS,
+        deliverable: "verdict",
+      },
       {
         id: "review",
         prompt: "reviewer",
@@ -307,6 +317,8 @@ export function reduceTask(
   let replyOnlyFix = false;
   let gatesFailures = 0;
   let pendingChecks: PendingChecks | null = null;
+  /** The last green task-checks tree, the baseline a QA accept may already have judged. */
+  let lastChecksTree: string | undefined;
   let lastTree: string | undefined;
   /** Tree of the last counted turn; ignored turns leave the branch baseline here. */
   let countedTree: string | undefined;
@@ -330,19 +342,19 @@ export function reduceTask(
     resolveRan = true;
     commit = rec.commit ?? commit;
     const outside = rec.outside ?? [];
-    const reviewIndex = steps.findIndex((step) => step.review === true);
+    const acceptanceIndex = steps.findIndex((step) => isAcceptanceStep(step));
     if (outside.length > 0) {
-      if (reviewIndex < 0) {
-        // No review step to judge the un-reviewed work: never land it silently.
+      if (acceptanceIndex < 0) {
+        // No acceptance step to judge the un-reviewed work: never land it silently.
         park = makeCause(
           "stuck",
-          `resolve changed files outside the conflict set and the flow has no review step: ${outside.join(", ")}`,
+          `resolve changed files outside the conflict set and the flow has no acceptance step: ${outside.join(", ")}`,
         );
         phase = "parked";
       } else {
         round = Math.max(round, rec.round + 1);
-        stepIndex = reviewIndex;
-        phase = steps[reviewIndex]!.id;
+        stepIndex = acceptanceIndex;
+        phase = steps[acceptanceIndex]!.id;
         pendingChecks = null;
       }
     } else {
@@ -383,6 +395,7 @@ export function reduceTask(
       continue;
     }
     if (rec.step === "checks") {
+      if (rec.ok === true && rec.tree !== undefined) lastChecksTree = rec.tree;
       if (pendingChecks) {
         const red = rec.checks?.filter((c) => !c.ok) ?? [];
         if (rec.ok === false && red.length > 0 && red.every(isInfraCheck)) {
@@ -633,7 +646,7 @@ export function reduceTask(
     const answeredReview =
       changesPending &&
       answeredStep !== undefined &&
-      !answeredStep.review &&
+      !isAcceptanceStep(answeredStep) &&
       replyCount > 0 &&
       committedNothing(task.kind, rec, priorTree);
     const emptyGateFix =
@@ -641,12 +654,12 @@ export function reduceTask(
       !changesPending &&
       carriedWork !== true &&
       answeredStep !== undefined &&
-      !answeredStep.review &&
+      !isAcceptanceStep(answeredStep) &&
       committedNothing(task.kind, rec, priorTree);
     const fp =
       answeredReview ||
       emptyGateFix ||
-      (answeredStep?.review === true && replyOnlyFix)
+      (isAcceptanceStep(answeredStep) && replyOnlyFix)
         ? null
         : stepFingerprint(task.kind, rec, lastTree);
     if (fp) {
@@ -702,7 +715,10 @@ export function reduceTask(
     // red checks, where the checks that run next decide: the branch may
     // already be done and only a repeated identical red proves the fix empty.
     let deferredEmpty: { step: string; round: number } | null = null;
-    if (!step.review && committedNothing(task.kind, rec, priorTree)) {
+    if (
+      !isAcceptanceStep(step) &&
+      committedNothing(task.kind, rec, priorTree)
+    ) {
       if (carriedWork !== true && (!changesPending || replyCount === 0)) {
         if (carriedWork === false) {
           park = makeCause(
@@ -729,6 +745,77 @@ export function reduceTask(
       // dispositions — or the turn carries a continuation's kept work, which
       // is progress, not an empty diff — or the following checks settle an
       // empty gate fix. Review rounds still bound the loop.
+    }
+    if (step.qa) {
+      const qa = qaReportOf(outcome);
+      if (qa?.verdict === "changes") {
+        if (isLastReviewCall(step, rec.round)) {
+          // The outcome validator refuses this; a recorded changes on the
+          // last call is a contract breach, never a merge.
+          park = makeCause(
+            "invalid-outcome",
+            `qa changes on the last acceptance call: ${outcome?.summary ?? "no summary"}`,
+          );
+          phase = "parked";
+          changesPending = false;
+          pendingChecks = null;
+        } else if (qa.findings.length === 0) {
+          park = makeCause(
+            "invalid-outcome",
+            `qa changes without findings: ${outcome?.summary ?? "no summary"}`,
+          );
+          phase = "parked";
+          changesPending = false;
+          pendingChecks = null;
+        } else {
+          round = rec.round + 1;
+          stepIndex = 0;
+          gateFix = false;
+          gateLastCall = false;
+          mergeFix = false;
+          phase = firstStep;
+          changesPending = true;
+          pendingChecks = null;
+          verdict = "changes";
+        }
+        replyOnlyFix = false;
+        continue;
+      }
+      if (qa?.verdict === "accept") {
+        stepIndex = idx + 1;
+        gateFix = false;
+        gateLastCall = false;
+        mergeFix = false;
+        changesPending = false;
+        // Gates run before an acceptance step or the end, exactly as
+        // `checksDue` decides for the turn. The checks before QA already
+        // judged this tree: do not spend a second run before the reviewer
+        // reads the same content.
+        const nextStep = steps[stepIndex];
+        const checksNext = !nextStep || isAcceptanceStep(nextStep);
+        const judged =
+          checksNext && rec.tree !== undefined && rec.tree === lastChecksTree;
+        pendingChecks =
+          checksNext && !judged
+            ? { nextIndex: stepIndex, mergeAfter: false }
+            : null;
+        // A reply-only fix's tree passes through QA to the reviewer: keep the
+        // flag so that review also skips the history fingerprint.
+        phase =
+          checksNext && !judged
+            ? "checks"
+            : phaseAfter(flow, stepIndex, task.kind);
+        continue;
+      }
+      park = makeCause(
+        "invalid-outcome",
+        `qa turn delivered no qa verdict: ${outcome?.summary ?? "no summary"}`,
+      );
+      phase = "parked";
+      changesPending = false;
+      pendingChecks = null;
+      replyOnlyFix = false;
+      continue;
     }
     if (step.review) {
       // Standalone escalation (and any review upscope answer): parks with the
@@ -785,7 +872,7 @@ export function reduceTask(
     changesPending = false;
     stepIndex = idx + 1;
     const nextStep = steps[stepIndex];
-    if (!nextStep || nextStep.review) {
+    if (!nextStep || isAcceptanceStep(nextStep)) {
       pendingChecks = {
         nextIndex: stepIndex,
         mergeAfter: mergeFix,

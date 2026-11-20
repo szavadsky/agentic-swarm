@@ -176,8 +176,8 @@ describe("merge conflicts", () => {
         detail:
           "task: auth: provider.no-route Model unavailable: opencode/does-not-exist-free",
       });
-      // Implement and review compacted; the infra-stopped steward turn did not.
-      expect(harness.compactions).toHaveLength(2);
+      // Implement, QA and review compacted; the infra-stopped steward turn did not.
+      expect(harness.compactions).toHaveLength(3);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -216,8 +216,8 @@ describe("merge conflicts", () => {
       expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
         "boundary",
       );
-      // Implement and review compacted; the refused steward turn did not.
-      expect(harness.compactions).toHaveLength(2);
+      // Implement, QA and review compacted; the refused steward turn did not.
+      expect(harness.compactions).toHaveLength(3);
       const records = await runtime.store.listRecords();
       expect(
         records.some((r) => r.step === "steward" && r.slug === "task"),

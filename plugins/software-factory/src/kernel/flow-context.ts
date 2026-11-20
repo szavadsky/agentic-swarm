@@ -20,11 +20,12 @@ import { contextPackRelPath } from "./context-pack.js";
 import { formatFailingChecks, newGateFailures } from "./gates.js";
 import { launchKindOf } from "./metrics.js";
 import { taskOutcomeSchema } from "./outcome-schemas.js";
-import { outcomeSchemaVar } from "./prompt-schema.js";
+import { outcomeSchemaVar, qaOutcomeSchemaVar } from "./prompt-schema.js";
 import { CHECK_HANDOFF_DEFAULTS, GATE_LAST_CALL_ASK } from "./prompts.js";
 import { poolExhausted } from "./quota-pools.js";
 import { formatFixDispositions, formatReviewFindings } from "./record.js";
-import { agentSteps, isLastChecksFixCall } from "./review.js";
+import { formatAcceptanceFindings } from "./record.js";
+import { agentSteps, isAcceptanceStep, isLastChecksFixCall } from "./review.js";
 import { sessionCacheHot } from "./sessions.js";
 import { spikeReportPath } from "./spike-report.js";
 import type {
@@ -162,6 +163,25 @@ function lastReview(
     .at(-1);
 }
 
+/**
+ * The latest turn that accepted or sent back the work: a review or QA. The
+ * author sees its findings; QA sees the findings its next round answers even
+ * when the checks record between them is newer.
+ */
+function lastAcceptance(
+  records: StepRecord[],
+  slug: string,
+  flow: FlowDefinition,
+): StepRecord | undefined {
+  const acceptanceIds = new Set(
+    flow.steps.filter(isAcceptanceStep).map((s) => s.id),
+  );
+  return records
+    .filter((r) => r.slug === slug && acceptanceIds.has(r.step) && r.outcome)
+    .sort(bySeq)
+    .at(-1);
+}
+
 /** The latest productive agent turn: the fix whose dispositions a deferred review judges. */
 function lastProductiveTurn(
   records: StepRecord[],
@@ -169,7 +189,7 @@ function lastProductiveTurn(
   flow: FlowDefinition,
 ): StepRecord | undefined {
   const productiveIds = new Set(
-    flow.steps.filter((s) => !s.review).map((s) => s.id),
+    flow.steps.filter((s) => !isAcceptanceStep(s)).map((s) => s.id),
   );
   return records
     .filter(
@@ -263,14 +283,17 @@ export function findStep(flow: FlowDefinition, id: string): FlowStep {
   return step;
 }
 
-/** Gates run after the last productive step, immediately before a review (or the end). */
+/**
+ * Gates run after a productive turn, immediately before an acceptance step
+ * (QA or review, or the end). QA and the reviewer read the already-gated tree.
+ */
 export function checksDue(flow: FlowDefinition, id: string): boolean {
   // The resolve step is outside the agent sequence: its commit is the branch's
   // new tip, so the gates that decide the re-merge always run after it.
   if (id === "resolve") return true;
   const steps = agentSteps(flow);
   const next = steps[steps.findIndex((s) => s.id === id) + 1];
-  return !next || next.review === true;
+  return !next || isAcceptanceStep(next);
 }
 
 export function isFixTurn(
@@ -283,8 +306,8 @@ export function isFixTurn(
 }
 
 /**
- * Whether this turn repeats its step: the productive step's fix turn, or a
- * review round after the first. The step's follow-up mode applies here; a
+ * Whether this turn repeats its step: the productive step's fix turn, or an
+ * acceptance round after the first. The step's follow-up mode applies here; a
  * failure-kind retry in the same round belongs to `alternates` instead.
  */
 function isFollowUpTurn(
@@ -292,7 +315,7 @@ function isFollowUpTurn(
   state: TaskState,
   stepId: string,
 ): boolean {
-  return findStep(flow, stepId).review === true
+  return isAcceptanceStep(findStep(flow, stepId))
     ? state.round > 1
     : isFixTurn(flow, state, stepId);
 }
@@ -694,7 +717,7 @@ export function isTrivialImplementTurn(
 ): boolean {
   const step = findStep(flowOf(runtime, task), stepId);
   return (
-    !step.review &&
+    !isAcceptanceStep(step) &&
     stepTurn(runtime, task, state, stepId).prompt === "implementer" &&
     frontTaskClass(runtime, task) === "trivial"
   );
@@ -779,7 +802,7 @@ export function stepTarget(
       runtime,
       turn.prompt,
       alias,
-      step.review ? undefined : task.tier,
+      isAcceptanceStep(step) ? undefined : task.tier,
       iteration,
     ),
     ...repairFields(turn),
@@ -1021,7 +1044,7 @@ export function trivialResumeNote(
   ].join("\n");
 }
 
-/** Prompt inputs shared by the implementer and reviewer templates. */
+/** Prompt inputs shared by the implementer, QA and reviewer templates. */
 export function promptVars(
   runtime: KernelRuntime,
   task: TaskFile,
@@ -1030,19 +1053,22 @@ export function promptVars(
   round: number,
   flow: FlowDefinition,
   state?: TaskState,
+  stepId?: string,
 ): Record<string, string> {
   const review = lastReview(records, task.slug, flow);
+  const acceptance = lastAcceptance(records, task.slug, flow);
+  const qaStep = flow.steps.find((step) => step.id === stepId)?.qa === true;
   const checks = lastChecks(records, task.slug);
   const mergeChecks = lastMergeChecks(records, task.slug);
-  const latest = [review, checks, mergeChecks]
+  const latest = [acceptance, checks, mergeChecks]
     .filter((r): r is StepRecord => Boolean(r))
     .sort(bySeq)
     .at(-1);
   const base = recordedBaseGates(records);
   const preexisting = preexistingRed(base);
   let findings = "";
-  if (latest === review && review?.outcome)
-    findings = formatReviewFindings(review.outcome);
+  if (latest === acceptance && acceptance?.outcome)
+    findings = formatAcceptanceFindings(acceptance.outcome);
   else if (latest?.checks)
     findings = formatFailingChecks(newGateFailures(latest.checks, preexisting));
 
@@ -1084,7 +1110,15 @@ export function promptVars(
     round: String(round),
     base_hash: "",
     head_hash: "",
-    prior_findings: review?.outcome ? formatReviewFindings(review.outcome) : "",
+    // The reviewer re-judges its own prior round; QA re-judges the last
+    // acceptance (its own or the reviewer's) the fix answers.
+    prior_findings: qaStep
+      ? acceptance?.outcome
+        ? formatAcceptanceFindings(acceptance.outcome)
+        : ""
+      : review?.outcome
+        ? formatReviewFindings(review.outcome)
+        : "",
     fix_dispositions: fixDispositions(records, task.slug, flow, round),
     front_pack: frontPack(runtime, task, records) ?? "",
     // The standalone escalation ask for the reviewer; empty when this task is
@@ -1093,11 +1127,14 @@ export function promptVars(
     // A de-novo turn carries no follow-up notice; the trivial path overrides
     // this with `trivialResumeNote` before rendering the implement prompt.
     resume_note: "",
-    // The task type's output schema, not the role's: a spike and a development
-    // task may deliver different shapes even when the same role runs both.
-    outcome_schema: outcomeSchemaVar(
-      undefined,
-      taskOutcomeSchema(task, runtime.configs.process.taskTypes),
-    ),
+    // QA carries its own kernel schema; every other step delivers the task
+    // type's schema (a spike and a development task may differ even when the
+    // same role runs both).
+    outcome_schema: qaStep
+      ? qaOutcomeSchemaVar()
+      : outcomeSchemaVar(
+          undefined,
+          taskOutcomeSchema(task, runtime.configs.process.taskTypes),
+        ),
   };
 }

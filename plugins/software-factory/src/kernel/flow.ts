@@ -39,6 +39,7 @@ import {
 import { runCleanlinessCheck } from "./cleanliness.js";
 import { type MergeResult, mergeTask } from "./integrate.js";
 import { taskOutcomeSchema } from "./outcome-schemas.js";
+import { qaOutcomeSchema, qaReportOf } from "./qa.js";
 import {
   abortMerge,
   type ConflictSnapshot,
@@ -62,7 +63,11 @@ import {
 } from "./record.js";
 import { checkSpikeReport } from "./spike-report.js";
 import { materialHash, taskArchitect } from "./tasks.js";
-import { isLastReviewCall, reviewRoundLimit } from "./review.js";
+import {
+  isAcceptanceStep,
+  isLastReviewCall,
+  reviewRoundLimit,
+} from "./review.js";
 import type {
   Action,
   Cause,
@@ -396,6 +401,24 @@ function trackHarnessTimeouts(inners: readonly Harness[]): TimeoutTracker {
   };
 }
 
+/** The last green task-checks tree before this turn, the baseline QA may already have judged. */
+function lastGreenChecksTree(
+  records: readonly StepRecord[],
+  slug: string,
+): string | undefined {
+  return records
+    .filter(
+      (record) =>
+        record.slug === slug &&
+        record.step === "checks" &&
+        record.endedAt &&
+        record.ok === true &&
+        record.tree !== undefined,
+    )
+    .sort((a, b) => a.seq - b.seq)
+    .at(-1)?.tree;
+}
+
 async function handleStepResult(
   runtime: KernelRuntime,
   task: TaskFile,
@@ -406,6 +429,7 @@ async function handleStepResult(
   worktree: string,
   preexisting: ReadonlySet<string>,
   prior: readonly StepRecord[],
+  record: StepRecord,
   stop: StepRecord["stop"],
   outcome: StepRecord["outcome"],
 ): Promise<TaskActionResult> {
@@ -446,6 +470,27 @@ async function handleStepResult(
   if (status === "blocked" || status === "failed" || status === "upscope") {
     await appendPark(runtime.store, meta, parkCause(status, outcome?.summary));
     return infraResult ?? cancelledResult ?? {};
+  }
+  if (step.qa) {
+    const qa = qaReportOf(outcome);
+    if (qa?.verdict === "changes") {
+      if (isLastReviewCall(step, state.round)) {
+        // The outcome validator refuses this; a delivered record is a
+        // contract breach, never a merge.
+        await appendPark(
+          runtime.store,
+          meta,
+          makeCause(
+            "invalid-outcome",
+            `qa changes on the last acceptance call: ${outcome?.summary ?? "no summary"}`,
+          ),
+        );
+      }
+      return infraResult ?? cancelledResult ?? {};
+    }
+    // Only an accept carries the tree to the reviewer; a missing verdict is a
+    // derive contract breach and never earns a gate run here.
+    if (qa?.verdict !== "accept") return infraResult ?? cancelledResult ?? {};
   }
   if (step.review) {
     // Standalone escalation: the reviewer answered the upscope ask with yes.
@@ -492,6 +537,14 @@ async function handleStepResult(
     return infraResult ?? cancelledResult ?? {};
   }
   if (checksDue(flow, step.id)) {
+    // QA may accept the very tree the preceding checks judged. Its own edits
+    // change the tree, so they still gate before the reviewer reads them.
+    const qaJudgedTree =
+      step.qa === true &&
+      qaReportOf(outcome)?.verdict === "accept" &&
+      record.tree !== undefined &&
+      record.tree === lastGreenChecksTree(prior, task.slug);
+    if (qaJudgedTree) return infraResult ?? cancelledResult ?? {};
     const checks = await runTaskGates(
       runtime,
       task,
@@ -588,7 +641,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   let resolveIsCreation = false;
   let resolveIsFirstTurn = false;
   if (!resolveStep && ensured.mergeConflict) {
-    if (step.review || fix) {
+    if (isAcceptanceStep(step) || fix) {
       const named =
         ensured.mergeConflict.paths.join(", ") ||
         "git reported no unmerged paths";
@@ -637,7 +690,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     !pendingResolve &&
     keptBranch &&
     !(ensured.created && task.base !== undefined) &&
-    !step.review &&
+    !isAcceptanceStep(step) &&
     (await worktreeClean(ensured.path))
   ) {
     const head = await integrationHead(runtime);
@@ -681,7 +734,12 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       }
     }
   }
-  if (!resolveStep && !pendingResolve && keptBranch && !step.review) {
+  if (
+    !resolveStep &&
+    !pendingResolve &&
+    keptBranch &&
+    !isAcceptanceStep(step)
+  ) {
     const inFlight = await mergeHeadSha(ensured.path);
     if (inFlight) {
       let paths = await unmergedFiles(ensured.path);
@@ -700,7 +758,11 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       pendingResolve = { head: inFlight, paths };
     }
   }
-  if (keptBranch && step.review && (await mergeHeadSha(ensured.path))) {
+  if (
+    keptBranch &&
+    isAcceptanceStep(step) &&
+    (await mergeHeadSha(ensured.path))
+  ) {
     const paths = await unmergedFiles(ensured.path);
     const named = paths.join(", ") || "git reported no unmerged paths";
     await abortMerge(ensured.path);
@@ -746,7 +808,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
   // other first turns start de novo.
   const trivial = isTrivialImplementTurn(runtime, task, state, step.id);
   let session =
-    step.review || (fix && !trivial)
+    isAcceptanceStep(step) || (fix && !trivial)
       ? await followUpSession(
           runtime,
           task,
@@ -780,6 +842,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     state.round,
     flow,
     state,
+    step.id,
   );
   if (resolve) {
     Object.assign(
@@ -801,14 +864,15 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       startPoint);
   vars.base_hash = baseHash;
   vars.head_hash = await headSha(ensured.path);
-  const lastCall = step.review && isLastReviewCall(step, state.round);
-  if (step.review) {
+  const lastCall =
+    isAcceptanceStep(step) && isLastReviewCall(step, state.round);
+  if (isAcceptanceStep(step)) {
     vars.max_rounds = String(reviewRoundLimit(step));
     vars.last_call = String(lastCall);
   } else if (state.gateFix && state.gateLastCall) {
     vars.last_call = "true";
   }
-  if (step.review && session) {
+  if (isAcceptanceStep(step) && session) {
     // A resumed review already holds the prior rounds: the range carries the
     // delta since the last turn of this step, with the fix dispositions.
     const delta = priorStepCommit(records, task.slug, step.id, task.revision);
@@ -874,8 +938,10 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
       taskHash: materialHash(task),
     },
     vars,
-    expectation: step.review ? "review" : "any",
-    outcomeSchema: taskOutcomeSchema(task, runtime.configs.process.taskTypes),
+    expectation: step.qa ? "qa" : step.review ? "review" : "any",
+    outcomeSchema: step.qa
+      ? qaOutcomeSchema
+      : taskOutcomeSchema(task, runtime.configs.process.taskTypes),
     lastCall,
     session,
     timeouts,
@@ -1064,6 +1130,7 @@ async function runStep(deps: StepDeps): Promise<TaskActionResult> {
     ensured.path,
     preexisting,
     records,
+    result.record,
     result.record.stop,
     result.outcome,
   );

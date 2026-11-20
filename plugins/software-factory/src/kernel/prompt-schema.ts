@@ -1,6 +1,7 @@
 // biome-ignore-all lint/complexity: split-rest
 import { z } from "zod";
 import { expectationField, type OutcomeExpectation } from "./outcome.js";
+import { qaOutcomeSchema } from "./qa.js";
 import { taskFrontmatterSchema } from "./tasks.js";
 import {
   type Outcome,
@@ -168,6 +169,23 @@ export function outcomeSchemaVar(
   schema: z.ZodType<Outcome> = outcomeSchema,
 ): string {
   return `\`\`\`yaml\n${renderSkeleton(schema, keep ?? writtenFields(schema))}\n\`\`\``;
+}
+
+/** The fields a QA turn writes: the kernel shape plus its own report. */
+export const QA_OUTCOME_FIELDS = [
+  "status",
+  "summary",
+  "concerns",
+  "qa",
+] as const;
+
+/**
+ * The `outcome_schema` variable for a QA turn. The QA turn's repair ask uses
+ * the same schema through `outcomeRepairSchemaVar`; the task type's schema
+ * stays the shape every other step delivers.
+ */
+export function qaOutcomeSchemaVar(): string {
+  return outcomeSchemaVar(QA_OUTCOME_FIELDS, qaOutcomeSchema);
 }
 
 /** The unconditional outcome fields every turn delivers. */

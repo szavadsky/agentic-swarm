@@ -3,6 +3,7 @@ import fs from "node:fs";
 import yaml from "yaml";
 import type { z } from "zod";
 import { knownDebtIds } from "./derive.js";
+import { qaReportOf } from "./qa.js";
 import {
   type FlowDefinition,
   type FlowStep,
@@ -12,7 +13,7 @@ import {
   type StepRecord,
 } from "./types.js";
 
-export type OutcomeExpectation = "any" | "review" | "architect";
+export type OutcomeExpectation = "any" | "review" | "qa" | "architect";
 
 export class OutcomeInvalidError extends Error {
   constructor(public readonly findings: string[]) {
@@ -116,15 +117,17 @@ export function readDeliveredOutcome(
 }
 
 /**
- * The one outcome field each expectation gates: a review delivers a verdict, the
- * architect step a decision, `any` delivers either only if it chooses. The
- * validator enforces the field and the repair ask renders just that one, so a
- * bare done is never asked for a verdict.
+ * The one outcome field each expectation gates: a review delivers a verdict, a
+ * QA step its nested accept-or-changes report, the architect step a decision,
+ * `any` delivers any only if it chooses. The validator enforces the field and
+ * the repair ask renders just that one, so a bare done is never asked for a
+ * verdict.
  */
 export function expectationField(
   expectation: OutcomeExpectation,
-): "verdict" | "decision" | undefined {
+): "verdict" | "qa" | "decision" | undefined {
   if (expectation === "review") return "verdict";
+  if (expectation === "qa") return "qa";
   if (expectation === "architect") return "decision";
   return undefined;
 }
@@ -149,10 +152,10 @@ export type KernelTurnStep = keyof typeof KERNEL_TURN_STEPS;
 
 /**
  * Maps a flow step id or kernel turn step to its outcome expectation: the
- * architect consult gates a decision, review steps a verdict, kernel turn steps
- * their expectation, and every other configured step accepts any outcome. An
- * id that is neither a flow step nor a kernel turn step is an error, never an
- * unenforced contract.
+ * architect consult gates a decision, review steps a verdict, QA steps their
+ * accept-or-changes report, kernel turn steps their expectation, and every
+ * other configured step accepts any outcome. An id that is neither a flow step
+ * nor a kernel turn step is an error, never an unenforced contract.
  */
 export function expectationForStep(
   step: string | undefined,
@@ -166,7 +169,9 @@ export function expectationForStep(
   if (!found) {
     throw new Error(`step "${step}" is not configured in the repo's flows`);
   }
-  return found.review ? "review" : "any";
+  if (found.review) return "review";
+  if (found.qa) return "qa";
+  return "any";
 }
 
 /** The first configured step with this id; step ids are kernel flow vocabulary. */
@@ -182,7 +187,7 @@ export function flowStepFor(
 }
 
 export interface ExpectationOptions {
-  /** A review's last call: `changes` is not accepted, only ship or park. */
+  /** A review's or QA's last call: a change request is not accepted then. */
   lastCall?: boolean;
   /**
    * Records read before this turn, so a `debtClosed` id can be checked against
@@ -229,6 +234,32 @@ export function validateExpectation(
     findings.push(
       'verdict "changes" is not available on the last review call: approve with concerns, or reject',
     );
+  }
+  if (field === "qa") {
+    const qa = qaReportOf(outcome);
+    if (!qa && outcome.status !== "failed" && outcome.status !== "blocked") {
+      findings.push(
+        "qa verdict is required on a completed QA turn: accept | changes",
+      );
+    }
+    if (
+      qa?.verdict === "changes" &&
+      qa.findings.length === 0 &&
+      outcome.status !== "failed" &&
+      outcome.status !== "blocked"
+    ) {
+      findings.push("qa verdict changes needs at least one finding");
+    }
+    if (
+      qa?.verdict === "changes" &&
+      opts.lastCall &&
+      outcome.status !== "failed" &&
+      outcome.status !== "blocked"
+    ) {
+      findings.push(
+        'qa verdict "changes" is not available on the last acceptance call: accept with concerns, or return blocked/failed',
+      );
+    }
   }
   const records = opts.records;
   if (records && outcome.debtClosed) {
