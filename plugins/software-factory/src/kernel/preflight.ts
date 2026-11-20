@@ -180,9 +180,9 @@ function fallbackAliasFindings(
 
 /**
  * Exactly the aliases process config names, each with the step that names it:
- * every boundary step, every flow step, every step alternate and every
- * different-model follow-up. Nothing is derived from a role name, so a renamed
- * alias is the only requirement.
+ * every boundary step, every architecture reviewer, every flow step, every step
+ * alternate and every different-model follow-up. Nothing is derived from a role
+ * name, so a renamed alias is the only requirement.
  */
 function requiredAliases(process: ProcessConfig): Map<string, string> {
   const refs = new Map<string, string>();
@@ -191,6 +191,9 @@ function requiredAliases(process: ProcessConfig): Map<string, string> {
   };
   for (const step of BOUNDARY_STEPS) {
     note(process.boundary[step].alias, `boundary step "${step}"`);
+  }
+  for (const alias of process.architecture.reviewers) {
+    note(alias, "architecture reviewer");
   }
   for (const [name, flow] of Object.entries(process.flows)) {
     for (const step of flow.steps) {

@@ -4,9 +4,9 @@ import yaml from "yaml";
 import type { z } from "zod";
 import { knownDebtIds } from "./derive.js";
 import {
-  type BoundaryStep,
   type FlowDefinition,
   type FlowStep,
+  type KernelStep,
   type Outcome,
   outcomeSchema,
   type StepRecord,
@@ -138,10 +138,11 @@ export const KERNEL_TURN_STEPS = {
   digest: "any",
   front: "any",
   plancheck: "any",
+  planreturn: "any",
   planreview: "any",
   pm: "any",
   steward: "any",
-} as const satisfies Record<BoundaryStep, OutcomeExpectation>;
+} as const satisfies Record<KernelStep, OutcomeExpectation>;
 
 export type KernelTurnStep = keyof typeof KERNEL_TURN_STEPS;
 

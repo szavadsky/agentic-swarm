@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import os from "node:os";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import type { ProcessConfig, RunConfig } from "../../src/kernel/types.js";
-import { TEST_BOUNDARY } from "./helpers.js";
+import { TEST_ARCHITECTURE, TEST_BOUNDARY } from "./helpers.js";
 
 describe("presets", () => {
   it("uses the preset calibration when defined", () => {
@@ -11,6 +11,7 @@ describe("presets", () => {
       taskTypes: {},
       flows: {},
       boundary: TEST_BOUNDARY,
+      architecture: TEST_ARCHITECTURE,
       reminders: 1,
       calibration: "DEFAULT",
       presets: {
@@ -33,6 +34,7 @@ describe("presets", () => {
       taskTypes: {},
       flows: {},
       boundary: TEST_BOUNDARY,
+      architecture: TEST_ARCHITECTURE,
       reminders: 1,
       calibration: "DEFAULT",
       presets: {
@@ -55,6 +57,7 @@ describe("presets", () => {
       taskTypes: {},
       flows: {},
       boundary: TEST_BOUNDARY,
+      architecture: TEST_ARCHITECTURE,
       reminders: 1,
       calibration: "DEFAULT",
       presets: {
@@ -85,6 +88,7 @@ describe("presets", () => {
       taskTypes: {},
       flows: {},
       boundary: TEST_BOUNDARY,
+      architecture: TEST_ARCHITECTURE,
       reminders: 1,
       calibration: "DEFAULT",
     };

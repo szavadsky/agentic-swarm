@@ -47,19 +47,25 @@ flows:
         changeRequests: 0
         deliverable: verdict
 # The kernel turns outside any task flow. Each names its prompt and the alias
-# pre-flight requires; `front` runs on the PM alias, as before, and plan review
-# shares the reviewer prompt on its own alias. A turn may also name the repair
-# ask its missing outcome renders and the product that ask calls for; the
-# process `repairPrompt` default and the turn's expectation cover steps that
-# name neither.
+# pre-flight requires; `front` runs on the PM alias, as before. A turn may also
+# name the repair ask its missing outcome renders and the product that ask
+# calls for; the process `repairPrompt` default and the turn's expectation
+# cover steps that name neither.
 boundary:
   architect: { prompt: architect, alias: architect, repairPrompt: architect-repair, deliverable: "plan edit or stop decision" }
   digest: { prompt: digest, alias: digest }
   front: { prompt: front, alias: pm, deliverable: "class, task, and pack" }
   plancheck: { prompt: plan-checker, alias: plan-checker, deliverable: "plan verdict" }
-  planreview: { prompt: reviewer, alias: plan-reviewer, deliverable: "numbered plan-review findings" }
   pm: { prompt: pm, alias: pm, deliverable: "task files" }
   steward: { prompt: steward, alias: steward, deliverable: merge resolution }
+# Plan review is the architecture flow: one fresh read-only review turn per
+# reviewer alias, then, when technical concerns exist and the policy allows it,
+# one architect turn on them. Both complete before the PM derives tasks.
+architecture:
+  planReview: { prompt: review-architect, deliverable: "plan-review findings" }
+  reviewers: [plan-reviewer]
+  architectReturn: on-technical-concerns
+  planReturn: { prompt: architect-review-return, deliverable: "plan edit and marks" }
 # A task file names one type; the type owns its flow, kind and output schema.
 # `development` merges, `spike` finishes with findings, `trivial` runs the
 # front's single-step path.

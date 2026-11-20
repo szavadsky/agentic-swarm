@@ -451,8 +451,17 @@ describe("boundary plan review", () => {
           ctx.writeOutcome(
             outcome({
               summary:
-                "1. alpha's done-when names no test; name the command that proves it.",
-              verdict: "reject",
+                "alpha's done-when names no test; name the command that proves it.",
+              planReview: {
+                technical: [],
+                planNotes: [
+                  {
+                    planLine: "plan.md:3",
+                    finding:
+                      "alpha's done-when names no test; name the command that proves it.",
+                  },
+                ],
+              },
             }),
           );
           return fakeTurnResult(req);
@@ -494,8 +503,10 @@ describe("boundary plan review", () => {
           "utf8",
         );
         expect(pack).toContain("## Plan review");
-        expect(pack).toContain("iteration 1, reviewer `plan-reviewer`");
-        expect(pack).toContain("alpha's done-when names no test");
+        expect(pack).toContain("iteration 1, reviewers `plan-reviewer`");
+        expect(pack).toContain(
+          "1. plan.md:3 — alpha's done-when names no test; name the command that proves it.",
+        );
         expect(req.prompt).toContain("mark every numbered finding");
         ctx.writeOutcome(
           outcome({
@@ -531,18 +542,31 @@ describe("boundary plan review", () => {
     const older = rec(1, {
       slug: undefined,
       step: PLAN_REVIEW_STEP,
-      outcome: outcome({ summary: "1. stale finding" }) as Outcome,
+      outcome: outcome({
+        summary: "stale",
+        planReview: {
+          technical: [{ planLine: "plan.md", finding: "stale finding" }],
+          planNotes: [],
+        },
+      }) as Outcome,
     });
     const newer = rec(2, {
       slug: undefined,
       step: PLAN_REVIEW_STEP,
-      outcome: outcome({ summary: "1. fresh finding" }) as Outcome,
+      outcome: outcome({
+        summary: "fresh",
+        planReview: {
+          technical: [{ planLine: "plan.md", finding: "fresh finding" }],
+          planNotes: [],
+        },
+      }) as Outcome,
     });
-    expect(latestPlanReview([older, newer])?.summary).toContain(
+    expect(latestPlanReview([older, newer])?.technical[0]?.finding).toContain(
       "fresh finding",
     );
     const failed = rec(3, {
       slug: undefined,
+      iteration: 3,
       step: PLAN_REVIEW_STEP,
       outcome: outcome({
         status: "failed",

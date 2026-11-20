@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  architectureSchema,
   ConfigError,
   loadConfigs,
   loadRunConfig,
@@ -271,7 +272,7 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it("names a prompt and alias for every boundary step, plan review included", () => {
+  it("names a prompt and alias for every boundary step", () => {
     const root = tmpRepo();
     const boundary = loadConfigs(root).process.boundary;
     expect(Object.keys(boundary).sort()).toEqual([
@@ -279,21 +280,55 @@ describe("three config layers", () => {
       "digest",
       "front",
       "plancheck",
-      "planreview",
       "pm",
       "steward",
     ]);
-    // Plan review shares the reviewer prompt on its own alias: no second role.
-    expect(boundary.planreview).toEqual({
-      prompt: "reviewer",
-      alias: "plan-reviewer",
-      deliverable: "numbered plan-review findings",
-    });
     expect(boundary.front).toEqual({
       prompt: "front",
       alias: "pm",
       deliverable: "class, task, and pack",
     });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("declares the architecture flow: reviewers and the architect return", () => {
+    const root = tmpRepo();
+    const architecture = loadConfigs(root).process.architecture;
+    expect(architecture).toEqual({
+      planReview: {
+        prompt: "review-architect",
+        deliverable: "plan-review findings",
+      },
+      reviewers: ["plan-reviewer"],
+      architectReturn: "on-technical-concerns",
+      planReturn: {
+        prompt: "architect-review-return",
+        deliverable: "plan edit and marks",
+      },
+    });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("refuses an architect return without its prompt", () => {
+    expect(() =>
+      architectureSchema.parse({
+        planReview: { prompt: "review-architect" },
+        reviewers: ["plan-reviewer"],
+        architectReturn: "on-technical-concerns",
+      }),
+    ).toThrow(/needs a planReturn prompt/);
+  });
+
+  it("lets a repo retarget one architecture key without restating the rest", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      "architecture:\n  reviewers: [reviewer, plan-reviewer]\n",
+    );
+    const architecture = loadConfigs(root).process.architecture;
+    expect(architecture.reviewers).toEqual(["reviewer", "plan-reviewer"]);
+    expect(architecture.planReview.prompt).toBe("review-architect");
     fs.rmSync(root, { recursive: true, force: true });
   });
 

@@ -25,7 +25,9 @@ import {
   planCheckFollowUpSchema,
   planCheckRouteEntrySchema,
   planCheckSchema,
+  planReviewFindingSchema,
   planReviewMarkSchema,
+  planReviewOutcomeSchema,
   replySchema,
   stallRouteEntrySchema,
   steerAnswerSchema,
@@ -166,6 +168,8 @@ describe("prompts: schema skeletons", () => {
       ["planCheck", planCheckEvidenceSchema],
       ["planCheck", planCheckFollowUpSchema],
       ["planCheckRoutes", planCheckRouteEntrySchema],
+      ["planReview", planReviewOutcomeSchema],
+      ["planReview", planReviewFindingSchema],
       ["planReviewMarks", planReviewMarkSchema],
     ];
     for (const [field, schema] of nested) {
@@ -249,6 +253,7 @@ describe("prompts: schema skeletons", () => {
         "steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall",
         "stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave",
         "planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged",
+        "planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes",
         "planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave",
         "planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful",
         "```",
@@ -342,6 +347,8 @@ describe("prompts: repair skeleton", () => {
       ["architect", "architect"],
       ["pm", "any"],
       ["plan-checker", "any"],
+      ["review-architect", "any"],
+      ["architect-review-return", "any"],
     ];
     const rendered = new Set(
       repairs.flatMap(([role, expectation]) =>
@@ -397,6 +404,15 @@ describe("prompts: repair skeleton", () => {
       "steerRoutes:",
     );
     expect(outcomeRepairSchemaVar("architect", "architect")).toContain(
+      "planReviewMarks:",
+    );
+    expect(outcomeRepairSchemaVar("review-architect", "any")).toContain(
+      "planReview:",
+    );
+    expect(outcomeRepairSchemaVar("review-architect", "any")).not.toContain(
+      "verdict:",
+    );
+    expect(outcomeRepairSchemaVar("architect-review-return", "any")).toContain(
       "planReviewMarks:",
     );
     // Debt closure and steer answers are protocol fields on every role's ask.

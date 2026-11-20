@@ -36,7 +36,7 @@ import {
   writePlan,
 } from "./e2e-helpers.js";
 import { withKernelRoleFallbacks, workCalls } from "./fake-defaults.js";
-import { TEST_BOUNDARY, task } from "./helpers.js";
+import { TEST_ARCHITECTURE, TEST_BOUNDARY, task } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -50,6 +50,7 @@ function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
     taskTypes: {},
     flows: {},
     boundary: TEST_BOUNDARY,
+    architecture: TEST_ARCHITECTURE,
     reminders: 1,
   };
   const repo: RepoConfig = {

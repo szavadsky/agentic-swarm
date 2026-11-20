@@ -73,6 +73,12 @@ export interface TurnSnapshot {
   tasks: Map<string, string>;
 }
 
+export async function snapshotTasks(
+  runtime: KernelRuntime,
+): Promise<Map<string, string>> {
+  return readTaskTexts(runtime);
+}
+
 export async function snapshotTurn(
   runtime: KernelRuntime,
   planPath: string,
@@ -82,8 +88,34 @@ export async function snapshotTurn(
     planPath,
     plan: planExists ? fs.readFileSync(planPath, "utf8") : "",
     planExists,
-    tasks: await readTaskTexts(runtime),
+    tasks: await snapshotTasks(runtime),
   };
+}
+
+/**
+ * Restores every task file a turn changed or created, byte for byte, and
+ * names what it restored. The plan is left alone: a return turn owns it, and
+ * a task write is the one thing only the PM may do.
+ */
+export async function restoreTasks(
+  runtime: KernelRuntime,
+  before: Map<string, string>,
+): Promise<string[]> {
+  const texts = await readTaskTexts(runtime);
+  const changed = new Set<string>();
+  for (const [slug, original] of before) {
+    if (texts.get(slug) !== original) {
+      await writeTextAtomic(taskPath(runtime, slug), original);
+      changed.add(slug);
+    }
+  }
+  for (const slug of texts.keys()) {
+    if (!before.has(slug)) {
+      fs.rmSync(taskPath(runtime, slug), { force: true });
+      changed.add(slug);
+    }
+  }
+  return [...changed].sort();
 }
 
 /**
@@ -112,21 +144,10 @@ export async function restoreTurn(
     planChanged = true;
   }
 
-  const texts = await readTaskTexts(runtime);
-  const changed = new Set<string>();
-  for (const [slug, original] of snapshot.tasks) {
-    if (texts.get(slug) !== original) {
-      await writeTextAtomic(taskPath(runtime, slug), original);
-      changed.add(slug);
-    }
-  }
-  for (const slug of texts.keys()) {
-    if (!snapshot.tasks.has(slug)) {
-      fs.rmSync(taskPath(runtime, slug), { force: true });
-      changed.add(slug);
-    }
-  }
-  return { plan: planChanged, tasks: [...changed].sort() };
+  return {
+    plan: planChanged,
+    tasks: await restoreTasks(runtime, snapshot.tasks),
+  };
 }
 
 function parseTasks(

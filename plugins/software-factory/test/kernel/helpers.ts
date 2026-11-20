@@ -1,4 +1,5 @@
 import type {
+  ArchitectureConfig,
   BoundaryStep,
   RecordStart,
   StepRecord,
@@ -25,17 +26,20 @@ export const TEST_BOUNDARY: Record<BoundaryStep, TurnSpec> = {
     alias: "plan-checker",
     deliverable: "plan verdict",
   },
-  planreview: {
-    prompt: "reviewer",
-    alias: "plan-reviewer",
-    deliverable: "numbered plan-review findings",
-  },
   pm: { prompt: "pm", alias: "pm", deliverable: "task files" },
   steward: {
     prompt: "steward",
     alias: "steward",
     deliverable: "merge resolution",
   },
+};
+
+/** The architecture flow the direct-runtime fixtures run. */
+export const TEST_ARCHITECTURE: ArchitectureConfig = {
+  planReview: { prompt: "review-architect" },
+  reviewers: ["plan-reviewer"],
+  architectReturn: "on-technical-concerns",
+  planReturn: { prompt: "architect-review-return" },
 };
 
 export function task(slug: string, patch: Partial<TaskFile> = {}): TaskFile {

@@ -77,6 +77,12 @@ export interface IncidentCounts {
   overflowParks: number;
 }
 
+/** The architect's marks on a plan review: whether the advisory review helped. */
+export interface PlanReviewMarkCounts {
+  helpful: number;
+  unhelpful: number;
+}
+
 export interface ArchitectMetrics {
   launches: number;
   usage: Usage;
@@ -109,6 +115,8 @@ export interface IterationMetrics {
   aliases: Record<string, AliasMetrics>;
   models: Record<string, ModelMetrics>;
   architect: ArchitectMetrics;
+  /** Architect marks on plan-review findings in this iteration. */
+  planReviewMarks: PlanReviewMarkCounts;
   unpricedTurns: number;
   incidents: IncidentCounts;
   /** Parks that name no-progress or an empty diff; the loop signals in kernel-0. */
@@ -160,6 +168,7 @@ export function rolesByStep(
 
 export const DEFAULT_ROLE_BY_STEP: Record<string, string> = {
   architect: "architect",
+  planreturn: "architect",
   pm: "pm",
   digest: "digest",
   implement: "implementer",
@@ -504,6 +513,12 @@ export function iterationMetrics(
   const incidents = emptyIncidents();
   attemptIncidents(recs, incidents);
   parkIncidents(all, incidents);
+  const planReviewMarks: PlanReviewMarkCounts = { helpful: 0, unhelpful: 0 };
+  for (const rec of all) {
+    for (const mark of rec.outcome?.planReviewMarks ?? []) {
+      planReviewMarks[mark.mark] += 1;
+    }
+  }
   const tokens = tokenTotal(usage);
 
   // Gate/commit wall and test runs come from the script records' own stamps;
@@ -554,6 +569,7 @@ export function iterationMetrics(
     aliases,
     models,
     architect,
+    planReviewMarks,
     unpricedTurns,
     incidents,
     loopIncidents: incidents.noProgressParks + incidents.emptyDiffParks,
@@ -591,6 +607,7 @@ function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
   const models: Record<string, ModelMetrics> = {};
   const incidents = emptyIncidents();
   const architect = emptyArchitect();
+  const planReviewMarks: PlanReviewMarkCounts = { helpful: 0, unhelpful: 0 };
 
   const sumGroup = <T extends GroupMetrics>(
     total: T,
@@ -655,6 +672,8 @@ function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
     architect.usage = addUsage(architect.usage, iteration.architect.usage);
     architect.tokens += iteration.architect.tokens;
     architect.unpricedTurns += iteration.architect.unpricedTurns;
+    planReviewMarks.helpful += iteration.planReviewMarks?.helpful ?? 0;
+    planReviewMarks.unhelpful += iteration.planReviewMarks?.unhelpful ?? 0;
   }
 
   architect.costShare = width(architect.usage.costUsd ?? 0, usage.costUsd ?? 0);
@@ -677,6 +696,7 @@ function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
     aliases,
     models,
     architect,
+    planReviewMarks,
     unpricedTurns,
     incidents,
     loopIncidents,

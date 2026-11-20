@@ -132,6 +132,35 @@ export const planReviewMarkSchema = z.object({
   finding: z.number().int().positive(),
   mark: z.enum(["helpful", "unhelpful"]),
 });
+export type PlanReviewMark = z.infer<typeof planReviewMarkSchema>;
+
+/** One plan-review finding: the plan line it concerns and what would satisfy it. */
+export const planReviewFindingSchema = z.object({
+  planLine: z.string().min(1).describe("the plan line or bullet it concerns"),
+  finding: z.string().min(1).describe("what fails and what would satisfy it"),
+});
+export type PlanReviewFinding = z.infer<typeof planReviewFindingSchema>;
+
+/**
+ * A plan review's findings: technical concerns first, then plan-and-dependency
+ * notes. No verdict, no last call — the review advises, the architect decides.
+ * The kernel numbers them in this order for the architect's marks.
+ */
+export const planReviewOutcomeSchema = z.object({
+  technical: z
+    .array(planReviewFindingSchema)
+    .default([])
+    .describe(
+      "technical concerns: impractical direction, a real bug, a foundation the plan assumes and the repo lacks",
+    ),
+  planNotes: z
+    .array(planReviewFindingSchema)
+    .default([])
+    .describe(
+      "plan and dependency notes: an unactionable bullet, missing coverage, ordering",
+    ),
+});
+export type PlanReviewOutcome = z.infer<typeof planReviewOutcomeSchema>;
 
 /** The only agent ↔ script surface; one schema for every step. Field
  * descriptions render into the outcome prompt skeleton, so they are the
@@ -196,6 +225,10 @@ export const outcomeSchema = z.object({
     .describe("PM stall turns only: one entry per parked slug"),
   // The kernel branches on the verdict.
   planCheck: planCheckSchema.optional().describe("plan-checker turns only"),
+  // Findings reach the architect before the PM; no verdict is taken here.
+  planReview: planReviewOutcomeSchema
+    .optional()
+    .describe("plan-review turns only: technical findings and plan notes"),
   // The kernel resumes amended/continued follow-ups, cancels a cancel
   // follow-up and records `leave` reasons for the next boundary.
   planCheckRoutes: z
@@ -349,9 +382,7 @@ export interface RepairSpec {
 }
 
 /** A step's prompt template and the run-config alias its turns run on. */
-export interface TurnSpec extends RepairSpec {
-  /** Prompt template name under `prompts/`. */
-  prompt: string;
+export interface TurnSpec extends PromptSpec {
   /** Run-config alias; pre-flight requires every named alias. */
   alias: string;
 }
@@ -359,17 +390,43 @@ export interface TurnSpec extends RepairSpec {
 /**
  * The kernel turns that run outside a configured flow. Their names are the
  * record step vocabulary; process config names a prompt and alias for each.
+ * Plan review is the architecture flow, configured by its own block.
  */
 export const BOUNDARY_STEPS = [
   "architect",
   "digest",
   "front",
   "plancheck",
-  "planreview",
   "pm",
   "steward",
 ] as const;
 export type BoundaryStep = (typeof BOUNDARY_STEPS)[number];
+
+/** Kernel turns owned by the architecture flow rather than the boundary block. */
+export const ARCHITECTURE_STEPS = ["planreview", "planreturn"] as const;
+
+/** Every kernel turn outside a task flow; none starts a task turn. */
+export const KERNEL_STEPS = [...BOUNDARY_STEPS, ...ARCHITECTURE_STEPS] as const;
+export type KernelStep = (typeof KERNEL_STEPS)[number];
+
+/** A boundary- or architecture-turn prompt; the alias is named elsewhere. */
+export interface PromptSpec extends RepairSpec {
+  /** Prompt template name under `prompts/`. */
+  prompt: string;
+}
+
+/**
+ * The architecture flow: who reviews the architect's plan, and whether the
+ * architect gets one turn on the technical findings before the PM derives
+ * tasks. `planReturn` is required exactly when that turn is allowed.
+ */
+export interface ArchitectureConfig {
+  planReview: PromptSpec;
+  /** Run-config aliases; one fresh read-only review turn each, in order. */
+  reviewers: string[];
+  architectReturn: "on-technical-concerns" | "never";
+  planReturn?: PromptSpec;
+}
 
 export interface FlowStep extends RepairSpec {
   id: string;
@@ -710,6 +767,8 @@ export interface ProcessConfig {
   taskTypes: Record<string, TaskTypeDefinition>;
   /** Each kernel boundary step's prompt and alias; pre-flight requires these aliases. */
   boundary: Record<BoundaryStep, TurnSpec>;
+  /** The plan review flow that completes before the PM derives tasks. */
+  architecture: ArchitectureConfig;
   /** Repair template a step renders when it names none; defaults to `delivery-repair`. */
   repairPrompt?: string;
   /** Outcome reminders after the first attempt; a task file's `repairTurns` overrides it for that task's turns only. */

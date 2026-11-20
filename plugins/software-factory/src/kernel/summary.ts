@@ -247,6 +247,7 @@ export async function writeIterationSummary(
     removedLines,
     operatorActs,
     humanInterventions,
+    planReviewMarks,
   } = computed;
   const roleNames = Object.values(roleCosts)
     .map((entry) => ({ name: entry.role, ...entry }))
@@ -300,6 +301,7 @@ export async function writeIterationSummary(
     ...(architect?.outcome
       ? [`- summary: ${architect.outcome.summary}`]
       : ["- no architect outcome recorded"]),
+    `- plan-review marks: ${planReviewMarks.helpful} helpful, ${planReviewMarks.unhelpful} unhelpful`,
     "",
     "## Assumptions",
     ...(assumed.length ? assumed : ["- none recorded"]),

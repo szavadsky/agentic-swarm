@@ -265,7 +265,17 @@ describe("plan review session hygiene", () => {
         (req, ctx) => {
           reviewSessions.push(req.session?.id);
           fs.writeFileSync(planPath, "# Plan\n\nHACKED\n", "utf8");
-          ctx.writeOutcome(outcome({ summary: "1. alpha needs a test" }));
+          ctx.writeOutcome(
+            outcome({
+              summary: "alpha needs a test",
+              planReview: {
+                technical: [],
+                planNotes: [
+                  { planLine: "# Plan", finding: "alpha needs a test" },
+                ],
+              },
+            }),
+          );
           return fakeTurnResult(req);
         },
         { when: whenTurn({ step: PLAN_REVIEW_STEP }) },

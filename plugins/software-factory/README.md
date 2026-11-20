@@ -89,9 +89,13 @@ boundary:                       # the kernel turns outside any task flow
   digest: { prompt: digest, alias: digest }
   front: { prompt: front, alias: pm, deliverable: "class, task, and pack" }
   plancheck: { prompt: plan-checker, alias: plan-checker, deliverable: "plan verdict" }
-  planreview: { prompt: reviewer, alias: plan-reviewer, deliverable: "numbered plan-review findings" }
   pm: { prompt: pm, alias: pm, deliverable: "task files" }
   steward: { prompt: steward, alias: steward, deliverable: "merge resolution" }
+architecture:                   # the plan review flow, before the PM derives tasks
+  planReview: { prompt: review-architect, deliverable: "plan-review findings" }
+  reviewers: [plan-reviewer]    # one fresh read-only review turn per alias
+  architectReturn: on-technical-concerns  # or never
+  planReturn: { prompt: architect-review-return, deliverable: "plan edit and marks" }
 ```
 
 A step may name `repairPrompt` (the template its in-session repair ask
@@ -105,6 +109,15 @@ through review before it lands. A step that names no
 template renders the process-level `repairPrompt` (default `delivery-repair`).
 The architect names `architect-repair` because its ask also requires the plan
 edit on disk; the default template then carries no role branch.
+
+The `architecture` flow completes before the PM derives tasks. Each alias in
+`reviewers` gets one fresh read-only review turn that delivers `planReview`
+findings (`technical`, `planNotes`) and no verdict. With `architectReturn:
+on-technical-concerns`, technical findings get one `planReturn` architect turn
+that edits the plan and marks every finding; the findings never block the
+iteration. With `never`, the findings reach the next architect's pack, which
+asks for the same marks. The return runs on the architect boundary step's
+alias; its prompt is `planReturn.prompt`.
 
 A flow step may name `alternates: [<alias>…]` to change the model on retry:
 the step's alias runs first, and after each failure-kind launch — no outcome

@@ -27,6 +27,10 @@ import {
   validateExpectation,
 } from "../kernel/outcome.js";
 import { PLAN_CHECK_STEP, validatePlanCheck } from "../kernel/plan-check.js";
+import {
+  PLAN_REVIEW_STEP,
+  validatePlanReviewDelivery,
+} from "../kernel/plan-review.js";
 import { isLastReviewCall } from "../kernel/review.js";
 import { createFolderStore } from "../kernel/store.js";
 import {
@@ -413,6 +417,9 @@ async function outcomeResult(
       lastCall,
       ...(records ? { records, excludeRecordId: recordId } : {}),
     });
+    if (step === PLAN_REVIEW_STEP) {
+      findings.push(...validatePlanReviewDelivery(outcome));
+    }
     const plan = step === PLAN_CHECK_STEP ? recordPlanPath(abs) : undefined;
     if (plan) {
       findings.push(

@@ -109,6 +109,42 @@ describe("iteration summary", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+  it("counts the architect's plan-review marks", async () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "factory-summary-marks-"),
+    );
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
+    try {
+      await store.ensureLayout();
+      const records = [
+        rec(1, {
+          step: "architect",
+          outcome: {
+            status: "done",
+            summary: "returned on the findings",
+            concerns: [],
+            forward: [],
+            planReviewMarks: [
+              { finding: 1, mark: "helpful" },
+              { finding: 2, mark: "helpful" },
+              { finding: 3, mark: "unhelpful" },
+            ],
+          },
+        }),
+      ];
+      const state = derive([], records);
+      const rel = await writeIterationSummary(store, {
+        iteration: 1,
+        state,
+        records,
+        decision: "continue",
+      });
+      const text = fs.readFileSync(path.join(store.goalDir, rel), "utf8");
+      expect(text).toContain("- plan-review marks: 2 helpful, 1 unhelpful");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
   it("names a quarantined task file in the outcome and remarkable", async () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), "factory-summary-quarantine-"),

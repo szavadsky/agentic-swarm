@@ -573,11 +573,28 @@ describe("factory validate", () => {
       const planreviewFile = writeFile(
         root,
         `${planreviewRec}/outcome.yaml`,
-        "status: done\nsummary: plan reviewed\n",
+        "status: done\nsummary: plan reviewed\nplanReview:\n  technical: []\n  planNotes: []\n",
       );
       const planreviewRes = await runValidate(planreviewFile);
       expect(planreviewRes.code).toBe(0);
       expect(planreviewRes.out).toContain(": valid");
+
+      const planreviewBareRec = "records/00007-i1-planreview-r2";
+      writeFile(
+        root,
+        `${planreviewBareRec}/started.yaml`,
+        STARTED("planreview"),
+      );
+      const planreviewBare = writeFile(
+        root,
+        `${planreviewBareRec}/outcome.yaml`,
+        "status: done\nsummary: plan reviewed\n",
+      );
+      const planreviewBareRes = await runValidate(planreviewBare);
+      expect(planreviewBareRes.code).toBe(1);
+      expect(planreviewBareRes.err).toContain(
+        "planReview is required on a completed plan review",
+      );
 
       // plancheck
       const plancheckRec = "records/00005-i1-plancheck-r1";

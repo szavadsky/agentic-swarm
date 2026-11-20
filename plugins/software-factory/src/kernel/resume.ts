@@ -1,7 +1,7 @@
 import type { Hold } from "./mailbox.js";
 import { PLAN_CHECK_STEP } from "./plan-check.js";
 import {
-  BOUNDARY_STEPS,
+  KERNEL_STEPS,
   type Limits,
   type State,
   type StepRecord,
@@ -14,14 +14,14 @@ export const RESUME_REFUSED_STEP = "resume-refused";
 
 const DEFAULT_RESUME_ATTEMPTS = 2;
 
-const boundarySteps: ReadonlySet<string> = new Set(BOUNDARY_STEPS);
+const kernelSteps: ReadonlySet<string> = new Set(KERNEL_STEPS);
 
 /** A task turn: an agent turn on a task slug outside the boundary roles. */
 function isTaskTurn(record: StepRecord): boolean {
   return (
     record.actor === "agent" &&
     record.slug !== undefined &&
-    !boundarySteps.has(record.step)
+    !kernelSteps.has(record.step)
   );
 }
 

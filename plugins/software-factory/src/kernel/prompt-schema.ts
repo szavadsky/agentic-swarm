@@ -169,9 +169,11 @@ const BASE_OUTCOME_FIELDS = [
  */
 const PROMPT_OUTCOME_FIELDS: Record<string, string[]> = {
   architect: ["planReviewMarks"],
+  "architect-review-return": ["planReviewMarks"],
   implementer: ["replies"],
   pm: ["steerRoutes", "stallRoutes", "planCheckRoutes"],
   "plan-checker": ["planCheck"],
+  "review-architect": ["planReview"],
   reviewer: ["upscope"],
 };
 

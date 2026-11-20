@@ -35,7 +35,10 @@ export function scriptKernelRoleFallbacks(harness: FakeHarness): void {
   );
   harness.script(
     (req, ctx) => {
-      ctx.writeOutcome(EMPTY);
+      ctx.writeOutcome({
+        ...EMPTY,
+        planReview: { technical: [], planNotes: [] },
+      });
       return fakeTurnResult(req);
     },
     {

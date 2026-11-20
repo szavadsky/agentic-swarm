@@ -21,13 +21,14 @@ import { finishChecks, startChecks } from "../../src/kernel/record.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type {
   KernelRuntime,
+  Outcome,
   ProcessConfig,
   RepoConfig,
   RunConfig,
 } from "../../src/kernel/types.js";
 import { createTmpRepo } from "../helpers/tmp-repo.js";
 import { expectDispatch } from "./e2e-helpers.js";
-import { rec, script, TEST_BOUNDARY } from "./helpers.js";
+import { rec, script, TEST_ARCHITECTURE, TEST_BOUNDARY } from "./helpers.js";
 
 const PLAN = `# Milestone 1 — alpha
 
@@ -232,6 +233,53 @@ describe("iteration metrics", () => {
       repo.cleanup();
     }
   }, 60_000);
+
+  it("counts plan-review marks in the iteration and in the totals", async () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "factory-metrics-marks-"),
+    );
+    try {
+      const store = createFolderStore(path.join(root, "goal"), undefined, {});
+      await store.ensureLayout();
+      const records = [
+        rec(1, {
+          step: "architect",
+          outcome: outcome({
+            decision: "continue",
+            planReviewMarks: [
+              { finding: 1, mark: "helpful" },
+              { finding: 2, mark: "unhelpful" },
+            ],
+          }) as Outcome,
+        }),
+        rec(2, {
+          slug: undefined,
+          step: "planreturn",
+          outcome: outcome({
+            planReviewMarks: [{ finding: 1, mark: "helpful" }],
+          }) as Outcome,
+        }),
+      ];
+      await writeMetrics(store, {
+        iteration: 1,
+        status: "in-progress",
+        records,
+      });
+      const metrics = yaml.parse(
+        (await store.readFile("metrics.yaml"))!,
+      ) as GoalMetrics;
+      expect(metrics.iterations[0]!.planReviewMarks).toEqual({
+        helpful: 2,
+        unhelpful: 1,
+      });
+      expect(metrics.totals.planReviewMarks).toEqual({
+        helpful: 2,
+        unhelpful: 1,
+      });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 
   it("counts no-progress loop incidents and preserves steer counts across rebuilds", async () => {
     const repo = createTmpRepo();
@@ -648,6 +696,7 @@ describe("record cost truth", () => {
       taskTypes: {},
       flows: {},
       boundary: TEST_BOUNDARY,
+      architecture: TEST_ARCHITECTURE,
       reminders: 1,
     };
     const repo: RepoConfig = {

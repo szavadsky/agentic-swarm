@@ -4,9 +4,10 @@ import { concernFingerprint } from "../core/concerns.js";
 import type { BaseGateState } from "./baseline.js";
 import type { OpenDebt } from "./derive.js";
 import type { Steer } from "./mailbox.js";
-import { BOUNDARY_STEPS } from "./types.js";
+import { KERNEL_STEPS } from "./types.js";
 import type {
   PlanCheckEvidence,
+  PlanReviewFinding,
   State,
   StepRecord,
   TaskFile,
@@ -29,13 +30,43 @@ export interface PlanCheckPack {
   evidence: PlanCheckEvidence[];
 }
 
-/** The latest plan-review turn's advisory findings, for the next architect turn. */
+/** The latest plan-review round's advisory findings, for the next architect turn. */
 export interface PlanReviewPack {
   iteration: number;
-  /** The resolved reviewer alias, e.g. `plan-reviewer`. */
-  alias: string;
-  /** The reviewer's numbered findings, one paragraph or list. */
-  summary: string;
+  /** The reviewer aliases that delivered findings, in run order. */
+  reviewers: string[];
+  /** Technical concerns; the architect marks them first. */
+  technical: PlanReviewFinding[];
+  /** Plan-and-dependency notes; numbered after the technical concerns. */
+  planNotes: PlanReviewFinding[];
+}
+
+/** One plan-review finding, numbered as the architect marks it. */
+export interface NumberedPlanFinding extends PlanReviewFinding {
+  /** 1-based across both lists: technical first, then plan notes. */
+  number: number;
+  kind: "technical" | "planNote";
+}
+
+/** The findings in mark order: technical concerns first, then plan notes. */
+export function numberedPlanFindings(
+  findings: Pick<PlanReviewPack, "technical" | "planNotes">,
+): NumberedPlanFinding[] {
+  return [
+    ...findings.technical.map((finding) => ({
+      ...finding,
+      kind: "technical" as const,
+    })),
+    ...findings.planNotes.map((finding) => ({
+      ...finding,
+      kind: "planNote" as const,
+    })),
+  ].map((finding, index) => ({ ...finding, number: index + 1 }));
+}
+
+/** One finding line: `<n>. <plan line> — <what would satisfy it>`. */
+export function formatPlanFinding(finding: NumberedPlanFinding): string {
+  return `${finding.number}. ${finding.planLine} — ${finding.finding}`;
 }
 
 /** A spike's finding: its sealed report, or the outcome summary for a legacy spike. */
@@ -245,13 +276,16 @@ export function renderContextPack(input: ContextPackInput): string {
         lines.push(`- ${entry.item} (${entry.status}): ${entry.evidence}`);
   }
 
-  if (input.planReview) {
+  const review = input.planReview;
+  if (review) {
     lines.push(
       "",
       "## Plan review (advisory findings; mark each finding helpful or unhelpful in planReviewMarks)",
-      `- iteration ${input.planReview.iteration}, reviewer \`${input.planReview.alias}\``,
-      "",
-      input.planReview.summary,
+      `- iteration ${review.iteration}, reviewers ${review.reviewers
+        .map((alias) => `\`${alias}\``)
+        .join(", ")}`,
+      "- findings are numbered technical first, then plan notes",
+      ...numberedPlanFindings(review).map(formatPlanFinding),
     );
   }
 
@@ -342,8 +376,8 @@ export function renderContextPack(input: ContextPackInput): string {
   return lines.join("\n") + "\n";
 }
 
-/** Boundary roles run between segments and never start a task turn. */
-const BOUNDARY_STEP_IDS: ReadonlySet<string> = new Set(BOUNDARY_STEPS);
+/** Boundary and architecture roles run between segments and never start a task turn. */
+const KERNEL_STEP_IDS: ReadonlySet<string> = new Set(KERNEL_STEPS);
 
 /** The agent turns a segment started, per slug, and the deps it landed. */
 function segmentStarts(
@@ -360,7 +394,7 @@ function segmentStarts(
     if (
       record.actor === "agent" &&
       record.slug &&
-      !BOUNDARY_STEP_IDS.has(record.step)
+      !KERNEL_STEP_IDS.has(record.step)
     ) {
       started.add(record.slug);
     }

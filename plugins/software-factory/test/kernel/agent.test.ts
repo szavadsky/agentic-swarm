@@ -29,13 +29,14 @@ import type {
   RunConfig,
 } from "../../src/kernel/types.js";
 import { createAcpxStub } from "../harness/acpx-stub.js";
-import { TEST_BOUNDARY, task } from "./helpers.js";
+import { TEST_ARCHITECTURE, TEST_BOUNDARY, task } from "./helpers.js";
 
 function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
   const process: ProcessConfig = {
     taskTypes: {},
     flows: {},
     boundary: TEST_BOUNDARY,
+    architecture: TEST_ARCHITECTURE,
     reminders: 1,
   };
   const repo: RepoConfig = {

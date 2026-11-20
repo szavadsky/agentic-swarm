@@ -8,6 +8,7 @@ import { packageRoot } from "../../src/kernel/config.js";
 import { promptVars } from "../../src/kernel/flow-context.js";
 import { frontClassTypesVar } from "../../src/kernel/front.js";
 import {
+  outcomeRepairSchemaVar,
   outcomeSchemaVar,
   taskFrontmatterVar,
   taskTypesVar,
@@ -19,7 +20,7 @@ import {
   formatReviewFindings,
 } from "../../src/kernel/record.js";
 import type { ProcessConfig, RunConfig } from "../../src/kernel/types.js";
-import { rec, TEST_BOUNDARY, task } from "./helpers.js";
+import { rec, TEST_ARCHITECTURE, TEST_BOUNDARY, task } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -169,6 +170,32 @@ const ROLES: Record<string, Record<string, string>> = {
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: OUTCOME_SCHEMA,
   },
+  "review-architect": {
+    iteration: "3",
+    intent_path: "/goal/intent.md",
+    plan_path: "/goal/plan.md",
+    pack_path: "/goal/iterations/3/context-pack.md",
+    worktree: "/worktrees/demo",
+    outcome_path: "/goal/records/00046-i3-planreview-r1/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
+    outcome_schema: outcomeRepairSchemaVar("review-architect", "any"),
+    task_types: TASK_TYPES,
+    tiers: TIERS,
+  },
+  "architect-review-return": {
+    iteration: "3",
+    intent_path: "/goal/intent.md",
+    plan_path: "/goal/plan.md",
+    pack_path: "/goal/iterations/3/context-pack.md",
+    reviewers: "`plan-reviewer`",
+    technical_findings:
+      "1. plan.md:12 — the bullet assumes a module the repo lacks",
+    plan_notes: "2. plan.md:40 — the done-when names no command",
+    finding_count: "2",
+    outcome_path: "/goal/records/00047-i3-planreturn-r1/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
+    outcome_schema: outcomeRepairSchemaVar("architect-review-return", "any"),
+  },
 };
 
 function library() {
@@ -176,7 +203,13 @@ function library() {
 }
 
 function processConfig(): ProcessConfig {
-  return { taskTypes: {}, flows: {}, boundary: TEST_BOUNDARY, reminders: 1 };
+  return {
+    taskTypes: {},
+    flows: {},
+    boundary: TEST_BOUNDARY,
+    architecture: TEST_ARCHITECTURE,
+    reminders: 1,
+  };
 }
 
 describe("role prompts", () => {
@@ -299,49 +332,24 @@ describe("reviewer includes its author's body", () => {
     ).toThrow('Prompt fragment "review-nobody" not found');
   });
 
-  it("selects the architect body and plan duties for author architect", () => {
+  it("includes the architect's assignment through fragments, not the whole body", () => {
     const lib = library();
-    const architectPlaceholders = lib.placeholders("reviewer", {
-      author: "architect",
-    });
-    const implementerPlaceholders = lib.placeholders("reviewer", {
-      author: "implementer",
-    });
-    expect(architectPlaceholders).toEqual(
-      expect.arrayContaining([
-        "tiers",
-        "task_types",
-        "iteration",
-        "intent_path",
-        "plan_path",
-        "pack_path",
-        "worktree",
-      ]),
-    );
-    expect(architectPlaceholders).not.toContain("task_path");
-    expect(architectPlaceholders).not.toContain("base_hash");
-    expect(implementerPlaceholders).not.toContain("tiers");
-    expect(implementerPlaceholders).not.toContain("task_types");
-    expect(implementerPlaceholders).not.toContain("intent_path");
-
-    const rendered = lib.render("reviewer", {
-      ...ROLES.architect!,
-      ...ROLES.reviewer!,
-      author: "architect",
-    });
-    expect(rendered.startsWith("You review one author's work.")).toBe(true);
+    const rendered = lib.render("review-architect", ROLES["review-architect"]!);
+    // The shared assignment, plan standard and plan rules are the standard the
+    // plan must meet; the architect's turn order, steers and tiers are not the
+    // reviewer's.
     expect(rendered).toContain("You are the architect");
-    expect(rendered).toContain("You review the architect's plan");
-    expect(rendered).toContain("/goal/intent.md");
-    expect(rendered).toContain("/goal/plan.md");
+    expect(rendered).toContain("## Bounds");
+    expect(rendered).toContain("## What the plan carries");
+    expect(rendered).toContain("## Granularity and dispatch");
+    expect(rendered).toContain("## Debt, parked work and ADRs");
+    expect(rendered).toContain("Temporary debt only with a named remover");
+    expect(rendered).not.toContain("## Turn order");
+    expect(rendered).not.toContain("## Steers and calibration");
     expect(rendered).not.toContain("You implement one task");
-    expect(rendered).not.toContain("You review the task diff");
-    expect(rendered).not.toContain("### Decision");
-    // Only the reviewer's own turn block: the architect's stayed out.
+    expect(rendered).not.toContain("- `verdict` is used on review steps");
+    expect(rendered).toContain("You review the architect's plan");
     expect(rendered.split("## This turn").length - 1).toBe(1);
-    expect(
-      rendered.split("- `verdict` is used on review steps").length - 1,
-    ).toBe(1);
   });
 });
 
@@ -502,6 +510,7 @@ describe("preset snapshots", () => {
           taskTypes: {},
           flows: {},
           boundary: TEST_BOUNDARY,
+          architecture: TEST_ARCHITECTURE,
           reminders: 1,
           presets: {
             autonomous: { calibration: "AUTO" },
@@ -527,11 +536,7 @@ describe("prompt debloat", () => {
       rendered.set(role, library().render(role, vars));
     rendered.set(
       "plan-reviewer",
-      library().render("reviewer", {
-        ...ROLES.architect!,
-        ...ROLES.reviewer!,
-        author: "architect",
-      }),
+      library().render("review-architect", ROLES["review-architect"]!),
     );
     return rendered;
   }

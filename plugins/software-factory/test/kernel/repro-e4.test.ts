@@ -90,7 +90,12 @@ describe("repro E4: first signal does not stop dispatch admission", () => {
       );
       harness.script(
         (req, ctx) => {
-          ctx.writeOutcome(outcome({ summary: "plan reviewed" }));
+          ctx.writeOutcome(
+            outcome({
+              summary: "plan reviewed",
+              planReview: { technical: [], planNotes: [] },
+            }),
+          );
           return fakeTurnResult(req);
         },
         { when: whenTurn({ step: "planreview" }) },

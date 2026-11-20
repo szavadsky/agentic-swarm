@@ -544,6 +544,26 @@ export function boundaryTarget(
 }
 
 /**
+ * Resolves one architecture-flow turn: the reviewers supply the review alias,
+ * the architect boundary step supplies the return alias. The architecture
+ * block owns the prompts, so the plan review is a flow, not a kernel constant.
+ */
+export function architectureTarget(
+  runtime: KernelRuntime,
+  turn: "planReview" | "planReturn",
+  alias: string,
+  iteration: number,
+): TurnTarget {
+  const spec = runtime.configs.process.architecture[turn];
+  if (!spec)
+    throw new Error(`process config has no architecture ${turn} prompt`);
+  return {
+    ...resolveTurn(runtime, spec.prompt, alias, undefined, iteration),
+    ...repairFields(spec),
+  };
+}
+
+/**
  * The prompt and alias that actually run this step: a `different-model`
  * follow-up turn keeps the step's prompt and moves to the follow-up alias.
  */

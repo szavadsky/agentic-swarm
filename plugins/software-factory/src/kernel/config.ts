@@ -193,12 +193,49 @@ export const boundaryOverrideSchema = z
   )
   .strict();
 
+/**
+ * An architecture prompt: the reviewers supply the aliases, the architect
+ * boundary step supplies the return's alias.
+ */
+const promptSpecSchema = turnSchema.omit({ alias: true });
+
+/** The plan review flow: its prompt, reviewers, and the architect's return. */
+export const architectureSchema = z
+  .object({
+    planReview: promptSpecSchema,
+    reviewers: z.array(z.string().min(1)).min(1),
+    architectReturn: z.enum(["on-technical-concerns", "never"]),
+    planReturn: promptSpecSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (architecture) =>
+      architecture.architectReturn === "never" ||
+      architecture.planReturn !== undefined,
+    {
+      message: "an architect return needs a planReturn prompt",
+      path: ["planReturn"],
+    },
+  );
+
+/** A repo override may retarget one architecture key without restating the rest. */
+export const architectureOverrideSchema = z
+  .object({
+    planReview: promptSpecSchema.optional(),
+    reviewers: z.array(z.string().min(1)).min(1).optional(),
+    architectReturn: z.enum(["on-technical-concerns", "never"]).optional(),
+    planReturn: promptSpecSchema.optional(),
+  })
+  .strict();
+
 /** Process layer: package default deep-merged with an optional repo override. */
 export const processConfigSchema = z
   .object({
     flows: z.record(z.string(), flowSchema).default({}),
     taskTypes: z.record(z.string(), taskTypeSchema).default({}),
     boundary: boundarySchema,
+    /** The plan review flow that completes before the PM derives tasks. */
+    architecture: architectureSchema,
     /** Repair template a step renders when it names none. */
     repairPrompt: z.string().min(1).optional(),
     reminders: z.number().int().nonnegative().default(1),
@@ -225,6 +262,7 @@ export const processConfigSchema = z
  */
 export const processOverrideSchema = processConfigSchema.extend({
   boundary: boundaryOverrideSchema.optional(),
+  architecture: architectureOverrideSchema.optional(),
 });
 
 /** Run layer: not tracked; aliases, price ids, limits, session store, scout pin. */

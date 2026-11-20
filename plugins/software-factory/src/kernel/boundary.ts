@@ -51,6 +51,8 @@ import {
 import {
   latestPlanReview,
   PLAN_REVIEW_STEP,
+  PLAN_RETURN_STEP,
+  runArchitectReturn,
   runPlanReview,
 } from "./plan-review.js";
 import { type PmRung, runPm } from "./pm.js";
@@ -657,12 +659,32 @@ export async function runBoundary(
     };
   }
 
-  // R14: the plan gets a second reading after the architect turn. The review
-  // is advisory and fresh; its findings reach the architect in the next pack.
-  // Pre-flight requires the reviewer alias, so this step cannot be skipped.
-  await runBoundaryTurn(runtime, { iteration, step: PLAN_REVIEW_STEP }, () =>
-    runPlanReview(runtime, { iteration, packRel }),
+  // R14: the plan gets a second reading after the architect turn, and when it
+  // raises technical concerns the architect answers them before the PM derives
+  // tasks. The review is advisory: neither step can block the iteration. Both
+  // turns run in the integration checkout under the merge lock; pre-flight
+  // requires the reviewer alias, so the review step cannot be skipped.
+  const review = await runBoundaryTurn(
+    runtime,
+    { iteration, step: PLAN_REVIEW_STEP },
+    () => runPlanReview(runtime, { iteration, packRel }),
   );
+  const policy = runtime.configs.process.architecture.architectReturn;
+  if (
+    review.findings &&
+    review.findings.technical.length > 0 &&
+    policy === "on-technical-concerns"
+  ) {
+    const findings = review.findings;
+    await runBoundaryTurn(runtime, { iteration, step: PLAN_RETURN_STEP }, () =>
+      runArchitectReturn(runtime, {
+        iteration,
+        packRel,
+        findings,
+        reviewers: review.reviewers,
+      }),
+    );
+  }
 
   const pm = await runBoundaryTurn(runtime, { iteration, step: "pm" }, () =>
     runPm(runtime, {
