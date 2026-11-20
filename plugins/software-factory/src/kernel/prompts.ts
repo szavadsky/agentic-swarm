@@ -265,6 +265,8 @@ export function loadPrompts(
       // A render with no base record must never read as a clean base: the
       // reviewer treats a "pre-existing" claim without a record as a finding.
       base_gates: BASE_GATES_NOT_RECORDED,
+      // No hierarchy is the default; the epic consult passes `2` on its turn.
+      depth: "1",
     },
   });
 }

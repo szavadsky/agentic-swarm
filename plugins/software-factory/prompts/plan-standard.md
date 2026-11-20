@@ -16,7 +16,7 @@ Name a non-default task type ({{task_types}}) on the bullet, and a parked task's
 
 Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the area, the edge cases and the dependency order from what and why plus the done-when.
 
-Write from the whole goal's perspective — interactions, layers, sequence.
+Write from your whole scope's perspective — interactions, layers, sequence.
 
 ## Granularity and dispatch
 

@@ -4,8 +4,6 @@
 
 {% include 'plan-rules' %}
 
-## Steers and calibration
-
-Every steer gets one `steerAnswers: {steer, answer}` entry, citing the id from the pending steers. Silence is not an answer.
+## Calibration
 
 {% include 'calibration' %}

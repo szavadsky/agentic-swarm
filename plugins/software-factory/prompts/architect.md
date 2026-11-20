@@ -1,4 +1,6 @@
-{%- include 'architect-body' -%}
+{% include 'architect-assignment' %}
+{% include 'architect-goal' %}
+{% include 'architect-body' %}
 
 ## Plan review marks
 

@@ -64,6 +64,23 @@ const ROLES: Record<string, Record<string, string>> = {
     outcome_schema: OUTCOME_SCHEMA,
     task_types: TASK_TYPES,
     tiers: TIERS,
+    depth: "2",
+  },
+  subarchitect: {
+    turn: "boundary",
+    iteration: "3",
+    epic: "auth",
+    intent_path: "/goal/intent.md",
+    plan_path: "/goal/epics/auth.md",
+    parent_plan_path: "/goal/plan.md",
+    checkout: "/worktrees/demo",
+    pack_path: "/goal/iterations/3/epics/auth/context-pack.md",
+    digest_path: "/goal/iterations/3/epics/auth/digest.md",
+    outcome_path: "/goal/records/00048-i3-subarchitect-r1/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
+    outcome_schema: OUTCOME_SCHEMA,
+    task_types: TASK_TYPES,
+    tiers: TIERS,
   },
   front: {
     iteration: "3",
@@ -515,7 +532,7 @@ describe("review findings carry", () => {
 
 describe("preset snapshots", () => {
   for (const preset of ["autonomous", "principal", "detailed"]) {
-    for (const role of ["architect", "pm"]) {
+    for (const role of ["architect", "subarchitect", "pm"]) {
       it(`renders ${role} with ${preset} preset`, () => {
         const process: ProcessConfig = {
           taskTypes: {},
@@ -805,7 +822,12 @@ describe("task size", () => {
       "one implementer session, one seam, one reviewable diff, one done-when";
     const split =
       "Split when a done-when needs two independent observables or crosses two interface seams";
-    for (const role of ["front", "architect", "review-architect"] as const) {
+    for (const role of [
+      "front",
+      "architect",
+      "subarchitect",
+      "review-architect",
+    ] as const) {
       const rendered = library().render(role, ROLES[role]!);
       expect(rendered.split(definition).length - 1, role).toBe(1);
       expect(rendered.split(split).length - 1, role).toBe(1);
@@ -868,6 +890,83 @@ describe("architect horizon", () => {
     expect(rendered).toContain("not one iteration's slice");
     expect(rendered).toContain("details after spike X / task Y lands");
     expect(rendered).not.toContain("plan the whole iteration");
+  });
+});
+
+describe("architect and subarchitect share fragments", () => {
+  function bounds(rendered: string): string {
+    const start = rendered.indexOf("## Bounds\n");
+    expect(start, "no bounds").toBeGreaterThanOrEqual(0);
+    return rendered.slice(start, rendered.indexOf("\n## ", start + 1));
+  }
+
+  function body(rendered: string): string {
+    const start = rendered.indexOf("## Turn order\n");
+    expect(start, "no turn order").toBeGreaterThanOrEqual(0);
+    const outcome = rendered.indexOf("## Outcome\n", start);
+    expect(outcome, "no outcome").toBeGreaterThan(start);
+    const end = rendered.indexOf("\n## ", outcome + 1);
+    return rendered.slice(start, end === -1 ? undefined : end);
+  }
+
+  it("renders the bounds and the whole body identically in both", () => {
+    const architect = library().render("architect", ROLES.architect!);
+    const subarchitect = library().render("subarchitect", ROLES.subarchitect!);
+    expect(bounds(subarchitect).trimEnd()).toBe(bounds(architect).trimEnd());
+    expect(body(subarchitect).trimEnd()).toBe(body(architect).trimEnd());
+    for (const rendered of [architect, subarchitect]) {
+      for (const heading of [
+        "## Bounds\n",
+        "## Turn order\n",
+        "## Outcome\n",
+      ]) {
+        expect(rendered.split(heading).length - 1, heading).toBe(1);
+      }
+    }
+  });
+
+  it("adds only its own scope and reporting line", () => {
+    const architect = library().render("architect", ROLES.architect!);
+    const subarchitect = library().render("subarchitect", ROLES.subarchitect!);
+    expect(architect.startsWith("You are the architect:")).toBe(true);
+    expect(architect).toContain("### Architect register");
+    expect(architect).toContain("## Steers");
+    expect(architect).not.toContain("You are the subarchitect");
+    expect(architect).not.toContain("## Upward brief");
+    expect(
+      subarchitect.startsWith("You are the subarchitect of epic `auth`"),
+    ).toBe(true);
+    expect(subarchitect).toContain("You report to the architect above you");
+    expect(subarchitect).toContain("## Your epic");
+    expect(subarchitect).toContain("## Upward brief");
+    expect(subarchitect).toContain("the one brief the parent reads");
+    expect(subarchitect).toContain("it is never the goal's done");
+    expect(subarchitect).toContain("never sideways");
+    expect(subarchitect).not.toContain("### Architect register");
+    expect(subarchitect).not.toContain("## Steers\n");
+  });
+
+  it("names each turn's own plan and the parent plan below the top", () => {
+    const architect = library().render("architect", ROLES.architect!);
+    const subarchitect = library().render("subarchitect", ROLES.subarchitect!);
+    expect(architect).toContain("- plan: `/goal/plan.md` (edit this file)");
+    expect(architect).not.toContain("parent plan");
+    const turn = subarchitect.slice(subarchitect.indexOf("## This turn"));
+    expect(turn).toContain("- epic: `auth`");
+    expect(turn).toContain(
+      "- plan: `/goal/epics/auth.md` (your epic plan; edit this file)",
+    );
+    expect(turn).toContain("- parent plan: `/goal/plan.md` (read-only)");
+  });
+
+  it("keeps the architect register out of a depth-1 goal", () => {
+    const depth1 = library().render("architect", {
+      ...ROLES.architect!,
+      depth: "1",
+    });
+    expect(depth1).not.toContain("Architect register");
+    expect(depth1).not.toContain("epics/");
+    expect(depth1).toContain("## Steers");
   });
 });
 
