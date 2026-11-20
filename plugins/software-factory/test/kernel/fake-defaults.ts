@@ -3,6 +3,7 @@ import {
   fakeTurnIdentity,
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
+import { PACK_PREP_STEP } from "../../src/kernel/pack-prep.js";
 import { PLAN_CHECK_STEP } from "../../src/kernel/plan-check.js";
 import { PLAN_REVIEW_STEP } from "../../src/kernel/plan-review.js";
 
@@ -12,7 +13,12 @@ const EMPTY = {
   concerns: [],
   forward: [],
 };
-const BACKGROUND_STEPS = new Set([PLAN_CHECK_STEP, PLAN_REVIEW_STEP, "digest"]);
+const BACKGROUND_STEPS = new Set([
+  PLAN_CHECK_STEP,
+  PLAN_REVIEW_STEP,
+  PACK_PREP_STEP,
+  "digest",
+]);
 
 /**
  * Every run config requires the full boundary vocabulary. Tests focused on
@@ -35,11 +41,24 @@ export function scriptKernelRoleFallbacks(harness: FakeHarness): void {
   );
   harness.script(
     (req, ctx) => {
-      ctx.writeOutcome(EMPTY);
+      ctx.writeOutcome({
+        ...EMPTY,
+        planReview: { technical: [], planNotes: [] },
+      });
       return fakeTurnResult(req);
     },
     {
       when: (req) => fakeTurnIdentity(req).step === PLAN_REVIEW_STEP,
+      fallback: true,
+    },
+  );
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(EMPTY);
+      return fakeTurnResult(req);
+    },
+    {
+      when: (req) => fakeTurnIdentity(req).step === PACK_PREP_STEP,
       fallback: true,
     },
   );
@@ -50,6 +69,24 @@ export function scriptKernelRoleFallbacks(harness: FakeHarness): void {
     },
     {
       when: (req) => fakeTurnIdentity(req).step === "digest",
+      fallback: true,
+    },
+  );
+  // The default development flow includes QA. Tests focused on other steps
+  // still run that acceptance turn; a neutral accept keeps them from consuming
+  // another step's scripted turn. A test that wants QA findings binds its own
+  // handler for the step, which wins over this fallback.
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome({
+        ...EMPTY,
+        summary: "qa accepted",
+        qa: { verdict: "accept", findings: [] },
+      });
+      return fakeTurnResult(req);
+    },
+    {
+      when: (req) => fakeTurnIdentity(req).step === "qa",
       fallback: true,
     },
   );

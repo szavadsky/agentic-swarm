@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import type {
   ModelRef,
   ServedUsage,
@@ -85,6 +84,54 @@ function matchCandidates(model: string): string[] {
   return out;
 }
 
+function resolvePriceId(
+  model: string,
+  priceIds?: Record<string, string>,
+): string {
+  if (!priceIds) return model;
+  const lower = model.toLowerCase();
+  const key = Object.keys(priceIds).find((k) => k.toLowerCase() === lower);
+  return key ? priceIds[key]! : model;
+}
+
+interface PriceIndex {
+  exact: Map<string, ModelPrice>;
+  suffixes: Map<string, Array<{ id: string; price: ModelPrice }>>;
+}
+
+function indexPrices(table: PriceTable): PriceIndex {
+  const exact = new Map<string, ModelPrice>();
+  const suffixes = new Map<string, Array<{ id: string; price: ModelPrice }>>();
+  for (const [id, price] of Object.entries(table)) {
+    const lower = id.toLowerCase();
+    if (!exact.has(lower)) exact.set(lower, price);
+    const segment = lower.slice(lower.lastIndexOf("/") + 1);
+    const group = suffixes.get(segment) ?? [];
+    group.push({ id, price });
+    suffixes.set(segment, group);
+  }
+  return { exact, suffixes };
+}
+
+function suffixPrice(
+  ids: string[],
+  suffixes: PriceIndex["suffixes"],
+): ModelPrice | undefined {
+  for (const id of ids) {
+    const lower = id.toLowerCase();
+    if (lower.includes("/")) continue;
+    const group = suffixes.get(lower);
+    if (!group) continue;
+    const [first] = [...group].sort(
+      (a, b) =>
+        Number(a.id.includes(":")) - Number(b.id.includes(":")) ||
+        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    );
+    return first!.price;
+  }
+  return undefined;
+}
+
 /**
  * The table entry for one harness model id. An explicit `priceIds` entry wins
  * over matching; then exact (case-insensitive), in candidate order; then the
@@ -99,40 +146,13 @@ export function matchPrice(
   priceIds?: Record<string, string>,
 ): ModelPrice | undefined {
   if (!model) return undefined;
-  let mapped = model;
-  if (priceIds) {
-    const lower = model.toLowerCase();
-    const key = Object.keys(priceIds).find((k) => k.toLowerCase() === lower);
-    if (key) mapped = priceIds[key]!;
-  }
-  const ids = matchCandidates(mapped);
-  const exact = new Map<string, ModelPrice>();
-  const suffixes = new Map<string, Array<{ id: string; price: ModelPrice }>>();
-  for (const [id, price] of Object.entries(table)) {
-    const lower = id.toLowerCase();
-    if (!exact.has(lower)) exact.set(lower, price);
-    const segment = lower.slice(lower.lastIndexOf("/") + 1);
-    const group = suffixes.get(segment) ?? [];
-    group.push({ id, price });
-    suffixes.set(segment, group);
-  }
+  const ids = matchCandidates(resolvePriceId(model, priceIds));
+  const { exact, suffixes } = indexPrices(table);
   for (const id of ids) {
     const hit = exact.get(id.toLowerCase());
     if (hit) return hit;
   }
-  for (const id of ids) {
-    const lower = id.toLowerCase();
-    if (lower.includes("/")) continue;
-    const group = suffixes.get(lower);
-    if (!group) continue;
-    const [first] = [...group].sort(
-      (a, b) =>
-        Number(a.id.includes(":")) - Number(b.id.includes(":")) ||
-        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
-    );
-    return first!.price;
-  }
-  return undefined;
+  return suffixPrice(ids, suffixes);
 }
 
 const PER_MTOK = 1_000_000;

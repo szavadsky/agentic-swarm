@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -186,6 +185,47 @@ export type ResolvePreparation =
   | { kind: "clean" }
   | { kind: "error"; cause: string };
 
+interface PendingMerge {
+  kind: "pending";
+  head: string;
+  conflicts: string[];
+}
+
+async function unmergedOrDiff(cwd: string, ref: string): Promise<string[]> {
+  const conflicts = await unmergedFiles(cwd);
+  if (conflicts.length > 0) return conflicts;
+  const diff = await git(cwd, ["diff", "--name-only", "HEAD", ref], {
+    allowFail: true,
+  });
+  return diff.stdout
+    .split("\n")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .sort();
+}
+
+async function mergeFreshHead(
+  runtime: KernelRuntime,
+  cwd: string,
+): Promise<PendingMerge | ResolvePreparation> {
+  const status = await git(cwd, ["status", "--porcelain"], {
+    allowFail: true,
+  });
+  if (status.code !== 0 || status.stdout.trim() !== "") {
+    return {
+      kind: "error",
+      cause:
+        "the task worktree has uncommitted changes; a resolve turn needs a clean branch",
+    };
+  }
+  const head = await integrationHead(runtime);
+  const attempt = await mergeRef(cwd, head, runtime.repo.identityEnv(), {
+    leaveConflict: true,
+  });
+  if (attempt.ok) return { kind: "clean" };
+  return { kind: "pending", head, conflicts: attempt.paths };
+}
+
 /**
  * Puts the task branch into the merge the resolve turn settles: a creation
  * merge already in flight is kept, a crashed turn's MERGE_HEAD resumes its
@@ -197,51 +237,33 @@ export async function prepareResolve(
   cwd: string,
   creation: { head: string; paths: string[] } | undefined,
 ): Promise<ResolvePreparation> {
-  let head: string;
-  let conflicts: string[];
+  let pending: PendingMerge;
   if (creation) {
-    head = creation.head;
-    conflicts = creation.paths;
-    if (conflicts.length === 0) conflicts = await unmergedFiles(cwd);
+    pending = {
+      kind: "pending",
+      head: creation.head,
+      conflicts:
+        creation.paths.length > 0 ? creation.paths : await unmergedFiles(cwd),
+    };
   } else {
     const inFlight = await mergeHeadSha(cwd);
     if (inFlight) {
-      head = inFlight;
-      conflicts = await unmergedFiles(cwd);
-      if (conflicts.length === 0) {
-        const diff = await git(cwd, ["diff", "--name-only", "HEAD", inFlight], {
-          allowFail: true,
-        });
-        conflicts = diff.stdout
-          .split("\n")
-          .map((entry) => entry.trim())
-          .filter(Boolean)
-          .sort();
-      }
+      pending = {
+        kind: "pending",
+        head: inFlight,
+        conflicts: await unmergedOrDiff(cwd, inFlight),
+      };
     } else {
-      const status = await git(cwd, ["status", "--porcelain"], {
-        allowFail: true,
-      });
-      if (status.code !== 0 || status.stdout.trim() !== "") {
-        return {
-          kind: "error",
-          cause:
-            "the task worktree has uncommitted changes; a resolve turn needs a clean branch",
-        };
-      }
-      head = await integrationHead(runtime);
-      const attempt = await mergeRef(cwd, head, runtime.repo.identityEnv(), {
-        leaveConflict: true,
-      });
-      if (attempt.ok) return { kind: "clean" };
-      conflicts = attempt.paths;
+      const fresh = await mergeFreshHead(runtime, cwd);
+      if (fresh.kind !== "pending") return fresh;
+      pending = fresh;
     }
   }
   return {
     kind: "conflict",
-    head,
-    conflicts,
-    snapshot: await snapshotConflictMerge(cwd, conflicts),
+    head: pending.head,
+    conflicts: pending.conflicts,
+    snapshot: await snapshotConflictMerge(cwd, pending.conflicts),
   };
 }
 

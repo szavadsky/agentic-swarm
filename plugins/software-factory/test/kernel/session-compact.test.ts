@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -95,7 +94,9 @@ const crossHarnessFlow = {
     reviewer: { harness: "fake", model: "fake-review" },
     steward: { harness: "fake", model: "fake-steward" },
     "plan-checker": { harness: "fake", model: "fake-check" },
+    intent: { harness: "fake", model: "fake-intent" },
     "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+    "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
     "implementer-strong": { harness: "other", model: "fake-strong" },
   },
 };
@@ -123,256 +124,16 @@ function scriptCrossHarness(fake: FakeHarness, other: FakeHarness): void {
 }
 
 describe("session portability", () => {
-  it("admits only same-harness resume edges when none are declared", () => {
-    expect(portable("omp", "omp")).toBe(true);
-    expect(portable("omp", "opencode")).toBe(false);
-  });
-
-  it("admits a declared edge in its direction only", () => {
-    const edges = [{ from: "opencode", to: "omp" }];
-    expect(portable("opencode", "omp", edges)).toBe(true);
-    expect(portable("omp", "opencode", edges)).toBe(false);
-    expect(portable("omp", "omp", edges)).toBe(true);
-  });
-
-  it("resumes the recording harness and refuses a session the alias no longer routes to", async () => {
-    const { repo, goal } = setupFlowRepo();
-    try {
-      const fake = new FakeHarness({ id: "fake" });
-      fake.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "done\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "implemented" }));
-        return fakeTurnResult(req);
-      });
-      fake.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
-        return fakeTurnResult(req);
-      });
-      const other = new FakeHarness({ id: "other" });
-      const runtime = await makeRuntime(repo, goal, { fake, other });
-      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
-      await runDispatch(runtime, { iteration: 1 });
-
-      const records = await runtime.store.listRecords();
-      const taskFile = (await runtime.store.listTasks()).find(
-        (t) => t.slug === "task",
-      )!;
-      const worktree = (await ensureTaskWorktree(runtime, taskFile)).path;
-      const recorded = records.find(
-        (r) => r.slug === "task" && r.step === "implement",
-      )!.session!;
-      expect(recorded.compacted).toBe(true);
-
-      const target = (harness: FakeHarness): TurnTarget => ({
-        prompt: "implementer",
-        alias: "implementer",
-        harness,
-        model: { id: "fake-impl" },
-        tiers: [{ harness, model: { id: "fake-impl" } }],
-        tierOffset: 0,
-      });
-      const resumed = await followUpSession(
-        runtime,
-        taskFile,
-        target(fake),
-        "implement",
-        records,
-        worktree,
-      );
-      expect(resumed?.id).toBe(recorded.id);
-
-      // Rotation: the same alias now routes to a different harness.
-      runtime.configs.run.aliases.implementer!.harness = "other";
-      expect(
-        await followUpSession(
-          runtime,
-          taskFile,
-          target(other),
-          "implement",
-          records,
-          worktree,
-        ),
-      ).toBeUndefined();
-
-      // A declared edge admits that crossing; the session resumes.
-      runtime.configs.run.portability = [{ from: "fake", to: "other" }];
-      expect(
-        (
-          await followUpSession(
-            runtime,
-            taskFile,
-            target(other),
-            "implement",
-            records,
-            worktree,
-          )
-        )?.id,
-      ).toBe(recorded.id);
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 60_000);
+  registerSessionPortabilityPart1();
+  registerSessionPortabilityPart2();
 });
 
 describe("end-of-turn compaction", () => {
-  it("does not compact a turn that ends in an infra stop", async () => {
-    const { repo, goal } = setupFlowRepo();
-    try {
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script((req) =>
-        fakeTurnResult(req, { stop: { kind: "infra", cause: "timeout" } }),
-      );
-
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
-      expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
-        "infra",
-      );
-
-      expect(harness.compactions).toHaveLength(0);
-      const record = (await runtime.store.listRecords()).find(
-        (r) => r.step === "implement",
-      )!;
-      expect(record.session?.compacted).toBe(false);
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 60_000);
-
-  it("does not compact a turn that ends in a refusal", async () => {
-    const { repo, goal } = setupFlowRepo();
-    try {
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script((req) =>
-        fakeTurnResult(req, {
-          stop: { kind: "refusal", details: "content policy" },
-        }),
-      );
-      scriptStallLeave(harness, ["task"]);
-
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
-      await runDispatch(runtime, { iteration: 1 });
-
-      expect(harness.compactions).toHaveLength(0);
-      const record = (await runtime.store.listRecords()).find(
-        (r) => r.step === "implement",
-      )!;
-      expect(record.session?.compacted).toBe(false);
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 60_000);
-
-  it("keeps the uncompacted ref when compaction fails and still resumes it", async () => {
-    const { repo, goal } = setupFlowRepo();
-    try {
-      const harness = new FailingCompactHarness({ id: "fake" });
-      scriptFixRound(harness);
-
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
-      await runDispatch(runtime, { iteration: 1 });
-      // All four turns attempted; every stored ref stays uncompacted.
-      expect(harness.attempts).toBe(4);
-      const records = await runtime.store.listRecords();
-      const implement = records
-        .filter((r) => r.slug === "task" && r.step === "implement")
-        .sort((a, b) => a.seq - b.seq);
-      const review = records
-        .filter((r) => r.slug === "task" && r.step === "review")
-        .sort((a, b) => a.seq - b.seq);
-      expect(implement.map((r) => r.session?.compacted)).toEqual([
-        false,
-        false,
-      ]);
-      expect(review.map((r) => r.session?.compacted)).toEqual([false, false]);
-      // The failed compaction cost no session: both follow-ups still resumed it.
-      expect(harness.calls[2]!.session?.id).toBe(implement[0]!.session?.id);
-      expect(harness.calls[2]!.session?.compacted).toBe(false);
-      expect(harness.calls[3]!.session?.id).toBe(review[0]!.session?.id);
-      expect(harness.calls[3]!.session?.compacted).toBe(false);
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 60_000);
-
-  it("does not compact or precondition a resume on a harness that cannot compact", async () => {
-    const { repo, goal } = setupFlowRepo();
-    try {
-      const harness = new FakeHarness({
-        id: "fake",
-        caps: { compact: "none" },
-      });
-      scriptFixRound(harness);
-
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
-      await runDispatch(runtime, { iteration: 1 });
-
-      expect(harness.compactions).toHaveLength(0);
-      const implement = (await runtime.store.listRecords())
-        .filter((r) => r.slug === "task" && r.step === "implement")
-        .sort((a, b) => a.seq - b.seq);
-      expect(implement.map((r) => r.session?.compacted)).toEqual([
-        false,
-        false,
-      ]);
-      expect(harness.calls[2]!.session?.id).toBe(implement[0]!.session?.id);
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 60_000);
-
-  it("skips a compaction whose turn outlived the cache TTL", async () => {
-    const { repo, goal } = setupFlowRepo();
-    try {
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "v1" }));
-        const result = fakeTurnResult(req);
-        // A turn longer than the TTL ends with a cold cache: compacting it
-        // would pay full input price for the transcript it was meant to trim.
-        result.session = {
-          harness: "fake",
-          id: "stale-session",
-          cwd: req.cwd!,
-          model: req.model,
-          lastRequestStartedAt: new Date(
-            Date.now() - 10 * 60_000,
-          ).toISOString(),
-          retentionTier: "short",
-          compacted: false,
-        };
-        return result;
-      });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
-        return fakeTurnResult(req);
-      });
-
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
-      await runDispatch(runtime, { iteration: 1 });
-
-      // The cold implement turn skips; the hot review turn still compacts.
-      expect(harness.compactions.map((c) => c.id)).toHaveLength(1);
-      const records = await runtime.store.listRecords();
-      const implement = records.find(
-        (r) => r.slug === "task" && r.step === "implement",
-      )!;
-      const review = records.find(
-        (r) => r.slug === "task" && r.step === "review",
-      )!;
-      expect(implement.session?.compacted).toBe(false);
-      expect(implement.compactUsage).toBeUndefined();
-      expect(review.session?.compacted).toBe(true);
-      expect(harness.compactions[0]!.id).toBe(review.session!.id);
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 60_000);
+  registerEndOfTurnCompactionPart1();
+  registerEndOfTurnCompactionPart2();
+  registerEndOfTurnCompactionPart3();
+  registerEndOfTurnCompactionPart4();
+  registerEndOfTurnCompactionPart5();
 });
 
 describe("compaction timing and cost", () => {
@@ -384,92 +145,12 @@ describe("compaction timing and cost", () => {
   it("compacts the resumed session at its end, records the cost, and the fix resumes fewer input tokens", async () => {
     const { repo, goal } = setupFlowRepo({ priceTable: PRICES });
     try {
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "v1" }));
-        return fakeTurnResult(req, { usage: { in: 10_000, out: 100 } });
-      });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "needs a fix", verdict: "changes" }),
-        );
-        return fakeTurnResult(req, { usage: { in: 5_000, out: 50 } });
-      });
-      harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v2\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "v2" }));
-        // A compacted transcript restarts small; an uncompacted resume rereads
-        // the whole prefix. The recorded input proves which ref the kernel sent.
-        const resumed = req.session?.compacted === true;
-        return fakeTurnResult(req, {
-          usage: { in: resumed ? 1_500 : 10_000, out: 100 },
-        });
-      });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
-        return fakeTurnResult(req, { usage: { in: 5_000, out: 50 } });
-      });
-
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
-      await runDispatch(runtime, { iteration: 1 });
-
-      const records = await runtime.store.listRecords();
-      const implement = records
-        .filter((r) => r.slug === "task" && r.step === "implement")
-        .sort((a, b) => a.seq - b.seq);
-      const review = records
-        .filter((r) => r.slug === "task" && r.step === "review")
-        .sort((a, b) => a.seq - b.seq);
-
-      // Every turn compacts at its end; both follow-ups resume a compacted ref.
-      expect(harness.compactions.map((c) => c.id)).toEqual([
-        implement[0]!.session!.id,
-        review[0]!.session!.id,
-        implement[1]!.session!.id,
-        review[1]!.session!.id,
-      ]);
-      expect(implement.map((r) => r.session?.compacted)).toEqual([true, true]);
-      expect(review.map((r) => r.session?.compacted)).toEqual([true, true]);
-      expect(sessionCacheHot(implement[0]!.session!)).toBe(true);
-      expect(sessionCacheHot(review[0]!.session!)).toBe(true);
-
-      // The turn's counters stay the turn's; the compaction is priced beside them.
-      expect(implement[0]!.usage).toMatchObject({ in: 10_000, out: 100 });
-      expect(implement[0]!.usage?.costUsd).toBeCloseTo(0.0102, 10);
-      expect(implement[0]!.compactUsage).toMatchObject({
-        in: 0,
-        cacheRead: 8_000,
-        out: 400,
-      });
-      expect(implement[0]!.compactUsage?.costUsd).toBeCloseTo(0.0048, 10);
-      expect(review[0]!.compactUsage).toMatchObject({
-        in: 0,
-        cacheRead: 8_000,
-        out: 400,
-      });
-      expect(review[0]!.compactUsage?.costUsd).toBeCloseTo(0.0048, 10);
-
-      // Both follow-ups resumed a compacted ref; the fix reread a trimmed prefix.
-      expect(harness.calls[2]!.session?.compacted).toBe(true);
-      expect(harness.calls[3]!.session?.compacted).toBe(true);
-      expect(harness.calls[3]!.session?.id).toBe(review[0]!.session!.id);
-      expect(implement[1]!.usage?.in).toBe(1_500);
-      expect(implement[1]!.usage!.in).toBeLessThan(implement[0]!.usage!.in);
-      // A resumed review prices its unsplit prefix at the cached rate.
-      expect(review[1]!.usage?.costUsd).toBeCloseTo(0.0026, 10);
-
-      // Metrics price the compaction on top of every attempt.
-      const metrics = iterationMetrics(
-        1,
-        "in-progress",
-        records,
-        {},
-        0,
+      const scope1 = await compactsResumedSessionAtEndRecordsPart1(repo, goal);
+      const scope2 = await compactsResumedSessionAtEndRecordsPart2(
         PRICES,
+        scope1,
       );
-      expect(metrics.usage.costUsd).toBeCloseTo(0.03805, 10);
+      await compactsResumedSessionAtEndRecordsPart3(scope2);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -515,6 +196,467 @@ describe("compaction timing and cost", () => {
 });
 
 describe("review session resume", () => {
+  registerReviewSessionResumePart1();
+  registerReviewSessionResumePart2();
+  registerReviewSessionResumePart3();
+  registerReviewSessionResumePart4();
+  registerReviewSessionResumePart5();
+  registerReviewSessionResumePart6();
+  registerReviewSessionResumePart7();
+});
+
+async function resumesReviewsWhileImplementPart1() {
+  const { repo, goal } = setupFlowRepo({
+    process: {
+      flows: {
+        "implement-review": {
+          steps: [
+            {
+              id: "implement",
+              prompt: "implementer",
+              alias: "implementer",
+              followUp: {
+                mode: "different-model",
+                alias: "implementer-strong",
+              },
+            },
+            {
+              id: "review",
+              prompt: "reviewer",
+              alias: "reviewer",
+              review: true,
+              changeRequests: 2,
+              deliverable: "verdict",
+            },
+          ],
+        },
+      },
+    },
+    aliases: {
+      architect: { harness: "fake", model: "fake-architect" },
+      pm: { harness: "fake", model: "fake-pm" },
+      implementer: { harness: "fake", model: "fake-impl" },
+      reviewer: { harness: "fake", model: "fake-review" },
+      steward: { harness: "fake", model: "fake-steward" },
+      "plan-checker": { harness: "fake", model: "fake-check" },
+      intent: { harness: "fake", model: "fake-intent" },
+      "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+      "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
+      "implementer-strong": { harness: "fake", model: "fake-strong" },
+    },
+  });
+
+  return { repo, goal };
+}
+
+async function resumesReviewsWhileImplementPart2(
+  scope: Awaited<ReturnType<typeof resumesReviewsWhileImplementPart1>>,
+) {
+  const { repo, goal } = scope;
+  try {
+    const harness = new FakeHarness({ id: "fake" });
+    scriptFixRound(harness);
+    const runtime = await makeRuntime(repo, goal, { fake: harness });
+    await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+    await runDispatch(runtime, { iteration: 1 });
+
+    const records = await runtime.store.listRecords();
+    const implement = records
+      .filter((r) => r.slug === "task" && r.step === "implement")
+      .sort((a, b) => a.seq - b.seq);
+    const review = records
+      .filter((r) => r.slug === "task" && r.step === "review")
+      .sort((a, b) => a.seq - b.seq);
+    expect(implement.map((r) => r.alias)).toEqual([
+      "implementer",
+      "implementer-strong",
+    ]);
+    expect(harness.calls[2]!.session).toBeUndefined();
+    expect(harness.calls[3]!.session?.id).toBe(review[0]!.session!.id);
+    expect(review.map((r) => r.session?.compacted)).toEqual([true, true]);
+  } finally {
+    cleanupFlowRepo(repo);
+  }
+}
+
+async function startsDeNovoReasonLoggedAliasPart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+) {
+  const fake = new FakeHarness({ id: "fake" });
+  const runtime = await makeRuntime(repo, goal, { fake });
+  const taskFile = task("task", { scope: ["task.txt"] });
+  await writeTask(runtime, taskFile);
+  const worktree = (await ensureTaskWorktree(runtime, taskFile)).path;
+  const now = new Date().toISOString();
+  const prior: SessionRef = {
+    harness: "fake",
+    id: "review-session",
+    cwd: worktree,
+    model: { id: "fake-review" },
+    lastRequestStartedAt: now,
+    retentionTier: "short",
+    compacted: true,
+  };
+  const records = [
+    rec(1, {
+      slug: "task",
+      step: "review",
+      alias: "reviewer",
+      session: prior,
+    }),
+  ];
+  const moved: SessionRef = { ...prior, cwd: "/tmp/elsewhere" };
+  const movedRecords = [
+    rec(1, {
+      slug: "task",
+      step: "review",
+      alias: "reviewer",
+      session: moved,
+    }),
+  ];
+
+  return { fake, runtime, taskFile, worktree, records, movedRecords };
+}
+
+async function startsDeNovoReasonLoggedAliasPart2(
+  warnings: string[],
+  scope: Awaited<ReturnType<typeof startsDeNovoReasonLoggedAliasPart1>>,
+) {
+  const { runtime, taskFile, fake, records, worktree, movedRecords } = scope;
+  expect(
+    await followUpSession(
+      runtime,
+      taskFile,
+      {
+        prompt: "reviewer",
+        alias: "implementer",
+        harness: fake,
+        model: { id: "fake-review" },
+        tiers: [{ harness: fake, model: { id: "fake-review" } }],
+        tierOffset: 0,
+      },
+      "review",
+      records,
+      worktree,
+    ),
+  ).toBeUndefined();
+  expect(
+    await followUpSession(
+      runtime,
+      taskFile,
+      {
+        prompt: "reviewer",
+        alias: "reviewer",
+        harness: fake,
+        model: { id: "fake-review" },
+        tiers: [{ harness: fake, model: { id: "fake-review" } }],
+        tierOffset: 0,
+      },
+      "review",
+      movedRecords,
+      worktree,
+    ),
+  ).toBeUndefined();
+  expect(warnings.join("\n")).toContain("alias changed");
+  expect(warnings.join("\n")).toContain("does not match worktree");
+}
+
+async function compactsResumedSessionAtEndRecordsPart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+) {
+  const harness = new FakeHarness({ id: "fake" });
+  harness.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "v1" }));
+    return fakeTurnResult(req, { usage: { in: 10_000, out: 100 } });
+  });
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "needs a fix", verdict: "changes" }));
+    return fakeTurnResult(req, { usage: { in: 5_000, out: 50 } });
+  });
+  harness.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v2\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "v2" }));
+    // A compacted transcript restarts small; an uncompacted resume rereads
+    // the whole prefix. The recorded input proves which ref the kernel sent.
+    const resumed = req.session?.compacted === true;
+    return fakeTurnResult(req, {
+      usage: { in: resumed ? 1_500 : 10_000, out: 100 },
+    });
+  });
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+    return fakeTurnResult(req, { usage: { in: 5_000, out: 50 } });
+  });
+
+  const runtime = await makeRuntime(repo, goal, { fake: harness });
+  await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+  await runDispatch(runtime, { iteration: 1 });
+
+  const records = await runtime.store.listRecords();
+  const implement = records
+    .filter((r) => r.slug === "task" && r.step === "implement")
+    .sort((a, b) => a.seq - b.seq);
+  const review = records
+    .filter((r) => r.slug === "task" && r.step === "review")
+    .sort((a, b) => a.seq - b.seq);
+  const qa = records
+    .filter((r) => r.slug === "task" && r.step === "qa")
+    .sort((a, b) => a.seq - b.seq);
+
+  return { harness, records, implement, review, qa };
+}
+
+async function compactsResumedSessionAtEndRecordsPart2(
+  PRICES: {
+    "fake-impl": {
+      input: number;
+      cachedInput: number;
+      output: number;
+      reasoning: number;
+    };
+    "fake-review": {
+      input: number;
+      cachedInput: number;
+      output: number;
+      reasoning: number;
+    };
+  },
+  scope: Awaited<ReturnType<typeof compactsResumedSessionAtEndRecordsPart1>>,
+) {
+  const { harness, implement, qa, review, records } = scope;
+  expect(harness.compactions.map((c) => c.id)).toEqual([
+    implement[0]!.session!.id,
+    qa[0]!.session!.id,
+    review[0]!.session!.id,
+    implement[1]!.session!.id,
+    qa[1]!.session!.id,
+    review[1]!.session!.id,
+  ]);
+  expect(implement.map((r) => r.session?.compacted)).toEqual([true, true]);
+  expect(qa.map((r) => r.session?.compacted)).toEqual([true, true]);
+  expect(review.map((r) => r.session?.compacted)).toEqual([true, true]);
+  expect(sessionCacheHot(implement[0]!.session!)).toBe(true);
+  expect(sessionCacheHot(review[0]!.session!)).toBe(true);
+
+  // The turn's counters stay the turn's; the compaction is priced beside them.
+  expect(implement[0]!.usage).toMatchObject({ in: 10_000, out: 100 });
+  expect(implement[0]!.usage?.costUsd).toBeCloseTo(0.0102, 10);
+  expect(implement[0]!.compactUsage).toMatchObject({
+    in: 0,
+    cacheRead: 8_000,
+    out: 400,
+  });
+  expect(implement[0]!.compactUsage?.costUsd).toBeCloseTo(0.0048, 10);
+  expect(review[0]!.compactUsage).toMatchObject({
+    in: 0,
+    cacheRead: 8_000,
+    out: 400,
+  });
+  expect(review[0]!.compactUsage?.costUsd).toBeCloseTo(0.0048, 10);
+
+  // The follow-ups resumed a compacted ref; the fix reread a trimmed prefix.
+  expect(harness.calls[3]!.session?.compacted).toBe(true);
+  expect(harness.calls[5]!.session?.compacted).toBe(true);
+  expect(harness.calls[3]!.session?.id).toBe(implement[0]!.session!.id);
+  expect(harness.calls[5]!.session?.id).toBe(review[0]!.session!.id);
+  expect(implement[1]!.usage?.in).toBe(1_500);
+  expect(implement[1]!.usage!.in).toBeLessThan(implement[0]!.usage!.in);
+  // A resumed review prices its unsplit prefix at the cached rate.
+  expect(review[1]!.usage?.costUsd).toBeCloseTo(0.0026, 10);
+
+  // Metrics price the compaction on top of every attempt.
+  const metrics = iterationMetrics(1, "in-progress", records, {}, 0, PRICES);
+
+  return { ...scope, metrics };
+}
+
+async function compactsResumedSessionAtEndRecordsPart3(
+  scope: Awaited<ReturnType<typeof compactsResumedSessionAtEndRecordsPart2>>,
+) {
+  const { metrics } = scope;
+  expect(metrics.usage.costUsd).toBeCloseTo(0.03805, 10);
+}
+
+function registerEndOfTurnCompactionPart1(): void {
+  it("does not compact a turn that ends in an infra stop", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req) =>
+        fakeTurnResult(req, { stop: { kind: "infra", cause: "timeout" } }),
+      );
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
+        "infra",
+      );
+
+      expect(harness.compactions).toHaveLength(0);
+      const record = (await runtime.store.listRecords()).find(
+        (r) => r.step === "implement",
+      )!;
+      expect(record.session?.compacted).toBe(false);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+function registerEndOfTurnCompactionPart2(): void {
+  it("does not compact a turn that ends in a refusal", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req) =>
+        fakeTurnResult(req, {
+          stop: { kind: "refusal", details: "content policy" },
+        }),
+      );
+      scriptStallLeave(harness, ["task"]);
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+
+      expect(harness.compactions).toHaveLength(0);
+      const record = (await runtime.store.listRecords()).find(
+        (r) => r.step === "implement",
+      )!;
+      expect(record.session?.compacted).toBe(false);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+function registerEndOfTurnCompactionPart3(): void {
+  it("keeps the uncompacted ref when compaction fails and still resumes it", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FailingCompactHarness({ id: "fake" });
+      scriptFixRound(harness);
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+      // Implement, QA, review, the fix and its second QA and review: every
+      // stored ref stays uncompacted when compaction fails.
+      expect(harness.attempts).toBe(6);
+      const records = await runtime.store.listRecords();
+      const implement = records
+        .filter((r) => r.slug === "task" && r.step === "implement")
+        .sort((a, b) => a.seq - b.seq);
+      const review = records
+        .filter((r) => r.slug === "task" && r.step === "review")
+        .sort((a, b) => a.seq - b.seq);
+      expect(implement.map((r) => r.session?.compacted)).toEqual([
+        false,
+        false,
+      ]);
+      expect(review.map((r) => r.session?.compacted)).toEqual([false, false]);
+      // The failed compaction cost no session: the implement fix and the
+      // second review still resume their step's first session.
+      expect(harness.calls[3]!.session?.id).toBe(implement[0]!.session?.id);
+      expect(harness.calls[3]!.session?.compacted).toBe(false);
+      expect(harness.calls[5]!.session?.id).toBe(review[0]!.session?.id);
+      expect(harness.calls[5]!.session?.compacted).toBe(false);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+function registerEndOfTurnCompactionPart4(): void {
+  it("does not compact or precondition a resume on a harness that cannot compact", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({
+        id: "fake",
+        caps: { compact: "none" },
+      });
+      scriptFixRound(harness);
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+
+      expect(harness.compactions).toHaveLength(0);
+      const implement = (await runtime.store.listRecords())
+        .filter((r) => r.slug === "task" && r.step === "implement")
+        .sort((a, b) => a.seq - b.seq);
+      expect(implement.map((r) => r.session?.compacted)).toEqual([
+        false,
+        false,
+      ]);
+      expect(harness.calls[3]!.session?.id).toBe(implement[0]!.session?.id);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+function registerEndOfTurnCompactionPart5(): void {
+  it("skips a compaction whose turn outlived the cache TTL", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script((req, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "v1" }));
+        const result = fakeTurnResult(req);
+        // A turn longer than the TTL ends with a cold cache: compacting it
+        // would pay full input price for the transcript it was meant to trim.
+        result.session = {
+          harness: "fake",
+          id: "stale-session",
+          cwd: req.cwd!,
+          model: req.model,
+          lastRequestStartedAt: new Date(
+            Date.now() - 10 * 60_000,
+          ).toISOString(),
+          retentionTier: "short",
+          compacted: false,
+        };
+        return result;
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+        return fakeTurnResult(req);
+      });
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+
+      // The cold implement turn skips; QA and the review still compact.
+      expect(harness.compactions.map((c) => c.id)).toHaveLength(2);
+      expect(harness.compactions.map((c) => c.id)).not.toContain(
+        "stale-session",
+      );
+      const records = await runtime.store.listRecords();
+      const implement = records.find(
+        (r) => r.slug === "task" && r.step === "implement",
+      )!;
+      const review = records.find(
+        (r) => r.slug === "task" && r.step === "review",
+      )!;
+      expect(implement.session?.compacted).toBe(false);
+      expect(implement.compactUsage).toBeUndefined();
+      expect(review.session?.compacted).toBe(true);
+      expect(harness.compactions.map((c) => c.id)).toContain(
+        review.session!.id,
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+function registerReviewSessionResumePart1(): void {
   it("review r2 resumes the compacted r1 session on the same alias with a delta prompt", async () => {
     const { repo, goal } = setupFlowRepo();
     const warnings: string[] = [];
@@ -542,20 +684,20 @@ describe("review session resume", () => {
       expect(harness.compactions.map((c) => c.id)).toContain(
         review[0]!.session!.id,
       );
-      expect(harness.calls[1]!.session).toBeUndefined();
-      expect(harness.calls[3]!.session?.id).toBe(review[0]!.session!.id);
-      expect(harness.calls[3]!.session?.compacted).toBe(true);
+      expect(harness.calls[2]!.session).toBeUndefined();
+      expect(harness.calls[5]!.session?.id).toBe(review[0]!.session!.id);
+      expect(harness.calls[5]!.session?.compacted).toBe(true);
       expect(review.map((r) => r.alias)).toEqual(["reviewer", "reviewer"]);
       // The r2 record names the resumed session.
       expect(review[1]!.session?.id).toBe(review[0]!.session!.id);
       expect(review[1]!.cachedPrefix).toBe(true);
       // Never the implementer's session, although the fix is more recent.
       expect(review[0]!.session!.id).not.toBe(impl[0]!.session!.id);
-      expect(harness.calls[3]!.session?.id).not.toBe(impl[1]!.session!.id);
+      expect(harness.calls[5]!.session?.id).not.toBe(impl[1]!.session!.id);
 
       // The delta prompt: the diff since r1 plus the fix dispositions.
-      const r1Prompt = harness.calls[1]!.prompt;
-      const r2Prompt = harness.calls[3]!.prompt;
+      const r1Prompt = harness.calls[2]!.prompt;
+      const r2Prompt = harness.calls[5]!.prompt;
       expect(r1Prompt).toContain(`${impl[0]!.base}..${impl[0]!.commit}`);
       expect(r2Prompt).toContain(`${review[0]!.commit}..${impl[1]!.commit}`);
       expect(review[0]!.commit).not.toBe(impl[0]!.base);
@@ -567,7 +709,9 @@ describe("review session resume", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerReviewSessionResumePart2(): void {
   it("starts de novo with the reason logged when the alias harness changed", async () => {
     const { repo, goal } = setupFlowRepo();
     const warnings: string[] = [];
@@ -603,7 +747,7 @@ describe("review session resume", () => {
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
 
-      expect(fake.calls).toHaveLength(3);
+      expect(fake.calls).toHaveLength(5);
       expect(other.calls).toHaveLength(1);
       expect(other.calls[0]!.session).toBeUndefined();
       const review = (await runtime.store.listRecords())
@@ -619,7 +763,9 @@ describe("review session resume", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerReviewSessionResumePart3(): void {
   it("starts de novo with the reason logged when the harness cannot resume", async () => {
     const { repo, goal } = setupFlowRepo();
     const warnings: string[] = [];
@@ -634,7 +780,7 @@ describe("review session resume", () => {
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
 
-      expect(harness.calls[3]!.session).toBeUndefined();
+      expect(harness.calls[5]!.session).toBeUndefined();
       const review = (await runtime.store.listRecords())
         .filter((r) => r.slug === "task" && r.step === "review")
         .sort((a, b) => a.seq - b.seq);
@@ -649,69 +795,12 @@ describe("review session resume", () => {
   }, 60_000);
 
   it("resumes reviews while an implement different-model follow-up starts de novo", async () => {
-    const { repo, goal } = setupFlowRepo({
-      process: {
-        flows: {
-          "implement-review": {
-            steps: [
-              {
-                id: "implement",
-                prompt: "implementer",
-                alias: "implementer",
-                followUp: {
-                  mode: "different-model",
-                  alias: "implementer-strong",
-                },
-              },
-              {
-                id: "review",
-                prompt: "reviewer",
-                alias: "reviewer",
-                review: true,
-                changeRequests: 2,
-                deliverable: "verdict",
-              },
-            ],
-          },
-        },
-      },
-      aliases: {
-        architect: { harness: "fake", model: "fake-architect" },
-        pm: { harness: "fake", model: "fake-pm" },
-        implementer: { harness: "fake", model: "fake-impl" },
-        reviewer: { harness: "fake", model: "fake-review" },
-        steward: { harness: "fake", model: "fake-steward" },
-        "plan-checker": { harness: "fake", model: "fake-check" },
-        "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
-        "implementer-strong": { harness: "fake", model: "fake-strong" },
-      },
-    });
-    try {
-      const harness = new FakeHarness({ id: "fake" });
-      scriptFixRound(harness);
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
-      await runDispatch(runtime, { iteration: 1 });
-
-      const records = await runtime.store.listRecords();
-      const implement = records
-        .filter((r) => r.slug === "task" && r.step === "implement")
-        .sort((a, b) => a.seq - b.seq);
-      const review = records
-        .filter((r) => r.slug === "task" && r.step === "review")
-        .sort((a, b) => a.seq - b.seq);
-      expect(implement.map((r) => r.alias)).toEqual([
-        "implementer",
-        "implementer-strong",
-      ]);
-      expect(harness.calls[2]!.session).toBeUndefined();
-      expect(harness.calls[3]!.session?.id).toBe(review[0]!.session!.id);
-      expect(review.map((r) => r.session?.compacted)).toEqual([true, true]);
-    } finally {
-      cleanupFlowRepo(repo);
-    }
+    const scope1 = await resumesReviewsWhileImplementPart1();
+    await resumesReviewsWhileImplementPart2(scope1);
   }, 60_000);
+}
 
+function registerReviewSessionResumePart4(): void {
   it("keeps the compacted transcript across a declared cross-harness switch", async () => {
     const { repo, goal } = setupFlowRepo(crossHarnessFlow);
     try {
@@ -741,7 +830,9 @@ describe("review session resume", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerReviewSessionResumePart5(): void {
   it("starts de novo with the reason logged on an undeclared harness edge", async () => {
     const { repo, goal } = setupFlowRepo(crossHarnessFlow);
     const warnings: string[] = [];
@@ -778,7 +869,9 @@ describe("review session resume", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerReviewSessionResumePart6(): void {
   it("resumes only its own step session, never the implementer's on a shared alias", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -837,7 +930,9 @@ describe("review session resume", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerReviewSessionResumePart7(): void {
   it("starts de novo with the reason logged on an alias change or cwd mismatch", async () => {
     const { repo, goal } = setupFlowRepo();
     const warnings: string[] = [];
@@ -846,77 +941,133 @@ describe("review session resume", () => {
       warnings.push(args.map(String).join(" "));
     };
     try {
-      const fake = new FakeHarness({ id: "fake" });
-      const runtime = await makeRuntime(repo, goal, { fake });
-      const taskFile = task("task", { scope: ["task.txt"] });
-      await writeTask(runtime, taskFile);
-      const worktree = (await ensureTaskWorktree(runtime, taskFile)).path;
-      const now = new Date().toISOString();
-      const prior: SessionRef = {
-        harness: "fake",
-        id: "review-session",
-        cwd: worktree,
-        model: { id: "fake-review" },
-        lastRequestStartedAt: now,
-        retentionTier: "short",
-        compacted: true,
-      };
-      const records = [
-        rec(1, {
-          slug: "task",
-          step: "review",
-          alias: "reviewer",
-          session: prior,
-        }),
-      ];
-      const moved: SessionRef = { ...prior, cwd: "/tmp/elsewhere" };
-      const movedRecords = [
-        rec(1, {
-          slug: "task",
-          step: "review",
-          alias: "reviewer",
-          session: moved,
-        }),
-      ];
-      expect(
-        await followUpSession(
-          runtime,
-          taskFile,
-          {
-            prompt: "reviewer",
-            alias: "implementer",
-            harness: fake,
-            model: { id: "fake-review" },
-            tiers: [{ harness: fake, model: { id: "fake-review" } }],
-            tierOffset: 0,
-          },
-          "review",
-          records,
-          worktree,
-        ),
-      ).toBeUndefined();
-      expect(
-        await followUpSession(
-          runtime,
-          taskFile,
-          {
-            prompt: "reviewer",
-            alias: "reviewer",
-            harness: fake,
-            model: { id: "fake-review" },
-            tiers: [{ harness: fake, model: { id: "fake-review" } }],
-            tierOffset: 0,
-          },
-          "review",
-          movedRecords,
-          worktree,
-        ),
-      ).toBeUndefined();
-      expect(warnings.join("\n")).toContain("alias changed");
-      expect(warnings.join("\n")).toContain("does not match worktree");
+      const scope1 = await startsDeNovoReasonLoggedAliasPart1(repo, goal);
+      await startsDeNovoReasonLoggedAliasPart2(warnings, scope1);
     } finally {
       console.warn = originalWarn;
       cleanupFlowRepo(repo);
     }
   }, 60_000);
-});
+}
+
+function registerSessionPortabilityPart1(): void {
+  it("admits only same-harness resume edges when none are declared", () => {
+    expect(portable("omp", "omp")).toBe(true);
+    expect(portable("omp", "opencode")).toBe(false);
+  });
+
+  it("admits a declared edge in its direction only", () => {
+    const edges = [{ from: "opencode", to: "omp" }];
+    expect(portable("opencode", "omp", edges)).toBe(true);
+    expect(portable("omp", "opencode", edges)).toBe(false);
+    expect(portable("omp", "omp", edges)).toBe(true);
+  });
+}
+
+/** Implement and approve on `fake`, returning the compacted session to resume. */
+async function resumesRecordingHarnessPart1() {
+  const { repo, goal } = setupFlowRepo();
+  try {
+    const fake = new FakeHarness({ id: "fake" });
+    fake.script((req, ctx) => {
+      fs.writeFileSync(path.join(req.cwd!, "task.txt"), "done\n", "utf8");
+      ctx.writeOutcome(outcome({ summary: "implemented" }));
+      return fakeTurnResult(req);
+    });
+    fake.script((req, ctx) => {
+      ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+      return fakeTurnResult(req);
+    });
+    const other = new FakeHarness({ id: "other" });
+    const runtime = await makeRuntime(repo, goal, { fake, other });
+    await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+    await runDispatch(runtime, { iteration: 1 });
+
+    const records = await runtime.store.listRecords();
+    const taskFile = (await runtime.store.listTasks()).find(
+      (t) => t.slug === "task",
+    )!;
+    const worktree = (await ensureTaskWorktree(runtime, taskFile)).path;
+    const recorded = records.find(
+      (r) => r.slug === "task" && r.step === "implement",
+    )!.session!;
+    expect(recorded.compacted).toBe(true);
+
+    return {
+      repo,
+      runtime,
+      taskFile,
+      records,
+      worktree,
+      recorded,
+      fake,
+      other,
+    };
+  } catch (error) {
+    cleanupFlowRepo(repo);
+    throw error;
+  }
+}
+
+/** Resume on the recording harness, refuse rotation, then admit a declared edge. */
+async function resumesRecordingHarnessPart2(
+  scope: Awaited<ReturnType<typeof resumesRecordingHarnessPart1>>,
+) {
+  const { runtime, taskFile, records, worktree, recorded, fake, other } = scope;
+  try {
+    const target = (harness: FakeHarness): TurnTarget => ({
+      prompt: "implementer",
+      alias: "implementer",
+      harness,
+      model: { id: "fake-impl" },
+      tiers: [{ harness, model: { id: "fake-impl" } }],
+      tierOffset: 0,
+    });
+    const resumed = await followUpSession(
+      runtime,
+      taskFile,
+      target(fake),
+      "implement",
+      records,
+      worktree,
+    );
+    expect(resumed?.id).toBe(recorded.id);
+
+    // Rotation: the same alias now routes to a different harness.
+    runtime.configs.run.aliases.implementer!.harness = "other";
+    expect(
+      await followUpSession(
+        runtime,
+        taskFile,
+        target(other),
+        "implement",
+        records,
+        worktree,
+      ),
+    ).toBeUndefined();
+
+    // A declared edge admits that crossing; the session resumes.
+    runtime.configs.run.portability = [{ from: "fake", to: "other" }];
+    expect(
+      (
+        await followUpSession(
+          runtime,
+          taskFile,
+          target(other),
+          "implement",
+          records,
+          worktree,
+        )
+      )?.id,
+    ).toBe(recorded.id);
+  } finally {
+    cleanupFlowRepo(scope.repo);
+  }
+}
+
+function registerSessionPortabilityPart2(): void {
+  it("resumes the recording harness and refuses a session the alias no longer routes to", async () => {
+    const scope1 = await resumesRecordingHarnessPart1();
+    await resumesRecordingHarnessPart2(scope1);
+  }, 60_000);
+}

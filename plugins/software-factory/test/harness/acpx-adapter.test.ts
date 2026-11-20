@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -73,6 +72,406 @@ function expectDead(pid: number): void {
 }
 
 describe("AcpxHarness", () => {
+  registerAcpxHarnessPart1();
+  registerAcpxHarnessPart2();
+  registerAcpxHarnessPart3();
+  registerAcpxHarnessPart4();
+  registerAcpxHarnessPart5();
+  registerAcpxHarnessPart6();
+  registerAcpxHarnessPart7();
+  registerAcpxHarnessPart8();
+  registerAcpxHarnessPart9();
+  registerAcpxHarnessPart10();
+  registerAcpxHarnessPart11();
+  registerAcpxHarnessPart12();
+  registerAcpxHarnessPart13();
+  registerAcpxHarnessPart14();
+  registerAcpxHarnessPart15();
+  registerAcpxHarnessPart16();
+  registerAcpxHarnessPart17();
+  registerAcpxHarnessPart18();
+  registerAcpxHarnessPart19();
+  registerAcpxHarnessPart20();
+  registerAcpxHarnessPart21();
+  registerAcpxHarnessPart22();
+  registerAcpxHarnessPart23();
+  registerAcpxHarnessPart24();
+  registerAcpxHarnessPart25();
+  registerAcpxHarnessPart26();
+});
+
+describe("AcpxHarness prompt result precedence", () => {
+  const scope1 = acpxHarnessPromptResultPrecedencePart1();
+  acpxHarnessPromptResultPrecedencePart2(scope1);
+  acpxHarnessPromptResultPrecedencePart3(scope1);
+  acpxHarnessPromptResultPrecedencePart4(scope1);
+});
+
+async function retriesDeNovoWhenResumedSessionSPart1(
+  stub: ReturnType<typeof createAcpxStub>,
+  harness: AcpxHarness,
+) {
+  const cwd = path.dirname(stub.binary);
+  const first = await harness.turn(request(cwd, "first", { effort: "high" }));
+  stub.closeSession(first.session!.id);
+
+  const second = await harness.turn(
+    request(cwd, "second [[text:ALPHA]]", {
+      session: first.session,
+      effort: "high",
+    }),
+  );
+
+  expect(second.stop).toEqual({ kind: "done" });
+  expect(second.text).toBe("ALPHA");
+  expect(second.session?.id).toMatch(/^pi-/);
+  expect(second.session?.id).not.toBe(first.session!.id);
+  expect(second.attempts?.map((attempt) => attempt.stop)).toEqual([
+    {
+      kind: "infra",
+      cause: "crash",
+      details: expect.stringMatching(/No acpx session found/),
+    },
+    { kind: "done" },
+  ]);
+
+  const calls = stub.invocations();
+  const creates = calls.filter(
+    (args) => args.includes("sessions") && args.includes("new"),
+  );
+  expect(creates).toHaveLength(2);
+  expect(creates[1]).toContain(second.session!.id);
+
+  const sets = calls.filter((args) => args.includes("set"));
+  expect(sets).toHaveLength(3);
+  expect(sets[1]![sets[1]!.indexOf("-s") + 1]).toBe(first.session!.id);
+  expect(sets[2]![sets[2]!.indexOf("-s") + 1]).toBe(second.session!.id);
+  expect(sets[2]!.slice(sets[2]!.indexOf("set"))).toEqual([
+    "set",
+    "thought_level",
+    "high",
+  ]);
+
+  const prompts = calls.filter((args) => args.at(-1)?.startsWith("second"));
+  expect(prompts).toHaveLength(1);
+
+  return { second, prompts };
+}
+
+async function retriesDeNovoWhenResumedSessionSPart2(
+  scope: Awaited<ReturnType<typeof retriesDeNovoWhenResumedSessionSPart1>>,
+) {
+  const { prompts, second } = scope;
+  expect(prompts[0]![prompts[0]!.indexOf("-s") + 1]).toBe(second.session!.id);
+}
+
+async function createsNamedPiSessionPassesModelPart1(
+  stub: ReturnType<typeof createAcpxStub>,
+  harness: AcpxHarness,
+) {
+  const cwd = path.dirname(stub.binary);
+  const outcomePath = path.join(cwd, "outbox", "outcome.yaml");
+  const result = await harness.turn(
+    request(cwd, `Say [[text:PONG]]\n\n- outcome path: \`${outcomePath}\``, {
+      effort: "high",
+      outcomePath,
+    }),
+  );
+
+  expect(result.stop).toEqual({ kind: "done" });
+  expect(result.text).toBe("PONG");
+  expect(result.model).toEqual({
+    id: "opencode-go/beam-free",
+    effort: "high",
+  });
+  expect(result.session?.harness).toBe("pi");
+  expect(result.session?.id).toMatch(/^pi-/);
+  // pi reports no usage on the prompt; absence stays unknown, not a fake zero cost.
+  expect(result.usage.costUsd).toBeUndefined();
+  expect(result.usage.in).toBe(0);
+
+  const calls = stub.invocations();
+  const create = calls.find(
+    (args) => args.includes("sessions") && args.includes("new"),
+  )!;
+  const set = calls.find((args) => args.includes("set"))!;
+  const prompt = calls.find((args) => args.at(-1)?.includes("[[text:PONG]]"))!;
+
+  // The stub logs argv and never writes the outcome, so this is the path the
+  // adapter actually handed the agent, not a file the stub invented.
+  expect(prompt.at(-1)).toContain(`outcome path: \`${outcomePath}\``);
+
+  for (const args of [create, set, prompt]) {
+    expect(args.indexOf("--format")).toBeLessThan(args.indexOf("pi"));
+    expect(args.indexOf("--cwd")).toBeLessThan(args.indexOf("pi"));
+  }
+  expect(create).toContain("--name");
+  expect(create).toContain(result.session!.id);
+  expect(set.slice(set.indexOf("set"))).toEqual([
+    "set",
+    "thought_level",
+    "high",
+  ]);
+
+  return { result, prompt };
+}
+
+async function createsNamedPiSessionPassesModelPart2(
+  scope: Awaited<ReturnType<typeof createsNamedPiSessionPassesModelPart1>>,
+) {
+  const { prompt, result } = scope;
+  expect(prompt).toContain("--model");
+  expect(prompt[prompt.indexOf("--model") + 1]).toBe("opencode-go/beam-free");
+  // acpx parses the positional agent with enablePositionalOptions: a global
+  // --model after `pi` is `unknown option '--model'`, exit 2.
+  expect(prompt.indexOf("--model")).toBeLessThan(prompt.indexOf("pi"));
+  expect(prompt[prompt.indexOf("-s") + 1]).toBe(result.session!.id);
+}
+
+async function runsAgyThroughAcpxSRawAgentRoutePart1(
+  stub: ReturnType<typeof createAcpxStub>,
+  harness: AcpxHarness,
+) {
+  const cwd = path.dirname(stub.binary);
+  const result = await harness.turn(
+    request(cwd, "Say [[text:PONG]]", {
+      model: { id: "gemini-3.8-flash-high" },
+    }),
+  );
+
+  expect(result.stop).toEqual({ kind: "done" });
+  expect(result.text).toBe("PONG");
+  // The alias's model id is recorded; only acpx's --model gets the base id.
+  expect(result.model).toEqual({
+    id: "gemini-3.8-flash-high",
+    effort: "high",
+  });
+  expect(result.usage).toEqual({
+    in: 8783,
+    cacheRead: 0,
+    cacheWrite5m: 21,
+    cacheWrite1h: 0,
+    out: 2,
+    reasoningOut: 77,
+  });
+  expect(result.usage.costUsd).toBeUndefined();
+
+  const calls = stub.invocations();
+  const create = calls.find(
+    (args) => args.includes("sessions") && args.includes("new"),
+  )!;
+  const set = calls.find((args) => args.includes("set"))!;
+  const prompt = calls.find((args) => args.at(-1)?.includes("[[text:PONG]]"))!;
+
+  // The raw ACP agent is the resolved executable; it needs approve-all or
+  // every shell command is denied.
+  for (const args of [create, set, prompt]) {
+    expect(args[args.indexOf("--agent") + 1]).toBe(`${AGY_BIN} acp`);
+  }
+  expect(create.indexOf("--approve-all")).toBeLessThan(
+    create.indexOf("sessions"),
+  );
+  expect(set.indexOf("--approve-all")).toBeLessThan(set.indexOf("set"));
+  expect(prompt.indexOf("--approve-all")).toBeLessThan(
+    prompt.indexOf("prompt"),
+  );
+
+  expect(create).toContain("--name");
+  expect(create).toContain(result.session!.id);
+
+  return { result, set, prompt };
+}
+
+async function runsAgyThroughAcpxSRawAgentRoutePart2(
+  scope: Awaited<ReturnType<typeof runsAgyThroughAcpxSRawAgentRoutePart1>>,
+) {
+  const { set, result, prompt } = scope;
+  expect(set.slice(set.indexOf("set"))).toEqual([
+    "set",
+    "-s",
+    result.session!.id,
+    "thought_level",
+    "high",
+  ]);
+  expect(prompt[prompt.indexOf("--model") + 1]).toBe("gemini-3.8-flash");
+  // The raw route has no positional agent, so --model and --agent are
+  // global flags; both must precede the prompt verb.
+  expect(prompt.indexOf("--model")).toBeLessThan(prompt.indexOf("prompt"));
+  expect(prompt.indexOf("--agent")).toBeLessThan(prompt.indexOf("prompt"));
+  expect(prompt.slice(prompt.indexOf("prompt"))).toEqual([
+    "prompt",
+    "-s",
+    result.session!.id,
+    "Say [[text:PONG]]",
+  ]);
+}
+
+function acpxHarnessPromptResultPrecedencePart1() {
+  function turnOn(
+    stub: ReturnType<typeof createAcpxStub>,
+    prompt: string,
+    extra: Record<string, unknown> = {},
+  ) {
+    const harness = new AcpxHarness({
+      id: "pi",
+      binary: stub.binary,
+      sessionDir: path.dirname(stub.binary),
+      acpx: PI_ACPX,
+    });
+    return harness.turn(request(path.dirname(stub.binary), prompt, extra));
+  }
+
+  it("returns done and reads the outcome when exit 5 follows a valid result", async () => {
+    const stub = createAcpxStub({
+      usage: {
+        inputTokens: 11,
+        outputTokens: 7,
+        cachedReadTokens: 3,
+        cachedWriteTokens: 2,
+      },
+      promptExitCode: 5,
+    });
+    try {
+      const result = await turnOn(stub, "Say [[text:COMPLETE]]");
+      expect(result.stop).toEqual({ kind: "done" });
+      expect(result.text).toBe("COMPLETE");
+      expect(result.usage).toMatchObject({
+        in: 11,
+        out: 7,
+        cacheRead: 3,
+        cacheWrite5m: 2,
+      });
+      expect(result.session?.id).toMatch(/^pi-/);
+    } finally {
+      stub.cleanup();
+    }
+  });
+
+  return { turnOn };
+}
+
+function acpxHarnessPromptResultPrecedencePart2(
+  scope: ReturnType<typeof acpxHarnessPromptResultPrecedencePart1>,
+) {
+  const { turnOn } = scope;
+  it("carries exit details when exit 5 has no prompt result", async () => {
+    const stub = createAcpxStub({
+      promptExitCode: 5,
+      omitPromptResult: true,
+    });
+    try {
+      const result = await turnOn(stub, "Say [[text:INCOMPLETE]]");
+      expect(result.stop).toEqual({
+        kind: "infra",
+        cause: "crash",
+        details: "exit 5, signal none",
+      });
+    } finally {
+      stub.cleanup();
+    }
+  });
+
+  it("keeps an ACP error frame over a parsed result", async () => {
+    const stub = createAcpxStub({
+      promptExitCode: 5,
+      errorAfterResult: {
+        code: -32603,
+        message: "agent transport crashed",
+      },
+    });
+    try {
+      const result = await turnOn(stub, "Say [[text:COMPLETE]]");
+      expect(result.stop.kind).toBe("infra");
+      if (result.stop.kind !== "infra")
+        throw new Error("expected an infra stop");
+      expect(result.stop.cause).toBe("crash");
+      expect(result.stop.details).toContain("exit 5");
+      expect(result.stop.details).toContain("agent transport crashed");
+    } finally {
+      stub.cleanup();
+    }
+  });
+}
+
+function acpxHarnessPromptResultPrecedencePart3(
+  scope: ReturnType<typeof acpxHarnessPromptResultPrecedencePart1>,
+) {
+  const { turnOn } = scope;
+  it("classifies a transport error frame as transient network", async () => {
+    const cases = [
+      { message: "fetch failed ECONNRESET", needle: "fetch failed ECONNRESET" },
+      {
+        message: "connect ECONNREFUSED 127.0.0.1:443",
+        needle: "connect ECONNREFUSED",
+      },
+      {
+        message: "ECONNABORTED: The operation was aborted",
+        needle: "ECONNABORTED",
+      },
+    ] as const;
+    for (const testCase of cases) {
+      const stub = createAcpxStub({
+        promptExitCode: 5,
+        errorAfterResult: { code: -32603, message: testCase.message },
+      });
+      try {
+        const result = await turnOn(stub, "Say [[text:COMPLETE]]");
+        expect(result.stop.kind).toBe("infra");
+        if (result.stop.kind !== "infra")
+          throw new Error("expected an infra stop");
+        expect(result.stop.cause).toBe("network");
+        expect(result.stop.details).toContain(testCase.needle);
+      } finally {
+        stub.cleanup();
+      }
+    }
+  }, 20_000);
+
+  it("keeps a wall timeout over a parsed result", async () => {
+    const stub = createAcpxStub({ hangAfterResult: true });
+    try {
+      const result = await turnOn(stub, "Say [[text:COMPLETE]]", {
+        timeouts: { idleMs: 0, wallMs: 250 },
+      });
+      expect(result.stop).toEqual({ kind: "infra", cause: "timeout" });
+    } finally {
+      stub.cleanup();
+    }
+  }, 20_000);
+}
+
+function acpxHarnessPromptResultPrecedencePart4(
+  scope: ReturnType<typeof acpxHarnessPromptResultPrecedencePart1>,
+) {
+  const { turnOn } = scope;
+  it("keeps refusal and truncation kinds under exit 5", async () => {
+    const cases = [
+      { stopReason: "refusal", stop: { kind: "refusal" } },
+      {
+        stopReason: "max_tokens",
+        stop: { kind: "truncated", cause: "max-tokens" },
+      },
+      {
+        stopReason: "max_turns",
+        stop: { kind: "truncated", cause: "turn-limit" },
+      },
+    ] as const;
+    for (const testCase of cases) {
+      const stub = createAcpxStub({
+        stopReason: testCase.stopReason,
+        promptExitCode: 5,
+      });
+      try {
+        const result = await turnOn(stub, "Say [[text:CUT]]");
+        expect(result.stop).toEqual(testCase.stop);
+      } finally {
+        stub.cleanup();
+      }
+    }
+  }, 20_000);
+}
+
+function registerAcpxHarnessPart1(): void {
   it("creates a named pi session, passes model and effort, and returns the last agent text", async () => {
     const stub = createAcpxStub({ banner: PI_BANNER });
     const harness = new AcpxHarness({
@@ -82,68 +481,15 @@ describe("AcpxHarness", () => {
       acpx: PI_ACPX,
     });
     try {
-      const cwd = path.dirname(stub.binary);
-      const outcomePath = path.join(cwd, "outbox", "outcome.yaml");
-      const result = await harness.turn(
-        request(
-          cwd,
-          `Say [[text:PONG]]\n\n- outcome path: \`${outcomePath}\``,
-          {
-            effort: "high",
-            outcomePath,
-          },
-        ),
-      );
-
-      expect(result.stop).toEqual({ kind: "done" });
-      expect(result.text).toBe("PONG");
-      expect(result.model).toEqual({
-        id: "opencode-go/beam-free",
-        effort: "high",
-      });
-      expect(result.session?.harness).toBe("pi");
-      expect(result.session?.id).toMatch(/^pi-/);
-      // pi reports no usage on the prompt; absence stays unknown, not a fake zero cost.
-      expect(result.usage.costUsd).toBeUndefined();
-      expect(result.usage.in).toBe(0);
-
-      const calls = stub.invocations();
-      const create = calls.find(
-        (args) => args.includes("sessions") && args.includes("new"),
-      )!;
-      const set = calls.find((args) => args.includes("set"))!;
-      const prompt = calls.find((args) =>
-        args.at(-1)?.includes("[[text:PONG]]"),
-      )!;
-
-      // The stub logs argv and never writes the outcome, so this is the path the
-      // adapter actually handed the agent, not a file the stub invented.
-      expect(prompt.at(-1)).toContain(`outcome path: \`${outcomePath}\``);
-
-      for (const args of [create, set, prompt]) {
-        expect(args.indexOf("--format")).toBeLessThan(args.indexOf("pi"));
-        expect(args.indexOf("--cwd")).toBeLessThan(args.indexOf("pi"));
-      }
-      expect(create).toContain("--name");
-      expect(create).toContain(result.session!.id);
-      expect(set.slice(set.indexOf("set"))).toEqual([
-        "set",
-        "thought_level",
-        "high",
-      ]);
-      expect(prompt).toContain("--model");
-      expect(prompt[prompt.indexOf("--model") + 1]).toBe(
-        "opencode-go/beam-free",
-      );
-      // acpx parses the positional agent with enablePositionalOptions: a global
-      // --model after `pi` is `unknown option '--model'`, exit 2.
-      expect(prompt.indexOf("--model")).toBeLessThan(prompt.indexOf("pi"));
-      expect(prompt[prompt.indexOf("-s") + 1]).toBe(result.session!.id);
+      const scope1 = await createsNamedPiSessionPassesModelPart1(stub, harness);
+      await createsNamedPiSessionPassesModelPart2(scope1);
     } finally {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart2(): void {
   it("persists the stdout stream and appends a resumed turn to the same path", async () => {
     const stub = createAcpxStub({ usage: { totalTokens: 10 } });
     const sessionDir = path.join(path.dirname(stub.binary), "sessions");
@@ -192,7 +538,9 @@ describe("AcpxHarness", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart3(): void {
   it("scrubs token-shaped secrets before the stream reaches disk", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
@@ -214,7 +562,9 @@ describe("AcpxHarness", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart4(): void {
   it("passes harness-entry options to the acpx child as args and env", async () => {
     const stub = createAcpxStub();
     const cwd = path.dirname(stub.binary);
@@ -242,7 +592,9 @@ describe("AcpxHarness", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart5(): void {
   it("keeps harness-entry args and env when the turn carries the production opaque block", async () => {
     const stub = createAcpxStub();
     const cwd = path.dirname(stub.binary);
@@ -274,7 +626,9 @@ describe("AcpxHarness", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart6(): void {
   it("refuses a scalar args option instead of spreading it into argv", () => {
     expect(
       () =>
@@ -299,7 +653,9 @@ describe("AcpxHarness", () => {
       'Invalid "args" option: expected string array, got array with non-string entries',
     );
   });
+}
 
+function registerAcpxHarnessPart7(): void {
   it("refuses a non-string env option instead of coercing it", () => {
     expect(
       () =>
@@ -326,7 +682,9 @@ describe("AcpxHarness", () => {
       'Invalid "env" option: expected string-to-string object, got object with non-string values',
     );
   });
+}
 
+function registerAcpxHarnessPart8(): void {
   it("ignores non-args/env options in harness-entry", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
@@ -352,7 +710,9 @@ describe("AcpxHarness", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart9(): void {
   it("resumes the same named session from a second process without creating a new one", async () => {
     const stub = createAcpxStub();
     const options = {
@@ -388,7 +748,9 @@ describe("AcpxHarness", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart10(): void {
   it("retries de novo with a new name when the resumed session is gone", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
@@ -441,7 +803,9 @@ describe("AcpxHarness", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart11(): void {
   it("retries de novo when the resumed session's effort set answers NO_SESSION", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
@@ -451,59 +815,51 @@ describe("AcpxHarness", () => {
       acpx: PI_ACPX,
     });
     try {
-      const cwd = path.dirname(stub.binary);
-      const first = await harness.turn(
-        request(cwd, "first", { effort: "high" }),
-      );
-      stub.closeSession(first.session!.id);
-
-      const second = await harness.turn(
-        request(cwd, "second [[text:ALPHA]]", {
-          session: first.session,
-          effort: "high",
-        }),
-      );
-
-      expect(second.stop).toEqual({ kind: "done" });
-      expect(second.text).toBe("ALPHA");
-      expect(second.session?.id).toMatch(/^pi-/);
-      expect(second.session?.id).not.toBe(first.session!.id);
-      expect(second.attempts?.map((attempt) => attempt.stop)).toEqual([
-        {
-          kind: "infra",
-          cause: "crash",
-          details: expect.stringMatching(/No acpx session found/),
-        },
-        { kind: "done" },
-      ]);
-
-      const calls = stub.invocations();
-      const creates = calls.filter(
-        (args) => args.includes("sessions") && args.includes("new"),
-      );
-      expect(creates).toHaveLength(2);
-      expect(creates[1]).toContain(second.session!.id);
-
-      const sets = calls.filter((args) => args.includes("set"));
-      expect(sets).toHaveLength(3);
-      expect(sets[1]![sets[1]!.indexOf("-s") + 1]).toBe(first.session!.id);
-      expect(sets[2]![sets[2]!.indexOf("-s") + 1]).toBe(second.session!.id);
-      expect(sets[2]!.slice(sets[2]!.indexOf("set"))).toEqual([
-        "set",
-        "thought_level",
-        "high",
-      ]);
-
-      const prompts = calls.filter((args) => args.at(-1)?.startsWith("second"));
-      expect(prompts).toHaveLength(1);
-      expect(prompts[0]![prompts[0]!.indexOf("-s") + 1]).toBe(
-        second.session!.id,
-      );
+      const scope1 = await retriesDeNovoWhenResumedSessionSPart1(stub, harness);
+      await retriesDeNovoWhenResumedSessionSPart2(scope1);
     } finally {
       stub.cleanup();
     }
   });
+}
 
+/** Asserts the second NO_SESSION answer ends the turn after one de-novo retry. */
+function expectNoSessionRetry(
+  second: Awaited<ReturnType<AcpxHarness["turn"]>>,
+  calls: string[][],
+  firstSessionId: string,
+): void {
+  // Bun's toMatchObject mutates a received object when a matcher is nested,
+  // and the final attempt shares this stop; assert the fields directly.
+  expect(second.stop.kind).toBe("infra");
+  if (second.stop.kind !== "infra") throw new Error("expected an infra stop");
+  expect(second.stop.cause).toBe("crash");
+  expect(second.stop.details).toContain("No acpx session found");
+  expect(second.session).toBeUndefined();
+  // The first lost record and the failed de-novo start are both recorded.
+  expect(second.attempts?.map((attempt) => attempt.stop.kind)).toEqual([
+    "infra",
+    "infra",
+  ]);
+  for (const attempt of second.attempts ?? []) {
+    expect(attempt.stop.kind).toBe("infra");
+    if (attempt.stop.kind !== "infra") continue;
+    expect(attempt.stop.cause).toBe("crash");
+    expect(attempt.stop.details).toContain("No acpx session found");
+  }
+  // One de-novo retry: the dead-record set, one new session, then the prompt
+  // that also answers NO_SESSION must end the turn, not start another retry.
+  expect(
+    calls.filter((args) => args.includes("sessions") && args.includes("new")),
+  ).toHaveLength(2);
+  const prompts = calls.filter((args) =>
+    args.at(-1)?.includes("[[mode:no_session]]"),
+  );
+  expect(prompts).toHaveLength(1);
+  expect(prompts[0]![prompts[0]!.indexOf("-s") + 1]).not.toBe(firstSessionId);
+}
+
+function registerAcpxHarnessPart12(): void {
   it("stops with infra details and no session when the retry also answers NO_SESSION", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
@@ -526,46 +882,14 @@ describe("AcpxHarness", () => {
         }),
       );
 
-      // Bun's toMatchObject mutates a received object when a matcher is nested,
-      // and the final attempt shares this stop; assert the fields directly.
-      expect(second.stop.kind).toBe("infra");
-      if (second.stop.kind !== "infra")
-        throw new Error("expected an infra stop");
-      expect(second.stop.cause).toBe("crash");
-      expect(second.stop.details).toContain("No acpx session found");
-      expect(second.session).toBeUndefined();
-      // The first lost record and the failed de-novo start are both recorded.
-      expect(second.attempts?.map((attempt) => attempt.stop.kind)).toEqual([
-        "infra",
-        "infra",
-      ]);
-      for (const attempt of second.attempts ?? []) {
-        expect(attempt.stop.kind).toBe("infra");
-        if (attempt.stop.kind !== "infra") continue;
-        expect(attempt.stop.cause).toBe("crash");
-        expect(attempt.stop.details).toContain("No acpx session found");
-      }
-
-      const calls = stub.invocations();
-      // One de-novo retry: the dead-record set, one new session, then the prompt
-      // that also answers NO_SESSION must end the turn, not start another retry.
-      expect(
-        calls.filter(
-          (args) => args.includes("sessions") && args.includes("new"),
-        ),
-      ).toHaveLength(2);
-      const prompts = calls.filter((args) =>
-        args.at(-1)?.includes("[[mode:no_session]]"),
-      );
-      expect(prompts).toHaveLength(1);
-      expect(prompts[0]![prompts[0]!.indexOf("-s") + 1]).not.toBe(
-        first.session!.id,
-      );
+      expectNoSessionRetry(second, stub.invocations(), first.session!.id);
     } finally {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart13(): void {
   it("gives two fresh sessions in the same worktree distinct names", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
@@ -591,7 +915,9 @@ describe("AcpxHarness", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart14(): void {
   it("maps codex usage into Usage and leaves cost to OpenRouter pricing", async () => {
     // The live codex probe reported in 556 / cache-read 5760 / out 4.
     const stub = createAcpxStub({
@@ -646,7 +972,9 @@ describe("AcpxHarness", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart15(): void {
   it("runs agy through acpx's raw agent route and splits the effort suffix", async () => {
     const stub = createAcpxStub({
       usage: {
@@ -666,77 +994,15 @@ describe("AcpxHarness", () => {
       options: AGY_OPTIONS,
     });
     try {
-      const cwd = path.dirname(stub.binary);
-      const result = await harness.turn(
-        request(cwd, "Say [[text:PONG]]", {
-          model: { id: "gemini-3.8-flash-high" },
-        }),
-      );
-
-      expect(result.stop).toEqual({ kind: "done" });
-      expect(result.text).toBe("PONG");
-      // The alias's model id is recorded; only acpx's --model gets the base id.
-      expect(result.model).toEqual({
-        id: "gemini-3.8-flash-high",
-        effort: "high",
-      });
-      expect(result.usage).toEqual({
-        in: 8783,
-        cacheRead: 0,
-        cacheWrite5m: 21,
-        cacheWrite1h: 0,
-        out: 2,
-        reasoningOut: 77,
-      });
-      expect(result.usage.costUsd).toBeUndefined();
-
-      const calls = stub.invocations();
-      const create = calls.find(
-        (args) => args.includes("sessions") && args.includes("new"),
-      )!;
-      const set = calls.find((args) => args.includes("set"))!;
-      const prompt = calls.find((args) =>
-        args.at(-1)?.includes("[[text:PONG]]"),
-      )!;
-
-      // The raw ACP agent is the resolved executable; it needs approve-all or
-      // every shell command is denied.
-      for (const args of [create, set, prompt]) {
-        expect(args[args.indexOf("--agent") + 1]).toBe(`${AGY_BIN} acp`);
-      }
-      expect(create.indexOf("--approve-all")).toBeLessThan(
-        create.indexOf("sessions"),
-      );
-      expect(set.indexOf("--approve-all")).toBeLessThan(set.indexOf("set"));
-      expect(prompt.indexOf("--approve-all")).toBeLessThan(
-        prompt.indexOf("prompt"),
-      );
-
-      expect(create).toContain("--name");
-      expect(create).toContain(result.session!.id);
-      expect(set.slice(set.indexOf("set"))).toEqual([
-        "set",
-        "-s",
-        result.session!.id,
-        "thought_level",
-        "high",
-      ]);
-      expect(prompt[prompt.indexOf("--model") + 1]).toBe("gemini-3.8-flash");
-      // The raw route has no positional agent, so --model and --agent are
-      // global flags; both must precede the prompt verb.
-      expect(prompt.indexOf("--model")).toBeLessThan(prompt.indexOf("prompt"));
-      expect(prompt.indexOf("--agent")).toBeLessThan(prompt.indexOf("prompt"));
-      expect(prompt.slice(prompt.indexOf("prompt"))).toEqual([
-        "prompt",
-        "-s",
-        result.session!.id,
-        "Say [[text:PONG]]",
-      ]);
+      const scope1 = await runsAgyThroughAcpxSRawAgentRoutePart1(stub, harness);
+      await runsAgyThroughAcpxSRawAgentRoutePart2(scope1);
     } finally {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart16(): void {
   it("resumes an agy session from a second process without creating a new one", async () => {
     const stub = createAcpxStub({
       usage: { totalTokens: 10, inputTokens: 5, outputTokens: 5 },
@@ -787,7 +1053,9 @@ describe("AcpxHarness", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart17(): void {
   it("keeps an agy model id whose effort word is part of the name", async () => {
     const stub = createAcpxStub({
       usage: { totalTokens: 10, inputTokens: 5, outputTokens: 5 },
@@ -816,7 +1084,9 @@ describe("AcpxHarness", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart18(): void {
   it("advertises agy's static caps without inventing live effort levels", async () => {
     const harness = new AcpxHarness({
       id: "agy",
@@ -834,7 +1104,9 @@ describe("AcpxHarness", () => {
       usage: { cache: true, cost: true },
     });
   });
+}
 
+function registerAcpxHarnessPart19(): void {
   it("takes the turn config from opaque when the kernel passes one", async () => {
     const stub = createAcpxStub({
       usage: { totalTokens: 10, inputTokens: 5, outputTokens: 5 },
@@ -873,7 +1145,9 @@ describe("AcpxHarness", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart20(): void {
   it("runs a new agent from config with no code", async () => {
     const stub = createAcpxStub({
       usage: { totalTokens: 10, inputTokens: 5, outputTokens: 5 },
@@ -918,7 +1192,9 @@ describe("AcpxHarness", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart21(): void {
   it("maps NO_SESSION, a bad model, provider quota and a bare exit to scrubbed stops", async () => {
     const cases = [
       {
@@ -972,7 +1248,9 @@ describe("AcpxHarness", () => {
       }
     }
   });
+}
 
+function registerAcpxHarnessPart22(): void {
   it("maps a cancelled stop reason to cancelled even though acpx exits 0", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
@@ -990,7 +1268,9 @@ describe("AcpxHarness", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart23(): void {
   it("starts de novo instead of reusing a session bound to another cwd", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
@@ -1017,7 +1297,9 @@ describe("AcpxHarness", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart24(): void {
   it("abort kills the prompt child and reports cancelled", async () => {
     const stub = createAcpxStub();
     const cwd = path.dirname(stub.binary);
@@ -1049,7 +1331,9 @@ describe("AcpxHarness", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart25(): void {
   it("abort after resolve is a no-op", async () => {
     const stub = createAcpxStub();
     const cwd = path.dirname(stub.binary);
@@ -1079,7 +1363,9 @@ describe("AcpxHarness", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessPart26(): void {
   it("a pre-aborted signal reports cancelled without spawning", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
@@ -1102,152 +1388,4 @@ describe("AcpxHarness", () => {
       stub.cleanup();
     }
   });
-});
-
-describe("AcpxHarness prompt result precedence", () => {
-  function turnOn(
-    stub: ReturnType<typeof createAcpxStub>,
-    prompt: string,
-    extra: Record<string, unknown> = {},
-  ) {
-    const harness = new AcpxHarness({
-      id: "pi",
-      binary: stub.binary,
-      sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
-    });
-    return harness.turn(request(path.dirname(stub.binary), prompt, extra));
-  }
-
-  it("returns done and reads the outcome when exit 5 follows a valid result", async () => {
-    const stub = createAcpxStub({
-      usage: {
-        inputTokens: 11,
-        outputTokens: 7,
-        cachedReadTokens: 3,
-        cachedWriteTokens: 2,
-      },
-      promptExitCode: 5,
-    });
-    try {
-      const result = await turnOn(stub, "Say [[text:COMPLETE]]");
-      expect(result.stop).toEqual({ kind: "done" });
-      expect(result.text).toBe("COMPLETE");
-      expect(result.usage).toMatchObject({
-        in: 11,
-        out: 7,
-        cacheRead: 3,
-        cacheWrite5m: 2,
-      });
-      expect(result.session?.id).toMatch(/^pi-/);
-    } finally {
-      stub.cleanup();
-    }
-  });
-
-  it("carries exit details when exit 5 has no prompt result", async () => {
-    const stub = createAcpxStub({
-      promptExitCode: 5,
-      omitPromptResult: true,
-    });
-    try {
-      const result = await turnOn(stub, "Say [[text:INCOMPLETE]]");
-      expect(result.stop).toEqual({
-        kind: "infra",
-        cause: "crash",
-        details: "exit 5, signal none",
-      });
-    } finally {
-      stub.cleanup();
-    }
-  });
-
-  it("keeps an ACP error frame over a parsed result", async () => {
-    const stub = createAcpxStub({
-      promptExitCode: 5,
-      errorAfterResult: {
-        code: -32603,
-        message: "agent transport crashed",
-      },
-    });
-    try {
-      const result = await turnOn(stub, "Say [[text:COMPLETE]]");
-      expect(result.stop.kind).toBe("infra");
-      if (result.stop.kind !== "infra")
-        throw new Error("expected an infra stop");
-      expect(result.stop.cause).toBe("crash");
-      expect(result.stop.details).toContain("exit 5");
-      expect(result.stop.details).toContain("agent transport crashed");
-    } finally {
-      stub.cleanup();
-    }
-  });
-
-  it("classifies a transport error frame as transient network", async () => {
-    const cases = [
-      { message: "fetch failed ECONNRESET", needle: "fetch failed ECONNRESET" },
-      {
-        message: "connect ECONNREFUSED 127.0.0.1:443",
-        needle: "connect ECONNREFUSED",
-      },
-      {
-        message: "ECONNABORTED: The operation was aborted",
-        needle: "ECONNABORTED",
-      },
-    ] as const;
-    for (const testCase of cases) {
-      const stub = createAcpxStub({
-        promptExitCode: 5,
-        errorAfterResult: { code: -32603, message: testCase.message },
-      });
-      try {
-        const result = await turnOn(stub, "Say [[text:COMPLETE]]");
-        expect(result.stop.kind).toBe("infra");
-        if (result.stop.kind !== "infra")
-          throw new Error("expected an infra stop");
-        expect(result.stop.cause).toBe("network");
-        expect(result.stop.details).toContain(testCase.needle);
-      } finally {
-        stub.cleanup();
-      }
-    }
-  }, 20_000);
-
-  it("keeps a wall timeout over a parsed result", async () => {
-    const stub = createAcpxStub({ hangAfterResult: true });
-    try {
-      const result = await turnOn(stub, "Say [[text:COMPLETE]]", {
-        timeouts: { idleMs: 0, wallMs: 250 },
-      });
-      expect(result.stop).toEqual({ kind: "infra", cause: "timeout" });
-    } finally {
-      stub.cleanup();
-    }
-  }, 20_000);
-
-  it("keeps refusal and truncation kinds under exit 5", async () => {
-    const cases = [
-      { stopReason: "refusal", stop: { kind: "refusal" } },
-      {
-        stopReason: "max_tokens",
-        stop: { kind: "truncated", cause: "max-tokens" },
-      },
-      {
-        stopReason: "max_turns",
-        stop: { kind: "truncated", cause: "turn-limit" },
-      },
-    ] as const;
-    for (const testCase of cases) {
-      const stub = createAcpxStub({
-        stopReason: testCase.stopReason,
-        promptExitCode: 5,
-      });
-      try {
-        const result = await turnOn(stub, "Say [[text:CUT]]");
-        expect(result.stop).toEqual(testCase.stop);
-      } finally {
-        stub.cleanup();
-      }
-    }
-  }, 20_000);
-});
+}

@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -31,6 +30,88 @@ function tiers(runtime: KernelRuntime, iteration?: number) {
 }
 
 describe("alias rotation", () => {
+  aliasRotationPart1();
+  aliasRotationPart2();
+});
+
+async function dispatchesTwoIterationsOntoTwoPart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+) {
+  const a = new FakeHarness({ id: "a" });
+  const b = new FakeHarness({ id: "b" });
+  for (const harness of [a, b]) {
+    harness.script(
+      (req, ctx) => {
+        const slug = fakeTurnIdentity(req).slug!;
+        fs.writeFileSync(
+          path.join(req.cwd!, `${slug}.txt`),
+          `${slug}\n`,
+          "utf8",
+        );
+        ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
+        return fakeTurnResult(req);
+      },
+      { when: whenTurn({ step: "implement" }), fallback: true },
+    );
+    harness.script(
+      (req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+        return fakeTurnResult(req);
+      },
+      { when: whenTurn({ step: "review" }), fallback: true },
+    );
+  }
+  const runtime = await makeRuntime(repo, goal, { a, b });
+
+  await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+  expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
+    "boundary",
+  );
+  await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
+  expect((await runDispatch(runtime, { iteration: 2 })).reason).toBe(
+    "boundary",
+  );
+
+  return { a, b, runtime };
+}
+
+async function dispatchesTwoIterationsOntoTwoPart2(
+  scope: Awaited<ReturnType<typeof dispatchesTwoIterationsOntoTwoPart1>>,
+) {
+  const { runtime, a, b } = scope;
+  const implementRecords = (await runtime.store.listRecords())
+    .filter(
+      (record) =>
+        record.alias === "implementer" &&
+        record.actor === "agent" &&
+        record.step === "implement" &&
+        record.endedAt,
+    )
+    .sort((left, right) => left.iteration - right.iteration);
+  expect(
+    implementRecords.map((record) => [
+      record.iteration,
+      record.attempts?.[0]?.harness,
+      record.model?.id,
+    ]),
+  ).toEqual([
+    [1, "b", "mb-one"],
+    [2, "a", "ma-zero"],
+  ]);
+  expect(
+    a.calls
+      .filter((call) => fakeTurnIdentity(call).step === "implement")
+      .map((call) => call.model.id),
+  ).toEqual(["ma-zero"]);
+  expect(
+    b.calls
+      .filter((call) => fakeTurnIdentity(call).step === "implement")
+      .map((call) => call.model.id),
+  ).toEqual(["mb-one"]);
+}
+
+function aliasRotationPart1() {
   it("resolves iteration N to rotate[N % length] and defaults fallbacks to the rotated entry", async () => {
     const { repo, goal } = setupFlowRepo({
       aliases: {
@@ -71,7 +152,9 @@ describe("alias rotation", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function aliasRotationPart2() {
   it("dispatches two iterations onto two harnesses recorded on one alias", async () => {
     const { repo, goal } = setupFlowRepo({
       limits: { concurrency: { overall: 1 } },
@@ -81,7 +164,9 @@ describe("alias rotation", () => {
         reviewer: { harness: "a", model: "ma-review" },
         steward: { harness: "a", model: "ma-steward" },
         "plan-checker": { harness: "a", model: "ma-check" },
+        intent: { harness: "a", model: "ma-intent" },
         "plan-reviewer": { harness: "a", model: "ma-plan-review" },
+        "pack-preparer": { harness: "a", model: "ma-pack-prep" },
         implementer: {
           harness: "a",
           model: "ma-base",
@@ -93,74 +178,10 @@ describe("alias rotation", () => {
       },
     });
     try {
-      const a = new FakeHarness({ id: "a" });
-      const b = new FakeHarness({ id: "b" });
-      for (const harness of [a, b]) {
-        harness.script(
-          (req, ctx) => {
-            const slug = fakeTurnIdentity(req).slug!;
-            fs.writeFileSync(
-              path.join(req.cwd!, `${slug}.txt`),
-              `${slug}\n`,
-              "utf8",
-            );
-            ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
-            return fakeTurnResult(req);
-          },
-          { when: whenTurn({ step: "implement" }), fallback: true },
-        );
-        harness.script(
-          (req, ctx) => {
-            ctx.writeOutcome(
-              outcome({ summary: "approved", verdict: "approve" }),
-            );
-            return fakeTurnResult(req);
-          },
-          { when: whenTurn({ step: "review" }), fallback: true },
-        );
-      }
-      const runtime = await makeRuntime(repo, goal, { a, b });
-
-      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
-      expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
-        "boundary",
-      );
-      await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
-      expect((await runDispatch(runtime, { iteration: 2 })).reason).toBe(
-        "boundary",
-      );
-
-      const implementRecords = (await runtime.store.listRecords())
-        .filter(
-          (record) =>
-            record.alias === "implementer" &&
-            record.actor === "agent" &&
-            record.step === "implement" &&
-            record.endedAt,
-        )
-        .sort((left, right) => left.iteration - right.iteration);
-      expect(
-        implementRecords.map((record) => [
-          record.iteration,
-          record.attempts?.[0]?.harness,
-          record.model?.id,
-        ]),
-      ).toEqual([
-        [1, "b", "mb-one"],
-        [2, "a", "ma-zero"],
-      ]);
-      expect(
-        a.calls
-          .filter((call) => fakeTurnIdentity(call).step === "implement")
-          .map((call) => call.model.id),
-      ).toEqual(["ma-zero"]);
-      expect(
-        b.calls
-          .filter((call) => fakeTurnIdentity(call).step === "implement")
-          .map((call) => call.model.id),
-      ).toEqual(["mb-one"]);
+      const scope1 = await dispatchesTwoIterationsOntoTwoPart1(repo, goal);
+      await dispatchesTwoIterationsOntoTwoPart2(scope1);
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
-});
+}

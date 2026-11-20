@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { spawn } from "node:child_process";
 import { createActiveTimer, detectSuspend, getClock } from "./clock.js";
 import { childEnv } from "./env.js";
@@ -105,6 +104,282 @@ class HeadTailBuffer {
   }
 }
 
+/** SIGTERM the child's process group, falling back to the child alone. */
+function terminateGroup(child: ReturnType<typeof spawn>, pid: number): void {
+  try {
+    process.kill(-pid, "SIGTERM");
+  } catch {
+    try {
+      child.kill("SIGTERM");
+    } catch {}
+  }
+}
+
+/** SIGKILL the child's process group; without a group, kill the child alone. */
+function killGroupNow(child: ReturnType<typeof spawn>): void {
+  const pid = child.pid;
+  if (!pid || pid <= 0) {
+    try {
+      child.kill("SIGKILL");
+    } catch {}
+    return;
+  }
+  try {
+    process.kill(-pid, "SIGKILL");
+  } catch {
+    try {
+      child.kill("SIGKILL");
+    } catch {}
+  }
+}
+
+/** The spawn spec for a string shell command or an argument array. */
+function commandSpec(
+  cmd: string | string[],
+): { executable: string; args: string[] } | { error: string } {
+  if (typeof cmd === "string") return { executable: "bash", args: ["-c", cmd] };
+  if (cmd.length === 0) return { error: "Empty command array" };
+  return { executable: cmd[0]!, args: cmd.slice(1) };
+}
+
+/** The child environment: TMPDIR overrides plus the run config's allowlist. */
+function processEnv(options: RunProcessOptions): Record<string, string> {
+  const factoryTmp = process.env.TMPDIR;
+  const tmpEnv: Record<string, string> = factoryTmp
+    ? { TMPDIR: factoryTmp, TMP: factoryTmp, TEMP: factoryTmp }
+    : {};
+  return childEnv({
+    allow: options.envAllowlist,
+    set: { ...tmpEnv, ...options.env },
+  });
+}
+
+/** The ring must hold at least maxOutputBytes so end-capping stays meaningful. */
+function streamRingBytes(maxOutputBytes?: number): number {
+  return maxOutputBytes && maxOutputBytes > 0
+    ? maxOutputBytes
+    : DEFAULT_STREAM_RING_BYTES;
+}
+
+/** Spawns the child in its own process group, or reports the spawn error. */
+function spawnChild(
+  executable: string,
+  args: string[],
+  cwd: string,
+  env: Record<string, string>,
+): { child: ReturnType<typeof spawn> } | { stderr: string } {
+  try {
+    return {
+      child: spawn(executable, args, {
+        cwd,
+        env,
+        detached: true, // creates new process group for clean group kills
+        stdio: ["pipe", "pipe", "pipe"],
+      }),
+    };
+  } catch (err: any) {
+    return { stderr: err?.message ?? String(err) };
+  }
+}
+
+/** Registers the child's process group when it has one. */
+function registerGrouped(child: ReturnType<typeof spawn>): void {
+  if (child.pid && child.pid > 0) registerChildGroup(child.pid);
+}
+
+/** Clears the child's process-group registration when it had one. */
+function unregisterGrouped(child: ReturnType<typeof spawn>): void {
+  if (child.pid && child.pid > 0) unregisterChildGroup(child.pid);
+}
+
+/** Feeds the optional stdin payload and closes the pipe. */
+function writeStdin(
+  child: ReturnType<typeof spawn>,
+  stdin: string | undefined,
+): void {
+  if (stdin === undefined || !child.stdin) return;
+  child.stdin.write(stdin);
+  child.stdin.end();
+}
+
+/** One run's mutable state, wired to the promise it resolves. */
+class ProcessRun {
+  private readonly clock = getClock();
+  private readonly startWall: number;
+  private readonly startMono: number;
+  private readonly stdoutRing: HeadTailBuffer;
+  private readonly stderrRing: HeadTailBuffer;
+  private child!: ReturnType<typeof spawn>;
+  private timedOut = false;
+  private aborted = false;
+  private settled = false;
+  private exitCode: number | null = null;
+  private exitSignal: string | undefined;
+  private activeTimer: { cancel: () => void } | undefined;
+  private graceTimer: NodeJS.Timeout | undefined;
+  private onAbort: (() => void) | undefined;
+
+  constructor(
+    private readonly options: RunProcessOptions,
+    private readonly spec: { executable: string; args: string[] },
+    private readonly resolve: (result: ProcessResult) => void,
+  ) {
+    this.startWall = this.clock.now();
+    this.startMono = this.clock.monotonic();
+    const capacity = streamRingBytes(options.maxOutputBytes);
+    this.stdoutRing = new HeadTailBuffer(capacity);
+    this.stderrRing = new HeadTailBuffer(capacity);
+  }
+
+  /** Spawns the child and wires every event before it can finish. */
+  public start(): void {
+    const spawned = spawnChild(
+      this.spec.executable,
+      this.spec.args,
+      this.options.cwd,
+      processEnv(this.options),
+    );
+    if ("stderr" in spawned) {
+      this.resolve({
+        code: 1,
+        stdout: "",
+        stderr: spawned.stderr,
+        timedOut: false,
+        aborted: false,
+        durationMs: Date.now() - this.startWall,
+      });
+      return;
+    }
+    this.child = spawned.child;
+    registerGrouped(this.child);
+    this.wireStreams();
+    writeStdin(this.child, this.options.stdin);
+    this.wireAbort();
+    this.armTimeout();
+    this.wireExit();
+  }
+
+  private wireStreams(): void {
+    this.child.stdout?.on("data", (chunk: Buffer) => {
+      this.stdoutRing.push(chunk);
+    });
+    this.child.stderr?.on("data", (chunk: Buffer) => {
+      this.stderrRing.push(chunk);
+    });
+  }
+
+  private wireAbort(): void {
+    this.onAbort = () => {
+      if (this.settled || this.aborted) return;
+      this.aborted = true;
+      this.killGroup();
+      this.scheduleGraceFinish();
+    };
+    this.options.signal?.addEventListener("abort", this.onAbort, {
+      once: true,
+    });
+  }
+
+  private armTimeout(): void {
+    const { timeoutSec } = this.options;
+    if (!timeoutSec || timeoutSec <= 0) return;
+    this.activeTimer = createActiveTimer(
+      timeoutSec * 1000,
+      () => {
+        this.timedOut = true;
+        this.killGroup();
+        this.scheduleGraceFinish();
+      },
+      this.clock,
+    );
+  }
+
+  private wireExit(): void {
+    this.child.on("exit", (code, signal) => {
+      this.exitCode = code;
+      this.exitSignal = signal ?? undefined;
+      this.scheduleGraceFinish();
+    });
+    this.child.on("close", () => {
+      this.finish();
+    });
+    this.child.on("error", (err) => {
+      this.fail(err);
+    });
+  }
+
+  /** The result body shared by every terminal path. */
+  private result(overrides: Partial<ProcessResult>): ProcessResult {
+    const { suspendDetected, gapMs } = detectSuspend(
+      this.startWall,
+      this.startMono,
+      this.clock,
+    );
+    return {
+      code: this.exitCode,
+      signal: this.exitSignal,
+      stdout: this.stdoutRing.toString(),
+      stderr: this.stderrRing.toString(),
+      timedOut: this.timedOut,
+      aborted: this.aborted,
+      durationMs: this.clock.now() - this.startWall,
+      suspendDetected,
+      suspendGapMs: gapMs,
+      ...overrides,
+    };
+  }
+
+  private finish(): void {
+    if (this.settled) return;
+    this.cleanup();
+    this.resolve(this.result({}));
+  }
+
+  private fail(err: Error): void {
+    if (this.settled) return;
+    this.settled = true;
+    this.cleanup();
+    this.resolve(this.result({ code: 1, stderr: err.message }));
+  }
+
+  private cleanup(): void {
+    if (this.onAbort) {
+      this.options.signal?.removeEventListener("abort", this.onAbort);
+    }
+    unregisterGrouped(this.child);
+    if (this.activeTimer) this.activeTimer.cancel();
+    if (this.graceTimer) clearTimeout(this.graceTimer);
+  }
+
+  /** Destroys stdio after a short grace period and resolves, so grandchildren
+   * that escaped the process group (setsid/daemonised) cannot hang us on `close`. */
+  private scheduleGraceFinish(): void {
+    if (this.graceTimer) clearTimeout(this.graceTimer);
+    this.graceTimer = setTimeout(() => {
+      try {
+        this.child.stdout?.destroy();
+      } catch {}
+      try {
+        this.child.stderr?.destroy();
+      } catch {}
+      this.finish();
+    }, STREAM_GRACE_MS);
+  }
+
+  private killGroup(): void {
+    const pid = this.child.pid;
+    if (!pid || pid <= 0) {
+      killGroupNow(this.child);
+      return;
+    }
+    terminateGroup(this.child, pid);
+    setTimeout(() => {
+      const latePid = this.child.pid;
+      if (latePid && latePid > 0) killGroupNow(this.child);
+    }, 500);
+  }
+}
+
 /**
  * Runs a process with process-group cleanup on timeout, bounded output
  * capture, and support for string shell commands (via non-login `bash -c`,
@@ -116,229 +391,28 @@ class HeadTailBuffer {
  * (e.g. setsid/daemonised) holding the pipes cannot hang the caller.
  */
 export function runProcess(options: RunProcessOptions): Promise<ProcessResult> {
-  const { cmd, cwd, env, timeoutSec, maxOutputBytes, stdin } = options;
-
-  return new Promise((resolve) => {
-    if (options.signal?.aborted) {
-      return resolve({
-        code: null,
-        stdout: "",
-        stderr: "",
-        timedOut: false,
-        aborted: true,
-        durationMs: 0,
-      });
-    }
-    const clock = getClock();
-    const startWall = clock.now();
-    const startMono = clock.monotonic();
-    const startTime = startWall;
-    let timedOut = false;
-    let aborted = false;
-    let settled = false;
-    let exitCode: number | null = null;
-    let exitSignal: string | undefined;
-
-    let executable: string;
-    let args: string[];
-
-    if (typeof cmd === "string") {
-      executable = "bash";
-      args = ["-c", cmd];
-    } else {
-      if (cmd.length === 0) {
-        return resolve({
-          code: 1,
-          stdout: "",
-          stderr: "Empty command array",
-          timedOut: false,
-          aborted: false,
-          durationMs: 0,
-        });
-      }
-      executable = cmd[0]!;
-      args = cmd.slice(1);
-    }
-
-    const factoryTmp = process.env.TMPDIR;
-    const tmpEnv: Record<string, string> = factoryTmp
-      ? { TMPDIR: factoryTmp, TMP: factoryTmp, TEMP: factoryTmp }
-      : {};
-
-    const mergedEnv = childEnv({
-      allow: options.envAllowlist,
-      set: { ...tmpEnv, ...env },
+  if (options.signal?.aborted) {
+    return Promise.resolve({
+      code: null,
+      stdout: "",
+      stderr: "",
+      timedOut: false,
+      aborted: true,
+      durationMs: 0,
     });
-
-    // The ring must hold at least maxOutputBytes so end-capping stays meaningful.
-    const ringCapacity =
-      maxOutputBytes && maxOutputBytes > 0
-        ? maxOutputBytes
-        : DEFAULT_STREAM_RING_BYTES;
-    const stdoutRing = new HeadTailBuffer(ringCapacity);
-    const stderrRing = new HeadTailBuffer(ringCapacity);
-
-    const finalizeStream = (ring: HeadTailBuffer): string => {
-      return ring.toString();
-    };
-
-    let child: ReturnType<typeof spawn>;
-    try {
-      child = spawn(executable, args, {
-        cwd,
-        env: mergedEnv,
-        detached: true, // creates new process group for clean group kills
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-    } catch (err: any) {
-      return resolve({
-        code: 1,
-        stdout: "",
-        stderr: err?.message ?? String(err),
-        timedOut: false,
-        aborted: false,
-        durationMs: Date.now() - startTime,
-      });
-    }
-    if (child.pid && child.pid > 0) {
-      registerChildGroup(child.pid);
-    }
-    let activeTimer: { cancel: () => void } | undefined;
-    let graceTimer: NodeJS.Timeout | undefined;
-    let onAbort: (() => void) | undefined;
-
-    const finish = () => {
-      if (settled) return;
-      if (onAbort) options.signal?.removeEventListener("abort", onAbort);
-      if (child.pid && child.pid > 0) {
-        unregisterChildGroup(child.pid);
-      }
-      if (activeTimer) activeTimer.cancel();
-      if (graceTimer) clearTimeout(graceTimer);
-      const { suspendDetected, gapMs } = detectSuspend(
-        startWall,
-        startMono,
-        clock,
-      );
-      resolve({
-        code: exitCode,
-        signal: exitSignal,
-        stdout: finalizeStream(stdoutRing),
-        stderr: finalizeStream(stderrRing),
-        timedOut,
-        aborted,
-        durationMs: clock.now() - startWall,
-        suspendDetected,
-        suspendGapMs: gapMs,
-      });
-    };
-
-    // Destroy stdio after a short grace period and resolve, so grandchildren
-    // that escaped the process group (setsid/daemonised) cannot hang us on `close`.
-    const scheduleGraceFinish = () => {
-      if (graceTimer) clearTimeout(graceTimer);
-      graceTimer = setTimeout(() => {
-        try {
-          child.stdout?.destroy();
-        } catch {}
-        try {
-          child.stderr?.destroy();
-        } catch {}
-        finish();
-      }, STREAM_GRACE_MS);
-    };
-
-    child.stdout?.on("data", (chunk: Buffer) => {
-      stdoutRing.push(chunk);
+  }
+  const spec = commandSpec(options.cmd);
+  if ("error" in spec) {
+    return Promise.resolve({
+      code: 1,
+      stdout: "",
+      stderr: spec.error,
+      timedOut: false,
+      aborted: false,
+      durationMs: 0,
     });
-
-    child.stderr?.on("data", (chunk: Buffer) => {
-      stderrRing.push(chunk);
-    });
-
-    if (stdin !== undefined && child.stdin) {
-      child.stdin.write(stdin);
-      child.stdin.end();
-    }
-
-    // Kill the whole process group: SIGTERM first, then SIGKILL.
-    const killGroup = () => {
-      if (child.pid && child.pid > 0) {
-        try {
-          process.kill(-child.pid, "SIGTERM");
-        } catch {
-          try {
-            child.kill("SIGTERM");
-          } catch {}
-        }
-        setTimeout(() => {
-          if (child.pid && child.pid > 0) {
-            try {
-              process.kill(-child.pid, "SIGKILL");
-            } catch {
-              try {
-                child.kill("SIGKILL");
-              } catch {}
-            }
-          }
-        }, 500);
-      } else {
-        try {
-          child.kill("SIGKILL");
-        } catch {}
-      }
-    };
-    onAbort = () => {
-      if (settled || aborted) return;
-      aborted = true;
-      killGroup();
-      scheduleGraceFinish();
-    };
-    options.signal?.addEventListener("abort", onAbort, { once: true });
-
-    if (timeoutSec && timeoutSec > 0) {
-      activeTimer = createActiveTimer(
-        timeoutSec * 1000,
-        () => {
-          timedOut = true;
-          killGroup();
-          scheduleGraceFinish();
-        },
-        clock,
-      );
-    }
-
-    child.on("exit", (code, signal) => {
-      exitCode = code;
-      exitSignal = signal ?? undefined;
-      scheduleGraceFinish();
-    });
-
-    child.on("close", () => {
-      finish();
-    });
-
-    child.on("error", (err) => {
-      if (settled) return;
-      settled = true;
-      if (onAbort) options.signal?.removeEventListener("abort", onAbort);
-      if (activeTimer) activeTimer.cancel();
-      if (graceTimer) clearTimeout(graceTimer);
-      const { suspendDetected, gapMs } = detectSuspend(
-        startWall,
-        startMono,
-        clock,
-      );
-      resolve({
-        code: 1,
-        stdout: finalizeStream(stdoutRing),
-        stderr: err.message,
-        timedOut,
-        aborted,
-        durationMs: clock.now() - startWall,
-        suspendDetected,
-        suspendGapMs: gapMs,
-      });
-    });
+  }
+  return new Promise<ProcessResult>((resolve) => {
+    new ProcessRun(options, spec, resolve).start();
   });
 }

@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -23,6 +22,100 @@ import {
 } from "./resume-helpers.js";
 
 describe("resume guards — holds and budgets", () => {
+  registerResumeGuardsHoldsAndBudgetsPart1();
+  registerResumeGuardsHoldsAndBudgetsPart2();
+  registerResumeGuardsHoldsAndBudgetsPart3();
+  registerResumeGuardsHoldsAndBudgetsPart4();
+});
+
+async function anExhaustedUSDBudgetSendsRelaunchPart1(
+  s: ReturnType<typeof setupRepo>,
+  controller: ReturnType<typeof createDrainController>,
+) {
+  const first = new FakeHarness({ id: "fake" });
+  first.script((req, ctx) => {
+    fs.writeFileSync(path.join(s.goalDir, "plan.md"), PLAN, "utf8");
+    ctx.writeOutcome(outcome({ summary: "planned", decision: "continue" }));
+    return fakeTurnResult(req, { usage: { costUsd: 1 } });
+  });
+  first.script((req, ctx) => {
+    fs.writeFileSync(path.join(s.taskDir, "alpha.md"), ALPHA, "utf8");
+    fs.writeFileSync(path.join(s.taskDir, "beta.md"), BETA, "utf8");
+    ctx.writeOutcome(outcome({ summary: "filed" }));
+    return fakeTurnResult(req, { usage: { costUsd: 1 } });
+  });
+  first.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "alpha added" }));
+    return fakeTurnResult(req, { usage: { costUsd: 1 } });
+  });
+  first.script((req, ctx) => {
+    controller.handleSignal("SIGINT");
+    ctx.writeOutcome(
+      outcome({ summary: "alpha approved", verdict: "approve" }),
+    );
+    return fakeTurnResult(req, { usage: { costUsd: 1 } });
+  });
+  await expectDispatch(130, ["run", "--repo", s.repo.dir, "--goal", "demo"], {
+    harnesses: { fake: first },
+    signals: controller,
+  });
+
+  // Iteration 1 spent $4 across architect, PM, implement and review.
+  setLimits(s.repo, "iterationUsd: 1");
+
+  const second = new FakeHarness({ id: "fake" });
+  queueDigestSteer(second);
+
+  return { second };
+}
+
+async function anExhaustedUSDBudgetSendsRelaunchPart2(
+  s: ReturnType<typeof setupRepo>,
+  scope: Awaited<ReturnType<typeof anExhaustedUSDBudgetSendsRelaunchPart1>>,
+) {
+  const { second } = scope;
+  second.script((req, ctx) => {
+    fs.appendFileSync(
+      path.join(s.goalDir, "plan.md"),
+      "\n## architect edit on relaunch\n",
+      "utf8",
+    );
+    ctx.writeOutcome(outcome({ summary: "still going", decision: "continue" }));
+    return fakeTurnResult(req);
+  });
+  second.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "no changes" }));
+    return fakeTurnResult(req);
+  });
+  second.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "beta added" }));
+    return fakeTurnResult(req);
+  });
+  second.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "beta approved", verdict: "approve" }));
+    return fakeTurnResult(req);
+  });
+  await expectDispatch(
+    3,
+    ["run", "--repo", s.repo.dir, "--goal", "demo", "--iterations", "1"],
+    { harnesses: { fake: second } },
+  );
+
+  const store = createFolderStore(s.goalDir, undefined, {});
+  const records = await store.listRecords();
+  expect(
+    records.filter(
+      (r) => r.actor === "agent" && r.step === "architect" && r.iteration === 2,
+    ).length,
+  ).toBe(1);
+  const beta = records.filter((r) => r.slug === "beta");
+  expect(beta.length).toBeGreaterThan(0);
+  expect(beta.every((r) => r.iteration === 2)).toBe(true);
+}
+
+function registerResumeGuardsHoldsAndBudgetsPart1(): void {
   it("a goal hold sends the relaunch to the boundary instead of resuming", async () => {
     const { repo, goalDir } = await drainedAfterAlpha();
     try {
@@ -80,7 +173,9 @@ describe("resume guards — holds and budgets", () => {
       repo.cleanup();
     }
   }, 120_000);
+}
 
+function registerResumeGuardsHoldsAndBudgetsPart2(): void {
   it("an exhausted turn budget sends the relaunch to the boundary", async () => {
     const { repo, goalDir, taskDir } = await drainedAfterAlpha();
     try {
@@ -137,99 +232,27 @@ describe("resume guards — holds and budgets", () => {
       repo.cleanup();
     }
   }, 120_000);
+}
 
+function registerResumeGuardsHoldsAndBudgetsPart3(): void {
   it("an exhausted USD budget sends the relaunch to the boundary", async () => {
     const s = setupRepo();
     const controller = createDrainController();
     const restoreWarn = silenceWarn();
     try {
-      const first = new FakeHarness({ id: "fake" });
-      first.script((req, ctx) => {
-        fs.writeFileSync(path.join(s.goalDir, "plan.md"), PLAN, "utf8");
-        ctx.writeOutcome(outcome({ summary: "planned", decision: "continue" }));
-        return fakeTurnResult(req, { usage: { costUsd: 1 } });
-      });
-      first.script((req, ctx) => {
-        fs.writeFileSync(path.join(s.taskDir, "alpha.md"), ALPHA, "utf8");
-        fs.writeFileSync(path.join(s.taskDir, "beta.md"), BETA, "utf8");
-        ctx.writeOutcome(outcome({ summary: "filed" }));
-        return fakeTurnResult(req, { usage: { costUsd: 1 } });
-      });
-      first.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "alpha added" }));
-        return fakeTurnResult(req, { usage: { costUsd: 1 } });
-      });
-      first.script((req, ctx) => {
-        controller.handleSignal("SIGINT");
-        ctx.writeOutcome(
-          outcome({ summary: "alpha approved", verdict: "approve" }),
-        );
-        return fakeTurnResult(req, { usage: { costUsd: 1 } });
-      });
-      await expectDispatch(
-        130,
-        ["run", "--repo", s.repo.dir, "--goal", "demo"],
-        {
-          harnesses: { fake: first },
-          signals: controller,
-        },
+      const scope1 = await anExhaustedUSDBudgetSendsRelaunchPart1(
+        s,
+        controller,
       );
-
-      // Iteration 1 spent $4 across architect, PM, implement and review.
-      setLimits(s.repo, "iterationUsd: 1");
-
-      const second = new FakeHarness({ id: "fake" });
-      queueDigestSteer(second);
-      second.script((req, ctx) => {
-        fs.appendFileSync(
-          path.join(s.goalDir, "plan.md"),
-          "\n## architect edit on relaunch\n",
-          "utf8",
-        );
-        ctx.writeOutcome(
-          outcome({ summary: "still going", decision: "continue" }),
-        );
-        return fakeTurnResult(req);
-      });
-      second.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "no changes" }));
-        return fakeTurnResult(req);
-      });
-      second.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "beta added" }));
-        return fakeTurnResult(req);
-      });
-      second.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "beta approved", verdict: "approve" }),
-        );
-        return fakeTurnResult(req);
-      });
-      await expectDispatch(
-        3,
-        ["run", "--repo", s.repo.dir, "--goal", "demo", "--iterations", "1"],
-        { harnesses: { fake: second } },
-      );
-
-      const store = createFolderStore(s.goalDir, undefined, {});
-      const records = await store.listRecords();
-      expect(
-        records.filter(
-          (r) =>
-            r.actor === "agent" && r.step === "architect" && r.iteration === 2,
-        ).length,
-      ).toBe(1);
-      const beta = records.filter((r) => r.slug === "beta");
-      expect(beta.length).toBeGreaterThan(0);
-      expect(beta.every((r) => r.iteration === 2)).toBe(true);
+      await anExhaustedUSDBudgetSendsRelaunchPart2(s, scope1);
     } finally {
       restoreWarn();
       s.repo.cleanup();
     }
   }, 120_000);
+}
 
+function registerResumeGuardsHoldsAndBudgetsPart4(): void {
   it("an exhausted wall budget sends the relaunch to the boundary", async () => {
     const { repo, goalDir } = await drainedAfterAlpha();
     try {
@@ -286,4 +309,4 @@ describe("resume guards — holds and budgets", () => {
       repo.cleanup();
     }
   }, 120_000);
-});
+}

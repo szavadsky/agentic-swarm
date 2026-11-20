@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -46,6 +45,84 @@ function parentCount(repo: TmpRepo, dir: string): number {
 }
 
 describe("launch follows base advances into the integration branch", () => {
+  registerLaunchFollowsBaseAdvancesIntoTheIntegrationBranchPart1();
+  registerLaunchFollowsBaseAdvancesIntoTheIntegrationBranchPart2();
+  registerLaunchFollowsBaseAdvancesIntoTheIntegrationBranchPart3();
+  registerLaunchFollowsBaseAdvancesIntoTheIntegrationBranchPart4();
+  registerLaunchFollowsBaseAdvancesIntoTheIntegrationBranchPart5();
+  registerLaunchFollowsBaseAdvancesIntoTheIntegrationBranchPart6();
+  registerLaunchFollowsBaseAdvancesIntoTheIntegrationBranchPart7();
+});
+
+async function abortsConflictingBaseLeavesPart1(repo: TmpRepo, goal: string) {
+  const runtime = await makeRuntime(repo, goal, {});
+  const checkout = goalCheckout(repo, goal);
+  commitFile(
+    repo,
+    checkout,
+    "shared.txt",
+    "integration\n",
+    "factory: merge task",
+  );
+  const integrationSha = head(repo, checkout);
+
+  repo.writeFile("shared.txt", "base\n");
+  repo.commit("base edit");
+
+  const conflict = await prepareIntegrationCheckout(runtime).catch(
+    (err: unknown) => err,
+  );
+  expect(conflict).toBeInstanceOf(BaseFollowConflictError);
+  expect((conflict as BaseFollowConflictError).paths).toEqual(["shared.txt"]);
+  expect(head(repo, checkout)).toBe(integrationSha);
+  expect(fs.readFileSync(path.join(checkout, "shared.txt"), "utf8")).toBe(
+    "integration\n",
+  );
+  expect(repo.git(["status", "--porcelain"], { cwd: checkout }).stdout).toBe(
+    "",
+  );
+  expect(
+    repo.git(["rev-parse", "--verify", "--quiet", "MERGE_HEAD"], {
+      cwd: checkout,
+      allowFail: true,
+    }).code,
+  ).not.toBe(0);
+
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) =>
+    warnings.push(args.map(String).join(" "));
+
+  return { checkout, integrationSha, warnings, originalWarn };
+}
+
+async function abortsConflictingBaseLeavesPart2(
+  repo: TmpRepo,
+  goal: string,
+  scope: Awaited<ReturnType<typeof abortsConflictingBaseLeavesPart1>>,
+) {
+  const { originalWarn, warnings, checkout, integrationSha } = scope;
+  try {
+    const result = await runGoal({
+      repo: repo.dir,
+      goal,
+      harnesses: {
+        fake: withKernelRoleFallbacks(new FakeHarness({ id: "fake" })),
+      },
+      baseGates: false,
+      priceSource: testPriceSource(repo.dir),
+    });
+    expect(result.iterations).toBe(0);
+    expect(result.stop).toBe("infra");
+    expect(result.cause).toContain("shared.txt");
+  } finally {
+    console.warn = originalWarn;
+  }
+  expect(warnings.join("\n")).toContain("shared.txt");
+  expect(head(repo, checkout)).toBe(integrationSha);
+}
+
+function registerLaunchFollowsBaseAdvancesIntoTheIntegrationBranchPart1(): void {
   it("fast-forwards an existing integration branch and then no-ops while base is an ancestor", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -76,7 +153,9 @@ describe("launch follows base advances into the integration branch", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerLaunchFollowsBaseAdvancesIntoTheIntegrationBranchPart2(): void {
   it("makes a merge commit when the integration branch has moved on", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -104,7 +183,9 @@ describe("launch follows base advances into the integration branch", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerLaunchFollowsBaseAdvancesIntoTheIntegrationBranchPart3(): void {
   it("merges cleanly when the integration branch squashed the same base delta", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -136,7 +217,9 @@ describe("launch follows base advances into the integration branch", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerLaunchFollowsBaseAdvancesIntoTheIntegrationBranchPart4(): void {
   it("authors the follow merge commit with the configured factory identity", async () => {
     const { repo, goal } = setupFlowRepo({
       identity: { name: "Factory Bot", email: "factory-bot@test.local" },
@@ -163,7 +246,9 @@ describe("launch follows base advances into the integration branch", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerLaunchFollowsBaseAdvancesIntoTheIntegrationBranchPart5(): void {
   it("reports git's stderr when the target repo refuses a non-fast-forward merge", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -193,7 +278,9 @@ describe("launch follows base advances into the integration branch", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerLaunchFollowsBaseAdvancesIntoTheIntegrationBranchPart6(): void {
   it("recovers a crash-sealed merge before following the base", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -247,69 +334,16 @@ describe("launch follows base advances into the integration branch", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerLaunchFollowsBaseAdvancesIntoTheIntegrationBranchPart7(): void {
   it("aborts a conflicting base, leaves the integration branch untouched and ends the launch naming the paths", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
-      const runtime = await makeRuntime(repo, goal, {});
-      const checkout = goalCheckout(repo, goal);
-      commitFile(
-        repo,
-        checkout,
-        "shared.txt",
-        "integration\n",
-        "factory: merge task",
-      );
-      const integrationSha = head(repo, checkout);
-
-      repo.writeFile("shared.txt", "base\n");
-      repo.commit("base edit");
-
-      const conflict = await prepareIntegrationCheckout(runtime).catch(
-        (err: unknown) => err,
-      );
-      expect(conflict).toBeInstanceOf(BaseFollowConflictError);
-      expect((conflict as BaseFollowConflictError).paths).toEqual([
-        "shared.txt",
-      ]);
-      expect(head(repo, checkout)).toBe(integrationSha);
-      expect(fs.readFileSync(path.join(checkout, "shared.txt"), "utf8")).toBe(
-        "integration\n",
-      );
-      expect(
-        repo.git(["status", "--porcelain"], { cwd: checkout }).stdout,
-      ).toBe("");
-      expect(
-        repo.git(["rev-parse", "--verify", "--quiet", "MERGE_HEAD"], {
-          cwd: checkout,
-          allowFail: true,
-        }).code,
-      ).not.toBe(0);
-
-      const warnings: string[] = [];
-      const originalWarn = console.warn;
-      console.warn = (...args: unknown[]) =>
-        warnings.push(args.map(String).join(" "));
-      try {
-        const result = await runGoal({
-          repo: repo.dir,
-          goal,
-          harnesses: {
-            fake: withKernelRoleFallbacks(new FakeHarness({ id: "fake" })),
-          },
-          baseGates: false,
-          priceSource: testPriceSource(repo.dir),
-        });
-        expect(result.iterations).toBe(0);
-        expect(result.stop).toBe("infra");
-        expect(result.cause).toContain("shared.txt");
-      } finally {
-        console.warn = originalWarn;
-      }
-      expect(warnings.join("\n")).toContain("shared.txt");
-      expect(head(repo, checkout)).toBe(integrationSha);
+      const scope1 = await abortsConflictingBaseLeavesPart1(repo, goal);
+      await abortsConflictingBaseLeavesPart2(repo, goal, scope1);
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
-});
+}

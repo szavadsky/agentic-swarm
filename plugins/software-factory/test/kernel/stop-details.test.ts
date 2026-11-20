@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -13,6 +12,7 @@ import {
   writeTask as writeGoalTask,
   writePlan,
 } from "./e2e-helpers.js";
+import { cause } from "./helpers.js";
 import { testPriceSource } from "../helpers/price-source.js";
 import { task } from "./helpers.js";
 import {
@@ -30,6 +30,13 @@ const NO_ROUTE =
   "provider.no-route Model unavailable: opencode/does-not-exist-free";
 
 describe("infra stop details", () => {
+  registerInfraStopDetailsPart1();
+  registerInfraStopDetailsPart2();
+  registerInfraStopDetailsPart3();
+  registerInfraStopDetailsPart4();
+});
+
+function registerInfraStopDetailsPart1(): void {
   it("shows a no-route stop's details in the dispatch cause and keeps the record verbatim", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -45,7 +52,10 @@ describe("infra stop details", () => {
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("infra");
-      expect(result.cause).toBe(`task: auth: ${NO_ROUTE}`);
+      expect(result.cause).toEqual({
+        kind: "boundary",
+        detail: `task: auth: ${NO_ROUTE}`,
+      });
 
       const stepRecord = (await runtime.store.listRecords()).find(
         (r) => r.step === "implement",
@@ -59,7 +69,9 @@ describe("infra stop details", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerInfraStopDetailsPart2(): void {
   it("prints a stop without details as before", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -73,12 +85,14 @@ describe("infra stop details", () => {
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("infra");
-      expect(result.cause).toBe("task: auth");
+      expect(result.cause).toEqual({ kind: "boundary", detail: "task: auth" });
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerInfraStopDetailsPart3(): void {
   it("keeps refusal details in the park cause", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -101,12 +115,16 @@ describe("infra stop details", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toBe("refused: content policy refusal");
+      expect(state.tasks.task!.cause).toEqual(
+        cause("refused: content policy refusal"),
+      );
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerInfraStopDetailsPart4(): void {
   it("carries the details through the launch stop text and the iteration summary", async () => {
     const goal = makeGoal();
     try {
@@ -156,4 +174,4 @@ describe("infra stop details", () => {
       cleanup(goal);
     }
   }, 60_000);
-});
+}

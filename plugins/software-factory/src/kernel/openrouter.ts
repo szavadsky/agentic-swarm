@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -26,6 +25,30 @@ function perMtok(value: unknown): number | undefined {
   return n * PER_MTOK;
 }
 
+function parsePriceEntry(
+  entry: unknown,
+): { id: string; price: ModelPrice } | undefined {
+  if (typeof entry !== "object" || entry === null) return undefined;
+  const { id, pricing } = entry as {
+    id?: unknown;
+    pricing?: Record<string, unknown> | null;
+  };
+  if (typeof id !== "string" || !id) return undefined;
+  if (typeof pricing !== "object" || pricing === null) return undefined;
+  const input = perMtok(pricing.prompt);
+  const output = perMtok(pricing.completion);
+  if (input === undefined || output === undefined) return undefined;
+  return {
+    id,
+    price: {
+      input,
+      cachedInput: perMtok(pricing.input_cache_read) ?? input,
+      output,
+      reasoning: perMtok(pricing.internal_reasoning) ?? output,
+    },
+  };
+}
+
 /**
  * The model list as USD per Mtok, keyed by OpenRouter id. Entries without a
  * prompt and completion rate are skipped: unpriced, never $0. Cache reads
@@ -37,22 +60,8 @@ export function parseOpenRouterModels(payload: unknown): PriceTable {
   if (!Array.isArray(data)) return {};
   const table: PriceTable = {};
   for (const entry of data) {
-    if (typeof entry !== "object" || entry === null) continue;
-    const { id, pricing } = entry as {
-      id?: unknown;
-      pricing?: Record<string, unknown> | null;
-    };
-    if (typeof id !== "string" || !id) continue;
-    if (typeof pricing !== "object" || pricing === null) continue;
-    const input = perMtok(pricing.prompt);
-    const output = perMtok(pricing.completion);
-    if (input === undefined || output === undefined) continue;
-    table[id] = {
-      input,
-      cachedInput: perMtok(pricing.input_cache_read) ?? input,
-      output,
-      reasoning: perMtok(pricing.internal_reasoning) ?? output,
-    };
+    const parsed = parsePriceEntry(entry);
+    if (parsed) table[parsed.id] = parsed.price;
   }
   return table;
 }

@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import fs from "node:fs";
 import path from "node:path";
 import { runWorktreeSetup } from "../core/checks/setup.js";
@@ -6,6 +5,7 @@ import type { CheckResult } from "../core/checks/types.js";
 import { fingerprintText } from "../core/fingerprint.js";
 import { isAncestor } from "../core/git/commit.js";
 import { git } from "../core/git/exec.js";
+import type { ProcessResult } from "../core/proc.js";
 import { resolveGoalPaths } from "./config.js";
 import {
   capGateOutput,
@@ -16,7 +16,7 @@ import {
   gateSignatures,
   isInfraCheck,
   isStaleGateCheck,
-  runGateCommand,
+  runDeclaredGate,
   UNIDENTIFIED_GATE_FAILURE,
 } from "./gates.js";
 import type {
@@ -116,34 +116,17 @@ export function preexistingRed(base: BaseGateState | undefined): Set<string> {
   return inherited;
 }
 
-/**
- * One baseline check. `roots` is the scratch worktree the gate ran from, so the
- * same failure in a task worktree normalises to the same identity.
- */
-function result(
-  name: string,
-  ok: boolean,
-  summary: string,
-  output = "",
-  roots: readonly string[] = [],
-): CheckResult {
-  const capped = capGateOutput(output, roots);
-  return {
-    name,
-    ok,
-    summary,
-    output: capped.output,
-    fingerprint: fingerprintText(`${name}:${ok}:${summary}`, {
-      lowercase: false,
-    }),
-    details: { roots: [...roots], truncated: capped.truncated },
-  };
-}
-
 /** A check that could not run; `checkBase` refuses to record it as red. */
 function infra(name: string, cause: string, output = ""): CheckResult {
+  const capped = capGateOutput(output);
   return {
-    ...result(name, false, cause, output),
+    name,
+    ok: false,
+    summary: cause,
+    output: capped.output,
+    fingerprint: fingerprintText(`${name}:false:${cause}`, {
+      lowercase: false,
+    }),
     details: { kind: "infra", cause } satisfies GateInfra,
   };
 }
@@ -181,6 +164,23 @@ function scratchPath(configs: ConfigBundle, repoRoot: string): string {
   const dir = fs.mkdtempSync(path.join(runtimeDir, "preflight-probe-"));
   fs.rmSync(dir, { recursive: true, force: true });
   return dir;
+}
+
+/** A gate's check; a timeout or unstartable command is infra, not a red tree. */
+function gateCheck(
+  gateId: string,
+  res: ProcessResult,
+  check: CheckResult,
+): CheckResult {
+  if (res.timedOut) {
+    return infra(gateId, `timed out after ${GATE_TIMEOUT_SEC}s`, check.output);
+  }
+  // 126/127 means the command itself could not start: an environment failure,
+  // not a verdict on the tree under test.
+  if (res.code === 126 || res.code === 127) {
+    return infra(gateId, `could not run: exit ${res.code}`, check.output);
+  }
+  return check;
 }
 
 async function runBaseGates(
@@ -236,23 +236,8 @@ async function runBaseGates(
     }
     const checks: CheckResult[] = [];
     for (const gate of configs.repo.gates) {
-      const res = await runGateCommand(repoRoot, dir, gate, gate.command);
-      const output = `${res.stdout}\n${res.stderr}`.trim();
-      if (res.timedOut) {
-        checks.push(
-          infra(gate.id, `timed out after ${GATE_TIMEOUT_SEC}s`, output),
-        );
-        continue;
-      }
-      // 126/127 means the command itself could not start: an environment
-      // failure, not a verdict on the tree under test.
-      if (res.code === 126 || res.code === 127) {
-        checks.push(infra(gate.id, `could not run: exit ${res.code}`, output));
-        continue;
-      }
-      checks.push(
-        result(gate.id, res.code === 0, `exit ${res.code}`, output, [dir]),
-      );
+      const { res, check } = await runDeclaredGate(repoRoot, dir, gate);
+      checks.push(gateCheck(gate.id, res, check));
     }
     return checks;
   } finally {
@@ -261,6 +246,127 @@ async function runBaseGates(
     });
     fs.rmSync(dir, { recursive: true, force: true });
   }
+}
+
+/**
+ * Runs the repo's setup + gates once on the head tasks start from, in a scratch
+ * worktree. Tasks branch from the integration head, not from the base branch,
+ * and recovery follows base into that head before dispatching: a fast-forward
+ * when the integration only lags, a merge when it has diverged. The divergent
+ * case is gated with that merge staged, so base's own red is not blamed on the
+ * first task. A red base is recorded and warned about, never fatal; an existing
+ * record for the same state means the result was already reported and is
+ * reused. A run that could not execute is infra: it is warned about and never
+ * cached as base-red.
+ */
+/** The commit and branch the follow lands on, plus base when it must merge. */
+interface BaseTarget {
+  target: string;
+  targetBranch: string;
+  mergeFrom: string | undefined;
+}
+
+/** Resolves the integration head the follow produces from base and commit. */
+async function baseTarget(
+  repoRoot: string,
+  baseBranch: string,
+  commit: string,
+  integrationBranch: string,
+): Promise<BaseTarget> {
+  const integrationCommit = await resolveBaseCommit(
+    repoRoot,
+    integrationBranch,
+  );
+  let target = commit;
+  let targetBranch = baseBranch;
+  // Set when the follow merges base into a divergent integration head: what
+  // the follow produces depends on both refs, so gate their merge result.
+  let mergeFrom: string | undefined;
+  if (
+    integrationCommit &&
+    !(await isAncestor(repoRoot, integrationCommit, commit))
+  ) {
+    // The integration carries commits base lacks; the follow adds base to it,
+    // by fast-forward when the integration only lags (target stays base's tip)
+    // and by a merge otherwise.
+    target = integrationCommit;
+    targetBranch = integrationBranch;
+    if (!(await isAncestor(repoRoot, commit, integrationCommit)))
+      mergeFrom = commit;
+  }
+  return { target, targetBranch, mergeFrom };
+}
+
+/** The reusable baseline record for this target, or undefined when stale. */
+async function reusableBaseline(
+  store: ArtifactStore,
+  target: string,
+  mergeFrom: string | undefined,
+): Promise<StepRecord | undefined> {
+  // A merge preview is a function of base too, so a record keyed by the
+  // integration commit alone may predate the base it was gated with. A record
+  // from before run roots were stored is stale: reusing it would collapse its
+  // basename-only paths into current runs, so it is re-gated instead.
+  if (mergeFrom) return undefined;
+  const found = baselineRecord(await store.listRecords(), target);
+  return found && (found.checks ?? []).some(isStaleGateCheck)
+    ? undefined
+    : found;
+}
+
+/** Records a baseline that could not run as infra and warns, never red. */
+async function recordInfraBase(
+  store: ArtifactStore,
+  target: string,
+  described: string,
+  checks: CheckResult[],
+  infraChecks: CheckResult[],
+): Promise<BaselineResult> {
+  await store.appendRecord(
+    {
+      iteration: 0,
+      step: BASELINE_INFRA_STEP,
+      round: 1,
+      actor: "script",
+      base: target,
+    },
+    { ok: false, checks },
+  );
+  console.warn(
+    [
+      `[factory] ${described} could not be checked; not recorded as red, retried next launch.`,
+      ...infraChecks.map((c) => `  ${c.name}: ${c.summary}`),
+    ].join("\n"),
+  );
+  return { commit: target, ok: false, checks, fresh: true, infra: true };
+}
+
+/** Records a base-gate run and warns once when it is red. */
+async function recordBaseResult(
+  store: ArtifactStore,
+  target: string,
+  described: string,
+  checks: CheckResult[],
+): Promise<boolean> {
+  const ok = checks.every((c) => c.ok);
+  const meta: RecordStart = {
+    iteration: 0,
+    step: "baseline",
+    round: 1,
+    actor: "script",
+    base: target,
+  };
+  await store.appendRecord(meta, { ok, checks });
+  if (!ok) {
+    const red = checks.filter((c) => !c.ok);
+    console.warn(
+      [
+        `[factory] ${described} is red; recorded once, continuing.`,
+        ...red.map((c) => `  ${c.name}: ${c.summary}`),
+      ].join("\n"),
+    );
+  }
+  return ok;
 }
 
 /**
@@ -283,37 +389,13 @@ export async function checkBase(
 ): Promise<BaselineResult> {
   // Same naming as resolveGoalPaths: the goal's stable integration branch.
   const integrationBranch = `factory/${path.basename(store.goalDir)}`;
-  const integrationCommit = await resolveBaseCommit(
+  const { target, targetBranch, mergeFrom } = await baseTarget(
     repoRoot,
+    baseBranch,
+    commit,
     integrationBranch,
   );
-  let target = commit;
-  let targetBranch = baseBranch;
-  // Set when the follow merges base into a divergent integration head: what
-  // the follow produces depends on both refs, so gate their merge result.
-  let mergeFrom: string | undefined;
-  if (
-    integrationCommit &&
-    !(await isAncestor(repoRoot, integrationCommit, commit))
-  ) {
-    // The integration carries commits base lacks; the follow adds base to it,
-    // by fast-forward when the integration only lags (target stays base's tip)
-    // and by a merge otherwise.
-    target = integrationCommit;
-    targetBranch = integrationBranch;
-    if (!(await isAncestor(repoRoot, commit, integrationCommit)))
-      mergeFrom = commit;
-  }
-
-  // A merge preview is a function of base too, so a record keyed by the
-  // integration commit alone may predate the base it was gated with. A record
-  // from before run roots were stored is stale: reusing it would collapse its
-  // basename-only paths into current runs, so it is re-gated instead.
-  const found = mergeFrom
-    ? undefined
-    : baselineRecord(await store.listRecords(), target);
-  const existing =
-    found && (found.checks ?? []).some(isStaleGateCheck) ? undefined : found;
+  const existing = await reusableBaseline(store, target, mergeFrom);
   if (existing)
     return {
       commit: target,
@@ -327,45 +409,9 @@ export async function checkBase(
     : `base "${targetBranch}" at ${target.slice(0, 8)}`;
   const checks = await runBaseGates(configs, repoRoot, target, mergeFrom);
   const infraChecks = checks.filter(isInfraCheck);
-  if (infraChecks.length > 0) {
-    await store.appendRecord(
-      {
-        iteration: 0,
-        step: BASELINE_INFRA_STEP,
-        round: 1,
-        actor: "script",
-        base: target,
-      },
-      { ok: false, checks },
-    );
-    console.warn(
-      [
-        `[factory] ${described} could not be checked; not recorded as red, retried next launch.`,
-        ...infraChecks.map((c) => `  ${c.name}: ${c.summary}`),
-      ].join("\n"),
-    );
-    return { commit: target, ok: false, checks, fresh: true, infra: true };
-  }
-
-  const ok = checks.every((c) => c.ok);
-  const meta: RecordStart = {
-    iteration: 0,
-    step: "baseline",
-    round: 1,
-    actor: "script",
-    base: target,
-  };
-  await store.appendRecord(meta, { ok, checks });
-
-  if (!ok) {
-    const red = checks.filter((c) => !c.ok);
-    console.warn(
-      [
-        `[factory] ${described} is red; recorded once, continuing.`,
-        ...red.map((c) => `  ${c.name}: ${c.summary}`),
-      ].join("\n"),
-    );
-  }
+  if (infraChecks.length > 0)
+    return await recordInfraBase(store, target, described, checks, infraChecks);
+  const ok = await recordBaseResult(store, target, described, checks);
   return { commit: target, ok, checks, fresh: true };
 }
 

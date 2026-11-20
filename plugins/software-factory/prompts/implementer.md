@@ -13,5 +13,5 @@ Commit the report at `{{ report_path }}` first, then refine it.
 - setup command: `{{setup_command}}`
 - gate commands: `{{gate_commands}}`
 - base gates: {{base_gates}} — the base tree's recorded gate result; a failure it lists was red before any task, and any red it does not list is this task's to fix
-- previous review findings: `{{findings}}` — empty before the first review; each is answered by a change, a reply in `replies`, or both, and a reply-only round is `done`.
+- previous acceptance findings: `{{findings}}` — empty before the first acceptance; each is answered by a change, a reply in `replies`, or both, and a reply-only round is `done`.
 - outcome path: `{{outcome_path}}`

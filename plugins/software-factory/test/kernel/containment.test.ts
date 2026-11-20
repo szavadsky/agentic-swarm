@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -17,7 +16,7 @@ import {
   containmentViolation,
   ensureTaskWorktree,
 } from "../../src/kernel/worktree.js";
-import { task } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   goalCheckout,
@@ -28,8 +27,241 @@ import {
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 describe("agent containment", () => {
+  registerAgentContainmentPart1();
+  registerAgentContainmentPart2();
+  registerAgentContainmentPart3();
+  registerAgentContainmentPart4();
+  registerAgentContainmentPart5();
+  registerAgentContainmentPart6();
+  registerAgentContainmentPart7();
+  registerAgentContainmentPart8();
+  registerAgentContainmentPart9();
+  registerAgentContainmentPart10();
+  registerAgentContainmentPart11();
+  registerAgentContainmentPart12();
+  registerAgentContainmentPart13();
+  registerAgentContainmentPart14();
+  registerAgentContainmentPart15();
+  registerAgentContainmentPart16();
+  registerAgentContainmentPart17();
+  registerAgentContainmentPart18();
+  registerAgentContainmentPart19();
+});
+
+async function ignoresSiblingRecordOpensAcrossPart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+) {
+  const harness = new FakeHarness({ id: "fake" });
+  const runtime = await makeRuntime(repo, goal, { fake: harness });
+  const file = task("task", { scope: ["task.txt"] });
+  await writeTask(runtime, file);
+  const ensured = await ensureTaskWorktree(runtime, file);
+
+  // A sibling commit record that opens across the snapshot's record
+  // read: stamped before the snapshot, its files land after. The read
+  // misses it (filtered here; under load the directory read wins the
+  // race), so the check must clear it by sequence, not by timestamp.
+  const open = await runtime.store.startRecord({
+    iteration: 1,
+    step: "commit",
+    round: 1,
+    actor: "script",
+    slug: "other",
+    commit: "0".repeat(40),
+  });
+  const past = new Date(Date.now() - 60_000).toISOString();
+  fs.writeFileSync(
+    path.join(open.dir, "started.yaml"),
+    yaml.stringify({ ...open.meta, startedAt: past }),
+    "utf8",
+  );
+  const filteredStore = Object.assign(
+    Object.create(Object.getPrototypeOf(runtime.store)),
+    runtime.store,
+    {
+      listRecords: async () => {
+        const records = await runtime.store.listRecords();
+        return records.filter((r) => r.seq !== open.meta.seq);
+      },
+    },
+  );
+  const snapshot = await containmentSnapshot(
+    { ...runtime, store: filteredStore },
+    ensured.path,
+  );
+
+  return { runtime, ensured, open, past, snapshot };
+}
+
+async function ignoresSiblingRecordOpensAcrossPart2(
+  scope: Awaited<ReturnType<typeof ignoresSiblingRecordOpensAcrossPart1>>,
+) {
+  const { open, past, runtime, ensured, snapshot } = scope;
+  fs.writeFileSync(
+    path.join(open.dir, "end.yaml"),
+    yaml.stringify({
+      ok: true,
+      commit: "0".repeat(40),
+      tree: "1".repeat(40),
+      endedAt: past,
+    }),
+    "utf8",
+  );
+
+  expect(
+    await containmentViolation(runtime, ensured.path, ensured.branch, snapshot),
+  ).toBeUndefined();
+}
+
+async function refusesMergeWhoseIntegrationHeadPart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+  checkout: string,
+) {
+  const harness = new FakeHarness({ id: "fake" });
+  harness.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "task.txt"), "task\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "implemented" }));
+    return fakeTurnResult(req);
+  });
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+    return fakeTurnResult(req);
+  });
+
+  const runtime = await makeRuntime(repo, goal, { fake: harness });
+  const file = task("task", { scope: ["task.txt"] });
+  await writeTask(runtime, file);
+  const drive = async (action: Action): Promise<void> => {
+    const before = derive(
+      await runtime.store.listTasks(),
+      await runtime.store.listRecords(),
+      runtime.configs.process.flows,
+    );
+    await executeTaskAction(runtime, file, action, 1, before.tasks[file.slug]!);
+  };
+  await drive({ kind: "step", slug: "task", step: "implement", round: 1 });
+  await drive({ kind: "step", slug: "task", step: "review", round: 1 });
+  // Differ the merged tree so the merge gates run: without a concurrent
+  // landing the merge would skip them on the already-judged tree.
+  fs.writeFileSync(path.join(checkout, "other.txt"), "other\n", "utf8");
+  repo.git(["add", "other.txt"], { cwd: checkout });
+  repo.git(["commit", "-m", "concurrent landing"], { cwd: checkout });
+  await drive({ kind: "merge", slug: "task" });
+  scriptStallLeave(harness, ["task"]);
+  await runDispatch(runtime, { iteration: 1 });
+
+  const records = await runtime.store.listRecords();
+  const state = derive(
+    await runtime.store.listTasks(),
+    records,
+    runtime.configs.process.flows,
+  );
+  expect(state.tasks.task!.status).toBe("parked");
+
+  return { records, state };
+}
+
+async function refusesMergeWhoseIntegrationHeadPart2(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  scope: Awaited<ReturnType<typeof refusesMergeWhoseIntegrationHeadPart1>>,
+) {
+  const { state, records } = scope;
+  expect(state.tasks.task!.cause?.kind).toBe("merge-failed");
+  expect(causeText(state.tasks.task!.cause)).toContain(
+    "merge-failed: integration-moved: expected ",
+  );
+  const failed = records.filter(
+    (r) => r.slug === "task" && r.step === "merge" && r.ok === false,
+  );
+  expect(failed).toHaveLength(1);
+  expect(failed[0]!.cause?.kind).toBe("integration-moved");
+  expect(causeText(failed[0]!.cause)).toMatch(/^integration-moved: expected /);
+  expect(
+    repo.git(["log", "-1", "--format=%s", "factory/demo"]).stdout.trim(),
+  ).toBe("outside");
+}
+
+async function containsTurnTriesRewriteSealedPart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+) {
+  const harness = new FakeHarness({ id: "fake" });
+  const runtime = await makeRuntime(repo, goal, { fake: harness });
+  const sealed = await runtime.store.startRecord({
+    iteration: 1,
+    step: "review",
+    round: 1,
+    actor: "agent",
+    slug: "other",
+  });
+  await sealed.finish({
+    ok: true,
+    outcome: outcome({ summary: "other approved", verdict: "approve" }),
+  });
+  const before = fs.readFileSync(sealed.outcomePath, "utf8");
+  const probe: { writeError: NodeJS.ErrnoException | undefined } = {
+    writeError: undefined,
+  };
+
+  harness.script(
+    (req, ctx) => {
+      // A resumed turn still holding the sealed record's stale path.
+      try {
+        fs.writeFileSync(
+          sealed.outcomePath,
+          "status: failed\nsummary: stale\n",
+          "utf8",
+        );
+      } catch (err) {
+        probe.writeError = err as NodeJS.ErrnoException;
+      }
+      fs.writeFileSync(path.join(req.cwd!, "task.txt"), "task\n", "utf8");
+      ctx.writeOutcome(outcome({ summary: "implemented" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ slug: "task", step: "implement" }) },
+  );
+
+  return { harness, runtime, sealed, before, probe };
+}
+
+async function containsTurnTriesRewriteSealedPart2(
+  scope: Awaited<ReturnType<typeof containsTurnTriesRewriteSealedPart1>>,
+) {
+  const { harness, runtime, probe, sealed, before } = scope;
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ slug: "task", step: "review" }) },
+  );
+
+  await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+  await runDispatch(runtime, { iteration: 1 });
+
+  const records = await runtime.store.listRecords();
+  const state = derive(
+    await runtime.store.listTasks(),
+    records,
+    runtime.configs.process.flows,
+  );
+  expect(probe.writeError?.code).toBe("EACCES");
+  expect(fs.statSync(sealed.outcomePath).mode & 0o777).toBe(0o444);
+  expect(fs.readFileSync(sealed.outcomePath, "utf8")).toBe(before);
+  expect(state.tasks.task!.status).toBe("merged");
+  expect(
+    records.filter((r) => r.slug === "task" && r.step === "park"),
+  ).toHaveLength(0);
+  expect(records.filter((r) => r.step === "containment")).toHaveLength(0);
+}
+
+function registerAgentContainmentPart1(): void {
   it("parks a turn that writes outside its worktree and switches branch", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -56,11 +288,11 @@ describe("agent containment", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain("containment:");
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain("containment:");
+      expect(causeText(state.tasks.task!.cause)).toContain(
         'not the task branch "factory-task/demo/task"',
       );
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "files changed outside the worktree",
       );
       expect(harness.calls.length).toBe(2);
@@ -70,7 +302,9 @@ describe("agent containment", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerAgentContainmentPart2(): void {
   it("accepts a turn contained to its worktree", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -104,7 +338,9 @@ describe("agent containment", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerAgentContainmentPart3(): void {
   it("merges a contained turn when the operator commits in the main checkout mid-turn", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -140,12 +376,14 @@ describe("agent containment", () => {
         (r) => r.slug === "task" && r.step === "containment",
       );
       expect(incidents).toHaveLength(1);
-      expect(incidents[0]!.cause).toContain("HEAD moved in");
+      expect(causeText(incidents[0]!.cause)).toContain("HEAD moved in");
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerAgentContainmentPart4(): void {
   it("parks a turn that writes into the goal artifacts directory", async () => {
     const { repo, goal, goalDir } = setupFlowRepo();
     try {
@@ -173,10 +411,10 @@ describe("agent containment", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "goal artifacts changed outside the worktree",
       );
-      expect(state.tasks.task!.cause).toContain("created plan.md");
+      expect(causeText(state.tasks.task!.cause)).toContain("created plan.md");
       expect(
         records.filter((r) => r.slug === "task" && r.step === "park"),
       ).toHaveLength(1);
@@ -185,7 +423,9 @@ describe("agent containment", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerAgentContainmentPart5(): void {
   it("parks a turn that writes a task file", async () => {
     const { repo, goal, goalDir } = setupFlowRepo();
     try {
@@ -209,84 +449,31 @@ describe("agent containment", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "goal artifacts changed outside the worktree",
       );
-      expect(state.tasks.task!.cause).toContain("changed tasks/task.md");
+      expect(causeText(state.tasks.task!.cause)).toContain(
+        "changed tasks/task.md",
+      );
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerAgentContainmentPart6(): void {
   it("contains a turn that tries to rewrite a sealed record", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
-      const harness = new FakeHarness({ id: "fake" });
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      const sealed = await runtime.store.startRecord({
-        iteration: 1,
-        step: "review",
-        round: 1,
-        actor: "agent",
-        slug: "other",
-      });
-      await sealed.finish({
-        ok: true,
-        outcome: outcome({ summary: "other approved", verdict: "approve" }),
-      });
-      const before = fs.readFileSync(sealed.outcomePath, "utf8");
-      let writeError: NodeJS.ErrnoException | undefined;
-
-      harness.script(
-        (req, ctx) => {
-          // A resumed turn still holding the sealed record's stale path.
-          try {
-            fs.writeFileSync(
-              sealed.outcomePath,
-              "status: failed\nsummary: stale\n",
-              "utf8",
-            );
-          } catch (err) {
-            writeError = err as NodeJS.ErrnoException;
-          }
-          fs.writeFileSync(path.join(req.cwd!, "task.txt"), "task\n", "utf8");
-          ctx.writeOutcome(outcome({ summary: "implemented" }));
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ slug: "task", step: "implement" }) },
-      );
-      harness.script(
-        (req, ctx) => {
-          ctx.writeOutcome(
-            outcome({ summary: "approved", verdict: "approve" }),
-          );
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ slug: "task", step: "review" }) },
-      );
-
-      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
-      await runDispatch(runtime, { iteration: 1 });
-
-      const records = await runtime.store.listRecords();
-      const state = derive(
-        await runtime.store.listTasks(),
-        records,
-        runtime.configs.process.flows,
-      );
-      expect(writeError?.code).toBe("EACCES");
-      expect(fs.statSync(sealed.outcomePath).mode & 0o777).toBe(0o444);
-      expect(fs.readFileSync(sealed.outcomePath, "utf8")).toBe(before);
-      expect(state.tasks.task!.status).toBe("merged");
-      expect(
-        records.filter((r) => r.slug === "task" && r.step === "park"),
-      ).toHaveLength(0);
-      expect(records.filter((r) => r.step === "containment")).toHaveLength(0);
+      const scope1 = await containsTurnTriesRewriteSealedPart1(repo, goal);
+      await containsTurnTriesRewriteSealedPart2(scope1);
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerAgentContainmentPart7(): void {
   it("parks a turn that forges a record directory", async () => {
     const { repo, goal, goalDir } = setupFlowRepo();
     try {
@@ -312,17 +499,19 @@ describe("agent containment", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "goal artifacts changed outside the worktree",
       );
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "created records/00099-i1-task-merge-r1/end.yaml",
       );
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerAgentContainmentPart8(): void {
   it("parks a turn that commits in the integration checkout", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -347,10 +536,10 @@ describe("agent containment", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "commit on the integration checkout",
       );
-      expect(state.tasks.task!.cause).toContain(checkout);
+      expect(causeText(state.tasks.task!.cause)).toContain(checkout);
       expect(records.filter((r) => r.step === "merge")).toHaveLength(0);
       expect(
         repo.git(["log", "-1", "--format=%s", "factory/demo"]).stdout.trim(),
@@ -359,7 +548,9 @@ describe("agent containment", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerAgentContainmentPart9(): void {
   it("parks a turn that moves the integration ref without checking it out", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -385,74 +576,92 @@ describe("agent containment", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "integration branch moved outside the merge queue",
       );
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function scriptSpanningMergeImplementTurns(
+  harness: FakeHarness,
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  checkout: string,
+  headWatch: { initial: string; observed: string },
+): void {
+  // Each turn is bound to its slug and step: alpha's implement waits on
+  // beta's merge of the shared checkout, so a swapped handler would
+  // write alpha.txt into the wrong worktree. The poll below is a latch
+  // on that real merge, not turn ordering.
+  harness.script(
+    async (req, ctx) => {
+      for (
+        let i = 0;
+        i < 500 && headWatch.observed === headWatch.initial;
+        i += 1
+      ) {
+        const head = repo
+          .git(["rev-parse", "HEAD"], { cwd: checkout })
+          .stdout.trim();
+        if (head !== headWatch.initial) headWatch.observed = head;
+        else await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
+      ctx.writeOutcome(outcome({ summary: "alpha implemented" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ slug: "alpha", step: "implement" }) },
+  );
+  harness.script(
+    (req, ctx) => {
+      fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
+      ctx.writeOutcome(outcome({ summary: "beta implemented" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ slug: "beta", step: "implement" }) },
+  );
+}
+
+function scriptSpanningMergeReviewTurns(harness: FakeHarness): void {
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(
+        outcome({ summary: "beta approved", verdict: "approve" }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ slug: "beta", step: "review" }) },
+  );
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(
+        outcome({ summary: "alpha approved", verdict: "approve" }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ slug: "alpha", step: "review" }) },
+  );
+}
+
+function registerAgentContainmentPart10(): void {
   it("merges a task whose turn spans another task's merge of the shared checkout", async () => {
     const { repo, goal } = setupFlowRepo({
       limits: { concurrency: { overall: 2 } },
     });
     try {
       const checkout = goalCheckout(repo, goal);
-      let initial = "";
-      let observed = "";
+      const headWatch = { initial: "", observed: "" };
       const harness = new FakeHarness({ id: "fake" });
-      // Each turn is bound to its slug and step: alpha's implement waits on
-      // beta's merge of the shared checkout, so a swapped handler would
-      // write alpha.txt into the wrong worktree. The poll below is a latch
-      // on that real merge, not turn ordering.
-      harness.script(
-        async (req, ctx) => {
-          for (let i = 0; i < 500 && observed === initial; i += 1) {
-            const head = repo
-              .git(["rev-parse", "HEAD"], { cwd: checkout })
-              .stdout.trim();
-            if (head !== initial) observed = head;
-            else await new Promise((resolve) => setTimeout(resolve, 10));
-          }
-          fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
-          ctx.writeOutcome(outcome({ summary: "alpha implemented" }));
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ slug: "alpha", step: "implement" }) },
-      );
-      harness.script(
-        (req, ctx) => {
-          fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
-          ctx.writeOutcome(outcome({ summary: "beta implemented" }));
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ slug: "beta", step: "implement" }) },
-      );
-      harness.script(
-        (req, ctx) => {
-          ctx.writeOutcome(
-            outcome({ summary: "beta approved", verdict: "approve" }),
-          );
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ slug: "beta", step: "review" }) },
-      );
-      harness.script(
-        (req, ctx) => {
-          ctx.writeOutcome(
-            outcome({ summary: "alpha approved", verdict: "approve" }),
-          );
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ slug: "alpha", step: "review" }) },
-      );
+      scriptSpanningMergeImplementTurns(harness, repo, checkout, headWatch);
+      scriptSpanningMergeReviewTurns(harness);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
-      initial = repo
+      headWatch.initial = repo
         .git(["rev-parse", "HEAD"], { cwd: checkout })
         .stdout.trim();
-      observed = initial;
+      headWatch.observed = headWatch.initial;
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
       const result = await runDispatch(runtime, { iteration: 1 });
@@ -464,7 +673,7 @@ describe("agent containment", () => {
         records,
         runtime.configs.process.flows,
       );
-      expect(observed).not.toBe(initial);
+      expect(headWatch.observed).not.toBe(headWatch.initial);
       expect(state.tasks.alpha!.status).toBe("merged");
       expect(state.tasks.beta!.status).toBe("merged");
       expect(records.filter((r) => r.step === "containment")).toHaveLength(0);
@@ -472,7 +681,9 @@ describe("agent containment", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerAgentContainmentPart11(): void {
   it("ignores the operator mailbox and a concurrent PM turn's writes", async () => {
     const { repo, goal, goalDir } = setupFlowRepo();
     try {
@@ -526,7 +737,9 @@ describe("agent containment", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerAgentContainmentPart12(): void {
   it("ignores a sealed record the kernel reopens and rewrites", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -570,7 +783,9 @@ describe("agent containment", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerAgentContainmentPart13(): void {
   it("ignores a record that closes after the turn started", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -602,6 +817,9 @@ describe("agent containment", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
+
+function registerAgentContainmentPart14(): void {
   it("ignores another spike's finish landing inside a turn's window", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -657,6 +875,9 @@ describe("agent containment", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
+
+function registerAgentContainmentPart15(): void {
   it("ignores a sibling kernel write under the goal dir during a turn", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -702,6 +923,9 @@ describe("agent containment", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
+
+function registerAgentContainmentPart16(): void {
   it("parks a turn whose undeclared write to the same goal path lands during the turn", async () => {
     const { repo, goal, goalDir } = setupFlowRepo();
     try {
@@ -730,16 +954,19 @@ describe("agent containment", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "goal artifacts changed outside the worktree",
       );
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "created finish/probe/report.md",
       );
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
+
+function registerAgentContainmentPart17(): void {
   it("parks a turn that rewrites a goal file the kernel wrote before the turn", async () => {
     const { repo, goal, goalDir } = setupFlowRepo();
     try {
@@ -771,13 +998,85 @@ describe("agent containment", () => {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain(
+      expect(causeText(state.tasks.task!.cause)).toContain(
         "changed iterations/1/summary.md",
       );
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
+
+async function openSiblingMergeBeforeTurn(runtime: KernelRuntime) {
+  // A sibling merge that opened before the turn. Its close is stamped
+  // before the snapshot but lands between the snapshot's artifact walk
+  // and its record read: the dispatch interleaving where a script merge
+  // and an agent turn start in the same poll round.
+  const open = await runtime.store.startRecord({
+    iteration: 1,
+    step: "merge",
+    round: 1,
+    actor: "script",
+    slug: "other",
+    commit: "0".repeat(40),
+  });
+  const past = new Date(Date.now() - 60_000).toISOString();
+  fs.writeFileSync(
+    path.join(open.dir, "started.yaml"),
+    yaml.stringify({ ...open.meta, startedAt: past }),
+    "utf8",
+  );
+  return { open, past };
+}
+
+async function startGatedContainmentSnapshot(
+  runtime: KernelRuntime,
+  worktree: string,
+) {
+  // Gate the snapshot's record read so the close lands after the walk
+  // but before the read, deterministically.
+  let entered = false;
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const gatedStore = Object.assign(
+    Object.create(Object.getPrototypeOf(runtime.store)),
+    runtime.store,
+    {
+      listRecords: async () => {
+        entered = true;
+        await released;
+        return runtime.store.listRecords();
+      },
+    },
+  );
+  const snapshot = containmentSnapshot(
+    { ...runtime, store: gatedStore },
+    worktree,
+  );
+  const deadline = Date.now() + 30_000;
+  while (!entered && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  if (!entered) throw new Error("snapshot never reached its record read");
+  return { snapshot, release: () => release() };
+}
+
+function closeSiblingMergeRecord(open: { dir: string }, past: string): void {
+  fs.writeFileSync(
+    path.join(open.dir, "end.yaml"),
+    yaml.stringify({
+      ok: true,
+      commit: "0".repeat(40),
+      cause: "recovered merge after crash",
+      endedAt: past,
+    }),
+    "utf8",
+  );
+}
+
+function registerAgentContainmentPart18(): void {
   it("ignores a sibling record whose close lands between the snapshot walk and its record read", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -787,137 +1086,35 @@ describe("agent containment", () => {
       await writeTask(runtime, file);
       const ensured = await ensureTaskWorktree(runtime, file);
 
-      // A sibling merge that opened before the turn. Its close is stamped
-      // before the snapshot but lands between the snapshot's artifact walk
-      // and its record read: the dispatch interleaving where a script merge
-      // and an agent turn start in the same poll round.
-      const open = await runtime.store.startRecord({
-        iteration: 1,
-        step: "merge",
-        round: 1,
-        actor: "script",
-        slug: "other",
-        commit: "0".repeat(40),
-      });
-      const past = new Date(Date.now() - 60_000).toISOString();
-      fs.writeFileSync(
-        path.join(open.dir, "started.yaml"),
-        yaml.stringify({ ...open.meta, startedAt: past }),
-        "utf8",
-      );
-
-      // Gate the snapshot's record read so the close lands after the walk
-      // but before the read, deterministically.
-      let entered = false;
-      let release!: () => void;
-      const released = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      const gatedStore = Object.assign(
-        Object.create(Object.getPrototypeOf(runtime.store)),
-        runtime.store,
-        {
-          listRecords: async () => {
-            entered = true;
-            await released;
-            return runtime.store.listRecords();
-          },
-        },
-      );
-      const pending = containmentSnapshot(
-        { ...runtime, store: gatedStore },
+      const { open, past } = await openSiblingMergeBeforeTurn(runtime);
+      const { snapshot, release } = await startGatedContainmentSnapshot(
+        runtime,
         ensured.path,
       );
-      const deadline = Date.now() + 30_000;
-      while (!entered && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 5));
-      }
-      if (!entered) throw new Error("snapshot never reached its record read");
-      fs.writeFileSync(
-        path.join(open.dir, "end.yaml"),
-        yaml.stringify({
-          ok: true,
-          commit: "0".repeat(40),
-          cause: "recovered merge after crash",
-          endedAt: past,
-        }),
-        "utf8",
-      );
+      closeSiblingMergeRecord(open, past);
       release();
-      const snapshot = await pending;
+      const walked = await snapshot;
 
       expect(
         await containmentViolation(
           runtime,
           ensured.path,
           ensured.branch,
-          snapshot,
+          walked,
         ),
       ).toBeUndefined();
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
+
+function registerAgentContainmentPart19(): void {
   it("ignores a sibling record that opens across the snapshot's record read", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
-      const harness = new FakeHarness({ id: "fake" });
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      const file = task("task", { scope: ["task.txt"] });
-      await writeTask(runtime, file);
-      const ensured = await ensureTaskWorktree(runtime, file);
-
-      // A sibling commit record that opens across the snapshot's record
-      // read: stamped before the snapshot, its files land after. The read
-      // misses it (filtered here; under load the directory read wins the
-      // race), so the check must clear it by sequence, not by timestamp.
-      const open = await runtime.store.startRecord({
-        iteration: 1,
-        step: "commit",
-        round: 1,
-        actor: "script",
-        slug: "other",
-        commit: "0".repeat(40),
-      });
-      const past = new Date(Date.now() - 60_000).toISOString();
-      fs.writeFileSync(
-        path.join(open.dir, "started.yaml"),
-        yaml.stringify({ ...open.meta, startedAt: past }),
-        "utf8",
-      );
-      const filteredStore = Object.assign(
-        Object.create(Object.getPrototypeOf(runtime.store)),
-        runtime.store,
-        {
-          listRecords: async () => {
-            const records = await runtime.store.listRecords();
-            return records.filter((r) => r.seq !== open.meta.seq);
-          },
-        },
-      );
-      const snapshot = await containmentSnapshot(
-        { ...runtime, store: filteredStore },
-        ensured.path,
-      );
-      fs.writeFileSync(
-        path.join(open.dir, "end.yaml"),
-        yaml.stringify({
-          ok: true,
-          commit: "0".repeat(40),
-          tree: "1".repeat(40),
-          endedAt: past,
-        }),
-        "utf8",
-      );
-
-      expect(
-        await containmentViolation(
-          runtime,
-          ensured.path,
-          ensured.branch,
-          snapshot,
-        ),
-      ).toBeUndefined();
+      const scope1 = await ignoresSiblingRecordOpensAcrossPart1(repo, goal);
+      await ignoresSiblingRecordOpensAcrossPart2(scope1);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -932,63 +1129,14 @@ describe("agent containment", () => {
     });
     const checkout = goalCheckout(repo, goal);
     try {
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "task\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "implemented" }));
-        return fakeTurnResult(req);
-      });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
-        return fakeTurnResult(req);
-      });
-
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      const file = task("task", { scope: ["task.txt"] });
-      await writeTask(runtime, file);
-      const drive = async (action: Action): Promise<void> => {
-        const before = derive(
-          await runtime.store.listTasks(),
-          await runtime.store.listRecords(),
-          runtime.configs.process.flows,
-        );
-        await executeTaskAction(
-          runtime,
-          file,
-          action,
-          1,
-          before.tasks[file.slug]!,
-        );
-      };
-      await drive({ kind: "step", slug: "task", step: "implement", round: 1 });
-      await drive({ kind: "step", slug: "task", step: "review", round: 1 });
-      // Differ the merged tree so the merge gates run: without a concurrent
-      // landing the merge would skip them on the already-judged tree.
-      fs.writeFileSync(path.join(checkout, "other.txt"), "other\n", "utf8");
-      repo.git(["add", "other.txt"], { cwd: checkout });
-      repo.git(["commit", "-m", "concurrent landing"], { cwd: checkout });
-      await drive({ kind: "merge", slug: "task" });
-      scriptStallLeave(harness, ["task"]);
-      await runDispatch(runtime, { iteration: 1 });
-
-      const records = await runtime.store.listRecords();
-      const state = derive(
-        await runtime.store.listTasks(),
-        records,
-        runtime.configs.process.flows,
+      const scope1 = await refusesMergeWhoseIntegrationHeadPart1(
+        repo,
+        goal,
+        checkout,
       );
-      expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause).toContain("integration moved");
-      const failed = records.filter(
-        (r) => r.slug === "task" && r.step === "merge" && r.ok === false,
-      );
-      expect(failed).toHaveLength(1);
-      expect(failed[0]!.cause).toContain("integration moved");
-      expect(
-        repo.git(["log", "-1", "--format=%s", "factory/demo"]).stdout.trim(),
-      ).toBe("outside");
+      await refusesMergeWhoseIntegrationHeadPart2(repo, scope1);
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
-});
+}

@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -8,72 +7,194 @@ import { statusForIteration } from "../../src/kernel/launch.js";
 import { postSteer } from "../../src/kernel/mailbox.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { writeIterationSummary } from "../../src/kernel/summary.js";
-import { rec, script, task } from "./helpers.js";
+import { rec, script, task, cause } from "./helpers.js";
 
 describe("iteration summary", () => {
+  registerIterationSummaryPart1();
+  registerIterationSummaryPart2();
+  registerIterationSummaryPart3();
+  registerIterationSummaryPart4();
+  registerIterationSummaryPart5();
+  registerIterationSummaryPart6();
+  registerIterationSummaryPart7();
+  registerIterationSummaryPart8();
+});
+
+async function keepsDistanceOpenMaterialDebtOnlyPart1(
+  store: ReturnType<typeof createFolderStore>,
+) {
+  await store.ensureLayout();
+  const tasks = [task("open1")];
+  const records = [
+    rec(1, {
+      slug: "open1",
+      step: "review",
+      outcome: {
+        status: "done",
+        summary: "approved with debt",
+        concerns: [
+          {
+            kind: "debt",
+            calibration: "architect",
+            text: "retry window drops head names",
+            id: "00001#1",
+          },
+          {
+            kind: "debt",
+            calibration: "fyi",
+            text: "nit: rename the helper",
+            id: "00001#2",
+          },
+        ],
+        forward: [],
+        verdict: "approve",
+      },
+    }),
+    rec(2, {
+      slug: undefined,
+      step: "architect",
+      outcome: {
+        status: "done",
+        summary: "closed the retry debt",
+        concerns: [],
+        forward: [],
+        debtClosed: [
+          { id: "00001#1", reason: "head names reconciled at the writer" },
+        ],
+        decision: "continue",
+      },
+    }),
+  ];
+
+  return { tasks, records };
+}
+
+async function keepsDistanceOpenMaterialDebtOnlyPart2(
+  store: ReturnType<typeof createFolderStore>,
+  scope: Awaited<ReturnType<typeof keepsDistanceOpenMaterialDebtOnlyPart1>>,
+) {
+  const { tasks, records } = scope;
+  const state = derive(tasks, records);
+  await writeIterationSummary(store, {
+    iteration: 1,
+    state,
+    records,
+    status: "in-progress",
+  });
+  const text = fs.readFileSync(
+    path.join(store.goalDir, "iterations/1/summary.md"),
+    "utf8",
+  );
+  // The material debt is closed; the open fyi note is not distance.
+  const distance = text.slice(
+    text.indexOf("## Distance"),
+    text.indexOf("## Architect"),
+  );
+  expect(distance).toContain("- open debt (0): none");
+  expect(distance).not.toContain("retry window drops head names");
+  expect(distance).not.toContain("nit: rename the helper");
+  expect(text).toContain(
+    "## Debt closed\n- 00001#1: head names reconciled at the writer",
+  );
+}
+
+/** The tasks the first summary test derives state from. */
+function summaryPart1Tasks(): ReturnType<typeof task>[] {
+  return [
+    task("merged1"),
+    task("parked1"),
+    task("pending1", { deps: ["parked1"] }),
+  ];
+}
+
+/** The architect turn: a decision, an owner concern and closed debt. */
+function summaryArchitectRecord(): ReturnType<typeof rec> {
+  return rec(1, {
+    step: "architect",
+    outcome: {
+      status: "done",
+      summary: "the goal is met",
+      concerns: [
+        {
+          kind: "choice",
+          calibration: "architect",
+          text: "kept the old storage format",
+        },
+        {
+          kind: "uncertainty",
+          calibration: "owner",
+          text: "confirm the public API is now frozen",
+        },
+      ],
+      forward: [
+        "debt closed: removed the compatibility shim",
+        "debt closed: cache invalidation needs a follow-up",
+        "steer s9: yes, drop it",
+      ],
+      decision: "done",
+    },
+  });
+}
+
+/** The merge, park and review script/agent records. */
+function summaryWorkRecords(): ReturnType<typeof rec>[] {
+  return [
+    script(2, { slug: "merged1", step: "merge", ok: true }),
+    script(3, {
+      slug: "parked1",
+      step: "park",
+      ok: true,
+      cause: cause("review rejected: missing test"),
+    }),
+    rec(4, {
+      slug: "merged1",
+      step: "review",
+      outcome: {
+        status: "done",
+        summary: "approved with a debt note",
+        concerns: [
+          {
+            kind: "debt",
+            calibration: "architect",
+            text: "cache invalidation needs a follow-up",
+          },
+        ],
+        forward: [],
+        verdict: "approve",
+      },
+    }),
+  ];
+}
+
+/** Asserts the summary's derived decision, debt, parks, owner lines, metrics. */
+function expectSummaryPart1(text: string): void {
+  expect(text).toContain("status: goal-met");
+  expect(text).toContain("decision: done");
+  expect(text).toContain("architect: the goal is met");
+  expect(text).toContain("kept the old storage format");
+  expect(text).toContain("## Parked by root cause");
+  expect(text).toContain("- review-rejected\n  - parked1: missing test");
+  expect(text).toContain("parked1");
+  expect(text).toContain("- pending: pending1");
+  expect(text).toContain("cache invalidation needs a follow-up");
+  expect(text).toContain("## Debt closed");
+  expect(text).toContain("removed the compatibility shim");
+  expect(text).toContain("confirm the public API is now frozen");
+  expect(text).toContain("steer s9 is still in mailbox/inbox/s9.md");
+  expect(text).toContain("## Metrics");
+  expect(text).toContain("turns:");
+  expect(text).toContain("merged: 1; parked: 1; pending: 1");
+}
+
+function registerIterationSummaryPart1(): void {
   it("is derived from records: decision, debt, parked root causes, owner attention, metrics", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-summary-"));
     const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
       await postSteer(store, "s9", "Do we still support node 18?");
-
-      const tasks = [
-        task("merged1"),
-        task("parked1"),
-        task("pending1", { deps: ["parked1"] }),
-      ];
-      const records = [
-        rec(1, {
-          step: "architect",
-          outcome: {
-            status: "done",
-            summary: "the goal is met",
-            concerns: [
-              {
-                kind: "choice",
-                calibration: "architect",
-                text: "kept the old storage format",
-              },
-              {
-                kind: "uncertainty",
-                calibration: "owner",
-                text: "confirm the public API is now frozen",
-              },
-            ],
-            forward: [
-              "debt closed: removed the compatibility shim",
-              "debt closed: cache invalidation needs a follow-up",
-              "steer s9: yes, drop it",
-            ],
-            decision: "done",
-          },
-        }),
-        script(2, { slug: "merged1", step: "merge", ok: true }),
-        script(3, {
-          slug: "parked1",
-          step: "park",
-          ok: true,
-          cause: "review rejected: missing test",
-        }),
-        rec(4, {
-          slug: "merged1",
-          step: "review",
-          outcome: {
-            status: "done",
-            summary: "approved with a debt note",
-            concerns: [
-              {
-                kind: "debt",
-                calibration: "architect",
-                text: "cache invalidation needs a follow-up",
-              },
-            ],
-            forward: [],
-            verdict: "approve",
-          },
-        }),
-      ];
+      const tasks = summaryPart1Tasks();
+      const records = [summaryArchitectRecord(), ...summaryWorkRecords()];
       const state = derive(tasks, records);
       const rel = await writeIterationSummary(store, {
         iteration: 1,
@@ -88,27 +209,53 @@ describe("iteration summary", () => {
         "utf8",
       );
       expect(outbox).toBe(`${rel}\n`);
-
-      expect(text).toContain("status: goal-met");
-      expect(text).toContain("decision: done");
-      expect(text).toContain("architect: the goal is met");
-      expect(text).toContain("kept the old storage format");
-      expect(text).toContain("## Parked by root cause");
-      expect(text).toContain("review rejected: missing test");
-      expect(text).toContain("parked1");
-      expect(text).toContain("- pending: pending1");
-      expect(text).toContain("cache invalidation needs a follow-up");
-      expect(text).toContain("## Debt closed");
-      expect(text).toContain("removed the compatibility shim");
-      expect(text).toContain("confirm the public API is now frozen");
-      expect(text).toContain("steer s9 is still in mailbox/inbox/s9.md");
-      expect(text).toContain("## Metrics");
-      expect(text).toContain("turns:");
-      expect(text).toContain("merged: 1; parked: 1; pending: 1");
+      expectSummaryPart1(text);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
+
+function registerIterationSummaryPart2(): void {
+  it("counts the architect's plan-review marks", async () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "factory-summary-marks-"),
+    );
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
+    try {
+      await store.ensureLayout();
+      const records = [
+        rec(1, {
+          step: "architect",
+          outcome: {
+            status: "done",
+            summary: "returned on the findings",
+            concerns: [],
+            forward: [],
+            planReviewMarks: [
+              { finding: 1, mark: "helpful" },
+              { finding: 2, mark: "helpful" },
+              { finding: 3, mark: "unhelpful" },
+            ],
+          },
+        }),
+      ];
+      const state = derive([], records);
+      const rel = await writeIterationSummary(store, {
+        iteration: 1,
+        state,
+        records,
+        decision: "continue",
+      });
+      const text = fs.readFileSync(path.join(store.goalDir, rel), "utf8");
+      expect(text).toContain("- plan-review marks: 2 helpful, 1 unhelpful");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
+function registerIterationSummaryPart3(): void {
   it("names a quarantined task file in the outcome and remarkable", async () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), "factory-summary-quarantine-"),
@@ -123,8 +270,9 @@ describe("iteration summary", () => {
           slug: "broken",
           step: "task-quarantine",
           ok: false,
-          cause:
+          cause: cause(
             'task file "broken.md" quarantined at tasks/quarantine/broken.md: no frontmatter',
+          ),
         }),
       ];
       const state = derive(tasks, records);
@@ -137,12 +285,15 @@ describe("iteration summary", () => {
       const text = fs.readFileSync(path.join(store.goalDir, rel), "utf8");
       expect(text).toContain("- quarantined: broken");
       expect(text).toContain(
-        'task-quarantine: task file "broken.md" quarantined at',
+        'task-quarantine: quarantine: task file "broken.md" quarantined at',
       );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
+
+function registerIterationSummaryPart4(): void {
   it("opens with the distance: pending, parks, open debt", async () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), "factory-summary-distance-"),
@@ -156,7 +307,7 @@ describe("iteration summary", () => {
           slug: "parked1",
           step: "park",
           ok: true,
-          cause: "review rejected: missing test",
+          cause: cause("review rejected: missing test"),
         }),
         rec(2, {
           slug: "pending1",
@@ -199,81 +350,24 @@ describe("iteration summary", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
+
+function registerIterationSummaryPart5(): void {
   it("keeps the distance on open material debt only and records an id closure", async () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), "factory-summary-debt-closed-"),
     );
     const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
-      await store.ensureLayout();
-      const tasks = [task("open1")];
-      const records = [
-        rec(1, {
-          slug: "open1",
-          step: "review",
-          outcome: {
-            status: "done",
-            summary: "approved with debt",
-            concerns: [
-              {
-                kind: "debt",
-                calibration: "architect",
-                text: "retry window drops head names",
-                id: "00001#1",
-              },
-              {
-                kind: "debt",
-                calibration: "fyi",
-                text: "nit: rename the helper",
-                id: "00001#2",
-              },
-            ],
-            forward: [],
-            verdict: "approve",
-          },
-        }),
-        rec(2, {
-          slug: undefined,
-          step: "architect",
-          outcome: {
-            status: "done",
-            summary: "closed the retry debt",
-            concerns: [],
-            forward: [],
-            debtClosed: [
-              { id: "00001#1", reason: "head names reconciled at the writer" },
-            ],
-            decision: "continue",
-          },
-        }),
-      ];
-      const state = derive(tasks, records);
-      await writeIterationSummary(store, {
-        iteration: 1,
-        state,
-        records,
-        status: "in-progress",
-      });
-      const text = fs.readFileSync(
-        path.join(store.goalDir, "iterations/1/summary.md"),
-        "utf8",
-      );
-      // The material debt is closed; the open fyi note is not distance.
-      const distance = text.slice(
-        text.indexOf("## Distance"),
-        text.indexOf("## Architect"),
-      );
-      expect(distance).toContain("- open debt (0): none");
-      expect(distance).not.toContain("retry window drops head names");
-      expect(distance).not.toContain("nit: rename the helper");
-      expect(text).toContain(
-        "## Debt closed\n- 00001#1: head names reconciled at the writer",
-      );
+      const scope1 = await keepsDistanceOpenMaterialDebtOnlyPart1(store);
+      await keepsDistanceOpenMaterialDebtOnlyPart2(store, scope1);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerIterationSummaryPart6(): void {
   it("lists parks of its own iteration while the distance keeps the total", async () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), "factory-summary-parks-"),
@@ -288,14 +382,14 @@ describe("iteration summary", () => {
           slug: "old-park",
           step: "park",
           ok: true,
-          cause: "round limit reached",
+          cause: cause("round limit reached"),
         }),
         script(2, {
           iteration: 2,
           slug: "new-park",
           step: "park",
           ok: true,
-          cause: "review rejected: missing test",
+          cause: cause("review rejected: missing test"),
         }),
       ];
       const state = derive(tasks, records);
@@ -317,6 +411,9 @@ describe("iteration summary", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
+
+function registerIterationSummaryPart7(): void {
   it("derives the status from the launch result, not the decision", async () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), "factory-summary-status-"),
@@ -343,6 +440,9 @@ describe("iteration summary", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
+
+function registerIterationSummaryPart8(): void {
   it("maps a refused done to in-progress and infra to stopped-with-debt", () => {
     expect(
       statusForIteration({
@@ -381,4 +481,4 @@ describe("iteration summary", () => {
       }),
     ).toBe("stopped-with-debt");
   });
-});
+}

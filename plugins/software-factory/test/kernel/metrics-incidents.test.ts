@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -13,8 +12,9 @@ import {
   writeMetrics,
 } from "../../src/kernel/metrics.js";
 import { createFolderStore } from "../../src/kernel/store.js";
+import type { StepRecord } from "../../src/kernel/types.js";
 import { writeIterationSummary } from "../../src/kernel/summary.js";
-import { rec, script, task } from "./helpers.js";
+import { rec, script, task, cause } from "./helpers.js";
 
 function usage(costUsd: number, tin: number, out: number): Usage {
   return {
@@ -45,8 +45,8 @@ function attempt(
 const OK: Stop = { kind: "done" };
 const QUOTA: Stop = { kind: "infra", cause: "quota" };
 
-/** One record per incident kind, with alias groups distinct from role groups. */
-function incidentRecords() {
+/** An infra stop retried on the same model, then a repair turn whose own first call was retried. */
+function retryIncidentRecords() {
   return [
     // One infra stop retried on the same model; the infra call reported no usage.
     rec(1, {
@@ -72,6 +72,12 @@ function incidentRecords() {
         attempt("model-a", OK, usage(0.01, 10, 1)),
       ],
     }),
+  ];
+}
+
+/** An infra stop that moved to the next model, then a final quota stop that is not a retry. */
+function hopIncidentRecords() {
+  return [
     // An infra stop that moved to the next model in the chain.
     rec(3, {
       slug: "a",
@@ -93,38 +99,55 @@ function incidentRecords() {
       promptBytes: 400,
       attempts: [attempt("model-a", QUOTA, usage(0.04, 40, 4))],
     }),
+  ];
+}
+
+/** Script records: merge and gate failures, then one park per park cause. */
+function scriptIncidentRecords() {
+  return [
     script(5, {
       slug: "a",
       step: "merge",
       ok: false,
-      cause: "conflict: alpha.txt",
+      cause: cause("conflict: alpha.txt"),
     }),
     script(6, { slug: "a", step: "merge-checks", ok: false, checks: [] }),
     script(12, {
       slug: "a",
       step: "gate-flake",
       ok: true,
-      cause: "unit: src/a.test.ts > suite > flaky test",
+      cause: cause("unit: src/a.test.ts > suite > flaky test"),
     }),
     script(7, {
       slug: "b",
       step: "park",
       ok: true,
-      cause: 'review round limit reached after verdict "changes" (2 rounds)',
+      cause: cause(
+        'review round limit reached after verdict "changes" (2 rounds)',
+      ),
     }),
     script(8, {
       slug: "c",
       step: "park",
       ok: true,
-      cause: "no-progress: implement r2 repeats r1 (deadbeef)",
+      cause: cause("no-progress: implement r2 repeats r1 (deadbeef)"),
     }),
     script(10, {
       slug: "e",
       step: "park",
       ok: true,
-      cause: "empty-diff: implement r1 committed no changes",
+      cause: cause("empty-diff: implement r1 committed no changes"),
     }),
-    script(11, { slug: "f", step: "park", ok: true, cause: "overflow" }),
+    script(11, { slug: "f", step: "park", ok: true, cause: cause("overflow") }),
+  ];
+}
+
+/** One record per incident kind, with alias groups distinct from role groups. */
+function incidentRecords() {
+  return [
+    ...retryIncidentRecords(),
+    ...hopIncidentRecords(),
+    ...scriptIncidentRecords(),
   ];
 }
 
@@ -165,95 +188,121 @@ function summaryIncidents(text: string): IncidentCounts {
 }
 
 describe("iteration metrics incidents and spend tables", () => {
+  registerIterationMetricsIncidentsAndSpendTablesPart1();
+  registerIterationMetricsIncidentsAndSpendTablesPart2();
+  registerIterationMetricsIncidentsAndSpendTablesPart3();
+  registerIterationMetricsIncidentsAndSpendTablesPart4();
+  registerIterationMetricsIncidentsAndSpendTablesPart5();
+  registerIterationMetricsIncidentsAndSpendTablesPart6();
+  registerIterationMetricsIncidentsAndSpendTablesPart7();
+});
+
+async function countsEachIncidentKindReportsPart1(
+  store: ReturnType<typeof createFolderStore>,
+) {
+  await store.ensureLayout();
+  const records = incidentRecords();
+  await writeMetrics(store, {
+    iteration: 1,
+    status: "in-progress",
+    records,
+  });
+
+  const metrics = yaml.parse(
+    (await store.readFile("metrics.yaml"))!,
+  ) as GoalMetrics;
+  const one = metrics.iterations[0]!;
+  expect(one.incidents).toEqual(EXPECTED_INCIDENTS);
+  expect(metrics.totals.incidents).toEqual(EXPECTED_INCIDENTS);
+  expect(one.loopIncidents).toBe(2);
+  expect(one.turns).toBe(4);
+  expect(one.tokens).toBe(110);
+
+  expect(one.roles.architect).toMatchObject({
+    turns: 1,
+    tokens: 11,
+    promptBytes: 100,
+    unpricedTurns: 0,
+  });
+  expect(one.roles.implementer).toMatchObject({
+    turns: 2,
+    tokens: 55,
+    promptBytes: 500,
+    unpricedTurns: 0,
+  });
+  expect(one.roles.reviewer).toMatchObject({
+    turns: 1,
+    tokens: 44,
+    promptBytes: 400,
+    unpricedTurns: 0,
+  });
+  expect(one.roles.implementer!.usage.costUsd).toBeCloseTo(0.05, 10);
+  expect(one.aliases.cheap).toMatchObject({
+    turns: 1,
+    tokens: 22,
+    promptBytes: 200,
+  });
+
+  return { records, metrics, one };
+}
+
+async function countsEachIncidentKindReportsPart2(
+  store: ReturnType<typeof createFolderStore>,
+  scope: Awaited<ReturnType<typeof countsEachIncidentKindReportsPart1>>,
+) {
+  const { one, metrics, records } = scope;
+  expect(one.aliases.escalated).toMatchObject({
+    turns: 1,
+    tokens: 33,
+    promptBytes: 300,
+  });
+  expect(one.aliases.cheap!.usage.costUsd).toBeCloseTo(0.02, 10);
+  expect(metrics.totals.aliases.cheap).toMatchObject({
+    turns: 1,
+    tokens: 22,
+    promptBytes: 200,
+  });
+
+  const state = derive(
+    [task("a"), task("b"), task("c"), task("e"), task("f")],
+    records,
+  );
+  await writeIterationSummary(store, {
+    iteration: 1,
+    state,
+    records,
+    status: "in-progress",
+  });
+  const text = fs.readFileSync(
+    path.join(store.goalDir, "iterations/1/summary.md"),
+    "utf8",
+  );
+
+  expect(summaryIncidents(text)).toEqual(one.incidents);
+  expect(text).toContain("- loop incidents: 2");
+  expect(text).toContain("| role | turns | tokens | cost | prompt bytes |");
+  expect(text).toContain("| implementer | 2 | 55 | $0.0500 | 500 |");
+  expect(text).toContain("| architect | 1 | 11 | $0.0100 | 100 |");
+  expect(text).toContain("| reviewer | 1 | 44 | $0.0400 | 400 |");
+  expect(text).toContain("| alias | turns | tokens | cost | prompt bytes |");
+  expect(text).toContain("| cheap | 1 | 22 | $0.0200 | 200 |");
+  expect(text).toContain("| escalated | 1 | 33 | $0.0300 | 300 |");
+}
+
+function registerIterationMetricsIncidentsAndSpendTablesPart1(): void {
   it("counts each incident kind and reports identical counts and spend tables in the summary", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-incidents-"));
     const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
-      await store.ensureLayout();
-      const records = incidentRecords();
-      await writeMetrics(store, {
-        iteration: 1,
-        status: "in-progress",
-        records,
-      });
-
-      const metrics = yaml.parse(
-        (await store.readFile("metrics.yaml"))!,
-      ) as GoalMetrics;
-      const one = metrics.iterations[0]!;
-      expect(one.incidents).toEqual(EXPECTED_INCIDENTS);
-      expect(metrics.totals.incidents).toEqual(EXPECTED_INCIDENTS);
-      expect(one.loopIncidents).toBe(2);
-      expect(one.turns).toBe(4);
-      expect(one.tokens).toBe(110);
-
-      expect(one.roles.architect).toMatchObject({
-        turns: 1,
-        tokens: 11,
-        promptBytes: 100,
-        unpricedTurns: 0,
-      });
-      expect(one.roles.implementer).toMatchObject({
-        turns: 2,
-        tokens: 55,
-        promptBytes: 500,
-        unpricedTurns: 0,
-      });
-      expect(one.roles.reviewer).toMatchObject({
-        turns: 1,
-        tokens: 44,
-        promptBytes: 400,
-        unpricedTurns: 0,
-      });
-      expect(one.roles.implementer!.usage.costUsd).toBeCloseTo(0.05, 10);
-      expect(one.aliases.cheap).toMatchObject({
-        turns: 1,
-        tokens: 22,
-        promptBytes: 200,
-      });
-      expect(one.aliases.escalated).toMatchObject({
-        turns: 1,
-        tokens: 33,
-        promptBytes: 300,
-      });
-      expect(one.aliases.cheap!.usage.costUsd).toBeCloseTo(0.02, 10);
-      expect(metrics.totals.aliases.cheap).toMatchObject({
-        turns: 1,
-        tokens: 22,
-        promptBytes: 200,
-      });
-
-      const state = derive(
-        [task("a"), task("b"), task("c"), task("e"), task("f")],
-        records,
-      );
-      await writeIterationSummary(store, {
-        iteration: 1,
-        state,
-        records,
-        status: "in-progress",
-      });
-      const text = fs.readFileSync(
-        path.join(store.goalDir, "iterations/1/summary.md"),
-        "utf8",
-      );
-
-      expect(summaryIncidents(text)).toEqual(one.incidents);
-      expect(text).toContain("- loop incidents: 2");
-      expect(text).toContain("| role | turns | tokens | cost | prompt bytes |");
-      expect(text).toContain("| implementer | 2 | 55 | $0.0500 | 500 |");
-      expect(text).toContain("| architect | 1 | 11 | $0.0100 | 100 |");
-      expect(text).toContain("| reviewer | 1 | 44 | $0.0400 | 400 |");
-      expect(text).toContain(
-        "| alias | turns | tokens | cost | prompt bytes |",
-      );
-      expect(text).toContain("| cheap | 1 | 22 | $0.0200 | 200 |");
-      expect(text).toContain("| escalated | 1 | 33 | $0.0300 | 300 |");
+      const scope1 = await countsEachIncidentKindReportsPart1(store);
+      await countsEachIncidentKindReportsPart2(store, scope1);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerIterationMetricsIncidentsAndSpendTablesPart2(): void {
   it("counts an empty-diff park as a loop incident but not a spike's empty finish", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-incidents-"));
     const store = createFolderStore(path.join(root, "goal"), undefined, {});
@@ -269,7 +318,7 @@ describe("iteration metrics incidents and spend tables", () => {
           slug: "a",
           step: "park",
           ok: true,
-          cause: "empty-diff: implement r1 committed no changes",
+          cause: cause("empty-diff: implement r1 committed no changes"),
         }),
         // A spike produces knowledge: no commit is a normal finish, not a park.
         script(3, { slug: "probe", step: "finish", ok: true }),
@@ -277,7 +326,7 @@ describe("iteration metrics incidents and spend tables", () => {
           slug: "b",
           step: "park",
           ok: true,
-          cause: "no-progress: implement r2 repeats r1 (deadbeef)",
+          cause: cause("no-progress: implement r2 repeats r1 (deadbeef)"),
         }),
       ];
 
@@ -300,6 +349,9 @@ describe("iteration metrics incidents and spend tables", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
+
+function registerIterationMetricsIncidentsAndSpendTablesPart3(): void {
   it("counts a same-model hop across harnesses as a fallback, not a retry", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-incidents-"));
     const store = createFolderStore(path.join(root, "goal"), undefined, {});
@@ -331,7 +383,9 @@ describe("iteration metrics incidents and spend tables", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerIterationMetricsIncidentsAndSpendTablesPart4(): void {
   it("counts zero loop incidents and zero unpriced turns when no signal is present", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-incidents-"));
     const store = createFolderStore(path.join(root, "goal"), undefined, {});
@@ -350,7 +404,7 @@ describe("iteration metrics incidents and spend tables", () => {
           slug: "b",
           step: "park",
           ok: true,
-          cause: "review rejected: missing test",
+          cause: cause("review rejected: missing test"),
         }),
       ];
 
@@ -381,7 +435,9 @@ describe("iteration metrics incidents and spend tables", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerIterationMetricsIncidentsAndSpendTablesPart5(): void {
   it("counts each outcome repair on one record", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-incidents-"));
     const store = createFolderStore(path.join(root, "goal"), undefined, {});
@@ -416,59 +472,143 @@ describe("iteration metrics incidents and spend tables", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function launchKindTurnRecords(): StepRecord[] {
+  return [
+    rec(1, {
+      slug: "a",
+      alias: "cheap",
+      usage: usage(0.01, 10, 1),
+      launchKind: "glitch",
+      stop: { kind: "infra", cause: "quota" },
+    }),
+    rec(2, {
+      slug: "a",
+      step: "review",
+      alias: "reviewer",
+      usage: usage(0.01, 10, 1),
+      launchKind: "change-request",
+      outcome: {
+        status: "done",
+        summary: "needs work",
+        concerns: [],
+        forward: [],
+        verdict: "changes",
+      },
+    }),
+    rec(3, {
+      slug: "b",
+      alias: "cheap",
+      usage: usage(0.01, 10, 1),
+      launchKind: "failure",
+      outcome: {
+        status: "failed",
+        summary: "broken",
+        concerns: [],
+        forward: [],
+      },
+    }),
+  ];
+}
+
+function launchKindLateRecords(): StepRecord[] {
+  return [
+    rec(4, {
+      slug: "c",
+      alias: "cheap",
+      usage: usage(0.01, 10, 1),
+      outcome: {
+        status: "failed",
+        summary: "old failure",
+        concerns: [],
+        forward: [],
+      },
+    }),
+    rec(5, { slug: "d", alias: "cheap", usage: usage(0.01, 10, 1) }),
+    rec(6, {
+      slug: "e",
+      step: "qa",
+      alias: "qa",
+      usage: usage(0.01, 10, 1),
+      launchKind: "qa-finding",
+      outcome: {
+        status: "done",
+        summary: "needs work",
+        concerns: [],
+        forward: [],
+        qa: { verdict: "changes", findings: ["task.txt:1 needs v2"] },
+      } as never,
+    }),
+  ];
+}
+
+/** Asserts the per-role/alias launch-kind tables. */
+function expectLaunchKinds(metrics: GoalMetrics): void {
+  const one = metrics.iterations[0]!;
+  expect(one.aliases.cheap!.launches).toEqual({
+    glitch: 1,
+    "change-request": 0,
+    "qa-finding": 0,
+    failure: 1,
+    unknown: 1,
+  });
+  expect(one.aliases.reviewer!.launches).toEqual({
+    glitch: 0,
+    "change-request": 1,
+    "qa-finding": 0,
+    failure: 0,
+    unknown: 0,
+  });
+  expect(one.roles.implementer!.launches).toEqual({
+    glitch: 1,
+    "change-request": 0,
+    "qa-finding": 0,
+    failure: 1,
+    unknown: 1,
+  });
+  expect(metrics.totals.aliases.cheap!.launches).toEqual({
+    glitch: 1,
+    "change-request": 0,
+    "qa-finding": 0,
+    failure: 1,
+    unknown: 1,
+  });
+  expect(one.roles.qa!.launches).toEqual({
+    glitch: 0,
+    "change-request": 0,
+    "qa-finding": 1,
+    failure: 0,
+    unknown: 0,
+  });
+  expect(one.aliases.qa!.launches).toEqual({
+    glitch: 0,
+    "change-request": 0,
+    "qa-finding": 1,
+    failure: 0,
+    unknown: 0,
+  });
+}
+
+/** Asserts the summary's launch tables name every observed launch kind. */
+function expectLaunchTableText(text: string): void {
+  expect(text).toContain("## Launches by role");
+  expect(text).toContain("## Launches by alias");
+  expect(text).toContain(
+    "| alias | glitch | change-request | qa-finding | failure | unknown |",
+  );
+  expect(text).toContain("| cheap | 1 | 0 | 0 | 1 | 1 |");
+  expect(text).toContain("| reviewer | 0 | 1 | 0 | 0 | 0 |");
+  expect(text).toContain("| qa | 0 | 0 | 1 | 0 | 0 |");
+}
+
+function registerIterationMetricsIncidentsAndSpendTablesPart6(): void {
   it("counts launches per agent per kind and old incidents as unknown", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-launches-"));
     const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
       await store.ensureLayout();
-      const records = [
-        rec(1, {
-          slug: "a",
-          alias: "cheap",
-          usage: usage(0.01, 10, 1),
-          launchKind: "glitch",
-          stop: { kind: "infra", cause: "quota" },
-        }),
-        rec(2, {
-          slug: "a",
-          step: "review",
-          alias: "reviewer",
-          usage: usage(0.01, 10, 1),
-          launchKind: "change-request",
-          outcome: {
-            status: "done",
-            summary: "needs work",
-            concerns: [],
-            forward: [],
-            verdict: "changes",
-          },
-        }),
-        rec(3, {
-          slug: "b",
-          alias: "cheap",
-          usage: usage(0.01, 10, 1),
-          launchKind: "failure",
-          outcome: {
-            status: "failed",
-            summary: "broken",
-            concerns: [],
-            forward: [],
-          },
-        }),
-        rec(4, {
-          slug: "c",
-          alias: "cheap",
-          usage: usage(0.01, 10, 1),
-          outcome: {
-            status: "failed",
-            summary: "old failure",
-            concerns: [],
-            forward: [],
-          },
-        }),
-        rec(5, { slug: "d", alias: "cheap", usage: usage(0.01, 10, 1) }),
-      ];
+      const records = [...launchKindTurnRecords(), ...launchKindLateRecords()];
 
       await writeMetrics(store, {
         iteration: 1,
@@ -478,31 +618,7 @@ describe("iteration metrics incidents and spend tables", () => {
       const metrics = yaml.parse(
         (await store.readFile("metrics.yaml"))!,
       ) as GoalMetrics;
-      const one = metrics.iterations[0]!;
-      expect(one.aliases.cheap!.launches).toEqual({
-        glitch: 1,
-        "change-request": 0,
-        failure: 1,
-        unknown: 1,
-      });
-      expect(one.aliases.reviewer!.launches).toEqual({
-        glitch: 0,
-        "change-request": 1,
-        failure: 0,
-        unknown: 0,
-      });
-      expect(one.roles.implementer!.launches).toEqual({
-        glitch: 1,
-        "change-request": 0,
-        failure: 1,
-        unknown: 1,
-      });
-      expect(metrics.totals.aliases.cheap!.launches).toEqual({
-        glitch: 1,
-        "change-request": 0,
-        failure: 1,
-        unknown: 1,
-      });
+      expectLaunchKinds(metrics);
 
       const state = derive(
         [task("a"), task("b"), task("c"), task("d")],
@@ -518,18 +634,14 @@ describe("iteration metrics incidents and spend tables", () => {
         path.join(store.goalDir, "iterations/1/summary.md"),
         "utf8",
       );
-      expect(text).toContain("## Launches by role");
-      expect(text).toContain("## Launches by alias");
-      expect(text).toContain(
-        "| alias | glitch | change-request | failure | unknown |",
-      );
-      expect(text).toContain("| cheap | 1 | 0 | 1 | 1 |");
-      expect(text).toContain("| reviewer | 0 | 1 | 0 | 0 |");
+      expectLaunchTableText(text);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerIterationMetricsIncidentsAndSpendTablesPart7(): void {
   it("counts an undelivered reminder as an incident, never one that delivered", () => {
     // Legacy records carry no stored launch kind: the delivery decides.
     const delivered = rec(1, {
@@ -557,4 +669,4 @@ describe("iteration metrics incidents and spend tables", () => {
     });
     expect(deriveLaunchKind(undelivered)).toBe("unknown");
   });
-});
+}

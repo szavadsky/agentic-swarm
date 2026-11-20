@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -18,6 +17,8 @@ import { testPriceSource } from "../helpers/price-source.js";
 import { cleanup, expectDispatch, makeGoal, outcome } from "./e2e-helpers.js";
 import { withKernelRoleFallbacks } from "./fake-defaults.js";
 import { drainedAfterAlpha, queueDigestSteer } from "./resume-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
+import { causeText } from "./helpers.js";
 
 const MALFORMED = "slugs: [unclosed\n";
 const UNKNOWN_SLUG = "slugs: [ghost]\ngoal: false\n";
@@ -50,6 +51,78 @@ function holdQuarantineRecords(
 }
 
 describe("hold read pure", () => {
+  registerHoldReadPurePart1();
+  registerHoldReadPurePart2();
+  registerHoldReadPurePart3();
+  registerHoldReadPurePart4();
+});
+
+async function runSweepsBothHoldsExactlyOnceOnlyPart1(
+  goal: ReturnType<typeof makeGoal>,
+) {
+  const store = createFolderStore(goal.goalDir, undefined, {});
+  const dir = holdsDir(store);
+  writeHold(dir, "s1.yaml", MALFORMED);
+  writeHold(dir, "s2.yaml", UNKNOWN_SLUG);
+  const before = snapshot(dir);
+
+  const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "nothing to plan", decision: "done" }));
+    return fakeTurnResult(req);
+  });
+  const run = () =>
+    runGoal({
+      repo: goal.repo.dir,
+      goal: "demo",
+      iterations: 1,
+      harnesses: { fake: harness },
+      baseGates: false,
+      priceSource: testPriceSource(goal.repo.dir),
+    });
+
+  // Another live holder of the run lock: the launch refuses and sweeps nothing.
+  const configs = loadConfigs(goal.repo.dir, { iterations: 1 });
+  const paths = resolveGoalPaths(configs, goal.repo.dir, "demo");
+  const held = acquireRunLock(goal.repo.dir, "goal-demo", {
+    runtimeDir: path.join(paths.worktreeRoot, ".factory-runtime"),
+  });
+  expect(held).not.toBeNull();
+  try {
+    await expect(run()).rejects.toThrow(/already running/);
+  } finally {
+    held?.release();
+  }
+  expect(snapshot(dir)).toEqual(before);
+  expect(fs.existsSync(quarantineDir(store))).toBe(false);
+  expect(holdQuarantineRecords(await store.listRecords())).toEqual([]);
+
+  await run();
+
+  expect(fs.readdirSync(dir)).toEqual([]);
+  expect(fs.readdirSync(quarantineDir(store)).sort()).toEqual([
+    "s1.yaml",
+    "s2.yaml",
+  ]);
+  const records = holdQuarantineRecords(await store.listRecords());
+
+  return { records };
+}
+
+async function runSweepsBothHoldsExactlyOnceOnlyPart2(
+  scope: Awaited<ReturnType<typeof runSweepsBothHoldsExactlyOnceOnlyPart1>>,
+) {
+  const { records } = scope;
+  expect(records).toHaveLength(2);
+  expect(records.map((r) => causeText(r.cause)).join("\n")).toContain(
+    "s1.yaml",
+  );
+  expect(records.map((r) => causeText(r.cause)).join("\n")).toContain(
+    "s2.yaml",
+  );
+}
+
+function registerHoldReadPurePart1(): void {
   it("readHolds reports a malformed and an unknown-slug hold without touching the mailbox", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-hold-read-"));
     try {
@@ -85,7 +158,9 @@ describe("hold read pure", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerHoldReadPurePart2(): void {
   it("sweepHolds parks both findings once and leaves valid holds in place", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-hold-sweep-"));
     try {
@@ -107,13 +182,19 @@ describe("hold read pure", () => {
       const records = holdQuarantineRecords(await store.listRecords());
       expect(records.map((r) => r.iteration)).toEqual([4, 4]);
       expect(records[0]?.ok).toBe(false);
-      expect(records[0]?.cause).toContain('malformed hold "s1.yaml"');
-      expect(records[1]?.cause).toContain('unknown-slug hold "s2.yaml"');
+      expect(causeText(records[0]?.cause)).toContain(
+        'malformed hold "s1.yaml"',
+      );
+      expect(causeText(records[1]?.cause)).toContain(
+        'unknown-slug hold "s2.yaml"',
+      );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerHoldReadPurePart3(): void {
   it("sweepHolds keeps a hold whose slug is an unconfigured-type task", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-hold-type-"));
     try {
@@ -140,61 +221,15 @@ describe("hold read pure", () => {
   it("run sweeps both holds exactly once, only after taking the run lock", async () => {
     const goal = makeGoal();
     try {
-      const store = createFolderStore(goal.goalDir, undefined, {});
-      const dir = holdsDir(store);
-      writeHold(dir, "s1.yaml", MALFORMED);
-      writeHold(dir, "s2.yaml", UNKNOWN_SLUG);
-      const before = snapshot(dir);
-
-      const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "nothing to plan", decision: "done" }),
-        );
-        return fakeTurnResult(req);
-      });
-      const run = () =>
-        runGoal({
-          repo: goal.repo.dir,
-          goal: "demo",
-          iterations: 1,
-          harnesses: { fake: harness },
-          baseGates: false,
-          priceSource: testPriceSource(goal.repo.dir),
-        });
-
-      // Another live holder of the run lock: the launch refuses and sweeps nothing.
-      const configs = loadConfigs(goal.repo.dir, { iterations: 1 });
-      const paths = resolveGoalPaths(configs, goal.repo.dir, "demo");
-      const held = acquireRunLock(goal.repo.dir, "goal-demo", {
-        runtimeDir: path.join(paths.worktreeRoot, ".factory-runtime"),
-      });
-      expect(held).not.toBeNull();
-      try {
-        await expect(run()).rejects.toThrow(/already running/);
-      } finally {
-        held?.release();
-      }
-      expect(snapshot(dir)).toEqual(before);
-      expect(fs.existsSync(quarantineDir(store))).toBe(false);
-      expect(holdQuarantineRecords(await store.listRecords())).toEqual([]);
-
-      await run();
-
-      expect(fs.readdirSync(dir)).toEqual([]);
-      expect(fs.readdirSync(quarantineDir(store)).sort()).toEqual([
-        "s1.yaml",
-        "s2.yaml",
-      ]);
-      const records = holdQuarantineRecords(await store.listRecords());
-      expect(records).toHaveLength(2);
-      expect(records.map((r) => r.cause).join("\n")).toContain("s1.yaml");
-      expect(records.map((r) => r.cause).join("\n")).toContain("s2.yaml");
+      const scope1 = await runSweepsBothHoldsExactlyOnceOnlyPart1(goal);
+      await runSweepsBothHoldsExactlyOnceOnlyPart2(scope1);
     } finally {
       cleanup(goal);
     }
   }, 60_000);
+}
 
+function registerHoldReadPurePart4(): void {
   it("a malformed hold refuses resume, and the launch then sweeps it", async () => {
     const { repo, goalDir } = await drainedAfterAlpha();
     try {
@@ -239,4 +274,4 @@ describe("hold read pure", () => {
       repo.cleanup();
     }
   }, 120_000);
-});
+}

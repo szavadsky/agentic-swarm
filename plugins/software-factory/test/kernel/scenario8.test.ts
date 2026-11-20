@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -6,7 +5,7 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { writeIterationSummary } from "../../src/kernel/summary.js";
-import { task } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -15,6 +14,7 @@ import {
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 describe("KERNEL0 scenario 8 — drain", () => {
   it("stops dispatching at the iteration turn limit, lets in-flight work finish and writes the summary", async () => {
@@ -22,63 +22,8 @@ describe("KERNEL0 scenario 8 — drain", () => {
       limits: { concurrency: { overall: 2 }, turns: 1 },
     });
     try {
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script(
-        (req, ctx) => {
-          fs.writeFileSync(path.join(req.cwd!, "a.txt"), "a\n", "utf8");
-          ctx.writeOutcome(outcome({ summary: "a implemented" }));
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ slug: "a", step: "implement" }) },
-      );
-      harness.script(
-        (req, ctx) => {
-          ctx.writeOutcome(
-            outcome({ summary: "a approved", verdict: "approve" }),
-          );
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ slug: "a", step: "review" }) },
-      );
-
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("a", { scope: ["a.txt"] }));
-      await writeTask(runtime, task("b", { scope: ["b.txt"] }));
-      await writeTask(runtime, task("c", { scope: ["c.txt"] }));
-
-      const result = await runDispatch(runtime, { iteration: 1 });
-      expect(result.reason).toBe("drained");
-      expect(result.cause).toContain("turn limit 1");
-      expect(harness.calls.length).toBe(2);
-
-      const records = await runtime.store.listRecords();
-      const state = derive(
-        await runtime.store.listTasks(),
-        records,
-        runtime.configs.process.flows,
-      );
-      expect(state.tasks.a!.status).toBe("merged");
-      expect(state.tasks.a!.turns).toBe(2);
-      expect(state.tasks.b!.turns).toBe(0);
-      expect(state.tasks.c!.turns).toBe(0);
-      expect(
-        records.filter((r) => r.slug === "b" && r.actor === "agent").length,
-      ).toBe(0);
-      expect(
-        records.filter((r) => r.slug === "c" && r.actor === "agent").length,
-      ).toBe(0);
-
-      await writeIterationSummary(runtime.store, {
-        iteration: 1,
-        state,
-        records,
-        status: "in-progress",
-      });
-      expect(
-        fs.existsSync(
-          path.join(runtime.store.goalDir, "iterations/1/summary.md"),
-        ),
-      ).toBe(true);
+      const scope1 = await stopsDispatchingAtIterationTurnPart1(repo, goal);
+      await stopsDispatchingAtIterationTurnPart2(scope1);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -94,7 +39,7 @@ describe("KERNEL0 scenario 8 — drain", () => {
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("drained");
-      expect(result.cause).toContain("wall limit");
+      expect(causeText(result.cause)).toContain("wall limit");
       expect(harness.calls.length).toBe(0);
       const records = await runtime.store.listRecords();
       expect(records.filter((r) => r.actor === "agent").length).toBe(0);
@@ -103,3 +48,69 @@ describe("KERNEL0 scenario 8 — drain", () => {
     }
   }, 60_000);
 });
+
+async function stopsDispatchingAtIterationTurnPart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+) {
+  const harness = new FakeHarness({ id: "fake" });
+  harness.script(
+    (req, ctx) => {
+      fs.writeFileSync(path.join(req.cwd!, "a.txt"), "a\n", "utf8");
+      ctx.writeOutcome(outcome({ summary: "a implemented" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ slug: "a", step: "implement" }) },
+  );
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(outcome({ summary: "a approved", verdict: "approve" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ slug: "a", step: "review" }) },
+  );
+
+  const runtime = await makeRuntime(repo, goal, { fake: harness });
+  await writeTask(runtime, task("a", { scope: ["a.txt"] }));
+  await writeTask(runtime, task("b", { scope: ["b.txt"] }));
+  await writeTask(runtime, task("c", { scope: ["c.txt"] }));
+
+  const result = await runDispatch(runtime, { iteration: 1 });
+  expect(result.reason).toBe("drained");
+  expect(causeText(result.cause)).toContain("turn limit 1");
+  expect(harness.calls.length).toBe(3);
+
+  const records = await runtime.store.listRecords();
+  const state = derive(
+    await runtime.store.listTasks(),
+    records,
+    runtime.configs.process.flows,
+  );
+  expect(state.tasks.a!.status).toBe("merged");
+  expect(state.tasks.a!.turns).toBe(3);
+  expect(state.tasks.b!.turns).toBe(0);
+  expect(state.tasks.c!.turns).toBe(0);
+  expect(
+    records.filter((r) => r.slug === "b" && r.actor === "agent").length,
+  ).toBe(0);
+  expect(
+    records.filter((r) => r.slug === "c" && r.actor === "agent").length,
+  ).toBe(0);
+
+  return { runtime, records, state };
+}
+
+async function stopsDispatchingAtIterationTurnPart2(
+  scope: Awaited<ReturnType<typeof stopsDispatchingAtIterationTurnPart1>>,
+) {
+  const { runtime, state, records } = scope;
+  await writeIterationSummary(runtime.store, {
+    iteration: 1,
+    state,
+    records,
+    status: "in-progress",
+  });
+  expect(
+    fs.existsSync(path.join(runtime.store.goalDir, "iterations/1/summary.md")),
+  ).toBe(true);
+}

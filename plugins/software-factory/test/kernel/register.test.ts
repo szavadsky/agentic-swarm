@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import {
   parseArchitectRegister,
@@ -36,6 +35,19 @@ function ctx(patch: Partial<RegisterContext> = {}): RegisterContext {
 }
 
 describe("architect register", () => {
+  architectRegisterPart1();
+  architectRegisterPart2();
+  architectRegisterPart3();
+  architectRegisterPart4();
+  architectRegisterPart5();
+  architectRegisterPart6();
+  architectRegisterPart7();
+  architectRegisterPart8();
+  architectRegisterPart9();
+  architectRegisterPart10();
+});
+
+function architectRegisterPart1() {
   it("parses §2's example to three rows", () => {
     const parsed = parseArchitectRegister(EXAMPLE, ctx());
     expect(parsed.findings).toEqual([]);
@@ -72,7 +84,9 @@ describe("architect register", () => {
     );
     expect(parsed).toEqual({ epics: [], findings: [] });
   });
+}
 
+function architectRegisterPart2() {
   it("keeps closed rows as history", () => {
     const parsed = parseArchitectRegister(
       register(
@@ -118,7 +132,9 @@ describe("architect register", () => {
     expect(parsed.findings).toHaveLength(1);
     expect(parsed.findings[0]).toMatch(/cannot be parsed/);
   });
+}
 
+function architectRegisterPart3() {
   it("requires the grammar's architect, plan and close reason", () => {
     const parsed = parseArchitectRegister(
       register(
@@ -153,7 +169,9 @@ describe("architect register", () => {
       /epic "billing" is owned by a subarchitect; its plan must be "epics\/billing\.md", not "src\/billing\/billing\.ts"/,
     );
   });
+}
 
+function architectRegisterPart4() {
   it("requires exactly plan.md for a main row", () => {
     const parsed = parseArchitectRegister(
       register(
@@ -188,7 +206,9 @@ describe("architect register", () => {
     expect(parsed.findings[0]).toMatch(/epics\/auth\.md/);
     expect(parsed.findings[0]).toMatch(/does not exist/);
   });
+}
 
+function architectRegisterPart5() {
   it("rejects absolute and parent-escaping plans without touching the disk", () => {
     const seen: string[] = [];
     const parsed = parseArchitectRegister(
@@ -222,7 +242,9 @@ describe("architect register", () => {
     expect(parsed.findings).toHaveLength(2);
     expect(parsed.findings.join("\n")).toMatch(/scope/);
   });
+}
 
+function architectRegisterPart6() {
   it("reports duplicate active epics", () => {
     const parsed = parseArchitectRegister(
       register(
@@ -260,7 +282,9 @@ describe("architect register", () => {
     expect(parsed.findings).toHaveLength(1);
     expect(parsed.findings[0]).toMatch(/a closed name is never reopened/);
   });
+}
 
+function architectRegisterPart7() {
   it("resolves a task against the active row regardless of row order", () => {
     const active =
       "- epic `auth` | architect `subarchitect` | plan `epics/auth.md` | scope `src/auth/**` | opened i7 | active";
@@ -300,7 +324,9 @@ describe("architect register", () => {
       /task "search.reindex" names closed epic "search"/,
     );
   });
+}
 
+function architectRegisterPart8() {
   it("ignores prose and comments under the heading", () => {
     const parsed = parseArchitectRegister(
       [
@@ -337,7 +363,9 @@ describe("architect register", () => {
     expect(parsed.epics.map((row) => row.epic)).toEqual(["auth"]);
     expect(parsed.findings).toEqual([]);
   });
+}
 
+function architectRegisterPart9() {
   it("reports an unterminated fence at EOF, unlike a plan with no register", () => {
     const unclosed = parseArchitectRegister(
       [
@@ -377,7 +405,9 @@ describe("architect register", () => {
     expect(parsed.findings).toHaveLength(1);
     expect(parsed.findings[0]).toMatch(/unterminated code fence/);
   });
+}
 
+function architectRegisterPart10() {
   it("keeps rows under a nested heading inside the register", () => {
     const parsed = parseArchitectRegister(
       [
@@ -409,4 +439,4 @@ describe("architect register", () => {
     expect(parsed.findings).toEqual([]);
     expect(parsed.epics).toHaveLength(3);
   });
-});
+}

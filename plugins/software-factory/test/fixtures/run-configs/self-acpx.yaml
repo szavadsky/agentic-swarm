@@ -33,6 +33,15 @@ aliases:
     timeouts:
       idleMs: 1200000
       wallMs: 3600000
+  intent:
+    harness: opencode
+    model: opencode/beam-free
+    rotate: []
+    fallbacks:
+      - model: opencode-go/deepseek-v4.1-flash
+    timeouts:
+      idleMs: 1200000
+      wallMs: 3600000
   implementer:
     harness: pi
     model: opencode-go/beam-free
@@ -73,6 +82,15 @@ aliases:
     timeouts:
       idleMs: 1200000
       wallMs: 3600000
+  pack-preparer:
+    harness: opencode
+    model: opencode/deepseek-v4.1-flash-free
+    rotate: []
+    fallbacks:
+      - model: opencode-go/deepseek-v4.1-flash
+    timeouts:
+      idleMs: 1200000
+      wallMs: 3600000
   plan-checker:
     harness: pi
     model: opencode-go/beam-free
@@ -87,6 +105,15 @@ aliases:
     model: gemini-3.8-flash-high
     rotate: []
     fallbacks: []
+    timeouts:
+      idleMs: 1200000
+      wallMs: 3600000
+  qa:
+    harness: opencode
+    model: opencode/minimax-m3.1-flash-free
+    rotate: []
+    fallbacks:
+      - model: opencode-go/deepseek-v4.1-flash
     timeouts:
       idleMs: 1200000
       wallMs: 3600000

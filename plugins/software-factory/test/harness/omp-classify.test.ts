@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -22,158 +21,9 @@ function promptError(file: string): any {
 }
 
 describe("classifyOmpError", () => {
-  it("classifies the recorded free-tier 429 prompt_result as quota", () => {
-    const error = promptError("rpc-quota.ndjson");
-    expect(error.httpStatus).toBe(429);
-    const stop = classifyOmpError(error);
-    expect(stop).toMatchObject({ kind: "infra", cause: "quota" });
-    expect((stop as { details?: string }).details).toContain(
-      "Free usage limit reached",
-    );
-  });
-
-  it("classifies auth, overflow, refusal, timeout and provider saturation", () => {
-    expect(
-      classifyOmpError({ httpStatus: 401, message: "unauthorized" }),
-    ).toEqual({
-      kind: "infra",
-      cause: "auth",
-      details: "unauthorized",
-    });
-    expect(classifyOmpError({ message: "context length exceeded" })).toEqual({
-      kind: "infra",
-      cause: "overflow",
-      details: "context length exceeded",
-    });
-    expect(
-      classifyOmpError({ message: "The model declined: safety policy" }),
-    ).toEqual({
-      kind: "refusal",
-      details: "The model declined: safety policy",
-    });
-    expect(classifyOmpError({ message: "Request timed out" })).toEqual({
-      kind: "infra",
-      cause: "timeout",
-      details: "Request timed out",
-    });
-    expect(
-      classifyOmpError({ httpStatus: 503, message: "provider overloaded" }),
-    ).toEqual({
-      kind: "infra",
-      cause: "rate",
-      details: "provider overloaded",
-    });
-    expect(classifyOmpError({})).toEqual({ kind: "infra", cause: "crash" });
-    // No transport token, so the abort word still means a user cancel.
-    expect(classifyOmpError({ message: "Request aborted by user" })).toEqual({
-      kind: "cancelled",
-    });
-  });
-
-  it("classifies transport loss and a provider retryable flag as transient network", () => {
-    expect(
-      classifyOmpError({ message: "fetch failed", code: "ECONNRESET" }),
-    ).toEqual({
-      kind: "infra",
-      cause: "network",
-      details: "fetch failed ECONNRESET",
-    });
-    expect(classifyOmpError({ message: "socket closed" })).toEqual({
-      kind: "infra",
-      cause: "network",
-      details: "socket closed",
-    });
-    // `ECONNABORTED` is a transport code, not a user abort, whether it
-    // arrives alone or beside node's abort wording.
-    expect(classifyOmpError({ code: "ECONNABORTED" })).toEqual({
-      kind: "infra",
-      cause: "network",
-      details: "ECONNABORTED",
-    });
-    expect(
-      classifyOmpError({
-        code: "ECONNABORTED",
-        message: "The operation was aborted",
-      }),
-    ).toEqual({
-      kind: "infra",
-      cause: "network",
-      details: "The operation was aborted ECONNABORTED",
-    });
-    // A refused socket and a connect timeout are transport, not a model
-    // refusal and not the deliberately frozen `timeout` cause.
-    expect(
-      classifyOmpError({ message: "connect ECONNREFUSED 127.0.0.1:443" }),
-    ).toEqual({
-      kind: "infra",
-      cause: "network",
-      details: "connect ECONNREFUSED 127.0.0.1:443",
-    });
-    expect(classifyOmpError({ message: "connection refused" })).toEqual({
-      kind: "infra",
-      cause: "network",
-      details: "connection refused",
-    });
-    expect(
-      classifyOmpError({ message: "connect ETIMEDOUT 1.2.3.4:443" }),
-    ).toEqual({
-      kind: "infra",
-      cause: "network",
-      details: "connect ETIMEDOUT 1.2.3.4:443",
-    });
-    expect(
-      classifyOmpError({
-        message: "provider asked for another try",
-        retryable: true,
-      }),
-    ).toEqual({
-      kind: "infra",
-      cause: "network",
-      details: "provider asked for another try",
-    });
-    // The edge: a provider flag never overrides a fatal auth classification.
-    expect(
-      classifyOmpError({
-        httpStatus: 401,
-        message: "unauthorized",
-        retryable: true,
-      }),
-    ).toEqual({ kind: "infra", cause: "auth", details: "unauthorized" });
-  });
-
-  it("masks and truncates a refusal message that carries a token", () => {
-    const secret = "sk-live-TOPSECRETTOKEN1234567890";
-    const message = `The model declined: safety policy ${"x".repeat(600)} token=${secret}`;
-    const stop = classifyOmpError({ message });
-    expect(stop.kind).toBe("refusal");
-    const details = stop.kind === "refusal" ? stop.details : undefined;
-    expect(details).toBeDefined();
-    expect(details).not.toContain(secret);
-    expect(details).toContain("token=[redacted]");
-    expect(details?.startsWith("…")).toBe(true);
-    expect(details?.length).toBeLessThanOrEqual(501);
-  });
-
-  it("carries scrubbed details on auth and overflow stops", () => {
-    const secret = "sk-live-TOPSECRETTOKEN1234567890";
-    expect(
-      classifyOmpError({
-        httpStatus: 401,
-        message: `unauthorized api_key=${secret}`,
-      }),
-    ).toEqual({
-      kind: "infra",
-      cause: "auth",
-      details: "unauthorized api_key=[redacted]",
-    });
-    expect(
-      classifyOmpError({ message: `context length exceeded token=${secret}` }),
-    ).toEqual({
-      kind: "infra",
-      cause: "overflow",
-      details: "context length exceeded token=[redacted]",
-    });
-  });
+  classifyOmpErrorPart1();
+  classifyOmpErrorPart2();
+  classifyOmpErrorPart3();
 });
 
 describe("classifyOmpStopReason", () => {
@@ -289,3 +139,170 @@ describe("classifyOmpTurn", () => {
     expect(stop).toMatchObject({ kind: "done" });
   });
 });
+
+function classifiesTransportLossProviderPart1() {
+  expect(
+    classifyOmpError({ message: "fetch failed", code: "ECONNRESET" }),
+  ).toEqual({
+    kind: "infra",
+    cause: "network",
+    details: "fetch failed ECONNRESET",
+  });
+  expect(classifyOmpError({ message: "socket closed" })).toEqual({
+    kind: "infra",
+    cause: "network",
+    details: "socket closed",
+  });
+  // `ECONNABORTED` is a transport code, not a user abort, whether it
+  // arrives alone or beside node's abort wording.
+  expect(classifyOmpError({ code: "ECONNABORTED" })).toEqual({
+    kind: "infra",
+    cause: "network",
+    details: "ECONNABORTED",
+  });
+  expect(
+    classifyOmpError({
+      code: "ECONNABORTED",
+      message: "The operation was aborted",
+    }),
+  ).toEqual({
+    kind: "infra",
+    cause: "network",
+    details: "The operation was aborted ECONNABORTED",
+  });
+  // A refused socket and a connect timeout are transport, not a model
+  // refusal and not the deliberately frozen `timeout` cause.
+  expect(
+    classifyOmpError({ message: "connect ECONNREFUSED 127.0.0.1:443" }),
+  ).toEqual({
+    kind: "infra",
+    cause: "network",
+    details: "connect ECONNREFUSED 127.0.0.1:443",
+  });
+  expect(classifyOmpError({ message: "connection refused" })).toEqual({
+    kind: "infra",
+    cause: "network",
+    details: "connection refused",
+  });
+}
+
+function classifiesTransportLossProviderPart2() {
+  expect(
+    classifyOmpError({ message: "connect ETIMEDOUT 1.2.3.4:443" }),
+  ).toEqual({
+    kind: "infra",
+    cause: "network",
+    details: "connect ETIMEDOUT 1.2.3.4:443",
+  });
+  expect(
+    classifyOmpError({
+      message: "provider asked for another try",
+      retryable: true,
+    }),
+  ).toEqual({
+    kind: "infra",
+    cause: "network",
+    details: "provider asked for another try",
+  });
+  // The edge: a provider flag never overrides a fatal auth classification.
+  expect(
+    classifyOmpError({
+      httpStatus: 401,
+      message: "unauthorized",
+      retryable: true,
+    }),
+  ).toEqual({ kind: "infra", cause: "auth", details: "unauthorized" });
+}
+
+function classifyOmpErrorPart1() {
+  it("classifies the recorded free-tier 429 prompt_result as quota", () => {
+    const error = promptError("rpc-quota.ndjson");
+    expect(error.httpStatus).toBe(429);
+    const stop = classifyOmpError(error);
+    expect(stop).toMatchObject({ kind: "infra", cause: "quota" });
+    expect((stop as { details?: string }).details).toContain(
+      "Free usage limit reached",
+    );
+  });
+}
+
+function classifyOmpErrorPart2() {
+  it("classifies auth, overflow, refusal, timeout and provider saturation", () => {
+    expect(
+      classifyOmpError({ httpStatus: 401, message: "unauthorized" }),
+    ).toEqual({
+      kind: "infra",
+      cause: "auth",
+      details: "unauthorized",
+    });
+    expect(classifyOmpError({ message: "context length exceeded" })).toEqual({
+      kind: "infra",
+      cause: "overflow",
+      details: "context length exceeded",
+    });
+    expect(
+      classifyOmpError({ message: "The model declined: safety policy" }),
+    ).toEqual({
+      kind: "refusal",
+      details: "The model declined: safety policy",
+    });
+    expect(classifyOmpError({ message: "Request timed out" })).toEqual({
+      kind: "infra",
+      cause: "timeout",
+      details: "Request timed out",
+    });
+    expect(
+      classifyOmpError({ httpStatus: 503, message: "provider overloaded" }),
+    ).toEqual({
+      kind: "infra",
+      cause: "rate",
+      details: "provider overloaded",
+    });
+    expect(classifyOmpError({})).toEqual({ kind: "infra", cause: "crash" });
+    // No transport token, so the abort word still means a user cancel.
+    expect(classifyOmpError({ message: "Request aborted by user" })).toEqual({
+      kind: "cancelled",
+    });
+  });
+
+  it("classifies transport loss and a provider retryable flag as transient network", () => {
+    classifiesTransportLossProviderPart1();
+    classifiesTransportLossProviderPart2();
+  });
+}
+
+function classifyOmpErrorPart3() {
+  it("masks and truncates a refusal message that carries a token", () => {
+    const secret = "sk-live-TOPSECRETTOKEN1234567890";
+    const message = `The model declined: safety policy ${"x".repeat(600)} token=${secret}`;
+    const stop = classifyOmpError({ message });
+    expect(stop.kind).toBe("refusal");
+    const details = stop.kind === "refusal" ? stop.details : undefined;
+    expect(details).toBeDefined();
+    expect(details).not.toContain(secret);
+    expect(details).toContain("token=[redacted]");
+    expect(details?.startsWith("…")).toBe(true);
+    expect(details?.length).toBeLessThanOrEqual(501);
+  });
+
+  it("carries scrubbed details on auth and overflow stops", () => {
+    const secret = "sk-live-TOPSECRETTOKEN1234567890";
+    expect(
+      classifyOmpError({
+        httpStatus: 401,
+        message: `unauthorized api_key=${secret}`,
+      }),
+    ).toEqual({
+      kind: "infra",
+      cause: "auth",
+      details: "unauthorized api_key=[redacted]",
+    });
+    expect(
+      classifyOmpError({ message: `context length exceeded token=${secret}` }),
+    ).toEqual({
+      kind: "infra",
+      cause: "overflow",
+      details: "context length exceeded token=[redacted]",
+    });
+  });
+}

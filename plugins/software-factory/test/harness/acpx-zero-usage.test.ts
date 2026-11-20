@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -40,6 +39,292 @@ function request(
 }
 
 describe("acpx-zero-usage classification", () => {
+  acpxZeroUsageClassificationPart1();
+  acpxZeroUsageClassificationPart2();
+  acpxZeroUsageClassificationPart3();
+  acpxZeroUsageClassificationPart4();
+  acpxZeroUsageClassificationPart5();
+  acpxZeroUsageClassificationPart6();
+  acpxZeroUsageClassificationPart7();
+  acpxZeroUsageClassificationPart8();
+  acpxZeroUsageClassificationPart9();
+  acpxZeroUsageClassificationPart10();
+  acpxZeroUsageClassificationPart11();
+  acpxZeroUsageClassificationPart12();
+  acpxZeroUsageClassificationPart13();
+  acpxZeroUsageClassificationPart14();
+});
+
+async function edgeCaseFirstRepairTurnMeasuresPart1(
+  initialStub: ReturnType<typeof createAcpxStub>,
+  harness1: AcpxHarness,
+) {
+  const cwd = path.dirname(initialStub.binary);
+  const initial = await harness1.turn(request(cwd, "Say [[text:PONG]]"));
+  expect(initial.stop).toEqual({ kind: "done" });
+  expect(initial.usage.in).toBe(90);
+
+  expect(initial.session).toBeDefined();
+  if (!initial.session) throw new Error("session missing");
+  const sessionId = initial.session.id;
+
+  // Subsequent repair turn on same session hits quota: zero usage
+  const repairStub = createAcpxStub({
+    sessionInfoError: {
+      httpStatusCode: 429,
+      message: "Reconnecting... 5/5",
+      additionalDetails:
+        "exceeded retry limit, last status: 429 Too Many Requests",
+      willRetry: true,
+    },
+  });
+  // Copy session record into repairStub's state directory so resume succeeds on first attempt
+  const initialSessionFile = path.join(
+    path.dirname(initialStub.binary),
+    "state",
+    `session-${sessionId}`,
+  );
+  const repairSessionFile = path.join(
+    path.dirname(repairStub.binary),
+    "state",
+    `session-${sessionId}`,
+  );
+  fs.mkdirSync(path.dirname(repairSessionFile), { recursive: true });
+  fs.copyFileSync(initialSessionFile, repairSessionFile);
+
+  const harness2 = new AcpxHarness({
+    id: "codex",
+    binary: repairStub.binary,
+    sessionDir: path.dirname(repairStub.binary),
+    acpx: CODEX_ACPX,
+    retry: { retries: 0 },
+  });
+
+  return { cwd, initial, repairStub, harness2 };
+}
+
+async function edgeCaseFirstRepairTurnMeasuresPart2(
+  scope: Awaited<ReturnType<typeof edgeCaseFirstRepairTurnMeasuresPart1>>,
+) {
+  const { harness2, cwd, initial, repairStub } = scope;
+  try {
+    const repairTurn = await harness2.turn(
+      request(
+        cwd,
+        "delivery-repair [[text:exceeded retry limit, last status: 429 Too Many Requests]]",
+        { session: initial.session },
+      ),
+    );
+    expect(repairTurn.attempts).toHaveLength(1);
+    expect(repairTurn.attempts?.[0]?.stop).toEqual({
+      kind: "infra",
+      cause: "quota",
+      details: expect.stringContaining("429 Too Many Requests"),
+    });
+    expect(repairTurn.stop).toEqual({
+      kind: "infra",
+      cause: "quota",
+      details: expect.stringContaining("429 Too Many Requests"),
+    });
+  } finally {
+    repairStub.cleanup();
+  }
+}
+
+async function edgeCasePiFirstRepairTurnMeasuresPart1(
+  initialStub: ReturnType<typeof createAcpxStub>,
+  harness1: AcpxHarness,
+) {
+  const cwd = path.dirname(initialStub.binary);
+  const initial = await harness1.turn(request(cwd, "initial prompt"));
+  expect(initial.stop).toEqual({ kind: "done" });
+  expect(initial.usage.in).toBe(100);
+  expect(initial.session?.cumulativeUsage).toMatchObject({
+    in: 100,
+    out: 20,
+  });
+
+  // Subsequent repair turn on same session adds no tokens (unchanged cumulative)
+  const repairStub = createAcpxStub({
+    modelBehaviors: {
+      "opencode-go/primary": {
+        reply: "",
+      },
+    },
+  });
+  expect(initial.session).toBeDefined();
+  if (!initial.session) throw new Error("session missing");
+  const sessionId = initial.session.id;
+
+  // Copy session and usage records into repairStub's state directory
+  const initialSessionFile = path.join(
+    path.dirname(initialStub.binary),
+    "state",
+    `session-${sessionId}`,
+  );
+  const repairSessionFile = path.join(
+    path.dirname(repairStub.binary),
+    "state",
+    `session-${sessionId}`,
+  );
+  const initialUsageFile = path.join(
+    path.dirname(initialStub.binary),
+    "state",
+    `usage-${sessionId}`,
+  );
+  const repairUsageFile = path.join(
+    path.dirname(repairStub.binary),
+    "state",
+    `usage-${sessionId}`,
+  );
+  fs.mkdirSync(path.dirname(repairSessionFile), { recursive: true });
+  fs.copyFileSync(initialSessionFile, repairSessionFile);
+  fs.copyFileSync(initialUsageFile, repairUsageFile);
+
+  return { cwd, initial, repairStub };
+}
+
+async function edgeCasePiFirstRepairTurnMeasuresPart2(
+  scope: Awaited<ReturnType<typeof edgeCasePiFirstRepairTurnMeasuresPart1>>,
+) {
+  const { repairStub, cwd, initial } = scope;
+  const harness2 = new AcpxHarness({
+    id: "pi",
+    binary: repairStub.binary,
+    sessionDir: path.dirname(repairStub.binary),
+    acpx: PI_ACPX,
+    retry: { retries: 0 },
+  });
+  try {
+    const repairTurn = await harness2.turn({
+      ...request(cwd, "delivery-repair"),
+      session: initial.session,
+    });
+    expect(repairTurn.attempts).toHaveLength(1);
+    expect(repairTurn.stop).toEqual({
+      kind: "infra",
+      cause: "rate",
+      details: expect.stringMatching(/zero.*usage/i),
+    });
+  } finally {
+    repairStub.cleanup();
+  }
+}
+
+async function test3BothShapesNextFallbackModelRunsNoPart1() {
+  const codexStub = createAcpxStub({
+    modelBehaviors: {
+      "opencode-go/primary": {
+        sessionInfoError: {
+          httpStatusCode: 429,
+          message: "Reconnecting... 5/5",
+          additionalDetails:
+            "exceeded retry limit, last status: 429 Too Many Requests",
+          willRetry: true,
+        },
+        reply: "exceeded retry limit, last status: 429 Too Many Requests",
+      },
+      "opencode-go/fallback": {
+        reply: "delivered by fallback",
+        usage: { totalTokens: 100, inputTokens: 90, outputTokens: 10 },
+      },
+    },
+  });
+  const codexHarness = new AcpxHarness({
+    id: "codex",
+    binary: codexStub.binary,
+    sessionDir: path.dirname(codexStub.binary),
+    acpx: CODEX_ACPX,
+    retry: { retries: 0 },
+  });
+
+  return { codexStub, codexHarness };
+}
+
+async function test3BothShapesNextFallbackModelRunsNoPart2(
+  scope: Awaited<
+    ReturnType<typeof test3BothShapesNextFallbackModelRunsNoPart1>
+  >,
+) {
+  const { codexStub, codexHarness } = scope;
+  try {
+    const cwd = path.dirname(codexStub.binary);
+    const result = await codexHarness.turn({
+      ...request(cwd, "task prompt"),
+      model: { id: "opencode-go/primary" },
+      fallbacks: [{ id: "opencode-go/fallback" }],
+    });
+
+    expect(result.stop).toEqual({ kind: "done" });
+    expect(result.model.id).toBe("opencode-go/fallback");
+    expect(result.text).toBe("delivered by fallback");
+    expect(result.attempts).toHaveLength(2);
+    expect(result.attempts?.[0]?.stop).toEqual({
+      kind: "infra",
+      cause: "quota",
+      details: expect.stringContaining("429 Too Many Requests"),
+    });
+    expect(result.attempts?.[1]?.stop).toEqual({ kind: "done" });
+    expect(countOutcomeRepairs(result.attempts ?? [])).toBe(0);
+  } finally {
+    codexStub.cleanup();
+  }
+
+  // 3b: pi shape hops to fallback
+  const piStub = createAcpxStub({
+    modelBehaviors: {
+      "opencode-go/primary": {
+        sessionUsage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        reply: "",
+      },
+      "opencode-go/fallback": {
+        sessionUsage: { input: 150, output: 20, cacheRead: 5, cacheWrite: 2 },
+        reply: "delivered by pi fallback",
+      },
+    },
+  });
+  const piHarness = new AcpxHarness({
+    id: "pi",
+    binary: piStub.binary,
+    sessionDir: path.dirname(piStub.binary),
+    acpx: PI_ACPX,
+    retry: { retries: 0 },
+  });
+
+  return { ...scope, piStub, piHarness };
+}
+
+async function test3BothShapesNextFallbackModelRunsNoPart3(
+  scope: Awaited<
+    ReturnType<typeof test3BothShapesNextFallbackModelRunsNoPart2>
+  >,
+) {
+  const { piStub, piHarness } = scope;
+  try {
+    const cwd = path.dirname(piStub.binary);
+    const result = await piHarness.turn({
+      ...request(cwd, "task prompt"),
+      model: { id: "opencode-go/primary" },
+      fallbacks: [{ id: "opencode-go/fallback" }],
+    });
+
+    expect(result.stop).toEqual({ kind: "done" });
+    expect(result.model.id).toBe("opencode-go/fallback");
+    expect(result.text).toBe("delivered by pi fallback");
+    expect(result.attempts).toHaveLength(2);
+    expect(result.attempts?.[0]?.stop).toEqual({
+      kind: "infra",
+      cause: "rate",
+      details: expect.stringMatching(/zero.*usage/i),
+    });
+    expect(result.attempts?.[1]?.stop).toEqual({ kind: "done" });
+    expect(countOutcomeRepairs(result.attempts ?? [])).toBe(0);
+  } finally {
+    piStub.cleanup();
+  }
+}
+
+function acpxZeroUsageClassificationPart1() {
   it("(1) codex shape (end_turn, 429 text, no usage frame) yields infra: quota with details carrying 429 text", async () => {
     const errorText =
       "exceeded retry limit, last status: 429 Too Many Requests";
@@ -74,7 +359,9 @@ describe("acpx-zero-usage classification", () => {
       stub.cleanup();
     }
   });
+}
 
+function acpxZeroUsageClassificationPart2() {
   it("(2) pi shape (end_turn, no text, usage command reports zero tokens) yields infra: rate that fallback chain retries", async () => {
     const stub = createAcpxStub({
       sessionUsage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -103,99 +390,13 @@ describe("acpx-zero-usage classification", () => {
   });
 
   it("(3) in both shapes the next fallback model runs and no outcome-repair turn is spent", async () => {
-    // 3a: codex shape hops to fallback
-    const codexStub = createAcpxStub({
-      modelBehaviors: {
-        "opencode-go/primary": {
-          sessionInfoError: {
-            httpStatusCode: 429,
-            message: "Reconnecting... 5/5",
-            additionalDetails:
-              "exceeded retry limit, last status: 429 Too Many Requests",
-            willRetry: true,
-          },
-          reply: "exceeded retry limit, last status: 429 Too Many Requests",
-        },
-        "opencode-go/fallback": {
-          reply: "delivered by fallback",
-          usage: { totalTokens: 100, inputTokens: 90, outputTokens: 10 },
-        },
-      },
-    });
-    const codexHarness = new AcpxHarness({
-      id: "codex",
-      binary: codexStub.binary,
-      sessionDir: path.dirname(codexStub.binary),
-      acpx: CODEX_ACPX,
-      retry: { retries: 0 },
-    });
-    try {
-      const cwd = path.dirname(codexStub.binary);
-      const result = await codexHarness.turn({
-        ...request(cwd, "task prompt"),
-        model: { id: "opencode-go/primary" },
-        fallbacks: [{ id: "opencode-go/fallback" }],
-      });
-
-      expect(result.stop).toEqual({ kind: "done" });
-      expect(result.model.id).toBe("opencode-go/fallback");
-      expect(result.text).toBe("delivered by fallback");
-      expect(result.attempts).toHaveLength(2);
-      expect(result.attempts?.[0]?.stop).toEqual({
-        kind: "infra",
-        cause: "quota",
-        details: expect.stringContaining("429 Too Many Requests"),
-      });
-      expect(result.attempts?.[1]?.stop).toEqual({ kind: "done" });
-      expect(countOutcomeRepairs(result.attempts ?? [])).toBe(0);
-    } finally {
-      codexStub.cleanup();
-    }
-
-    // 3b: pi shape hops to fallback
-    const piStub = createAcpxStub({
-      modelBehaviors: {
-        "opencode-go/primary": {
-          sessionUsage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          reply: "",
-        },
-        "opencode-go/fallback": {
-          sessionUsage: { input: 150, output: 20, cacheRead: 5, cacheWrite: 2 },
-          reply: "delivered by pi fallback",
-        },
-      },
-    });
-    const piHarness = new AcpxHarness({
-      id: "pi",
-      binary: piStub.binary,
-      sessionDir: path.dirname(piStub.binary),
-      acpx: PI_ACPX,
-      retry: { retries: 0 },
-    });
-    try {
-      const cwd = path.dirname(piStub.binary);
-      const result = await piHarness.turn({
-        ...request(cwd, "task prompt"),
-        model: { id: "opencode-go/primary" },
-        fallbacks: [{ id: "opencode-go/fallback" }],
-      });
-
-      expect(result.stop).toEqual({ kind: "done" });
-      expect(result.model.id).toBe("opencode-go/fallback");
-      expect(result.text).toBe("delivered by pi fallback");
-      expect(result.attempts).toHaveLength(2);
-      expect(result.attempts?.[0]?.stop).toEqual({
-        kind: "infra",
-        cause: "rate",
-        details: expect.stringMatching(/zero.*usage/i),
-      });
-      expect(result.attempts?.[1]?.stop).toEqual({ kind: "done" });
-      expect(countOutcomeRepairs(result.attempts ?? [])).toBe(0);
-    } finally {
-      piStub.cleanup();
-    }
+    const scope1 = await test3BothShapesNextFallbackModelRunsNoPart1();
+    const scope2 = await test3BothShapesNextFallbackModelRunsNoPart2(scope1);
+    await test3BothShapesNextFallbackModelRunsNoPart3(scope2);
   });
+}
 
+function acpxZeroUsageClassificationPart3() {
   it("(4a) done stays done for completed turn with measured nonzero usage whose text mentions 429", async () => {
     const stub = createAcpxStub({
       usage: {
@@ -228,7 +429,9 @@ describe("acpx-zero-usage classification", () => {
       stub.cleanup();
     }
   });
+}
 
+function acpxZeroUsageClassificationPart4() {
   it("(4b) done stays done for resumed pi turn whose usage is unknown (no baseline)", async () => {
     const stub = createAcpxStub({
       sessionUsage: { input: 100, output: 10, cacheRead: 5, cacheWrite: 2 },
@@ -262,7 +465,9 @@ describe("acpx-zero-usage classification", () => {
       stub.cleanup();
     }
   });
+}
 
+function acpxZeroUsageClassificationPart5() {
   it("(4c) done stays done for an agent with no usage config (claude-code)", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
@@ -283,7 +488,9 @@ describe("acpx-zero-usage classification", () => {
       stub.cleanup();
     }
   });
+}
 
+function acpxZeroUsageClassificationPart6() {
   it("codex willRetry: true reconnect frames on a turn that later recovers are not errors", async () => {
     const stub = createAcpxStub({
       sessionInfoError: {
@@ -318,7 +525,9 @@ describe("acpx-zero-usage classification", () => {
       stub.cleanup();
     }
   });
+}
 
+function acpxZeroUsageClassificationPart7() {
   it("yields infra: quota from adapter error metadata when agent text carries no error pattern", async () => {
     const stub = createAcpxStub({
       sessionInfoError: {
@@ -355,7 +564,9 @@ describe("acpx-zero-usage classification", () => {
       stub.cleanup();
     }
   });
+}
 
+function acpxZeroUsageClassificationPart8() {
   it("yields infra: quota from adapter error metadata when agent text is empty", async () => {
     const stub = createAcpxStub({
       sessionInfoError: {
@@ -392,7 +603,9 @@ describe("acpx-zero-usage classification", () => {
       stub.cleanup();
     }
   });
+}
 
+function acpxZeroUsageClassificationPart9() {
   it("falls through to rate stop when adapter error has no specific cause and reply is empty", async () => {
     const stub = createAcpxStub({
       sessionInfoError: {
@@ -425,7 +638,9 @@ describe("acpx-zero-usage classification", () => {
       stub.cleanup();
     }
   });
+}
 
+function acpxZeroUsageClassificationPart10() {
   it("falls back to zero-usage rate stop when text matches no pattern and no usage frame is sent", async () => {
     const stub = createAcpxStub({
       modelBehaviors: {
@@ -455,7 +670,9 @@ describe("acpx-zero-usage classification", () => {
       stub.cleanup();
     }
   });
+}
 
+function acpxZeroUsageClassificationPart11() {
   it("edge case: first repair turn measures zero usage and stops as infra", async () => {
     // Initial turn did real work (nonzero usage) but failed to write deliverable
     const initialStub = createAcpxStub({
@@ -469,68 +686,11 @@ describe("acpx-zero-usage classification", () => {
       retry: FAST_RETRY,
     });
     try {
-      const cwd = path.dirname(initialStub.binary);
-      const initial = await harness1.turn(request(cwd, "Say [[text:PONG]]"));
-      expect(initial.stop).toEqual({ kind: "done" });
-      expect(initial.usage.in).toBe(90);
-
-      expect(initial.session).toBeDefined();
-      if (!initial.session) throw new Error("session missing");
-      const sessionId = initial.session.id;
-
-      // Subsequent repair turn on same session hits quota: zero usage
-      const repairStub = createAcpxStub({
-        sessionInfoError: {
-          httpStatusCode: 429,
-          message: "Reconnecting... 5/5",
-          additionalDetails:
-            "exceeded retry limit, last status: 429 Too Many Requests",
-          willRetry: true,
-        },
-      });
-      // Copy session record into repairStub's state directory so resume succeeds on first attempt
-      const initialSessionFile = path.join(
-        path.dirname(initialStub.binary),
-        "state",
-        `session-${sessionId}`,
+      const scope1 = await edgeCaseFirstRepairTurnMeasuresPart1(
+        initialStub,
+        harness1,
       );
-      const repairSessionFile = path.join(
-        path.dirname(repairStub.binary),
-        "state",
-        `session-${sessionId}`,
-      );
-      fs.mkdirSync(path.dirname(repairSessionFile), { recursive: true });
-      fs.copyFileSync(initialSessionFile, repairSessionFile);
-
-      const harness2 = new AcpxHarness({
-        id: "codex",
-        binary: repairStub.binary,
-        sessionDir: path.dirname(repairStub.binary),
-        acpx: CODEX_ACPX,
-        retry: { retries: 0 },
-      });
-      try {
-        const repairTurn = await harness2.turn(
-          request(
-            cwd,
-            "delivery-repair [[text:exceeded retry limit, last status: 429 Too Many Requests]]",
-            { session: initial.session },
-          ),
-        );
-        expect(repairTurn.attempts).toHaveLength(1);
-        expect(repairTurn.attempts?.[0]?.stop).toEqual({
-          kind: "infra",
-          cause: "quota",
-          details: expect.stringContaining("429 Too Many Requests"),
-        });
-        expect(repairTurn.stop).toEqual({
-          kind: "infra",
-          cause: "quota",
-          details: expect.stringContaining("429 Too Many Requests"),
-        });
-      } finally {
-        repairStub.cleanup();
-      }
+      await edgeCaseFirstRepairTurnMeasuresPart2(scope1);
     } finally {
       initialStub.cleanup();
     }
@@ -548,78 +708,18 @@ describe("acpx-zero-usage classification", () => {
       retry: FAST_RETRY,
     });
     try {
-      const cwd = path.dirname(initialStub.binary);
-      const initial = await harness1.turn(request(cwd, "initial prompt"));
-      expect(initial.stop).toEqual({ kind: "done" });
-      expect(initial.usage.in).toBe(100);
-      expect(initial.session?.cumulativeUsage).toMatchObject({
-        in: 100,
-        out: 20,
-      });
-
-      // Subsequent repair turn on same session adds no tokens (unchanged cumulative)
-      const repairStub = createAcpxStub({
-        modelBehaviors: {
-          "opencode-go/primary": {
-            reply: "",
-          },
-        },
-      });
-      expect(initial.session).toBeDefined();
-      if (!initial.session) throw new Error("session missing");
-      const sessionId = initial.session.id;
-
-      // Copy session and usage records into repairStub's state directory
-      const initialSessionFile = path.join(
-        path.dirname(initialStub.binary),
-        "state",
-        `session-${sessionId}`,
+      const scope1 = await edgeCasePiFirstRepairTurnMeasuresPart1(
+        initialStub,
+        harness1,
       );
-      const repairSessionFile = path.join(
-        path.dirname(repairStub.binary),
-        "state",
-        `session-${sessionId}`,
-      );
-      const initialUsageFile = path.join(
-        path.dirname(initialStub.binary),
-        "state",
-        `usage-${sessionId}`,
-      );
-      const repairUsageFile = path.join(
-        path.dirname(repairStub.binary),
-        "state",
-        `usage-${sessionId}`,
-      );
-      fs.mkdirSync(path.dirname(repairSessionFile), { recursive: true });
-      fs.copyFileSync(initialSessionFile, repairSessionFile);
-      fs.copyFileSync(initialUsageFile, repairUsageFile);
-
-      const harness2 = new AcpxHarness({
-        id: "pi",
-        binary: repairStub.binary,
-        sessionDir: path.dirname(repairStub.binary),
-        acpx: PI_ACPX,
-        retry: { retries: 0 },
-      });
-      try {
-        const repairTurn = await harness2.turn({
-          ...request(cwd, "delivery-repair"),
-          session: initial.session,
-        });
-        expect(repairTurn.attempts).toHaveLength(1);
-        expect(repairTurn.stop).toEqual({
-          kind: "infra",
-          cause: "rate",
-          details: expect.stringMatching(/zero.*usage/i),
-        });
-      } finally {
-        repairStub.cleanup();
-      }
+      await edgeCasePiFirstRepairTurnMeasuresPart2(scope1);
     } finally {
       initialStub.cleanup();
     }
   });
+}
 
+function acpxZeroUsageClassificationPart12() {
   it("redacts token-shaped secrets in zero-usage rate fallback details", async () => {
     const rawReply =
       "failed: api_key=sk-ABCDEFGHIJKLMNOP1234 and token: ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
@@ -654,7 +754,9 @@ describe("acpx-zero-usage classification", () => {
       stub.cleanup();
     }
   });
+}
 
+function acpxZeroUsageClassificationPart13() {
   it("caps zero-usage rate details over 500 chars within MAX_DETAILS_CHARS", async () => {
     const longReply = `failure: ${"x".repeat(600)}`;
     const stub = createAcpxStub({
@@ -687,7 +789,9 @@ describe("acpx-zero-usage classification", () => {
       stub.cleanup();
     }
   });
+}
 
+function acpxZeroUsageClassificationPart14() {
   it("measures zero usage from usage config without command regardless of agent name", async () => {
     const stub = createAcpxStub({
       modelBehaviors: {
@@ -719,4 +823,4 @@ describe("acpx-zero-usage classification", () => {
       stub.cleanup();
     }
   });
-});
+}

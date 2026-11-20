@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { exitDetails, stopDetails, withDetails } from "../details.js";
 import type { Stop, Usage } from "../types.js";
 import { isTransportFailure } from "../transport.js";
@@ -120,6 +119,29 @@ export interface OmpTurnOutcomeInput {
   text?: string;
 }
 
+/** A completed prompt: its stop reason, a zero-usage glitch, or done. */
+function classifyCompleted(input: OmpTurnOutcomeInput): Stop {
+  const stop = classifyOmpStopReason(input.lastStopReason);
+  if (stop) return stop;
+  if (input.usage && !reportsUsage(input.usage) && !input.text) {
+    return withDetails(
+      { kind: "infra", cause: "glitch" },
+      "zero-usage, no-output",
+    );
+  }
+  return { kind: "done" };
+}
+
+/** A process failure: its launch cause plus the exit facts when it named none. */
+function classifyFailure(failure: OmpTurnFailure): Stop {
+  const stop = classifyOmpLaunchFailure(failure.stderr ?? "");
+  if (stop.kind === "infra" && !stop.details) {
+    const exit = exitDetails(failure.code ?? null, failure.signal ?? null);
+    if (exit) return { ...stop, details: exit };
+  }
+  return stop;
+}
+
 /** Final stop for one omp RPC process, from the frames the adapter collected. */
 export function classifyOmpTurn(input: OmpTurnOutcomeInput): Stop {
   if (input.abortReason || input.failure?.timedOut) {
@@ -130,15 +152,7 @@ export function classifyOmpTurn(input: OmpTurnOutcomeInput): Stop {
   }
   if (input.promptResult?.status === "aborted") return { kind: "cancelled" };
   if (input.promptResult?.status === "completed") {
-    const stop = classifyOmpStopReason(input.lastStopReason);
-    if (stop) return stop;
-    if (input.usage && !reportsUsage(input.usage) && !input.text) {
-      return withDetails(
-        { kind: "infra", cause: "glitch" },
-        "zero-usage, no-output",
-      );
-    }
-    return { kind: "done" };
+    return classifyCompleted(input);
   }
   if (
     input.failure?.signal === "SIGTERM" ||
@@ -146,17 +160,7 @@ export function classifyOmpTurn(input: OmpTurnOutcomeInput): Stop {
   ) {
     return { kind: "cancelled" };
   }
-  if (input.failure) {
-    const stop = classifyOmpLaunchFailure(input.failure.stderr ?? "");
-    if (stop.kind === "infra" && !stop.details) {
-      const exit = exitDetails(
-        input.failure.code ?? null,
-        input.failure.signal ?? null,
-      );
-      if (exit) return { ...stop, details: exit };
-    }
-    return stop;
-  }
+  if (input.failure) return classifyFailure(input.failure);
   return withDetails(
     { kind: "infra", cause: "crash" },
     "no prompt_result and no failure captured",

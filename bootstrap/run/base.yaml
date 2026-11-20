@@ -27,6 +27,13 @@ aliases:
     effort: max
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
+  # The intent agent carries an intent-amending steer into the goal's intent:
+  # prose copying, so the cheap free model, never the architect.
+  intent:
+    harness: opencode
+    model: opencode/beam-free
+    fallbacks:
+      - model: opencode-go/deepseek-v4.1-flash
   implementer:
     harness: opencode
     model: opencode/deepseek-v4.1-flash-free
@@ -51,6 +58,13 @@ aliases:
     model: opencode/minimax-m3.1-flash-free
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
+  # QA inherits the reviewer's model here; a variant that wants model
+  # diversity for QA overrides this alias like any other.
+  qa:
+    harness: opencode
+    model: opencode/minimax-m3.1-flash-free
+    fallbacks:
+      - model: opencode-go/deepseek-v4.1-flash
   plan-reviewer:
     harness: opencode
     model: opencode/minimax-m3.1-flash-free
@@ -62,6 +76,11 @@ aliases:
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
   plan-checker:
+    harness: opencode
+    model: opencode/deepseek-v4.1-flash-free
+    fallbacks:
+      - model: opencode-go/deepseek-v4.1-flash
+  pack-preparer:
     harness: opencode
     model: opencode/deepseek-v4.1-flash-free
     fallbacks:

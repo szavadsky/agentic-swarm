@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -59,119 +58,8 @@ function servers(dir: string): Record<string, ServerConfig> {
 }
 
 describe("artifact LSP", () => {
-  it("writes every kernel schema and one config into the artifact folder", async () => {
-    const written = await writeArtifactLsp(goalDir);
-
-    expect(fs.readdirSync(path.join(goalDir, "schemas")).sort()).toEqual([
-      "class.schema.json",
-      "hold.schema.json",
-      "outcome.schema.json",
-      "process.schema.json",
-      "repo.schema.json",
-      "run.schema.json",
-      "task.schema.json",
-    ]);
-    expect(written.schemas).toHaveLength(7);
-    expect(written.config).toBe(artifactLspConfigPath(goalDir));
-    expect(fs.existsSync(written.config)).toBe(true);
-
-    const config = servers(goalDir);
-    // The built-in yamlls entry would double-validate with the schema store.
-    expect(config.yamlls).toEqual({ disabled: true });
-    const yaml = config["factory-artifacts"]!;
-    expect(yaml.fileTypes).toEqual([".yaml", ".yml"]);
-    expect(yaml.args).toEqual(["--stdio"]);
-    expect(yaml.rootMarkers).toEqual(["."]);
-    expect(yaml.settings?.yaml?.validate).toBe(true);
-    // No schema-store network fetches at agent time.
-    expect(yaml.settings?.yaml?.schemaStore?.enable).toBe(false);
-
-    const schemas = yaml.settings?.yaml?.schemas ?? {};
-    const entries = Object.entries(schemas);
-    expect(entries).toHaveLength(3);
-    for (const [schema, globs] of entries) {
-      expect(path.isAbsolute(schema)).toBe(true);
-      expect(fs.existsSync(schema)).toBe(true);
-      expect(globs).toHaveLength(1);
-      expect(path.isAbsolute(globs[0]!)).toBe(true);
-      expect(globs[0]!.startsWith(goalDir)).toBe(true);
-    }
-    const byName = Object.fromEntries(
-      entries.map(([schema, globs]) => [path.basename(schema), globs[0]]),
-    );
-    expect(byName["outcome.schema.json"]).toBe(
-      path.join(goalDir, "records/**/outcome.yaml"),
-    );
-    expect(byName["hold.schema.json"]).toBe(
-      path.join(goalDir, "mailbox/holds/*.yaml"),
-    );
-    expect(byName["class.schema.json"]).toBe(path.join(goalDir, "class.yaml"));
-
-    // Markdown is the frontmatter server's job: yamlls would parse the body
-    // as a second YAML document and false-report every task file.
-    expect(yaml.fileTypes).not.toContain(".md");
-
-    const task = config["factory-task-frontmatter"]!;
-    expect(task.fileTypes).toEqual([".md"]);
-    expect(task.command).toBe(process.execPath);
-    expect(task.args?.[0]).toEndWith(
-      path.join("src", "harness", "lsp", "frontmatter.ts"),
-    );
-    expect(fs.existsSync(task.args?.[0] ?? "")).toBe(true);
-  });
-
-  it("writes identical content when the launch repeats", async () => {
-    await writeArtifactLsp(goalDir);
-    const first = fs.readFileSync(artifactLspConfigPath(goalDir), "utf8");
-    await writeArtifactLsp(goalDir);
-    expect(fs.readFileSync(artifactLspConfigPath(goalDir), "utf8")).toBe(first);
-    expect(artifactLspConfig(goalDir)).toEqual(artifactLspConfig(goalDir));
-  });
-
-  it("installs the canonical config into the turn cwd, byte-identical", async () => {
-    const { config } = await writeArtifactLsp(goalDir);
-    const cwd = path.join(root, "task-worktree");
-    fs.mkdirSync(cwd, { recursive: true });
-
-    const target = await installLspConfig(cwd, config);
-    expect(target).toBe(turnLspConfigPath(cwd));
-    expect(fs.readFileSync(target, "utf8")).toBe(
-      fs.readFileSync(config, "utf8"),
-    );
-    // A user's own omp config keeps its precedence and is never touched.
-    const userConfig = path.join(cwd, ".omp", "lsp.json");
-    expect(target).not.toBe(userConfig);
-
-    // A second install leaves the file alone (no churn on every turn).
-    const before = fs.statSync(target).mtimeMs;
-    await installLspConfig(cwd, config);
-    expect(fs.statSync(target).mtimeMs).toBe(before);
-  });
-
-  it("refuses to overwrite a tracked .omp/.lsp.json", async () => {
-    const { config } = await writeArtifactLsp(goalDir);
-    const cwd = path.join(root, "tracked-worktree");
-    fs.mkdirSync(path.join(cwd, ".omp"), { recursive: true });
-    fs.writeFileSync(path.join(cwd, ".omp", ".lsp.json"), "user config\n");
-    const init = Bun.spawnSync(["git", "init", "-q", cwd]);
-    expect(init.exitCode).toBe(0);
-    const add = Bun.spawnSync(["git", "-C", cwd, "add", ".omp/.lsp.json"]);
-    expect(add.exitCode).toBe(0);
-
-    await expect(installLspConfig(cwd, config)).rejects.toThrow(/is tracked/);
-    expect(fs.readFileSync(path.join(cwd, ".omp", ".lsp.json"), "utf8")).toBe(
-      "user config\n",
-    );
-  });
-
-  it("fails loudly when the canonical config is missing", async () => {
-    const cwd = path.join(root, "task-worktree");
-    fs.mkdirSync(cwd, { recursive: true });
-    await expect(
-      installLspConfig(cwd, path.join(root, "absent.json")),
-    ).rejects.toThrow(/ENOENT/);
-    expect(fs.existsSync(turnLspConfigPath(cwd))).toBe(false);
-  });
+  artifactLSPPart1();
+  artifactLSPPart2();
 });
 
 describe("launch provisioning", () => {
@@ -186,9 +74,12 @@ describe("launch provisioning", () => {
         "  implementer-b: { harness: fake, model: fake-impl-b }",
         "  researcher: { harness: fake, model: fake-research }",
         "  reviewer: { harness: fake, model: fake-review }",
+        "  qa: { harness: fake, model: fake-qa }",
         "  steward: { harness: fake, model: fake-steward }",
         "  plan-checker: { harness: fake, model: fake-check }",
+        "  intent: { harness: fake, model: fake-intent }",
         "  plan-reviewer: { harness: fake, model: fake-plan-review }",
+        "  pack-preparer: { harness: fake, model: fake-pack-prep }",
         "lsp: true",
         "limits: { iterations: 1, concurrency: { overall: 1 } }",
         "",
@@ -230,3 +121,134 @@ describe("launch provisioning", () => {
     }
   }, 60_000);
 });
+
+async function writesEveryKernelSchemaOneConfigPart1() {
+  const written = await writeArtifactLsp(goalDir);
+
+  expect(fs.readdirSync(path.join(goalDir, "schemas")).sort()).toEqual([
+    "class.schema.json",
+    "hold.schema.json",
+    "outcome.schema.json",
+    "process.schema.json",
+    "repo.schema.json",
+    "run.schema.json",
+    "task.schema.json",
+  ]);
+  expect(written.schemas).toHaveLength(7);
+  expect(written.config).toBe(artifactLspConfigPath(goalDir));
+  expect(fs.existsSync(written.config)).toBe(true);
+
+  const config = servers(goalDir);
+  // The built-in yamlls entry would double-validate with the schema store.
+  expect(config.yamlls).toEqual({ disabled: true });
+  const yaml = config["factory-artifacts"]!;
+  expect(yaml.fileTypes).toEqual([".yaml", ".yml"]);
+  expect(yaml.args).toEqual(["--stdio"]);
+  expect(yaml.rootMarkers).toEqual(["."]);
+  expect(yaml.settings?.yaml?.validate).toBe(true);
+  // No schema-store network fetches at agent time.
+  expect(yaml.settings?.yaml?.schemaStore?.enable).toBe(false);
+
+  const schemas = yaml.settings?.yaml?.schemas ?? {};
+  const entries = Object.entries(schemas);
+  expect(entries).toHaveLength(3);
+  for (const [schema, globs] of entries) {
+    expect(path.isAbsolute(schema)).toBe(true);
+    expect(fs.existsSync(schema)).toBe(true);
+    expect(globs).toHaveLength(1);
+    expect(path.isAbsolute(globs[0]!)).toBe(true);
+    expect(globs[0]!.startsWith(goalDir)).toBe(true);
+  }
+  const byName = Object.fromEntries(
+    entries.map(([schema, globs]) => [path.basename(schema), globs[0]]),
+  );
+  expect(byName["outcome.schema.json"]).toBe(
+    path.join(goalDir, "records/**/outcome.yaml"),
+  );
+
+  return { config, yaml, byName };
+}
+
+async function writesEveryKernelSchemaOneConfigPart2(
+  scope: Awaited<ReturnType<typeof writesEveryKernelSchemaOneConfigPart1>>,
+) {
+  const { byName, yaml, config } = scope;
+  expect(byName["hold.schema.json"]).toBe(
+    path.join(goalDir, "mailbox/holds/*.yaml"),
+  );
+  expect(byName["class.schema.json"]).toBe(path.join(goalDir, "class.yaml"));
+
+  // Markdown is the frontmatter server's job: yamlls would parse the body
+  // as a second YAML document and false-report every task file.
+  expect(yaml.fileTypes).not.toContain(".md");
+
+  const task = config["factory-task-frontmatter"]!;
+  expect(task.fileTypes).toEqual([".md"]);
+  expect(task.command).toBe(process.execPath);
+  expect(task.args?.[0]).toEndWith(
+    path.join("src", "harness", "lsp", "frontmatter.ts"),
+  );
+  expect(fs.existsSync(task.args?.[0] ?? "")).toBe(true);
+}
+
+function artifactLSPPart1() {
+  it("writes every kernel schema and one config into the artifact folder", async () => {
+    const scope1 = await writesEveryKernelSchemaOneConfigPart1();
+    await writesEveryKernelSchemaOneConfigPart2(scope1);
+  });
+
+  it("writes identical content when the launch repeats", async () => {
+    await writeArtifactLsp(goalDir);
+    const first = fs.readFileSync(artifactLspConfigPath(goalDir), "utf8");
+    await writeArtifactLsp(goalDir);
+    expect(fs.readFileSync(artifactLspConfigPath(goalDir), "utf8")).toBe(first);
+    expect(artifactLspConfig(goalDir)).toEqual(artifactLspConfig(goalDir));
+  });
+
+  it("installs the canonical config into the turn cwd, byte-identical", async () => {
+    const { config } = await writeArtifactLsp(goalDir);
+    const cwd = path.join(root, "task-worktree");
+    fs.mkdirSync(cwd, { recursive: true });
+
+    const target = await installLspConfig(cwd, config);
+    expect(target).toBe(turnLspConfigPath(cwd));
+    expect(fs.readFileSync(target, "utf8")).toBe(
+      fs.readFileSync(config, "utf8"),
+    );
+    // A user's own omp config keeps its precedence and is never touched.
+    const userConfig = path.join(cwd, ".omp", "lsp.json");
+    expect(target).not.toBe(userConfig);
+
+    // A second install leaves the file alone (no churn on every turn).
+    const before = fs.statSync(target).mtimeMs;
+    await installLspConfig(cwd, config);
+    expect(fs.statSync(target).mtimeMs).toBe(before);
+  });
+}
+
+function artifactLSPPart2() {
+  it("refuses to overwrite a tracked .omp/.lsp.json", async () => {
+    const { config } = await writeArtifactLsp(goalDir);
+    const cwd = path.join(root, "tracked-worktree");
+    fs.mkdirSync(path.join(cwd, ".omp"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, ".omp", ".lsp.json"), "user config\n");
+    const init = Bun.spawnSync(["git", "init", "-q", cwd]);
+    expect(init.exitCode).toBe(0);
+    const add = Bun.spawnSync(["git", "-C", cwd, "add", ".omp/.lsp.json"]);
+    expect(add.exitCode).toBe(0);
+
+    await expect(installLspConfig(cwd, config)).rejects.toThrow(/is tracked/);
+    expect(fs.readFileSync(path.join(cwd, ".omp", ".lsp.json"), "utf8")).toBe(
+      "user config\n",
+    );
+  });
+
+  it("fails loudly when the canonical config is missing", async () => {
+    const cwd = path.join(root, "task-worktree");
+    fs.mkdirSync(cwd, { recursive: true });
+    await expect(
+      installLspConfig(cwd, path.join(root, "absent.json")),
+    ).rejects.toThrow(/ENOENT/);
+    expect(fs.existsSync(turnLspConfigPath(cwd))).toBe(false);
+  });
+}

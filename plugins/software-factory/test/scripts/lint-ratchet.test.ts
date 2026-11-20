@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -100,29 +99,29 @@ describe("lint ratchet", () => {
   });
 });
 
+let root: string;
+
+function run(): ReturnType<typeof spawnSync> {
+  return spawnSync(process.execPath, [SIZE_CHECK, root], {
+    encoding: "utf8",
+  });
+}
+
+function writeAllowlist(entries: Record<string, string>): void {
+  fs.mkdirSync(path.join(root, "config"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "config", "file-size-allowlist.json"),
+    JSON.stringify(entries),
+  );
+}
+
+function writeLines(file: string, lines: number): void {
+  const full = path.join(root, file);
+  fs.mkdirSync(path.dirname(full), { recursive: true });
+  fs.writeFileSync(full, "const x = 1;\n".repeat(lines));
+}
+
 describe("check-file-size", () => {
-  let root: string;
-
-  function run(): ReturnType<typeof spawnSync> {
-    return spawnSync(process.execPath, [SIZE_CHECK, root], {
-      encoding: "utf8",
-    });
-  }
-
-  function writeAllowlist(entries: Record<string, string>): void {
-    fs.mkdirSync(path.join(root, "config"), { recursive: true });
-    fs.writeFileSync(
-      path.join(root, "config", "file-size-allowlist.json"),
-      JSON.stringify(entries),
-    );
-  }
-
-  function writeLines(file: string, lines: number): void {
-    const full = path.join(root, file);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, "const x = 1;\n".repeat(lines));
-  }
-
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), "file-size-test-"));
   });
@@ -130,48 +129,7 @@ describe("check-file-size", () => {
   afterEach(() => {
     fs.rmSync(root, { recursive: true, force: true });
   });
-
-  it("fails an over-limit file that is not allowlisted and names the file", () => {
-    writeLines("src/big.ts", 501);
-    writeAllowlist({});
-
-    const result = run();
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("src/big.ts: 501 lines");
-  });
-
-  it("passes when every over-limit file is allowlisted and a file at the limit is not", () => {
-    writeLines("src/big.ts", 501);
-    writeLines("src/fits.ts", 500);
-    writeAllowlist({ "src/big.ts": "split-rest" });
-
-    const result = run();
-
-    expect(result.status).toBe(0);
-  });
-
-  it("fails a stale allowlist entry", () => {
-    writeLines("src/fits.ts", 500);
-    writeAllowlist({ "src/fits.ts": "split-rest" });
-
-    const result = run();
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain(
-      "src/fits.ts: allowlisted but not over 500 lines",
-    );
-  });
-
-  it("fails an allowlist entry that names no split task", () => {
-    writeLines("src/big.ts", 501);
-    writeAllowlist({ "src/big.ts": "later" });
-
-    const result = run();
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('remover "later" is not a split-* task');
-  });
+  registerCheckFileSizePart1();
 });
 
 describe("lint gate order", () => {
@@ -220,3 +178,47 @@ describe("lint gate order", () => {
     }
   });
 });
+
+function registerCheckFileSizePart1(): void {
+  it("fails an over-limit file that is not allowlisted and names the file", () => {
+    writeLines("src/big.ts", 501);
+    writeAllowlist({});
+
+    const result = run();
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("src/big.ts: 501 lines");
+  });
+
+  it("passes when every over-limit file is allowlisted and a file at the limit is not", () => {
+    writeLines("src/big.ts", 501);
+    writeLines("src/fits.ts", 500);
+    writeAllowlist({ "src/big.ts": "split-rest" });
+
+    const result = run();
+
+    expect(result.status).toBe(0);
+  });
+
+  it("fails a stale allowlist entry", () => {
+    writeLines("src/fits.ts", 500);
+    writeAllowlist({ "src/fits.ts": "split-rest" });
+
+    const result = run();
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "src/fits.ts: allowlisted but not over 500 lines",
+    );
+  });
+
+  it("fails an allowlist entry that names no split task", () => {
+    writeLines("src/big.ts", 501);
+    writeAllowlist({ "src/big.ts": "later" });
+
+    const result = run();
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('remover "later" is not a split-* task');
+  });
+}

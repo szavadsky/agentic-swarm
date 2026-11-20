@@ -1,7 +1,6 @@
-// biome-ignore-all lint/complexity: split-rest
-import fs from "node:fs";
-import path from "node:path";
 import { runAgentTurn } from "./agent.js";
+import { makeCause } from "./cause.js";
+import { formatCause } from "./cause.js";
 import type { PlanCheckPack } from "./context-pack.js";
 import { boundaryTarget } from "./flow-context.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
@@ -12,9 +11,11 @@ import {
   runPlanCheckPm,
   snapshotTurn,
 } from "./pm.js";
+import { formatPlanList } from "./plan-file.js";
 import { scriptMeta } from "./record.js";
-import { recordDirName } from "./store.js";
 import type {
+  ArtifactStore,
+  Cause,
   KernelRuntime,
   Outcome,
   PlanCheck,
@@ -42,9 +43,8 @@ const OPEN_STATUSES: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
 const PLAN_BULLET = /^-\s+(\S+)\s+—/u;
 
 /**
- * The slugs the plan names as task bullets. Prose mentions and nested bullets
+ * The slugs one plan names as task bullets. Prose mentions and nested bullets
  * (`  - done: …`) name no task, so a follow-up cannot hide behind them.
- * `plan-scopes` generalizes this parser once every scope has its own plan.
  */
 export function planSlugs(plan: string): Set<string> {
   const slugs = new Set<string>();
@@ -56,14 +56,18 @@ export function planSlugs(plan: string): Set<string> {
 }
 
 /**
- * Findings for a plan-check report whose follow-ups reach outside the plan:
- * each follow-up's own slug must be a `- <slug> —` bullet. A `missing-dep`
- * follow-up's dead dependency may be absent from the plan; it is the dep, not
- * the slug acted on. Only a `done` outcome carries a report to check.
+ * Findings for a plan-check report whose follow-ups reach outside every active
+ * plan: each follow-up's own slug must be a `- <slug> —` bullet in one of them.
+ * A `missing-dep` follow-up's dead dependency may be absent from the plans; it
+ * is the dep, not the slug acted on. Only a `done` outcome carries a report to
+ * check.
  */
-export function validatePlanCheck(plan: string, outcome: Outcome): string[] {
+export function validatePlanCheck(
+  plans: readonly string[],
+  outcome: Outcome,
+): string[] {
   if (outcome.status !== "done" || !outcome.planCheck) return [];
-  const named = planSlugs(plan);
+  const named = new Set(plans.flatMap((plan) => [...planSlugs(plan)]));
   const outside = [
     ...new Set(
       outcome.planCheck.followUps
@@ -146,7 +150,7 @@ export function consultGate(input: {
  */
 export function lastGateRecord(
   records: StepRecord[],
-  recordsDir: string,
+  store: ArtifactStore,
 ): string | undefined {
   const last = records
     .filter(
@@ -157,9 +161,12 @@ export function lastGateRecord(
     )
     .sort((a, b) => a.seq - b.seq)
     .at(-1);
-  return last
-    ? path.join(recordsDir, recordDirName(last.seq, last), "end.yaml")
-    : undefined;
+  return last ? store.records.file(last, "end.yaml") : undefined;
+}
+
+/** One parked task's cause as the brief reads it. */
+function parkedCauseText(cause: Cause | undefined): string {
+  return cause ? formatCause(cause) : "no recorded cause";
 }
 
 /**
@@ -175,7 +182,7 @@ export function planCheckBrief(state: State, tasks: TaskFile[]): string {
     .sort((a, b) => a.slug.localeCompare(b.slug))
     .map(
       (task) =>
-        `- ${task.slug}: ${state.tasks[task.slug]?.cause ?? "no recorded cause"}`,
+        `- ${task.slug}: ${parkedCauseText(state.tasks[task.slug]?.cause)}`,
     );
   if (parked.length > 0) lines.push("", "Parked by cause:", ...parked);
   return lines.join("\n");
@@ -197,56 +204,51 @@ export interface PlanCheckTurn {
  * reports `architect`, so the checker can only add progress, never block the
  * iteration on its own failure.
  */
-export async function runPlanCheck(
+/** The template variables of one plan-checker turn. */
+function planCheckVars(
   runtime: KernelRuntime,
-  opts: { iteration: number; round: number; state: State },
-): Promise<PlanCheckTurn> {
-  const planPath = path.join(runtime.store.goalDir, "plan.md");
-  const plan = fs.existsSync(planPath)
-    ? await fs.promises.readFile(planPath, "utf8")
-    : "";
-  const snapshot = await snapshotTurn(runtime, planPath);
-  const tasks = await runtime.store.listTasks();
-  const gateRecord = lastGateRecord(
-    await runtime.store.listRecords(),
-    runtime.store.recordsDir,
-  );
-  const result = await runAgentTurn(runtime, {
-    target: boundaryTarget(runtime, "plancheck", opts.iteration),
-    cwd: runtime.paths.goalCheckout,
-    meta: {
-      iteration: opts.iteration,
-      step: PLAN_CHECK_STEP,
+  opts: { iteration: number; state: State },
+  plans: ReturnType<KernelRuntime["store"]["plans"]["existing"]>,
+  tasks: Awaited<ReturnType<KernelRuntime["store"]["listTasks"]>>,
+  gateRecord: string | undefined,
+): Record<string, string> {
+  return {
+    iteration: String(opts.iteration),
+    intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
+    plans: formatPlanList(plans),
+    checkout: runtime.paths.goalCheckout,
+    tasks_dir: runtime.store.tasks.dir,
+    existing_tasks: planCheckBrief(opts.state, tasks),
+    gate_record_path: gateRecord ?? "none recorded",
+  };
+}
+
+/** Records the checker's reads-only breach after restoring its writes. */
+async function recordDiscardedWrites(
+  runtime: KernelRuntime,
+  opts: { iteration: number; round: number },
+  restored: Awaited<ReturnType<typeof restoreTurn>>,
+): Promise<void> {
+  const touched = [...restored.plans, ...restored.tasks].sort();
+  if (touched.length === 0) return;
+  await runtime.store.appendRecord(
+    scriptMeta(opts.iteration, "plan-check-reconcile", {
       round: opts.round,
+    }),
+    {
+      ok: false,
+      cause: makeCause(
+        "invalid-outcome",
+        `checker writes discarded: ${touched.join(", ")}; the checker is read-only`,
+      ),
     },
-    vars: {
-      iteration: String(opts.iteration),
-      intent_path: path.join(runtime.store.goalDir, "intent.md"),
-      plan_path: planPath,
-      checkout: runtime.paths.goalCheckout,
-      tasks_dir: runtime.store.tasksDir,
-      existing_tasks: planCheckBrief(opts.state, tasks),
-      gate_record_path: gateRecord ?? "none recorded",
-    },
-    expectation: KERNEL_TURN_STEPS[PLAN_CHECK_STEP],
-    validate: (outcome) => validatePlanCheck(plan, outcome),
-  });
-  const restored = await restoreTurn(runtime, snapshot);
-  const touched = [
-    ...(restored.plan ? ["plan.md"] : []),
-    ...restored.tasks,
-  ].sort();
-  if (touched.length > 0) {
-    await runtime.store.appendRecord(
-      scriptMeta(opts.iteration, "plan-check-reconcile", {
-        round: opts.round,
-      }),
-      {
-        ok: false,
-        cause: `checker writes discarded: ${touched.join(", ")}; the checker is read-only`,
-      },
-    );
-  }
+  );
+}
+
+/** The turn result: infra, no verdict, or the checker's verdict. */
+function planCheckTurnResult(
+  result: Awaited<ReturnType<typeof runAgentTurn>>,
+): PlanCheckTurn {
   const stop = result.record.stop;
   if (stop?.kind === "infra") {
     return {
@@ -275,6 +277,41 @@ export async function runPlanCheck(
     followUps: check.followUps,
     outcome: result.outcome,
   };
+}
+
+export async function runPlanCheck(
+  runtime: KernelRuntime,
+  opts: { iteration: number; round: number; state: State },
+): Promise<PlanCheckTurn> {
+  const allPlans = runtime.store.plans.registered();
+  const plans = runtime.store.plans.existing();
+  const texts = (
+    await Promise.all(plans.map((plan) => runtime.store.plans.read(plan.scope)))
+  ).filter((text): text is string => text !== null);
+  const snapshot = await snapshotTurn(runtime, allPlans);
+  const tasks = await runtime.store.listTasks();
+  const gateRecord = lastGateRecord(
+    await runtime.store.listRecords(),
+    runtime.store,
+  );
+  const result = await runAgentTurn(runtime, {
+    target: boundaryTarget(runtime, "plancheck", opts.iteration),
+    cwd: runtime.paths.goalCheckout,
+    meta: {
+      iteration: opts.iteration,
+      step: PLAN_CHECK_STEP,
+      round: opts.round,
+    },
+    vars: planCheckVars(runtime, opts, plans, tasks, gateRecord),
+    expectation: KERNEL_TURN_STEPS[PLAN_CHECK_STEP],
+    validate: (outcome) => validatePlanCheck(texts, outcome),
+  });
+  await recordDiscardedWrites(
+    runtime,
+    opts,
+    await restoreTurn(runtime, snapshot),
+  );
+  return planCheckTurnResult(result);
 }
 
 export interface PlanCheckRound {

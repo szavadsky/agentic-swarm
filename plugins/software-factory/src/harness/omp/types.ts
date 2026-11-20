@@ -7,6 +7,12 @@ export interface OmpTurnOpaque {
   subagentModel?: ModelRef | string;
   addDirs?: string[];
   overlayExtra?: Record<string, unknown>;
+  /**
+   * Transient agent definitions for this launch: each markdown is written to a
+   * content-addressed extension package's `agents/` root and the package is
+   * passed with `-e`, so the worktree and the global config stay untouched.
+   */
+  agents?: { name: string; markdown: string }[];
 }
 
 export interface OmpHarnessOptions {

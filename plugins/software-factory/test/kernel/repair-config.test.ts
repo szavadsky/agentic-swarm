@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -6,6 +5,11 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { cleanup, expectLaunch, makeGoal } from "./e2e-helpers.js";
 
 describe("repair config", () => {
+  repairConfigPart1();
+  repairConfigPart2();
+});
+
+function repairConfigPart1() {
   it("renders the template a step names and names that step's deliverable", async () => {
     const goal = makeGoal({
       classYaml: null,
@@ -47,7 +51,9 @@ describe("repair config", () => {
       cleanup(goal);
     }
   }, 60_000);
+}
 
+function repairConfigPart2() {
   it("renders the process default template when a step names none", async () => {
     const goal = makeGoal({
       classYaml: null,
@@ -72,4 +78,4 @@ describe("repair config", () => {
       cleanup(goal);
     }
   }, 60_000);
-});
+}

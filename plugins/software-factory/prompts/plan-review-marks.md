@@ -1,0 +1,1 @@
+One `{finding, mark}` entry per numbered finding: `helpful` or `unhelpful`. `helpful` means it changed or clarified the plan or caught a real issue; `unhelpful` means it was wrong, stale or noise. Findings are advisory: you decide; the mark records whether the finding helped, not whether you obeyed it.

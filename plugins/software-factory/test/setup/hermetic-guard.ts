@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 /**
  * Hermetic test guard, loaded via the `[test] preload` in bunfig.toml.
  *
@@ -213,35 +212,72 @@ function stripPort(host: string): string {
   return h;
 }
 
+/** The host an explicit options object names, if any. */
+function overrideHost(override: HostOpts | undefined): string | undefined {
+  if (!override) return undefined;
+  if (typeof override.hostname === "string" && override.hostname) {
+    return override.hostname;
+  }
+  if (typeof override.host === "string" && override.host) {
+    return stripPort(override.host);
+  }
+  return undefined;
+}
+
+interface HttpTarget {
+  host?: string;
+  socketPath: boolean;
+}
+
+/** The host and socket flag request(url[, options]) or request(options) names. */
+function requestTarget(a: unknown, b: unknown): HttpTarget {
+  if (typeof a === "string" || a instanceof URL) {
+    let fromUrl: string | undefined;
+    try {
+      fromUrl = new URL(a instanceof URL ? a.href : a).hostname || undefined;
+    } catch {
+      fromUrl = undefined;
+    }
+    const override =
+      b !== null && typeof b === "object" ? (b as HostOpts) : undefined;
+    return {
+      host: overrideHost(override) ?? fromUrl,
+      socketPath: typeof override?.socketPath === "string",
+    };
+  }
+  if (a !== null && typeof a === "object") {
+    const override = a as HostOpts;
+    return {
+      host: overrideHost(override),
+      socketPath: typeof override.socketPath === "string",
+    };
+  }
+  return { socketPath: false };
+}
+
 /** request(url[, options]) or request(options); absent host defaults to localhost. */
 function assertHttpAllowed(
   kind: "http" | "https",
   a: unknown,
   b: unknown,
 ): void {
-  let fromUrl: string | undefined;
-  let override: HostOpts | undefined;
-  if (typeof a === "string" || a instanceof URL) {
-    try {
-      fromUrl = new URL(a instanceof URL ? a.href : a).hostname || undefined;
-    } catch {
-      fromUrl = undefined;
-    }
-    if (b !== null && typeof b === "object") override = b as HostOpts;
-  } else if (a !== null && typeof a === "object") {
-    override = a as HostOpts;
-  }
-  if (override && typeof override.socketPath === "string") return;
-  let host = fromUrl;
-  if (override) {
-    if (typeof override.hostname === "string" && override.hostname) {
-      host = override.hostname;
-    } else if (typeof override.host === "string" && override.host) {
-      host = stripPort(override.host);
-    }
-  }
-  if (host === undefined || host === "") return;
-  if (!isLoopbackHostname(host)) refuse(kind, host, NETWORK_HINT);
+  const target = requestTarget(a, b);
+  if (target.socketPath) return;
+  if (target.host === undefined || target.host === "") return;
+  if (!isLoopbackHostname(target.host)) refuse(kind, target.host, NETWORK_HINT);
+}
+
+interface TcpOpts {
+  path?: unknown;
+  host?: unknown;
+  hostname?: unknown;
+  port?: unknown;
+}
+
+function tcpOptionHost(opts: TcpOpts): string {
+  if (typeof opts.host === "string") return stripPort(opts.host);
+  if (typeof opts.hostname === "string") return stripPort(opts.hostname);
+  return "127.0.0.1";
 }
 
 /** connect(options), connect(port[, host]) or connect(path); absent host is loopback. */
@@ -249,31 +285,19 @@ function assertTcpAllowed(kind: "tcp" | "tls", args: unknown[]): void {
   const first = args[0];
   if (typeof first === "number") {
     const host = typeof args[1] === "string" ? stripPort(args[1]) : "127.0.0.1";
-    if (!isLoopbackHostname(host))
+    if (!isLoopbackHostname(host)) {
       refuse(kind, `${host}:${first}`, NETWORK_HINT);
+    }
     return;
   }
   if (typeof first === "string") return; // Unix socket path.
-  if (first !== null && typeof first === "object") {
-    const opts = first as {
-      path?: unknown;
-      host?: unknown;
-      hostname?: unknown;
-      port?: unknown;
-    };
-    if (typeof opts.path === "string") return;
-    const host =
-      typeof opts.host === "string"
-        ? stripPort(opts.host)
-        : typeof opts.hostname === "string"
-          ? stripPort(opts.hostname)
-          : "127.0.0.1";
-    if (!isLoopbackHostname(host)) {
-      const detail =
-        typeof opts.port === "number" ? `${host}:${opts.port}` : host;
-      refuse(kind, detail, NETWORK_HINT);
-    }
-  }
+  if (first === null || typeof first !== "object") return;
+  const opts = first as TcpOpts;
+  if (typeof opts.path === "string") return;
+  const host = tcpOptionHost(opts);
+  if (isLoopbackHostname(host)) return;
+  const detail = typeof opts.port === "number" ? `${host}:${opts.port}` : host;
+  refuse(kind, detail, NETWORK_HINT);
 }
 
 const SHELLS = new Set(["sh", "bash", "dash", "zsh", "ksh"]);
@@ -288,6 +312,26 @@ function scanShellPayload(payload: string, cwd: string): void {
   }
 }
 
+/** Scans the payload after a shell's `-c` flag, when the command has one. */
+function scanShellCommands(cmds: string[], cwd: string): void {
+  for (let i = 1; i < cmds.length; i += 1) {
+    const flag = cmds[i];
+    if (flag === undefined || !SHORT_C_FLAG.test(flag)) continue;
+    const payload = cmds[i + 1];
+    if (payload !== undefined) scanShellPayload(payload, cwd);
+    return;
+  }
+}
+
+/** The on-demand `bunx acpx` route: raw args only, never tokenized. */
+function scanBunxArgs(exe: string, cmds: string[], cwd: string): void {
+  for (const arg of cmds.slice(1)) {
+    if (harnessName(arg) === "acpx" && !isTmpPath(arg, cwd)) {
+      refuse("spawn", `${exe} ${arg}`, spawnHint("acpx"));
+    }
+  }
+}
+
 function assertSpawnAllowed(cmds: string[], cwd: string): void {
   const exe = cmds[0];
   if (exe === undefined) return;
@@ -297,25 +341,10 @@ function assertSpawnAllowed(cmds: string[], cwd: string): void {
     refuse("spawn", exe, spawnHint(name));
   }
   if (SHELLS.has(base)) {
-    for (let i = 1; i < cmds.length; i += 1) {
-      const flag = cmds[i];
-      if (flag !== undefined && SHORT_C_FLAG.test(flag)) {
-        const payload = cmds[i + 1];
-        if (payload !== undefined) scanShellPayload(payload, cwd);
-        break;
-      }
-    }
+    scanShellCommands(cmds, cwd);
     return;
   }
-  // The on-demand `bunx acpx` route: raw args only, never tokenized, so a
-  // `bun -e` payload cannot false-positive.
-  if (base === "bun" || base === "bunx") {
-    for (const arg of cmds.slice(1)) {
-      if (harnessName(arg) === "acpx" && !isTmpPath(arg, cwd)) {
-        refuse("spawn", `${exe} ${arg}`, spawnHint("acpx"));
-      }
-    }
-  }
+  if (base === "bun" || base === "bunx") scanBunxArgs(exe, cmds, cwd);
 }
 
 /** Bun.spawn(cmds, opts) or Bun.spawn({ cmd, cwd, ... }); strings scan as shell. */
@@ -358,31 +387,31 @@ function installSpawnGuard(): void {
   }) as typeof bun.spawnSync;
 }
 
-function installNetworkGuard(): void {
-  const rawFetch = globalThis.fetch;
-  globalThis.fetch = ((input: unknown, init?: unknown) => {
-    assertFetchAllowed(input);
-    return (rawFetch as (...args: unknown[]) => unknown)(input, init);
-  }) as typeof fetch;
+type AnyModule = {
+  request: (...args: never[]) => unknown;
+  get: (...args: never[]) => unknown;
+};
 
-  for (const mod of [http, https]) {
-    const kind = mod === http ? "http" : "https";
-    const anyMod = mod as unknown as {
-      request: (...args: never[]) => unknown;
-      get: (...args: never[]) => unknown;
-    };
-    const rawRequest = anyMod.request.bind(mod);
-    const rawGet = anyMod.get.bind(mod);
-    anyMod.request = ((...args: unknown[]) => {
-      assertHttpAllowed(kind, args[0], args[1]);
-      return (rawRequest as (...args: unknown[]) => unknown)(...args);
-    }) as typeof anyMod.request;
-    anyMod.get = ((...args: unknown[]) => {
-      assertHttpAllowed(kind, args[0], args[1]);
-      return (rawGet as (...args: unknown[]) => unknown)(...args);
-    }) as typeof anyMod.get;
-  }
+/** Wraps one http module's request/get with the host assertion. */
+function guardHttpModule(
+  mod: typeof http | typeof https,
+  kind: "http" | "https",
+): void {
+  const anyMod = mod as unknown as AnyModule;
+  const rawRequest = anyMod.request.bind(mod);
+  const rawGet = anyMod.get.bind(mod);
+  anyMod.request = ((...args: unknown[]) => {
+    assertHttpAllowed(kind, args[0], args[1]);
+    return (rawRequest as (...args: unknown[]) => unknown)(...args);
+  }) as typeof anyMod.request;
+  anyMod.get = ((...args: unknown[]) => {
+    assertHttpAllowed(kind, args[0], args[1]);
+    return (rawGet as (...args: unknown[]) => unknown)(...args);
+  }) as typeof anyMod.get;
+}
 
+/** Wraps net.connect/createConnection and Socket.connect with the TCP assertion. */
+function guardNetConnections(): void {
   const anyNet = net as unknown as {
     connect: (...args: never[]) => unknown;
     createConnection: (...args: never[]) => unknown;
@@ -412,7 +441,10 @@ function installNetworkGuard(): void {
       args,
     );
   } as typeof socketProto.connect;
+}
 
+/** Wraps tls.connect with the TLS assertion. */
+function guardTlsConnect(): void {
   const anyTls = tls as unknown as {
     connect: (...args: never[]) => unknown;
   };
@@ -421,22 +453,37 @@ function installNetworkGuard(): void {
     assertTcpAllowed("tls", args);
     return (rawTlsConnect as (...args: unknown[]) => unknown)(...args);
   }) as typeof anyTls.connect;
+}
 
+/** Wraps Bun.connect, which takes an options object instead of args. */
+function guardBunConnect(): void {
   const bun = Bun as unknown as { connect?: (...args: never[]) => unknown };
-  if (typeof bun.connect === "function") {
-    const rawBunConnect = bun.connect.bind(Bun);
-    bun.connect = ((opts: unknown) => {
-      if (opts !== null && typeof opts === "object") {
-        const o = opts as { unix?: unknown; hostname?: unknown };
-        if (typeof o.unix !== "string") {
-          const host =
-            typeof o.hostname === "string" ? o.hostname : "127.0.0.1";
-          if (!isLoopbackHostname(host)) refuse("tcp", host, NETWORK_HINT);
-        }
+  if (typeof bun.connect !== "function") return;
+  const rawBunConnect = bun.connect.bind(Bun);
+  bun.connect = ((opts: unknown) => {
+    if (opts !== null && typeof opts === "object") {
+      const o = opts as { unix?: unknown; hostname?: unknown };
+      if (typeof o.unix !== "string") {
+        const host = typeof o.hostname === "string" ? o.hostname : "127.0.0.1";
+        if (!isLoopbackHostname(host)) refuse("tcp", host, NETWORK_HINT);
       }
-      return (rawBunConnect as (opts: unknown) => unknown)(opts);
-    }) as typeof bun.connect;
-  }
+    }
+    return (rawBunConnect as (opts: unknown) => unknown)(opts);
+  }) as typeof bun.connect;
+}
+
+function installNetworkGuard(): void {
+  const rawFetch = globalThis.fetch;
+  globalThis.fetch = ((input: unknown, init?: unknown) => {
+    assertFetchAllowed(input);
+    return (rawFetch as (...args: unknown[]) => unknown)(input, init);
+  }) as typeof fetch;
+
+  guardHttpModule(http, "http");
+  guardHttpModule(https, "https");
+  guardNetConnections();
+  guardTlsConnect();
+  guardBunConnect();
 }
 
 function redirectPriceCache(): void {

@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -37,9 +36,12 @@ function setupRepo(): { repo: TmpRepo; goalDir: string; taskDir: string } {
       "  implementer-b: { harness: fake, model: fake-impl-b }",
       "  researcher: { harness: fake, model: fake-research }",
       "  reviewer: { harness: fake, model: fake-review }",
+      "  qa: { harness: fake, model: fake-qa }",
       "  steward: { harness: fake, model: fake-steward }",
       "  plan-checker: { harness: fake, model: fake-check }",
+      "  intent: { harness: fake, model: fake-intent }",
       "  plan-reviewer: { harness: fake, model: fake-plan-review }",
+      "  pack-preparer: { harness: fake, model: fake-pack-prep }",
       "limits: { iterations: 1, concurrency: { overall: 1 } }",
       `worktreeRoot: ../${base}-wt`,
       `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
@@ -78,6 +80,13 @@ function captureWarn(): { lines: string[]; restore(): void } {
 }
 
 describe("signal policy", () => {
+  registerSignalPolicyPart1();
+  registerSignalPolicyPart2();
+  registerSignalPolicyPart3();
+  registerSignalPolicyPart4();
+});
+
+function registerSignalPolicyPart1(): void {
   it("drains on the first signal and aborts on the second, without OS signals", () => {
     const warning = captureWarn();
     let recordedGrace: number | undefined;
@@ -109,7 +118,9 @@ describe("signal policy", () => {
       warning.restore();
     }
   });
+}
 
+function registerSignalPolicyPart2(): void {
   it("stops dispatching after a drain request and writes the summary", async () => {
     const s = setupRepo();
     const controller = createDrainController();
@@ -153,7 +164,9 @@ describe("signal policy", () => {
       s.repo.cleanup();
     }
   }, 60_000);
+}
 
+function registerSignalPolicyPart3(): void {
   it("records the partial usage a cancelled turn returns", async () => {
     const s = setupRepo();
     const controller = createDrainController(() => Promise.resolve());
@@ -199,7 +212,9 @@ describe("signal policy", () => {
       s.repo.cleanup();
     }
   }, 60_000);
+}
 
+function registerSignalPolicyPart4(): void {
   it("a real second SIGINT in a launch still kills every registered group", async () => {
     const shutdownPath = path.resolve(__dirname, "../../src/core/shutdown.ts");
     const signalsPath = path.resolve(__dirname, "../../src/kernel/signals.ts");
@@ -255,4 +270,4 @@ process.exit(0);
 
     expect(res.exitCode).toBe(0);
   });
-});
+}

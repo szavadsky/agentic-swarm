@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -10,7 +9,7 @@ import { runDispatch } from "../../src/kernel/dispatch.js";
 import { resolveTurn } from "../../src/kernel/flow-context.js";
 import type { KernelRuntime } from "../../src/kernel/types.js";
 import type { TmpRepo } from "../helpers/tmp-repo.js";
-import { task } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   type FlowRepoOptions,
@@ -20,6 +19,7 @@ import {
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 const implementerVars = {
   task_path: "/g/tasks/a.md",
@@ -83,6 +83,83 @@ function latchPool(runtime: KernelRuntime, pool: string): void {
 }
 
 describe("alias fallback tiers", () => {
+  registerAliasFallbackTiersPart1();
+  registerAliasFallbackTiersPart2();
+  registerAliasFallbackTiersPart3();
+  registerAliasFallbackTiersPart4();
+  registerAliasFallbackTiersPart5();
+  registerAliasFallbackTiersPart6();
+  registerAliasFallbackTiersPart7();
+  registerAliasFallbackTiersPart8();
+  registerAliasFallbackTiersPart9();
+  registerAliasFallbackTiersPart10();
+  registerAliasFallbackTiersPart11();
+  registerAliasFallbackTiersPart12();
+  registerAliasFallbackTiersPart13();
+});
+
+async function skipsExhaustedPoolRestDispatchPart1(
+  repo: TmpRepo,
+  goal: string,
+) {
+  const a = new FakeHarness({ id: "a" });
+  const b = new FakeHarness({ id: "b" });
+  a.script((req) => fakeTurnResult(req, quota()), {
+    when: whenTurn({ step: "implement" }),
+  });
+  for (let i = 0; i < 2; i += 1) {
+    b.script(
+      (req, ctx) => {
+        fs.writeFileSync(
+          path.join(req.cwd!, `${path.basename(req.cwd!)}.txt`),
+          "done\n",
+          "utf8",
+        );
+        ctx.writeOutcome(outcome({ summary: "implemented" }));
+        return fakeTurnResult(req);
+      },
+      { when: whenTurn({ step: "implement" }) },
+    );
+    b.script(
+      (req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+        return fakeTurnResult(req);
+      },
+      { when: whenTurn({ step: "review" }) },
+    );
+  }
+  const runtime = await makeRuntime(repo, goal, { a, b });
+  await writeTask(runtime, task("alpha", { scope: ["alpha-area"] }));
+  await writeTask(runtime, task("beta", { scope: ["beta-area"] }));
+
+  const result = await runDispatch(runtime, { iteration: 1 });
+  expect(result.reason).toBe("boundary");
+  const state = derive(
+    await runtime.store.listTasks(),
+    await runtime.store.listRecords(),
+    runtime.configs.process.flows,
+  );
+  expect(state.tasks.alpha!.status).toBe("merged");
+  expect(state.tasks.beta!.status).toBe("merged");
+
+  // Alpha's implement fell back to b; beta's started there. QA shares the
+  // reviewer's binding, so it ran on b for both tasks too.
+  expect(a.calls).toHaveLength(1);
+  expect(b.calls).toHaveLength(6);
+
+  return { runtime };
+}
+
+async function skipsExhaustedPoolRestDispatchPart2(
+  scope: Awaited<ReturnType<typeof skipsExhaustedPoolRestDispatchPart1>>,
+) {
+  const { runtime } = scope;
+  expect(resolveTurn(runtime, "implementer", "implementer").harness.id).toBe(
+    "b",
+  );
+}
+
+function registerAliasFallbackTiersPart1(): void {
   it("falls back across harnesses with each tier's own effort and opaque config", async () => {
     const t = await tierRuntime({
       harness: "a",
@@ -135,7 +212,9 @@ describe("alias fallback tiers", () => {
       cleanupFlowRepo(t.repo);
     }
   });
+}
 
+function registerAliasFallbackTiersPart2(): void {
   it("skips exhausted pools on subsequent turns", async () => {
     const t = await tierRuntime({
       harness: "a",
@@ -170,7 +249,9 @@ describe("alias fallback tiers", () => {
       cleanupFlowRepo(t.repo);
     }
   });
+}
 
+function registerAliasFallbackTiersPart3(): void {
   it("keeps the session on a same-harness fallback", async () => {
     const t = await tierRuntime({
       harness: "a",
@@ -203,7 +284,9 @@ describe("alias fallback tiers", () => {
       cleanupFlowRepo(t.repo);
     }
   });
+}
 
+function registerAliasFallbackTiersPart4(): void {
   it("drops the session when the fallback leaves the harness", async () => {
     const t = await tierRuntime({
       harness: "a",
@@ -234,7 +317,9 @@ describe("alias fallback tiers", () => {
       cleanupFlowRepo(t.repo);
     }
   });
+}
 
+function registerAliasFallbackTiersPart5(): void {
   it("carries the session across a declared portability edge", async () => {
     const t = await tierRuntime({
       harness: "a",
@@ -264,7 +349,9 @@ describe("alias fallback tiers", () => {
       cleanupFlowRepo(t.repo);
     }
   });
+}
 
+function registerAliasFallbackTiersPart6(): void {
   it("returns the last infra stop when every tier fails on transient error and retries the primary next", async () => {
     const t = await tierRuntime({
       harness: "a",
@@ -303,7 +390,9 @@ describe("alias fallback tiers", () => {
       cleanupFlowRepo(t.repo);
     }
   });
+}
 
+function registerAliasFallbackTiersPart7(): void {
   it("leaves next turn starting at primary when primary stops on timeout, rate or crash and fallback delivers", async () => {
     for (const cause of ["timeout", "rate", "crash"] as const) {
       const t = await tierRuntime({
@@ -339,7 +428,9 @@ describe("alias fallback tiers", () => {
       }
     }
   });
+}
 
+function registerAliasFallbackTiersPart8(): void {
   it("marks pool exhausted by subscription on quota and leaves another alias on that pool unavailable", async () => {
     const { repo, goal } = setupFlowRepo({
       aliases: {
@@ -395,7 +486,9 @@ describe("alias fallback tiers", () => {
       cleanupFlowRepo(repo);
     }
   });
+}
 
+function registerAliasFallbackTiersPart9(): void {
   it("marks an alias with every tier exhausted unavailable instead of retrying the last tier", async () => {
     const t = await tierRuntime({
       harness: "a",
@@ -442,7 +535,9 @@ describe("alias fallback tiers", () => {
       cleanupFlowRepo(t.repo);
     }
   });
+}
 
+function registerAliasFallbackTiersPart10(): void {
   it("defers a task whose alias has no live tier and names the cause", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -456,9 +551,11 @@ describe("alias fallback tiers", () => {
 
       expect(result.reason).toBe("infra");
       expect(result.taskTurnsStarted).toBe(0);
-      expect(result.cause).toContain("alpha:");
-      expect(result.cause).toContain('alias "implementer" has no live tier');
-      expect(result.cause).toContain(
+      expect(causeText(result.cause)).toContain("alpha:");
+      expect(causeText(result.cause)).toContain(
+        'alias "implementer" has no live tier',
+      );
+      expect(causeText(result.cause)).toContain(
         `fake+fake-impl resets at ${new Date(resetAt).toISOString()}`,
       );
       expect(fake.calls).toHaveLength(0);
@@ -466,7 +563,9 @@ describe("alias fallback tiers", () => {
       cleanupFlowRepo(repo);
     }
   });
+}
 
+function registerAliasFallbackTiersPart11(): void {
   it("skips the exhausted pool for the rest of the dispatch", async () => {
     const { repo, goal } = setupFlowRepo({
       limits: { concurrency: { overall: 1 } },
@@ -480,59 +579,15 @@ describe("alias fallback tiers", () => {
       },
     });
     try {
-      const a = new FakeHarness({ id: "a" });
-      const b = new FakeHarness({ id: "b" });
-      a.script((req) => fakeTurnResult(req, quota()), {
-        when: whenTurn({ step: "implement" }),
-      });
-      for (let i = 0; i < 2; i += 1) {
-        b.script(
-          (req, ctx) => {
-            fs.writeFileSync(
-              path.join(req.cwd!, `${path.basename(req.cwd!)}.txt`),
-              "done\n",
-              "utf8",
-            );
-            ctx.writeOutcome(outcome({ summary: "implemented" }));
-            return fakeTurnResult(req);
-          },
-          { when: whenTurn({ step: "implement" }) },
-        );
-        b.script(
-          (req, ctx) => {
-            ctx.writeOutcome(
-              outcome({ summary: "approved", verdict: "approve" }),
-            );
-            return fakeTurnResult(req);
-          },
-          { when: whenTurn({ step: "review" }) },
-        );
-      }
-      const runtime = await makeRuntime(repo, goal, { a, b });
-      await writeTask(runtime, task("alpha", { scope: ["alpha-area"] }));
-      await writeTask(runtime, task("beta", { scope: ["beta-area"] }));
-
-      const result = await runDispatch(runtime, { iteration: 1 });
-      expect(result.reason).toBe("boundary");
-      const state = derive(
-        await runtime.store.listTasks(),
-        await runtime.store.listRecords(),
-        runtime.configs.process.flows,
-      );
-      expect(state.tasks.alpha!.status).toBe("merged");
-      expect(state.tasks.beta!.status).toBe("merged");
-
-      // Alpha's implement fell back to b; beta's started there.
-      expect(a.calls).toHaveLength(1);
-      expect(b.calls).toHaveLength(4);
-      expect(
-        resolveTurn(runtime, "implementer", "implementer").harness.id,
-      ).toBe("b");
+      const scope1 = await skipsExhaustedPoolRestDispatchPart1(repo, goal);
+      await skipsExhaustedPoolRestDispatchPart2(scope1);
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function registerAliasFallbackTiersPart12(): void {
   it("expands a fallback that names another alias and keeps its pools and effort", async () => {
     const t = await tierRuntime(
       {
@@ -583,7 +638,9 @@ describe("alias fallback tiers", () => {
       cleanupFlowRepo(t.repo);
     }
   });
+}
 
+function registerAliasFallbackTiersPart13(): void {
   it("runs a named alias's ladder and exhausts only the pool that answered quota", async () => {
     const t = await tierRuntime(
       {
@@ -629,4 +686,4 @@ describe("alias fallback tiers", () => {
       cleanupFlowRepo(t.repo);
     }
   });
-});
+}

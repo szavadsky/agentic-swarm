@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -27,6 +26,17 @@ function tempDir(): string {
 }
 
 describe("FakeHarness (kernel contract)", () => {
+  fakeHarnessKernelContractPart1();
+  fakeHarnessKernelContractPart2();
+  fakeHarnessKernelContractPart3();
+  fakeHarnessKernelContractPart4();
+  fakeHarnessKernelContractPart5();
+  fakeHarnessKernelContractPart6();
+  fakeHarnessKernelContractPart7();
+  fakeHarnessKernelContractPart8();
+});
+
+function fakeHarnessKernelContractPart1() {
   it("reports its id and configured caps", async () => {
     const harness = new FakeHarness({
       id: "fake-test",
@@ -70,7 +80,9 @@ describe("FakeHarness (kernel contract)", () => {
     ]);
     expect(harness.calls).toHaveLength(1);
   });
+}
 
+function fakeHarnessKernelContractPart2() {
   it("forwards the fallback chain and reports the model actually used", async () => {
     const fallback = { id: "test/backup" };
     const harness = new FakeHarness();
@@ -100,7 +112,9 @@ describe("FakeHarness (kernel contract)", () => {
     expect(resumed.session?.id).toBe(first.session?.id);
     expect(resumed.session?.model).toEqual(model);
   });
+}
 
+function fakeHarnessKernelContractPart3() {
   it("runs file side effects in cwd and writes the outcome file", async () => {
     const dir = tempDir();
     const outcomePath = path.join(dir, "outcome.json");
@@ -130,7 +144,9 @@ describe("FakeHarness (kernel contract)", () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+}
 
+function fakeHarnessKernelContractPart4() {
   it("passes through every scripted stop, including each infra cause", async () => {
     const stops: Stop[] = [
       { kind: "cancelled" },
@@ -171,14 +187,18 @@ describe("FakeHarness (kernel contract)", () => {
       true,
     );
   });
+}
 
+function fakeHarnessKernelContractPart5() {
   it("fails loudly when a turn was not scripted", async () => {
     const harness = new FakeHarness();
     await expect(harness.turn(request())).rejects.toThrow(
       "FakeHarness: no scripted turn",
     );
   });
+}
 
+function fakeHarnessKernelContractPart6() {
   it("routes bound handlers by request identity no matter which turn calls first", async () => {
     const dir = tempDir();
     try {
@@ -216,7 +236,9 @@ describe("FakeHarness (kernel contract)", () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+}
 
+function fakeHarnessKernelContractPart7() {
   it("serves a bound fallback before an unbound script, but explicit bindings win", async () => {
     const harness = new FakeHarness();
     harness.script((req) => fakeTurnResult(req, { text: "review default" }), {
@@ -258,7 +280,9 @@ describe("FakeHarness (kernel contract)", () => {
     expect(alphaReview.text).toBe("review default");
     expect(betaReview.text).toBe("review default");
   });
+}
 
+function fakeHarnessKernelContractPart8() {
   it("fails an unmatched request naming its slug and step", async () => {
     const harness = new FakeHarness();
     harness.script((req) => fakeTurnResult(req), {
@@ -279,4 +303,4 @@ describe("FakeHarness (kernel contract)", () => {
     expect(err?.message).toContain('slug "beta"');
     expect(err?.message).toContain('step "review"');
   });
-});
+}

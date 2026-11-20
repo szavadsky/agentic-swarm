@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -8,7 +7,7 @@ import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { TIMEOUT_SETTLE_GRACE_MS } from "../../src/kernel/flow.js";
 import { ensureTaskWorktree, treeSha } from "../../src/kernel/worktree.js";
-import { task } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -18,73 +17,95 @@ import {
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 describe("turn failures — outcome, crash and wall-clock handling", () => {
+  turnFailuresOutcomeCrashWallClockPart1();
+  turnFailuresOutcomeCrashWallClockPart2();
+  turnFailuresOutcomeCrashWallClockPart3();
+  turnFailuresOutcomeCrashWallClockPart4();
+});
+
+async function timesOutNeverResolvingHarnessAfterPart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+) {
+  const harness = new FakeHarness({ id: "fake" });
+  harness.script((req) => {
+    fs.writeFileSync(path.join(req.cwd, "orphan.txt"), "before\n", "utf8");
+    return new Promise<TurnResult>(() => {});
+  });
+  // Relaunch handlers: implement completes, review approves.
+  harness.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd, "a.txt"), "a\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "a implemented" }));
+    return fakeTurnResult(req);
+  });
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "a approved", verdict: "approve" }));
+    return fakeTurnResult(req);
+  });
+  const runtime = await makeRuntime(repo, goal, { fake: harness });
+  const taskFile = task("a", { scope: ["a.txt"] });
+  await writeTask(runtime, taskFile);
+  const wtPath = (await ensureTaskWorktree(runtime, taskFile)).path;
+  const startHead = repo
+    .git(["rev-parse", "HEAD"], { cwd: wtPath })
+    .stdout.trim();
+  const startTree = await treeSha(wtPath);
+
+  const start = Date.now();
+  const result = await runDispatch(runtime, { iteration: 1 });
+  const elapsed = Date.now() - start;
+  expect(result.reason).toBe("infra");
+  // Bound plus the fixed settle grace — the hung turn holds the launch for
+  // the grace, never forever.
+  expect(elapsed).toBeGreaterThanOrEqual(TIMEOUT_SETTLE_GRACE_MS - 250);
+  expect(elapsed).toBeLessThan(TIMEOUT_SETTLE_GRACE_MS + 30_000);
+  const records = await runtime.store.listRecords();
+  const turn = records.find((r) => r.slug === "a" && r.actor === "agent");
+  expect(turn?.stop?.kind).toBe("infra");
+  if (turn?.stop?.kind === "infra") {
+    expect(turn.stop.cause).toBe("timeout");
+  }
+  expect(turn?.commit).toBeUndefined();
+  expect(turn?.tree).toBeUndefined();
+  // No commit carries the orphan's writes: the task branch never moved.
+  expect(repo.git(["rev-parse", "factory-task/demo/a"]).stdout.trim()).toBe(
+    startHead,
+  );
+  // The worktree is back at the step's start tree.
+  expect(await treeSha(wtPath)).toBe(startTree);
+
+  return { runtime, wtPath };
+}
+
+async function timesOutNeverResolvingHarnessAfterPart2(
+  scope: Awaited<ReturnType<typeof timesOutNeverResolvingHarnessAfterPart1>>,
+) {
+  const { wtPath, runtime } = scope;
+  expect(fs.existsSync(path.join(wtPath, "orphan.txt"))).toBe(false);
+
+  // The launch moves on: a relaunch redispatches and merges the task.
+  const second = await runDispatch(runtime, { iteration: 2 });
+  expect(second.reason).toBe("boundary");
+  const state = derive(
+    await runtime.store.listTasks(),
+    await runtime.store.listRecords(),
+    runtime.configs.process.flows,
+  );
+  expect(state.tasks.a!.status).toBe("merged");
+}
+
+function turnFailuresOutcomeCrashWallClockPart1() {
   it("times out a never-resolving harness after the bound plus grace and moves the launch on", async () => {
     // 30ms bound; the handler writes, then ignores the bound and never resolves.
     const { repo, goal } = setupFlowRepo({
       limits: { turnMinutes: 0.0005, concurrency: { overall: 1 } },
     });
     try {
-      const harness = new FakeHarness({ id: "fake" });
-      harness.script((req) => {
-        fs.writeFileSync(path.join(req.cwd, "orphan.txt"), "before\n", "utf8");
-        return new Promise<TurnResult>(() => {});
-      });
-      // Relaunch handlers: implement completes, review approves.
-      harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd, "a.txt"), "a\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "a implemented" }));
-        return fakeTurnResult(req);
-      });
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({ summary: "a approved", verdict: "approve" }),
-        );
-        return fakeTurnResult(req);
-      });
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      const taskFile = task("a", { scope: ["a.txt"] });
-      await writeTask(runtime, taskFile);
-      const wtPath = (await ensureTaskWorktree(runtime, taskFile)).path;
-      const startHead = repo
-        .git(["rev-parse", "HEAD"], { cwd: wtPath })
-        .stdout.trim();
-      const startTree = await treeSha(wtPath);
-
-      const start = Date.now();
-      const result = await runDispatch(runtime, { iteration: 1 });
-      const elapsed = Date.now() - start;
-      expect(result.reason).toBe("infra");
-      // Bound plus the fixed settle grace — the hung turn holds the launch for
-      // the grace, never forever.
-      expect(elapsed).toBeGreaterThanOrEqual(TIMEOUT_SETTLE_GRACE_MS - 250);
-      expect(elapsed).toBeLessThan(TIMEOUT_SETTLE_GRACE_MS + 30_000);
-      const records = await runtime.store.listRecords();
-      const turn = records.find((r) => r.slug === "a" && r.actor === "agent");
-      expect(turn?.stop?.kind).toBe("infra");
-      if (turn?.stop?.kind === "infra") {
-        expect(turn.stop.cause).toBe("timeout");
-      }
-      expect(turn?.commit).toBeUndefined();
-      expect(turn?.tree).toBeUndefined();
-      // No commit carries the orphan's writes: the task branch never moved.
-      expect(repo.git(["rev-parse", "factory-task/demo/a"]).stdout.trim()).toBe(
-        startHead,
-      );
-      // The worktree is back at the step's start tree.
-      expect(await treeSha(wtPath)).toBe(startTree);
-      expect(fs.existsSync(path.join(wtPath, "orphan.txt"))).toBe(false);
-
-      // The launch moves on: a relaunch redispatches and merges the task.
-      const second = await runDispatch(runtime, { iteration: 2 });
-      expect(second.reason).toBe("boundary");
-      const state = derive(
-        await runtime.store.listTasks(),
-        await runtime.store.listRecords(),
-        runtime.configs.process.flows,
-      );
-      expect(state.tasks.a!.status).toBe("merged");
+      const scope1 = await timesOutNeverResolvingHarnessAfterPart1(repo, goal);
+      await timesOutNeverResolvingHarnessAfterPart2(scope1);
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -111,7 +132,9 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function turnFailuresOutcomeCrashWallClockPart2() {
   it("leaves the signal alone when the turn resolves before the bound", async () => {
     const { repo, goal } = setupFlowRepo({
       limits: { concurrency: { overall: 1 } },
@@ -147,13 +170,15 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
 
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("drained");
-      expect(result.cause).toContain("wall limit");
+      expect(causeText(result.cause)).toContain("wall limit");
       expect(harness.calls).toHaveLength(0);
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function turnFailuresOutcomeCrashWallClockPart3() {
   it("bounds a task turn at the task file's turnMinutes", async () => {
     const { repo, goal } = setupFlowRepo({
       limits: { concurrency: { overall: 1 } },
@@ -192,7 +217,9 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function turnFailuresOutcomeCrashWallClockPart4() {
   it("still caps the task file's turnMinutes at the run's turnMinutes", async () => {
     const { repo, goal } = setupFlowRepo({
       limits: { turnMinutes: 5, concurrency: { overall: 1 } },
@@ -231,4 +258,4 @@ describe("turn failures — outcome, crash and wall-clock handling", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
-});
+}

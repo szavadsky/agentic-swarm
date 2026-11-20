@@ -21,16 +21,14 @@ interface StatusEntry {
  */
 export async function porcelainStatus(
   wt: string,
-  opts?: { env?: Record<string, string> },
+  opts?: { env?: Record<string, string>; pathspec?: string },
 ): Promise<StatusEntry[]> {
-  const res = await git(
-    wt,
-    ["status", "--porcelain", "-z", "--untracked-files=all"],
-    {
-      allowFail: true,
-      env: opts?.env,
-    },
-  );
+  const args = ["status", "--porcelain", "-z", "--untracked-files=all"];
+  if (opts?.pathspec) args.push("--", opts.pathspec);
+  const res = await git(wt, args, {
+    allowFail: true,
+    env: opts?.env,
+  });
   if (res.code !== 0 || !res.stdout) return [];
 
   const tokens = res.stdout.split("\0");

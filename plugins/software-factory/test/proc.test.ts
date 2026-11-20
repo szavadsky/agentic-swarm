@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -6,6 +5,14 @@ import path from "node:path";
 import { runProcess } from "../src/core/proc.js";
 
 describe("Process runner & output capping (§5, §9)", () => {
+  processRunnerOutputCapping59Part1();
+  processRunnerOutputCapping59Part2();
+  processRunnerOutputCapping59Part3();
+  processRunnerOutputCapping59Part4();
+  processRunnerOutputCapping59Part5();
+});
+
+function processRunnerOutputCapping59Part1() {
   it("executes an argument array directly", async () => {
     const res = await runProcess({
       cmd: ["echo", "hello", "world"],
@@ -40,7 +47,9 @@ describe("Process runner & output capping (§5, §9)", () => {
       fs.rmSync(home, { recursive: true, force: true });
     }
   });
+}
 
+function processRunnerOutputCapping59Part2() {
   it("pipes stdin into child process", async () => {
     const res = await runProcess({
       cmd: ["cat"],
@@ -78,7 +87,9 @@ describe("Process runner & output capping (§5, §9)", () => {
     expect(res.stdout).toContain("TAIL_END");
     expect(res.stdout).toContain("... [truncated");
   });
+}
 
+function processRunnerOutputCapping59Part3() {
   it("resolves after timeout even when a setsid grandchild holds the pipes open", async () => {
     // The child exits immediately; the detached grandchild (own session,
     // immune to the process-group SIGKILL) inherits stdout and sleeps.
@@ -112,7 +123,9 @@ describe("Process runner & output capping (§5, §9)", () => {
     expect(res.stdout).toContain("... [truncated");
     expect(Buffer.byteLength(res.stdout, "utf8")).toBeLessThan(5000000);
   });
+}
 
+function processRunnerOutputCapping59Part4() {
   it("derives TMP and TEMP from TMPDIR for the child", async () => {
     const previous = {
       TMPDIR: process.env.TMPDIR,
@@ -153,7 +166,9 @@ describe("Process runner & output capping (§5, §9)", () => {
     expect(res.timedOut).toBe(false);
     expect(res.signal).toBe("SIGTERM");
   });
+}
 
+function processRunnerOutputCapping59Part5() {
   it("a pre-aborted signal resolves without spawning", async () => {
     const controller = new AbortController();
     controller.abort();
@@ -165,4 +180,4 @@ describe("Process runner & output capping (§5, §9)", () => {
     expect(res.aborted).toBe(true);
     expect(res.code).toBeNull();
   });
-});
+}

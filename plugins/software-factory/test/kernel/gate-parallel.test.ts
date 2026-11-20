@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -53,6 +52,14 @@ function logKinds(log: string): string[] {
 }
 
 describe("gate runs across worktrees", () => {
+  gateRunsAcrossWorktreesPart1();
+  gateRunsAcrossWorktreesPart2();
+  gateRunsAcrossWorktreesPart3();
+  gateRunsAcrossWorktreesPart4();
+  gateRunsAcrossWorktreesPart5();
+});
+
+function gateRunsAcrossWorktreesPart1() {
   it("runs two worktrees' gates concurrently when no gate declares a mutex", async () => {
     const shared = sharedDir("parallel");
     const { repo, goal } = setupFlowRepo({
@@ -78,7 +85,9 @@ describe("gate runs across worktrees", () => {
       fs.rmSync(shared, { recursive: true, force: true });
     }
   }, 30_000);
+}
 
+function gateRunsAcrossWorktreesPart2() {
   it("serializes gates that name the same mutex, across worktrees", async () => {
     const shared = sharedDir("serial");
     const log = path.join(shared, "order.log");
@@ -112,7 +121,9 @@ describe("gate runs across worktrees", () => {
       fs.rmSync(shared, { recursive: true, force: true });
     }
   }, 30_000);
+}
 
+function gateRunsAcrossWorktreesPart3() {
   it("gives each worktree its own declared env dirs", async () => {
     const { repo, goal } = setupFlowRepo({
       gates: [
@@ -150,7 +161,9 @@ describe("gate runs across worktrees", () => {
       cleanupFlowRepo(repo);
     }
   }, 30_000);
+}
 
+function gateRunsAcrossWorktreesPart4() {
   it("reports an uncreatable env dir as infra, not a rejected run", async () => {
     const { repo, goal } = setupFlowRepo({
       gates: [
@@ -182,7 +195,9 @@ describe("gate runs across worktrees", () => {
       cleanupFlowRepo(repo);
     }
   }, 10_000);
+}
 
+function gateRunsAcrossWorktreesPart5() {
   it("holds mutexes in name order, so opposite declarations cannot deadlock", async () => {
     const shared = sharedDir("order");
     const log = path.join(shared, "order.log");
@@ -224,4 +239,4 @@ describe("gate runs across worktrees", () => {
       fs.rmSync(shared, { recursive: true, force: true });
     }
   }, 10_000);
-});
+}

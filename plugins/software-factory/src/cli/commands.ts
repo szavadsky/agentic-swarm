@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -27,14 +26,29 @@ import {
   validateExpectation,
 } from "../kernel/outcome.js";
 import { PLAN_CHECK_STEP, validatePlanCheck } from "../kernel/plan-check.js";
-import { isLastReviewCall } from "../kernel/review.js";
+import { existingPlans, registeredPlans } from "../kernel/plan-file.js";
+import {
+  PLAN_REVIEW_STEP,
+  validatePlanReviewDelivery,
+} from "../kernel/plan-review.js";
+import { qaOutcomeSchema } from "../kernel/qa.js";
+import { isAcceptanceStep, isLastReviewCall } from "../kernel/review.js";
+import { collectStatus, readStatus, renderStatus } from "../kernel/status.js";
 import { createFolderStore } from "../kernel/store.js";
+import { createArtifactStore } from "../kernel/store-backend.js";
 import {
   parseTaskFile,
   validateTaskFlows,
   validateTaskGraph,
 } from "../kernel/tasks.js";
-import type { ProcessConfig, State } from "../kernel/types.js";
+import {
+  outcomeSchema,
+  type ArtifactStore,
+  type ConfigBundle,
+  type ProcessConfig,
+  type State,
+} from "../kernel/types.js";
+import type { PriceSource } from "../kernel/openrouter.js";
 
 export interface InitResult {
   goalDir: string;
@@ -74,27 +88,23 @@ export async function initGoal(opts: {
   const configs = loadConfigs(repoRoot);
   const paths = resolveGoalPaths(configs, repoRoot, opts.goal);
   const taskTypes = configs.process.taskTypes;
-  const store = createFolderStore(
-    paths.goalDir,
-    path.dirname(paths.goalDir),
-    taskTypes,
-  );
+  const store = createArtifactStore(paths, taskTypes);
   await store.ensureLayout();
 
   const intentPath = path.join(paths.goalDir, "intent.md");
   let intentCreated = false;
-  if (!fs.existsSync(intentPath)) {
+  const existing = await store.readFile("intent.md");
+  if (existing === null) {
     const text = opts.intent
       ? await fs.promises.readFile(path.resolve(opts.intent), "utf8")
       : `# Goal: ${opts.goal}\n\nDescribe the outcome this goal must reach, its acceptance criteria and any constraints.\n`;
-    await writeTextAtomic(intentPath, text);
+    await store.writeFile("intent.md", text);
     intentCreated = true;
   } else if (opts.intent) {
     const incoming = await fs.promises.readFile(
       path.resolve(opts.intent),
       "utf8",
     );
-    const existing = await fs.promises.readFile(intentPath, "utf8");
     if (incoming !== existing) {
       throw new Error(
         `intent already exists at ${intentPath}; edit it instead of overwriting it`,
@@ -116,12 +126,21 @@ export interface StatusResult {
   state: State;
   lastSummary?: string;
   goalDir: string;
+  /** The status.json text `factory status --json` prints; set when asked. */
+  statusJson?: string;
+}
+
+export interface StatusOptions {
+  json?: boolean;
+  /** Price cache and fetcher for a snapshot derived before the kernel ever ran. */
+  priceSource?: PriceSource;
 }
 
 /** Derived state only: status reads tasks + records and never launches anything. */
 export async function statusGoal(
   repo: string,
   goal: string,
+  opts: StatusOptions = {},
 ): Promise<StatusResult> {
   const repoRoot = path.resolve(repo);
   const configs = loadConfigs(repoRoot);
@@ -129,11 +148,7 @@ export async function statusGoal(
   if (!fs.existsSync(paths.goalDir))
     throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
   const taskTypes = configs.process.taskTypes;
-  const store = createFolderStore(
-    paths.goalDir,
-    path.dirname(paths.goalDir),
-    taskTypes,
-  );
+  const store = createArtifactStore(paths, taskTypes);
   const state = derive(
     await store.listTasks(),
     await store.listRecords(),
@@ -152,7 +167,37 @@ export async function statusGoal(
       break;
     }
   }
-  return { goal, state, lastSummary, goalDir: paths.goalDir };
+  const statusJson = opts.json
+    ? await statusTextFor(store, configs, opts.priceSource)
+    : undefined;
+  return {
+    goal,
+    state,
+    lastSummary,
+    goalDir: paths.goalDir,
+    ...(statusJson !== undefined ? { statusJson } : {}),
+  };
+}
+
+/**
+ * The kernel's stored snapshot, or the same document derived now when no
+ * launch has written one: `--json` never answers a missing file with nothing.
+ */
+async function statusTextFor(
+  store: ArtifactStore,
+  configs: ConfigBundle,
+  priceSource: PriceSource | undefined,
+): Promise<string> {
+  const stored = await readStatus(store);
+  if (stored !== null) return stored;
+  return renderStatus(
+    await collectStatus({
+      store,
+      flows: configs.process.flows,
+      priceIds: configs.run.priceIds,
+      priceSource,
+    }),
+  );
 }
 
 export type SteerSource = { text: string; source: string };
@@ -178,11 +223,7 @@ export async function steerGoal(
   if (!fs.existsSync(paths.goalDir))
     throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
   const taskTypes = configs.process.taskTypes;
-  const store = createFolderStore(
-    paths.goalDir,
-    path.dirname(paths.goalDir),
-    taskTypes,
-  );
+  const store = createArtifactStore(paths, taskTypes);
   await store.ensureLayout();
 
   const hash = crypto
@@ -191,12 +232,12 @@ export async function steerGoal(
     .digest("hex")
     .slice(0, 8);
   const stamp = new Date().toISOString().replace(/[-:.]/g, "");
-  const rel = `mailbox/inbox/${stamp}-${hash}.md`;
-  await writeTextAtomic(
-    path.join(paths.goalDir, rel),
+  const name = `${stamp}-${hash}.md`;
+  await store.mailbox.publish(
+    name,
     source.text.endsWith("\n") ? source.text : `${source.text}\n`,
   );
-  return path.join(paths.goalDir, rel);
+  return store.pathOf({ area: "mailbox", rel: `inbox/${name}` });
 }
 
 /** One schema-enforced file kind `factory validate` recognizes, by path. */
@@ -360,14 +401,16 @@ export interface ValidateResult {
 }
 
 /**
- * The plan a record outcome was delivered against. Records live at
- * `<goal>/records/<record>/outcome.yaml`, the goal's plan at `<goal>/plan.md`;
- * a file outside a goal layout has no plan to check against.
+ * The plans a record outcome was delivered against. Records live at
+ * `<goal>/records/<record>/outcome.yaml`; the goal plan's register names every
+ * active plan. A file outside a goal layout has no plan to check against.
  */
-function recordPlanPath(abs: string): string | undefined {
+function recordPlans(abs: string): string[] {
   const recordDir = path.dirname(abs);
-  const plan = path.join(path.dirname(path.dirname(recordDir)), "plan.md");
-  return fs.existsSync(plan) ? plan : undefined;
+  const goalDir = path.dirname(path.dirname(recordDir));
+  return existingPlans(registeredPlans(goalDir)).map((plan) =>
+    fs.readFileSync(plan.path, "utf8"),
+  );
 }
 
 /**
@@ -381,18 +424,25 @@ async function outcomeResult(
   opts: ValidateFileOptions,
 ): Promise<ValidateResult> {
   try {
-    const outcome = parseOutcome(text);
     const started = startedMeta(abs);
     const step = opts.step ?? started?.step;
-    if (!step) return { findings: [], stepIndependent: true };
+    if (!step) {
+      parseOutcome(text);
+      return { findings: [], stepIndependent: true };
+    }
     const process = processForValidation(path.dirname(abs), opts.repo);
     const flows = process.flows;
+    const stepConfig = flowStepFor(step, flows);
+    const outcome = parseOutcome(
+      text,
+      stepConfig?.qa ? qaOutcomeSchema : outcomeSchema,
+    );
     const expectation = expectationForStep(step, flows);
-    const review = flowStepFor(step, flows);
     const lastCall =
-      review?.review === true &&
       started?.step === step &&
-      isLastReviewCall(review, started.round);
+      stepConfig !== undefined &&
+      isAcceptanceStep(stepConfig) &&
+      isLastReviewCall(stepConfig, started.round);
     // The outcome sits in a record directory under a `records` tree: read the
     // tree so a `debtClosed` id is checked against what ingest assigned. Any
     // other file has no records to resolve an id against, so only the step
@@ -413,11 +463,12 @@ async function outcomeResult(
       lastCall,
       ...(records ? { records, excludeRecordId: recordId } : {}),
     });
-    const plan = step === PLAN_CHECK_STEP ? recordPlanPath(abs) : undefined;
-    if (plan) {
-      findings.push(
-        ...validatePlanCheck(fs.readFileSync(plan, "utf8"), outcome),
-      );
+    if (step === PLAN_REVIEW_STEP) {
+      findings.push(...validatePlanReviewDelivery(outcome));
+    }
+    if (step === PLAN_CHECK_STEP) {
+      const plans = recordPlans(abs);
+      if (plans.length > 0) findings.push(...validatePlanCheck(plans, outcome));
     }
     return { findings: findings.map((finding) => `${abs}: ${finding}`) };
   } catch (err) {

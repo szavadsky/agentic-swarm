@@ -109,6 +109,23 @@ export function whenTurn(want: {
   };
 }
 
+/** The full boundary and flow vocabulary every direct-runtime fixture wires. */
+const DEFAULT_ALIASES: NonNullable<FlowRepoOptions["aliases"]> = {
+  architect: { harness: "fake", model: "fake-architect" },
+  pm: { harness: "fake", model: "fake-pm" },
+  digest: { harness: "fake", model: "fake-digest" },
+  implementer: { harness: "fake", model: "fake-impl" },
+  "implementer-b": { harness: "fake", model: "fake-impl-b" },
+  researcher: { harness: "fake", model: "fake-research" },
+  reviewer: { harness: "fake", model: "fake-review" },
+  qa: { harness: "fake", model: "fake-qa" },
+  steward: { harness: "fake", model: "fake-steward" },
+  "plan-checker": { harness: "fake", model: "fake-check" },
+  intent: { harness: "fake", model: "fake-intent" },
+  "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
+  "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
+};
+
 export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
   const goal = opts.goal ?? "demo";
   const repo = createTmpRepo();
@@ -129,18 +146,14 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
       ...(opts.identity ? { identity: opts.identity } : {}),
     }),
   );
-  const aliases = opts.aliases ?? {
-    architect: { harness: "fake", model: "fake-architect" },
-    pm: { harness: "fake", model: "fake-pm" },
-    digest: { harness: "fake", model: "fake-digest" },
-    implementer: { harness: "fake", model: "fake-impl" },
-    "implementer-b": { harness: "fake", model: "fake-impl-b" },
-    researcher: { harness: "fake", model: "fake-research" },
-    reviewer: { harness: "fake", model: "fake-review" },
-    steward: { harness: "fake", model: "fake-steward" },
-    "plan-checker": { harness: "fake", model: "fake-check" },
-    "plan-reviewer": { harness: "fake", model: "fake-plan-review" },
-  };
+  // The package default flow includes QA; a test that narrows its aliases
+  // keeps the neutral QA binding rather than failing pre-flight for it.
+  const aliases = opts.aliases
+    ? {
+        qa: opts.aliases.qa ?? opts.aliases.reviewer ?? DEFAULT_ALIASES.qa!,
+        ...opts.aliases,
+      }
+    : DEFAULT_ALIASES;
   repo.writeFile(
     ".factory/run.yaml",
     yaml.stringify({
@@ -177,6 +190,11 @@ export async function makeRuntime(
   for (const harness of Object.values(harnesses))
     scriptKernelRoleFallbacks(harness);
   const configs = loadConfigs(repo.dir);
+  // A test repo written before QA may name only its reviewer; the package
+  // default flow still needs the alias, so mirror the reviewer's binding.
+  if (!configs.run.aliases.qa && configs.run.aliases.reviewer) {
+    configs.run.aliases.qa = configs.run.aliases.reviewer;
+  }
   const paths = resolveGoalPaths(configs, repo.dir, goal);
   const store = createFolderStore(
     paths.goalDir,

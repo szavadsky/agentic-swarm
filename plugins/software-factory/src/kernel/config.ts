@@ -9,6 +9,8 @@ import { acpxConfigSchema } from "../harness/acpx/config.js";
 import { type Finding, formatFindings } from "./findings.js";
 import { DEFAULT_POOL_RESET_MINUTES } from "./quota-pools.js";
 import type {
+  ArtifactBackendConfig,
+  ArtifactLocation,
   BoundaryStep,
   ConfigBundle,
   ConfigFiles,
@@ -26,20 +28,24 @@ const identitySchema = z
   .object({ name: z.string().min(1), email: z.string().min(1) })
   .strict();
 /**
- * A gate's scratch directory: relative to its worktree, so the same declaration
- * gives every worktree its own directory. Absolute, `~` and `..` paths would
- * let two concurrent gate runs share one, which is what `env` exists to prevent.
+ * A gate path that must stay inside its worktree. Absolute, `~` and `..`
+ * paths would let two concurrent gate runs share one directory (which is what
+ * `env` exists to prevent) or write and read outside the tree.
  */
-const gateEnvDirSchema = z
-  .string()
-  .min(1)
-  .refine(
-    (value) =>
-      !path.isAbsolute(value) &&
-      !value.startsWith("~") &&
-      !value.split(/[\\/]/).includes(".."),
-    { message: "env dirs must be worktree-relative (no absolute, ~ or ..)" },
-  );
+function worktreePath(label: string) {
+  return z
+    .string()
+    .min(1)
+    .refine(
+      (value) =>
+        !path.isAbsolute(value) &&
+        !value.startsWith("~") &&
+        !value.split(/[\\/]/).includes(".."),
+      { message: `${label} must be worktree-relative (no absolute, ~ or ..)` },
+    );
+}
+const gateEnvDirSchema = worktreePath("env dirs");
+const gateJunitPathSchema = worktreePath("junit path");
 const gateSchema = z
   .object({
     id: z.string().min(1),
@@ -50,7 +56,7 @@ const gateSchema = z
       .optional(),
     format: z
       .object({
-        junit: z.string().min(1).optional(),
+        junit: gateJunitPathSchema.optional(),
         pattern: z.enum(["pytest", "jest", "cargo"]).optional(),
       })
       .strict()
@@ -66,6 +72,22 @@ export const repoConfigSchema = z
   .object({
     baseBranch: z.string().min(1).default("main"),
     artifactRoot: z.string().min(1).default(".factory/artifacts"),
+    /** Artifact backend by name; absent keeps the plain gitignored folder. */
+    artifacts: z
+      .object({
+        backend: z.enum(["folder", "same-repo", "git-repo"]).default("folder"),
+        root: z.string().min(1).optional(),
+        remote: z.string().min(1).optional(),
+      })
+      .strict()
+      .refine(
+        (value) => value.remote === undefined || value.backend === "git-repo",
+        {
+          message: "remote is only valid for the git-repo backend",
+          path: ["remote"],
+        },
+      )
+      .optional(),
     identity: identitySchema.optional(),
     setup: z.array(z.string().min(1)).default([]),
     gates: z.array(gateSchema).default([]),
@@ -134,7 +156,11 @@ export const flowStepSchema = z
     /** Product the turn must deliver; defaults by expectation, else `outcome`. */
     deliverable: z.string().min(1).optional(),
     review: z.boolean().default(false),
-    /** Review and checks steps: change requests honored before the last call. */
+    /** QA acceptance step: its own schema, verdict and gate handoff. */
+    qa: z.boolean().default(false),
+    /** Review adjudication: `all` cycles or only the last change-bearing one. */
+    adjudicate: z.enum(["last", "all"]).optional(),
+    /** Review, QA and checks steps: change requests honored before the last call. */
     changeRequests: z.number().int().nonnegative().optional(),
     /** Aliases later attempts run on after failure-kind launches, in order. */
     alternates: z.array(z.string().min(1)).optional(),
@@ -154,13 +180,47 @@ export const flowStepSchema = z
   .refine((step) => step.alternates === undefined || step.alias !== undefined, {
     message: "alternates need a step alias to alternate with",
     path: ["alternates"],
-  });
+  })
+  .refine((step) => !(step.review && step.qa), {
+    message: "a step is either a review or a QA acceptance step, not both",
+    path: ["qa"],
+  })
+  .refine((step) => !(step.adjudicate && (step.review || step.qa)), {
+    message:
+      "an adjudicate step is neither a review nor a QA step: it re-judges the review before it",
+    path: ["adjudicate"],
+  })
+  .refine(
+    (step) =>
+      step.adjudicate === undefined || step.changeRequests === undefined,
+    {
+      message:
+        "an adjudicate step takes no changeRequests: the review it follows owns the bound",
+      path: ["changeRequests"],
+    },
+  );
 
 export const flowSchema = z
   .object({
     steps: z.array(flowStepSchema).min(1),
   })
-  .strict();
+  .strict()
+  .refine(
+    (flow) => {
+      const steps = flow.steps.filter(
+        (step) => step.id !== "checks" && step.id !== "resolve",
+      );
+      return steps.every(
+        (step, index) =>
+          step.adjudicate === undefined || steps[index - 1]?.review === true,
+      );
+    },
+    {
+      message:
+        "an adjudicate step must directly follow a review step: it adjudicates that review's findings",
+      path: ["steps"],
+    },
+  );
 
 /**
  * One task type: the flow a task runs, whether it is a spike or development
@@ -193,12 +253,74 @@ export const boundaryOverrideSchema = z
   )
   .strict();
 
+/**
+ * An architecture prompt: the reviewers supply the aliases, the architect
+ * boundary step supplies the return's alias.
+ */
+const promptSpecSchema = turnSchema.omit({ alias: true });
+
+/** The plan review flow: its prompt, reviewers, and the architect's return. */
+export const architectureSchema = z
+  .object({
+    planReview: promptSpecSchema,
+    reviewers: z.array(z.string().min(1)).min(1),
+    architectReturn: z.enum(["on-technical-concerns", "never"]),
+    planReturn: promptSpecSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (architecture) =>
+      architecture.architectReturn === "never" ||
+      architecture.planReturn !== undefined,
+    {
+      message: "an architect return needs a planReturn prompt",
+      path: ["planReturn"],
+    },
+  );
+
+/** A repo override may retarget one architecture key without restating the rest. */
+export const architectureOverrideSchema = z
+  .object({
+    planReview: promptSpecSchema.optional(),
+    reviewers: z.array(z.string().min(1)).min(1).optional(),
+    architectReturn: z.enum(["on-technical-concerns", "never"]).optional(),
+    planReturn: promptSpecSchema.optional(),
+  })
+  .strict();
+
+/** The hierarchy knob: depth 1 (the norm) or 2, and the epic architect's prompt. */
+export const hierarchySchema = z
+  .object({
+    depth: z.union([z.literal(1), z.literal(2)]),
+    subarchitect: promptSpecSchema,
+  })
+  .strict();
+
+/** A repo override may set the depth without restating the prompt. */
+export const hierarchyOverrideSchema = z
+  .object({
+    depth: z.union([z.literal(1), z.literal(2)]).optional(),
+    subarchitect: promptSpecSchema.optional(),
+  })
+  .strict();
+
 /** Process layer: package default deep-merged with an optional repo override. */
 export const processConfigSchema = z
   .object({
     flows: z.record(z.string(), flowSchema).default({}),
     taskTypes: z.record(z.string(), taskTypeSchema).default({}),
     boundary: boundarySchema,
+    /** The plan review flow that completes before the PM derives tasks. */
+    architecture: architectureSchema,
+    /** Depth and the epic architect's prompt; depth 1 is one architect. */
+    hierarchy: hierarchySchema.default({
+      depth: 1,
+      subarchitect: {
+        prompt: "subarchitect",
+        repairPrompt: "architect-repair",
+        deliverable: "epic plan edit or stop decision",
+      },
+    }),
     /** Repair template a step renders when it names none. */
     repairPrompt: z.string().min(1).optional(),
     reminders: z.number().int().nonnegative().default(1),
@@ -225,6 +347,8 @@ export const processConfigSchema = z
  */
 export const processOverrideSchema = processConfigSchema.extend({
   boundary: boundaryOverrideSchema.optional(),
+  architecture: architectureOverrideSchema.optional(),
+  hierarchy: hierarchyOverrideSchema.optional(),
 });
 
 /** Run layer: not tracked; aliases, price ids, limits, session store, scout pin. */
@@ -296,8 +420,9 @@ export const harnessEntrySchema = z
      */
     binary: z.string().min(1).optional(),
     /**
-     * Adapter-specific keys, never interpreted by the kernel: acpx reads
-     * `args`/`env`, omp merges the rest into its launch overlay.
+     * Adapter-specific keys, opaque to the kernel except pre-flight's shape
+     * check of the acpx `args`/`env`; omp merges the rest into its launch
+     * overlay.
      */
     options: z.record(z.string(), z.unknown()).optional(),
   })
@@ -855,6 +980,62 @@ function legacyCheckout(
     : undefined;
 }
 
+/** True when `child` is strictly below `parent`; symlinks are not resolved. */
+function isInside(child: string, parent: string): boolean {
+  const rel = path.relative(parent, child);
+  return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
+/**
+ * A local path remote resolves against the repo; a scheme or scp-style remote
+ * is passed through for git to handle.
+ */
+function resolveRemote(repoRoot: string, remote: string): string {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(remote) || /^[^/]+@[^:]+:/.test(remote))
+    return remote;
+  return path.resolve(repoRoot, expandHome(remote));
+}
+
+/**
+ * The configured backend resolved to one root. A same-repo store must live
+ * inside the repository it is committed to; a separate repository must not sit
+ * inside the main checkout, where a stray `git add` would absorb it.
+ */
+function resolveArtifacts(
+  configs: ConfigBundle,
+  root: string,
+  worktreeRoot: string,
+): ArtifactLocation {
+  const configured: ArtifactBackendConfig = configs.repo.artifacts ?? {
+    backend: "folder",
+  };
+  const fallback =
+    configured.backend === "git-repo"
+      ? path.join(worktreeRoot, "artifacts")
+      : configs.repo.artifactRoot;
+  const location = fromRoot(root, configured.root ?? fallback);
+  if (configured.backend === "same-repo" && !isInside(location, root)) {
+    throw new Error(
+      `artifacts.root "${location}" must be inside the repository for the same-repo backend`,
+    );
+  }
+  if (
+    configured.backend === "git-repo" &&
+    (location === root || isInside(location, root))
+  ) {
+    throw new Error(
+      `artifacts.root "${location}" must be outside the repository for the git-repo backend`,
+    );
+  }
+  return {
+    backend: configured.backend,
+    root: location,
+    ...(configured.remote
+      ? { remote: resolveRemote(root, configured.remote) }
+      : {}),
+  };
+}
+
 export function resolveGoalPaths(
   configs: ConfigBundle,
   repoRoot: string,
@@ -870,12 +1051,10 @@ export function resolveGoalPaths(
     ? fromRoot(root, configs.run.worktreeRoot)
     : path.resolve(root, "..", ".factory-worktrees", path.basename(root));
   const worktreeRoot = path.join(baseRoot, repositoryId(root));
+  const artifacts = resolveArtifacts(configs, root, worktreeRoot);
   return {
     repoRoot: root,
-    goalDir: fromRoot(
-      root,
-      path.join(expandHome(configs.repo.artifactRoot), goal),
-    ),
+    goalDir: path.join(artifacts.root, goal),
     goalCheckout:
       legacyCheckout(baseRoot, goal, root) ?? path.join(worktreeRoot, goal),
     integrationBranch: `factory/${goal}`,
@@ -883,6 +1062,7 @@ export function resolveGoalPaths(
     sessionsDir: configs.run.sessions.dir
       ? fromRoot(root, configs.run.sessions.dir)
       : path.join(worktreeRoot, ".sessions"),
+    artifacts,
   };
 }
 

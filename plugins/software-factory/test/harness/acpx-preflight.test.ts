@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -45,9 +44,12 @@ function runConfig(spec: RunSpec = {}): string {
   implementer-b: { harness: opencode, model: model-a }
   researcher: { harness: opencode, model: model-a }
   reviewer: { harness: opencode, model: model-a${spec.reviewerEffort ? `, effort: ${spec.reviewerEffort}` : ""} }
+  qa: { harness: opencode, model: model-a }
   steward: { harness: opencode, model: model-a }
   plan-checker: { harness: opencode, model: model-a }
+  intent: { harness: opencode, model: model-a }
   plan-reviewer: { harness: opencode, model: model-a }
+  pack-preparer: { harness: opencode, model: model-a }
 harnesses:
   opencode:
     acpx:
@@ -133,120 +135,11 @@ function sessionCalls(stub: AcpxStub, verb: "new" | "show" | "close") {
 }
 
 describe("acpx live pre-flight", () => {
-  it("rejects max against the model's live values", async () => {
-    const stub = createAcpxStub({
-      models: LIVE_MODELS,
-      effortConfigId: "effort",
-    });
-    const failed = await fixture(runConfig({ pmEffort: "max" }), stub);
-    try {
-      const err = await refusal(failed.input);
-      expect(err.findings).toContainEqual(
-        expect.objectContaining({
-          key: "aliases.pm.effort",
-          file: expect.stringContaining(".factory/run-acpx.yaml"),
-        }),
-      );
-      expect(err.report).toContain(
-        'effort "max" is not supported; model accepts: none, high, default',
-      );
-      expect(stub.sessionNames()).toEqual([]);
-    } finally {
-      failed.repo.cleanup();
-    }
-  });
-
-  it("refuses highest effort", async () => {
-    const stub = createAcpxStub({
-      models: LIVE_MODELS,
-      effortConfigId: "effort",
-    });
-    const failed = await fixture(
-      runConfig({ pmEffort: "high", reviewerEffort: "highest" }),
-      stub,
-    );
-    try {
-      const err = await refusal(failed.input);
-      expect(err.findings).toContainEqual(
-        expect.objectContaining({
-          key: "aliases.reviewer.effort",
-          file: expect.stringContaining(".factory/run-acpx.yaml"),
-        }),
-      );
-      expect(err.report).toContain('effort "highest" is forbidden');
-    } finally {
-      failed.repo.cleanup();
-    }
-  });
-
-  it("rejects an unlisted model and names the live model list", async () => {
-    const stub = createAcpxStub({
-      models: LIVE_MODELS,
-      effortConfigId: "effort",
-    });
-    const f = await fixture(runConfig({ pmModel: "ghost-model" }), stub);
-    try {
-      const err = await refusal(f.input);
-      expect(err.findings).toContainEqual(
-        expect.objectContaining({
-          key: "aliases.pm.model",
-          message:
-            'model "ghost-model" is not listed by harness "opencode"; available models: model-a, model-b',
-        }),
-      );
-      expect(err.report).toContain("available models: model-a, model-b");
-      expect(stub.sessionNames()).toEqual([]);
-    } finally {
-      f.repo.cleanup();
-    }
-  });
-
-  it("refuses highest in fallbacks", async () => {
-    const stub = createAcpxStub({
-      models: LIVE_MODELS,
-      effortConfigId: "effort",
-    });
-    const text = `aliases:
-  pm: { harness: opencode, model: model-a, fallbacks: [{ model: model-b, effort: highest }] }
-  digest: { harness: opencode, model: model-a }
-  implementer: { harness: opencode, model: model-a }
-  implementer-b: { harness: opencode, model: model-b }
-  researcher: { harness: opencode, model: model-a }
-  reviewer: { harness: opencode, model: model-a }
-  steward: { harness: opencode, model: model-a }
-  plan-checker: { harness: opencode, model: model-a }
-  plan-reviewer: { harness: opencode, model: model-a }
-harnesses:
-  opencode:
-    acpx:
-      agent: opencode
-      effort: { configId: effort }
-limits: { concurrency: { overall: 2 }, iterations: 1 }
-`;
-    const f = await fixture(text, stub);
-    try {
-      const err = await refusal(f.input);
-      expect(err.report).toContain('effort "highest" is forbidden');
-    } finally {
-      f.repo.cleanup();
-    }
-  });
-
-  it("splits a declared model suffix, probes the wire id, and validates its live level", async () => {
-    const stub = createAcpxStub({
-      models: LIVE_MODELS,
-      effortConfigId: "effort",
-    });
-    const f = await fixture(runConfig({ pmModel: "model-a-high" }), stub);
-    try {
-      const result = await preflight(f.input);
-      expect(result.aliases.pm).toBe("high");
-      const create = sessionCalls(stub, "new")[0]!;
-      expect(create[create.indexOf("--model") + 1]).toBe("model-a");
-    } finally {
-      f.repo.cleanup();
-    }
-  });
+  acpxLivePreFlightPart1();
+  acpxLivePreFlightPart2();
+  acpxLivePreFlightPart3();
+  acpxLivePreFlightPart4();
+  acpxLivePreFlightPart5();
 });
 
 describe("acpx harness registry", () => {
@@ -289,3 +182,131 @@ describe("acpx harness registry", () => {
     expect(binaries.plain!.length).toBeGreaterThan(0);
   });
 });
+
+function acpxLivePreFlightPart1() {
+  it("rejects max against the model's live values", async () => {
+    const stub = createAcpxStub({
+      models: LIVE_MODELS,
+      effortConfigId: "effort",
+    });
+    const failed = await fixture(runConfig({ pmEffort: "max" }), stub);
+    try {
+      const err = await refusal(failed.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "aliases.pm.effort",
+          file: expect.stringContaining(".factory/run-acpx.yaml"),
+        }),
+      );
+      expect(err.report).toContain(
+        'effort "max" is not supported; model accepts: none, high, default',
+      );
+      expect(stub.sessionNames()).toEqual([]);
+    } finally {
+      failed.repo.cleanup();
+    }
+  });
+}
+
+function acpxLivePreFlightPart2() {
+  it("refuses highest effort", async () => {
+    const stub = createAcpxStub({
+      models: LIVE_MODELS,
+      effortConfigId: "effort",
+    });
+    const failed = await fixture(
+      runConfig({ pmEffort: "high", reviewerEffort: "highest" }),
+      stub,
+    );
+    try {
+      const err = await refusal(failed.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "aliases.reviewer.effort",
+          file: expect.stringContaining(".factory/run-acpx.yaml"),
+        }),
+      );
+      expect(err.report).toContain('effort "highest" is forbidden');
+    } finally {
+      failed.repo.cleanup();
+    }
+  });
+}
+
+function acpxLivePreFlightPart3() {
+  it("rejects an unlisted model and names the live model list", async () => {
+    const stub = createAcpxStub({
+      models: LIVE_MODELS,
+      effortConfigId: "effort",
+    });
+    const f = await fixture(runConfig({ pmModel: "ghost-model" }), stub);
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "aliases.pm.model",
+          message:
+            'model "ghost-model" is not listed by harness "opencode"; available models: model-a, model-b',
+        }),
+      );
+      expect(err.report).toContain("available models: model-a, model-b");
+      expect(stub.sessionNames()).toEqual([]);
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+}
+
+function acpxLivePreFlightPart4() {
+  it("refuses highest in fallbacks", async () => {
+    const stub = createAcpxStub({
+      models: LIVE_MODELS,
+      effortConfigId: "effort",
+    });
+    const text = `aliases:
+  pm: { harness: opencode, model: model-a, fallbacks: [{ model: model-b, effort: highest }] }
+  digest: { harness: opencode, model: model-a }
+  implementer: { harness: opencode, model: model-a }
+  implementer-b: { harness: opencode, model: model-b }
+  researcher: { harness: opencode, model: model-a }
+  reviewer: { harness: opencode, model: model-a }
+  qa: { harness: opencode, model: model-a }
+  steward: { harness: opencode, model: model-a }
+  plan-checker: { harness: opencode, model: model-a }
+  intent: { harness: opencode, model: model-a }
+  plan-reviewer: { harness: opencode, model: model-a }
+  pack-preparer: { harness: opencode, model: model-a }
+harnesses:
+  opencode:
+    acpx:
+      agent: opencode
+      effort: { configId: effort }
+limits: { concurrency: { overall: 2 }, iterations: 1 }
+`;
+    const f = await fixture(text, stub);
+    try {
+      const err = await refusal(f.input);
+      expect(err.report).toContain('effort "highest" is forbidden');
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+}
+
+function acpxLivePreFlightPart5() {
+  it("splits a declared model suffix, probes the wire id, and validates its live level", async () => {
+    const stub = createAcpxStub({
+      models: LIVE_MODELS,
+      effortConfigId: "effort",
+    });
+    const f = await fixture(runConfig({ pmModel: "model-a-high" }), stub);
+    try {
+      const result = await preflight(f.input);
+      expect(result.aliases.pm).toBe("high");
+      const create = sessionCalls(stub, "new")[0]!;
+      expect(create[create.indexOf("--model") + 1]).toBe("model-a");
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+}

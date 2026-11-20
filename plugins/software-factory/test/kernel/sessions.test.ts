@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -14,6 +13,11 @@ function tmpRoot(): string {
 }
 
 describe("launch session store", () => {
+  registerLaunchSessionStorePart1();
+  registerLaunchSessionStorePart2();
+});
+
+function registerLaunchSessionStorePart1(): void {
   it("keeps the last N launches per goal and writes a launch marker", async () => {
     const root = tmpRoot();
     try {
@@ -57,7 +61,9 @@ describe("launch session store", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerLaunchSessionStorePart2(): void {
   it("creates unique sortable ids for launches in the same millisecond", () => {
     const now = new Date(Date.UTC(2026, 0, 1, 1, 2, 3, 4));
     const ids = new Set(Array.from({ length: 20 }, () => newLaunchId(now)));
@@ -80,4 +86,4 @@ describe("launch session store", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
-});
+}

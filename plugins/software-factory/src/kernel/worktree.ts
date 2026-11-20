@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -6,8 +5,11 @@ import { runWorktreeSetup, type SetupResult } from "../core/checks/setup.js";
 import { isAncestor } from "../core/git/commit.js";
 import { GitError, git } from "../core/git/exec.js";
 import { parseWorktreeList } from "../core/git/status.js";
+import { isPlanPath } from "./plan-file.js";
 import { sealedRecordDirs } from "./store.js";
+import { makeCause } from "./cause.js";
 import type {
+  Cause,
   DeclaredWrite,
   KernelRuntime,
   StepRecord,
@@ -211,15 +213,14 @@ async function followBase(runtime: KernelRuntime): Promise<void> {
  * Creates (or recovers) the stable integration checkout. It is the only
  * worktree the merge queue moves; task worktrees are disposable.
  */
-export async function prepareIntegrationCheckout(
+/** Removes this goal's leftover task worktrees and merge scratch. */
+async function removeOwnWorktrees(
   runtime: KernelRuntime,
+  goalCheckout: string,
+  ownTasks: string,
+  ownScratch: string,
 ): Promise<void> {
-  const { repoRoot, goalCheckout, integrationBranch } = runtime.paths;
-  const goal = path.basename(runtime.paths.goalDir);
-  const ownTasks = path.join(goalWorktreeRoot(runtime), `${goal}-tasks`);
-  const ownScratch = mergeScratchPath(runtime);
-  fs.mkdirSync(goalWorktreeRoot(runtime), { recursive: true });
-
+  const { repoRoot } = runtime.paths;
   // Recovery owns this goal's worktrees only: a sibling goal's checkout and
   // task worktrees, and another repo sharing the root, are not ours to remove.
   for (const wt of await registeredWorktrees(runtime)) {
@@ -237,7 +238,15 @@ export async function prepareIntegrationCheckout(
       allowFail: true,
     });
   }
+}
 
+/** Creates the integration worktree, or recreates it on the wrong branch. */
+async function ensureIntegrationCheckout(
+  runtime: KernelRuntime,
+  goalCheckout: string,
+  integrationBranch: string,
+): Promise<void> {
+  const { repoRoot } = runtime.paths;
   const registered = (await registeredWorktrees(runtime)).map((p) =>
     path.resolve(p),
   );
@@ -271,6 +280,22 @@ export async function prepareIntegrationCheckout(
     });
     await git(repoRoot, ["worktree", "add", goalCheckout, integrationBranch]);
   }
+}
+
+/**
+ * Creates (or recovers) the stable integration checkout. It is the only
+ * worktree the merge queue moves; task worktrees are disposable.
+ */
+export async function prepareIntegrationCheckout(
+  runtime: KernelRuntime,
+): Promise<void> {
+  const { goalCheckout, integrationBranch } = runtime.paths;
+  const goal = path.basename(runtime.paths.goalDir);
+  const ownTasks = path.join(goalWorktreeRoot(runtime), `${goal}-tasks`);
+  const ownScratch = mergeScratchPath(runtime);
+  fs.mkdirSync(goalWorktreeRoot(runtime), { recursive: true });
+  await removeOwnWorktrees(runtime, goalCheckout, ownTasks, ownScratch);
+  await ensureIntegrationCheckout(runtime, goalCheckout, integrationBranch);
   // A crashed merge must not leave staged or conflicted state for the next launch.
   await git(goalCheckout, ["reset", "--hard", "HEAD"]);
   await git(goalCheckout, ["clean", "-fd"]);
@@ -309,6 +334,109 @@ async function setupMarker(cwd: string): Promise<string | null> {
  * the park are present, and review diffs from the integration head so the
  * carried parked commits are in the diff. `startPoint` is that head.
  */
+interface WorktreeCreation {
+  startPoint: string;
+  conflict?: { paths: string[]; head: string };
+}
+
+/** Adds the task worktree and, for a continuation, merges the head into it. */
+async function createTaskWorktree(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  wtPath: string,
+  branch: string,
+  startSha: string,
+  startPoint: string,
+): Promise<WorktreeCreation> {
+  if (fs.existsSync(wtPath)) {
+    fs.rmSync(wtPath, { recursive: true, force: true });
+  }
+  fs.mkdirSync(path.dirname(wtPath), { recursive: true });
+  let current = startPoint;
+  let conflict: WorktreeCreation["conflict"];
+  await runtime.repo.writeLock.runExclusive(async () => {
+    if (await branchExists(runtime, branch)) {
+      await git(runtime.paths.repoRoot, ["worktree", "add", wtPath, branch]);
+    } else {
+      await git(runtime.paths.repoRoot, [
+        "worktree",
+        "add",
+        "-b",
+        branch,
+        wtPath,
+        startSha,
+      ]);
+    }
+    if (!task.base) return;
+    // The parked branch is never rewritten: only this continuation branch moves.
+    // A conflict stays in progress for the first turn to resolve instead of
+    // parking before it; the caller decides (first turn resolves, later parks).
+    current = await integrationHead(runtime);
+    const attempt = await mergeRef(
+      wtPath,
+      current,
+      runtime.repo.identityEnv(),
+      {
+        leaveConflict: true,
+      },
+    );
+    if (!attempt.ok) conflict = { paths: attempt.paths, head: current };
+  });
+  return { startPoint: current, conflict };
+}
+
+/** Runs the repo's setup commands once per worktree, unless its marker holds. */
+async function ensureSetup(
+  runtime: KernelRuntime,
+  wtPath: string,
+  created: boolean,
+): Promise<SetupResult | undefined> {
+  if (runtime.configs.repo.setup.length === 0) return undefined;
+  const marker = await setupMarker(wtPath);
+  if (!created && marker && fs.existsSync(marker)) return undefined;
+  const setup = await runWorktreeSetup({
+    commands: runtime.configs.repo.setup,
+    cwd: wtPath,
+  });
+  if (setup.ok && marker) {
+    fs.writeFileSync(marker, new Date().toISOString(), "utf8");
+  }
+  return setup;
+}
+
+/** The result for a task branch whose start point does not exist. */
+function missingBranchWorktree(
+  wtPath: string,
+  branch: string,
+  branchPoint: string,
+): EnsuredWorktree {
+  return {
+    path: wtPath,
+    branch,
+    created: false,
+    startPoint: branchPoint,
+    error: `branch "${branchPoint}" does not exist`,
+  };
+}
+
+/** The result for a created worktree whose setup failed. */
+function failedSetupWorktree(
+  wtPath: string,
+  branch: string,
+  created: boolean,
+  startPoint: string,
+  setup: SetupResult,
+): EnsuredWorktree {
+  return {
+    path: wtPath,
+    branch,
+    created,
+    startPoint,
+    setup,
+    error: setup.error,
+  };
+}
+
 export async function ensureTaskWorktree(
   runtime: KernelRuntime,
   task: TaskFile,
@@ -320,15 +448,8 @@ export async function ensureTaskWorktree(
     : runtime.paths.integrationBranch;
 
   const branchPointExists = await branchExists(runtime, branchPoint);
-  if (!branchPointExists) {
-    return {
-      path: wtPath,
-      branch,
-      created: false,
-      startPoint: branchPoint,
-      error: `branch "${branchPoint}" does not exist`,
-    };
-  }
+  if (!branchPointExists)
+    return missingBranchWorktree(wtPath, branch, branchPoint);
   const startSha = (
     await git(runtime.paths.repoRoot, ["rev-parse", branchPoint])
   ).stdout.trim();
@@ -338,61 +459,25 @@ export async function ensureTaskWorktree(
     path.resolve(p),
   );
   let created = false;
-  let conflict: { paths: string[]; head: string } | undefined;
+  let conflict: WorktreeCreation["conflict"];
   if (!registered.includes(path.resolve(wtPath))) {
-    if (fs.existsSync(wtPath))
-      fs.rmSync(wtPath, { recursive: true, force: true });
-    fs.mkdirSync(path.dirname(wtPath), { recursive: true });
-    await runtime.repo.writeLock.runExclusive(async () => {
-      if (await branchExists(runtime, branch)) {
-        await git(runtime.paths.repoRoot, ["worktree", "add", wtPath, branch]);
-      } else {
-        await git(runtime.paths.repoRoot, [
-          "worktree",
-          "add",
-          "-b",
-          branch,
-          wtPath,
-          startSha,
-        ]);
-      }
-      if (!task.base) return;
-      // The parked branch is never rewritten: only this continuation branch moves.
-      // A conflict stays in progress for the first turn to resolve instead of
-      // parking before it; the caller decides (first turn resolves, later parks).
-      startPoint = await integrationHead(runtime);
-      const attempt = await mergeRef(
-        wtPath,
-        startPoint,
-        runtime.repo.identityEnv(),
-        { leaveConflict: true },
-      );
-      if (!attempt.ok) conflict = { paths: attempt.paths, head: startPoint };
-    });
+    const worktree = await createTaskWorktree(
+      runtime,
+      task,
+      wtPath,
+      branch,
+      startSha,
+      startPoint,
+    );
+    startPoint = worktree.startPoint;
+    conflict = worktree.conflict;
     created = true;
   }
 
-  let setup: SetupResult | undefined;
-  if (runtime.configs.repo.setup.length > 0) {
-    const marker = await setupMarker(wtPath);
-    if (created || !marker || !fs.existsSync(marker)) {
-      setup = await runWorktreeSetup({
-        commands: runtime.configs.repo.setup,
-        cwd: wtPath,
-      });
-      if (!setup.ok) {
-        if (conflict) await abortInFlightMerge(wtPath);
-        return {
-          path: wtPath,
-          branch,
-          created,
-          startPoint,
-          setup,
-          error: setup.error,
-        };
-      }
-      if (marker) fs.writeFileSync(marker, new Date().toISOString(), "utf8");
-    }
+  const setup = await ensureSetup(runtime, wtPath, created);
+  if (setup && !setup.ok) {
+    if (conflict) await abortInFlightMerge(wtPath);
+    return failedSetupWorktree(wtPath, branch, created, startPoint, setup);
   }
   return {
     path: wtPath,
@@ -415,6 +500,17 @@ interface WorktreeState {
   status: string;
 }
 
+export interface ContainmentOptions {
+  /**
+   * Task turns check the goal artifacts and read merge records to explain a
+   * checkout move. A boundary turn runs in the integration checkout under the
+   * merge lock and owns the goal artifacts (the plan, the tasks, the digest),
+   * so it skips both the artifact state and the merge-record lookup; the
+   * checkout identity checks still run.
+   */
+  mode?: "task" | "boundary";
+}
+
 export interface ContainmentSnapshot {
   branch: string;
   /** Wall-clock start; a record spanning it may still write goal artifacts. */
@@ -425,7 +521,10 @@ export interface ContainmentSnapshot {
   maxSeq: number;
   /** Record directories already sealed at the snapshot; their files are history. */
   sealed: ReadonlySet<string>;
-  /** Every goal artifact except the operator's mailbox channels: path -> hash. */
+  /**
+   * Every goal artifact except the operator's mailbox channels: path -> hash.
+   * Empty in boundary mode, which skips the artifact state.
+   */
   artifacts: ReadonlyMap<string, string>;
   /** The integration branch ref; the merge queue advances it after a merge record. */
   integration: string;
@@ -433,6 +532,27 @@ export interface ContainmentSnapshot {
   root: WorktreeState;
   /** The integration checkout; the merge queue moves its HEAD legitimately. */
   checkout: WorktreeState;
+}
+
+/**
+ * Porcelain lines outside the artifact root. A same-repo artifact commit
+ * changes the main checkout's HEAD and dirty set; both are the store's writes,
+ * not the operator's, so containment compares only what lies outside the store.
+ */
+function statusOutsideArtifacts(
+  status: string,
+  repoRoot: string,
+  artifactRoot: string,
+): string {
+  const rel = path.relative(repoRoot, artifactRoot).split(path.sep).join("/");
+  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) return status;
+  return status
+    .split("\n")
+    .filter((line) => {
+      const file = line.slice(3);
+      return file !== rel && !file.startsWith(`${rel}/`);
+    })
+    .join("\n");
 }
 
 async function worktreeState(dir: string): Promise<WorktreeState> {
@@ -458,38 +578,51 @@ const OPERATOR_CHANNELS = new Set([
   "mailbox/outbox",
 ]);
 
+/** Directory entries, or undefined when the directory vanished. */
+function readEntries(abs: string): fs.Dirent[] | undefined {
+  try {
+    return fs.readdirSync(abs, { withFileTypes: true });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw err;
+  }
+}
+
+/** A file's hash, or undefined when another writer removed it. */
+function fileHash(abs: string): string | undefined {
+  try {
+    return createHash("sha256").update(fs.readFileSync(abs)).digest("hex");
+  } catch (err) {
+    // Another writer may remove a file between readdir and read.
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw err;
+  }
+}
+
+function walkArtifacts(
+  abs: string,
+  rel: string,
+  files: Map<string, string>,
+): void {
+  const entries = readEntries(abs);
+  if (!entries) return;
+  for (const entry of entries) {
+    const childRel = rel === "" ? entry.name : `${rel}/${entry.name}`;
+    if (OPERATOR_CHANNELS.has(childRel)) continue;
+    const childAbs = path.join(abs, entry.name);
+    if (entry.isDirectory()) {
+      walkArtifacts(childAbs, childRel, files);
+    } else if (entry.isFile()) {
+      const hash = fileHash(childAbs);
+      if (hash !== undefined) files.set(childRel, hash);
+    }
+  }
+}
+
 /** Hashes of every goal artifact except the operator's mailbox channels. */
 function artifactState(dir: string): Map<string, string> {
   const files = new Map<string, string>();
-  const walk = (abs: string, rel: string): void => {
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(abs, { withFileTypes: true });
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
-      throw err;
-    }
-    for (const entry of entries) {
-      const childRel = rel === "" ? entry.name : `${rel}/${entry.name}`;
-      if (OPERATOR_CHANNELS.has(childRel)) continue;
-      const childAbs = path.join(abs, entry.name);
-      if (entry.isDirectory()) walk(childAbs, childRel);
-      else if (entry.isFile()) {
-        try {
-          files.set(
-            childRel,
-            createHash("sha256")
-              .update(fs.readFileSync(childAbs))
-              .digest("hex"),
-          );
-        } catch (err) {
-          // Another writer may remove a file between readdir and read.
-          if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-        }
-      }
-    }
-  };
-  walk(dir, "");
+  walkArtifacts(dir, "", files);
   return files;
 }
 
@@ -520,10 +653,11 @@ function recordsInFlight(
 }
 
 /**
- * The PM owns the plan, the task files and the holds, and a steer turn may run
- * while a task turn is in flight. Its writes are not the task's.
+ * A steer turn owns the goal surface it edits: the PM writes the plan, task
+ * files and holds, and the intent agent writes the intent. Either may run while
+ * a task turn is in flight, so its writes are not the task's.
  */
-function pmWroteDuring(
+function steerTurnWroteDuring(
   records: readonly StepRecord[],
   at: string,
   now: string,
@@ -532,15 +666,17 @@ function pmWroteDuring(
     (r) =>
       (r.step === "pm" ||
         r.step === "pm-validate" ||
-        r.step === "steer-reconcile") &&
+        r.step === "steer-reconcile" ||
+        r.step === "intent") &&
       r.startedAt <= now &&
       (!r.endedAt || r.endedAt >= at),
   );
 }
 
-function pmOwned(rel: string): boolean {
+function steerTurnOwned(rel: string): boolean {
   return (
-    rel === "plan.md" ||
+    isPlanPath(rel) ||
+    rel === "intent.md" ||
     rel.startsWith("tasks/") ||
     rel.startsWith("mailbox/holds/")
   );
@@ -585,14 +721,14 @@ function artifactBreaches(
     sealed: ReadonlySet<string>;
     records: readonly StepRecord[];
     declared: readonly DeclaredWrite[];
-    pmActive: boolean;
+    steerActive: boolean;
   },
 ): string[] {
   const live = new Map<number, StepRecord>();
   for (const record of opts.records) live.set(record.seq, record);
   const ignored = (rel: string): boolean => {
     if (kernelDeclared(rel, opts.declared, opts.at)) return true;
-    if (opts.pmActive && pmOwned(rel)) return true;
+    if (opts.steerActive && steerTurnOwned(rel)) return true;
     const dir = recordDirOf(rel);
     if (dir !== undefined && opts.sealed.has(dir)) return true;
     const seq = recordSeqOf(rel);
@@ -626,15 +762,15 @@ function summarizePaths(paths: readonly string[]): string {
 async function appendContainmentIncident(
   runtime: KernelRuntime,
   taskWorktree: string,
-  records: readonly StepRecord[],
-  cause: string,
+  records: readonly StepRecord[] | undefined,
+  cause: Cause,
 ): Promise<void> {
   const slug = path.basename(taskWorktree);
-  const own = records.filter((r) => r.slug === slug);
+  const all = records ?? (await runtime.store.listRecords());
+  const own = all.filter((r) => r.slug === slug);
   const latest = own.at(-1);
   const iteration =
-    latest?.iteration ??
-    records.reduce((max, r) => Math.max(max, r.iteration), 0);
+    latest?.iteration ?? all.reduce((max, r) => Math.max(max, r.iteration), 0);
   await runtime.store.appendRecord(
     {
       iteration,
@@ -657,6 +793,7 @@ async function appendContainmentIncident(
 export async function containmentSnapshot(
   runtime: KernelRuntime,
   taskWorktree: string,
+  opts: ContainmentOptions = {},
 ): Promise<ContainmentSnapshot> {
   const branch = await git(
     taskWorktree,
@@ -666,9 +803,12 @@ export async function containmentSnapshot(
   // Records read before the stamp and the walk: a sibling close whose files
   // land after the walk then still reads as open (in flight), never as a
   // closed record whose concurrent write would be blamed on the turn.
-  const records = await runtime.store.listRecords();
+  const boundary = opts.mode === "boundary";
+  const records = boundary ? [] : await runtime.store.listRecords();
   const at = new Date().toISOString();
-  const artifacts = artifactState(runtime.paths.goalDir);
+  const artifacts = boundary
+    ? new Map<string, string>()
+    : artifactState(runtime.paths.goalDir);
   const integration = await integrationHead(runtime);
   const root = await worktreeState(runtime.paths.repoRoot);
   const checkout = await worktreeState(runtime.paths.goalCheckout);
@@ -685,71 +825,31 @@ export async function containmentSnapshot(
   };
 }
 
-/** Text for the park cause when a turn left its worktree; undefined when contained. */
-export async function containmentViolation(
-  runtime: KernelRuntime,
-  taskWorktree: string,
-  expectedBranch: string,
+/** Breaches for a checkout/integration head move no merge record explains. */
+function integrationBreaches(
   snapshot: ContainmentSnapshot,
-): Promise<string | undefined> {
+  checkout: WorktreeState,
+  integration: string,
+  mergeExplains: (commit: string) => boolean,
+  goalCheckout: string,
+): string[] {
   const breaches: string[] = [];
-  const branch = await git(
-    taskWorktree,
-    ["rev-parse", "--abbrev-ref", "HEAD"],
-    { allowFail: true },
-  );
-  const now = branch.stdout.trim();
-  if (snapshot.branch !== expectedBranch || now !== expectedBranch) {
-    breaches.push(
-      `HEAD is on "${now || "detached"}", not the task branch "${expectedBranch}"`,
-    );
-  }
-
-  // Read the shared surfaces before the records: a merge record or a PM record
-  // is written before its owner moves the ref, resets the checkout or edits the
-  // goal, so records read last explain every move those reads can see.
-  const checkout = await worktreeState(runtime.paths.goalCheckout);
-  const integration = await integrationHead(runtime);
-  const artifacts = artifactState(runtime.paths.goalDir);
-  const records = await runtime.store.listRecords();
-  const mergeExplains = (commit: string): boolean =>
-    records.some(
-      (r) => r.step === "merge" && r.ok !== false && r.commit === commit,
-    );
-
-  const settledAt = new Date().toISOString();
-  const changedArtifacts = artifactBreaches(snapshot.artifacts, artifacts, {
-    at: snapshot.at,
-    maxSeq: snapshot.maxSeq,
-    inFlight: snapshot.inFlight,
-    sealed: snapshot.sealed,
-    records,
-    declared: runtime.store.declaredWrites(),
-    pmActive: pmWroteDuring(records, snapshot.at, settledAt),
-  });
-  if (changedArtifacts.length > 0) {
-    breaches.push(
-      `goal artifacts changed outside the worktree in ${runtime.paths.goalDir}: ${summarizePaths(changedArtifacts)}`,
-    );
-  }
-
-  // The merge queue moves this checkout's HEAD and resets it; a move recorded
-  // as a merge is the queue's, not the turn's. A move no merge record explains
-  // is a commit the turn made there. While a merge is between its ref move and
-  // its checkout reset, the working tree is not the turn's to explain either.
   if (checkout.branch !== snapshot.checkout.branch) {
     breaches.push(
-      `HEAD is on "${checkout.branch || "detached"}" in the integration checkout ${runtime.paths.goalCheckout}`,
+      `HEAD is on "${checkout.branch || "detached"}" in the integration checkout ${goalCheckout}`,
     );
-  } else if (checkout.head !== snapshot.checkout.head) {
+    return breaches;
+  }
+  if (checkout.head !== snapshot.checkout.head) {
+    const head = checkout.head.slice(0, 10);
     if (!mergeExplains(checkout.head)) {
       if (checkout.status !== snapshot.checkout.status) {
         breaches.push(
-          `integration branch moved outside the merge queue in ${runtime.paths.goalCheckout}: HEAD is ${checkout.head.slice(0, 10)}`,
+          `integration branch moved outside the merge queue in ${goalCheckout}: HEAD is ${head}`,
         );
       } else {
         breaches.push(
-          `commit on the integration checkout ${runtime.paths.goalCheckout}: HEAD moved to ${checkout.head.slice(0, 10)}`,
+          `commit on the integration checkout ${goalCheckout}: HEAD moved to ${head}`,
         );
       }
     } else if (integration !== checkout.head && !mergeExplains(integration)) {
@@ -757,35 +857,162 @@ export async function containmentViolation(
         `integration branch moved outside the merge queue: HEAD is ${integration.slice(0, 10)}`,
       );
     }
-  } else if (integration !== snapshot.integration) {
+    return breaches;
+  }
+  if (integration !== snapshot.integration) {
     if (!mergeExplains(integration)) {
       breaches.push(
         `integration branch moved outside the merge queue: HEAD is ${integration.slice(0, 10)}`,
       );
     }
-  } else if (checkout.status !== snapshot.checkout.status) {
-    breaches.push(
-      `files changed outside the worktree in ${runtime.paths.goalCheckout}`,
-    );
+    return breaches;
   }
+  if (checkout.status !== snapshot.checkout.status) {
+    breaches.push(`files changed outside the worktree in ${goalCheckout}`);
+  }
+  return breaches;
+}
 
+/** Operator moves in the repo root that a turn cannot have made. */
+function outsideBreaches(
+  root: WorktreeState,
+  snapshot: ContainmentSnapshot,
+  runtime: KernelRuntime,
+): string[] {
+  const statusKey = (status: string) =>
+    statusOutsideArtifacts(
+      status,
+      runtime.paths.repoRoot,
+      runtime.paths.artifacts.root,
+    );
+  // A same-repo artifact commit is the store's own write, not the operator's.
+  const storeCommit =
+    root.head !== snapshot.root.head &&
+    runtime.store.committed().includes(root.head) &&
+    statusKey(root.status) === statusKey(snapshot.root.status);
+  const outside: string[] = [];
+  if (!storeCommit && root.head !== snapshot.root.head) {
+    outside.push(`HEAD moved in ${runtime.paths.repoRoot}`);
+  }
+  if (!storeCommit && root.status !== snapshot.root.status) {
+    outside.push(`files changed in ${runtime.paths.repoRoot}`);
+  }
+  return outside;
+}
+
+/** Text for the park cause when a turn left its worktree; undefined when contained. */
+/** The branch-identity breach, if the turn left its task branch. */
+async function taskBranchBreach(
+  taskWorktree: string,
+  expectedBranch: string,
+  snapshot: ContainmentSnapshot,
+): Promise<string | undefined> {
+  const branch = await git(
+    taskWorktree,
+    ["rev-parse", "--abbrev-ref", "HEAD"],
+    { allowFail: true },
+  );
+  const now = branch.stdout.trim();
+  if (snapshot.branch === expectedBranch && now === expectedBranch)
+    return undefined;
+  return `HEAD is on "${now || "detached"}", not the task branch "${expectedBranch}"`;
+}
+
+/** Goal artifacts the turn wrote outside its worktree. */
+function changedArtifactBreaches(
+  runtime: KernelRuntime,
+  snapshot: ContainmentSnapshot,
+  records: StepRecord[] | undefined,
+  artifacts: ReadonlyMap<string, string> | undefined,
+): string[] {
+  if (artifacts === undefined || records === undefined) return [];
+  const changed = artifactBreaches(snapshot.artifacts, artifacts, {
+    at: snapshot.at,
+    maxSeq: snapshot.maxSeq,
+    inFlight: snapshot.inFlight,
+    sealed: snapshot.sealed,
+    records,
+    declared: runtime.store.declaredWrites(),
+    steerActive: steerTurnWroteDuring(
+      records,
+      snapshot.at,
+      new Date().toISOString(),
+    ),
+  });
+  return changed.length === 0
+    ? []
+    : [
+        `goal artifacts changed outside the worktree in ${runtime.paths.goalDir}: ${summarizePaths(changed)}`,
+      ];
+}
+
+/** Operator moves in the repo root are incidents, not turn breaches. */
+async function recordOutsideChanges(
+  runtime: KernelRuntime,
+  taskWorktree: string,
+  records: StepRecord[] | undefined,
+  snapshot: ContainmentSnapshot,
+): Promise<void> {
   // The operator may commit or edit in the main checkout while a turn runs. The
   // task cannot have made that change and must still merge; record it instead.
   const root = await worktreeState(runtime.paths.repoRoot);
-  const outside: string[] = [];
-  if (root.head !== snapshot.root.head)
-    outside.push(`HEAD moved in ${runtime.paths.repoRoot}`);
-  if (root.status !== snapshot.root.status)
-    outside.push(`files changed in ${runtime.paths.repoRoot}`);
-  if (outside.length > 0) {
-    await appendContainmentIncident(
-      runtime,
-      taskWorktree,
-      records,
-      `outside-change: ${outside.join("; ")}`,
-    );
-  }
+  const outside = outsideBreaches(root, snapshot, runtime);
+  if (outside.length === 0) return;
+  await appendContainmentIncident(
+    runtime,
+    taskWorktree,
+    records,
+    makeCause("outside-change", outside.join("; ")),
+  );
+}
 
+export async function containmentViolation(
+  runtime: KernelRuntime,
+  taskWorktree: string,
+  expectedBranch: string,
+  snapshot: ContainmentSnapshot,
+  opts: ContainmentOptions = {},
+): Promise<string | undefined> {
+  const breaches: string[] = [];
+  const branchBreach = await taskBranchBreach(
+    taskWorktree,
+    expectedBranch,
+    snapshot,
+  );
+  if (branchBreach) breaches.push(branchBreach);
+
+  // Read the shared surfaces before the records: a merge record or a PM record
+  // is written before its owner moves the ref, resets the checkout or edits the
+  // goal, so records read last explain every move those reads can see.
+  const checkout = await worktreeState(runtime.paths.goalCheckout);
+  const integration = await integrationHead(runtime);
+  const boundary = opts.mode === "boundary";
+  const artifacts = boundary ? undefined : artifactState(runtime.paths.goalDir);
+  // A boundary turn holds the merge lock, so no merge can move the checkout
+  // while it runs: a move the lock did not explain is the turn's own.
+  const records = boundary ? undefined : await runtime.store.listRecords();
+  const mergeExplains = (commit: string): boolean =>
+    records?.some(
+      (r) => r.step === "merge" && r.ok !== false && r.commit === commit,
+    ) ?? false;
+
+  breaches.push(
+    ...changedArtifactBreaches(runtime, snapshot, records, artifacts),
+  );
+
+  // The merge queue moves this checkout's HEAD and resets it; a move recorded
+  // as a merge is the queue's, not the turn's.
+  breaches.push(
+    ...integrationBreaches(
+      snapshot,
+      checkout,
+      integration,
+      mergeExplains,
+      runtime.paths.goalCheckout,
+    ),
+  );
+
+  await recordOutsideChanges(runtime, taskWorktree, records, snapshot);
   return breaches.length > 0 ? breaches.join("; ") : undefined;
 }
 

@@ -1,11 +1,9 @@
-// biome-ignore-all lint/complexity: split-rest
 import { createHash } from "node:crypto";
-import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import yaml from "yaml";
 import { z } from "zod";
-import { writeTextAtomic } from "../core/records/io.js";
+import { makeCause } from "./cause.js";
 import { scriptMeta } from "./record.js";
 import type {
   ArtifactStore,
@@ -45,7 +43,6 @@ export interface ReadHoldsOptions {
 }
 
 const DEFAULT_SETTLE_MS = 50;
-const TMP_DIR = ".tmp";
 const YAML_HOLD = /\.ya?ml$/i;
 
 /** Hold-file shape the PM writes: `{ slugs: string[], goal: boolean }`, extras ignored. */
@@ -88,10 +85,6 @@ function parseSteerText(raw: string): { urgent: boolean; text: string } {
   return { urgent, text: match[2] ?? "" };
 }
 
-function isENOENT(err: unknown): boolean {
-  return (err as NodeJS.ErrnoException).code === "ENOENT";
-}
-
 function hashSuffix(hash: string): string {
   return hash.slice(0, 8);
 }
@@ -107,25 +100,7 @@ function archiveName(file: string, hash: string): string {
  * the same text under a new name is a second steer that must be answered.
  */
 async function processedNames(store: ArtifactStore): Promise<Set<string>> {
-  const dir = path.join(store.mailboxDir, "processed");
-  const names = new Set<string>();
-  let entries: string[];
-  try {
-    entries = await fs.promises.readdir(dir);
-  } catch (err) {
-    if (isENOENT(err)) return names;
-    throw err;
-  }
-  for (const name of entries) {
-    if (name.startsWith(".")) continue;
-    try {
-      if (!(await fs.promises.stat(path.join(dir, name))).isFile()) continue;
-      names.add(name);
-    } catch (err) {
-      if (!isENOENT(err)) throw err;
-    }
-  }
-  return names;
+  return new Set(await store.mailbox.files("processed"));
 }
 
 /**
@@ -135,40 +110,16 @@ async function processedNames(store: ArtifactStore): Promise<Set<string>> {
  * writers (`postSteer`) use tmp + rename and pass at once.
  */
 async function stableInboxNames(
-  dir: string,
+  store: ArtifactStore,
   settleMs: number,
 ): Promise<string[]> {
-  const names = async (): Promise<Map<string, number>> => {
-    const out = new Map<string, number>();
-    let entries: fs.Dirent[];
-    try {
-      entries = await fs.promises.readdir(dir, { withFileTypes: true });
-    } catch (err) {
-      if (isENOENT(err)) return out;
-      throw err;
-    }
-    for (const entry of entries) {
-      if (!entry.isFile() || entry.name.startsWith(".")) continue;
-      try {
-        out.set(
-          entry.name,
-          (await fs.promises.stat(path.join(dir, entry.name))).size,
-        );
-      } catch (err) {
-        if (!isENOENT(err)) throw err;
-      }
-    }
-    return out;
-  };
-
-  const first = await names();
-  if (first.size === 0 || settleMs <= 0) return [...first.keys()].sort();
+  const first = await store.mailbox.sizes("inbox");
+  if (first.size === 0 || settleMs <= 0) return [...first.keys()];
   await sleep(settleMs);
-  const second = await names();
+  const second = await store.mailbox.sizes("inbox");
   return [...first.entries()]
     .filter(([name, size]) => second.get(name) === size)
-    .map(([name]) => name)
-    .sort();
+    .map(([name]) => name);
 }
 
 /** Inbox files are user drops; a file still growing is left for the next boundary. */
@@ -176,29 +127,22 @@ export async function scanInbox(
   store: ArtifactStore,
   opts: ScanOptions = {},
 ): Promise<Steer[]> {
-  const inbox = path.join(store.mailboxDir, "inbox");
   const names = await stableInboxNames(
-    inbox,
+    store,
     opts.settleMs ?? DEFAULT_SETTLE_MS,
   );
   if (names.length === 0) return [];
   const seen = await processedNames(store);
   const steers: Steer[] = [];
   for (const file of names) {
-    const full = path.join(inbox, file);
-    let text: string;
-    try {
-      text = await fs.promises.readFile(full, "utf8");
-    } catch (err) {
-      if (isENOENT(err)) continue;
-      throw err;
-    }
+    const text = await store.mailbox.read("inbox", file);
+    if (text === null) continue;
     const hash = contentHash(text);
     const parsed = parseSteerText(text);
     const steer: Steer = {
       id: path.basename(file, path.extname(file)),
       file,
-      relPath: `mailbox/inbox/${file}`,
+      relPath: store.mailbox.rel("inbox", file),
       text: parsed.text,
       hash,
       urgent: parsed.urgent,
@@ -225,44 +169,30 @@ export async function postSteer(
   if (!/^[a-z0-9][a-z0-9._-]*$/i.test(id)) {
     throw new Error(`steer id "${id}" must be a safe file name`);
   }
-  const inbox = path.join(store.mailboxDir, "inbox");
-  const tmp = path.join(store.mailboxDir, TMP_DIR);
-  await fs.promises.mkdir(inbox, { recursive: true });
-  await fs.promises.mkdir(tmp, { recursive: true });
-  const temp = path.join(tmp, `${id}.${process.pid}.${Date.now()}.tmp`);
   const content = `${text.trim()}\n`;
-  await fs.promises.writeFile(temp, content, "utf8");
   const hash = contentHash(content);
-  let target = path.join(inbox, `${id}.md`);
-  if (fs.existsSync(target)) {
-    try {
-      const existing = await fs.promises.readFile(target, "utf8");
-      if (contentHash(existing) === hash) {
-        await fs.promises.rm(temp, { force: true });
-        return path.join("mailbox", "inbox", `${id}.md`);
-      }
-    } catch (err) {
-      if (!isENOENT(err)) throw err;
+  let name = `${id}.md`;
+  const existing = await store.mailbox.read("inbox", name);
+  if (existing !== null) {
+    if (contentHash(existing) === hash) {
+      return store.mailbox.rel("inbox", name);
     }
-    target = path.join(inbox, archiveName(`${id}.md`, hash));
+    name = archiveName(name, hash);
   }
-  await fs.promises.rename(temp, target);
-  return path.join("mailbox", "inbox", path.basename(target));
+  await store.mailbox.publish(name, content);
+  return store.mailbox.rel("inbox", name);
 }
 
 async function archiveDuplicate(
   store: ArtifactStore,
   steer: Steer,
 ): Promise<void> {
-  const dir = path.join(store.mailboxDir, "processed");
-  await fs.promises.mkdir(dir, { recursive: true });
-  const from = path.join(store.mailboxDir, "inbox", steer.file);
-  const target = path.join(dir, archiveName(steer.file, steer.hash));
-  try {
-    await fs.promises.rename(from, target);
-  } catch (err) {
-    if (!isENOENT(err)) throw err;
-  }
+  await store.mailbox.move(
+    "inbox",
+    steer.file,
+    "processed",
+    archiveName(steer.file, steer.hash),
+  );
 }
 
 /**
@@ -273,38 +203,24 @@ export async function markProcessed(
   store: ArtifactStore,
   steer: Steer,
 ): Promise<void> {
-  const dir = path.join(store.mailboxDir, "processed");
-  await fs.promises.mkdir(dir, { recursive: true });
-  const from = path.join(store.mailboxDir, "inbox", steer.file);
-  const preferred = path.join(dir, steer.file);
-  let target = preferred;
-  if (fs.existsSync(preferred)) {
-    try {
-      const existing = await fs.promises.readFile(preferred, "utf8");
-      if (contentHash(existing) === steer.hash) {
-        await fs.promises.rm(from, { force: true });
-        return;
-      }
-      target = path.join(dir, archiveName(steer.file, steer.hash));
-    } catch (err) {
-      if (!isENOENT(err)) throw err;
-    }
+  const existing = await store.mailbox.read("processed", steer.file);
+  if (existing !== null && contentHash(existing) === steer.hash) {
+    await store.mailbox.remove("inbox", steer.file);
+    return;
   }
-  try {
-    await fs.promises.rename(from, target);
-  } catch (err) {
-    if (!isENOENT(err)) throw err;
-  }
+  const target =
+    existing === null ? steer.file : archiveName(steer.file, steer.hash);
+  await store.mailbox.move("inbox", steer.file, "processed", target);
 }
 
 /** Where the PM's steer turn writes one `<steer-id>.yaml` per structured steer. */
 export function holdsDir(store: ArtifactStore): string {
-  return path.join(store.mailboxDir, "holds");
+  return store.mailbox.holds;
 }
 
 /** Where unreadable hold files are parked so they stop deciding dispatch. */
 export function quarantineDir(store: ArtifactStore): string {
-  return path.join(store.mailboxDir, "quarantine");
+  return store.mailbox.quarantine;
 }
 
 /** A hold file that decides nothing; `sweepHolds` parks it, a read only reports it. */
@@ -316,12 +232,7 @@ export interface HoldFinding {
 }
 
 async function listHoldNames(store: ArtifactStore): Promise<string[]> {
-  try {
-    return (await fs.promises.readdir(holdsDir(store))).sort();
-  } catch (err) {
-    if (isENOENT(err)) return [];
-    throw err;
-  }
+  return store.mailbox.files("holds");
 }
 
 /**
@@ -341,17 +252,9 @@ export async function readHolds(
   const findings: HoldFinding[] = [];
   for (const name of await listHoldNames(store)) {
     if (name.startsWith(".") || !YAML_HOLD.test(name)) continue;
-    const file = path.join("mailbox", "holds", name);
-    let text: string;
-    try {
-      text = await fs.promises.readFile(
-        path.join(holdsDir(store), name),
-        "utf8",
-      );
-    } catch (err) {
-      if (isENOENT(err)) continue;
-      throw err;
-    }
+    const file = store.mailbox.rel("holds", name);
+    const text = await store.mailbox.read("holds", name);
+    if (text === null) continue;
     let parsed: Hold | undefined;
     try {
       const valid = holdFileSchema.safeParse(yaml.parse(text));
@@ -403,29 +306,19 @@ async function quarantineHold(
   iteration: number,
 ): Promise<void> {
   const name = path.basename(finding.file);
-  let text: string;
-  try {
-    text = await fs.promises.readFile(path.join(holdsDir(store), name), "utf8");
-  } catch (err) {
-    if (isENOENT(err)) return;
-    throw err;
-  }
-  const dir = quarantineDir(store);
-  await fs.promises.mkdir(dir, { recursive: true });
-  const preferred = path.join(dir, name);
-  const target = fs.existsSync(preferred)
-    ? path.join(dir, archiveName(name, contentHash(text)))
-    : preferred;
-  try {
-    await fs.promises.rename(path.join(holdsDir(store), name), target);
-  } catch (err) {
-    if (!isENOENT(err)) throw err;
-    return;
-  }
-  const rel = path.relative(store.goalDir, target);
+  const text = await store.mailbox.read("holds", name);
+  if (text === null) return;
+  const taken = await store.mailbox.read("quarantine", name);
+  const target = taken === null ? name : archiveName(name, contentHash(text));
+  const moved = await store.mailbox.move("holds", name, "quarantine", target);
+  if (!moved) return;
+  const rel = store.mailbox.rel("quarantine", target);
   await store.appendRecord(scriptMeta(iteration, "hold-quarantine"), {
     ok: false,
-    cause: `${finding.kind} hold "${name}" moved to ${rel}: ${finding.reason}`,
+    cause: makeCause(
+      "quarantine",
+      `${finding.kind} hold "${name}" moved to ${rel}: ${finding.reason}`,
+    ),
   });
 }
 
@@ -466,22 +359,10 @@ export async function expireHold(
   store: ArtifactStore,
   steerId: string,
 ): Promise<void> {
-  const dir = holdsDir(store);
-  let names: string[];
-  try {
-    names = await fs.promises.readdir(dir);
-  } catch (err) {
-    if (isENOENT(err)) return;
-    throw err;
-  }
-  for (const name of names) {
+  for (const name of await store.mailbox.files("holds")) {
     if (!YAML_HOLD.test(name)) continue;
     if (path.basename(name, path.extname(name)) !== steerId) continue;
-    try {
-      await fs.promises.rm(path.join(dir, name));
-    } catch (err) {
-      if (!isENOENT(err)) throw err;
-    }
+    await store.mailbox.remove("holds", name);
   }
 }
 
@@ -490,12 +371,9 @@ export async function writeOutbox(
   id: string,
   text: string,
 ): Promise<string> {
-  const rel = path.join("mailbox", "outbox", `steer-${id}.md`);
-  await writeTextAtomic(
-    path.join(store.mailboxDir, "outbox", `steer-${id}.md`),
-    `${text.trim()}\n`,
-  );
-  return rel;
+  const name = `steer-${id}.md`;
+  await store.mailbox.write("outbox", name, `${text.trim()}\n`);
+  return store.mailbox.rel("outbox", name);
 }
 
 function escapeRegExp(text: string): string {
@@ -567,6 +445,25 @@ export function steerProvenance(source: string): string | undefined {
   return id ? id : undefined;
 }
 
+/**
+ * Slugs a steer's hold names that the same steer created (`source: steer:
+ * <id>`). A spike steer is answered only when its task ends, so holding that
+ * task deadlocks both: the hold waits for the steer and the task waits for the
+ * hold. Every such slug is a hold bug, never a legitimate block.
+ */
+export function selfHeldSlugs(
+  steer: string,
+  slugs: readonly string[],
+  tasks: readonly { slug: string; source: string }[],
+): string[] {
+  const own = new Set(
+    tasks
+      .filter((task) => steerProvenance(task.source) === steer)
+      .map((task) => task.slug),
+  );
+  return slugs.filter((slug) => own.has(slug));
+}
+
 /** A PM-created stall continuation's provenance: its `source` is `stall: <iteration>`. */
 export function stallProvenance(source: string): string | undefined {
   const match = /^stall:\s*(.+)$/.exec(source.trim());
@@ -604,6 +501,16 @@ export function collectSteerRoutes(
   return out;
 }
 
+/** True when a route waits for an architect, generic or a named scope. */
+export function isArchitectRoute(route: SteerRoute): boolean {
+  return route === "architect" || typeof route === "object";
+}
+
+/** A route as one token for prompts, records and summaries. */
+export function formatSteerRoute(route: SteerRoute): string {
+  return typeof route === "object" ? `architect ${route.architect}` : route;
+}
+
 /** One line per PM-routed steer for the architect's pack; sorted by steer id. */
 export function formatPmAnswers(
   routes: Map<string, { route: SteerRoute; answer?: string }>,
@@ -611,6 +518,8 @@ export function formatPmAnswers(
   return [...routes.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([steer, { route, answer }]) =>
-      answer ? `- ${steer} [${route}]: ${answer}` : `- ${steer} [${route}]`,
+      answer
+        ? `- ${steer} [${formatSteerRoute(route)}]: ${answer}`
+        : `- ${steer} [${formatSteerRoute(route)}]`,
     );
 }

@@ -1,9 +1,9 @@
-// biome-ignore-all lint/complexity: split-rest
 import { commitAll } from "../core/git/commit.js";
 import { git } from "../core/git/exec.js";
 import { unmergedFiles } from "../core/git/merge.js";
 import type { SessionRef } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
+import { formatCause, makeCause } from "./cause.js";
 import { derive } from "./derive.js";
 import { boundaryTarget, compactSession } from "./flow-context.js";
 import { mergeTask } from "./integrate.js";
@@ -12,6 +12,7 @@ import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { scriptMeta } from "./record.js";
 import { materialHash } from "./tasks.js";
 import type {
+  Cause,
   KernelRuntime,
   Outcome,
   StepRecord,
@@ -22,6 +23,7 @@ import {
   containmentSnapshot,
   containmentViolation,
   ensureTaskWorktree,
+  type EnsuredWorktree,
   headSha,
   integrationHead,
   taskBranchName,
@@ -59,7 +61,7 @@ export interface StewardOptions {
 
 interface StewardAttempt {
   ok: boolean;
-  cause?: string;
+  cause?: Cause;
   infra?: { kind: "infra"; cause: string; details?: string };
   cancelled?: boolean;
   session?: SessionRef;
@@ -69,7 +71,7 @@ interface StewardAttempt {
 
 function pointerConcern(
   slug: string,
-  status: string,
+  status: Cause,
   worktree: string,
   branch: string,
 ): Outcome {
@@ -80,7 +82,7 @@ function pointerConcern(
       {
         kind: "risk",
         calibration: "architect",
-        text: `steward: ${slug} unmerged (${status}); worktree ${worktree}; branch ${branch}`,
+        text: `steward: ${slug} unmerged (${formatCause(status)}); worktree ${worktree}; branch ${branch}`,
         evidence: `records steward ${slug}`,
       },
     ],
@@ -93,7 +95,7 @@ async function commitMerge(
   runtime: KernelRuntime,
   task: TaskFile,
   cwd: string,
-): Promise<{ ok: true } | { ok: false; cause: string }> {
+): Promise<{ ok: true } | { ok: false; cause: Cause }> {
   try {
     const commit = await commitAll(
       runtime.repo,
@@ -101,13 +103,223 @@ async function commitMerge(
       `factory: ${task.slug} merge integration head`,
     );
     if (commit) return { ok: true };
-    return { ok: false, cause: "merge produced no commit" };
+    return {
+      ok: false,
+      cause: makeCause("merge-failed", "merge produced no commit"),
+    };
   } catch (err) {
     return {
       ok: false,
-      cause: `merge commit failed: ${err instanceof Error ? err.message : String(err)}`,
+      cause: makeCause(
+        "merge-failed",
+        `merge commit failed: ${err instanceof Error ? err.message : String(err)}`,
+      ),
     };
   }
+}
+
+/** The worktree a steward attempt needs, or the failure that ends it. */
+async function stewardWorktree(
+  runtime: KernelRuntime,
+  task: TaskFile,
+): Promise<{ ensured: EnsuredWorktree } | { attempt: StewardAttempt }> {
+  const ensured = await ensureTaskWorktree(runtime, task);
+  if (ensured.error) {
+    return {
+      attempt: {
+        ok: false,
+        cause: makeCause("setup", ensured.error),
+        agentTurn: false,
+      },
+    };
+  }
+  if (ensured.setup && !ensured.setup.ok) {
+    return {
+      attempt: {
+        ok: false,
+        cause: makeCause("setup", ensured.setup.error ?? "unknown"),
+        agentTurn: false,
+      },
+    };
+  }
+  if (ensured.mergeConflict) {
+    const named =
+      ensured.mergeConflict.paths.join(", ") ||
+      "git reported no unmerged paths";
+    await abortMerge(ensured.path);
+    return {
+      attempt: {
+        ok: false,
+        cause: makeCause("base-conflict", named),
+        agentTurn: false,
+      },
+    };
+  }
+  return { ensured };
+}
+
+type MergeAttempt =
+  | { before: string; conflicts: string[] }
+  | { before: string; result: StewardAttempt };
+
+/** A conflict-free merge commits itself; a conflict hands over to the steward. */
+async function prepareMerge(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  wtPath: string,
+  head: string,
+  session: SessionRef | undefined,
+): Promise<MergeAttempt> {
+  const before = await headSha(wtPath);
+  const merge = await git(wtPath, ["merge", "--no-ff", "--no-commit", head], {
+    allowFail: true,
+  });
+  if (merge.code === 0) {
+    const committed = await commitMerge(runtime, task, wtPath);
+    if (committed.ok) {
+      return { before, result: { ok: true, agentTurn: false, session } };
+    }
+    await abortMerge(wtPath);
+    return {
+      before,
+      result: { ok: false, cause: committed.cause, agentTurn: false },
+    };
+  }
+  const conflicts = await unmergedFiles(wtPath);
+  if (conflicts.length === 0) {
+    await abortMerge(wtPath);
+    return {
+      before,
+      result: {
+        ok: false,
+        cause: makeCause(
+          "merge-failed",
+          merge.stderr.trim().slice(-500) || "merge failed without conflicts",
+        ),
+        agentTurn: false,
+      },
+    };
+  }
+  return { before, conflicts };
+}
+
+/** A finished turn that produced no merge commit. */
+function failedTurn(
+  message: string,
+  storedSession: SessionRef | undefined,
+  outcome: Outcome | undefined,
+): StewardAttempt {
+  return {
+    ok: false,
+    cause: makeCause("merge-failed", message),
+    ...(storedSession ? { session: storedSession } : {}),
+    ...(outcome ? { outcome } : {}),
+    agentTurn: true,
+  };
+}
+
+/** Turns a finished steward turn into the attempt the launch records. */
+async function finishStewardAttempt(
+  runtime: KernelRuntime,
+  wtPath: string,
+  before: string,
+  breach: string | undefined,
+  result: Awaited<ReturnType<typeof runAgentTurn>>,
+): Promise<StewardAttempt> {
+  if (breach) {
+    await abortMerge(wtPath);
+    return {
+      ok: false,
+      cause: makeCause("containment", breach),
+      agentTurn: true,
+    };
+  }
+  const stop = result.record.stop;
+  if (stop?.kind === "infra") {
+    await abortMerge(wtPath);
+    return {
+      ok: false,
+      infra: {
+        kind: "infra",
+        cause: stop.cause,
+        ...(stop.details ? { details: stop.details } : {}),
+      },
+      agentTurn: true,
+    };
+  }
+  if (stop?.kind === "cancelled") {
+    await abortMerge(wtPath);
+    return { ok: false, cancelled: true, agentTurn: true };
+  }
+  const storedSession = result.record.session;
+  const after = await headSha(wtPath);
+  if (after === before) {
+    await abortMerge(wtPath);
+    return failedTurn(
+      result.outcome?.summary ?? "steward made no merge commit",
+      storedSession,
+      result.outcome,
+    );
+  }
+  const mergeHead = await git(
+    wtPath,
+    ["rev-parse", "-q", "--verify", "MERGE_HEAD"],
+    {
+      allowFail: true,
+    },
+  );
+  if (mergeHead.code === 0) {
+    await abortMerge(wtPath);
+    return failedTurn(
+      "merge still in progress after the steward attempt",
+      storedSession,
+      result.outcome,
+    );
+  }
+  return {
+    ok: true,
+    ...(storedSession ? { session: storedSession } : {}),
+    ...(result.outcome ? { outcome: result.outcome } : {}),
+    agentTurn: true,
+  };
+}
+
+/** The steward turn's settle hook: containment, merge settle, compaction. */
+function stewardSettle(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  iteration: number,
+  round: number,
+  ensured: { path: string; branch: string },
+  contained: Awaited<ReturnType<typeof containmentSnapshot>>,
+  onBreach: (breach: string | undefined) => void,
+): NonNullable<Parameters<typeof runAgentTurn>[1]["settle"]> {
+  return async (_record, outcome, live) => {
+    const breach = await containmentViolation(
+      runtime,
+      ensured.path,
+      ensured.branch,
+      contained,
+    );
+    onBreach(breach);
+    if (breach) {
+      return { ok: false, cause: makeCause("containment", breach) };
+    }
+    const settled = await settleMergeTurn(
+      runtime,
+      { iteration, slug: task.slug, round },
+      ensured.path,
+      `factory: ${task.slug} merge integration head`,
+    );
+    if (!outcome || !live) return settled;
+    const compacted = await compactSession(runtime, live);
+    if (!compacted) return settled;
+    return {
+      ...settled,
+      session: compacted.session,
+      ...(compacted.usage ? { compactUsage: compacted.usage } : {}),
+    };
+  };
 }
 
 async function attemptStewardMerge(
@@ -118,46 +330,14 @@ async function attemptStewardMerge(
   state: TaskState,
   session: SessionRef | undefined,
 ): Promise<StewardAttempt> {
-  const ensured = await ensureTaskWorktree(runtime, task);
-  if (ensured.error)
-    return { ok: false, cause: ensured.error, agentTurn: false };
-  if (ensured.setup && !ensured.setup.ok) {
-    return {
-      ok: false,
-      cause: `setup: ${ensured.setup.error ?? "unknown"}`,
-      agentTurn: false,
-    };
-  }
-  if (ensured.mergeConflict) {
-    const named =
-      ensured.mergeConflict.paths.join(", ") ||
-      "git reported no unmerged paths";
-    await abortMerge(ensured.path);
-    return { ok: false, cause: `base-conflict: ${named}`, agentTurn: false };
-  }
+  const prepared = await stewardWorktree(runtime, task);
+  if ("attempt" in prepared) return prepared.attempt;
+  const { ensured } = prepared;
+
   const head = await integrationHead(runtime);
-  const before = await headSha(ensured.path);
-  const merge = await git(
-    ensured.path,
-    ["merge", "--no-ff", "--no-commit", head],
-    { allowFail: true },
-  );
-  if (merge.code === 0) {
-    const committed = await commitMerge(runtime, task, ensured.path);
-    if (committed.ok) return { ok: true, agentTurn: false, session };
-    await abortMerge(ensured.path);
-    return { ok: false, cause: committed.cause, agentTurn: false };
-  }
-  const conflicts = await unmergedFiles(ensured.path);
-  if (conflicts.length === 0) {
-    await abortMerge(ensured.path);
-    return {
-      ok: false,
-      cause:
-        merge.stderr.trim().slice(-500) || "merge failed without conflicts",
-      agentTurn: false,
-    };
-  }
+  const merge = await prepareMerge(runtime, task, ensured.path, head, session);
+  if ("result" in merge) return merge.result;
+  const { before, conflicts } = merge;
 
   const target = boundaryTarget(runtime, "steward", iteration);
   const base = records
@@ -187,85 +367,20 @@ async function attemptStewardMerge(
     vars,
     expectation: KERNEL_TURN_STEPS.steward,
     session,
-    settle: async (_record, outcome, live) => {
-      breach = await containmentViolation(
-        runtime,
-        ensured.path,
-        ensured.branch,
-        contained,
-      );
-      if (breach) return { ok: false, cause: `containment: ${breach}` };
-      const settled = await settleMergeTurn(
-        runtime,
-        { iteration, slug: task.slug, round: state.round },
-        ensured.path,
-        `factory: ${task.slug} merge integration head`,
-      );
-      if (!outcome || !live) return settled;
-      const compacted = await compactSession(runtime, live);
-      if (!compacted) return settled;
-      return {
-        ...settled,
-        session: compacted.session,
-        ...(compacted.usage ? { compactUsage: compacted.usage } : {}),
-      };
-    },
+    settle: stewardSettle(
+      runtime,
+      task,
+      iteration,
+      state.round,
+      ensured,
+      contained,
+      (found) => {
+        breach = found;
+      },
+    ),
   });
 
-  if (breach) {
-    await abortMerge(ensured.path);
-    return { ok: false, cause: `containment: ${breach}`, agentTurn: true };
-  }
-  const stop = result.record.stop;
-  if (stop?.kind === "infra") {
-    await abortMerge(ensured.path);
-    return {
-      ok: false,
-      infra: {
-        kind: "infra",
-        cause: stop.cause,
-        ...(stop.details ? { details: stop.details } : {}),
-      },
-      agentTurn: true,
-    };
-  }
-  if (stop?.kind === "cancelled") {
-    await abortMerge(ensured.path);
-    return { ok: false, cancelled: true, agentTurn: true };
-  }
-  const storedSession = result.record.session;
-  const after = await headSha(ensured.path);
-  if (after === before) {
-    await abortMerge(ensured.path);
-    return {
-      ok: false,
-      cause: result.outcome?.summary ?? "steward made no merge commit",
-      ...(storedSession ? { session: storedSession } : {}),
-      ...(result.outcome ? { outcome: result.outcome } : {}),
-      agentTurn: true,
-    };
-  }
-  const mergeHead = await git(
-    ensured.path,
-    ["rev-parse", "-q", "--verify", "MERGE_HEAD"],
-    { allowFail: true },
-  );
-  if (mergeHead.code === 0) {
-    await abortMerge(ensured.path);
-    return {
-      ok: false,
-      cause: "merge still in progress after the steward attempt",
-      ...(storedSession ? { session: storedSession } : {}),
-      ...(result.outcome ? { outcome: result.outcome } : {}),
-      agentTurn: true,
-    };
-  }
-  return {
-    ok: true,
-    ...(storedSession ? { session: storedSession } : {}),
-    ...(result.outcome ? { outcome: result.outcome } : {}),
-    agentTurn: true,
-  };
+  return finishStewardAttempt(runtime, ensured.path, before, breach, result);
 }
 
 function hasPointer(outcome: Outcome | undefined, branch: string): boolean {
@@ -282,7 +397,7 @@ async function ensurePointer(
   task: TaskFile,
   iteration: number,
   round: number,
-  status: string,
+  status: Cause,
   worktree: string,
   branch: string,
   outcome: Outcome | undefined,
@@ -292,7 +407,7 @@ async function ensurePointer(
     scriptMeta(iteration, "steward", { slug: task.slug, round }),
     {
       ok: false,
-      cause: `held: ${status}`,
+      cause: makeCause("held", formatCause(status)),
       outcome: pointerConcern(task.slug, status, worktree, branch),
     },
   );
@@ -310,17 +425,11 @@ async function ensurePointer(
  * tasks relaunch via continuations on the new head through the existing
  * `base:` path.
  */
-export async function runSteward(
-  runtime: KernelRuntime,
+function attemptedThisWave(
+  records: readonly StepRecord[],
   iteration: number,
-  opts: StewardOptions = {},
-): Promise<StewardResult> {
-  const tasks = await runtime.store.listTasks();
-  const records = await runtime.store.listRecords();
-  const state = derive(tasks, records, runtime.configs.process.flows);
-  // A turn that stopped on infra is not an attempt: its slug gets the
-  // task-turn backoff, so a later wave retries it instead of skipping it.
-  const attemptedThisWave = new Set(
+): Set<string> {
+  return new Set(
     records
       .filter(
         (r) =>
@@ -331,32 +440,259 @@ export async function runSteward(
       )
       .map((r) => r.slug!),
   );
-  const candidates = tasks
+}
+
+/** Parked conflicts this wave may attempt, in slug order. */
+function stewardCandidates(
+  tasks: readonly TaskFile[],
+  state: ReturnType<typeof derive>,
+  attempted: ReadonlySet<string>,
+  frozen: ReadonlySet<string> | undefined,
+): string[] {
+  return tasks
     .filter((t) => {
       const s = state.tasks[t.slug];
       return (
         s?.status === "parked" &&
-        s.cause?.startsWith("conflict:") &&
-        !attemptedThisWave.has(t.slug) &&
-        !opts.frozen?.has(t.slug)
+        s.cause?.kind === "conflict" &&
+        !attempted.has(t.slug) &&
+        !frozen?.has(t.slug)
       );
     })
     .map((t) => t.slug)
     .sort();
-  if (candidates.length === 0) {
-    const recorded = records.some(
-      (r) => r.iteration === iteration && r.step === "steward",
+}
+
+async function recordSkippedSteward(
+  runtime: KernelRuntime,
+  records: readonly StepRecord[],
+  iteration: number,
+): Promise<void> {
+  const recorded = records.some(
+    (r) => r.iteration === iteration && r.step === "steward",
+  );
+  if (recorded) return;
+  await runtime.store.appendRecord(scriptMeta(iteration, "steward"), {
+    ok: true,
+    cause: makeCause("note", "skipped: no conflicts"),
+  });
+}
+
+type StewardCandidateOutcome =
+  | { kind: "dead"; dead: StewardDead; session?: SessionRef }
+  | { kind: "cancelled"; session?: SessionRef }
+  | { kind: "landed"; session?: SessionRef }
+  | { kind: "unmerged"; session?: SessionRef };
+
+/** Records how a failed attempt held its task: a script note or an architect pointer. */
+async function holdAttempt(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  iteration: number,
+  state: TaskState,
+  attempt: StewardAttempt,
+  worktree: string,
+  branch: string,
+): Promise<void> {
+  const status = attempt.cause ?? makeCause("held", "unresolved");
+  if (attempt.agentTurn) {
+    await ensurePointer(
+      runtime,
+      task,
+      iteration,
+      state.round,
+      status,
+      worktree,
+      branch,
+      attempt.outcome,
     );
-    if (!recorded) {
-      await runtime.store.appendRecord(scriptMeta(iteration, "steward"), {
+    return;
+  }
+  await runtime.store.appendRecord(
+    scriptMeta(iteration, "steward", {
+      slug: task.slug,
+      round: state.round,
+    }),
+    {
+      ok: false,
+      cause: makeCause("held", formatCause(status)),
+      outcome: pointerConcern(task.slug, status, worktree, branch),
+    },
+  );
+}
+
+/** The dead leg's payload, with details only when present. */
+function deadDetails(infra: { cause: string; details?: string }): {
+  cause: string;
+  details?: string;
+} {
+  return {
+    cause: infra.cause,
+    ...(infra.details ? { details: infra.details } : {}),
+  };
+}
+
+/** Lands a steward attempt's branch through the kept-land queue. */
+async function landStewardCandidate(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  iteration: number,
+  state: TaskState,
+  attempt: StewardAttempt,
+  worktree: string,
+  branch: string,
+): Promise<StewardCandidateOutcome> {
+  if (!attempt.agentTurn) {
+    await runtime.store.appendRecord(
+      scriptMeta(iteration, "steward", {
+        slug: task.slug,
+        round: state.round,
+      }),
+      {
         ok: true,
-        cause: "skipped: no conflicts",
-      });
-    }
-    return { skipped: true, attempted: [], landed: [], unmerged: [], dead: [] };
+        cause: makeCause("note", `auto-merged ${branch} without a turn`),
+      },
+    );
+  }
+  // The branch now carries the head; land through the queue without a second
+  // agent attempt (kept-land mode: conflict parks, red gates get one flake
+  // re-run). Gates are the steward's CI run.
+  const merged = await mergeTask(runtime, task, iteration, state, {
+    keptLand: true,
+  });
+  if (merged.infra) {
+    return {
+      kind: "dead",
+      dead: { slug: task.slug, ...deadDetails(merged.infra) },
+      session: attempt.session,
+    };
+  }
+  if (merged.cancelled) return { kind: "cancelled" };
+  const after = await runtime.store.listRecords();
+  const merge = after
+    .filter((r) => r.slug === task.slug && r.step === "merge" && r.endedAt)
+    .sort((a, b) => a.seq - b.seq)
+    .at(-1);
+  if (merge?.ok === true && merge.iteration === iteration) {
+    return { kind: "landed", session: attempt.session };
+  }
+  // Parked is terminal: a red gates run cannot ready a fix turn here, so the
+  // steward holds and the relaunch happens via a continuation.
+  const cause = merge?.cause ?? makeCause("merge-failed", "merge did not land");
+  await ensurePointer(
+    runtime,
+    task,
+    iteration,
+    state.round,
+    cause,
+    worktree,
+    branch,
+    attempt.outcome,
+  );
+  return { kind: "unmerged", session: attempt.session };
+}
+
+/** Attempts one parked conflict, then lands or holds its branch. */
+async function stewardCandidate(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  records: StepRecord[],
+  iteration: number,
+  state: TaskState,
+  session: SessionRef | undefined,
+): Promise<StewardCandidateOutcome> {
+  const attempt = await attemptStewardMerge(
+    runtime,
+    task,
+    records,
+    iteration,
+    state,
+    session,
+  );
+  if (attempt.infra) {
+    return {
+      kind: "dead",
+      dead: { slug: task.slug, ...deadDetails(attempt.infra) },
+    };
+  }
+  if (attempt.cancelled) return { kind: "cancelled" };
+
+  const branch = taskBranchName(runtime, task.slug);
+  // The worktree path is stable per slug; read it from the ensured checkout
+  // when present, else the branch name is the pointer's locator.
+  const ensured = await ensureTaskWorktree(runtime, task);
+  const worktree = ensured.path;
+
+  if (!attempt.ok) {
+    await holdAttempt(
+      runtime,
+      task,
+      iteration,
+      state,
+      attempt,
+      worktree,
+      branch,
+    );
+    return { kind: "unmerged", session: attempt.session };
   }
 
-  const attempted: string[] = [];
+  return landStewardCandidate(
+    runtime,
+    task,
+    iteration,
+    state,
+    attempt,
+    worktree,
+    branch,
+  );
+}
+
+/** Records a wave with no candidates and returns its empty result. */
+async function skipStewardWave(
+  runtime: KernelRuntime,
+  records: StepRecord[],
+  iteration: number,
+): Promise<StewardResult> {
+  await recordSkippedSteward(runtime, records, iteration);
+  return { skipped: true, attempted: [], landed: [], unmerged: [], dead: [] };
+}
+
+/** The candidate's state derived from the newest records and task list. */
+async function stewardCandidateState(
+  runtime: KernelRuntime,
+  records: StepRecord[],
+  slug: string,
+): Promise<TaskState> {
+  const tasks = await runtime.store.listTasks();
+  return derive(tasks, records, runtime.configs.process.flows).tasks[slug]!;
+}
+
+/**
+ * Steward-merge launch step: every parked conflict is attempted once by a
+ * model turn in its own worktree (compacted at settle), then the merge queue
+ * lands it with gates; failures hold the task and leave an architect pointer
+ * (status, worktree, branch) as a forwarded concern. A candidate whose leg
+ * stops on infra is reported as dead and the remaining candidates still run;
+ * only a frozen slug (its bounded re-dispatches spent, or a fatal cause) is
+ * left for the next launch. Unmerged tasks relaunch via continuations on the
+ * new head through the existing `base:` path.
+ */
+export async function runSteward(
+  runtime: KernelRuntime,
+  iteration: number,
+  opts: StewardOptions = {},
+): Promise<StewardResult> {
+  const tasks = await runtime.store.listTasks();
+  const records = await runtime.store.listRecords();
+  const state = derive(tasks, records, runtime.configs.process.flows);
+  // A turn that stopped on infra is not an attempt: its slug gets the
+  // task-turn backoff, so a later wave retries it instead of skipping it.
+  const attempted = attemptedThisWave(records, iteration);
+  const candidates = stewardCandidates(tasks, state, attempted, opts.frozen);
+  if (candidates.length === 0)
+    return await skipStewardWave(runtime, records, iteration);
+
+  const attemptedSlugs: string[] = [];
   const landed: string[] = [];
   const unmerged: string[] = [];
   const dead: StewardDead[] = [];
@@ -365,13 +701,9 @@ export async function runSteward(
   for (const slug of candidates) {
     const task = tasks.find((t) => t.slug === slug)!;
     const fresh = await runtime.store.listRecords();
-    const taskState = derive(
-      await runtime.store.listTasks(),
-      fresh,
-      runtime.configs.process.flows,
-    ).tasks[slug]!;
-    attempted.push(slug);
-    const attempt = await attemptStewardMerge(
+    const taskState = await stewardCandidateState(runtime, fresh, slug);
+    attemptedSlugs.push(slug);
+    const outcome = await stewardCandidate(
       runtime,
       task,
       fresh,
@@ -379,114 +711,30 @@ export async function runSteward(
       taskState,
       session,
     );
-    if (attempt.infra) {
-      dead.push({
-        slug,
-        cause: attempt.infra.cause,
-        ...(attempt.infra.details ? { details: attempt.infra.details } : {}),
-      });
-      continue;
-    }
-    if (attempt.cancelled)
+    if (outcome.session) session = outcome.session;
+    if (outcome.kind === "cancelled") {
       return {
         skipped: false,
-        attempted,
+        attempted: attemptedSlugs,
         landed,
         unmerged,
         dead,
         cancelled: true,
       };
-    if (attempt.session) session = attempt.session;
-
-    const branch = taskBranchName(runtime, slug);
-    // The worktree path is stable per slug; read it from the ensured checkout
-    // when present, else the branch name is the pointer's locator.
-    const ensured = await ensureTaskWorktree(runtime, task);
-    const worktree = ensured.path;
-
-    if (!attempt.ok) {
-      unmerged.push(slug);
-      const status = attempt.cause ?? "unresolved";
-      if (!attempt.agentTurn) {
-        await runtime.store.appendRecord(
-          scriptMeta(iteration, "steward", {
-            slug,
-            round: taskState.round,
-          }),
-          {
-            ok: false,
-            cause: `held: ${status}`,
-            outcome: pointerConcern(slug, status, worktree, branch),
-          },
-        );
-      } else {
-        await ensurePointer(
-          runtime,
-          task,
-          iteration,
-          taskState.round,
-          status,
-          worktree,
-          branch,
-          attempt.outcome,
-        );
-      }
+    }
+    if (outcome.kind === "dead") {
+      dead.push(outcome.dead);
       continue;
     }
-
-    if (!attempt.agentTurn) {
-      await runtime.store.appendRecord(
-        scriptMeta(iteration, "steward", { slug, round: taskState.round }),
-        { ok: true, cause: `auto-merged ${branch} without a turn` },
-      );
-    }
-    // The branch now carries the head; land through the queue without a second
-    // agent attempt (kept-land mode: conflict parks, red gates get one flake
-    // re-run). Gates are the steward's CI run.
-    const merged = await mergeTask(runtime, task, iteration, taskState, {
-      keptLand: true,
-    });
-    if (merged.infra) {
-      dead.push({
-        slug,
-        cause: merged.infra.cause,
-        ...(merged.infra.details ? { details: merged.infra.details } : {}),
-      });
-      continue;
-    }
-    if (merged.cancelled)
-      return {
-        skipped: false,
-        attempted,
-        landed,
-        unmerged,
-        dead,
-        cancelled: true,
-      };
-    const after = await runtime.store.listRecords();
-    const merge = after
-      .filter((r) => r.slug === slug && r.step === "merge" && r.endedAt)
-      .sort((a, b) => a.seq - b.seq)
-      .at(-1);
-    if (merge?.ok === true && merge.iteration === iteration) {
-      landed.push(slug);
-    } else {
-      // Parked is terminal: a red gates run cannot ready a fix turn here, so
-      // the steward holds and the relaunch happens via a continuation.
-      unmerged.push(slug);
-      const status = merge?.cause ?? "merge did not land";
-      await ensurePointer(
-        runtime,
-        task,
-        iteration,
-        taskState.round,
-        status,
-        worktree,
-        branch,
-        attempt.outcome,
-      );
-    }
+    if (outcome.kind === "landed") landed.push(slug);
+    else unmerged.push(slug);
   }
 
-  return { skipped: false, attempted, landed, unmerged, dead };
+  return {
+    skipped: false,
+    attempted: attemptedSlugs,
+    landed,
+    unmerged,
+    dead,
+  };
 }

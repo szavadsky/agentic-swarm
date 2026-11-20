@@ -1,6 +1,4 @@
-// biome-ignore-all lint/complexity: split-rest
 import { createHash } from "node:crypto";
-import path from "node:path";
 import { runAgentTurn } from "./agent.js";
 import { boundaryTarget, type TurnTarget } from "./flow-context.js";
 import { postSteer, type Steer, scanInbox } from "./mailbox.js";
@@ -26,53 +24,105 @@ function roleOf(rec: StepRecord, roleByStep: Record<string, string>): string {
   return roleByStep[rec.step] ?? rec.step;
 }
 
-/**
- * The script half of the digest: cost and turns by role, straight from the
- * records. No model is asked to add numbers it can only approximate.
- */
-function renderDigestFacts(
+/** Adds one past agent turn to its role/alias row. */
+function addRoleRow(
+  rows: Map<string, RoleRow>,
+  rec: StepRecord,
+  prices: PriceTable,
+  priceIds: Record<string, string> | undefined,
+  roleByStep: Record<string, string>,
+): void {
+  const priced = pricedRecord(rec, prices, priceIds);
+  const role = roleOf(rec, roleByStep);
+  const alias = rec.alias ?? "-";
+  const key = `${role}\u0000${alias}`;
+  const row =
+    rows.get(key) ??
+    ({
+      role,
+      alias,
+      turns: 0,
+      in: 0,
+      cacheRead: 0,
+      out: 0,
+      costUsd: 0,
+      costKnown: false,
+      unpricedTurns: 0,
+    } as RoleRow);
+  row.turns += 1;
+  row.in += priced.usage.in;
+  row.cacheRead += priced.usage.cacheRead;
+  row.out += priced.usage.out;
+  if (priced.usage.costUsd !== undefined) {
+    row.costUsd += priced.usage.costUsd;
+    row.costKnown = true;
+  }
+  if (!priced.costKnown) row.unpricedTurns += 1;
+  rows.set(key, row);
+}
+
+/** The transcript pointers, capped at the first twenty. */
+function appendTranscripts(lines: string[], records: StepRecord[]): void {
+  const transcripts = [
+    ...new Set(
+      records.map((r) => r.transcript).filter((t): t is string => Boolean(t)),
+    ),
+  ];
+  lines.push("## Transcripts");
+  if (transcripts.length === 0) {
+    lines.push("- none recorded");
+    return;
+  }
+  for (const transcript of transcripts.slice(0, 20)) {
+    lines.push(`- ${transcript}`);
+  }
+  if (transcripts.length > 20) {
+    lines.push(`- … ${transcripts.length - 20} more`);
+  }
+}
+
+/** The digest's per-role totals, accumulated over past agent turns. */
+interface DigestTotals {
+  turns: number;
+  in: number;
+  cacheRead: number;
+  out: number;
+  costUsd: number;
+  costKnown: boolean;
+  unpricedTurns: number;
+}
+
+/** Groups past agent turns by role/alias and counts them. */
+function digestRoleRows(
   records: StepRecord[],
   iteration: number,
   roleByStep: Record<string, string>,
   prices: PriceTable,
   priceIds?: Record<string, string>,
-): string {
+): { rows: Map<string, RoleRow>; turns: number } {
   const rows = new Map<string, RoleRow>();
   let turns = 0;
   for (const rec of records) {
     if (rec.actor !== "agent" || !rec.endedAt) continue;
     if (rec.iteration >= iteration) continue;
     turns += 1;
-    const priced = pricedRecord(rec, prices, priceIds);
-    const role = roleOf(rec, roleByStep);
-    const alias = rec.alias ?? "-";
-    const key = `${role}\u0000${alias}`;
-    const row =
-      rows.get(key) ??
-      ({
-        role,
-        alias,
-        turns: 0,
-        in: 0,
-        cacheRead: 0,
-        out: 0,
-        costUsd: 0,
-        costKnown: false,
-        unpricedTurns: 0,
-      } as RoleRow);
-    row.turns += 1;
-    row.in += priced.usage.in;
-    row.cacheRead += priced.usage.cacheRead;
-    row.out += priced.usage.out;
-    if (priced.usage.costUsd !== undefined) {
-      row.costUsd += priced.usage.costUsd;
-      row.costKnown = true;
-    }
-    if (!priced.costKnown) row.unpricedTurns += 1;
-    rows.set(key, row);
+    addRoleRow(rows, rec, prices, priceIds, roleByStep);
   }
+  return { rows, turns };
+}
 
-  const totals = [...rows.values()].reduce(
+/** Sums the per-role rows into the digest's grand totals. */
+function digestTotals(rows: Map<string, RoleRow>): DigestTotals {
+  const empty: DigestTotals = {
+    turns: 0,
+    in: 0,
+    cacheRead: 0,
+    out: 0,
+    costUsd: 0,
+    costKnown: false,
+    unpricedTurns: 0,
+  };
+  return [...rows.values()].reduce<DigestTotals>(
     (sum, row) => ({
       turns: sum.turns + row.turns,
       in: sum.in + row.in,
@@ -82,23 +132,13 @@ function renderDigestFacts(
       costKnown: sum.costKnown || row.costKnown,
       unpricedTurns: sum.unpricedTurns + row.unpricedTurns,
     }),
-    {
-      turns: 0,
-      in: 0,
-      cacheRead: 0,
-      out: 0,
-      costUsd: 0,
-      costKnown: false,
-      unpricedTurns: 0,
-    },
+    empty,
   );
+}
 
+/** The digest's markdown cost/turn table, one row per role/alias. */
+function renderRoleTable(rows: Map<string, RoleRow>): string[] {
   const lines = [
-    `# Digest — previous launch (before iteration ${iteration})`,
-    "",
-    `launch: previous-launch-before-${iteration}`,
-    `records: ${records.filter((r) => (r.iteration ?? 0) < iteration).length}`,
-    "",
     "## Cost and turns by role",
     "| role | alias | turns | input | cached | output | cost |",
     "|---|---|---|---|---|---|---|",
@@ -114,7 +154,16 @@ function renderDigestFacts(
     );
   }
   if (rows.size === 0) lines.push("| (none) | | | | | | |");
-  lines.push(
+  return lines;
+}
+
+/** The digest's markdown totals block. */
+function renderDigestTotals(
+  turns: number,
+  rows: Map<string, RoleRow>,
+  totals: DigestTotals,
+): string[] {
+  return [
     "",
     "## Totals",
     `- turns: ${turns}`,
@@ -128,21 +177,37 @@ function renderDigestFacts(
           )
     }`,
     "",
-  );
-
-  const transcripts = [
-    ...new Set(
-      records.map((r) => r.transcript).filter((t): t is string => Boolean(t)),
-    ),
   ];
-  lines.push("## Transcripts");
-  if (transcripts.length === 0) lines.push("- none recorded");
-  else {
-    for (const transcript of transcripts.slice(0, 20))
-      lines.push(`- ${transcript}`);
-    if (transcripts.length > 20)
-      lines.push(`- … ${transcripts.length - 20} more`);
-  }
+}
+
+/**
+ * The script half of the digest: cost and turns by role, straight from the
+ * records. No model is asked to add numbers it can only approximate.
+ */
+function renderDigestFacts(
+  records: StepRecord[],
+  iteration: number,
+  roleByStep: Record<string, string>,
+  prices: PriceTable,
+  priceIds?: Record<string, string>,
+): string {
+  const { rows, turns } = digestRoleRows(
+    records,
+    iteration,
+    roleByStep,
+    prices,
+    priceIds,
+  );
+  const lines = [
+    `# Digest — previous launch (before iteration ${iteration})`,
+    "",
+    `launch: previous-launch-before-${iteration}`,
+    `records: ${records.filter((r) => (r.iteration ?? 0) < iteration).length}`,
+    "",
+    ...renderRoleTable(rows),
+    ...renderDigestTotals(turns, rows, digestTotals(rows)),
+  ];
+  appendTranscripts(lines, records);
   lines.push(
     "",
     "<!-- The scout appends loops, failures and interventions from these sources. -->",
@@ -173,10 +238,11 @@ export async function writeLaunchDigest(
   } catch {
     scoutTarget = undefined;
   }
-  const rel = `iterations/${iteration}/digest.md`;
-  const digestPath = path.join(runtime.store.goalDir, rel);
-  await runtime.store.writeFile(
-    rel,
+  const rel = runtime.store.iterations.rel(iteration, "digest.md");
+  const digestPath = runtime.store.iterations.path(iteration, "digest.md");
+  await runtime.store.iterations.write(
+    iteration,
+    "digest.md",
     renderDigestFacts(
       records,
       iteration,
@@ -197,8 +263,8 @@ export async function writeLaunchDigest(
         meta: { iteration, step: "digest", round: 1 },
         vars: {
           launch_id: `previous-launch-before-${iteration}`,
-          goal_dir: runtime.store.goalDir,
-          records_dir: runtime.store.recordsDir,
+          goal_dir: runtime.store.pathOf({ area: "goal" }),
+          records_dir: runtime.store.pathOf({ area: "records" }),
           transcripts_dir: runtime.paths.sessionsDir,
           digest_path: digestPath,
         },
@@ -226,7 +292,7 @@ export async function postLaunchDigest(
 ): Promise<Steer | null> {
   const rel = await writeLaunchDigest(runtime, iteration, records);
   if (!rel) return null;
-  const digest = await runtime.store.readFile(rel);
+  const digest = await runtime.store.iterations.read(iteration, "digest.md");
   if (digest === null) return null;
   const text = [
     `# Launch digest before iteration ${iteration}`,

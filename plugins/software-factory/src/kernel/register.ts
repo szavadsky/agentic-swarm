@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 /**
  * The architect register is the only hierarchy state the main architect writes
  * (plan §2): one bullet per epic under `## Architect register`. This module is
@@ -36,6 +35,27 @@ const ROW =
   /^\s*[-*+]\s+epic\s+`([^`]*)`\s*\|\s*architect\s+`([^`]*)`\s*\|\s*plan\s+`([^`]*)`\s*\|\s*scope\s+`([^`]*)`\s*\|\s*opened\s+i(\d+)\s*\|\s*(?:active|closed\s+i(\d+)\s*:\s*(.+?))\s*$/i;
 const EPIC_NAME = /^[a-z0-9-]+$/;
 
+/** A fence delimiter line, or that the line is ordinary text. */
+function consumeFence(line: string, state: { marker: string | null }): boolean {
+  const match = FENCE.exec(line);
+  if (match === null) return false;
+  const marker = match[1] ?? "";
+  if (state.marker === null) state.marker = marker[0] ?? null;
+  else if (marker[0] === state.marker) state.marker = null;
+  return true;
+}
+
+/**
+ * A level-1/2 heading enters or leaves the register; nested headings leave the
+ * current section alone. Undefined means the line is not a level-1/2 heading.
+ */
+function headingRegister(line: string): boolean | undefined {
+  const heading = HEADING.exec(line);
+  if (heading === null) return undefined;
+  if ((heading[1] ?? "").length > 2) return undefined;
+  return REGISTER_HEADING.test(line);
+}
+
 /**
  * Bullet lines under the register heading; prose, comments and fenced examples
  * are not rows. The section runs until the next level-1/2 heading, so bullets
@@ -49,28 +69,19 @@ function registerRows(plan: string): {
   const rows: string[] = [];
   let found = false;
   let inRegister = false;
-  let fence: string | null = null;
+  const fence = { marker: null as string | null };
   for (const line of plan.split(/\r?\n/)) {
-    const fenceMatch = FENCE.exec(line);
-    if (fenceMatch !== null) {
-      const marker = fenceMatch[1] ?? "";
-      if (fence === null) fence = marker[0] ?? null;
-      else if (marker[0] === fence) fence = null;
-      continue;
-    }
-    if (fence !== null) continue;
-
-    const heading = HEADING.exec(line);
-    if (heading !== null) {
-      if ((heading[1] ?? "").length <= 2) {
-        inRegister = REGISTER_HEADING.test(line);
-        found ||= inRegister;
-      }
+    if (consumeFence(line, fence)) continue;
+    if (fence.marker !== null) continue;
+    const register = headingRegister(line);
+    if (register !== undefined) {
+      inRegister = register;
+      found ||= register;
       continue;
     }
     if (inRegister && BULLET.test(line)) rows.push(line.trim());
   }
-  return { found, rows, unterminatedFence: fence !== null };
+  return { found, rows, unterminatedFence: fence.marker !== null };
 }
 
 function relativePathIssue(path: string): string | null {
@@ -86,6 +97,164 @@ function relativePathIssue(path: string): string | null {
     return 'contains ".." and escapes the goal directory';
   }
   return null;
+}
+
+/** One register bullet parsed, or the grammar finding that rejected it. */
+function parseRegisterRow(
+  line: string,
+  findings: string[],
+): EpicRow | undefined {
+  const match = ROW.exec(line);
+  if (!match) {
+    findings.push(
+      `register row ${JSON.stringify(line)} cannot be parsed: expected "- epic \`<name>\` | architect \`main|subarchitect\` | plan \`<path>\` | scope \`<glob>\` | opened i<N> | active|closed i<N>: <reason>"`,
+    );
+    return undefined;
+  }
+  const epic = match[1] ?? "";
+  const architect = match[2] ?? "";
+  const planPath = match[3] ?? "";
+  const scope = match[4] ?? "";
+  const opened = Number(match[5]);
+  const closedIteration = match[6] === undefined ? undefined : Number(match[6]);
+  const reason = match[7]?.trim() ?? "";
+
+  if (!EPIC_NAME.test(epic)) {
+    findings.push(`register epic ${JSON.stringify(epic)} is not [a-z0-9-]+`);
+    return undefined;
+  }
+  if (architect !== "main" && architect !== "subarchitect") {
+    findings.push(
+      `register epic "${epic}" names architect ${JSON.stringify(architect)}; expected "main" or "subarchitect"`,
+    );
+    return undefined;
+  }
+  return {
+    epic,
+    architect,
+    plan: planPath,
+    scope,
+    opened,
+    ...(closedIteration === undefined
+      ? {}
+      : { closed: { iteration: closedIteration, reason } }),
+  };
+}
+
+/** Depth 1 cannot host subarchitect rows. */
+function depthOneFindings(epics: EpicRow[]): string[] {
+  return epics
+    .filter(
+      (row) => row.closed === undefined && row.architect === "subarchitect",
+    )
+    .map(
+      (row) =>
+        `epic "${row.epic}" names architect "subarchitect" at hierarchy depth 1; subarchitect rows require depth 2`,
+    );
+}
+
+/** Duplicate epic names: an active reopen is its own finding. */
+function duplicateEpicFindings(epics: EpicRow[]): string[] {
+  const rowCounts = new Map<string, number>();
+  const activeCounts = new Map<string, number>();
+  for (const row of epics) {
+    rowCounts.set(row.epic, (rowCounts.get(row.epic) ?? 0) + 1);
+    if (row.closed === undefined) {
+      activeCounts.set(row.epic, (activeCounts.get(row.epic) ?? 0) + 1);
+    }
+  }
+  const findings: string[] = [];
+  for (const [epic, count] of rowCounts) {
+    if (count === 1) continue;
+    if ((activeCounts.get(epic) ?? 0) > 1) {
+      findings.push(`duplicate active epic "${epic}" (${count} rows)`);
+    } else {
+      findings.push(
+        `epic "${epic}" appears in ${count} rows; a closed name is never reopened, a new effort is a new epic name`,
+      );
+    }
+  }
+  return findings;
+}
+
+/** Plan and scope paths, and the plan each owner is allowed to name. */
+function rowPathFindings(epics: EpicRow[]): string[] {
+  const findings: string[] = [];
+  for (const row of epics) {
+    const planIssue = relativePathIssue(row.plan);
+    if (planIssue !== null) {
+      findings.push(`epic "${row.epic}" plan "${row.plan}" ${planIssue}`);
+    }
+    const scopeIssue = relativePathIssue(row.scope);
+    if (scopeIssue !== null) {
+      findings.push(`epic "${row.epic}" scope "${row.scope}" ${scopeIssue}`);
+    }
+    const epicPlan = `epics/${row.epic}.md`;
+    if (
+      planIssue === null &&
+      row.architect === "subarchitect" &&
+      row.plan !== epicPlan
+    ) {
+      findings.push(
+        `epic "${row.epic}" is owned by a subarchitect; its plan must be "${epicPlan}", not "${row.plan}"`,
+      );
+    }
+    if (
+      planIssue === null &&
+      row.architect === "main" &&
+      row.plan !== "plan.md"
+    ) {
+      findings.push(
+        `epic "${row.epic}" is owned by the main architect; its plan must be "plan.md", not "${row.plan}"`,
+      );
+    }
+  }
+  return findings;
+}
+
+/** Open rows must name a plan that exists. */
+function missingPlanFindings(epics: EpicRow[], ctx: RegisterContext): string[] {
+  return epics
+    .filter(
+      (row) => row.closed === undefined && relativePathIssue(row.plan) === null,
+    )
+    .filter((row) => !ctx.exists(row.plan))
+    .map((row) => `epic "${row.epic}" plan "${row.plan}" does not exist`);
+}
+
+/** Active rows by epic, and closed rows by epic. */
+function classifyRows(epics: EpicRow[]): {
+  active: Map<string, EpicRow>;
+  closed: Map<string, EpicRow>;
+} {
+  const active = new Map<string, EpicRow>();
+  const closed = new Map<string, EpicRow>();
+  for (const row of epics) {
+    const rows = row.closed === undefined ? active : closed;
+    if (!rows.has(row.epic)) rows.set(row.epic, row);
+  }
+  return { active, closed };
+}
+
+/** Tasks may only name an active epic. */
+function taskEpicFindings(
+  tasks: RegisterContext["tasks"],
+  active: ReadonlyMap<string, EpicRow>,
+  closed: ReadonlyMap<string, EpicRow>,
+): string[] {
+  const findings: string[] = [];
+  for (const task of tasks) {
+    if (task.epic === undefined || active.has(task.epic)) continue;
+    const closedRow = closed.get(task.epic)?.closed;
+    if (closedRow === undefined) {
+      findings.push(`task "${task.slug}" names unknown epic "${task.epic}"`);
+    } else {
+      findings.push(
+        `task "${task.slug}" names closed epic "${task.epic}" (closed i${closedRow.iteration})`,
+      );
+    }
+  }
+  return findings;
 }
 
 /**
@@ -111,128 +280,18 @@ export function parseArchitectRegister(
   if (!located.found) return { epics: [], findings };
 
   const epics: EpicRow[] = [];
-
   for (const line of located.rows) {
-    const match = ROW.exec(line);
-    if (!match) {
-      findings.push(
-        `register row ${JSON.stringify(line)} cannot be parsed: expected "- epic \`<name>\` | architect \`main|subarchitect\` | plan \`<path>\` | scope \`<glob>\` | opened i<N> | active|closed i<N>: <reason>"`,
-      );
-      continue;
-    }
-    const epic = match[1] ?? "";
-    const architect = match[2] ?? "";
-    const planPath = match[3] ?? "";
-    const scope = match[4] ?? "";
-    const opened = Number(match[5]);
-    const closedIteration =
-      match[6] === undefined ? undefined : Number(match[6]);
-    const reason = match[7]?.trim() ?? "";
-
-    if (!EPIC_NAME.test(epic)) {
-      findings.push(`register epic ${JSON.stringify(epic)} is not [a-z0-9-]+`);
-      continue;
-    }
-    if (architect !== "main" && architect !== "subarchitect") {
-      findings.push(
-        `register epic "${epic}" names architect ${JSON.stringify(architect)}; expected "main" or "subarchitect"`,
-      );
-      continue;
-    }
-    epics.push({
-      epic,
-      architect,
-      plan: planPath,
-      scope,
-      opened,
-      ...(closedIteration === undefined
-        ? {}
-        : { closed: { iteration: closedIteration, reason } }),
-    });
+    const row = parseRegisterRow(line, findings);
+    if (row) epics.push(row);
   }
-
   if (ctx.depth === 1) {
-    for (const row of epics) {
-      if (row.closed === undefined && row.architect === "subarchitect") {
-        findings.push(
-          `epic "${row.epic}" names architect "subarchitect" at hierarchy depth 1; subarchitect rows require depth 2`,
-        );
-      }
-    }
+    findings.push(...depthOneFindings(epics));
     return { epics, findings };
   }
 
-  const rowCounts = new Map<string, number>();
-  const activeCounts = new Map<string, number>();
-  for (const row of epics) {
-    rowCounts.set(row.epic, (rowCounts.get(row.epic) ?? 0) + 1);
-    if (row.closed === undefined)
-      activeCounts.set(row.epic, (activeCounts.get(row.epic) ?? 0) + 1);
-  }
-  for (const [epic, count] of rowCounts) {
-    if (count === 1) continue;
-    if ((activeCounts.get(epic) ?? 0) > 1) {
-      findings.push(`duplicate active epic "${epic}" (${count} rows)`);
-    } else {
-      findings.push(
-        `epic "${epic}" appears in ${count} rows; a closed name is never reopened, a new effort is a new epic name`,
-      );
-    }
-  }
-
-  for (const row of epics) {
-    const planIssue = relativePathIssue(row.plan);
-    if (planIssue !== null)
-      findings.push(`epic "${row.epic}" plan "${row.plan}" ${planIssue}`);
-    const scopeIssue = relativePathIssue(row.scope);
-    if (scopeIssue !== null)
-      findings.push(`epic "${row.epic}" scope "${row.scope}" ${scopeIssue}`);
-    const epicPlan = `epics/${row.epic}.md`;
-    if (
-      planIssue === null &&
-      row.architect === "subarchitect" &&
-      row.plan !== epicPlan
-    ) {
-      findings.push(
-        `epic "${row.epic}" is owned by a subarchitect; its plan must be "${epicPlan}", not "${row.plan}"`,
-      );
-    }
-    if (
-      planIssue === null &&
-      row.architect === "main" &&
-      row.plan !== "plan.md"
-    ) {
-      findings.push(
-        `epic "${row.epic}" is owned by the main architect; its plan must be "plan.md", not "${row.plan}"`,
-      );
-    }
-  }
-
-  for (const row of epics) {
-    if (row.closed !== undefined || relativePathIssue(row.plan) !== null)
-      continue;
-    if (!ctx.exists(row.plan)) {
-      findings.push(`epic "${row.epic}" plan "${row.plan}" does not exist`);
-    }
-  }
-
-  const activeRows = new Map<string, EpicRow>();
-  const closedRows = new Map<string, EpicRow>();
-  for (const row of epics) {
-    const rows = row.closed === undefined ? activeRows : closedRows;
-    if (!rows.has(row.epic)) rows.set(row.epic, row);
-  }
-  for (const task of ctx.tasks) {
-    if (task.epic === undefined || activeRows.has(task.epic)) continue;
-    const closed = closedRows.get(task.epic)?.closed;
-    if (closed === undefined) {
-      findings.push(`task "${task.slug}" names unknown epic "${task.epic}"`);
-    } else {
-      findings.push(
-        `task "${task.slug}" names closed epic "${task.epic}" (closed i${closed.iteration})`,
-      );
-    }
-  }
-
+  findings.push(...duplicateEpicFindings(epics), ...rowPathFindings(epics));
+  findings.push(...missingPlanFindings(epics, ctx));
+  const { active, closed } = classifyRows(epics);
+  findings.push(...taskEpicFindings(ctx.tasks, active, closed));
   return { epics, findings };
 }

@@ -1,4 +1,0 @@
-- iteration: `{{iteration}}`
-- intent: `{{intent_path}}`
-- plan: `{{plan_path}}` (read-only: never edit it or any task file)
-- context pack: `{{pack_path}}`

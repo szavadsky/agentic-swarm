@@ -1,49 +1,19 @@
-// biome-ignore-all lint/complexity: split-rest
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { readYaml, writeYamlAtomic } from "../../src/core/records/io.js";
-import { createFolderStore } from "../../src/kernel/store.js";
-import type { RecordStart, TaskFile } from "../../src/kernel/types.js";
-import { createTmpRepo } from "../helpers/tmp-repo.js";
 import { forwardedConcerns } from "../../src/kernel/context-pack.js";
 import { openDebts } from "../../src/kernel/derive.js";
+import { createFolderStore } from "../../src/kernel/store.js";
 import { writeIterationSummary } from "../../src/kernel/summary.js";
+import { createTmpRepo } from "../helpers/tmp-repo.js";
+import { cause } from "./helpers.js";
+import { start, task } from "./store-fixtures.js";
 
-const MODEL = { id: "fake/model" };
-
-function start(over: Partial<RecordStart> = {}): RecordStart {
-  return {
-    iteration: 1,
-    slug: "auth.login",
-    step: "implement",
-    round: 1,
-    actor: "agent",
-    alias: "implementer",
-    model: MODEL,
-    ...over,
-  };
-}
-
-function task(over: Partial<TaskFile> = {}): TaskFile {
-  return {
-    slug: "auth.login",
-    title: "Login",
-    kind: "development",
-    flow: "implement-review",
-    deps: [],
-    scope: ["src/auth"],
-    revision: 0,
-    source: "Plan §auth",
-    body: "why login\n\ndone when: user can log in",
-    ...over,
-  };
-}
+let goalDir: string;
 
 describe("createFolderStore", () => {
-  let goalDir: string;
-
   beforeEach(() => {
     goalDir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-store-"));
   });
@@ -51,7 +21,22 @@ describe("createFolderStore", () => {
   afterEach(() => {
     fs.rmSync(goalDir, { recursive: true, force: true });
   });
+  registerCreateFolderStorePart1();
+  registerCreateFolderStorePart2();
+  registerCreateFolderStorePart3();
+  registerCreateFolderStorePart4();
+  registerCreateFolderStorePart5();
+  registerCreateFolderStorePart6();
+  registerCreateFolderStorePart7();
+  registerCreateFolderStorePart8();
+  registerCreateFolderStorePart9();
+  registerCreateFolderStorePart10();
+  registerCreateFolderStorePart11();
+  registerCreateFolderStorePart12();
+  registerCreateFolderStorePart13();
+});
 
+function registerCreateFolderStorePart1(): void {
   it("creates the goal layout", async () => {
     const store = createFolderStore(goalDir, undefined, {});
     await store.ensureLayout();
@@ -71,7 +56,9 @@ describe("createFolderStore", () => {
     expect(store.mailboxDir).toBe(path.join(goalDir, "mailbox"));
     expect(store.iterationsDir).toBe(path.join(goalDir, "iterations"));
   });
+}
 
+function registerCreateFolderStorePart2(): void {
   it("writes a .gitignore at the artifact root so goal records stay out of git", async () => {
     const repo = createTmpRepo();
     try {
@@ -111,7 +98,9 @@ describe("createFolderStore", () => {
     expect(await store.readFile("notes/hello.txt")).toBe("hello");
     expect(await store.listDir("notes")).toEqual(["alpha.txt", "hello.txt"]);
   });
+}
 
+function registerCreateFolderStorePart3(): void {
   it("resolves a task file's type through the store's process config", async () => {
     const store = createFolderStore(goalDir, undefined, {
       spike: { flow: "spike", kind: "spike", schema: "outcome" },
@@ -152,7 +141,9 @@ describe("createFolderStore", () => {
     expect(await store.readTask("auth.login")).toMatchObject(login);
     expect(await store.readTask("missing")).toBeNull();
   });
+}
 
+function registerCreateFolderStorePart4(): void {
   it("writes started.yaml before returning and shows the unfinished record", async () => {
     const store = createFolderStore(goalDir, undefined, {});
     const turn = await store.startRecord(start());
@@ -180,6 +171,16 @@ describe("createFolderStore", () => {
     expect(records[0]!.outcome).toBeUndefined();
   });
 
+  it("round-trips the architect that owns a record", async () => {
+    const store = createFolderStore(goalDir, undefined, {});
+    const turn = await store.startRecord(start({ architect: "auth" }));
+    expect(turn.meta.architect).toBe("auth");
+    const records = await store.listRecords();
+    expect(records[0]!.architect).toBe("auth");
+  });
+}
+
+function registerCreateFolderStorePart5(): void {
   it("finishes atomically: outcome.yaml, then end.yaml with endedAt", async () => {
     const store = createFolderStore(goalDir, undefined, {});
     const turn = await store.startRecord(start());
@@ -223,7 +224,9 @@ describe("createFolderStore", () => {
     expect(records[0]!.endedAt).toBe(finished.endedAt!);
     expect(records[0]!.outcome).toEqual(outcome);
   });
+}
 
+function registerCreateFolderStorePart6(): void {
   it("increments seq from the highest existing record dir", async () => {
     const store = createFolderStore(goalDir, undefined, {});
     const first = await store.appendRecord(start(), { stop: { kind: "done" } });
@@ -257,7 +260,9 @@ describe("createFolderStore", () => {
       path.join(goalDir, "records", "00008-i2-auth.login-implement-r1"),
     );
   });
+}
 
+function registerCreateFolderStorePart7(): void {
   it("skips record dirs without a parseable started.yaml", async () => {
     const store = createFolderStore(goalDir, undefined, {});
     await store.startRecord(start());
@@ -287,7 +292,9 @@ describe("createFolderStore", () => {
     const records = await store.listRecords();
     expect(records.map((r) => r.seq)).toEqual([1]);
   });
+}
 
+function registerCreateFolderStorePart8(): void {
   it("reads outcome.yaml when present and prefers it over end.yaml", async () => {
     const store = createFolderStore(goalDir, undefined, {});
     const turn = await store.startRecord(start());
@@ -326,7 +333,9 @@ describe("createFolderStore", () => {
     expect(records[0]!.outcome).toBeUndefined();
     expect(records[0]!.seq).toBe(turn.meta.seq);
   });
+}
 
+function registerCreateFolderStorePart9(): void {
   it("degrades a torn end.yaml to an orphan instead of throwing", async () => {
     const store = createFolderStore(goalDir, undefined, {});
     const turn = await store.startRecord(start());
@@ -338,7 +347,9 @@ describe("createFolderStore", () => {
     expect(records).toHaveLength(1);
     expect(records[0]!.stop).toBeUndefined();
   });
+}
 
+function registerCreateFolderStorePart10(): void {
   it("normalizes missing concerns/forward in outcome.yaml on read", async () => {
     const store = createFolderStore(goalDir, undefined, {});
     const turn = await store.startRecord(start());
@@ -383,7 +394,9 @@ describe("createFolderStore", () => {
     ]);
     expect(r2.outcome!.forward).toEqual([]);
   });
+}
 
+function registerCreateFolderStorePart11(): void {
   it("assigns every ingested concern the record id, overwriting one the agent wrote", async () => {
     const store = createFolderStore(goalDir, undefined, {});
     const turn = await store.startRecord(start());
@@ -409,7 +422,9 @@ describe("createFolderStore", () => {
       `${recordId}#2`,
     ]);
   });
+}
 
+function registerCreateFolderStorePart12(): void {
   it("assigns ids to an outcome that rides on a script step's end.yaml", async () => {
     const store = createFolderStore(goalDir, undefined, {});
     const turn = await store.startRecord(
@@ -417,7 +432,7 @@ describe("createFolderStore", () => {
     );
     await turn.finish({
       ok: true,
-      cause: "round limit",
+      cause: cause("round limit"),
       outcome: {
         status: "done",
         summary: "script outcome",
@@ -431,7 +446,9 @@ describe("createFolderStore", () => {
       `${path.basename(turn.dir)}#1`,
     );
   });
+}
 
+function registerCreateFolderStorePart13(): void {
   it("verifies context pack, open debts and summary builder do not throw on seeded records", async () => {
     const store = createFolderStore(goalDir, undefined, {});
     await store.ensureLayout();
@@ -448,8 +465,9 @@ describe("createFolderStore", () => {
         terminal: false,
         interrupted: false,
         tasks: {},
+        epics: {},
       },
       records,
     });
   });
-});
+}

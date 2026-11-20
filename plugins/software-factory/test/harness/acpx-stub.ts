@@ -1,8 +1,8 @@
-// biome-ignore-all lint/complexity: split-rest
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { removeAtFileEnd } from "../setup/tmp-cleanup.js";
+import { stubJsonOptions } from "./acpx-stub-script.js";
 
 /** Bound on the stub's startup wait, so a failed spawn reports instead of hanging. */
 const READY_TIMEOUT_MS = 30_000;
@@ -105,39 +105,13 @@ export interface AcpxStubOptions {
   envFile?: string;
 }
 
-/**
- * A stub acpx executable that replays the probe's JSON-RPC frames. It keeps a
- * named-session record in its own state dir, so a missing `-s` is a real
- * NO_SESSION failure for both `set` and the prompt, and a second turn can only
- * resume by name. It logs argv and never writes the outcome file: a test that
- * cares about the outcome path asserts the prompt the stub received.
- */
 export function createAcpxStub(opts: AcpxStubOptions = {}): AcpxStub {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acpx-stub-"));
   const logPath = path.join(dir, "invocations.ndjson");
   const readyPath = path.join(dir, "ready");
   const stateDir = path.join(dir, "state");
   const binary = path.join(dir, "acpx-stub.js");
-  const usageJs = JSON.stringify(opts.usage ?? null);
-  const sessionUsageJs = JSON.stringify(opts.sessionUsage ?? null);
-  const sessionCommandJs = JSON.stringify(opts.sessionCommand ?? "ok");
-  const compactUsageJs = JSON.stringify(opts.compactUsage ?? null);
-  const bannerJs = JSON.stringify(opts.banner ?? null);
-  const promptDelayJs = JSON.stringify(opts.promptDelayMs ?? 0);
-  const costJs = JSON.stringify(opts.cost ?? null);
-  const compactJs = JSON.stringify(opts.compact ?? "ok");
-  const modelsJs = JSON.stringify(opts.models ?? null);
-  const defaultModelJs = JSON.stringify(opts.defaultModel ?? null);
-  const effortConfigIdJs = JSON.stringify(opts.effortConfigId ?? "effort");
-  const stopReasonJs = JSON.stringify(opts.stopReason ?? "end_turn");
-  const promptExitCodeJs = JSON.stringify(opts.promptExitCode ?? 0);
-  const omitPromptResultJs = JSON.stringify(opts.omitPromptResult ?? false);
-  const errorAfterResultJs = JSON.stringify(opts.errorAfterResult ?? null);
-  const hangAfterResultJs = JSON.stringify(opts.hangAfterResult ?? false);
-  const sessionInfoErrorJs = JSON.stringify(opts.sessionInfoError ?? null);
-  const modelBehaviorsJs = JSON.stringify(opts.modelBehaviors ?? null);
-  const envFileJs = JSON.stringify(opts.envFile ?? null);
-
+  const js = stubJsonOptions(opts);
   const script = `#!/usr/bin/env bun
 import fs from "node:fs";
 import path from "node:path";
@@ -146,7 +120,7 @@ const args = process.argv.slice(2);
 const logPath = ${JSON.stringify(logPath)};
 const readyPath = ${JSON.stringify(readyPath)};
 const stateDir = ${JSON.stringify(stateDir)};
-const envFile = ${envFileJs};
+const envFile = ${js.envFileJs};
 fs.mkdirSync(stateDir, { recursive: true });
 fs.appendFileSync(logPath, JSON.stringify(args) + "\\n");
 fs.writeFileSync(readyPath, "ready");
@@ -167,30 +141,30 @@ const marker = (name) => {
   return match ? match[1] : undefined;
 };
 const modelFlag = flag(["--model"]);
-const behaviors = ${modelBehaviorsJs};
+const behaviors = ${js.modelBehaviorsJs};
 const activeBehavior = (modelFlag && behaviors && behaviors[modelFlag]) ? behaviors[modelFlag] : {};
 
 const mode = marker("mode");
 const textMarker = marker("text");
 const defaultReply = "reply" in activeBehavior ? activeBehavior.reply : "PONG";
 const reply = textMarker !== undefined ? textMarker : defaultReply;
-const usage = "usage" in activeBehavior ? activeBehavior.usage : ${usageJs};
-const sessionUsage = "sessionUsage" in activeBehavior ? activeBehavior.sessionUsage : ${sessionUsageJs};
-const sessionInfoError = "sessionInfoError" in activeBehavior ? activeBehavior.sessionInfoError : ${sessionInfoErrorJs};
-const sessionCommand = ${sessionCommandJs};
-const compactUsage = ${compactUsageJs};
-const banner = ${bannerJs};
-const promptDelayMs = ${promptDelayJs};
-const cost = ${costJs};
-const compactMode = ${compactJs};
-const models = ${modelsJs};
-const defaultModel = ${defaultModelJs};
-const effortConfigId = ${effortConfigIdJs};
-const stopReason = ${stopReasonJs};
-const promptExitCode = ${promptExitCodeJs};
-const omitPromptResult = ${omitPromptResultJs};
-const errorAfterResult = ${errorAfterResultJs};
-const hangAfterResult = ${hangAfterResultJs};
+const usage = "usage" in activeBehavior ? activeBehavior.usage : ${js.usageJs};
+const sessionUsage = "sessionUsage" in activeBehavior ? activeBehavior.sessionUsage : ${js.sessionUsageJs};
+const sessionInfoError = "sessionInfoError" in activeBehavior ? activeBehavior.sessionInfoError : ${js.sessionInfoErrorJs};
+const sessionCommand = ${js.sessionCommandJs};
+const compactUsage = ${js.compactUsageJs};
+const banner = ${js.bannerJs};
+const promptDelayMs = ${js.promptDelayJs};
+const cost = ${js.costJs};
+const compactMode = ${js.compactJs};
+const models = ${js.modelsJs};
+const defaultModel = ${js.defaultModelJs};
+const effortConfigId = ${js.effortConfigIdJs};
+const stopReason = ${js.stopReasonJs};
+const promptExitCode = ${js.promptExitCodeJs};
+const omitPromptResult = ${js.omitPromptResultJs};
+const errorAfterResult = ${js.errorAfterResultJs};
+const hangAfterResult = ${js.hangAfterResultJs};
 const sessionFile = (name) => path.join(stateDir, "session-" + name);
 const sessionUsageFile = (name) => path.join(stateDir, "usage-" + name);
 const addSessionUsage = (name, amount) => {
