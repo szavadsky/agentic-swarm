@@ -1,8 +1,4 @@
-// biome-ignore-all lint/complexity: split-rest
-import fs from "node:fs";
-import path from "node:path";
 import { runAgentTurn } from "./agent.js";
-import { contextPackRelPath } from "./context-pack.js";
 import {
   type FrontClass,
   FrontClassError,
@@ -42,7 +38,6 @@ interface FrontRunOptions {
   state: State;
 }
 
-const PLAN_FILE = "plan.md";
 const CLASS_FILE = "class.yaml";
 
 /**
@@ -83,16 +78,9 @@ function stopText(stop: StepRecord["stop"]): string {
   return "cause" in stop ? `${stop.kind}: ${stop.cause}` : stop.kind;
 }
 
-function readTasks(runtime: KernelRuntime): TaskFile[] {
+async function readTasks(runtime: KernelRuntime): Promise<TaskFile[]> {
   const tasks: TaskFile[] = [];
-  if (!fs.existsSync(runtime.store.tasksDir)) return tasks;
-  for (const name of fs.readdirSync(runtime.store.tasksDir).sort()) {
-    if (!name.endsWith(".md")) continue;
-    const slug = name.slice(0, -".md".length);
-    const text = fs.readFileSync(
-      path.join(runtime.store.tasksDir, name),
-      "utf8",
-    );
+  for (const [slug, text] of await runtime.store.tasks.texts()) {
     try {
       tasks.push(parseTaskFile(text, slug, runtime.configs.process.taskTypes));
     } catch (err) {
@@ -111,12 +99,12 @@ function readTasks(runtime: KernelRuntime): TaskFile[] {
  * graph (slug, scope, deps, base), and the run-config tier pre-flight would have
  * checked had the file existed before launch.
  */
-function validateFrontTasks(
+async function validateFrontTasks(
   runtime: KernelRuntime,
   cls: FrontClass,
   state: State,
-): void {
-  const tasks = readTasks(runtime);
+): Promise<void> {
+  const tasks = await readTasks(runtime);
   const findings = validateTaskGraph(tasks, { status: taskStatuses(state) });
   if (findings.length > 0) {
     throw new FrontError(
@@ -131,7 +119,7 @@ function validateFrontTasks(
   const task = tasks.find((candidate) => candidate.slug === cls.slug);
   if (!task) {
     throw new FrontError(
-      `class.yaml names slug "${cls.slug}" but ${runtime.store.tasksDir}/${cls.slug}.md does not exist`,
+      `class.yaml names slug "${cls.slug}" but ${runtime.store.tasks.path(cls.slug ?? "")} does not exist`,
     );
   }
   const expectedFlow =
@@ -167,18 +155,24 @@ function gateCommands(runtime: KernelRuntime): string {
   );
 }
 
-function resultFor(
+async function resultFor(
   runtime: KernelRuntime,
   cls: FrontClass,
   opts: { ran: boolean; iteration: number; state: State },
-): FrontResult {
-  const packRel = contextPackRelPath(opts.iteration);
+): Promise<FrontResult> {
+  const packRel = runtime.store.iterations.rel(
+    opts.iteration,
+    "context-pack.md",
+  );
   // Every class gets a pack: a bigger front hands it to the architect, a
   // trivial/task front leaves it as the implementer's briefing, delivered as
   // the implement prompt's front_pack variable.
   if (opts.ran) {
-    const pack = path.join(runtime.store.goalDir, packRel);
-    if (!fs.existsSync(pack) || fs.statSync(pack).size === 0) {
+    const pack = await runtime.store.iterations.read(
+      opts.iteration,
+      "context-pack.md",
+    );
+    if (pack === null || pack.length === 0) {
       throw new FrontError(
         `front classified ${cls.class} but wrote no context pack at ${packRel}`,
       );
@@ -189,8 +183,66 @@ function resultFor(
       ? { action: "boundary", packPath: packRel }
       : { action: "boundary" };
   }
-  validateFrontTasks(runtime, cls, opts.state);
+  await validateFrontTasks(runtime, cls, opts.state);
   return { action: "dispatch" };
+}
+
+/** The template variables a front turn reads. */
+function frontTurnVars(
+  runtime: KernelRuntime,
+  opts: FrontRunOptions,
+  packPath: string,
+): Record<string, string> {
+  return {
+    iteration: String(opts.iteration),
+    intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
+    plan_path: runtime.store.plans.path,
+    tasks_dir: runtime.store.tasks.dir,
+    class_path: runtime.store.pathOf({ area: "goal", rel: CLASS_FILE }),
+    pack_path: packPath,
+    checkout: runtime.paths.goalCheckout,
+    setup_command: runtime.configs.repo.setup.join(" && ") || "none",
+    gate_commands: gateCommands(runtime),
+    class_types: frontClassTypesVar(runtime.configs.process.taskTypes),
+  };
+}
+
+/** Runs the front's agent turn against the prepared context pack. */
+async function runFrontTurn(
+  runtime: KernelRuntime,
+  opts: FrontRunOptions,
+  target: ReturnType<typeof frontTarget>,
+  packPath: string,
+): Promise<Awaited<ReturnType<typeof runAgentTurn>>> {
+  return await runAgentTurn(runtime, {
+    target,
+    cwd: runtime.paths.goalCheckout,
+    meta: { iteration: opts.iteration, step: "front", round: 1 },
+    vars: frontTurnVars(runtime, opts, packPath),
+    expectation: KERNEL_TURN_STEPS.front,
+  });
+}
+
+/** The infra/blocked result for a front turn that did not finish cleanly. */
+function frontTurnFailure(
+  result: Awaited<ReturnType<typeof runAgentTurn>>,
+): FrontResult | undefined {
+  if (!result.outcome) {
+    return {
+      action: "infra",
+      cause: `front turn produced no outcome (${stopText(result.record.stop)})`,
+    };
+  }
+  if (result.outcome.status === "blocked") {
+    return { action: "blocked", cause: result.outcome.summary };
+  }
+  if (result.outcome.status !== "done") {
+    return {
+      action: "infra",
+      cause: `front turn ended ${result.outcome.status}: ${result.outcome.summary}`,
+    };
+  }
+  return undefined;
 }
 
 /**
@@ -205,10 +257,8 @@ export async function runFront(
   runtime: KernelRuntime,
   opts: FrontRunOptions,
 ): Promise<FrontResult> {
-  const goalDir = runtime.store.goalDir;
   try {
-    if (fs.existsSync(path.join(goalDir, PLAN_FILE)))
-      return { action: "boundary" };
+    if (await runtime.store.plans.exists()) return { action: "boundary" };
     // The front has no steer variable and cannot answer one; the architect
     // boundary is the only steer consumer, so a pending steer must not be
     // skipped by a class that would dispatch without it.
@@ -216,60 +266,30 @@ export async function runFront(
       return { action: "boundary" };
     const existing = readFrontClass(runtime);
     if (existing)
-      return resultFor(runtime, existing, {
+      return await resultFor(runtime, existing, {
         ran: false,
         iteration: opts.iteration,
         state: opts.state,
       });
 
     const target = frontTarget(runtime, opts.iteration);
-    const packRel = contextPackRelPath(opts.iteration);
     // The front writes its pack; the script owns the directory so the agent
     // never has to create a path outside the goal artifacts.
-    fs.mkdirSync(path.join(goalDir, path.dirname(packRel)), {
-      recursive: true,
+    const packPath = await runtime.store.localPath({
+      area: "iterations",
+      rel: `${opts.iteration}/context-pack.md`,
     });
-    const result = await runAgentTurn(runtime, {
-      target,
-      cwd: runtime.paths.goalCheckout,
-      meta: { iteration: opts.iteration, step: "front", round: 1 },
-      vars: {
-        iteration: String(opts.iteration),
-        intent_path: path.join(goalDir, "intent.md"),
-        plan_path: path.join(goalDir, PLAN_FILE),
-        tasks_dir: runtime.store.tasksDir,
-        class_path: path.join(goalDir, CLASS_FILE),
-        pack_path: path.join(goalDir, packRel),
-        checkout: runtime.paths.goalCheckout,
-        setup_command: runtime.configs.repo.setup.join(" && ") || "none",
-        gate_commands: gateCommands(runtime),
-        class_types: frontClassTypesVar(runtime.configs.process.taskTypes),
-      },
-      expectation: KERNEL_TURN_STEPS.front,
-    });
-    if (!result.outcome) {
-      return {
-        action: "infra",
-        cause: `front turn produced no outcome (${stopText(result.record.stop)})`,
-      };
-    }
-    if (result.outcome.status === "blocked") {
-      return { action: "blocked", cause: result.outcome.summary };
-    }
-    if (result.outcome.status !== "done") {
-      return {
-        action: "infra",
-        cause: `front turn ended ${result.outcome.status}: ${result.outcome.summary}`,
-      };
-    }
+    const result = await runFrontTurn(runtime, opts, target, packPath);
+    const failure = frontTurnFailure(result);
+    if (failure) return failure;
     const cls = readFrontClass(runtime);
     if (!cls) {
       return {
         action: "infra",
-        cause: `front turn wrote no ${CLASS_FILE} at ${path.join(goalDir, CLASS_FILE)}`,
+        cause: `front turn wrote no ${CLASS_FILE} at ${runtime.store.pathOf({ area: "goal", rel: CLASS_FILE })}`,
       };
     }
-    return resultFor(runtime, cls, {
+    return await resultFor(runtime, cls, {
       ran: true,
       iteration: opts.iteration,
       state: opts.state,

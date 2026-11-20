@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -96,6 +95,14 @@ describe("child environment allowlist", () => {
 });
 
 describe("spawned child environments", () => {
+  spawnedChildEnvironmentsPart1();
+  spawnedChildEnvironmentsPart2();
+  spawnedChildEnvironmentsPart3();
+  spawnedChildEnvironmentsPart4();
+  spawnedChildEnvironmentsPart5();
+});
+
+function spawnedChildEnvironmentsPart1() {
   it("runProcess spawns with only the allowlisted environment", async () => {
     process.env[PLANTED] = "s3cret";
     try {
@@ -131,7 +138,9 @@ describe("spawned child environments", () => {
       delete process.env[PLANTED];
     }
   });
+}
 
+function spawnedChildEnvironmentsPart2() {
   it("OmpRpc spawns with only the allowlisted environment", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "env-allowlist-omp-"));
     const envFile = path.join(dir, "env.json");
@@ -151,7 +160,9 @@ describe("spawned child environments", () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+}
 
+function spawnedChildEnvironmentsPart3() {
   it("the omp model catalog probe inherits the configured allowlist", async () => {
     const dir = fs.mkdtempSync(
       path.join(os.tmpdir(), "env-allowlist-catalog-"),
@@ -177,7 +188,9 @@ describe("spawned child environments", () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+}
 
+function spawnedChildEnvironmentsPart4() {
   it("AcpxHarness's prompt child inherits only the allowlisted environment", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "env-allowlist-acpx-"));
     const envFile = path.join(dir, "env.json");
@@ -207,7 +220,9 @@ describe("spawned child environments", () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+}
 
+function spawnedChildEnvironmentsPart5() {
   it("AcpxHarness's prompt child inherits a name the config allows", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "env-allowlist-acpx-"));
     const envFile = path.join(dir, "env.json");
@@ -235,4 +250,4 @@ describe("spawned child environments", () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
-});
+}

@@ -1,7 +1,3 @@
-import fs from "node:fs";
-import path from "node:path";
-import { writeYamlAtomic } from "../core/records/io.js";
-import { sealRecord } from "./store.js";
 import { backfillSummaries } from "./summary.js";
 import type { ArtifactStore, KernelRuntime } from "./types.js";
 import { prepareIntegrationCheckout } from "./worktree.js";
@@ -20,30 +16,17 @@ import { prepareIntegrationCheckout } from "./worktree.js";
  * sealed as well.
  */
 async function settleRecords(store: ArtifactStore): Promise<number> {
-  let entries: fs.Dirent[];
-  try {
-    entries = await fs.promises.readdir(store.recordsDir, {
-      withFileTypes: true,
-    });
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return 0;
-    throw err;
-  }
   let closed = 0;
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const dir = path.join(store.recordsDir, entry.name);
-    if (!fs.existsSync(path.join(dir, "started.yaml"))) continue;
-    if (fs.existsSync(path.join(dir, "end.yaml"))) {
-      await sealRecord(dir);
+  for (const dir of await store.records.dirs()) {
+    if (!dir.started) continue;
+    if (dir.ended) {
+      await store.records.seal(dir.name);
       continue;
     }
-    await writeYamlAtomic(path.join(dir, "end.yaml"), {
+    await store.records.close(dir.name, {
       stop: { kind: "infra", cause: "crash" },
       ok: false,
-      endedAt: new Date().toISOString(),
     });
-    await sealRecord(dir);
     closed += 1;
   }
   return closed;

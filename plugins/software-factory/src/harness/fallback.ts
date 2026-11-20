@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { statedWaitMs } from "./stated-wait.js";
 import type { ModelRef, Stop, TurnAttempt, Usage } from "./types.js";
 
@@ -73,6 +72,36 @@ export function modelChain(
   return chain;
 }
 
+/** Bounded retries for one model, in order; returns its final attempt output. */
+async function runModelAttempts<T>(
+  model: ModelRef,
+  run: (model: ModelRef) => Promise<AttemptOutput<T>>,
+  policy: RetryPolicy,
+  counters: { retriesLeft: number; retryIndex: number },
+  attempts: TurnAttempt[],
+  sleep: (ms: number) => Promise<void>,
+): Promise<AttemptOutput<T>> {
+  for (;;) {
+    const outcome = await run(model);
+    attempts.push(...(outcome.attempts ?? []));
+    attempts.push({ model, stop: outcome.stop, usage: outcome.usage });
+    if (outcome.stop.kind !== "infra") return outcome;
+    if (counters.retriesLeft > 0 && isRetryableInfra(outcome.stop)) {
+      if (quotaWaitBeyondWindow(outcome.stop, policy.maxDelayMs))
+        return outcome;
+      const delay = Math.min(
+        policy.baseDelayMs * 2 ** counters.retryIndex,
+        policy.maxDelayMs,
+      );
+      counters.retriesLeft -= 1;
+      counters.retryIndex += 1;
+      if (delay > 0) await sleep(delay);
+      continue;
+    }
+    return outcome;
+  }
+}
+
 export async function runWithFallbacks<T>(opts: {
   primary: ModelRef;
   fallbacks?: ModelRef[];
@@ -86,32 +115,23 @@ export async function runWithFallbacks<T>(opts: {
     ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const chain = modelChain(opts.primary, opts.fallbacks);
   const attempts: TurnAttempt[] = [];
-  let retriesLeft = Math.max(0, policy.retries);
-  let retryIndex = 0;
+  const counters = {
+    retriesLeft: Math.max(0, policy.retries),
+    retryIndex: 0,
+  };
   let last: { outcome: AttemptOutput<T>; model: ModelRef } | undefined;
 
   for (const model of chain) {
-    for (;;) {
-      const outcome = await opts.run(model);
-      attempts.push(...(outcome.attempts ?? []));
-      attempts.push({ model, stop: outcome.stop, usage: outcome.usage });
-      last = { outcome, model };
-      if (outcome.stop.kind !== "infra") {
-        return { outcome, attempts };
-      }
-      if (retriesLeft > 0 && isRetryableInfra(outcome.stop)) {
-        if (quotaWaitBeyondWindow(outcome.stop, policy.maxDelayMs)) break;
-        const delay = Math.min(
-          policy.baseDelayMs * 2 ** retryIndex,
-          policy.maxDelayMs,
-        );
-        retriesLeft -= 1;
-        retryIndex += 1;
-        if (delay > 0) await sleep(delay);
-        continue;
-      }
-      break;
-    }
+    const outcome = await runModelAttempts(
+      model,
+      opts.run,
+      policy,
+      counters,
+      attempts,
+      sleep,
+    );
+    last = { outcome, model };
+    if (outcome.stop.kind !== "infra") return { outcome, attempts };
   }
 
   // `chain` is never empty (primary is always present).

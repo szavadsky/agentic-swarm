@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -152,6 +151,83 @@ function defaultHome(sessionDir: string): string {
 const silent = { idleMs: 0, wallMs: 10_000 };
 
 describe("omp resume", () => {
+  registerOmpResumePart1();
+  registerOmpResumePart2();
+  registerOmpResumePart3();
+  registerOmpResumePart4();
+  registerOmpResumePart5();
+  registerOmpResumePart6();
+});
+
+async function retriesOnceDeNovoWhenResumedPart1(
+  fake: ReturnType<typeof createFakeOmp>,
+  sessionDir: string,
+  root: string,
+  storedDir: string,
+  home: string,
+) {
+  const harness = new OmpHarness({
+    binary: fake.binary,
+    sessionDir,
+    readyTimeoutMs: 5_000,
+  });
+  const session: SessionRef = {
+    harness: "omp",
+    id: "sess-old",
+    cwd: root,
+    model: { id: "provider/resume-retry" },
+    lastRequestStartedAt: new Date().toISOString(),
+    retentionTier: "short",
+    compacted: false,
+    dir: storedDir,
+  };
+
+  const result = await harness.turn({
+    model: { id: "provider/resume-retry" },
+    session,
+    cwd: root,
+    prompt: "go",
+    timeouts: silent,
+  });
+
+  expect(result.stop).toEqual({ kind: "done" });
+  expect(result.session?.id).toBe("fresh-session");
+  expect(result.session?.dir).toBe(home);
+
+  // The lost resume is recorded, then the same task input starts de novo.
+  expect(result.attempts).toEqual([
+    {
+      model: { id: "provider/resume-retry" },
+      stop: {
+        kind: "infra",
+        cause: "crash",
+        details: "Session sess-old not found",
+      },
+      usage: zeroUsage(),
+    },
+    {
+      model: { id: "provider/resume-retry" },
+      stop: { kind: "done" },
+      usage: result.usage,
+    },
+  ]);
+  expect(fake.prompts()).toEqual(["go"]);
+}
+
+async function retriesOnceDeNovoWhenResumedPart2(
+  fake: ReturnType<typeof createFakeOmp>,
+  storedDir: string,
+  home: string,
+) {
+  const calls = fake.invocations();
+  expect(calls).toHaveLength(2);
+  expect(flag(calls[0]!, "--resume")).toBe("sess-old");
+  expect(flag(calls[0]!, "--session-dir")).toBe(storedDir);
+  expect(flag(calls[1]!, "--resume")).toBeUndefined();
+  expect(flag(calls[1]!, "--session-dir")).toBe(home);
+}
+
+function registerOmpResumePart1(): void {
   it("retries once de novo when the resumed session is not found", async () => {
     const fake = createFakeOmp();
     const root = path.dirname(fake.binary);
@@ -160,64 +236,21 @@ describe("omp resume", () => {
     const storedDir = path.join(root, "stored-home");
     fs.mkdirSync(storedDir, { recursive: true });
     try {
-      const harness = new OmpHarness({
-        binary: fake.binary,
+      await retriesOnceDeNovoWhenResumedPart1(
+        fake,
         sessionDir,
-        readyTimeoutMs: 5_000,
-      });
-      const session: SessionRef = {
-        harness: "omp",
-        id: "sess-old",
-        cwd: root,
-        model: { id: "provider/resume-retry" },
-        lastRequestStartedAt: new Date().toISOString(),
-        retentionTier: "short",
-        compacted: false,
-        dir: storedDir,
-      };
-
-      const result = await harness.turn({
-        model: { id: "provider/resume-retry" },
-        session,
-        cwd: root,
-        prompt: "go",
-        timeouts: silent,
-      });
-
-      expect(result.stop).toEqual({ kind: "done" });
-      expect(result.session?.id).toBe("fresh-session");
-      expect(result.session?.dir).toBe(home);
-
-      // The lost resume is recorded, then the same task input starts de novo.
-      expect(result.attempts).toEqual([
-        {
-          model: { id: "provider/resume-retry" },
-          stop: {
-            kind: "infra",
-            cause: "crash",
-            details: "Session sess-old not found",
-          },
-          usage: zeroUsage(),
-        },
-        {
-          model: { id: "provider/resume-retry" },
-          stop: { kind: "done" },
-          usage: result.usage,
-        },
-      ]);
-      expect(fake.prompts()).toEqual(["go"]);
-
-      const calls = fake.invocations();
-      expect(calls).toHaveLength(2);
-      expect(flag(calls[0]!, "--resume")).toBe("sess-old");
-      expect(flag(calls[0]!, "--session-dir")).toBe(storedDir);
-      expect(flag(calls[1]!, "--resume")).toBeUndefined();
-      expect(flag(calls[1]!, "--session-dir")).toBe(home);
+        root,
+        storedDir,
+        home,
+      );
+      await retriesOnceDeNovoWhenResumedPart2(fake, storedDir, home);
     } finally {
       fake.cleanup();
     }
   }, 20_000);
+}
 
+function registerOmpResumePart2(): void {
   it("does not retry de novo when the resume failure is not a missing session", async () => {
     const fake = createFakeOmp();
     const root = path.dirname(fake.binary);
@@ -262,7 +295,9 @@ describe("omp resume", () => {
       fake.cleanup();
     }
   }, 20_000);
+}
 
+function registerOmpResumePart3(): void {
   it("stores the launch session home and resumes against it", async () => {
     const fake = createFakeOmp();
     const root = path.dirname(fake.binary);
@@ -307,7 +342,9 @@ describe("omp resume", () => {
       fake.cleanup();
     }
   }, 20_000);
+}
 
+function registerOmpResumePart4(): void {
   it("reports a failed de-novo retry as an infra crash instead of looping", async () => {
     const fake = createFakeOmp();
     const root = path.dirname(fake.binary);
@@ -363,7 +400,9 @@ describe("omp resume", () => {
       fake.cleanup();
     }
   }, 20_000);
+}
 
+function registerOmpResumePart5(): void {
   it("stamps the configured long retention tier on the returned session", async () => {
     const fake = createFakeOmp();
     const root = path.dirname(fake.binary);
@@ -387,7 +426,9 @@ describe("omp resume", () => {
       fake.cleanup();
     }
   }, 20_000);
+}
 
+function registerOmpResumePart6(): void {
   it("keeps a long turn's cache hot through its last model event and skips once idle", async () => {
     const fake = createFakeOmp({ promptDelayMs: 100 });
     const root = path.dirname(fake.binary);
@@ -437,4 +478,4 @@ describe("omp resume", () => {
       fake.cleanup();
     }
   }, 20_000);
-});
+}

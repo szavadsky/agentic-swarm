@@ -2,8 +2,11 @@ import type { CheckResult } from "../core/checks/types.js";
 import { git } from "../core/git/exec.js";
 import { newGateFailures } from "./gates.js";
 import { committedSpikeReport, spikeReportRef } from "./spike-report.js";
+import { makeCause } from "./cause.js";
+import { qaReportOf } from "./qa.js";
 import type {
   ArtifactStore,
+  Cause,
   Concern,
   LaunchKind,
   Outcome,
@@ -17,7 +20,12 @@ import type {
 export function scriptMeta(
   iteration: number,
   step: string,
-  opts: { slug?: string; round?: number; revision?: number } = {},
+  opts: {
+    slug?: string;
+    round?: number;
+    revision?: number;
+    architect?: string;
+  } = {},
 ): RecordStart {
   return {
     iteration,
@@ -26,13 +34,19 @@ export function scriptMeta(
     actor: "script",
     ...(opts.slug ? { slug: opts.slug } : {}),
     ...(opts.revision !== undefined ? { revision: opts.revision } : {}),
+    ...(opts.architect ? { architect: opts.architect } : {}),
   };
 }
 
 /** Opens a checks record before the gate run; `finishChecks` closes it after. */
 export async function startChecks(
   store: ArtifactStore,
-  meta: { iteration: number; slug: string; round: number },
+  meta: {
+    iteration: number;
+    slug: string;
+    round: number;
+    architect?: string;
+  },
   opts: { step?: string } = {},
 ) {
   return store.startRecord(
@@ -78,7 +92,12 @@ export interface GateFlake {
  */
 export async function appendGateFlake(
   store: ArtifactStore,
-  meta: { iteration: number; slug: string; round: number },
+  meta: {
+    iteration: number;
+    slug: string;
+    round: number;
+    architect?: string;
+  },
   flake: { tree?: string; flakes: GateFlake[]; checks: CheckResult[] },
 ): Promise<void> {
   const cause = flake.flakes
@@ -86,7 +105,7 @@ export async function appendGateFlake(
     .join("; ");
   await store.appendRecord(scriptMeta(meta.iteration, "gate-flake", meta), {
     ok: true,
-    cause,
+    cause: makeCause("gate-flake", cause),
     checks: flake.checks,
     ...(flake.tree !== undefined ? { tree: flake.tree } : {}),
   });
@@ -118,9 +137,15 @@ export async function commitEdits(
 /** The last-call reviewer concerns, recorded as debt once the item merges. */
 export async function appendDebt(
   store: ArtifactStore,
-  meta: { iteration: number; slug: string; round: number },
+  meta: {
+    iteration: number;
+    slug: string;
+    round: number;
+    architect?: string;
+  },
   concerns: Concern[],
   fallback: string,
+  summary = "last-call review concerns recorded as debt",
 ): Promise<void> {
   // Concerns already marked debt live on the review record; only the rest need
   // converting, or the summary would report the same debt twice.
@@ -141,7 +166,7 @@ export async function appendDebt(
     ok: true,
     outcome: {
       status: "done",
-      summary: "last-call review concerns recorded as debt",
+      summary,
       concerns: debt,
       forward: [],
     },
@@ -149,17 +174,16 @@ export async function appendDebt(
 }
 
 /**
- * A park's launch kind from its cause: infra-like parks are glitches, the
- * round limit reached after a review `changes` verdict is a change request,
- * everything else failed. Only that exact cause is a change request: a failure
- * summary quoting the verdict enum (`approve | changes | reject`) stays a
- * failure.
+ * A park's launch kind from its kind: infra-like parks are glitches, review
+ * rounds spent on change requests are change requests, everything else failed.
+ * The kind is the closed vocabulary, so a detail quoting the verdict enum
+ * (`approve | changes | reject`) never decides the launch kind.
  */
-export function parkLaunchKind(cause: string): LaunchKind {
-  if (/^(overflow\b|infra-repeat:)/i.test(cause)) return "glitch";
-  if (/^review round limit reached after verdict "changes"/i.test(cause)) {
-    return "change-request";
+export function parkLaunchKind(cause: Cause): LaunchKind {
+  if (cause.kind === "overflow" || cause.kind === "infra-repeat") {
+    return "glitch";
   }
+  if (cause.kind === "change-requests-exhausted") return "change-request";
   return "failure";
 }
 
@@ -169,14 +193,21 @@ export function parkLaunchKind(cause: string): LaunchKind {
  */
 export async function appendPark(
   store: ArtifactStore,
-  meta: { iteration: number; slug: string; round: number; revision: number },
-  cause: string,
+  meta: {
+    iteration: number;
+    slug: string;
+    round: number;
+    revision: number;
+    architect?: string;
+  },
+  cause: Cause,
 ): Promise<void> {
   await store.appendRecord(
     scriptMeta(meta.iteration, "park", {
       slug: meta.slug,
       round: meta.round,
       revision: meta.revision,
+      architect: meta.architect,
     }),
     {
       ok: true,
@@ -188,7 +219,12 @@ export async function appendPark(
 
 export async function appendFinish(
   store: ArtifactStore,
-  meta: { iteration: number; slug: string; round: number },
+  meta: {
+    iteration: number;
+    slug: string;
+    round: number;
+    architect?: string;
+  },
   task: TaskFile,
   commit?: string,
 ): Promise<void> {
@@ -218,8 +254,13 @@ async function spikeFinishReport(
 /** A task an explicit leave decision cancels; the slug stays spent. */
 export async function appendCancel(
   store: ArtifactStore,
-  meta: { iteration: number; slug: string; round: number },
-  cause: string,
+  meta: {
+    iteration: number;
+    slug: string;
+    round: number;
+    architect?: string;
+  },
+  cause: Cause,
 ): Promise<void> {
   await store.appendRecord(scriptMeta(meta.iteration, "cancel", meta), {
     ok: true,
@@ -248,4 +289,26 @@ export function formatReviewFindings(outcome: Outcome): string {
     );
   lines.push(...outcome.forward.map((f) => `- forward: ${f}`));
   return lines.join("\n");
+}
+
+/**
+ * QA findings for the author: the summary, then one numbered finding per
+ * entry so a reply's `finding` is the entry's position.
+ */
+export function formatQaFindings(outcome: Outcome): string {
+  const lines: string[] = [];
+  const summary = outcome.summary.trim();
+  if (summary) lines.push(summary);
+  for (const [index, finding] of (
+    qaReportOf(outcome)?.findings ?? []
+  ).entries())
+    lines.push(`${index + 1}. ${finding.trim()}`);
+  return lines.join("\n");
+}
+
+/** The findings the current acceptance step sent back, reviewer or QA. */
+export function formatAcceptanceFindings(outcome: Outcome): string {
+  return qaReportOf(outcome)
+    ? formatQaFindings(outcome)
+    : formatReviewFindings(outcome);
 }

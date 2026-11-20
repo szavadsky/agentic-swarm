@@ -1,5 +1,5 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
+import type { Subprocess } from "bun";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -155,83 +155,8 @@ describe("task frontmatter LSP protocol", () => {
       stderr: "pipe",
     });
     try {
-      const frames = new FrameReader(proc.stdout);
-      send(proc, { id: 1, method: "initialize", params: {} });
-      const initialized = await frames.next();
-      expect(initialized.id).toBe(1);
-      expect(initialized.result?.capabilities?.textDocumentSync).toBe(1);
-
-      const taskFile = path.join(dir, "tasks", "demo.md");
-      fs.mkdirSync(path.dirname(taskFile), { recursive: true });
-      fs.writeFileSync(taskFile, INVALID);
-      const uri = pathToFileURL(taskFile).href;
-      // An open before the buffer has content reports nothing.
-      send(proc, {
-        method: "textDocument/didOpen",
-        params: { textDocument: { uri, languageId: "markdown", version: 1 } },
-      });
-      const empty = await frames.next();
-      expect(empty.params?.diagnostics).toEqual([]);
-      send(proc, {
-        method: "textDocument/didOpen",
-        params: {
-          textDocument: {
-            uri,
-            languageId: "markdown",
-            version: 1,
-            text: INVALID,
-          },
-        },
-      });
-      const opened = await frames.next();
-      expect(opened.method).toBe("textDocument/publishDiagnostics");
-      expect(opened.params?.uri).toBe(uri);
-      expect(opened.params?.diagnostics).toHaveLength(1);
-      expect(opened.params?.diagnostics?.[0]?.message).toContain("banana");
-      expect(opened.params?.diagnostics?.[0]?.range.start.line).toBe(3);
-
-      send(proc, {
-        method: "textDocument/didChange",
-        params: {
-          textDocument: { uri, version: 2 },
-          contentChanges: [{ text: VALID }],
-        },
-      });
-      const changed = await frames.next();
-      expect(changed.params?.diagnostics).toEqual([]);
-
-      // A save without text validates the file on disk.
-      fs.writeFileSync(taskFile, INVALID);
-      send(proc, {
-        method: "textDocument/didSave",
-        params: { textDocument: { uri } },
-      });
-      const saved = await frames.next();
-      expect(saved.params?.diagnostics).toHaveLength(1);
-      expect(saved.params?.diagnostics?.[0]?.message).toContain("banana");
-
-      // A Markdown file outside this goal's tasks directory is not a task
-      // artifact, even when its parent is named tasks/.
-      const other = path.join(dir, "other", "tasks");
-      fs.mkdirSync(other, { recursive: true });
-      const plan = pathToFileURL(path.join(other, "plan.md")).href;
-      send(proc, {
-        method: "textDocument/didOpen",
-        params: {
-          textDocument: {
-            uri: plan,
-            languageId: "markdown",
-            version: 1,
-            text: "# plan",
-          },
-        },
-      });
-      const ignored = await frames.next();
-      expect(ignored.params?.uri).toBe(plan);
-      expect(ignored.params?.diagnostics).toEqual([]);
-
-      send(proc, { method: "exit" });
-      expect(await proc.exited).toBe(0);
+      const scope1 = await answersInitializePublishesPart1(proc, dir);
+      await answersInitializePublishesPart2(proc, dir, scope1);
     } finally {
       proc.kill();
       fs.rmSync(dir, { recursive: true, force: true });
@@ -244,3 +169,96 @@ describe("task frontmatter LSP protocol", () => {
     expect(typeof startFrontmatterServer).toBe("function");
   });
 });
+
+async function answersInitializePublishesPart1(
+  proc: Subprocess<"pipe", "pipe", "pipe">,
+  dir: string,
+) {
+  const frames = new FrameReader(proc.stdout);
+  send(proc, { id: 1, method: "initialize", params: {} });
+  const initialized = await frames.next();
+  expect(initialized.id).toBe(1);
+  expect(initialized.result?.capabilities?.textDocumentSync).toBe(1);
+
+  const taskFile = path.join(dir, "tasks", "demo.md");
+  fs.mkdirSync(path.dirname(taskFile), { recursive: true });
+  fs.writeFileSync(taskFile, INVALID);
+  const uri = pathToFileURL(taskFile).href;
+  // An open before the buffer has content reports nothing.
+  send(proc, {
+    method: "textDocument/didOpen",
+    params: { textDocument: { uri, languageId: "markdown", version: 1 } },
+  });
+  const empty = await frames.next();
+  expect(empty.params?.diagnostics).toEqual([]);
+  send(proc, {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: {
+        uri,
+        languageId: "markdown",
+        version: 1,
+        text: INVALID,
+      },
+    },
+  });
+  const opened = await frames.next();
+  expect(opened.method).toBe("textDocument/publishDiagnostics");
+  expect(opened.params?.uri).toBe(uri);
+  expect(opened.params?.diagnostics).toHaveLength(1);
+  expect(opened.params?.diagnostics?.[0]?.message).toContain("banana");
+  expect(opened.params?.diagnostics?.[0]?.range.start.line).toBe(3);
+
+  send(proc, {
+    method: "textDocument/didChange",
+    params: {
+      textDocument: { uri, version: 2 },
+      contentChanges: [{ text: VALID }],
+    },
+  });
+  const changed = await frames.next();
+  expect(changed.params?.diagnostics).toEqual([]);
+
+  // A save without text validates the file on disk.
+  fs.writeFileSync(taskFile, INVALID);
+
+  return { frames, uri };
+}
+
+async function answersInitializePublishesPart2(
+  proc: Subprocess<"pipe", "pipe", "pipe">,
+  dir: string,
+  scope: Awaited<ReturnType<typeof answersInitializePublishesPart1>>,
+) {
+  const { uri, frames } = scope;
+  send(proc, {
+    method: "textDocument/didSave",
+    params: { textDocument: { uri } },
+  });
+  const saved = await frames.next();
+  expect(saved.params?.diagnostics).toHaveLength(1);
+  expect(saved.params?.diagnostics?.[0]?.message).toContain("banana");
+
+  // A Markdown file outside this goal's tasks directory is not a task
+  // artifact, even when its parent is named tasks/.
+  const other = path.join(dir, "other", "tasks");
+  fs.mkdirSync(other, { recursive: true });
+  const plan = pathToFileURL(path.join(other, "plan.md")).href;
+  send(proc, {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: {
+        uri: plan,
+        languageId: "markdown",
+        version: 1,
+        text: "# plan",
+      },
+    },
+  });
+  const ignored = await frames.next();
+  expect(ignored.params?.uri).toBe(plan);
+  expect(ignored.params?.diagnostics).toEqual([]);
+
+  send(proc, { method: "exit" });
+  expect(await proc.exited).toBe(0);
+}

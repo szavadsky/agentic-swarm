@@ -7,7 +7,8 @@ import {
   setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
-import { task } from "./helpers.js";
+import { task, cause, causeText } from "./helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 describe("kept-land", () => {
   it("writes a kept-land record when branch does not exist", async () => {
@@ -49,7 +50,7 @@ describe("kept-land", () => {
           actor: "agent",
           commit,
         },
-        { ok: true, cause: "parked" },
+        { ok: true, cause: cause("parked") },
       );
 
       // Run kept-land
@@ -64,7 +65,7 @@ describe("kept-land", () => {
       );
       expect(keptLand).toBeDefined();
       expect(keptLand!.ok).toBe(false);
-      expect(keptLand!.cause).toContain("does not exist");
+      expect(causeText(keptLand!.cause)).toContain("does not exist");
     } finally {
       cleanupFlowRepo(repo);
     }

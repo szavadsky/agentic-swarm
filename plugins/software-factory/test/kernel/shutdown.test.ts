@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -71,6 +70,12 @@ process.exit(0);
 }
 
 describe("child process group shutdown", () => {
+  childProcessGroupShutdownPart1();
+  childProcessGroupShutdownPart2();
+  childProcessGroupShutdownPart3();
+});
+
+function childProcessGroupShutdownPart1() {
   it("terminateAllChildGroups kills a spawned child group, not only its leader", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "shutdown-test-"));
     const grandchildPid = path.join(dir, "grandchild.pid");
@@ -108,7 +113,9 @@ describe("child process group shutdown", () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+}
 
+function childProcessGroupShutdownPart2() {
   it("sentinel child group survives shutdown sweep path and double-signal drain", async () => {
     const sentinel = spawn("sleep", ["30"], { detached: true });
     expect(sentinel.pid).toBeDefined();
@@ -151,7 +158,9 @@ describe("child process group shutdown", () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+}
 
+function childProcessGroupShutdownPart3() {
   it("a pid that unregistered during the grace gets no SIGKILL", async () => {
     const origKill = process.kill;
     const killCalls: Array<{ pid: number; signal?: string | number }> = [];
@@ -187,4 +196,4 @@ describe("child process group shutdown", () => {
       unregisterChildGroup(pid2);
     }
   });
-});
+}

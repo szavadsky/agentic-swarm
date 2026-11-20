@@ -3,19 +3,57 @@ import type { FlowDefinition, FlowStep } from "./types.js";
 /** Reviewer default: the first two reviews may request changes; the third is the last call. */
 export const DEFAULT_CHANGE_REQUESTS = 2;
 
+/**
+ * A step that accepts or sends back the work: a review or QA. Both consume the
+ * same acceptance round, both are gated before they read the tree, and both
+ * end with a verdict rather than a product.
+ */
+export function isAcceptanceStep(step: FlowStep | undefined): boolean {
+  return step?.review === true || step?.qa === true;
+}
+
+/** A review adjudicator: a verdict-only turn that re-judges a review's findings. */
+export function isAdjudicatorStep(step: FlowStep | undefined): boolean {
+  return step?.adjudicate !== undefined;
+}
+
+/**
+ * A turn that delivers a verdict, not a product: review, QA or adjudicator.
+ * These never count as productive turns and never own an empty diff.
+ */
+export function isVerdictStep(step: FlowStep | undefined): boolean {
+  return isAcceptanceStep(step) || isAdjudicatorStep(step);
+}
+
 /** Change requests a step's agent may issue before its call is the last one. */
 function changeRequestBound(step: FlowStep): number {
   return step.changeRequests ?? DEFAULT_CHANGE_REQUESTS;
 }
 
-/** Total review calls the bound allows: one per accepted change request plus the last call. */
+/** Total acceptance calls the bound allows: one per accepted change request plus the last call. */
 export function reviewRoundLimit(step: FlowStep): number {
   return changeRequestBound(step) + 1;
 }
 
-/** True when this review round is the step's last call: no change request is honored. */
+/** True when this acceptance round is the step's last call: no change request is honored. */
 export function isLastReviewCall(step: FlowStep, round: number): boolean {
   return round > changeRequestBound(step);
+}
+
+/**
+ * Whether an adjudicator step runs after this review's `changes`. `all` runs
+ * on every change-bearing cycle; `last` only on the final cycle whose change
+ * request is still honored, where no later review re-judges the implementer's
+ * dispositions.
+ */
+export function adjudicationDue(
+  adjudicator: FlowStep,
+  review: FlowStep,
+  round: number,
+): boolean {
+  if (adjudicator.adjudicate === "all") return true;
+  const bound = changeRequestBound(review);
+  return bound > 0 && round >= bound;
 }
 
 /**

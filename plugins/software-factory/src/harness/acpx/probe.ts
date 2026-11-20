@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -52,25 +51,27 @@ async function runProbeCommand(
   };
 }
 
+/** The object records a parsed JSON value names, in order. */
+function recordItems(parsed: unknown): Record<string, unknown>[] {
+  if (Array.isArray(parsed)) {
+    return parsed.flatMap((item) => {
+      const object = record(item);
+      return object ? [object] : [];
+    });
+  }
+  const object = record(parsed);
+  return object ? [object] : [];
+}
+
 function records(text: string): Record<string, unknown>[] {
   const found: Record<string, unknown>[] = [];
   for (const line of text.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) continue;
-    let parsed: unknown;
     try {
-      parsed = JSON.parse(trimmed);
+      found.push(...recordItems(JSON.parse(trimmed)));
     } catch (err) {
-      if (err instanceof SyntaxError) continue;
-      throw err;
-    }
-    if (Array.isArray(parsed)) {
-      for (const item of parsed) {
-        if (item !== null && typeof item === "object" && !Array.isArray(item))
-          found.push(item as Record<string, unknown>);
-      }
-    } else if (parsed !== null && typeof parsed === "object") {
-      found.push(parsed as Record<string, unknown>);
+      if (!(err instanceof SyntaxError)) throw err;
     }
   }
   return found;
@@ -119,19 +120,22 @@ function didNotOfferModel(text: string): boolean {
   );
 }
 
-function optionValues(option: Record<string, unknown>): string[] {
-  const values: string[] = [];
-  for (const entry of Array.isArray(option.options) ? option.options : []) {
-    const choice = record(entry);
-    if (!choice) continue;
-    if (typeof choice.value === "string") values.push(choice.value);
-    for (const nested of Array.isArray(choice.options) ? choice.options : []) {
-      const nestedChoice = record(nested);
-      if (nestedChoice && typeof nestedChoice.value === "string")
-        values.push(nestedChoice.value);
-    }
+/** One config-option entry's values, including a nested level's. */
+function choiceValues(entry: unknown): string[] {
+  const choice = record(entry);
+  if (!choice) return [];
+  const values = typeof choice.value === "string" ? [choice.value] : [];
+  for (const nested of Array.isArray(choice.options) ? choice.options : []) {
+    const nestedChoice = record(nested);
+    if (nestedChoice && typeof nestedChoice.value === "string")
+      values.push(nestedChoice.value);
   }
-  return [...new Set(values)];
+  return values;
+}
+
+function optionValues(option: Record<string, unknown>): string[] {
+  const entries = Array.isArray(option.options) ? option.options : [];
+  return [...new Set(entries.flatMap(choiceValues))];
 }
 
 function configOptions(
@@ -156,6 +160,134 @@ function failure(
   const target = model === undefined ? "" : ` for model "${model}"`;
   return new Error(`acpx ${action}${target} failed: ${details}`);
 }
+/** One probe's fixed inputs: the adapter, the model selection and its temp cwd. */
+interface ProbeContext {
+  runtime: AcpxRuntime;
+  config: AcpxRunConfig;
+  selection: { id: string; effort?: string };
+  globals: string[];
+  agent: string[];
+  name: string;
+  cwd: string;
+}
+
+/** The probe's optional effort field, absent when the model names none. */
+function effortField(selection: ProbeContext["selection"]): {
+  modelEffort?: string;
+} {
+  return selection.effort === undefined
+    ? {}
+    : { modelEffort: selection.effort };
+}
+
+function unlistedProbe(
+  selection: ProbeContext["selection"],
+  available: string[],
+): ModelProbe {
+  return {
+    listed: false,
+    available,
+    effort: [],
+    ...effortField(selection),
+  };
+}
+
+/** `sessions new` with the model selection and a fresh session name. */
+function createSessionArgs(context: ProbeContext): string[] {
+  return [
+    ...context.globals,
+    "--model",
+    context.selection.id,
+    ...context.agent,
+    "sessions",
+    "new",
+    "--name",
+    context.name,
+  ];
+}
+
+/** A failed `sessions new` that rejected the model, or the failure it is. */
+function rejectedCreate(
+  context: ProbeContext,
+  result: ProbeProcessResult,
+): ModelProbe {
+  const text = failureText(result);
+  if (!didNotOfferModel(text)) {
+    throw failure("sessions new", result, context.selection.id);
+  }
+  return unlistedProbe(context.selection, availableModels(text));
+}
+
+/** Reads the live session record into the probe outcome. */
+async function readSession(context: ProbeContext): Promise<ModelProbe> {
+  const show = await runProbeCommand(
+    context.runtime,
+    context.config,
+    [...context.globals, ...context.agent, "sessions", "show", context.name],
+    context.cwd,
+  );
+  if (show.aborted) throw new Error("acpx session probe was aborted");
+  if (show.timedOut)
+    throw new Error("acpx session probe timed out reading the session");
+  if (show.code !== 0)
+    throw failure("sessions show", show, context.selection.id);
+  const session = records(show.stdout).at(-1);
+  if (!session) {
+    throw new Error("acpx sessions show returned no session record");
+  }
+  const options = configOptions(session);
+  const modelOption = options.find(
+    (option) => option.category === "model" || option.id === "model",
+  );
+  const available = modelOption ? optionValues(modelOption) : [];
+  const current = modelOption?.currentValue;
+  if (
+    modelOption &&
+    !available.includes(context.selection.id) &&
+    current !== context.selection.id
+  ) {
+    return unlistedProbe(context.selection, available);
+  }
+  const effortId = context.config.effort?.configId;
+  const effortOption = effortId
+    ? options.find((option) => option.id === effortId)
+    : undefined;
+  return {
+    listed: true,
+    available,
+    effort: effortOption ? optionValues(effortOption) : [],
+    ...effortField(context.selection),
+  };
+}
+
+/** Closes the created session, collecting its failure instead of throwing. */
+async function closeSession(context: ProbeContext): Promise<unknown[]> {
+  try {
+    const close = await runProbeCommand(
+      context.runtime,
+      context.config,
+      [...context.globals, ...context.agent, "sessions", "close", context.name],
+      context.cwd,
+    );
+    if (close.aborted || close.timedOut || close.code !== 0) {
+      return [failure("sessions close", close, context.selection.id)];
+    }
+    return [];
+  } catch (err) {
+    return [err];
+  }
+}
+
+/** Removes the throwaway cwd, collecting its failure instead of throwing. */
+async function removeCwd(cwd: string): Promise<unknown[]> {
+  try {
+    await fs.promises.rm(cwd, { recursive: true, force: true });
+    return [];
+  } catch (err) {
+    return [err];
+  }
+}
+
 /**
  * One no-prompt ACP session for an acpx model. Session creation applies
  * `--model`; the local session record then exposes the live model list and the
@@ -171,9 +303,15 @@ export async function probeAcpxModel(
   const cwd = await fs.promises.mkdtemp(
     path.join(os.tmpdir(), "preflight-acpx-"),
   );
-  const name = `${runtime.id}-preflight-${randomUUID()}`;
-  const globals = acpxGlobalArgs(config, cwd);
-  const agent = acpxAgentSelection(config);
+  const context: ProbeContext = {
+    runtime,
+    config,
+    selection,
+    globals: acpxGlobalArgs(config, cwd),
+    agent: acpxAgentSelection(config),
+    name: `${runtime.id}-preflight-${randomUUID()}`,
+    cwd,
+  };
   let created = false;
   let outcome: ModelProbe | undefined;
   let probeFailure: unknown;
@@ -181,112 +319,24 @@ export async function probeAcpxModel(
     const create = await runProbeCommand(
       runtime,
       config,
-      [
-        ...globals,
-        "--model",
-        selection.id,
-        ...agent,
-        "sessions",
-        "new",
-        "--name",
-        name,
-      ],
+      createSessionArgs(context),
       cwd,
     );
     if (create.aborted) throw new Error("acpx session probe was aborted");
     if (create.timedOut)
       throw new Error("acpx session probe timed out creating a session");
     if (create.code !== 0) {
-      const text = failureText(create);
-      if (didNotOfferModel(text)) {
-        outcome = {
-          listed: false,
-          available: availableModels(text),
-          effort: [],
-          ...(selection.effort === undefined
-            ? {}
-            : { modelEffort: selection.effort }),
-        };
-      } else {
-        throw failure("sessions new", create, selection.id);
-      }
+      outcome = rejectedCreate(context, create);
     } else {
       created = true;
-
-      const show = await runProbeCommand(
-        runtime,
-        config,
-        [...globals, ...agent, "sessions", "show", name],
-        cwd,
-      );
-      if (show.aborted) throw new Error("acpx session probe was aborted");
-      if (show.timedOut)
-        throw new Error("acpx session probe timed out reading the session");
-      if (show.code !== 0) throw failure("sessions show", show, selection.id);
-      const session = records(show.stdout).at(-1);
-      if (!session) {
-        throw new Error("acpx sessions show returned no session record");
-      }
-      const options = configOptions(session);
-      const modelOption = options.find(
-        (option) => option.category === "model" || option.id === "model",
-      );
-      const available = modelOption ? optionValues(modelOption) : [];
-      const current = modelOption?.currentValue;
-      if (
-        modelOption &&
-        !available.includes(selection.id) &&
-        current !== selection.id
-      ) {
-        outcome = {
-          listed: false,
-          available,
-          effort: [],
-          ...(selection.effort === undefined
-            ? {}
-            : { modelEffort: selection.effort }),
-        };
-      } else {
-        const effortId = config.effort?.configId;
-        const effortOption = effortId
-          ? options.find((option) => option.id === effortId)
-          : undefined;
-        outcome = {
-          listed: true,
-          available,
-          effort: effortOption ? optionValues(effortOption) : [],
-          ...(selection.effort === undefined
-            ? {}
-            : { modelEffort: selection.effort }),
-        };
-      }
+      outcome = await readSession(context);
     }
   } catch (err) {
     probeFailure = err;
   }
 
-  const cleanupFailures: unknown[] = [];
-  if (created) {
-    try {
-      const close = await runProbeCommand(
-        runtime,
-        config,
-        [...globals, ...agent, "sessions", "close", name],
-        cwd,
-      );
-      if (close.aborted || close.timedOut || close.code !== 0) {
-        cleanupFailures.push(failure("sessions close", close, selection.id));
-      }
-    } catch (err) {
-      cleanupFailures.push(err);
-    }
-  }
-
-  try {
-    await fs.promises.rm(cwd, { recursive: true, force: true });
-  } catch (err) {
-    cleanupFailures.push(err);
-  }
+  const cleanupFailures = created ? await closeSession(context) : [];
+  cleanupFailures.push(...(await removeCwd(cwd)));
 
   const failures = [
     ...(probeFailure === undefined ? [] : [probeFailure]),

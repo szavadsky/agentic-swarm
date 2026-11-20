@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -15,7 +14,8 @@ import {
   validateTaskGraph,
 } from "../../src/kernel/tasks.js";
 import type { TaskStatus } from "../../src/kernel/types.js";
-import { task } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 
 const TEXT = `---
 slug: auth.token-refresh
@@ -53,6 +53,24 @@ Done when: the finding names the store.
 `;
 
 describe("task files", () => {
+  taskFilesPart1();
+  taskFilesPart2();
+  taskFilesPart3();
+  taskFilesPart4();
+  taskFilesPart5();
+  taskFilesPart6();
+  taskFilesPart7();
+  taskFilesPart8();
+  taskFilesPart9();
+  taskFilesPart10();
+});
+
+describe("unreadable task files", () => {
+  registerUnreadableTaskFilesPart1();
+  registerUnreadableTaskFilesPart2();
+});
+
+function taskFilesPart1() {
   it("parses and renders the frontmatter plus brief", () => {
     const parsed = parseTaskFile(TEXT, "auth.token-refresh");
     expect(parsed.slug).toBe("auth.token-refresh");
@@ -63,6 +81,39 @@ describe("task files", () => {
     expect(round).toEqual(parsed);
   });
 
+  it("parses, renders and hashes the owning epic", () => {
+    const withEpic = TEXT.replace("tier: default", "epic: auth\ntier: default");
+    const parsed = parseTaskFile(withEpic, "auth.token-refresh");
+    expect(parsed.epic).toBe("auth");
+    expect(renderTaskFile(parsed)).toContain("epic: auth");
+    const round = parseTaskFile(renderTaskFile(parsed), parsed.slug);
+    expect(round.epic).toBe("auth");
+    expect(materialHash({ ...parsed, epic: "billing" })).not.toBe(
+      materialHash(parsed),
+    );
+    expect(parseTaskFile(TEXT, "auth.token-refresh").epic).toBeUndefined();
+  });
+
+  it("requires an epic's tasks to be namespaced under it", () => {
+    expect(
+      validateTaskGraph([task("auth.login", { epic: "auth", scope: ["x"] })]),
+    ).toEqual([]);
+    expect(
+      validateTaskGraph([
+        task("billing.login", { epic: "auth", scope: ["x"] }),
+      ]),
+    ).toContain(
+      'task "billing.login" names epic "auth": an epic\'s tasks are named "auth.<name>"',
+    );
+    expect(
+      validateTaskGraph([task("auth.login", { epic: "Auth", scope: ["x"] })]),
+    ).toContain(
+      'task "auth.login" names epic "Auth": an epic id is [a-z0-9-]+',
+    );
+  });
+}
+
+function taskFilesPart2() {
   it("resolves a task type into its flow and kind and renders only the type", () => {
     const parsed = parseTaskFile(TYPED, "auth.probe", TYPES);
     expect(parsed.type).toBe("spike");
@@ -106,7 +157,9 @@ describe("task files", () => {
     );
     expect(parseTaskFile(spike, "auth.token-refresh").kind).toBe("spike");
   });
+}
 
+function taskFilesPart3() {
   it("hashes the task type, so a retype is material", () => {
     const legacy = parseTaskFile(TEXT, "auth.token-refresh");
     const typed = parseTaskFile(
@@ -150,7 +203,9 @@ describe("task files", () => {
       /repairTurns/,
     );
   });
+}
 
+function taskFilesPart4() {
   it("parses an optional turnMinutes override and round-trips it", () => {
     const withOverride = TEXT.replace(
       "source: Milestone auth / refresh",
@@ -184,7 +239,9 @@ describe("task files", () => {
       /turnMinutes/,
     );
   });
+}
 
+function taskFilesPart5() {
   it("parses an optional revision and round-trips it", () => {
     expect(parseTaskFile(TEXT, "auth.token-refresh").revision).toBe(0);
     const amended = TEXT.replace(
@@ -220,7 +277,9 @@ describe("task files", () => {
       '"after" is not accepted: use "deps"',
     );
   });
+}
 
+function taskFilesPart6() {
   it("defaults the fields the schema allows to be absent", () => {
     const minimal = `---
 slug: auth.token-refresh
@@ -260,7 +319,9 @@ Done when: refresh rotates the token.
       materialHash(base),
     );
   });
+}
 
+function taskFilesPart7() {
   it("accepts namespaced slugs only", () => {
     expect(isValidTaskSlug("auth.token-refresh")).toBe(true);
     expect(isValidTaskSlug("a.b-c")).toBe(true);
@@ -281,7 +342,9 @@ Done when: refresh rotates the token.
     expect(findings.some((f) => f.includes("itself"))).toBe(true);
     expect(findings.some((f) => f.includes("declared twice"))).toBe(true);
   });
+}
 
+function taskFilesPart8() {
   it("exempts a terminal continuation from base findings", () => {
     // delta i5: three continuations of bases the plan cancelled as landed.
     // Two continuations are merged, one parked; the cancelled files remain.
@@ -323,7 +386,9 @@ Done when: refresh rotates the token.
       ).toEqual([`task "new" continues "old", which is ${state}`]);
     }
   });
+}
 
+function taskFilesPart9() {
   it("counts a task with no state entry as live", () => {
     const tasks = [
       task("old", { scope: ["old-area"] }),
@@ -368,7 +433,9 @@ Done when: refresh rotates the token.
       'task "narrow" has no scope: declare the predicted area it works in',
     );
   });
+}
 
+function taskFilesPart10() {
   it("rejects an unknown kind with the kernel finding", () => {
     const bad = TEXT.replace("kind: task", "kind: banana");
     expect(() => parseTaskFile(bad, "auth.token-refresh")).toThrow(
@@ -402,9 +469,9 @@ Done when: refresh rotates the token.
       'task "a" uses flow "constructor": flow "constructor" is not configured',
     ]);
   });
-});
+}
 
-describe("unreadable task files", () => {
+function registerUnreadableTaskFilesPart1(): void {
   it("quarantines one, reports it, and still lists the readable tasks", async () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), "factory-task-quarantine-"),
@@ -435,14 +502,16 @@ describe("unreadable task files", () => {
       expect(report?.ok).toBe(false);
       expect(report?.iteration).toBe(1);
       expect(report?.slug).toBe("broken");
-      expect(report?.cause).toContain(
+      expect(causeText(report?.cause)).toContain(
         'task "broken" has no --- frontmatter ---',
       );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerUnreadableTaskFilesPart2(): void {
   it("leaves a terminal slug's unreadable file in place and reports it once", async () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), "factory-task-terminal-"),
@@ -487,9 +556,9 @@ describe("unreadable task files", () => {
         (record) => record.step === "task-quarantine",
       );
       expect(reports).toHaveLength(terminal.length);
-      expect(reports.map((record) => record.cause).join("\n")).toContain(
-        "left in tasks/",
-      );
+      expect(
+        reports.map((record) => causeText(record.cause)).join("\n"),
+      ).toContain("left in tasks/");
 
       await store.listTasks();
       expect(
@@ -501,4 +570,4 @@ describe("unreadable task files", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
-});
+}

@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { SessionRef } from "../harness/types.js";
-import { boundaryTarget } from "./flow-context.js";
+import { portable, type SessionRef } from "../harness/types.js";
+import type { TurnTarget } from "./flow-context.js";
 import type { KernelRuntime, Outcome, StepRecord } from "./types.js";
 
 /**
@@ -31,19 +31,20 @@ export function missingPlanFinding(
   planPath: string | undefined,
   decision: Outcome["decision"],
   beforeHash: string | null,
+  who = "architect",
 ): string | null {
   if (decision !== "continue") return null;
   if (!planPath) return null;
   const afterHash = snapshotPlan(planPath);
   if (afterHash === null) {
     return (
-      `architect continued but ${planPath} does not exist; ` +
+      `${who} continued but ${planPath} does not exist; ` +
       "the deliverable is a plan edit or a stop decision"
     );
   }
   if (afterHash === beforeHash) {
     return (
-      `architect continued but ${planPath} is unchanged since the turn started; ` +
+      `${who} continued but ${planPath} is unchanged since the turn started; ` +
       "the deliverable is a plan edit or a stop decision"
     );
   }
@@ -51,21 +52,25 @@ export function missingPlanFinding(
 }
 
 /**
- * The session ref is re-derived from the last architect record, never kept in
- * memory: a relaunch reads it off disk. Resume is cwd- and model-bound, and
- * only when the harness says it can.
+ * The session ref is re-derived from the last record the selector names, never
+ * kept in memory: a relaunch reads it off disk. The main architect selects its
+ * `architect` records; an epic's selects `subarchitect` records carrying that
+ * epic, so two subarchitects never resume each other. Resume is cwd- and
+ * model-bound, and only when the harness says it can and the run config's
+ * portability graph admits the recorded harness's session.
  */
 export async function resumableSession(
   runtime: KernelRuntime,
-  records: StepRecord[],
-  iteration: number,
+  records: readonly StepRecord[],
+  select: (record: StepRecord) => boolean,
+  target: Pick<TurnTarget, "harness" | "model">,
 ): Promise<SessionRef | undefined> {
   const last = records
-    .filter((r) => r.step === "architect" && r.session && r.endedAt)
+    .filter((r) => select(r) && r.session && r.endedAt)
     .sort((a, b) => a.seq - b.seq)
     .at(-1);
   if (!last?.session) return undefined;
-  const { harness, model } = boundaryTarget(runtime, "architect", iteration);
+  const { harness, model } = target;
   let resume = false;
   try {
     resume = (await harness.caps(model)).resume;
@@ -74,7 +79,8 @@ export async function resumableSession(
   }
   if (!resume) return undefined;
   const session = last.session;
-  if (session.harness !== harness.id) return undefined;
+  if (!portable(session.harness, harness.id, runtime.configs.run.portability))
+    return undefined;
   if (path.resolve(session.cwd) !== path.resolve(runtime.paths.goalCheckout))
     return undefined;
   if (session.model.id !== model.id) return undefined;

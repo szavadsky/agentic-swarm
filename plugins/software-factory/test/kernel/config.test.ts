@@ -1,9 +1,9 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  architectureSchema,
   ConfigError,
   loadConfigs,
   loadRunConfig,
@@ -16,6 +16,296 @@ function tmpRepo(): string {
 }
 
 describe("three config layers", () => {
+  threeConfigLayersPart1();
+  threeConfigLayersPart2();
+  threeConfigLayersPart3();
+  threeConfigLayersPart4();
+  threeConfigLayersPart5();
+  threeConfigLayersPart6();
+  threeConfigLayersPart7();
+  threeConfigLayersPart8();
+  threeConfigLayersPart9();
+  threeConfigLayersPart10();
+  threeConfigLayersPart11();
+  threeConfigLayersPart12();
+  threeConfigLayersPart13();
+  threeConfigLayersPart14();
+  threeConfigLayersPart15();
+  threeConfigLayersPart16();
+  threeConfigLayersPart17();
+  threeConfigLayersPart18();
+  threeConfigLayersPart19();
+  threeConfigLayersPart20();
+  threeConfigLayersPart21();
+  threeConfigLayersPart22();
+  threeConfigLayersPart23();
+  threeConfigLayersPart24();
+  threeConfigLayersPart25();
+  threeConfigLayersPart26();
+  threeConfigLayersPart27();
+  threeConfigLayersPart28();
+});
+
+describe("run-config extends", () => {
+  const scope1 = runConfigExtendsPart1();
+  runConfigExtendsPart2(scope1);
+  runConfigExtendsPart3(scope1);
+  runConfigExtendsPart4(scope1);
+  runConfigExtendsPart5(scope1);
+  runConfigExtendsPart6(scope1);
+});
+
+function mergesBaseChainLetsOverlayChangePart1(
+  write: (root: string, rel: string, content: string) => void,
+) {
+  const root = tmpRepo();
+  write(
+    root,
+    ".factory/root.yaml",
+    [
+      "aliases:",
+      "  architect: { harness: fake, model: root-model, effort: high, fallbacks: [{ model: fallback-model }] }",
+      "  reviewer: { harness: fake, model: review-model }",
+      "harnesses:",
+      "  fake: { binary: fake }",
+      "priceIds: { base/model: catalog/model }",
+      "limits: { iterations: 4, concurrency: { overall: 5 } }",
+      "sessions: { dir: ~/sessions, keepRuns: 7 }",
+      "worktreeRoot: ../wt",
+      "",
+    ].join("\n"),
+  );
+  write(root, ".factory/base.yaml", "extends: root.yaml\n");
+  write(
+    root,
+    ".factory/run.yaml",
+    [
+      "extends: base.yaml",
+      "aliases:",
+      "  architect: { model: overlay-model, effort: null }",
+      "  implementer: { harness: fake, model: impl-model }",
+      "",
+    ].join("\n"),
+  );
+
+  const configs = loadConfigs(root);
+  expect(configs.run.aliases.architect).toMatchObject({
+    harness: "fake",
+    model: "overlay-model",
+    fallbacks: [{ model: "fallback-model" }],
+  });
+  expect(configs.run.aliases.architect!.effort).toBeUndefined();
+  expect(configs.run.aliases.reviewer!.model).toBe("review-model");
+  expect(configs.run.aliases.implementer!.model).toBe("impl-model");
+  expect(configs.run.harnesses!.fake!.binary).toBe("fake");
+  expect(configs.run.priceIds).toEqual({ "base/model": "catalog/model" });
+
+  return { root, configs };
+}
+
+function mergesBaseChainLetsOverlayChangePart2(
+  scope: ReturnType<typeof mergesBaseChainLetsOverlayChangePart1>,
+) {
+  const { configs, root } = scope;
+  expect(configs.run.limits).toMatchObject({
+    iterations: 4,
+    concurrency: { overall: 5 },
+  });
+  expect(configs.run.sessions).toEqual({
+    dir: "~/sessions",
+    keepRuns: 7,
+    retention: "short",
+  });
+  expect(configs.run.worktreeRoot).toBe("../wt");
+  expect(resolveGoalPaths(configs, root, "demo").worktreeRoot).toContain(
+    path.basename(root),
+  );
+  expect(configs.run).not.toHaveProperty("extends");
+  // The same resolution serves the operator surface, not only a launch.
+  expect(loadRunConfig(path.join(root, ".factory/run.yaml"))).toEqual(
+    configs.run,
+  );
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+function runConfigExtendsPart1() {
+  function write(root: string, rel: string, content: string): void {
+    const file = path.join(root, rel);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, content);
+  }
+
+  it("merges a base chain and lets the overlay change one alias field", () => {
+    const scope1 = mergesBaseChainLetsOverlayChangePart1(write);
+    mergesBaseChainLetsOverlayChangePart2(scope1);
+  });
+
+  return { write };
+}
+
+function runConfigExtendsPart2(
+  scope: ReturnType<typeof runConfigExtendsPart1>,
+) {
+  const { write } = scope;
+  it("removes inherited aliases, harnesses, price rows and scouts with null", () => {
+    const root = tmpRepo();
+    write(
+      root,
+      ".factory/base.yaml",
+      [
+        "aliases:",
+        "  architect: { harness: fake, model: model }",
+        "  obsolete: { harness: fake, model: old }",
+        "harnesses:",
+        "  fake: { binary: fake }",
+        "  omp: { options: { approvalMode: yolo } }",
+        "priceIds: { base/model: catalog/model }",
+        "scouts: { model: cheap }",
+        "",
+      ].join("\n"),
+    );
+    write(
+      root,
+      ".factory/run.yaml",
+      [
+        "extends: base.yaml",
+        "aliases: { obsolete: null }",
+        "harnesses: { omp: null }",
+        "priceIds: { base/model: null }",
+        "scouts: null",
+        "",
+      ].join("\n"),
+    );
+
+    const run = loadConfigs(root).run;
+    expect(Object.keys(run.aliases)).toEqual(["architect"]);
+    expect(Object.keys(run.harnesses!)).toEqual(["fake"]);
+    expect(run.priceIds).toEqual({});
+    expect(run.scouts).toBeUndefined();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+function runConfigExtendsPart3(
+  scope: ReturnType<typeof runConfigExtendsPart1>,
+) {
+  const { write } = scope;
+  it("keeps the child's own keys when the base file is empty", () => {
+    const root = tmpRepo();
+    write(root, ".factory/base.yaml", "# intentionally empty\n");
+    write(
+      root,
+      ".factory/run.yaml",
+      [
+        "extends: base.yaml",
+        "worktreeRoot: .factory/worktrees",
+        "aliases:",
+        "  implementer: { harness: fake, model: model }",
+        "",
+      ].join("\n"),
+    );
+
+    const run = loadConfigs(root).run;
+    expect(Object.keys(run.aliases)).toEqual(["implementer"]);
+    expect(run.worktreeRoot).toBe(".factory/worktrees");
+
+    const direct = loadRunConfig(path.join(root, ".factory/run.yaml"));
+    expect(direct.aliases.implementer!.model).toBe("model");
+    expect(direct.worktreeRoot).toBe(".factory/worktrees");
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+function runConfigExtendsPart4(
+  scope: ReturnType<typeof runConfigExtendsPart1>,
+) {
+  const { write } = scope;
+  it("refuses an extends cycle and names the files", () => {
+    const root = tmpRepo();
+    write(root, ".factory/a.yaml", "extends: b.yaml\n");
+    write(root, ".factory/b.yaml", "extends: a.yaml\n");
+    write(root, ".factory/run.yaml", "extends: a.yaml\n");
+
+    let error: unknown;
+    try {
+      loadConfigs(root);
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(ConfigError);
+    const findings = (error as ConfigError).findings;
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        file: path.join(root, ".factory/b.yaml"),
+        key: "extends",
+        message: expect.stringMatching(
+          /extends cycle: .*a\.yaml -> .*b\.yaml -> .*a\.yaml/,
+        ),
+      }),
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+function runConfigExtendsPart5(
+  scope: ReturnType<typeof runConfigExtendsPart1>,
+) {
+  const { write } = scope;
+  it("refuses a base that is missing or not a mapping", () => {
+    const root = tmpRepo();
+    write(root, ".factory/run.yaml", "extends: absent.yaml\n");
+    let error: unknown;
+    try {
+      loadConfigs(root);
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(ConfigError);
+    expect((error as ConfigError).findings).toContainEqual(
+      expect.objectContaining({
+        file: path.join(root, ".factory/run.yaml"),
+        key: "extends",
+        message: expect.stringMatching(/base run config not found/),
+      }),
+    );
+
+    write(root, ".factory/scalar.yaml", "- not a mapping\n");
+    write(root, ".factory/run.yaml", "extends: scalar.yaml\n");
+    expect(() => loadConfigs(root)).toThrow(/expected a run config mapping/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+function runConfigExtendsPart6(
+  scope: ReturnType<typeof runConfigExtendsPart1>,
+) {
+  const { write } = scope;
+  it("refuses worktreeRoot in the repo layer", () => {
+    const root = tmpRepo();
+    write(
+      root,
+      ".factory/repo.yaml",
+      "baseBranch: main\nworktreeRoot: ../wt\n",
+    );
+
+    let error: unknown;
+    try {
+      loadConfigs(root);
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(ConfigError);
+    expect((error as ConfigError).findings).toContainEqual(
+      expect.objectContaining({
+        file: path.join(root, ".factory/repo.yaml"),
+        message: expect.stringContaining("worktreeRoot"),
+      }),
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+function threeConfigLayersPart1() {
   it("defaults without files and resolves paths outside the repo", () => {
     const root = tmpRepo();
     const configs = loadConfigs(root, { iterations: 3 });
@@ -45,7 +335,9 @@ describe("three config layers", () => {
     expect(paths.integrationBranch).toBe("factory/demo");
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function threeConfigLayersPart2() {
   it("keeps declared portability edges and refuses an unknown edge key", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
@@ -80,7 +372,9 @@ describe("three config layers", () => {
     expect(() => loadConfigs(root)).toThrow(ConfigError);
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function threeConfigLayersPart3() {
   it("refuses a task type kind outside spike and development", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
@@ -92,7 +386,7 @@ describe("three config layers", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it("defines just-implement as one implement step with no reviewer", () => {
+  it("defines just-implement as one implement step with no acceptance step", () => {
     const root = tmpRepo();
     const configs = loadConfigs(root);
     expect(configs.process.flows["just-implement"]!.steps).toEqual([
@@ -102,14 +396,153 @@ describe("three config layers", () => {
         alias: "implementer",
         alternates: ["implementer-b"],
         review: false,
+        qa: false,
       },
       {
         id: "resolve",
         prompt: "steward",
         alias: "steward",
         review: false,
+        qa: false,
       },
     ]);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+function threeConfigLayersPart4() {
+  it("puts the QA acceptance step between implement and review", () => {
+    const root = tmpRepo();
+    const configs = loadConfigs(root);
+    const steps = configs.process.flows["implement-review"]!.steps;
+    expect(steps.map((step) => step.id)).toEqual([
+      "implement",
+      "qa",
+      "review",
+      "resolve",
+    ]);
+    expect(steps[1]).toMatchObject({
+      prompt: "qa",
+      alias: "qa",
+      qa: true,
+      changeRequests: 2,
+      deliverable: "verdict",
+    });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("refuses a step that is both a review and a QA acceptance", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      [
+        "flows:",
+        "  ambiguous:",
+        "    steps:",
+        "      - id: implement",
+        "        prompt: implementer",
+        "        alias: implementer",
+        "      - id: accept",
+        "        prompt: reviewer",
+        "        alias: reviewer",
+        "        review: true",
+        "        qa: true",
+        "",
+      ].join("\n"),
+    );
+    expect(() => loadConfigs(root)).toThrow(/either a review or a QA/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+function threeConfigLayersPart5() {
+  it("refuses an adjudicate step that is also a review or QA step", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      [
+        "flows:",
+        "  ambiguous:",
+        "    steps:",
+        "      - id: implement",
+        "        prompt: implementer",
+        "        alias: implementer",
+        "      - id: review",
+        "        prompt: reviewer",
+        "        alias: reviewer",
+        "        review: true",
+        "      - id: adjudicate",
+        "        prompt: adjudicator",
+        "        alias: reviewer",
+        "        adjudicate: all",
+        "        review: true",
+        "",
+      ].join("\n"),
+    );
+    expect(() => loadConfigs(root)).toThrow(
+      /an adjudicate step is neither a review nor a QA/,
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+function threeConfigLayersPart6() {
+  it("refuses an adjudicate step that does not directly follow a review", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      [
+        "flows:",
+        "  misplaced:",
+        "    steps:",
+        "      - id: implement",
+        "        prompt: implementer",
+        "        alias: implementer",
+        "      - id: adjudicate",
+        "        prompt: adjudicator",
+        "        alias: reviewer",
+        "        adjudicate: last",
+        "",
+      ].join("\n"),
+    );
+    expect(() => loadConfigs(root)).toThrow(
+      /an adjudicate step must directly follow a review step/,
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+function threeConfigLayersPart7() {
+  it("refuses changeRequests on an adjudicate step", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      [
+        "flows:",
+        "  bounded:",
+        "    steps:",
+        "      - id: implement",
+        "        prompt: implementer",
+        "        alias: implementer",
+        "      - id: review",
+        "        prompt: reviewer",
+        "        alias: reviewer",
+        "        review: true",
+        "      - id: adjudicate",
+        "        prompt: adjudicator",
+        "        alias: reviewer",
+        "        adjudicate: all",
+        "        changeRequests: 1",
+        "",
+      ].join("\n"),
+    );
+    expect(() => loadConfigs(root)).toThrow(
+      /an adjudicate step takes no changeRequests/,
+    );
     fs.rmSync(root, { recursive: true, force: true });
   });
 
@@ -126,7 +559,9 @@ describe("three config layers", () => {
       });
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function threeConfigLayersPart8() {
   it("runs a spike's implement turn on researcher with task-model alternates", () => {
     const root = tmpRepo();
     const configs = loadConfigs(root);
@@ -139,10 +574,13 @@ describe("three config layers", () => {
       alias: "researcher",
       alternates: ["implementer", "reviewer"],
       review: false,
+      qa: false,
     });
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function threeConfigLayersPart9() {
   it("merges the package process default with a repo override", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
@@ -174,7 +612,9 @@ describe("three config layers", () => {
     expect(toLimits(configs).iterations).toBe(2);
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function threeConfigLayersPart10() {
   it("keeps a change-request bound per review step", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
@@ -205,7 +645,9 @@ describe("three config layers", () => {
     expect(steps.map((step) => step.changeRequests)).toEqual([undefined, 0, 3]);
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function threeConfigLayersPart11() {
   it("allows a checks step without a prompt or alias and retains changeRequests", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
@@ -231,10 +673,17 @@ describe("three config layers", () => {
     const checks = configs.process.flows.custom!.steps.find(
       (s) => s.id === "checks",
     );
-    expect(checks).toEqual({ id: "checks", review: false, changeRequests: 1 });
+    expect(checks).toEqual({
+      id: "checks",
+      review: false,
+      qa: false,
+      changeRequests: 1,
+    });
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function threeConfigLayersPart12() {
   it("parses a step's alternates and refuses them on the checks script step", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
@@ -270,33 +719,86 @@ describe("three config layers", () => {
     expect(() => loadConfigs(root)).toThrow(/alternates need a step alias/);
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
-  it("names a prompt and alias for every boundary step, plan review included", () => {
+function threeConfigLayersPart13() {
+  it("names a prompt and alias for every boundary step", () => {
     const root = tmpRepo();
     const boundary = loadConfigs(root).process.boundary;
     expect(Object.keys(boundary).sort()).toEqual([
       "architect",
       "digest",
       "front",
+      "intent",
+      "packprep",
       "plancheck",
-      "planreview",
       "pm",
       "steward",
     ]);
-    // Plan review shares the reviewer prompt on its own alias: no second role.
-    expect(boundary.planreview).toEqual({
-      prompt: "reviewer",
-      alias: "plan-reviewer",
-      deliverable: "numbered plan-review findings",
+    // The pack preparer runs on its own cheap alias.
+    expect(boundary.packprep).toEqual({
+      prompt: "pack-preparer",
+      alias: "pack-preparer",
+      deliverable: "context pack",
     });
     expect(boundary.front).toEqual({
       prompt: "front",
       alias: "pm",
       deliverable: "class, task, and pack",
     });
+    expect(boundary.intent).toEqual({
+      prompt: "intent",
+      alias: "intent",
+      deliverable: "intent edit",
+    });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+function threeConfigLayersPart14() {
+  it("declares the architecture flow: reviewers and the architect return", () => {
+    const root = tmpRepo();
+    const architecture = loadConfigs(root).process.architecture;
+    expect(architecture).toEqual({
+      planReview: {
+        prompt: "review-architect",
+        deliverable: "plan-review findings",
+      },
+      reviewers: ["plan-reviewer"],
+      architectReturn: "on-technical-concerns",
+      planReturn: {
+        prompt: "architect-review-return",
+        deliverable: "plan edit and marks",
+      },
+    });
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("refuses an architect return without its prompt", () => {
+    expect(() =>
+      architectureSchema.parse({
+        planReview: { prompt: "review-architect" },
+        reviewers: ["plan-reviewer"],
+        architectReturn: "on-technical-concerns",
+      }),
+    ).toThrow(/needs a planReturn prompt/);
+  });
+
+  it("lets a repo retarget one architecture key without restating the rest", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      "architecture:\n  reviewers: [reviewer, plan-reviewer]\n",
+    );
+    const architecture = loadConfigs(root).process.architecture;
+    expect(architecture.reviewers).toEqual(["reviewer", "plan-reviewer"]);
+    expect(architecture.planReview.prompt).toBe("review-architect");
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+function threeConfigLayersPart15() {
   it("refuses a step that names no alias", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
@@ -331,7 +833,9 @@ describe("three config layers", () => {
     expect(() => loadConfigs(root)).toThrow(ConfigError);
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function threeConfigLayersPart16() {
   it("reads a step's follow-up mode, alias and keepSession", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
@@ -372,7 +876,9 @@ describe("three config layers", () => {
     expect(error!.report).toContain("reviewer");
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function threeConfigLayersPart17() {
   it("fails loud on a repo process file that still carries itemTurns", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
@@ -416,7 +922,9 @@ describe("three config layers", () => {
     });
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function threeConfigLayersPart18() {
   it("maps the optional iteration USD brake into the typed limits", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
@@ -442,7 +950,9 @@ describe("three config layers", () => {
     expect(() => loadConfigs(root)).toThrow(/parkAmends/);
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function threeConfigLayersPart19() {
   it("maps the optional turn/iteration minute knobs into the limits", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
@@ -464,7 +974,9 @@ describe("three config layers", () => {
     expect(() => loadConfigs(root)).toThrow(/turnMinutes/);
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function threeConfigLayersPart20() {
   it("defaults concurrency to overall-only and maps pool and model caps", () => {
     const root = tmpRepo();
     expect(toLimits(loadConfigs(root)).concurrency).toEqual({
@@ -490,7 +1002,9 @@ describe("three config layers", () => {
     expect(() => loadConfigs(root)).toThrow(/overall/);
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function threeConfigLayersPart21() {
   it("parses alias subscriptions and cross-harness fallback tiers", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
@@ -532,7 +1046,9 @@ describe("three config layers", () => {
     expect(() => loadConfigs(root)).toThrow(/fallbacks\.0/);
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function threeConfigLayersPart22() {
   it("rejects an unsafe goal name", () => {
     const root = tmpRepo();
     const configs = loadConfigs(root);
@@ -567,6 +1083,29 @@ describe("three config layers", () => {
     expect(format1).toEqual({ pattern: "pytest" });
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
+
+function threeConfigLayersPart23() {
+  it("rejects a junit report path outside the worktree", () => {
+    for (const junit of ["/tmp/junit.xml", "../junit.xml", "~/junit.xml"]) {
+      const root = tmpRepo();
+      fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+      fs.writeFileSync(
+        path.join(root, ".factory/repo.yaml"),
+        [
+          "gates:",
+          "  - id: unit",
+          "    command: echo unit",
+          `    format: { junit: "${junit}" }`,
+          "",
+        ].join("\n"),
+      );
+      expect(() => loadConfigs(root)).toThrow(
+        /junit path must be worktree-relative/,
+      );
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 
   it("keeps the pre-serial gates shape valid and defaults serial to empty", () => {
     const root = tmpRepo();
@@ -581,7 +1120,9 @@ describe("three config layers", () => {
     ]);
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function threeConfigLayersPart24() {
   it("parses declared serial mutexes and per-worktree env dirs", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
@@ -607,7 +1148,9 @@ describe("three config layers", () => {
     ]);
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function threeConfigLayersPart25() {
   it("rejects an env dir outside the worktree and a name that is not a variable", () => {
     const cases = [
       ["{ TMPDIR: /tmp/shared }", /worktree-relative/],
@@ -651,7 +1194,9 @@ describe("three config layers", () => {
     expect(configs.run.sessions.retention).toBe("long");
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function threeConfigLayersPart26() {
   it("parses the harness env allowlist and defaults it empty", () => {
     const root = tmpRepo();
     expect(loadConfigs(root).run.envAllowlist).toEqual([]);
@@ -685,7 +1230,9 @@ describe("three config layers", () => {
     ).toBe(true);
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function threeConfigLayersPart27() {
   it("accepts a native harness entry that carries only opaque options", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
@@ -724,7 +1271,9 @@ describe("three config layers", () => {
     );
     fs.rmSync(root, { recursive: true, force: true });
   });
+}
 
+function threeConfigLayersPart28() {
   it("requires an acpx usage command to be an adapter slash command", () => {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
@@ -760,212 +1309,4 @@ describe("three config layers", () => {
     );
     fs.rmSync(root, { recursive: true, force: true });
   });
-});
-
-describe("run-config extends", () => {
-  function write(root: string, rel: string, content: string): void {
-    const file = path.join(root, rel);
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, content);
-  }
-
-  it("merges a base chain and lets the overlay change one alias field", () => {
-    const root = tmpRepo();
-    write(
-      root,
-      ".factory/root.yaml",
-      [
-        "aliases:",
-        "  architect: { harness: fake, model: root-model, effort: high, fallbacks: [{ model: fallback-model }] }",
-        "  reviewer: { harness: fake, model: review-model }",
-        "harnesses:",
-        "  fake: { binary: fake }",
-        "priceIds: { base/model: catalog/model }",
-        "limits: { iterations: 4, concurrency: { overall: 5 } }",
-        "sessions: { dir: ~/sessions, keepRuns: 7 }",
-        "worktreeRoot: ../wt",
-        "",
-      ].join("\n"),
-    );
-    write(root, ".factory/base.yaml", "extends: root.yaml\n");
-    write(
-      root,
-      ".factory/run.yaml",
-      [
-        "extends: base.yaml",
-        "aliases:",
-        "  architect: { model: overlay-model, effort: null }",
-        "  implementer: { harness: fake, model: impl-model }",
-        "",
-      ].join("\n"),
-    );
-
-    const configs = loadConfigs(root);
-    expect(configs.run.aliases.architect).toMatchObject({
-      harness: "fake",
-      model: "overlay-model",
-      fallbacks: [{ model: "fallback-model" }],
-    });
-    expect(configs.run.aliases.architect!.effort).toBeUndefined();
-    expect(configs.run.aliases.reviewer!.model).toBe("review-model");
-    expect(configs.run.aliases.implementer!.model).toBe("impl-model");
-    expect(configs.run.harnesses!.fake!.binary).toBe("fake");
-    expect(configs.run.priceIds).toEqual({ "base/model": "catalog/model" });
-    expect(configs.run.limits).toMatchObject({
-      iterations: 4,
-      concurrency: { overall: 5 },
-    });
-    expect(configs.run.sessions).toEqual({
-      dir: "~/sessions",
-      keepRuns: 7,
-      retention: "short",
-    });
-    expect(configs.run.worktreeRoot).toBe("../wt");
-    expect(resolveGoalPaths(configs, root, "demo").worktreeRoot).toContain(
-      path.basename(root),
-    );
-    expect(configs.run).not.toHaveProperty("extends");
-    // The same resolution serves the operator surface, not only a launch.
-    expect(loadRunConfig(path.join(root, ".factory/run.yaml"))).toEqual(
-      configs.run,
-    );
-    fs.rmSync(root, { recursive: true, force: true });
-  });
-
-  it("removes inherited aliases, harnesses, price rows and scouts with null", () => {
-    const root = tmpRepo();
-    write(
-      root,
-      ".factory/base.yaml",
-      [
-        "aliases:",
-        "  architect: { harness: fake, model: model }",
-        "  obsolete: { harness: fake, model: old }",
-        "harnesses:",
-        "  fake: { binary: fake }",
-        "  omp: { options: { approvalMode: yolo } }",
-        "priceIds: { base/model: catalog/model }",
-        "scouts: { model: cheap }",
-        "",
-      ].join("\n"),
-    );
-    write(
-      root,
-      ".factory/run.yaml",
-      [
-        "extends: base.yaml",
-        "aliases: { obsolete: null }",
-        "harnesses: { omp: null }",
-        "priceIds: { base/model: null }",
-        "scouts: null",
-        "",
-      ].join("\n"),
-    );
-
-    const run = loadConfigs(root).run;
-    expect(Object.keys(run.aliases)).toEqual(["architect"]);
-    expect(Object.keys(run.harnesses!)).toEqual(["fake"]);
-    expect(run.priceIds).toEqual({});
-    expect(run.scouts).toBeUndefined();
-    fs.rmSync(root, { recursive: true, force: true });
-  });
-
-  it("keeps the child's own keys when the base file is empty", () => {
-    const root = tmpRepo();
-    write(root, ".factory/base.yaml", "# intentionally empty\n");
-    write(
-      root,
-      ".factory/run.yaml",
-      [
-        "extends: base.yaml",
-        "worktreeRoot: .factory/worktrees",
-        "aliases:",
-        "  implementer: { harness: fake, model: model }",
-        "",
-      ].join("\n"),
-    );
-
-    const run = loadConfigs(root).run;
-    expect(Object.keys(run.aliases)).toEqual(["implementer"]);
-    expect(run.worktreeRoot).toBe(".factory/worktrees");
-
-    const direct = loadRunConfig(path.join(root, ".factory/run.yaml"));
-    expect(direct.aliases.implementer!.model).toBe("model");
-    expect(direct.worktreeRoot).toBe(".factory/worktrees");
-    fs.rmSync(root, { recursive: true, force: true });
-  });
-
-  it("refuses an extends cycle and names the files", () => {
-    const root = tmpRepo();
-    write(root, ".factory/a.yaml", "extends: b.yaml\n");
-    write(root, ".factory/b.yaml", "extends: a.yaml\n");
-    write(root, ".factory/run.yaml", "extends: a.yaml\n");
-
-    let error: unknown;
-    try {
-      loadConfigs(root);
-    } catch (err) {
-      error = err;
-    }
-    expect(error).toBeInstanceOf(ConfigError);
-    const findings = (error as ConfigError).findings;
-    expect(findings).toContainEqual(
-      expect.objectContaining({
-        file: path.join(root, ".factory/b.yaml"),
-        key: "extends",
-        message: expect.stringMatching(
-          /extends cycle: .*a\.yaml -> .*b\.yaml -> .*a\.yaml/,
-        ),
-      }),
-    );
-    fs.rmSync(root, { recursive: true, force: true });
-  });
-
-  it("refuses a base that is missing or not a mapping", () => {
-    const root = tmpRepo();
-    write(root, ".factory/run.yaml", "extends: absent.yaml\n");
-    let error: unknown;
-    try {
-      loadConfigs(root);
-    } catch (err) {
-      error = err;
-    }
-    expect(error).toBeInstanceOf(ConfigError);
-    expect((error as ConfigError).findings).toContainEqual(
-      expect.objectContaining({
-        file: path.join(root, ".factory/run.yaml"),
-        key: "extends",
-        message: expect.stringMatching(/base run config not found/),
-      }),
-    );
-
-    write(root, ".factory/scalar.yaml", "- not a mapping\n");
-    write(root, ".factory/run.yaml", "extends: scalar.yaml\n");
-    expect(() => loadConfigs(root)).toThrow(/expected a run config mapping/);
-    fs.rmSync(root, { recursive: true, force: true });
-  });
-
-  it("refuses worktreeRoot in the repo layer", () => {
-    const root = tmpRepo();
-    write(
-      root,
-      ".factory/repo.yaml",
-      "baseBranch: main\nworktreeRoot: ../wt\n",
-    );
-
-    let error: unknown;
-    try {
-      loadConfigs(root);
-    } catch (err) {
-      error = err;
-    }
-    expect(error).toBeInstanceOf(ConfigError);
-    expect((error as ConfigError).findings).toContainEqual(
-      expect.objectContaining({
-        file: path.join(root, ".factory/repo.yaml"),
-        message: expect.stringContaining("worktreeRoot"),
-      }),
-    );
-    fs.rmSync(root, { recursive: true, force: true });
-  });
-});
+}

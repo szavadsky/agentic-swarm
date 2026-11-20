@@ -1,10 +1,29 @@
+import { formatCause, readCause } from "../../src/kernel/cause.js";
 import type {
+  ArchitectureConfig,
   BoundaryStep,
+  Cause,
   RecordStart,
   StepRecord,
   TaskFile,
   TurnSpec,
 } from "../../src/kernel/types.js";
+
+/**
+ * A typed cause fixture from the text a record would carry: the same mapping
+ * the store applies to records written before causes were typed, so a fixture's
+ * kind cannot drift from the producer's.
+ */
+export function cause(text: string): Cause {
+  const parsed = readCause(text);
+  if (!parsed) throw new Error(`test cause ${JSON.stringify(text)} is empty`);
+  return parsed;
+}
+
+/** Rendered cause text for assertions; an absent cause renders empty. */
+export function causeText(value: Cause | undefined): string {
+  return value ? formatCause(value) : "";
+}
 
 /** Boundary prompts and aliases the direct-runtime fixtures wire their run config for. */
 export const TEST_BOUNDARY: Record<BoundaryStep, TurnSpec> = {
@@ -20,15 +39,16 @@ export const TEST_BOUNDARY: Record<BoundaryStep, TurnSpec> = {
     alias: "front",
     deliverable: "class, task, and pack",
   },
+  intent: { prompt: "intent", alias: "intent", deliverable: "intent edit" },
+  packprep: {
+    prompt: "pack-preparer",
+    alias: "pack-preparer",
+    deliverable: "context pack",
+  },
   plancheck: {
     prompt: "plan-checker",
     alias: "plan-checker",
     deliverable: "plan verdict",
-  },
-  planreview: {
-    prompt: "reviewer",
-    alias: "plan-reviewer",
-    deliverable: "numbered plan-review findings",
   },
   pm: { prompt: "pm", alias: "pm", deliverable: "task files" },
   steward: {
@@ -36,6 +56,14 @@ export const TEST_BOUNDARY: Record<BoundaryStep, TurnSpec> = {
     alias: "steward",
     deliverable: "merge resolution",
   },
+};
+
+/** The architecture flow the direct-runtime fixtures run. */
+export const TEST_ARCHITECTURE: ArchitectureConfig = {
+  planReview: { prompt: "review-architect" },
+  reviewers: ["plan-reviewer"],
+  architectReturn: "on-technical-concerns",
+  planReturn: { prompt: "architect-review-return" },
 };
 
 export function task(slug: string, patch: Partial<TaskFile> = {}): TaskFile {

@@ -52,3 +52,45 @@ describe("omp binary resolution", () => {
     expect(binary).not.toBe("/nonexistent/omp-from-env");
   });
 });
+
+describe("omp transient agent definitions", () => {
+  it("writes a content-addressed extension package and reuses it", () => {
+    const sessionDir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-omp-"));
+    try {
+      const runtime = new OmpRuntime({
+        binary: "/opt/omp",
+        sessionDir,
+      });
+      const agents = [
+        {
+          name: "subarchitect",
+          markdown: "---\nname: subarchitect\n---\nrole\n",
+        },
+      ];
+      const first = runtime.agentsDir(agents);
+      const second = runtime.agentsDir(agents);
+      expect(first).toBe(second);
+      expect(
+        fs.readFileSync(path.join(first, "agents", "subarchitect.md"), "utf8"),
+      ).toBe(agents[0]!.markdown);
+      const changed = runtime.agentsDir([
+        { name: "subarchitect", markdown: "different" },
+      ]);
+      expect(changed).not.toBe(first);
+    } finally {
+      fs.rmSync(sessionDir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a definition name that would escape the agents root", () => {
+    const sessionDir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-omp-"));
+    try {
+      const runtime = new OmpRuntime({ binary: "/opt/omp", sessionDir });
+      expect(() =>
+        runtime.agentsDir([{ name: "../x", markdown: "role" }]),
+      ).toThrow('invalid omp agent name "../x"');
+    } finally {
+      fs.rmSync(sessionDir, { recursive: true, force: true });
+    }
+  });
+});

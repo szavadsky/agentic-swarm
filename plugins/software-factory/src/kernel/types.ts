@@ -15,6 +15,7 @@ import type {
   Usage,
 } from "../harness/types.js";
 import type { PriceSource } from "./openrouter.js";
+import type { PlanFile, PlanScope } from "./plan-file.js";
 import type { PromptLibrary } from "./prompts.js";
 
 export const concernSchema = z.object({
@@ -47,8 +48,18 @@ export const replySchema = z.object({
   finding: z.number().int().positive(),
   reply: z.string().min(1),
 });
-/** Where the PM's steer turn sends one steer: handled now, a new task, the architect, or drain-then-architect. */
-export const steerRouteSchema = z.enum(["task", "spike", "architect", "stall"]);
+/**
+ * Where the PM's steer turn sends one steer: handled now, a new task, carried
+ * into the goal's intent by the intent agent, an architect (the goal architect,
+ * or `{architect: id}` for one scope), or drain-then-architect.
+ */
+export const steerRouteSchema = z.union([
+  z.enum(["task", "spike", "intent", "architect", "stall"]),
+  z
+    .object({ architect: z.string().min(1) })
+    .strict()
+    .describe("one architect's scope: `main` or an epic id"),
+]);
 export type SteerRoute = z.infer<typeof steerRouteSchema>;
 
 export const steerRouteEntrySchema = z.object({
@@ -132,6 +143,35 @@ export const planReviewMarkSchema = z.object({
   finding: z.number().int().positive(),
   mark: z.enum(["helpful", "unhelpful"]),
 });
+export type PlanReviewMark = z.infer<typeof planReviewMarkSchema>;
+
+/** One plan-review finding: the plan line it concerns and what would satisfy it. */
+export const planReviewFindingSchema = z.object({
+  planLine: z.string().min(1).describe("the plan line or bullet it concerns"),
+  finding: z.string().min(1).describe("what fails and what would satisfy it"),
+});
+export type PlanReviewFinding = z.infer<typeof planReviewFindingSchema>;
+
+/**
+ * A plan review's findings: technical concerns first, then plan-and-dependency
+ * notes. No verdict, no last call — the review advises, the architect decides.
+ * The kernel numbers them in this order for the architect's marks.
+ */
+export const planReviewOutcomeSchema = z.object({
+  technical: z
+    .array(planReviewFindingSchema)
+    .default([])
+    .describe(
+      "technical concerns: impractical direction, a real bug, a foundation the plan assumes and the repo lacks",
+    ),
+  planNotes: z
+    .array(planReviewFindingSchema)
+    .default([])
+    .describe(
+      "plan and dependency notes: an unactionable bullet, missing coverage, ordering",
+    ),
+});
+export type PlanReviewOutcome = z.infer<typeof planReviewOutcomeSchema>;
 
 /** The only agent ↔ script surface; one schema for every step. Field
  * descriptions render into the outcome prompt skeleton, so they are the
@@ -196,6 +236,10 @@ export const outcomeSchema = z.object({
     .describe("PM stall turns only: one entry per parked slug"),
   // The kernel branches on the verdict.
   planCheck: planCheckSchema.optional().describe("plan-checker turns only"),
+  // Findings reach the architect before the PM; no verdict is taken here.
+  planReview: planReviewOutcomeSchema
+    .optional()
+    .describe("plan-review turns only: technical findings and plan notes"),
   // The kernel resumes amended/continued follow-ups, cancels a cancel
   // follow-up and records `leave` reasons for the next boundary.
   planCheckRoutes: z
@@ -238,6 +282,8 @@ export interface TaskFile {
   flow: string;
   deps: string[];
   scope: string[];
+  /** The epic that owns this task; absent means goal-level work. */
+  epic?: string;
   tier?: string;
   /**
    * The decider's revision of this task, 0 until it amends a park under the
@@ -291,9 +337,57 @@ export interface ProgressRepeat {
   firstRound: number;
 }
 
+/**
+ * A park or failure cause, closed by `kind`: the kernel switches on it and
+ * never on `detail`. `detail` is free text for prompts, summaries and records.
+ */
+export const causeKindSchema = z.enum([
+  "gates",
+  "conflict",
+  "base-conflict",
+  "no-progress",
+  "empty-diff",
+  "round-limit",
+  "change-requests-exhausted",
+  "overflow",
+  "infra",
+  "infra-repeat",
+  "setup",
+  "containment",
+  "outside-change",
+  "integration-moved",
+  "budget",
+  "steer",
+  "blocked",
+  "upscope",
+  "failed",
+  "review-rejected",
+  "refused",
+  "invalid-outcome",
+  "merge-failed",
+  "quarantine",
+  "held",
+  "stuck",
+  "resume",
+  "gate-flake",
+  "note",
+  "boundary",
+  "error",
+  "unknown",
+]);
+export type CauseKind = z.infer<typeof causeKindSchema>;
+
+export const causeSchema = z.object({
+  kind: causeKindSchema,
+  detail: z.string(),
+});
+export type Cause = z.infer<typeof causeSchema>;
+
 export interface TaskState {
   status: TaskStatus;
-  cause?: string;
+  /** The task file's epic, copied so a consumer reading state keeps the owner. */
+  epic?: string;
+  cause?: Cause;
   /** Agent turns spent on this slug, a spend fact only: no bound reads it. */
   turns: number;
   /** Current implementation/review round, 1-based. */
@@ -304,7 +398,7 @@ export interface TaskState {
   commit?: string;
   verdict?: ReviewVerdict;
   /** A derived terminal outcome that still needs its park record. */
-  park?: string;
+  park?: Cause;
   /** No-progress over the item's history; the next action is the loop park. */
   loop?: ProgressRepeat;
   /** A red gate run sent the task back to implement: the fix turn resumes its session, and only a merged-result fix skips the next review. */
@@ -315,6 +409,21 @@ export interface TaskState {
 
 export type GoalStatus = "active" | "done" | "blocked";
 
+/**
+ * One epic's derived state. The epic's last completed subarchitect record owns
+ * its decision; `done` additionally requires every task in the epic to be
+ * terminal, so a task that reopens reopens the epic. An epic without a
+ * subarchitect turn (the top architect owns it) closes on its tasks alone.
+ */
+export interface EpicState {
+  /** The epic's task slugs; goal-level tasks appear only in `tasks`. */
+  tasks: string[];
+  /** The last completed subarchitect decision; absent before the first turn. */
+  decision?: GoalDecision;
+  /** No subarchitect veto and no task in the epic is open. */
+  done: boolean;
+}
+
 export interface State {
   goal: GoalStatus;
   /** Highest iteration seen in records; 0 before the first boundary turn. */
@@ -323,6 +432,8 @@ export interface State {
   /** The current iteration was interrupted with ready work left; a relaunch resumes it. */
   interrupted: boolean;
   tasks: Record<string, TaskState>;
+  /** Every epic the task files and subarchitect records name. */
+  epics: Record<string, EpicState>;
 }
 
 export type Action =
@@ -330,7 +441,7 @@ export type Action =
   | { kind: "checks"; slug: string }
   | { kind: "merge"; slug: string }
   | { kind: "finish"; slug: string }
-  | { kind: "park"; slug: string; cause: string }
+  | { kind: "park"; slug: string; cause: Cause }
   | { kind: "boundary" }
   | { kind: "exit"; reason: string };
 
@@ -349,9 +460,7 @@ export interface RepairSpec {
 }
 
 /** A step's prompt template and the run-config alias its turns run on. */
-export interface TurnSpec extends RepairSpec {
-  /** Prompt template name under `prompts/`. */
-  prompt: string;
+export interface TurnSpec extends PromptSpec {
   /** Run-config alias; pre-flight requires every named alias. */
   alias: string;
 }
@@ -359,17 +468,67 @@ export interface TurnSpec extends RepairSpec {
 /**
  * The kernel turns that run outside a configured flow. Their names are the
  * record step vocabulary; process config names a prompt and alias for each.
+ * Plan review is the architecture flow, configured by its own block.
  */
 export const BOUNDARY_STEPS = [
   "architect",
   "digest",
   "front",
+  "intent",
+  "packprep",
   "plancheck",
-  "planreview",
   "pm",
   "steward",
 ] as const;
 export type BoundaryStep = (typeof BOUNDARY_STEPS)[number];
+
+/** Kernel turns owned by the architecture flow rather than the boundary block. */
+export const ARCHITECTURE_STEPS = ["planreview", "planreturn"] as const;
+
+/**
+ * The epic architect's consult, run only at hierarchy depth 2. It is not a
+ * boundary-block step: it runs on the architect's alias, so no run config
+ * needs a second alias, and its records carry `architect: <epic>`.
+ */
+export const HIERARCHY_STEPS = ["subarchitect"] as const;
+
+/** Every kernel turn outside a task flow; none starts a task turn. */
+export const KERNEL_STEPS = [
+  ...BOUNDARY_STEPS,
+  ...ARCHITECTURE_STEPS,
+  ...HIERARCHY_STEPS,
+] as const;
+export type KernelStep = (typeof KERNEL_STEPS)[number];
+
+/** A boundary- or architecture-turn prompt; the alias is named elsewhere. */
+export interface PromptSpec extends RepairSpec {
+  /** Prompt template name under `prompts/`. */
+  prompt: string;
+}
+
+/**
+ * The architecture flow: who reviews the architect's plan, and whether the
+ * architect gets one turn on the technical findings before the PM derives
+ * tasks. `planReturn` is required exactly when that turn is allowed.
+ */
+export interface ArchitectureConfig {
+  planReview: PromptSpec;
+  /** Run-config aliases; one fresh read-only review turn each, in order. */
+  reviewers: string[];
+  architectReturn: "on-technical-concerns" | "never";
+  planReturn?: PromptSpec;
+}
+
+/**
+ * Hierarchy depth and the epic architect's prompt. Depth 1 (the default) is
+ * one architect; depth 2 adds one subarchitect consult per active epic. The
+ * subarchitect runs on the boundary architect's alias, so only the prompt
+ * differs.
+ */
+export interface HierarchyConfig {
+  depth: 1 | 2;
+  subarchitect: PromptSpec;
+}
 
 export interface FlowStep extends RepairSpec {
   id: string;
@@ -379,8 +538,20 @@ export interface FlowStep extends RepairSpec {
   /** Review steps carry the verdict contract and consume a review round. */
   review?: boolean;
   /**
-   * Review and checks steps: how many change requests this step may issue before
-   * its call is the last one. Absent means the default (two).
+   * QA steps carry the accept-or-changes contract, consume the same acceptance
+   * round as a review, and gate the tree before the reviewer sees it.
+   */
+  qa?: boolean;
+  /**
+   * Review adjudication: this verdict-only step runs after the preceding
+   * review's change request, re-judges its findings and may discard them.
+   * `all` runs on every change-bearing review cycle; `last` only on the final
+   * one. The step must directly follow the review it adjudicates.
+   */
+  adjudicate?: "last" | "all";
+  /**
+   * Review, QA and checks steps: how many change requests this step may issue
+   * before its call is the last one. Absent means the default (two).
    */
   changeRequests?: number;
   /**
@@ -450,10 +621,11 @@ export type StepActor = "agent" | "script";
 
 /**
  * Why a launch ran again: a technical glitch (infra stop or fallback hop),
- * a bona fide change request (a review `changes`), or a bona fide failure
- * (agent `failed`/`blocked` or no outcome after reminders).
+ * a bona fide change request (a review `changes`), a QA finding that sent the
+ * work back, or a bona fide failure (agent `failed`/`blocked` or no outcome
+ * after reminders).
  */
-export type LaunchKind = "glitch" | "change-request" | "failure";
+export type LaunchKind = "glitch" | "change-request" | "qa-finding" | "failure";
 
 /** Idle is separate from wall: a long tool call streams nothing but is not stuck. */
 export interface Timeouts {
@@ -481,6 +653,11 @@ export interface StepRecord {
   step: string;
   round: number;
   actor: StepActor;
+  /**
+   * The architect that owns this record's work: `main` for goal-level work or
+   * an epic's id for epic work.
+   */
+  architect?: string;
   /** Agent steps only; `model` is the model actually used when reported. */
   alias?: string;
   model?: ModelRef;
@@ -520,6 +697,8 @@ export interface StepRecord {
   commit?: string;
   /** Spike finish only: `<commit>:<report path>`, the finding's one copy. */
   report?: string;
+  /** Intent turn only: the unified diff the turn carried into the goal's intent. */
+  diff?: string;
   /** UTF-8 bytes of the rendered prompt sent to the harness (agent steps only). */
   promptBytes?: number;
   /** Boundary roles only: UTF-8 bytes of the iteration context pack. */
@@ -545,7 +724,7 @@ export interface StepRecord {
   wallMs?: number;
   outcome?: RecordedOutcome;
   ok?: boolean;
-  cause?: string;
+  cause?: Cause;
   startedAt: string;
   endedAt?: string;
 }
@@ -564,6 +743,8 @@ export interface RecordStart {
   step: string;
   round: number;
   actor: StepActor;
+  /** The architect that owns this record's work; see `StepRecord.architect`. */
+  architect?: string;
   alias?: string;
   model?: ModelRef;
   taskHash?: string;
@@ -604,6 +785,8 @@ export interface RecordEnd {
   commit?: string;
   /** Spike finish only: `<commit>:<report path>`, the finding's one copy. */
   report?: string;
+  /** Intent turn only: the unified diff the turn carried into the goal's intent. */
+  diff?: string;
   tree?: string;
   /** base-advance only: integration head tree at the creation advance. */
   headTree?: string;
@@ -615,7 +798,7 @@ export interface RecordEnd {
   wallMs?: number;
   outcome?: Outcome;
   ok?: boolean;
-  cause?: string;
+  cause?: Cause;
 }
 
 /** Handle for an in-flight turn; the directory exists but has no end. */
@@ -640,8 +823,166 @@ export interface DeclaredWrite {
   endedAt?: string;
 }
 
+/** The directory a goal artifact lives in; `goal` owns the files no sub-store does. */
+export type ArtifactArea =
+  | "goal"
+  | "records"
+  | "tasks"
+  | "plans"
+  | "mailbox"
+  | "iterations";
+
+/** One goal artifact, addressed by the store that owns it. */
+export interface ArtifactRef {
+  readonly area: ArtifactArea;
+  /** Path inside the area's directory; empty names that directory. */
+  readonly rel?: string;
+}
+
+/** One record directory and whether its start/end committed. */
+export interface RecordDir {
+  /** Directory name, `NNNNN-i<iteration>[-<slug>]-<step>-r<round>`. */
+  name: string;
+  /** Absolute directory path. */
+  path: string;
+  started: boolean;
+  ended: boolean;
+}
+
+/** The files a record directory owns; nothing else is a record. */
+export type RecordFile = "started.yaml" | "outcome.yaml" | "end.yaml";
+
+export interface RecordStore {
+  /** Absolute directory the record owns; prompts and briefs carry it. */
+  dir(record: StepRecord): string;
+  /** Absolute path of one of the record's files. */
+  file(record: StepRecord, name: RecordFile): string;
+  /**
+   * The reviewer prompt's `checks_log`: the pre-existing
+   * `<records>/<iteration>/<slug>/<step>` layout, not a record directory.
+   */
+  checksLog(record: StepRecord): string;
+  /** Every record directory on disk, in name order. */
+  dirs(): Promise<RecordDir[]>;
+  /** Includes unfinished records (started, no end); sorted by seq. */
+  list(): Promise<StepRecord[]>;
+  start(meta: RecordStart): Promise<TurnRecord>;
+  append(meta: RecordStart, end: RecordEnd): Promise<StepRecord>;
+  /** Writes an end for a record a dead process left open, then seals it. */
+  close(name: string, end: RecordEnd): Promise<void>;
+  /** Makes an ended record's files read-only. */
+  seal(name: string): Promise<void>;
+}
+
+export interface TaskStore {
+  /** Absolute directory holding the task files. */
+  readonly dir: string;
+  /** Absolute path of one task file; prompts carry it. */
+  path(slug: string): string;
+  /** Raw task texts by slug, sorted. */
+  texts(): Promise<Map<string, string>>;
+  list(): Promise<TaskFile[]>;
+  read(slug: string): Promise<TaskFile | null>;
+  write(task: TaskFile): Promise<void>;
+  /** Writes one file byte for byte: a kernel restore. */
+  writeText(slug: string, text: string): Promise<void>;
+  /** Restores what a turn changed or created; names the slugs it put back. */
+  restore(before: Map<string, string>): Promise<string[]>;
+  findings(): Promise<TaskFileFinding[]>;
+  /** Quarantines malformed files and records each; one listing's sweep. */
+  sweep(iteration: number): Promise<void>;
+}
+
+export interface PlanStore {
+  /** Absolute path of the goal's plan file; prompts carry it. */
+  readonly path: string;
+  /** Every plan the register names, goal plan first. */
+  registered(): PlanFile[];
+  /** The registered plans whose file exists, in register order. */
+  existing(): PlanFile[];
+  /** Every plan file on disk (goal plus `epics/*.md`), the ownership view. */
+  filesOnDisk(): PlanFile[];
+  /** A scope's bytes; the goal plan when no scope is named. */
+  read(scope?: PlanScope): Promise<string | null>;
+  exists(scope?: PlanScope): Promise<boolean>;
+  /** Kernel write: declares the path and replaces the file atomically. */
+  write(scope: PlanScope, text: string): Promise<void>;
+  /** Deletes the plan; absent is a no-op. */
+  remove(scope?: PlanScope): Promise<void>;
+}
+
+/** The files one iteration directory owns. */
+export type IterationFile =
+  | "context-pack.md"
+  | "context-data.json"
+  | "summary.md"
+  | "digest.md"
+  | "metrics.yaml";
+
+export interface IterationStore {
+  /** Goal-relative path of one iteration file. */
+  rel(iteration: number, file: IterationFile): string;
+  /** Absolute path of one iteration file; prompts carry it. */
+  path(iteration: number, file: IterationFile): string;
+  read(iteration: number, file: IterationFile): Promise<string | null>;
+  write(iteration: number, file: IterationFile, text: string): Promise<void>;
+}
+
+/** The mailbox queues a steer moves through. */
+export type MailboxQueue =
+  | "inbox"
+  | "processed"
+  | "outbox"
+  | "holds"
+  | "quarantine";
+
+export interface MailboxStore {
+  /** Absolute holds directory: where the PM writes one file per steer. */
+  readonly holds: string;
+  /** Absolute quarantine directory for holds that decide nothing. */
+  readonly quarantine: string;
+  /** Goal-relative path of a queue, or a file in it; prompts carry it. */
+  rel(queue: MailboxQueue, name?: string): string;
+  /** Reads a queue file; null when absent. */
+  read(queue: MailboxQueue, name: string): Promise<string | null>;
+  /** Writes a queue file atomically; materializes the queue directory. */
+  write(queue: MailboxQueue, name: string, text: string): Promise<void>;
+  /** Publishes a steer through the private tmp dir, then renames it in. */
+  publish(name: string, text: string): Promise<void>;
+  /** Renames between queues; false when the source is gone. */
+  move(
+    from: MailboxQueue,
+    fromName: string,
+    to: MailboxQueue,
+    toName: string,
+  ): Promise<boolean>;
+  /** Removes a queue file; absent is a no-op. */
+  remove(queue: MailboxQueue, name: string): Promise<void>;
+  /** Non-dot files directly in a queue, sorted. */
+  files(queue: MailboxQueue): Promise<string[]>;
+  /** Sizes of those files, by name, for the inbox settle check. */
+  sizes(queue: MailboxQueue): Promise<Map<string, number>>;
+}
+
 export interface ArtifactStore {
   readonly goalDir: string;
+  /** The store's areas, each owning its files and the paths they live at. */
+  readonly records: RecordStore;
+  readonly tasks: TaskStore;
+  readonly plans: PlanStore;
+  readonly mailbox: MailboxStore;
+  readonly iterations: IterationStore;
+  /**
+   * Absolute path of an artifact without touching the disk. Prompts carry it;
+   * a writer uses `localPath` so its parent exists.
+   */
+  pathOf(ref: ArtifactRef): string;
+  /** Absolute path of an artifact, its parent directory created. */
+  localPath(ref: ArtifactRef): Promise<string>;
+  /**
+   * Raw directories below are the folder backend's layout, kept for the
+   * unchanged suite; kernel modules reach artifacts through the areas above.
+   */
   readonly tasksDir: string;
   readonly recordsDir: string;
   readonly mailboxDir: string;
@@ -668,7 +1009,16 @@ export interface ArtifactStore {
    * its artifacts while a turn is contained.
    */
   declaredWrites(): readonly DeclaredWrite[];
+  /**
+   * Commit SHAs this store's backend persisted, oldest first. The folder
+   * backend commits nothing; containment uses this to tell a store's own
+   * artifact commit apart from an operator's.
+   */
+  committed(): readonly string[];
 }
+
+/** A runner whose printed failure report the kernel parses by name. */
+export type GatePattern = "pytest" | "jest" | "cargo";
 
 /** One repo gate command and the shared resources it needs to itself. */
 export interface GateConfig {
@@ -685,13 +1035,55 @@ export interface GateConfig {
    * creates them and exports absolute paths, so two worktrees get two dirs.
    */
   env?: Record<string, string>;
-  format?: { junit?: string; pattern?: "pytest" | "jest" | "cargo" };
+  /**
+   * `junit` names the worktree-relative report the command writes before it
+   * exits; `pattern` names a runner whose printed failures the kernel reads.
+   */
+  format?: { junit?: string; pattern?: GatePattern };
+}
+
+/**
+ * How the kernel stores one goal's artifacts. The backend is selected by name,
+ * never by where a path happens to point.
+ *
+ * - `folder`: a plain directory, gitignored when it lives inside the repo.
+ * - `same-repo`: a directory inside the repo, committed after every kernel
+ *   write so orchestration artifacts are never left unmerged on a branch.
+ * - `git-repo`: a separate git repository, committed and pushed after every
+ *   write.
+ */
+export type ArtifactBackend = "folder" | "same-repo" | "git-repo";
+
+export interface ArtifactBackendConfig {
+  backend: ArtifactBackend;
+  /**
+   * Store location, repo-relative or absolute. Defaults to `artifactRoot` for
+   * `folder`/`same-repo` and to `<worktreeRoot>/artifacts` for `git-repo`.
+   */
+  root?: string;
+  /**
+   * `git-repo` only: the separate repository to clone and push. A local path is
+   * resolved against the main repository; anything with a scheme is passed
+   * through unchanged.
+   */
+  remote?: string;
+}
+
+/** A backend resolved against one repository and goal. */
+export interface ArtifactLocation {
+  backend: ArtifactBackend;
+  /** Absolute directory holding every goal's artifacts. */
+  root: string;
+  /** `git-repo` only: the resolved remote, when one is configured. */
+  remote?: string;
 }
 
 export interface RepoConfig {
   baseBranch: string;
-  /** Goal directories live at <repo>/<artifactRoot>/<goal>. */
+  /** Goal directories live at <repo>/<artifactRoot>/<goal> unless a backend names another root. */
   artifactRoot: string;
+  /** How artifacts are stored; absent reads as the plain folder backend. */
+  artifacts?: ArtifactBackendConfig;
   identity?: { name: string; email: string };
   setup: string[];
   gates: GateConfig[];
@@ -710,6 +1102,10 @@ export interface ProcessConfig {
   taskTypes: Record<string, TaskTypeDefinition>;
   /** Each kernel boundary step's prompt and alias; pre-flight requires these aliases. */
   boundary: Record<BoundaryStep, TurnSpec>;
+  /** The plan review flow that completes before the PM derives tasks. */
+  architecture: ArchitectureConfig;
+  /** Hierarchy depth and the epic architect's prompt; absent reads as depth 1. */
+  hierarchy?: HierarchyConfig;
   /** Repair template a step renders when it names none; defaults to `delivery-repair`. */
   repairPrompt?: string;
   /** Outcome reminders after the first attempt; a task file's `repairTurns` overrides it for that task's turns only. */
@@ -843,6 +1239,8 @@ export interface GoalPaths {
   integrationBranch: string;
   worktreeRoot: string;
   sessionsDir: string;
+  /** The resolved artifact backend and the root holding every goal. */
+  artifacts: ArtifactLocation;
 }
 
 /** Everything a boundary or flow step needs; built once by the launch. */

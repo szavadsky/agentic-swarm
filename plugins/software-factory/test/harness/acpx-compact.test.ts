@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it, setDefaultTimeout } from "bun:test";
 import path from "node:path";
 import type { AcpxConfig } from "../../src/harness/acpx/config.js";
@@ -73,6 +72,16 @@ function compactRuntime(harness: Harness): KernelRuntime {
 }
 
 describe("AcpxHarness session compaction", () => {
+  registerAcpxHarnessSessionCompactionPart1();
+  registerAcpxHarnessSessionCompactionPart2();
+  registerAcpxHarnessSessionCompactionPart3();
+  registerAcpxHarnessSessionCompactionPart4();
+  registerAcpxHarnessSessionCompactionPart5();
+  registerAcpxHarnessSessionCompactionPart6();
+  registerAcpxHarnessSessionCompactionPart7();
+});
+
+function registerAcpxHarnessSessionCompactionPart1(): void {
   it("runs /compact as the whole prompt on the named session and parses the summary", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
@@ -109,7 +118,9 @@ describe("AcpxHarness session compaction", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessSessionCompactionPart2(): void {
   it("returns a compacted ref and the next turn resumes the same session", async () => {
     const stub = createAcpxStub();
     const options = {
@@ -160,7 +171,9 @@ describe("AcpxHarness session compaction", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessSessionCompactionPart3(): void {
   it("runs /compact on the raw route's named session after the prompt verb", async () => {
     const stub = createAcpxStub({ usage: AGENT_USAGE });
     const acpx: AcpxConfig = {
@@ -200,7 +213,9 @@ describe("AcpxHarness session compaction", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessSessionCompactionPart4(): void {
   it("treats pi's Nothing to compact as a usable session, not a failure", async () => {
     const stub = createAcpxStub({ compact: "nothing" });
     const harness = new AcpxHarness({
@@ -241,7 +256,9 @@ describe("AcpxHarness session compaction", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessSessionCompactionPart5(): void {
   it("contains a failed compaction and keeps the session resumable", async () => {
     const stub = createAcpxStub({ compact: "fail" });
     const harness = new AcpxHarness({
@@ -268,7 +285,9 @@ describe("AcpxHarness session compaction", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessSessionCompactionPart6(): void {
   it("never sends /compact to an agent without declared support", async () => {
     const stub = createAcpxStub({ usage: AGENT_USAGE });
     const harness = new AcpxHarness({
@@ -297,7 +316,9 @@ describe("AcpxHarness session compaction", () => {
       stub.cleanup();
     }
   });
+}
 
+function registerAcpxHarnessSessionCompactionPart7(): void {
   it("keeps a long turn's cache hot through its last model event and skips once idle", async () => {
     const stub = createAcpxStub({ promptDelayMs: 100 });
     const harness = new AcpxHarness({
@@ -341,4 +362,4 @@ describe("AcpxHarness session compaction", () => {
       stub.cleanup();
     }
   });
-});
+}

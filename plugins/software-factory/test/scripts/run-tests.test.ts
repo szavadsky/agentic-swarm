@@ -14,10 +14,19 @@ interface Run {
   output: string;
 }
 
-function run(cwd: string, ...patterns: string[]): Run {
+function run(
+  cwd: string,
+  patterns: string[],
+  env: Record<string, string> = {},
+): Run {
+  // The factory gate sets the report variable for the outer runner; a nested
+  // runner must not inherit it or the outer gate's report is overwritten.
+  const baseEnv = { ...process.env };
+  delete baseEnv.FACTORY_JUNIT_PATH;
   const result = spawnSync("bun", [RUNNER, ...patterns], {
     cwd,
     encoding: "utf8",
+    env: { ...baseEnv, ...env },
   });
   const stdout = result.stdout ?? "";
   const stderr = result.stderr ?? "";
@@ -74,6 +83,22 @@ beforeAll(() => {
       "",
     ].join("\n"),
   );
+  fs.writeFileSync(
+    path.join(root, "flaky.test.ts"),
+    [
+      'import { expect, it } from "bun:test";',
+      'import fs from "node:fs";',
+      'import path from "node:path";',
+      "",
+      'const marker = path.join(import.meta.dir, "flaky-once.marker");',
+      'it("fails once", () => {',
+      "  if (!fs.existsSync(marker)) return;",
+      "  fs.rmSync(marker);",
+      "  expect(1).toBe(2);",
+      "});",
+      "",
+    ].join("\n"),
+  );
 });
 
 afterAll(() => {
@@ -82,14 +107,14 @@ afterAll(() => {
 
 describe("tests gate runner", () => {
   it("exits zero and prints the wall time when every worker is green", () => {
-    const green = run(root, "green.test.ts");
+    const green = run(root, ["green.test.ts"]);
     expect(green.code).toBe(0);
     expect(green.output).toContain("1 pass");
     expectCapturedWall(green, true);
   });
 
   it("fails the gate and names the file when one worker is red", () => {
-    const red = run(root, "green.test.ts", "red.test.ts");
+    const red = run(root, ["green.test.ts", "red.test.ts"]);
     expect(red.code).not.toBe(0);
     expect(red.output).toContain("red.test.ts:");
     expect(red.output).toContain("(fail) fails");
@@ -98,5 +123,36 @@ describe("tests gate runner", () => {
     expect(red.output).toContain("1 fail");
     expectCapturedWall(red, false);
     expect(red.stderr).toContain("red.test.ts > fails");
+  });
+
+  it("writes the report at the gate's declared path for the kernel to read", () => {
+    const report = path.join(root, "declared-junit.xml");
+    const red = run(root, ["green.test.ts", "red.test.ts"], {
+      FACTORY_JUNIT_PATH: report,
+    });
+    try {
+      expect(red.code).not.toBe(0);
+      const xml = fs.readFileSync(report, "utf8");
+      expect(xml).toContain('name="fails"');
+      expect(xml).toContain("<failure");
+    } finally {
+      fs.rmSync(report, { force: true });
+    }
+  });
+
+  it("rewrites the report on the one retry so a flake no longer reads red", () => {
+    fs.writeFileSync(path.join(root, "flaky-once.marker"), "once\n");
+    const report = path.join(root, "flaky-junit.xml");
+    const flaky = run(root, ["flaky.test.ts"], {
+      FACTORY_JUNIT_PATH: report,
+    });
+    try {
+      expect(flaky.code).toBe(0);
+      // The first run's report was red; the retry passed and replaced it, so a
+      // kernel reading the declared path sees the gate's final colour.
+      expect(fs.readFileSync(report, "utf8")).not.toContain("<failure");
+    } finally {
+      fs.rmSync(report, { force: true });
+    }
   });
 });

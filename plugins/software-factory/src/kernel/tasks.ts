@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { createHash } from "node:crypto";
 import { z, type ZodIssue } from "zod";
 import yaml from "yaml";
@@ -13,6 +12,14 @@ import type {
 
 /** The flow a task file gets when its frontmatter names none. */
 export const DEFAULT_FLOW = "implement-review";
+
+/** The goal architect's id; an epic's architect id is its epic name. */
+export const MAIN_ARCHITECT = "main";
+
+/** The architect that owns a task's scope: its epic's id, or the goal's. */
+export function taskArchitect(task: Pick<TaskFile, "epic">): string {
+  return task.epic ?? MAIN_ARCHITECT;
+}
 
 /**
  * Task frontmatter shape: the one schema that validates task files and
@@ -49,6 +56,11 @@ export const taskFrontmatterSchema = z
       .array(z.string().describe("a slug that must merge first"))
       .default([]),
     scope: z.array(z.string().describe("a predicted area")).default([]),
+    epic: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("the epic that owns this task; absent means goal-level work"),
     tier: z
       .string()
       .min(1)
@@ -180,11 +192,11 @@ function resolveTaskType(
  * validation finding, not a silent rename. A file naming a type takes its
  * flow and kind from that configured type; a legacy file declares them itself.
  */
-export function parseTaskFile(
+/** A task file's YAML frontmatter mapping and Markdown body. */
+function taskSections(
   text: string,
   fileSlug: string,
-  taskTypes: Record<string, TaskTypeDefinition> = {},
-): TaskFile {
+): { meta: Record<string, unknown>; body: string } {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text);
   if (!match) {
     throw new TaskFileError(
@@ -207,7 +219,15 @@ export function parseTaskFile(
       "malformed",
     );
   }
-  const meta = raw as Record<string, unknown>;
+  return { meta: raw as Record<string, unknown>, body: match[2] ?? "" };
+}
+
+export function parseTaskFile(
+  text: string,
+  fileSlug: string,
+  taskTypes: Record<string, TaskTypeDefinition> = {},
+): TaskFile {
+  const { meta, body } = taskSections(text, fileSlug);
   const result = taskFrontmatterSchema.safeParse({
     ...meta,
     slug: meta.slug ?? fileSlug,
@@ -247,7 +267,7 @@ export function parseTaskFile(
     ...result.data,
     ...resolved,
     revision: result.data.revision ?? 0,
-    body: (match[2] ?? "").trim(),
+    body: body.trim(),
   };
 }
 
@@ -263,6 +283,7 @@ export function renderTaskFile(task: TaskFile): string {
   }
   front.deps = task.deps;
   front.scope = task.scope;
+  if (task.epic !== undefined) front.epic = task.epic;
   if (task.tier) front.tier = task.tier;
   if (task.revision > 0) front.revision = task.revision;
   if (task.base) front.base = task.base;
@@ -280,8 +301,8 @@ export function doneWhen(body: string): string {
 
 /**
  * Material hash: frozen-task comparisons must ignore cosmetic edits but catch
- * a changed dependency set, scope, type, flow, tier, revision, kind, slug or
- * done-when.
+ * a changed dependency set, scope, epic, type, flow, tier, revision, kind,
+ * slug or done-when.
  */
 export function materialHash(task: TaskFile): string {
   const canonical = JSON.stringify([
@@ -291,6 +312,7 @@ export function materialHash(task: TaskFile): string {
     task.type ?? "",
     [...task.deps].sort(),
     [...task.scope],
+    task.epic ?? "",
     task.tier ?? "",
     task.revision,
     task.base ?? "",
@@ -333,63 +355,92 @@ export function taskStatuses(state: State): Map<string, TaskStatus> {
  * the edge away. A live continuation names a base that is not parked by the
  * base's state (merged, finished, cancelled, or not parked at all).
  */
-export function validateTaskGraph(
-  tasks: TaskFile[],
-  opts: { status?: ReadonlyMap<string, TaskStatus> } = {},
+/** Slug, scope, duplicate and epic findings; registers the task by slug. */
+function taskFieldFindings(
+  task: TaskFile,
+  bySlug: Map<string, TaskFile>,
 ): string[] {
   const findings: string[] = [];
-  const bySlug = new Map<string, TaskFile>();
-  for (const task of tasks) {
-    if (!isValidTaskSlug(task.slug)) {
+  if (!isValidTaskSlug(task.slug)) {
+    findings.push(
+      `slug "${task.slug}" is not namespaced kebab-case (example: auth.token-refresh)`,
+    );
+  }
+  if (task.scope.length === 0) {
+    findings.push(
+      `task "${task.slug}" has no scope: declare the predicted area it works in`,
+    );
+  }
+  if (bySlug.has(task.slug)) {
+    findings.push(`slug "${task.slug}" is declared twice`);
+  }
+  if (task.epic !== undefined) {
+    if (!/^[a-z0-9-]+$/.test(task.epic)) {
       findings.push(
-        `slug "${task.slug}" is not namespaced kebab-case (example: auth.token-refresh)`,
+        `task "${task.slug}" names epic "${task.epic}": an epic id is [a-z0-9-]+`,
+      );
+    } else if (!task.slug.startsWith(`${task.epic}.`)) {
+      findings.push(
+        `task "${task.slug}" names epic "${task.epic}": an epic's tasks are named "${task.epic}.<name>"`,
       );
     }
-    if (task.scope.length === 0) {
-      findings.push(
-        `task "${task.slug}" has no scope: declare the predicted area it works in`,
-      );
-    }
-    if (bySlug.has(task.slug)) {
-      findings.push(`slug "${task.slug}" is declared twice`);
-    }
-    bySlug.set(task.slug, task);
   }
-  for (const task of tasks) {
-    for (const dep of task.deps) {
-      if (!bySlug.has(dep)) {
-        findings.push(`task "${task.slug}" depends on missing task "${dep}"`);
-      }
-      if (dep === task.slug) {
-        findings.push(`task "${task.slug}" depends on itself`);
-      }
+  bySlug.set(task.slug, task);
+  return findings;
+}
+
+/** Missing or self-referencing dependency findings. */
+function depFindings(
+  task: TaskFile,
+  bySlug: ReadonlyMap<string, TaskFile>,
+): string[] {
+  const findings: string[] = [];
+  for (const dep of task.deps) {
+    if (!bySlug.has(dep)) {
+      findings.push(`task "${task.slug}" depends on missing task "${dep}"`);
     }
-    if (task.base !== undefined) {
-      const status = opts.status;
-      // A terminal continuation is history: its base was cancelled or landed
-      // afterwards and no PM turn can change that edge.
-      if (status && !isLive(status.get(task.slug))) continue;
-      const baseStatus = status?.get(task.base);
-      if (baseStatus === "parked") continue;
-      if (
-        baseStatus === "merged" ||
-        baseStatus === "finished" ||
-        baseStatus === "cancelled"
-      ) {
-        findings.push(
-          `task "${task.slug}" continues "${task.base}", which is ${baseStatus}`,
-        );
-      } else if (!bySlug.has(task.base)) {
-        findings.push(
-          `task "${task.slug}" continues missing task "${task.base}"`,
-        );
-      } else if (status !== undefined) {
-        findings.push(
-          `task "${task.slug}" continues "${task.base}", which is not parked`,
-        );
-      }
+    if (dep === task.slug) {
+      findings.push(`task "${task.slug}" depends on itself`);
     }
   }
+  return findings;
+}
+
+/** Findings for one task's base edge, given the other tasks' statuses. */
+function baseFindings(
+  task: TaskFile,
+  bySlug: ReadonlyMap<string, TaskFile>,
+  status: ReadonlyMap<string, TaskStatus> | undefined,
+): string[] {
+  if (task.base === undefined) return [];
+  // A terminal continuation is history: its base was cancelled or landed
+  // afterwards and no PM turn can change that edge.
+  if (status && !isLive(status.get(task.slug))) return [];
+  const baseStatus = status?.get(task.base);
+  if (baseStatus === "parked") return [];
+  if (
+    baseStatus === "merged" ||
+    baseStatus === "finished" ||
+    baseStatus === "cancelled"
+  ) {
+    return [
+      `task "${task.slug}" continues "${task.base}", which is ${baseStatus}`,
+    ];
+  }
+  if (!bySlug.has(task.base)) {
+    return [`task "${task.slug}" continues missing task "${task.base}"`];
+  }
+  if (status !== undefined) {
+    return [
+      `task "${task.slug}" continues "${task.base}", which is not parked`,
+    ];
+  }
+  return [];
+}
+
+/** Dependency-cycle findings over the registered tasks. */
+function cycleFindings(bySlug: ReadonlyMap<string, TaskFile>): string[] {
+  const findings: string[] = [];
   const visiting = new Set<string>();
   const done = new Set<string>();
   const walk = (slug: string, path: string[]): void => {
@@ -406,6 +457,25 @@ export function validateTaskGraph(
     done.add(slug);
   };
   for (const slug of [...bySlug.keys()].sort()) walk(slug, []);
+  return findings;
+}
+
+export function validateTaskGraph(
+  tasks: TaskFile[],
+  opts: { status?: ReadonlyMap<string, TaskStatus> } = {},
+): string[] {
+  const findings: string[] = [];
+  const bySlug = new Map<string, TaskFile>();
+  for (const task of tasks) {
+    findings.push(...taskFieldFindings(task, bySlug));
+  }
+  for (const task of tasks) {
+    findings.push(
+      ...depFindings(task, bySlug),
+      ...baseFindings(task, bySlug, opts.status),
+    );
+  }
+  findings.push(...cycleFindings(bySlug));
   return [...new Set(findings)];
 }
 
@@ -426,5 +496,5 @@ export function validateTaskFlows(
       );
     }
   }
-  return [...new Set(findings)];
+  return findings;
 }

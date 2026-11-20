@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import fs from "node:fs";
 import path from "node:path";
 import { parseTaskFile } from "../../kernel/tasks.js";
@@ -185,47 +184,76 @@ function validateFile(uri: string, text: string): void {
   }
 }
 
-function handle(frame: Frame): void {
-  const method = frame.method;
-  if (!method) return;
-  if (frame.id !== undefined) {
-    if (method === "initialize") {
-      send({
-        id: frame.id,
-        result: {
-          capabilities: { textDocumentSync: 1 },
-          serverInfo: { name: "factory-task-frontmatter", version: "1" },
-        },
-      });
-    } else {
-      send({ id: frame.id, result: null });
-    }
+/** Answers a request; only `initialize` carries capabilities. */
+function handleRequest(frame: Frame, method: string): void {
+  if (method === "initialize") {
+    send({
+      id: frame.id,
+      result: {
+        capabilities: { textDocumentSync: 1 },
+        serverInfo: { name: "factory-task-frontmatter", version: "1" },
+      },
+    });
     return;
   }
-  const params = frame.params ?? {};
+  send({ id: frame.id, result: null });
+}
+
+/** The newest change in a `didChange` notification, or empty text. */
+function latestChangeText(params: Record<string, unknown>): string {
+  const changes = params.contentChanges as { text?: string }[] | undefined;
+  return changes?.at(-1)?.text ?? "";
+}
+
+/** The save text the client sent, else the file on disk, else empty text. */
+function savedText(params: Record<string, unknown>, uri: string): string {
+  // omp asks for the save text only when the server advertises includeText;
+  // otherwise the saved file on disk is authoritative.
+  const saved = typeof params.text === "string" ? params.text : undefined;
+  const file = filePath(uri);
+  return (
+    saved ?? (file && fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "")
+  );
+}
+
+/** Applies one document notification; requests arrive only on `handleRequest`. */
+function handleNotification(
+  method: string,
+  params: Record<string, unknown>,
+): void {
+  if (method === "exit") {
+    process.exit(0);
+    return;
+  }
   const document = params.textDocument as
     | { uri?: string; text?: string }
     | undefined;
   const uri = document?.uri;
-  if (method === "textDocument/didOpen" && uri) {
-    validateFile(uri, document?.text ?? "");
-  } else if (method === "textDocument/didChange" && uri) {
-    const changes = params.contentChanges as { text?: string }[] | undefined;
-    validateFile(uri, changes?.at(-1)?.text ?? "");
-  } else if (method === "textDocument/didSave" && uri) {
-    // omp asks for the save text only when the server advertises
-    // includeText; otherwise the saved file on disk is authoritative.
-    const saved = typeof params.text === "string" ? params.text : undefined;
-    const file = filePath(uri);
-    const text =
-      saved ??
-      (file && fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "");
-    validateFile(uri, text);
-  } else if (method === "textDocument/didClose" && uri) {
-    publish(uri, []);
-  } else if (method === "exit") {
-    process.exit(0);
+  if (!uri) return;
+  switch (method) {
+    case "textDocument/didOpen":
+      validateFile(uri, document?.text ?? "");
+      return;
+    case "textDocument/didChange":
+      validateFile(uri, latestChangeText(params));
+      return;
+    case "textDocument/didSave":
+      validateFile(uri, savedText(params, uri));
+      return;
+    case "textDocument/didClose":
+      publish(uri, []);
+      return;
   }
+}
+
+function handle(frame: Frame): void {
+  const method = frame.method;
+  if (!method) return;
+  if (frame.id !== undefined) {
+    handleRequest(frame, method);
+    return;
+  }
+  handleNotification(method, frame.params ?? {});
 }
 
 export function startFrontmatterServer(): void {

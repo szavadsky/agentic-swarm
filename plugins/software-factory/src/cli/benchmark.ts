@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
@@ -9,7 +8,7 @@ import {
   type IncidentCounts,
   type MetricsTotals,
 } from "../kernel/metrics.js";
-import { createFolderStore } from "../kernel/store.js";
+import { createArtifactStore } from "../kernel/store-backend.js";
 import type { StepRecord } from "../kernel/types.js";
 
 export interface BenchmarkRow {
@@ -100,38 +99,9 @@ function readMetrics(text: string, metricsPath: string): GoalMetrics {
   return parsed;
 }
 
-/**
- * Reads one goal's `metrics.yaml` (written by `writeMetrics`) and its records
- * (the only artifact carrying wall clock), then shapes the rows of
- * `bootstrap/context/benchmark.md` §1 so a v2 column can sit beside them.
- */
-export async function benchmarkGoal(
-  repo: string,
-  goal: string,
-): Promise<BenchmarkReport> {
-  const repoRoot = path.resolve(repo);
-  const configs = loadConfigs(repoRoot);
-  const paths = resolveGoalPaths(configs, repoRoot, goal);
-  if (!fs.existsSync(paths.goalDir))
-    throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
-  const taskTypes = configs.process.taskTypes;
-  const store = createFolderStore(
-    paths.goalDir,
-    path.dirname(paths.goalDir),
-    taskTypes,
-  );
-  const metricsPath = path.join(paths.goalDir, "metrics.yaml");
-  const text = await store.readFile("metrics.yaml");
-  if (text === null) {
-    throw new Error(
-      `goal "${goal}" has no metrics.yaml at ${metricsPath}; run the goal first`,
-    );
-  }
-  const metrics = readMetrics(text, metricsPath);
-  const totals = metrics.totals;
-  const records = await store.listRecords();
-
-  const rows: BenchmarkRow[] = [
+/** Spend and volume rows: launches, tokens, cost and its derived shares. */
+function usageRows(totals: MetricsTotals): BenchmarkRow[] {
+  return [
     { metric: "launches", value: String(totals.turns), unit: "launches" },
     {
       metric: "architect launches",
@@ -163,6 +133,15 @@ export async function benchmarkGoal(
       value: costPerMerged(totals),
       unit: "USD/merged task",
     },
+  ];
+}
+
+/** Activity rows: work done, events, wall clock and task outcomes. */
+function activityRows(
+  totals: MetricsTotals,
+  records: StepRecord[],
+): BenchmarkRow[] {
+  return [
     {
       metric: "work",
       value: `${totals.edits ?? 0} files, ${totals.testRuns ?? 0} test runs`,
@@ -189,6 +168,39 @@ export async function benchmarkGoal(
       value: `${totals.merged.length} / ${totals.parked.length}`,
       unit: "tasks",
     },
+  ];
+}
+
+/**
+ * Reads one goal's `metrics.yaml` (written by `writeMetrics`) and its records
+ * (the only artifact carrying wall clock), then shapes the rows of
+ * `bootstrap/context/benchmark.md` §1 so a v2 column can sit beside them.
+ */
+export async function benchmarkGoal(
+  repo: string,
+  goal: string,
+): Promise<BenchmarkReport> {
+  const repoRoot = path.resolve(repo);
+  const configs = loadConfigs(repoRoot);
+  const paths = resolveGoalPaths(configs, repoRoot, goal);
+  if (!fs.existsSync(paths.goalDir))
+    throw new Error(`goal "${goal}" has no directory at ${paths.goalDir}`);
+  const taskTypes = configs.process.taskTypes;
+  const store = createArtifactStore(paths, taskTypes);
+  const metricsPath = path.join(paths.goalDir, "metrics.yaml");
+  const text = await store.readFile("metrics.yaml");
+  if (text === null) {
+    throw new Error(
+      `goal "${goal}" has no metrics.yaml at ${metricsPath}; run the goal first`,
+    );
+  }
+  const metrics = readMetrics(text, metricsPath);
+  const totals = metrics.totals;
+  const records = await store.listRecords();
+
+  const rows: BenchmarkRow[] = [
+    ...usageRows(totals),
+    ...activityRows(totals, records),
   ];
 
   return {

@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { qaOutcomeSchema } from "./qa.js";
 import {
   type Outcome,
   outcomeSchema,
@@ -13,6 +14,7 @@ import {
  */
 export const OUTCOME_SCHEMAS = {
   outcome: outcomeSchema,
+  qa: qaOutcomeSchema,
 } as const;
 
 export function outcomeSchemaFor(name: string): z.ZodType<Outcome> | undefined {

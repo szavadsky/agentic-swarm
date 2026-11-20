@@ -134,6 +134,27 @@ export interface ServedUsage {
   usage: Usage;
 }
 
+/** One live child of a running turn, as the harness's own registry names it. */
+export interface SubagentInfo {
+  /** The spawn `name`, the id IRC addresses. */
+  id: string;
+  /** The agent definition the child runs. */
+  agent: string;
+  status: string;
+  sessionFile?: string;
+}
+
+/**
+ * The children of a turn that is still running. Available only through
+ * `TurnRequest.onLive`: once the owning process closes, a fresh resume has an
+ * empty registry and a parked child is reachable only by name through the
+ * model-side `agent://` path.
+ */
+export interface LiveAgents {
+  list(): Promise<SubagentInfo[]>;
+  steer(id: string, message: string): Promise<void>;
+}
+
 export interface TurnRequest {
   model: ModelRef;
   effort?: string;
@@ -153,6 +174,13 @@ export interface TurnRequest {
   signal?: AbortSignal;
   /** Harness configuration passed through untouched. */
   opaque?: unknown;
+  /**
+   * Harnesses that can steer (`Caps.subagents === "steer"`) call this once the
+   * launch is live and before the prompt, so the caller can steer children the
+   * turn spawns. The handle dies with the turn; a harness that cannot steer
+   * never calls it.
+   */
+  onLive?: (agents: LiveAgents) => void;
 }
 
 export type TurnResult = {

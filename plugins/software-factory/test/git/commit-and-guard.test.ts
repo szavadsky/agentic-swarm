@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -32,58 +31,75 @@ describe("Git commit and revision inspection (§7)", () => {
   });
 
   it("commitAll returns sha on changes and null on no changes", async () => {
-    const filePath = path.join(tmpRepo.dir, "hello.txt");
-    fs.writeFileSync(filePath, "Hello World\n", "utf8");
-
-    const sha1 = await commitAll(repo, tmpRepo.dir, "feat: add hello");
-    expect(sha1).toBeString();
-    expect(sha1?.length).toBe(40);
-
-    // No changes to commit -> returns null
-    const sha2 = await commitAll(repo, tmpRepo.dir, "empty commit");
-    expect(sha2).toBeNull();
-
-    // allowEmpty creates commit even with no changes
-    const shaEmpty = await commitAll(repo, tmpRepo.dir, "chore: empty commit", {
-      allowEmpty: true,
-    });
-    expect(shaEmpty).toBeString();
-    expect(shaEmpty).not.toBe(sha1);
+    await commitAllShaAndEmptyCommit(tmpRepo, repo);
   });
 
   it("never commits the harness LSP config installed into the worktree", async () => {
-    const source = path.join(wtRoot, "canonical-lsp.json");
-    fs.writeFileSync(source, '{"servers":{}}\n', "utf8");
-    await installLspConfig(tmpRepo.dir, source);
-    fs.writeFileSync(path.join(tmpRepo.dir, "task.txt"), "work\n", "utf8");
-
-    const sha = await commitAll(repo, tmpRepo.dir, "factory: task");
-    expect(sha).toBeString();
-    const committed = (
-      await git(tmpRepo.dir, ["show", "--name-only", "--format=", sha!])
-    ).stdout;
-    expect(committed).toContain("task.txt");
-    expect(committed).not.toContain(".lsp.json");
-    // Still on disk for the harness, ignored by git: status stays clean so
-    // containment and the merge queue's clean do not see it.
-    expect(fs.existsSync(path.join(tmpRepo.dir, ".omp", ".lsp.json"))).toBe(
-      true,
-    );
-    expect((await git(tmpRepo.dir, ["status", "--porcelain"])).stdout).toBe("");
+    await neverCommitsLspConfig(tmpRepo, wtRoot, repo);
   });
 
   it("isAncestor distinguishes older from newer commits", async () => {
-    const head1 = (await git(tmpRepo.dir, ["rev-parse", "HEAD"])).stdout.trim();
-    expect(head1.length).toBe(40);
-
-    fs.writeFileSync(
-      path.join(tmpRepo.dir, "ancestor-test.txt"),
-      "data\n",
-      "utf8",
-    );
-    const sha2 = (await commitAll(repo, tmpRepo.dir, "feat: next commit"))!;
-
-    expect(await isAncestor(tmpRepo.dir, head1, sha2)).toBe(true);
-    expect(await isAncestor(tmpRepo.dir, sha2, head1)).toBe(false);
+    await isAncestorOrdering(tmpRepo, repo);
   });
 });
+
+async function commitAllShaAndEmptyCommit(
+  tmpRepo: TmpRepo,
+  repo: Repo,
+): Promise<void> {
+  const filePath = path.join(tmpRepo.dir, "hello.txt");
+  fs.writeFileSync(filePath, "Hello World\n", "utf8");
+
+  const sha1 = await commitAll(repo, tmpRepo.dir, "feat: add hello");
+  expect(sha1).toBeString();
+  expect(sha1?.length).toBe(40);
+
+  // No changes to commit -> returns null
+  const sha2 = await commitAll(repo, tmpRepo.dir, "empty commit");
+  expect(sha2).toBeNull();
+
+  // allowEmpty creates commit even with no changes
+  const shaEmpty = await commitAll(repo, tmpRepo.dir, "chore: empty commit", {
+    allowEmpty: true,
+  });
+  expect(shaEmpty).toBeString();
+  expect(shaEmpty).not.toBe(sha1);
+}
+
+async function neverCommitsLspConfig(
+  tmpRepo: TmpRepo,
+  wtRoot: string,
+  repo: Repo,
+): Promise<void> {
+  const source = path.join(wtRoot, "canonical-lsp.json");
+  fs.writeFileSync(source, '{"servers":{}}\n', "utf8");
+  await installLspConfig(tmpRepo.dir, source);
+  fs.writeFileSync(path.join(tmpRepo.dir, "task.txt"), "work\n", "utf8");
+
+  const sha = await commitAll(repo, tmpRepo.dir, "factory: task");
+  expect(sha).toBeString();
+  const committed = (
+    await git(tmpRepo.dir, ["show", "--name-only", "--format=", sha!])
+  ).stdout;
+  expect(committed).toContain("task.txt");
+  expect(committed).not.toContain(".lsp.json");
+  // Still on disk for the harness, ignored by git: status stays clean so
+  // containment and the merge queue's clean do not see it.
+  expect(fs.existsSync(path.join(tmpRepo.dir, ".omp", ".lsp.json"))).toBe(true);
+  expect((await git(tmpRepo.dir, ["status", "--porcelain"])).stdout).toBe("");
+}
+
+async function isAncestorOrdering(tmpRepo: TmpRepo, repo: Repo): Promise<void> {
+  const head1 = (await git(tmpRepo.dir, ["rev-parse", "HEAD"])).stdout.trim();
+  expect(head1.length).toBe(40);
+
+  fs.writeFileSync(
+    path.join(tmpRepo.dir, "ancestor-test.txt"),
+    "data\n",
+    "utf8",
+  );
+  const sha2 = (await commitAll(repo, tmpRepo.dir, "feat: next commit"))!;
+
+  expect(await isAncestor(tmpRepo.dir, head1, sha2)).toBe(true);
+  expect(await isAncestor(tmpRepo.dir, sha2, head1)).toBe(false);
+}

@@ -1,5 +1,6 @@
 baseBranch: factory-v3
 artifactRoot: .factory/artifacts
+artifacts: { backend: folder }
 setup:
   - bun install --cwd plugins/software-factory --frozen-lockfile --silent
 gates:
@@ -11,6 +12,9 @@ gates:
   - id: tests
     command: plugins/software-factory/scripts/gates.sh plugins/software-factory tests
     env: { TMPDIR: .cache/gate }
+    # run-tests.ts writes the gate's JUnit report here (FACTORY_JUNIT_PATH); the
+    # kernel reads the same file, so a red names the failed cases on base too.
+    format: { junit: .cache/gate/junit.xml }
   - id: format
     command: plugins/software-factory/scripts/gates.sh plugins/software-factory format
     env: { TMPDIR: .cache/gate }

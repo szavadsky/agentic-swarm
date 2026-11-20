@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import fs from "node:fs";
 import path from "node:path";
 import { type FS, Liquid } from "liquidjs";
@@ -104,49 +103,60 @@ function loadFragment(
  * `defaults` are launch-wide variables merged under every render's own vars:
  * an explicit var wins, so callers that do not know a default still render.
  */
-export function loadPromptLibrary(opts: {
-  builtinDir: string;
-  overrideDirs?: string[];
-  overrides?: Record<string, string>;
-  defaults?: Record<string, string>;
-}): PromptLibrary {
-  const overrideDirs = opts.overrideDirs ?? [];
-  const roots = [...overrideDirs, opts.builtinDir];
-  const overrides = opts.overrides ?? {};
-  const defaults = opts.defaults ?? {};
+/** Rejects non-string override bodies before the engine sees them. */
+function checkOverrides(overrides: Record<string, string>): void {
   for (const [name, content] of Object.entries(overrides)) {
     if (typeof content !== "string") {
       throw new TypeError(`prompt override "${name}" must be a string`);
     }
   }
-  const { engine, fs: layers } = createEngine(roots, overrides);
+}
 
+/**
+ * `locals` are assigned inside the template (`{% assign %}`), so they are not
+ * inputs the caller must pass. The reviewer assigns `author_body` and
+ * `review_duties` to include its author's `<role>-body`, `review-<role>` duties
+ * and `review-<role>-turn` inputs; Liquid cannot resolve those includes
+ * statically, so the fragments they name are analyzed by the caller (a missing
+ * one fails by name).
+ */
+function dynamicIncludes(
+  locals: Record<string, unknown>,
+  author: string | undefined,
+): string[] {
+  if (author === undefined) return [];
+  return [
+    ...(locals.author_body ? [`${author}-body`] : []),
+    ...(locals.review_duties ? [`review-${author}`] : []),
+    ...(locals.review_turn ? [`review-${author}-turn`] : []),
+  ];
+}
+
+/** The analyzer closures a prompt library renders and validates with. */
+function promptAnalyzer(
+  engine: ReturnType<typeof createEngine>["engine"],
+  layers: ReturnType<typeof createEngine>["fs"],
+  roots: string[],
+): {
+  requiredVariables: (
+    fragment: string,
+    vars: Record<string, string>,
+  ) => string[];
+  requireVars: (fragment: string, vars: Record<string, string>) => void;
+} {
   const requiredVariables = (
     fragment: string,
     vars: Record<string, string>,
   ): string[] => {
     const { text, filepath } = loadFragment(layers, roots, fragment);
     const analysis = engine.parseAndAnalyzeSync(text, filepath);
-    // `locals` are assigned inside the template (`{% assign %}`), so they are
-    // not inputs the caller must pass. The reviewer assigns `author_body` and
-    // `review_duties` to include its author's `<role>-body`, `review-<role>`
-    // duties and `review-<role>-turn` inputs; Liquid cannot resolve those
-    // includes statically, so the fragments they name are analyzed here (a
-    // missing one fails by name).
     const names = new Set(Object.keys(analysis.globals));
-    if (vars.author !== undefined) {
-      const dynamic = [
-        ...(analysis.locals.author_body ? [`${vars.author}-body`] : []),
-        ...(analysis.locals.review_duties ? [`review-${vars.author}`] : []),
-        ...(analysis.locals.review_turn ? [`review-${vars.author}-turn`] : []),
-      ];
-      for (const included of dynamic) {
-        for (const name of requiredVariables(included, vars)) names.add(name);
-      }
+    const dynamic = dynamicIncludes(analysis.locals, vars.author);
+    for (const included of dynamic) {
+      for (const name of requiredVariables(included, vars)) names.add(name);
     }
     return [...names];
   };
-
   const requireVars = (fragment: string, vars: Record<string, string>) => {
     const missing = requiredVariables(fragment, vars).filter(
       (v) => !(v in vars),
@@ -159,6 +169,26 @@ export function loadPromptLibrary(opts: {
       );
     }
   };
+  return { requiredVariables, requireVars };
+}
+
+export function loadPromptLibrary(opts: {
+  builtinDir: string;
+  overrideDirs?: string[];
+  overrides?: Record<string, string>;
+  defaults?: Record<string, string>;
+}): PromptLibrary {
+  const overrideDirs = opts.overrideDirs ?? [];
+  const roots = [...overrideDirs, opts.builtinDir];
+  const overrides = opts.overrides ?? {};
+  const defaults = opts.defaults ?? {};
+  checkOverrides(overrides);
+  const { engine, fs: layers } = createEngine(roots, overrides);
+  const { requiredVariables, requireVars } = promptAnalyzer(
+    engine,
+    layers,
+    roots,
+  );
 
   return {
     placeholders(
@@ -265,6 +295,10 @@ export function loadPrompts(
       // A render with no base record must never read as a clean base: the
       // reviewer treats a "pre-existing" claim without a record as a finding.
       base_gates: BASE_GATES_NOT_RECORDED,
+      // No hierarchy is the default; the epic consult passes `2` on its turn.
+      depth: "1",
+      // No steered subarchitects by default; the steered hierarchy renders the block.
+      subarchitect_block: "",
     },
   });
 }

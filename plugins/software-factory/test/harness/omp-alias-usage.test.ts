@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -83,6 +82,12 @@ async function turn(
 }
 
 describe("omp alias turn usage", () => {
+  registerOmpAliasTurnUsagePart1();
+  registerOmpAliasTurnUsagePart2();
+  registerOmpAliasTurnUsagePart3();
+});
+
+function registerOmpAliasTurnUsagePart1(): void {
   it("records every served model with its own tokens", async () => {
     const { tmp, harness } = await turn("@free");
     try {
@@ -141,7 +146,9 @@ describe("omp alias turn usage", () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
+}
 
+function registerOmpAliasTurnUsagePart2(): void {
   it("prices an alias turn from its one served model, not the primary", async () => {
     const { tmp, harness } = await turn("@one");
     try {
@@ -180,7 +187,9 @@ describe("omp alias turn usage", () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
+}
 
+function registerOmpAliasTurnUsagePart3(): void {
   it("leaves a non-alias turn on its session-stats aggregate", async () => {
     const { tmp, harness } = await turn("opencode-go/beam-free");
     try {
@@ -209,4 +218,4 @@ describe("omp alias turn usage", () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
-});
+}

@@ -32,7 +32,7 @@ export interface GoalOptions {
   classYaml?: string | null;
 }
 
-const DEFAULT_RUN_YAML = [
+export const DEFAULT_RUN_YAML = [
   "aliases:",
   "  architect: { harness: fake, model: fake-architect }",
   "  pm: { harness: fake, model: fake-pm }",
@@ -40,9 +40,12 @@ const DEFAULT_RUN_YAML = [
   "  implementer-b: { harness: fake, model: fake-impl-b }",
   "  researcher: { harness: fake, model: fake-research }",
   "  reviewer: { harness: fake, model: fake-review }",
+  "  qa: { harness: fake, model: fake-qa }",
   "  steward: { harness: fake, model: fake-steward }",
   "  plan-checker: { harness: fake, model: fake-check }",
+  "  intent: { harness: fake, model: fake-intent }",
   "  plan-reviewer: { harness: fake, model: fake-plan-review }",
+  "  pack-preparer: { harness: fake, model: fake-pack-prep }",
   "  digest: { harness: fake, model: fake-digest }",
   "limits: { iterations: 1, concurrency: { overall: 1 } }",
   "",

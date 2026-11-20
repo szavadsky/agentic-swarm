@@ -10,7 +10,10 @@ and on its step's next alternate. When open work remains, the boundary runs
 the plan checker first: a `progress` verdict resumes dispatch without a
 consult, bounded by `limits.planCheckRounds`; the consult runs on `architect`,
 when nothing is open, or when the bound is hit. State is derived from task
-files and append-only records; there is no state file to repair.
+files and append-only records; there is no state file to repair. After the
+first iteration a pack-preparer turn turns the script's full status data into
+the iteration's index pack; when it fails, the script render is the pack and
+the fallback is recorded as a glitch.
 
 ## Commands
 
@@ -18,17 +21,21 @@ files and append-only records; there is no state file to repair.
 cd plugins/software-factory
 bun bin/factory.ts init   --repo <path> --goal <name> [--intent <file>]
 bun bin/factory.ts run    --repo <path> --goal <name> --run-config <file> [--iterations N]
-bun bin/factory.ts status --repo <path> --goal <name>
+bun bin/factory.ts status --repo <path> --goal <name> [--json]
 bun bin/factory.ts benchmark --repo <path> --goal <name>
 bun bin/factory.ts steer  --repo <path> --goal <name> <file | ->
 bun bin/factory.ts validate [--step <id>] <file>
 bun bin/factory.ts schemas --out <dir>
+bun bin/factory.ts variables --out <file>
 ```
 
 `init` writes `.factory/repo.yaml` if missing, creates the goal directory and
 copies the intent (or writes a template). `run` pre-flights, takes the goal
 lock, recovers interrupted work and runs the iteration loop. `status` prints
-derived state and parked causes; `benchmark` prints one goal's benchmark rows;
+derived state and parked causes; `--json` prints `status.json`, the snapshot
+the kernel rewrites after each agent launch and finish, together with the
+static `dashboard.html` rendered beside it; `benchmark` prints one
+goal's benchmark rows;
 `steer` drops a file into the inbox atomically. `validate` checks one
 schema-enforced file with the gate's validators (tasks/*.md with its
 directory's dependency graph and flow existence against the merged process
@@ -36,12 +43,25 @@ config, class.yaml, outcome.yaml keyed by the step in the sibling
 started.yaml or `--step`, mailbox/holds/*.yaml, repo.yaml, run.yaml,
 process.yaml); exit 0 valid, 1 invalid or unknown kind. `schemas` writes every
 kernel file schema as JSON Schema (`task`, `outcome`, `hold`, `class`, `repo`,
-`run`, `process`) into `--out` for editors and the artifact LSP.
+`run`, `process`) into `--out` for editors and the artifact LSP. `variables`
+renders `prompts/VARIABLES.md` from the typed prompt-variable descriptor; the
+prompt tests fail when the committed file differs from that render.
 
 Exit codes for `run`: `0` goal done, `1` failure, `2` blocked, `3` iteration
 limit, `130`/`143` interrupted by SIGINT/SIGTERM. The first signal drains (no
 new dispatch, in-flight turns finish), the second aborts in-flight turns and
 records their partial usage.
+
+## Skill
+
+`skills/run-factory/SKILL.md` is the operator skill: where the intent goes,
+which layer configures what, what to launch, what to watch and where the HTML
+dashboard is. Its resources are [kernel.md](skills/run-factory/kernel.md)
+(commands, goal layout, records, exit codes) and
+[config.md](skills/run-factory/config.md) (the three layers); its walkthrough
+commands run green on the fake harness in the test suite.
+[docs/sandbox.md](docs/sandbox.md) documents the run-inside-a-sandbox
+assumption.
 
 ## Configuration
 
@@ -52,13 +72,18 @@ Three layers, all validated with one report naming file and key.
 ```yaml
 baseBranch: main
 artifactRoot: .factory/artifacts
+artifacts:                      # optional; defaults to a gitignored folder
+  backend: folder               # folder | same-repo | git-repo
+  root: .factory/artifacts      # optional; defaults per backend
+  remote: ../factory-artifacts.git  # git-repo only: local path or URL
 setup: [bun install]
 gates:
-  - id: typecheck
-    command: bun run typecheck
-    format: { junit: junit.xml }
+  - id: unit
+    command: pytest --junitxml=reports/junit.xml
+    format: { junit: reports/junit.xml }         # report the command writes
   - id: integration
-    command: bun run test:integration
+    command: jest --ci
+    format: { pattern: jest }                    # runner whose output it parses
     serial: [database]                          # gates naming a mutex never overlap
     env: { TMPDIR: .cache/gate }                # per-worktree scratch directory
 ```
@@ -66,11 +91,40 @@ gates:
 The tracked repo layer names no worktree root: checkouts, sessions and harness
 policy belong to the run layer, so one checkout never silently shadows another.
 
+`artifacts.backend` selects storage by name, never by where a path happens to
+point. `folder` (the default) keeps the root a plain directory and writes a `*`
+`.gitignore` when it sits inside the repo. `same-repo` requires a root inside
+the repo and commits every kernel write to the main checkout's branch, so
+orchestration artifacts are never left unmerged on a task branch; the store
+replaces its own folder `.gitignore` and commits nothing under `sessions/`,
+`logs/`, `raw/` or a `.jsonl`/`.log`/`.tmp` name. `git-repo` keeps a separate
+repository at `root` (default `<worktreeRoot>/artifacts`, outside the repo),
+clones `remote` when the checkout is absent, commits every write there and
+pushes it; a local bare repository needs no network. A same-repo root must be
+inside the repository and a git-repo root outside it, so one repository never
+absorbs the other's history; the same-repo root must also not be ignored by the
+repository (the store replaces only its own folder `.gitignore`).
+
 Gate runs in different worktrees run in parallel. A gate waits only for the
 mutexes it names in `serial`: within one factory process, gates naming the same
 mutex are serialized, and a gate that names none never waits. `env` maps
 variable names to worktree-relative directories; the kernel creates them and
 exports absolute paths, so two worktrees get two directories.
+
+A gate's `format` gives its failures identities that survive assertion values
+and timings, so a red inherited from the base is not blamed on the task:
+
+- `junit: <path>` names a worktree-relative report the command writes before it
+  exits. The kernel exports the absolute path as `FACTORY_JUNIT_PATH`, reads the
+  same file after the run, and stores its cases (capped, failing cases first).
+  Any runner that emits JUnit works: bun, pytest, jest-junit, nextest.
+- `pattern: pytest | jest | cargo` parses that runner's printed failure lines
+  when it writes no report. A gate may declare both; the report wins when it
+  names a failure.
+
+A JUnit red's summary names its failing cases, and a missing, empty or
+unreadable report is red rather than a silent pass. Records written before
+`details.junit` existed still classify by their output lines.
 
 **Process** — package `config/process.yaml`, optionally overridden by
 `.factory/process.yaml`:
@@ -80,6 +134,7 @@ flows:
   implement-review:
     steps:
       - { id: implement, prompt: implementer, alias: implementer }
+      - { id: qa, prompt: qa, alias: qa, qa: true, changeRequests: 2, deliverable: verdict }
       - { id: review, prompt: reviewer, alias: reviewer, review: true, changeRequests: 2 }
       - { id: resolve, prompt: steward, alias: steward }   # merge-conflict turn only
 taskTypes:
@@ -88,23 +143,62 @@ boundary:                       # the kernel turns outside any task flow
   architect: { prompt: architect, alias: architect, repairPrompt: architect-repair, deliverable: "plan edit or stop decision" }
   digest: { prompt: digest, alias: digest }
   front: { prompt: front, alias: pm, deliverable: "class, task, and pack" }
+  intent: { prompt: intent, alias: intent, deliverable: "intent edit" }
+  packprep: { prompt: pack-preparer, alias: pack-preparer, deliverable: "context pack" }
   plancheck: { prompt: plan-checker, alias: plan-checker, deliverable: "plan verdict" }
-  planreview: { prompt: reviewer, alias: plan-reviewer, deliverable: "numbered plan-review findings" }
   pm: { prompt: pm, alias: pm, deliverable: "task files" }
   steward: { prompt: steward, alias: steward, deliverable: "merge resolution" }
+architecture:                   # the plan review flow, before the PM derives tasks
+  planReview: { prompt: review-architect, deliverable: "plan-review findings" }
+  reviewers: [plan-reviewer]    # one fresh read-only review turn per alias
+  architectReturn: on-technical-concerns  # or never
+  planReturn: { prompt: architect-review-return, deliverable: "plan edit and marks" }
+hierarchy:                      # 1 architect (the norm), or 2 with one subarchitect per epic
+  depth: 1
+  subarchitect: { prompt: subarchitect, repairPrompt: architect-repair, deliverable: "epic plan edit or stop decision" }
 ```
 
 A step may name `repairPrompt` (the template its in-session repair ask
 renders) and `deliverable` (the product the ask and the missing-outcome finding
-name; default `outcome`, or `verdict` on a review step). The `resolve` step is
+name; default `outcome`, or `verdict` on an acceptance step). A `qa: true` step
+carries its own outcome schema (`qa: {verdict: accept | changes, findings}`)
+and acceptance duty; QA and the reviewer share the acceptance round, so a QA
+change request costs the same round budget as a review's. QA's own test and
+script edits are gated again before the reviewer reads the tree. The `resolve` step is
 outside the normal agent sequence: a squash merge that conflicts runs one turn
 that merges the head into the task branch and resolves it, then the task checks
 and the merge retries. A second conflict parks, the wave-end steward remains the
 fallback, and a resolution that changed files outside the conflict set goes
-through review before it lands. A step that names no
+through QA and review before it lands. A step that names no
 template renders the process-level `repairPrompt` (default `delivery-repair`).
 The architect names `architect-repair` because its ask also requires the plan
 edit on disk; the default template then carries no role branch.
+
+`hierarchy.depth: 2` makes the architect register in `plan.md` live: one
+bullet per epic (`- epic \`auth\` | architect \`subarchitect\` | plan
+\`epics/auth.md\` | scope \`src/auth/**\` | opened i7 | active`). The boundary
+runs the main architect, then one subarchitect consult per active
+`subarchitect` row on the architect alias — each with its own epic plan and
+its own resumable, compacted session — then a plan review for every plan
+that changed, then the PM. An epic with a prior plan is steered on a harness
+whose caps advertise `subagents: steer` (omp with the subagent RPC surface):
+the main architect launches it as a named child of its own session, the
+script sends the consult over IRC, and the child's context is compacted
+before the next launch revives it by name. Every other harness, and a new
+epic's first consult, runs the separate written-report turn. A subarchitect
+whose last decision was `done` and whose epic has no open task is left out
+until a task reopens it. Each subarchitect's outcome paragraph is written to
+`iterations/<n>/epics/<epic>/summary.md`. Depth 1 never parses the register
+and keeps today's single-architect flow.
+
+The `architecture` flow completes before the PM derives tasks. Each alias in
+`reviewers` gets one fresh read-only review turn that delivers `planReview`
+findings (`technical`, `planNotes`) and no verdict. With `architectReturn:
+on-technical-concerns`, technical findings get one `planReturn` architect turn
+that edits the plan and marks every finding; the findings never block the
+iteration. With `never`, the findings reach the next architect's pack, which
+asks for the same marks. The return runs on the architect boundary step's
+alias; its prompt is `planReturn.prompt`.
 
 A flow step may name `alternates: [<alias>…]` to change the model on retry:
 the step's alias runs first, and after each failure-kind launch — no outcome
@@ -123,18 +217,19 @@ alias; `de-novo` starts fresh; `different-model` runs the later turn on
 `alias` without a session, or with `keepSession: true` continues the step's
 compacted session across the switch when the portability graph admits it (the
 same harness always, another harness only along a declared edge). The prompt
-stays the step's: the retry changes the model, not the role.
+stays the step's: the retry changes the model, not the role. Pre-flight refuses
+`followUp` on a step of the trivial flow (`just-implement`): a trivial task
+implements in the front's session, so the step never follows up.
 
 **Run** — transient, passed with `--run-config`:
 
 ```yaml
+extends: base.yaml                                   # inherit the shared aliases, harnesses and roots
 aliases:
   architect: { harness: opencode, model: opencode/minimax-m3.1-flash-free, effort: high }
   implementer: { harness: opencode, model: opencode/deepseek-v4.1-flash-free }
-prices:
-  opencode/minimax-m3.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
-  opencode/deepseek-v4.1-flash-free: { input: 0, cachedInput: 0, output: 0, reasoning: 0 }
-  opencode-go/deepseek-v4.1-flash: { input: 0.15, cachedInput: 0.003, output: 0.6, reasoning: 0.6 }
+priceIds:                                            # harness model id -> OpenRouter id, when matching cannot resolve
+  opencode/beam-free: reflection/beam-1.0-501b-a23b
 limits:
   concurrency: { overall: 3, perSubscription: { opencode-go: 2 }, perModel: {} }
   iterations: 1
@@ -150,16 +245,17 @@ portability: [{ from: opencode, to: omp }]           # sessions cross only decla
 `extends: <file>` composes the run layer from a base. The path resolves relative
 to the file that names it, a base may extend another, and the child's keys win.
 Objects merge key by key and arrays replace, so a variant restates only the
-alias field, harness entry or price row it changes; a `null` removes an
+alias field, harness entry or price-id row it changes; a `null` removes an
 inherited key (`scouts: null`, `fallbacks: null`). A missing base and an
 `extends` cycle are refused when the config loads, naming the file.
 `bootstrap/run/base.yaml` carries the shared self-run aliases, the unattended
-omp policy, the price rows and the roots; every other shipped file is a thin
+omp policy, the price-id rows and the roots; every other shipped file is a thin
 overlay.
 
 A task session resumes on the harness that recorded it. `portability: [{from, to}]`
 declares further directional edges: a session recorded on `from` may resume on
-`to`, while every other pair starts de novo with the rendered prompt.
+`to`, while every other pair starts de novo with the rendered prompt. Pre-flight
+refuses an edge whose endpoint names no registered harness.
 
 `lsp: true` enables artifact diagnostics where the harness supports them. At
 launch the factory writes every kernel schema as JSON Schema and one omp LSP
@@ -266,9 +362,10 @@ list; its effort must be one omp's `--thinking` flag parses (`off`, `minimal`,
 `low`, `medium`, `high`, `xhigh`, `max`, `auto`) — or absent.
 
 `harnesses.<id>` binds an adapter (`acpx:`) or executable and carries
-`options` passed untouched: acpx reads `args`/`env`, omp merges the keys into
-its launch overlay (`sessions.retention` still owns
-`providers.cacheRetention`). The shipped `bootstrap/run/base.yaml` keeps the
+`options` passed untouched: acpx reads `args`/`env` (pre-flight refuses an
+`args` that is not a string array or an `env` that is not a string-to-string
+map), omp merges the keys into its launch overlay (`sessions.retention` still
+owns `providers.cacheRetention`). The shipped `bootstrap/run/base.yaml` keeps the
 unattended omp policy there — memory/auto-learn/skills off, approval, disabled
 providers, retry — so no policy is compiled in.
 
@@ -284,12 +381,15 @@ Gates run once on the base; a red base is recorded and warned once, not fatal.
 ## Goal directory
 
 ```
-<artifactRoot>/<goal>/
+<artifact root>/<goal>/
   intent.md plan.md tasks/
+  epics/<epic>.md           # one plan per architect scope; the goal plan's register names them
   records/                  # one directory per settled step and round: started/end/outcome
   mailbox/{inbox,processed,outbox}/
   iterations/<n>/{context-pack.md,summary.md,metrics.yaml}
   metrics.yaml
+  status.json              # machine-readable snapshot for the CLI and dashboard
+  dashboard.html           # static page rendered from status.json; no server
 ```
 
 ## Steering
@@ -315,13 +415,18 @@ Stop the rollout and consult me.
 
 Each iteration writes exactly one `iterations/<n>/summary.md` (the outbox entry
 references it): status, merged/finished/parked tasks, remarkable concerns,
-assumptions and debt. `metrics.yaml` is rebuilt from the usage records;
+assumptions and debt, and a waste section naming every wasted turn's record
+with rebutted reviews counted apart. The next iteration's context pack carries
+that waste section. `metrics.yaml` is rebuilt from the usage records;
 `mailbox/outbox/metrics.yaml` references it: architect launches, architect
 cost and token share, cost and list cost per merged task, incident counts
 (infra retries, fallback hops, outcome-repair turns, merge conflicts,
 merged-gate failures, and round-limit, no-progress, empty-diff and overflow
 parks), loop incidents (no-progress and empty-diff parks; a spike's empty
-finish and overflow parks are not loop incidents), human interventions
+finish and overflow parks are not loop incidents), wasted turns by reason and
+by role and alias (complete implementer failure; structure: protocol,
+containment, outcome channel, infra; flaky-test rejection), rebutted review
+turns counted apart as accepted tax, human interventions
 (processed steers) and the observable
 operator-act counter (steers plus containment outside-changes and
 integration-moved merges), gate and commit wall time, and turns, tokens, cost

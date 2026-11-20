@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -11,6 +10,74 @@ import { withKernelRoleFallbacks } from "./fake-defaults.js";
 import { testPriceSource } from "../helpers/price-source.js";
 
 describe("task read pure", () => {
+  registerTaskReadPurePart1();
+  registerTaskReadPurePart2();
+  registerTaskReadPurePart3();
+  registerTaskReadPurePart4();
+});
+
+async function sweepTasksQuarantinesMalformedPart1(
+  goal: ReturnType<typeof makeGoal>,
+) {
+  fs.mkdirSync(goal.tasksDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(goal.tasksDir, "malformed.md"),
+    "broken\n",
+    "utf8",
+  );
+  // Valid task to prevent preflight refusal
+  fs.writeFileSync(
+    path.join(goal.tasksDir, "valid.md"),
+    "---\nslug: valid\ntitle: Valid\ntype: test-type\n---\nDone when: test.\n",
+    "utf8",
+  );
+  // Unconfigured type, should remain untouched
+  fs.writeFileSync(
+    path.join(goal.tasksDir, "unconfigured.md"),
+    "---\nslug: unconfigured\ntitle: Unconfigured\ntype: unknown\n---\nDone when: test.\n",
+    "utf8",
+  );
+
+  const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(
+      outcome({
+        summary: "the plan needs nothing yet",
+        decision: "done",
+      }),
+    );
+    return fakeTurnResult(req);
+  });
+
+  await runGoal({
+    repo: goal.repo.dir,
+    goal: "demo",
+    iterations: 1,
+    harnesses: { fake: harness },
+    baseGates: false,
+    priceSource: testPriceSource(goal.repo.dir),
+  });
+
+  const quarantined = path.join(goal.tasksDir, "quarantine", "malformed.md");
+  expect(fs.existsSync(quarantined)).toBe(true);
+}
+
+async function sweepTasksQuarantinesMalformedPart2(
+  goal: ReturnType<typeof makeGoal>,
+) {
+  expect(fs.existsSync(path.join(goal.tasksDir, "unconfigured.md"))).toBe(true);
+
+  const records = await createFolderStore(
+    goal.goalDir,
+    undefined,
+    {},
+  ).listRecords();
+  const quarantineRecord = records.find((r) => r.step === "task-quarantine");
+  expect(quarantineRecord).toBeDefined();
+  expect(quarantineRecord?.iteration).toBeGreaterThanOrEqual(1);
+}
+
+function registerTaskReadPurePart1(): void {
   it("listTasks is pure and does not write", async () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), "factory-task-read-pure-"),
@@ -49,7 +116,9 @@ describe("task read pure", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerTaskReadPurePart2(): void {
   it("scanTaskFindings identifies unconfigured and malformed tasks", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-task-scan-"));
     try {
@@ -82,7 +151,9 @@ describe("task read pure", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerTaskReadPurePart3(): void {
   it("runGoal refuses launch for unconfigured task type", async () => {
     const goal = makeGoal();
     try {
@@ -128,7 +199,9 @@ describe("task read pure", () => {
       cleanup(goal);
     }
   });
+}
 
+function registerTaskReadPurePart4(): void {
   it("sweepTasks quarantines malformed tasks after launch lock", async () => {
     const goal = makeGoal({
       processYaml: `
@@ -144,69 +217,10 @@ taskTypes:
 `,
     });
     try {
-      fs.mkdirSync(goal.tasksDir, { recursive: true });
-      fs.writeFileSync(
-        path.join(goal.tasksDir, "malformed.md"),
-        "broken\n",
-        "utf8",
-      );
-      // Valid task to prevent preflight refusal
-      fs.writeFileSync(
-        path.join(goal.tasksDir, "valid.md"),
-        "---\nslug: valid\ntitle: Valid\ntype: test-type\n---\nDone when: test.\n",
-        "utf8",
-      );
-      // Unconfigured type, should remain untouched
-      fs.writeFileSync(
-        path.join(goal.tasksDir, "unconfigured.md"),
-        "---\nslug: unconfigured\ntitle: Unconfigured\ntype: unknown\n---\nDone when: test.\n",
-        "utf8",
-      );
-
-      const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));
-      harness.script((req, ctx) => {
-        ctx.writeOutcome(
-          outcome({
-            summary: "the plan needs nothing yet",
-            decision: "done",
-          }),
-        );
-        return fakeTurnResult(req);
-      });
-
-      await runGoal({
-        repo: goal.repo.dir,
-        goal: "demo",
-        iterations: 1,
-        harnesses: { fake: harness },
-        baseGates: false,
-        priceSource: testPriceSource(goal.repo.dir),
-      });
-
-      const quarantined = path.join(
-        goal.tasksDir,
-        "quarantine",
-        "malformed.md",
-      );
-      expect(fs.existsSync(quarantined)).toBe(true);
-
-      // Verify unconfigured task is NOT quarantined
-      expect(fs.existsSync(path.join(goal.tasksDir, "unconfigured.md"))).toBe(
-        true,
-      );
-
-      const records = await createFolderStore(
-        goal.goalDir,
-        undefined,
-        {},
-      ).listRecords();
-      const quarantineRecord = records.find(
-        (r) => r.step === "task-quarantine",
-      );
-      expect(quarantineRecord).toBeDefined();
-      expect(quarantineRecord?.iteration).toBeGreaterThanOrEqual(1);
+      await sweepTasksQuarantinesMalformedPart1(goal);
+      await sweepTasksQuarantinesMalformedPart2(goal);
     } finally {
       cleanup(goal);
     }
   });
-});
+}

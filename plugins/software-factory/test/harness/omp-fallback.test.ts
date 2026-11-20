@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -57,6 +56,11 @@ setInterval(() => {}, 1000);
 `;
 
 describe("OmpHarness fallback chain", () => {
+  ompHarnessFallbackChainPart1();
+  ompHarnessFallbackChainPart2();
+});
+
+function ompHarnessFallbackChainPart1() {
   it("retries quota then walks to the fallback and reports every hop", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-fallback-"));
     try {
@@ -96,7 +100,9 @@ describe("OmpHarness fallback chain", () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   }, 30_000);
+}
 
+function ompHarnessFallbackChainPart2() {
   it("backs off and fails over when the backend resets the socket", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-reset-"));
     try {
@@ -133,4 +139,4 @@ describe("OmpHarness fallback chain", () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   }, 30_000);
-});
+}

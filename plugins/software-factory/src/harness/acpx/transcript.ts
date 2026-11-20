@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import fs from "node:fs";
 import path from "node:path";
 import { scrubSecrets } from "../details.js";
@@ -89,61 +88,64 @@ function usageUpdateCost(update: any): number | undefined {
     : undefined;
 }
 
+/** An object value, or undefined for primitives, null and absent values. */
+function objectValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/** Error objects a session_info_update's `_meta` names, direct and nested. */
+function errorCandidates(
+  meta: Record<string, unknown>,
+): Record<string, unknown>[] {
+  const candidates: Record<string, unknown>[] = [];
+  const direct = objectValue(meta.error);
+  if (direct) candidates.push(direct);
+  for (const value of Object.values(meta)) {
+    const nested = objectValue(objectValue(value)?.error);
+    if (nested) candidates.push(nested);
+  }
+  return candidates;
+}
+
+/** One candidate's code, message and nested data, as the adapter reported them. */
+function adapterError(raw: Record<string, unknown>): AcpxError {
+  const codexErrorInfo = objectValue(raw.codexErrorInfo);
+  const disconnected = objectValue(codexErrorInfo?.responseStreamDisconnected);
+  const code =
+    typeof raw.httpStatusCode === "number"
+      ? raw.httpStatusCode
+      : typeof disconnected?.httpStatusCode === "number"
+        ? disconnected.httpStatusCode
+        : typeof raw.code === "number"
+          ? raw.code
+          : undefined;
+  const message = typeof raw.message === "string" ? raw.message : undefined;
+  const details =
+    typeof raw.additionalDetails === "string"
+      ? raw.additionalDetails
+      : typeof raw.details === "string"
+        ? raw.details
+        : undefined;
+  const errorName =
+    typeof raw.errorName === "string" ? raw.errorName : undefined;
+  return {
+    ...(code !== undefined ? { code } : {}),
+    ...(message ? { message } : {}),
+    data: {
+      ...(details ? { details } : {}),
+      ...(errorName ? { errorName } : {}),
+    },
+  };
+}
+
 /** Extracts adapter-level error metadata from a session_info_update frame. */
 function extractAdapterError(update: unknown): AcpxError | undefined {
-  if (!update || typeof update !== "object") return undefined;
-  const meta = (update as Record<string, unknown>)._meta;
-  if (!meta || typeof meta !== "object") return undefined;
-  const metaObj = meta as Record<string, unknown>;
-  const candidates: Record<string, unknown>[] = [];
-  if (metaObj.error && typeof metaObj.error === "object") {
-    candidates.push(metaObj.error as Record<string, unknown>);
-  }
-  for (const val of Object.values(metaObj)) {
-    if (val && typeof val === "object") {
-      const sub = (val as Record<string, unknown>).error;
-      if (sub && typeof sub === "object") {
-        candidates.push(sub as Record<string, unknown>);
-      }
-    }
-  }
-  for (const raw of candidates) {
-    const codexErrorInfo =
-      raw.codexErrorInfo && typeof raw.codexErrorInfo === "object"
-        ? (raw.codexErrorInfo as Record<string, unknown>)
-        : undefined;
-    const disconnected =
-      codexErrorInfo?.responseStreamDisconnected &&
-      typeof codexErrorInfo.responseStreamDisconnected === "object"
-        ? (codexErrorInfo.responseStreamDisconnected as Record<string, unknown>)
-        : undefined;
-    const code =
-      typeof raw.httpStatusCode === "number"
-        ? raw.httpStatusCode
-        : typeof disconnected?.httpStatusCode === "number"
-          ? disconnected.httpStatusCode
-          : typeof raw.code === "number"
-            ? raw.code
-            : undefined;
-    const message = typeof raw.message === "string" ? raw.message : undefined;
-    const details =
-      typeof raw.additionalDetails === "string"
-        ? raw.additionalDetails
-        : typeof raw.details === "string"
-          ? raw.details
-          : undefined;
-    const errorName =
-      typeof raw.errorName === "string" ? raw.errorName : undefined;
-    return {
-      ...(code !== undefined ? { code } : {}),
-      ...(message ? { message } : {}),
-      data: {
-        ...(details ? { details } : {}),
-        ...(errorName ? { errorName } : {}),
-      },
-    };
-  }
-  return undefined;
+  const meta = objectValue(objectValue(update)?._meta);
+  if (!meta) return undefined;
+  const raw = errorCandidates(meta)[0];
+  return raw ? adapterError(raw) : undefined;
 }
 
 /** A config name used as one path segment; ids and session names are caller text. */
@@ -267,56 +269,67 @@ export class AcpxTranscriptParser {
     };
   }
 
+  /** Records a `session/prompt` request id; true when the frame was one. */
+  private feedPromptRequest(frame: any): boolean {
+    if (
+      frame.method !== "session/prompt" ||
+      frame.id === undefined ||
+      frame.id === null
+    ) {
+      return false;
+    }
+    this.promptId = frame.id;
+    return true;
+  }
+
+  /** Applies one `session/update` notification's update and session id. */
+  private feedUpdate(params: any): void {
+    const update = params?.update;
+    if (typeof params?.sessionId === "string")
+      this.sessionId = params.sessionId;
+    if (update?.sessionUpdate === "usage_update") {
+      const cost = usageUpdateCost(update);
+      if (cost !== undefined) this.costUsd = cost;
+    }
+    if (update?.sessionUpdate === "session_info_update") {
+      const adapterErr = extractAdapterError(update);
+      if (adapterErr) this.adapterError = adapterErr;
+    }
+    if (update?.sessionUpdate === "agent_message_chunk") {
+      this.feedChunk(update);
+    } else if (update?.sessionUpdate !== "agent_thought_chunk") {
+      this.flush();
+    }
+  }
+
+  /** Records the turn's prompt result; true when the frame carried it. */
+  private feedPromptResult(frame: any): boolean {
+    if (
+      !frame.result ||
+      this.promptId === undefined ||
+      frame.id !== this.promptId
+    ) {
+      return false;
+    }
+    const result = frame.result as PromptResult;
+    this.promptResult = result;
+    if (typeof result.sessionId === "string") this.sessionId = result.sessionId;
+    this.flush();
+    return true;
+  }
+
   private feed(frame: any): void {
     if (!frame || typeof frame !== "object") return;
-
-    if (
-      frame.method === "session/prompt" &&
-      frame.id !== undefined &&
-      frame.id !== null
-    ) {
-      this.promptId = frame.id;
-      return;
-    }
-
+    if (this.feedPromptRequest(frame)) return;
     if (frame.method === "session/update") {
-      const update = frame.params?.update;
-      if (typeof frame.params?.sessionId === "string")
-        this.sessionId = frame.params.sessionId;
-      if (update?.sessionUpdate === "usage_update") {
-        const cost = usageUpdateCost(update);
-        if (cost !== undefined) this.costUsd = cost;
-      }
-      if (update?.sessionUpdate === "session_info_update") {
-        const adapterErr = extractAdapterError(update);
-        if (adapterErr) this.adapterError = adapterErr;
-      }
-      if (update?.sessionUpdate === "agent_message_chunk") {
-        this.feedChunk(update);
-      } else if (update?.sessionUpdate !== "agent_thought_chunk") {
-        this.flush();
-      }
+      this.feedUpdate(frame.params);
       return;
     }
-
     if (frame.error) {
       this.errors.push(frame.error as AcpxError);
       return;
     }
-
-    if (
-      frame.result &&
-      this.promptId !== undefined &&
-      frame.id === this.promptId
-    ) {
-      const result = frame.result as PromptResult;
-      this.promptResult = result;
-      if (typeof result.sessionId === "string")
-        this.sessionId = result.sessionId;
-      this.flush();
-      return;
-    }
-
+    if (this.feedPromptResult(frame)) return;
     if (typeof frame.result?.sessionId === "string") {
       this.sessionId = frame.result.sessionId;
     }

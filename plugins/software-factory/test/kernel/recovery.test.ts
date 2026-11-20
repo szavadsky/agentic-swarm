@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -17,6 +16,11 @@ import {
 } from "./s2-helpers.js";
 
 describe("script-step recovery", () => {
+  recoveryRerunsChecksTest();
+  recoverySealsRecordTest();
+});
+
+function recoveryRerunsChecksTest(): void {
   it("re-runs branch checks when an implement turn ended without a checks record", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -66,7 +70,9 @@ describe("script-step recovery", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
+}
 
+function recoverySealsRecordTest(): void {
   it("seals the interrupted record it closes", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
@@ -98,4 +104,4 @@ describe("script-step recovery", () => {
       cleanupFlowRepo(repo);
     }
   }, 60_000);
-});
+}

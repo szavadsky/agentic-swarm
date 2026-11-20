@@ -6,6 +6,7 @@ import yaml from "yaml";
 import { z } from "zod";
 import { dispatch } from "../../src/cli/dispatch.js";
 import { loadRunConfig } from "../../src/kernel/config.js";
+import { findShippedRunConfigsDir } from "../helpers/run-configs.js";
 
 const FILES = [
   "class.schema.json",
@@ -60,7 +61,7 @@ interface JsonSchema {
   additionalProperties?: boolean;
 }
 
-const SHIPPED_RUN_DIR = shippedRunDir();
+const SHIPPED_RUN_DIR = findShippedRunConfigsDir();
 
 describe("factory schemas", () => {
   it(
@@ -204,16 +205,4 @@ function expectAuthoredRunLayer(out: string, root: string): void {
     "utf8",
   );
   expect(() => loadRunConfig(unknown)).toThrow(/Unrecognized key/);
-}
-
-/**
- * The shipped run library lives outside this package. The gate export names
- * the tree under test; a package-only checkout ships no configs to validate.
- */
-function shippedRunDir(): string | undefined {
-  const tree = process.env.FACTORY_TREE_ROOT;
-  return [
-    ...(tree ? [path.join(tree, "bootstrap", "run")] : []),
-    path.resolve(import.meta.dir, "../../../../bootstrap/run"),
-  ].find((dir) => fs.existsSync(dir));
 }

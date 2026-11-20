@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -88,6 +87,14 @@ function expectDead(pid: number): void {
 }
 
 describe("OmpHarness fake process", () => {
+  ompHarnessFakeProcessPart1();
+  ompHarnessFakeProcessPart2();
+  ompHarnessFakeProcessPart3();
+  ompHarnessFakeProcessPart4();
+  ompHarnessFakeProcessPart5();
+});
+
+function ompHarnessFakeProcessPart1() {
   it("idle timeout aborts the turn and returns partial usage", async () => {
     const { harness, cleanup } = fakeHarness();
     try {
@@ -125,7 +132,9 @@ describe("OmpHarness fake process", () => {
       cleanup();
     }
   }, 20_000);
+}
 
+function ompHarnessFakeProcessPart2() {
   it("abort kills the child and reports cancelled", async () => {
     const { harness, dir, cleanup } = fakeHarness();
     const pidFile = path.join(dir, "child.pid");
@@ -150,7 +159,9 @@ describe("OmpHarness fake process", () => {
       cleanup();
     }
   }, 20_000);
+}
 
+function ompHarnessFakeProcessPart3() {
   it("abort after resolve is a no-op", async () => {
     const { harness, dir, cleanup } = fakeHarness();
     const pidFile = path.join(dir, "child.pid");
@@ -175,7 +186,9 @@ describe("OmpHarness fake process", () => {
       cleanup();
     }
   }, 20_000);
+}
 
+function ompHarnessFakeProcessPart4() {
   it("abort during the baseline request reports cancelled instead of rejecting", async () => {
     const { harness, dir, cleanup } = fakeHarness();
     const pidFile = path.join(dir, "child.pid");
@@ -203,7 +216,9 @@ describe("OmpHarness fake process", () => {
       cleanup();
     }
   }, 20_000);
+}
 
+function ompHarnessFakeProcessPart5() {
   it("a pre-aborted signal reports cancelled without spawning", async () => {
     const { harness, dir, cleanup } = fakeHarness();
     const pidFile = path.join(dir, "child.pid");
@@ -226,4 +241,4 @@ describe("OmpHarness fake process", () => {
       cleanup();
     }
   }, 20_000);
-});
+}

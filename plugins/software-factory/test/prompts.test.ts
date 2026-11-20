@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -9,6 +8,7 @@ import type { OutcomeExpectation } from "../src/kernel/outcome.js";
 import {
   outcomeRepairSchemaVar,
   outcomeSchemaVar,
+  qaOutcomeSchemaVar,
   renderSkeleton,
   taskFrontmatterVar,
   taskTypesVar,
@@ -25,7 +25,9 @@ import {
   planCheckFollowUpSchema,
   planCheckRouteEntrySchema,
   planCheckSchema,
+  planReviewFindingSchema,
   planReviewMarkSchema,
+  planReviewOutcomeSchema,
   replySchema,
   stallRouteEntrySchema,
   steerAnswerSchema,
@@ -33,9 +35,9 @@ import {
 } from "../src/kernel/types.js";
 import { TEST_BOUNDARY } from "./kernel/helpers.js";
 
-describe("prompts: PromptLibrary", () => {
-  let dir: string;
+let dir: string;
 
+describe("prompts: PromptLibrary", () => {
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "prompts-test-"));
     fs.mkdirSync(path.join(dir, "_shared"), { recursive: true });
@@ -53,65 +55,8 @@ describe("prompts: PromptLibrary", () => {
   afterEach(() => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
-
-  it("renders includes and leaves no unresolved variables", () => {
-    const lib = loadPromptLibrary({ builtinDir: dir });
-    expect(lib.render("steps/develop", { task: "add auth" })).toContain(
-      "Task: add auth",
-    );
-    expect(lib.render("steps/develop", { task: "add auth" })).toContain(
-      "Workspace Containment",
-    );
-  });
-
-  it("throws for a missing variable and reports placeholders", () => {
-    const lib = loadPromptLibrary({ builtinDir: dir });
-    expect(lib.placeholders("steps/develop")).toEqual(["task"]);
-    expect(() => lib.render("steps/develop", {})).toThrow(
-      "Missing required prompt variables",
-    );
-    expect(() => lib.render("steps/missing", {})).toThrow("not found");
-  });
-
-  it("lets the process config replace the calibration partial", () => {
-    const process = {
-      flows: {},
-      boundary: TEST_BOUNDARY,
-      reminders: 1,
-      calibration: "CUSTOM CALIBRATION",
-    } as ProcessConfig;
-    const lib = loadPrompts(process, dir, { run: {} as RunConfig });
-    expect(lib.render("calibration", {})).toBe("CUSTOM CALIBRATION");
-    // Built-ins still render when the process config sets no calibration.
-    const builtin = loadPrompts(
-      { flows: {}, boundary: TEST_BOUNDARY, reminders: 1 } as ProcessConfig,
-      dir,
-      { run: {} as RunConfig },
-    );
-    expect(builtin.render("calibration", {})).toContain(
-      "A concern is a recorded debt",
-    );
-  });
-
-  it("lets an override directory shadow the built-in fragment", () => {
-    const overrideDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), "prompts-override-"),
-    );
-    try {
-      fs.mkdirSync(path.join(overrideDir, "steps"), { recursive: true });
-      fs.writeFileSync(
-        path.join(overrideDir, "steps", "develop.md"),
-        "override {{task}}",
-      );
-      const lib = loadPromptLibrary({
-        builtinDir: dir,
-        overrideDirs: [overrideDir],
-      });
-      expect(lib.render("steps/develop", { task: "x" })).toBe("override x");
-    } finally {
-      fs.rmSync(overrideDir, { recursive: true, force: true });
-    }
-  });
+  registerPromptsPromptLibraryPart1();
+  registerPromptsPromptLibraryPart2();
 });
 
 /** Top-level `key:` lines of a rendered skeleton, in order. */
@@ -145,268 +90,17 @@ function skeletonComment(skeleton: string, key: string): string {
 }
 
 describe("prompts: schema skeletons", () => {
-  it("renders every outcome field a turn writes, so a new field cannot go missing", () => {
-    expect(skeletonKeys(outcomeSchemaVar())).toEqual(
-      Object.keys(outcomeSchema.shape).filter((key) => key !== "forward"),
-    );
-    // `forward` is parse-only: old records still carry it, no turn writes one.
-    expect(outcomeSchemaVar()).not.toContain("forward:");
-  });
-
-  it("renders every nested outcome key in its own field's shape", () => {
-    const skeleton = outcomeSchemaVar();
-    const nested: [string, { shape: Record<string, unknown> }][] = [
-      ["concerns", concernSchema],
-      ["debtClosed", debtClosedEntrySchema],
-      ["steerAnswers", steerAnswerSchema],
-      ["replies", replySchema],
-      ["steerRoutes", steerRouteEntrySchema],
-      ["stallRoutes", stallRouteEntrySchema],
-      ["planCheck", planCheckSchema],
-      ["planCheck", planCheckEvidenceSchema],
-      ["planCheck", planCheckFollowUpSchema],
-      ["planCheckRoutes", planCheckRouteEntrySchema],
-      ["planReviewMarks", planReviewMarkSchema],
-    ];
-    for (const [field, schema] of nested) {
-      const shape = skeletonShape(skeleton, field);
-      for (const key of Object.keys(schema.shape)) {
-        expect(shape, `${field} is missing nested key ${key}`).toContain(key);
-      }
-    }
-    // Optional nested fields keep their `?` marker.
-    expect(skeletonShape(skeleton, "concerns")).toContain("evidence?");
-    expect(skeletonShape(skeleton, "steerRoutes")).toContain("answer?");
-    expect(skeletonShape(skeleton, "planCheck")).toContain("dep?");
-  });
-
-  it("renders every nested enum value in its own field's comment", () => {
-    const skeleton = outcomeSchemaVar();
-    const enums: [string, string[]][] = [
-      [
-        "concerns",
-        ["debt", "risk", "uncertainty", "choice", "fyi", "architect", "owner"],
-      ],
-      ["steerRoutes", ["task", "spike", "architect", "stall"]],
-      ["stallRoutes", ["amend", "cancel", "replace", "split", "leave"]],
-      [
-        "planCheck",
-        [
-          "progress",
-          "architect",
-          "done",
-          "missing",
-          "below-standard",
-          "unverifiable",
-          "amend",
-          "cancel",
-          "replace",
-          "split",
-          "missing-dep",
-          "unmerged",
-        ],
-      ],
-      ["planCheckRoutes", ["continue", "leave"]],
-      ["planReviewMarks", ["helpful", "unhelpful"]],
-    ];
-    for (const [field, values] of enums) {
-      const comment = skeletonComment(skeleton, field);
-      for (const value of values) {
-        expect(comment, `${field} is missing enum value ${value}`).toContain(
-          value,
-        );
-      }
-    }
-  });
-
-  it("renders a nested field added to a schema, so a dropped nested key fails", () => {
-    const report = (fields: z.ZodRawShape) =>
-      z.object({ report: z.object(fields) });
-    expect(
-      skeletonShape(renderSkeleton(report({ kept: z.string() })), "report"),
-    ).toBe("report: {kept}");
-    expect(
-      skeletonShape(
-        renderSkeleton(report({ kept: z.string(), added: z.string() })),
-        "report",
-      ),
-    ).toBe("report: {kept, added}");
-  });
-
-  it("pins the outcome skeleton wording", () => {
-    expect(outcomeSchemaVar()).toBe(
-      [
-        "```yaml",
-        "status: done | blocked | failed | upscope  # upscope on task steps only",
-        "summary: one paragraph",
-        "concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner",
-        "debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it",
-        "steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list",
-        "replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position",
-        "verdict: approve | changes | reject  # optional; review steps only",
-        "decision: continue | done | blocked  # optional; architect step only",
-        "upscope: yes | no  # optional; standalone review escalation: answer with the verdict",
-        "steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | architect | stall",
-        "stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave",
-        "planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged",
-        "planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave",
-        "planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful",
-        "```",
-      ].join("\n"),
-    );
-  });
-
-  it("renders the fields a prompt author writes", () => {
-    expect(skeletonKeys(taskFrontmatterVar())).toEqual([
-      "slug",
-      "title",
-      "type",
-      "deps",
-      "scope",
-      "tier",
-      "revision",
-      "base",
-      "source",
-      "repairTurns",
-      "turnMinutes",
-    ]);
-  });
-
-  it("pins the task-frontmatter skeleton wording", () => {
-    expect(taskFrontmatterVar()).toBe(
-      [
-        "```yaml",
-        "slug: namespaced kebab-case, matches the file name",
-        "title: one line",
-        "type: one of the configured task types; it supplies flow, kind and schema",
-        "deps: [a slug that must merge first]",
-        "scope: [a predicted area]",
-        "tier: default, or a run-config alias  # optional",
-        "revision: one more than the parked revision when amending under its slug  # optional",
-        "base: the parked slug this continues  # optional",
-        "source: plan heading, front, steer, stall or plan-check turn",
-        "repairTurns: outcome-repair turns for this task's turns  # optional",
-        "turnMinutes: per-turn wall bound in minutes  # optional",
-        "```",
-      ].join("\n"),
-    );
-  });
-
-  it("keeps the frontmatter schema in step with the task parser", () => {
-    const text = [
-      "---",
-      "slug: auth.token-refresh",
-      "title: Refresh tokens",
-      "type: development",
-      "deps: [auth.session-store]",
-      "scope: [auth]",
-      "tier: escalation",
-      "revision: 1",
-      "base: auth.probe",
-      "source: Milestone auth / refresh",
-      "repairTurns: 1",
-      "turnMinutes: 45",
-      "---",
-      "",
-      "Why: rotate without a re-login.",
-      "Done when: refresh rotates the token.",
-      "",
-    ].join("\n");
-    const { body: _body, ...frontmatter } = parseTaskFile(
-      text,
-      "auth.token-refresh",
-      {
-        development: {
-          flow: "implement-review",
-          kind: "development",
-          schema: "outcome",
-        },
-      },
-    );
-    expect(Object.keys(frontmatter).sort()).toEqual(
-      Object.keys(taskFrontmatterSchema.shape).sort(),
-    );
-    expect(() => taskFrontmatterSchema.parse(frontmatter)).not.toThrow();
-    expect(taskFrontmatterVar()).toContain(
-      "type: one of the configured task types",
-    );
-    expect(taskFrontmatterVar()).not.toContain("kind:");
-  });
+  promptsSchemaSkeletonsPart1();
+  promptsSchemaSkeletonsPart2();
+  promptsSchemaSkeletonsPart3();
+  promptsSchemaSkeletonsPart4();
+  promptsSchemaSkeletonsPart5();
+  promptsSchemaSkeletonsPart6();
 });
 
 describe("prompts: repair skeleton", () => {
-  it("renders every ungated outcome field in some role's repair ask", () => {
-    const repairs: [string, OutcomeExpectation][] = [
-      ["implementer", "any"],
-      ["reviewer", "review"],
-      ["architect", "architect"],
-      ["pm", "any"],
-      ["plan-checker", "any"],
-    ];
-    const rendered = new Set(
-      repairs.flatMap(([role, expectation]) =>
-        skeletonKeys(outcomeRepairSchemaVar(role, expectation)),
-      ),
-    );
-    // `forward` is parse-only for old records; no repair ask can deliver it.
-    const ungated = Object.keys(outcomeSchema.shape).filter(
-      (key) => key !== "verdict" && key !== "decision" && key !== "forward",
-    );
-    expect(ungated.filter((key) => !rendered.has(key))).toEqual([]);
-  });
-
-  it("drops the gated lines a bare done cannot deliver", () => {
-    const implementer = outcomeRepairSchemaVar("implementer", "any");
-    expect(skeletonKeys(implementer)).toEqual([
-      "status",
-      "summary",
-      "concerns",
-      "debtClosed",
-      "steerAnswers",
-      "replies",
-    ]);
-    expect(implementer).not.toContain("verdict:");
-    expect(implementer).not.toContain("decision:");
-  });
-
-  it("keeps the one gated line the step delivers", () => {
-    const review = outcomeRepairSchemaVar("reviewer", "review");
-    expect(review).toContain("verdict: approve | changes | reject");
-    expect(review).not.toContain("decision:");
-    const architect = outcomeRepairSchemaVar("architect", "architect");
-    expect(architect).toContain("decision: continue | done | blocked");
-    expect(architect).not.toContain("verdict:");
-  });
-
-  it("keeps the reporting fields a role's turns deliver", () => {
-    const pm = outcomeRepairSchemaVar("pm", "any");
-    for (const field of ["steerRoutes:", "stallRoutes:", "planCheckRoutes:"]) {
-      expect(pm).toContain(field);
-    }
-    // The plan check itself belongs to the checker, not the PM's routing turn.
-    expect(pm).not.toContain("planCheck:");
-    expect(pm).not.toContain("verdict:");
-    expect(outcomeRepairSchemaVar("plan-checker", "any")).toContain(
-      "planCheck:",
-    );
-    expect(outcomeRepairSchemaVar("reviewer", "review")).toContain(
-      "upscope: yes | no",
-    );
-    expect(outcomeRepairSchemaVar("implementer", "any")).toContain("replies:");
-    expect(outcomeRepairSchemaVar("implementer", "any")).not.toContain(
-      "steerRoutes:",
-    );
-    expect(outcomeRepairSchemaVar("architect", "architect")).toContain(
-      "planReviewMarks:",
-    );
-    // Debt closure and steer answers are protocol fields on every role's ask.
-    for (const role of ["architect", "pm", "implementer"]) {
-      const rendered = outcomeRepairSchemaVar(role, "any");
-      expect(rendered).toContain("debtClosed:");
-      expect(rendered).toContain("steerAnswers:");
-    }
-    expect(outcomeRepairSchemaVar("pm", "any")).not.toContain("forward:");
-  });
+  promptsRepairSkeletonPart1();
+  promptsRepairSkeletonPart2();
 });
 
 describe("prompts: config names", () => {
@@ -458,6 +152,11 @@ describe("prompts: config names", () => {
 });
 
 describe("prompts: schema defaults", () => {
+  const scope1 = promptsSchemaDefaultsPart1();
+  promptsSchemaDefaultsPart2(scope1);
+});
+
+function promptsSchemaDefaultsPart1() {
   const TASK_TYPES = {
     development: {
       flow: "implement-review",
@@ -492,6 +191,13 @@ describe("prompts: schema defaults", () => {
     expect(rendered).not.toContain("{{");
   });
 
+  return { TASK_TYPES, libraryWithConfig };
+}
+
+function promptsSchemaDefaultsPart2(
+  scope: ReturnType<typeof promptsSchemaDefaultsPart1>,
+) {
+  const { libraryWithConfig, TASK_TYPES } = scope;
   it("fills the task-frontmatter partial from schema and config", () => {
     const rendered = libraryWithConfig(TASK_TYPES, {
       escalation: {},
@@ -530,4 +236,375 @@ describe("prompts: schema defaults", () => {
       expect.arrayContaining(["outcome_schema", "task_types", "tiers"]),
     );
   });
-});
+}
+
+function promptsRepairSkeletonPart1() {
+  it("renders every ungated outcome field in some role's repair ask", () => {
+    const repairs: [string, OutcomeExpectation][] = [
+      ["implementer", "any"],
+      ["reviewer", "review"],
+      ["architect", "architect"],
+      ["pm", "any"],
+      ["plan-checker", "any"],
+      ["review-architect", "any"],
+      ["architect-review-return", "any"],
+    ];
+    const rendered = new Set(
+      repairs.flatMap(([role, expectation]) =>
+        skeletonKeys(outcomeRepairSchemaVar(role, expectation)),
+      ),
+    );
+    // `forward` is parse-only for old records; no repair ask can deliver it.
+    const ungated = Object.keys(outcomeSchema.shape).filter(
+      (key) => key !== "verdict" && key !== "decision" && key !== "forward",
+    );
+    expect(ungated.filter((key) => !rendered.has(key))).toEqual([]);
+  });
+
+  it("drops the gated lines a bare done cannot deliver", () => {
+    const implementer = outcomeRepairSchemaVar("implementer", "any");
+    expect(skeletonKeys(implementer)).toEqual([
+      "status",
+      "summary",
+      "concerns",
+      "debtClosed",
+      "steerAnswers",
+      "replies",
+    ]);
+    expect(implementer).not.toContain("verdict:");
+    expect(implementer).not.toContain("decision:");
+  });
+
+  it("keeps the one gated line the step delivers", () => {
+    const review = outcomeRepairSchemaVar("reviewer", "review");
+    expect(review).toContain("verdict: approve | changes | reject");
+    expect(review).not.toContain("decision:");
+    const architect = outcomeRepairSchemaVar("architect", "architect");
+    expect(architect).toContain("decision: continue | done | blocked");
+    expect(architect).not.toContain("verdict:");
+  });
+}
+
+function promptsRepairSkeletonPart2() {
+  it("keeps the reporting fields a role's turns deliver", () => {
+    const pm = outcomeRepairSchemaVar("pm", "any");
+    for (const field of ["steerRoutes:", "stallRoutes:", "planCheckRoutes:"]) {
+      expect(pm).toContain(field);
+    }
+    // The plan check itself belongs to the checker, not the PM's routing turn.
+    expect(pm).not.toContain("planCheck:");
+    expect(pm).not.toContain("verdict:");
+    expect(outcomeRepairSchemaVar("plan-checker", "any")).toContain(
+      "planCheck:",
+    );
+    expect(outcomeRepairSchemaVar("reviewer", "review")).toContain(
+      "upscope: yes | no",
+    );
+    expect(outcomeRepairSchemaVar("implementer", "any")).toContain("replies:");
+    expect(outcomeRepairSchemaVar("implementer", "any")).not.toContain(
+      "steerRoutes:",
+    );
+    expect(outcomeRepairSchemaVar("architect", "architect")).toContain(
+      "planReviewMarks:",
+    );
+    expect(outcomeRepairSchemaVar("review-architect", "any")).toContain(
+      "planReview:",
+    );
+    expect(outcomeRepairSchemaVar("review-architect", "any")).not.toContain(
+      "verdict:",
+    );
+    expect(outcomeRepairSchemaVar("architect-review-return", "any")).toContain(
+      "planReviewMarks:",
+    );
+    // Debt closure and steer answers are protocol fields on every role's ask.
+    for (const role of ["architect", "pm", "implementer"]) {
+      const rendered = outcomeRepairSchemaVar(role, "any");
+      expect(rendered).toContain("debtClosed:");
+      expect(rendered).toContain("steerAnswers:");
+    }
+    expect(outcomeRepairSchemaVar("pm", "any")).not.toContain("forward:");
+  });
+}
+
+function promptsSchemaSkeletonsPart1() {
+  it("renders every outcome field a turn writes, so a new field cannot go missing", () => {
+    expect(skeletonKeys(outcomeSchemaVar())).toEqual(
+      Object.keys(outcomeSchema.shape).filter((key) => key !== "forward"),
+    );
+    // `forward` is parse-only: old records still carry it, no turn writes one.
+    expect(outcomeSchemaVar()).not.toContain("forward:");
+  });
+
+  it("renders every nested outcome key in its own field's shape", () => {
+    const skeleton = outcomeSchemaVar();
+    const nested: [string, { shape: Record<string, unknown> }][] = [
+      ["concerns", concernSchema],
+      ["debtClosed", debtClosedEntrySchema],
+      ["steerAnswers", steerAnswerSchema],
+      ["replies", replySchema],
+      ["steerRoutes", steerRouteEntrySchema],
+      ["stallRoutes", stallRouteEntrySchema],
+      ["planCheck", planCheckSchema],
+      ["planCheck", planCheckEvidenceSchema],
+      ["planCheck", planCheckFollowUpSchema],
+      ["planCheckRoutes", planCheckRouteEntrySchema],
+      ["planReview", planReviewOutcomeSchema],
+      ["planReview", planReviewFindingSchema],
+      ["planReviewMarks", planReviewMarkSchema],
+    ];
+    for (const [field, schema] of nested) {
+      const shape = skeletonShape(skeleton, field);
+      for (const key of Object.keys(schema.shape)) {
+        expect(shape, `${field} is missing nested key ${key}`).toContain(key);
+      }
+    }
+    // Optional nested fields keep their `?` marker.
+    expect(skeletonShape(skeleton, "concerns")).toContain("evidence?");
+    expect(skeletonShape(skeleton, "steerRoutes")).toContain("answer?");
+    expect(skeletonShape(skeleton, "planCheck")).toContain("dep?");
+  });
+}
+
+function promptsSchemaSkeletonsPart2() {
+  it("renders every nested enum value in its own field's comment", () => {
+    const skeleton = outcomeSchemaVar();
+    const enums: [string, string[]][] = [
+      [
+        "concerns",
+        ["debt", "risk", "uncertainty", "choice", "fyi", "architect", "owner"],
+      ],
+      ["steerRoutes", ["task", "spike", "architect", "stall", "{architect}"]],
+      ["stallRoutes", ["amend", "cancel", "replace", "split", "leave"]],
+      [
+        "planCheck",
+        [
+          "progress",
+          "architect",
+          "done",
+          "missing",
+          "below-standard",
+          "unverifiable",
+          "amend",
+          "cancel",
+          "replace",
+          "split",
+          "missing-dep",
+          "unmerged",
+        ],
+      ],
+      ["planCheckRoutes", ["continue", "leave"]],
+      ["planReviewMarks", ["helpful", "unhelpful"]],
+    ];
+    for (const [field, values] of enums) {
+      const comment = skeletonComment(skeleton, field);
+      for (const value of values) {
+        expect(comment, `${field} is missing enum value ${value}`).toContain(
+          value,
+        );
+      }
+    }
+  });
+}
+
+function promptsSchemaSkeletonsPart3() {
+  it("renders a nested field added to a schema, so a dropped nested key fails", () => {
+    const report = (fields: z.ZodRawShape) =>
+      z.object({ report: z.object(fields) });
+    expect(
+      skeletonShape(renderSkeleton(report({ kept: z.string() })), "report"),
+    ).toBe("report: {kept}");
+    expect(
+      skeletonShape(
+        renderSkeleton(report({ kept: z.string(), added: z.string() })),
+        "report",
+      ),
+    ).toBe("report: {kept, added}");
+  });
+
+  it("pins the outcome skeleton wording", () => {
+    expect(outcomeSchemaVar()).toBe(
+      [
+        "```yaml",
+        "status: done | blocked | failed | upscope  # upscope on task steps only",
+        "summary: one paragraph",
+        "concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner",
+        "debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it",
+        "steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list",
+        "replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position",
+        "verdict: approve | changes | reject  # optional; review steps only",
+        "decision: continue | done | blocked  # optional; architect step only",
+        "upscope: yes | no  # optional; standalone review escalation: answer with the verdict",
+        "steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}",
+        "stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave",
+        "planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged",
+        "planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes",
+        "planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave",
+        "planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful",
+        "```",
+      ].join("\n"),
+    );
+  });
+}
+
+function promptsSchemaSkeletonsPart4() {
+  it("renders QA's own schema with its verdict and no reviewer decision line", () => {
+    const skeleton = qaOutcomeSchemaVar();
+    expect(skeletonKeys(skeleton)).toEqual([
+      "status",
+      "summary",
+      "concerns",
+      "qa",
+    ]);
+    expect(skeletonLine(skeleton, "qa")).toContain("verdict: accept | changes");
+    expect(skeletonLine(skeleton, "qa")).toContain("findings");
+    expect(skeleton).not.toContain("decision:");
+    expect(skeleton).not.toContain("verdict: approve");
+  });
+
+  it("renders the fields a prompt author writes", () => {
+    expect(skeletonKeys(taskFrontmatterVar())).toEqual([
+      "slug",
+      "title",
+      "type",
+      "deps",
+      "scope",
+      "epic",
+      "tier",
+      "revision",
+      "base",
+      "source",
+      "repairTurns",
+      "turnMinutes",
+    ]);
+  });
+}
+
+function promptsSchemaSkeletonsPart5() {
+  it("pins the task-frontmatter skeleton wording", () => {
+    expect(taskFrontmatterVar()).toBe(
+      [
+        "```yaml",
+        "slug: namespaced kebab-case, matches the file name",
+        "title: one line",
+        "type: one of the configured task types; it supplies flow, kind and schema",
+        "deps: [a slug that must merge first]",
+        "scope: [a predicted area]",
+        "epic: the epic that owns this task; absent means goal-level work  # optional",
+        "tier: default, or a run-config alias  # optional",
+        "revision: one more than the parked revision when amending under its slug  # optional",
+        "base: the parked slug this continues  # optional",
+        "source: plan heading, front, steer, stall or plan-check turn",
+        "repairTurns: outcome-repair turns for this task's turns  # optional",
+        "turnMinutes: per-turn wall bound in minutes  # optional",
+        "```",
+      ].join("\n"),
+    );
+  });
+}
+
+function promptsSchemaSkeletonsPart6() {
+  it("keeps the frontmatter schema in step with the task parser", () => {
+    const text = [
+      "---",
+      "slug: auth.token-refresh",
+      "title: Refresh tokens",
+      "type: development",
+      "deps: [auth.session-store]",
+      "scope: [auth]",
+      "epic: auth",
+      "tier: escalation",
+      "revision: 1",
+      "base: auth.probe",
+      "source: Milestone auth / refresh",
+      "repairTurns: 1",
+      "turnMinutes: 45",
+      "---",
+      "",
+      "Why: rotate without a re-login.",
+      "Done when: refresh rotates the token.",
+      "",
+    ].join("\n");
+    const { body: _body, ...frontmatter } = parseTaskFile(
+      text,
+      "auth.token-refresh",
+      {
+        development: {
+          flow: "implement-review",
+          kind: "development",
+          schema: "outcome",
+        },
+      },
+    );
+    expect(Object.keys(frontmatter).sort()).toEqual(
+      Object.keys(taskFrontmatterSchema.shape).sort(),
+    );
+    expect(() => taskFrontmatterSchema.parse(frontmatter)).not.toThrow();
+    expect(taskFrontmatterVar()).toContain(
+      "type: one of the configured task types",
+    );
+    expect(taskFrontmatterVar()).not.toContain("kind:");
+  });
+}
+
+function registerPromptsPromptLibraryPart1(): void {
+  it("renders includes and leaves no unresolved variables", () => {
+    const lib = loadPromptLibrary({ builtinDir: dir });
+    expect(lib.render("steps/develop", { task: "add auth" })).toContain(
+      "Task: add auth",
+    );
+    expect(lib.render("steps/develop", { task: "add auth" })).toContain(
+      "Workspace Containment",
+    );
+  });
+
+  it("throws for a missing variable and reports placeholders", () => {
+    const lib = loadPromptLibrary({ builtinDir: dir });
+    expect(lib.placeholders("steps/develop")).toEqual(["task"]);
+    expect(() => lib.render("steps/develop", {})).toThrow(
+      "Missing required prompt variables",
+    );
+    expect(() => lib.render("steps/missing", {})).toThrow("not found");
+  });
+
+  it("lets the process config replace the calibration partial", () => {
+    const process = {
+      flows: {},
+      boundary: TEST_BOUNDARY,
+      reminders: 1,
+      calibration: "CUSTOM CALIBRATION",
+    } as ProcessConfig;
+    const lib = loadPrompts(process, dir, { run: {} as RunConfig });
+    expect(lib.render("calibration", {})).toBe("CUSTOM CALIBRATION");
+    // Built-ins still render when the process config sets no calibration.
+    const builtin = loadPrompts(
+      { flows: {}, boundary: TEST_BOUNDARY, reminders: 1 } as ProcessConfig,
+      dir,
+      { run: {} as RunConfig },
+    );
+    expect(builtin.render("calibration", {})).toContain(
+      "A concern is a recorded debt",
+    );
+  });
+}
+
+function registerPromptsPromptLibraryPart2(): void {
+  it("lets an override directory shadow the built-in fragment", () => {
+    const overrideDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompts-override-"),
+    );
+    try {
+      fs.mkdirSync(path.join(overrideDir, "steps"), { recursive: true });
+      fs.writeFileSync(
+        path.join(overrideDir, "steps", "develop.md"),
+        "override {{task}}",
+      );
+      const lib = loadPromptLibrary({
+        builtinDir: dir,
+        overrideDirs: [overrideDir],
+      });
+      expect(lib.render("steps/develop", { task: "x" })).toBe("override x");
+    } finally {
+      fs.rmSync(overrideDir, { recursive: true, force: true });
+    }
+  });
+}

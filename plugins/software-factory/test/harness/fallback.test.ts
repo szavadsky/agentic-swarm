@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: split-rest
 import { describe, expect, it } from "bun:test";
 import {
   type AttemptOutput,
@@ -29,6 +28,15 @@ const statedQuotaDetails = [
 ];
 
 describe("runWithFallbacks", () => {
+  runWithFallbacksPart1();
+  runWithFallbacksPart2();
+  runWithFallbacksPart3();
+  runWithFallbacksPart4();
+  runWithFallbacksPart5();
+  runWithFallbacksPart6();
+});
+
+function runWithFallbacksPart1() {
   it("returns the primary result without touching fallbacks", async () => {
     const calls: string[] = [];
     const result = await runWithFallbacks({
@@ -64,7 +72,9 @@ describe("runWithFallbacks", () => {
     expect(result.outcome.stop).toEqual(done);
     expect(result.attempts.map((a) => a.model.id)).toEqual([A.id, A.id]);
   });
+}
 
+function runWithFallbacksPart2() {
   it("advances without retrying when a quota stop states a wait beyond the window", async () => {
     for (const details of statedQuotaDetails) {
       const calls: string[] = [];
@@ -87,7 +97,9 @@ describe("runWithFallbacks", () => {
       expect(result.outcome.stop).toEqual(stop);
     }
   });
+}
 
+function runWithFallbacksPart3() {
   it("keeps the bounded retries within the window and for other causes", async () => {
     const cases = [
       { cause: "quota", details: "retry-after-ms=8000" },
@@ -128,7 +140,9 @@ describe("runWithFallbacks", () => {
     expect(isRetryableInfra({ kind: "infra", cause: "crash" })).toBe(false);
     expect(isRetryableInfra({ kind: "done" })).toBe(false);
   });
+}
 
+function runWithFallbacksPart4() {
   it("backs off and retries a transient network stop before falling back", async () => {
     const calls: string[] = [];
     const sleeps: number[] = [];
@@ -170,7 +184,9 @@ describe("runWithFallbacks", () => {
     expect(result.attempts.map((a) => a.model.id)).toEqual([A.id, A.id, B.id]);
     expect(result.outcome.value).toBe(B.id);
   });
+}
 
+function runWithFallbacksPart5() {
   it("does not retry a non-retryable infra cause, it advances", async () => {
     const calls: string[] = [];
     const result = await runWithFallbacks({
@@ -214,8 +230,10 @@ describe("runWithFallbacks", () => {
     expect(calls).toEqual([A.id]);
     expect(result.outcome.stop.kind).toBe("refusal");
   });
+}
 
+function runWithFallbacksPart6() {
   it("deduplicates a fallback identical to the primary", () => {
     expect(modelChain(A, [A, B, { id: B.id }])).toEqual([A, B]);
   });
-});
+}

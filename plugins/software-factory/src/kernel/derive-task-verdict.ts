@@ -1,0 +1,198 @@
+/**
+ * The acceptance-step verdicts: how an approve advances, a `changes` hands off
+ * to the adjudicator or the next fix round, and a reject parks.
+ */
+import { makeCause } from "./cause.js";
+import { phaseAfter } from "./derive-task-facts.js";
+import type { ReduceContext, ReduceState } from "./derive-task-state.js";
+import {
+  adjudicationDue,
+  isAcceptanceStep,
+  isAdjudicatorStep,
+  isLastReviewCall,
+} from "./review.js";
+import type { FlowStep, ReviewVerdict, StepRecord } from "./types.js";
+
+/** A QA accept advances; checks run before the next acceptance or the end. */
+export function advanceAfterQa(
+  context: ReduceContext,
+  state: ReduceState,
+  rec: StepRecord,
+  idx: number,
+): void {
+  state.stepIndex = idx + 1;
+  state.gateFix = false;
+  state.gateLastCall = false;
+  state.mergeFix = false;
+  state.changesPending = false;
+  // The checks before QA already judged this tree: do not spend a second run
+  // before the reviewer reads the same content.
+  const nextStep = context.steps[state.stepIndex];
+  const checksNext = !nextStep || isAcceptanceStep(nextStep);
+  const judged =
+    checksNext && rec.tree !== undefined && rec.tree === state.lastChecksTree;
+  state.pendingChecks =
+    checksNext && !judged
+      ? { nextIndex: state.stepIndex, mergeAfter: false }
+      : null;
+  state.phase =
+    checksNext && !judged ? "checks" : phaseAfterStep(context, state.stepIndex);
+}
+
+/** A verdict's approve advances past the step without a checks run. */
+export function advancePastStep(
+  context: ReduceContext,
+  state: ReduceState,
+  idx: number,
+): void {
+  state.stepIndex = idx + 1;
+  state.gateFix = false;
+  state.gateLastCall = false;
+  state.mergeFix = false;
+  state.changesPending = false;
+  state.pendingChecks = null;
+  state.phase = phaseAfter(context.flow, state.stepIndex, context.task.kind);
+}
+
+/** The adjudicator's re-judged review: approve advances, changes goes back. */
+export function applyAdjudicator(
+  context: ReduceContext,
+  state: ReduceState,
+  rec: StepRecord,
+  outcome: StepRecord["outcome"],
+  idx: number,
+): void {
+  if (outcome?.upscope === "yes") {
+    state.park = makeCause("upscope", outcome?.summary ?? "no summary");
+    state.phase = "parked";
+    return;
+  }
+  state.verdict = outcome?.verdict;
+  if (
+    state.verdict !== "approve" &&
+    state.verdict !== "changes" &&
+    state.verdict !== "reject"
+  ) {
+    state.park = makeCause(
+      "invalid-outcome",
+      `adjudicate turn delivered no review verdict: ${outcome?.summary ?? "no summary"}`,
+    );
+    state.phase = "parked";
+    state.changesPending = false;
+    state.pendingChecks = null;
+    return;
+  }
+  applyVerdict(context, state, rec, outcome, idx);
+  state.replyOnlyFix = false;
+}
+
+/** A review's verdict: approve advances, changes may hand off, reject parks. */
+export function applyReview(
+  context: ReduceContext,
+  state: ReduceState,
+  rec: StepRecord,
+  outcome: StepRecord["outcome"],
+  idx: number,
+  step: FlowStep,
+): void {
+  // Standalone escalation (and any review upscope answer): parks with the same
+  // cause shape as a status upscope, whatever the verdict says.
+  if (outcome?.upscope === "yes") {
+    state.park = makeCause("upscope", outcome?.summary ?? "no summary");
+    state.phase = "parked";
+    return;
+  }
+  state.verdict = outcome?.verdict;
+  applyVerdict(context, state, rec, outcome, idx, step);
+  state.replyOnlyFix = false;
+}
+
+function applyVerdict(
+  context: ReduceContext,
+  state: ReduceState,
+  rec: StepRecord,
+  outcome: StepRecord["outcome"],
+  idx: number,
+  step?: FlowStep,
+): void {
+  const verdict: ReviewVerdict | undefined = outcome?.verdict;
+  const summary = outcome?.summary ?? "no summary";
+  if (verdict === "approve") {
+    advancePastStep(context, state, idx);
+  } else if (verdict === "changes") {
+    const isLastReview =
+      step !== undefined && isLastReviewCall(step, rec.round);
+    if (isLastReview) {
+      state.park = makeCause(
+        "invalid-outcome",
+        `changes on the last review call: ${summary}`,
+      );
+      state.phase = "parked";
+      state.changesPending = false;
+      state.pendingChecks = null;
+    } else {
+      applyChanges(context, state, rec, idx);
+    }
+  } else if (verdict === "reject") {
+    state.park = makeCause("review-rejected", summary);
+    state.phase = "parked";
+  } else if (step?.adjudicate !== undefined) {
+    state.park = makeCause(
+      "invalid-outcome",
+      `adjudicate turn delivered no review verdict: ${summary}`,
+    );
+    state.phase = "parked";
+    state.changesPending = false;
+    state.pendingChecks = null;
+  }
+  // No `else` for a review: a done review always carries a verdict — outcome
+  // repair fails the turn otherwise — so a missing verdict never reaches derive.
+}
+
+/** `changes`: the adjudicator re-judges it, or the implementer gets the next round. */
+function applyChanges(
+  context: ReduceContext,
+  state: ReduceState,
+  rec: StepRecord,
+  idx: number,
+): void {
+  const adjudicator = context.steps[idx + 1];
+  state.gateFix = false;
+  state.gateLastCall = false;
+  state.mergeFix = false;
+  state.pendingChecks = null;
+  state.changesPending = true;
+  if (
+    adjudicator !== undefined &&
+    isAdjudicatorStep(adjudicator) &&
+    adjudicationDue(adjudicator, context.steps[idx]!, rec.round)
+  ) {
+    // The findings are not handed to the implementer yet: the adjudicator
+    // re-judges them in the same review cycle.
+    state.stepIndex = idx;
+    state.phase = adjudicator.id;
+    return;
+  }
+  state.round = rec.round + 1;
+  state.stepIndex = 0;
+  state.phase = context.firstStep;
+}
+
+export function startFixRound(
+  context: ReduceContext,
+  state: ReduceState,
+  rec: StepRecord,
+): void {
+  state.round = rec.round + 1;
+  state.stepIndex = 0;
+  state.gateFix = false;
+  state.gateLastCall = false;
+  state.mergeFix = false;
+  state.phase = context.firstStep;
+  state.changesPending = true;
+  state.pendingChecks = null;
+}
+
+function phaseAfterStep(context: ReduceContext, index: number) {
+  return phaseAfter(context.flow, index, context.task.kind);
+}

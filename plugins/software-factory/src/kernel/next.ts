@@ -1,9 +1,91 @@
-// biome-ignore-all lint/complexity: split-rest
-import { agentSteps, reviewRoundLimit } from "./review.js";
-import type { Action, Limits, State } from "./types.js";
+import { makeCause } from "./cause.js";
+import { agentSteps, isAcceptanceStep, reviewRoundLimit } from "./review.js";
+import type {
+  Action,
+  Cause,
+  FlowDefinition,
+  Limits,
+  State,
+  TaskState,
+} from "./types.js";
 
-function park(slug: string, cause: string): Action {
+function park(slug: string, cause: Cause): Action {
   return { kind: "park", slug, cause };
+}
+
+function isTerminalStatus(task: TaskState): boolean {
+  return (
+    task.status === "merged" ||
+    task.status === "finished" ||
+    task.status === "parked" ||
+    task.status === "cancelled"
+  );
+}
+
+function phaseAction(task: TaskState, slug: string): Action | undefined {
+  if (task.phase === "checks") return { kind: "checks", slug };
+  if (task.phase === "merge") return { kind: "merge", slug };
+  if (task.phase === "resolve")
+    return { kind: "step", slug, step: "resolve", round: task.round };
+  if (task.phase === "finish") return { kind: "finish", slug };
+  if (task.phase === "done" || task.phase === "parked")
+    return park(
+      slug,
+      makeCause("stuck", `no next action for phase "${task.phase}"`),
+    );
+  return undefined;
+}
+
+function agentStepAction(
+  task: TaskState,
+  slug: string,
+  flow: FlowDefinition,
+): Action {
+  const step = agentSteps(flow).find((s) => s.id === task.phase);
+  if (!step)
+    return park(
+      slug,
+      makeCause("stuck", `flow "${task.flow}" has no step "${task.phase}"`),
+    );
+  if (isAcceptanceStep(step)) {
+    const roundLimit = reviewRoundLimit(step);
+    if (task.round > roundLimit)
+      return park(
+        slug,
+        makeCause(
+          task.verdict === "changes"
+            ? "change-requests-exhausted"
+            : "round-limit",
+          `after verdict "${task.verdict ?? "none"}" (${roundLimit} rounds)`,
+        ),
+      );
+  }
+  return { kind: "step", slug, step: step.id, round: task.round };
+}
+
+function readyTaskAction(
+  task: TaskState,
+  slug: string,
+  limits: Limits,
+): Action {
+  if (task.park) return park(slug, task.park);
+  if (task.loop) {
+    const loop = task.loop;
+    return park(
+      slug,
+      makeCause(
+        "no-progress",
+        `${loop.step} r${loop.round} repeats r${loop.firstRound} (${loop.fingerprint.slice(0, 8)})`,
+      ),
+    );
+  }
+  const flow = limits.flows[task.flow];
+  if (!flow)
+    return park(
+      slug,
+      makeCause("stuck", `flow "${task.flow}" is not configured`),
+    );
+  return phaseAction(task, slug) ?? agentStepAction(task, slug, flow);
 }
 
 /**
@@ -19,87 +101,14 @@ export function next(
   if (state.terminal) {
     return [{ kind: "exit", reason: `goal ${state.goal}` }];
   }
-
   const actions: Action[] = [];
   for (const slug of Object.keys(state.tasks).sort()) {
     if (running.has(slug)) continue;
     const task = state.tasks[slug]!;
-    if (
-      task.status === "merged" ||
-      task.status === "finished" ||
-      task.status === "parked" ||
-      task.status === "cancelled"
-    ) {
-      continue;
-    }
+    if (isTerminalStatus(task)) continue;
     if (task.status !== "ready") continue;
-
-    if (task.park) {
-      actions.push(park(slug, task.park));
-      continue;
-    }
-    if (task.loop) {
-      const loop = task.loop;
-      actions.push(
-        park(
-          slug,
-          `no-progress: ${loop.step} r${loop.round} repeats r${loop.firstRound} (${loop.fingerprint.slice(0, 8)})`,
-        ),
-      );
-      continue;
-    }
-
-    const flow = limits.flows[task.flow];
-    if (!flow) {
-      actions.push(park(slug, `flow "${task.flow}" is not configured`));
-      continue;
-    }
-
-    if (task.phase === "checks") {
-      actions.push({ kind: "checks", slug });
-      continue;
-    }
-    if (task.phase === "merge") {
-      actions.push({ kind: "merge", slug });
-      continue;
-    }
-    if (task.phase === "resolve") {
-      actions.push({ kind: "step", slug, step: "resolve", round: task.round });
-      continue;
-    }
-    if (task.phase === "finish") {
-      actions.push({ kind: "finish", slug });
-      continue;
-    }
-    if (task.phase === "done" || task.phase === "parked") {
-      actions.push(
-        park(slug, `stuck: no next action for phase "${task.phase}"`),
-      );
-      continue;
-    }
-
-    const step = agentSteps(flow).find((s) => s.id === task.phase);
-    if (!step) {
-      actions.push(
-        park(slug, `flow "${task.flow}" has no step "${task.phase}"`),
-      );
-      continue;
-    }
-    if (step.review) {
-      const roundLimit = reviewRoundLimit(step);
-      if (task.round > roundLimit) {
-        actions.push(
-          park(
-            slug,
-            `review round limit reached after verdict "${task.verdict ?? "none"}" (${roundLimit} rounds)`,
-          ),
-        );
-        continue;
-      }
-    }
-    actions.push({ kind: "step", slug, step: step.id, round: task.round });
+    actions.push(readyTaskAction(task, slug, limits));
   }
-
   if (actions.length > 0) return actions;
   if (running.size > 0) return [];
   return [{ kind: "boundary" }];
