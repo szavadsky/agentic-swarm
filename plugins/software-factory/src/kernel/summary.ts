@@ -24,6 +24,7 @@ import type {
   State,
   StepRecord,
 } from "./types.js";
+import { wasteLines } from "./waste-summary.js";
 
 export type SummaryStatus =
   | "goal-met"
@@ -257,6 +258,7 @@ export async function writeIterationSummary(
     operatorActs,
     humanInterventions,
     planReviewMarks,
+    waste,
   } = computed;
   const roleNames = Object.values(roleCosts)
     .map((entry) => ({ name: entry.role, ...entry }))
@@ -391,6 +393,9 @@ export async function writeIterationSummary(
     "",
     "## Incidents",
     ...incidentLines(incidents, loopIncidents),
+    "",
+    "## Waste",
+    ...wasteLines(waste, agentTurns, roleNames, aliasNames),
     "",
     "## Launches by role",
     ...launchTable("role", roleNames),

@@ -351,13 +351,18 @@ Stop the rollout and consult me.
 
 Each iteration writes exactly one `iterations/<n>/summary.md` (the outbox entry
 references it): status, merged/finished/parked tasks, remarkable concerns,
-assumptions and debt. `metrics.yaml` is rebuilt from the usage records;
+assumptions and debt, and a waste section naming every wasted turn's record
+with rebutted reviews counted apart. The next iteration's context pack carries
+that waste section. `metrics.yaml` is rebuilt from the usage records;
 `mailbox/outbox/metrics.yaml` references it: architect launches, architect
 cost and token share, cost and list cost per merged task, incident counts
 (infra retries, fallback hops, outcome-repair turns, merge conflicts,
 merged-gate failures, and round-limit, no-progress, empty-diff and overflow
 parks), loop incidents (no-progress and empty-diff parks; a spike's empty
-finish and overflow parks are not loop incidents), human interventions
+finish and overflow parks are not loop incidents), wasted turns by reason and
+by role and alias (complete implementer failure; structure: protocol,
+containment, outcome channel, infra; flaky-test rejection), rebutted review
+turns counted apart as accepted tax, human interventions
 (processed steers) and the observable
 operator-act counter (steers plus containment outside-changes and
 integration-moved merges), gate and commit wall time, and turns, tokens, cost

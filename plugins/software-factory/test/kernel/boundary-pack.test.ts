@@ -108,6 +108,15 @@ describe("boundary context pack", () => {
       const packRel = contextPackRelPath(2);
       const dataRel = contextDataRelPath(2);
       const prepared = "# Prepared pack\n\n## Paths\n- plan: /goal/plan.md\n";
+      const wasteRecord = "records/00001-i1-waste-turn-implement-r1";
+      fs.mkdirSync(path.join(runtime.store.goalDir, "iterations/1"), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(runtime.store.goalDir, "iterations/1/summary.md"),
+        `# Iteration 1 summary\n\n## Waste\n- records:\n  - ${wasteRecord}: implementer/implementer (implement r1) — structure: infra — infra: network\n\n## Metrics\n- turns: 1\n`,
+        "utf8",
+      );
       let prepPrompt = "";
       harness.script(
         (req, ctx) => {
@@ -118,6 +127,7 @@ describe("boundary context pack", () => {
           expect(data.tasks).toContainEqual(
             expect.objectContaining({ slug: "alpha", status: "ready" }),
           );
+          expect(data.paths.previousWaste).toContain(wasteRecord);
           fs.writeFileSync(
             path.join(runtime.store.goalDir, packRel),
             prepared,
@@ -190,6 +200,15 @@ describe("boundary context pack", () => {
         PLAN,
         "utf8",
       );
+      const wasteRecord = "records/00001-i1-waste-turn-implement-r1";
+      fs.mkdirSync(path.join(runtime.store.goalDir, "iterations/1"), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(runtime.store.goalDir, "iterations/1/summary.md"),
+        `# Iteration 1 summary\n\n## Waste\n- wasted turns: 1 of 3 agent turns\n- records:\n  - ${wasteRecord}: implementer/implementer (implement r1) — structure: infra — infra: network\n\n## Metrics\n- turns: 1\n`,
+        "utf8",
+      );
       harness.script(
         (req, ctx) => {
           fs.appendFileSync(
@@ -224,6 +243,10 @@ describe("boundary context pack", () => {
       expect(pack).toContain("# Context pack — goal demo, iteration 2");
       expect(pack).toContain("## Task status");
       expect(pack).toContain("| alpha |");
+      expect(pack).toContain("## Waste (previous iteration summary)");
+      expect(pack).toContain(
+        `${wasteRecord}: implementer/implementer (implement r1) — structure: infra — infra: network`,
+      );
       const fallback = (await runtime.store.listRecords()).find(
         (record) => record.step === "packprep-fallback",
       );

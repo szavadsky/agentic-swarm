@@ -63,6 +63,7 @@ import { type PmRung, runPm } from "./pm.js";
 import { scriptMeta } from "./record.js";
 import { spikeFinding } from "./spike-report.js";
 import { MAIN_ARCHITECT } from "./tasks.js";
+import { summaryWaste } from "./waste-summary.js";
 import type {
   ArtifactStore,
   GoalDecision,
@@ -111,6 +112,14 @@ function previousSummary(
   return fs.existsSync(path.join(goalDir, rel))
     ? path.join(goalDir, rel)
     : undefined;
+}
+
+/** The previous summary's waste section, so the next consult's pack carries it. */
+function previousWaste(goalDir: string, iteration: number): string | undefined {
+  if (iteration <= 0) return undefined;
+  const file = path.join(goalDir, summaryRelPath(iteration));
+  if (!fs.existsSync(file)) return undefined;
+  return summaryWaste(fs.readFileSync(file, "utf8"));
 }
 
 function rungTrace(rungs: PmRung[]): string {
@@ -425,6 +434,7 @@ export async function runBoundary(
   if (!opts.frontPack) {
     const head = await integrationHead(runtime);
     const previous = previousSummary(runtime.store.goalDir, iteration - 1);
+    const waste = previousWaste(runtime.store.goalDir, iteration - 1);
     const { holds } = await readHolds(runtime.store).catch((err) => {
       console.warn(
         `[factory] pending-steer holds unreadable: ${(err as Error).message}`,
@@ -466,6 +476,7 @@ export async function runBoundary(
       recordsDir: runtime.store.recordsDir,
       tasksDir: runtime.store.tasksDir,
       previousSummary: previous,
+      previousWaste: waste,
       digestPath,
       tasks,
       state,

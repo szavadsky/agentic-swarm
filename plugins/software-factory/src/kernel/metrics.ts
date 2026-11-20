@@ -12,6 +12,14 @@ import type {
   State,
   StepRecord,
 } from "./types.js";
+import {
+  emptyWasteAccounting,
+  emptyWasteCounts,
+  WASTE_REASONS,
+  type WasteAccounting,
+  type WasteCounts,
+  wasteAccounting,
+} from "./waste.js";
 
 /** Incident launches by kind; `unknown` is an old record without a stored kind. */
 export interface LaunchCounts {
@@ -38,6 +46,10 @@ export interface GroupMetrics {
   testRuns: number;
   /** Incident launches for these turns, per kind. */
   launches: LaunchCounts;
+  /** Wasted turns in this group, by reason. */
+  waste: WasteCounts;
+  /** Review turns whose verdict was `changes`: accepted tax, not waste. */
+  rebuttedReviews: number;
 }
 
 export interface RoleMetrics extends GroupMetrics {
@@ -118,6 +130,8 @@ export interface IterationMetrics {
   /** Architect marks on plan-review findings in this iteration. */
   planReviewMarks: PlanReviewMarkCounts;
   unpricedTurns: number;
+  /** Wasted turns, each naming its record; rebutted reviews counted apart. */
+  waste: WasteAccounting;
   incidents: IncidentCounts;
   /** Parks that name no-progress or an empty diff; the loop signals in kernel-0. */
   loopIncidents: number;
@@ -273,6 +287,8 @@ function emptyGroup(): Omit<GroupMetrics, "turns"> & { turns: number } {
     removedLines: 0,
     testRuns: 0,
     launches: emptyLaunches(),
+    waste: emptyWasteCounts(),
+    rebuttedReviews: 0,
   };
 }
 
@@ -526,6 +542,38 @@ export function iterationMetrics(
   const incidents = emptyIncidents();
   attemptIncidents(recs, incidents);
   parkIncidents(all, incidents);
+  const waste = wasteAccounting({
+    records: all,
+    roleOf: (step) => roleByStep[step] ?? DEFAULT_ROLE_BY_STEP[step] ?? step,
+  });
+  for (const entry of waste.entries) {
+    const roleEntry = roles[entry.role] ?? {
+      role: entry.role,
+      ...emptyGroup(),
+    };
+    roleEntry.waste[entry.reason] += 1;
+    roles[entry.role] = roleEntry;
+    const aliasEntry = aliases[entry.alias] ?? {
+      alias: entry.alias,
+      ...emptyGroup(),
+    };
+    aliasEntry.waste[entry.reason] += 1;
+    aliases[entry.alias] = aliasEntry;
+  }
+  for (const review of waste.rebuttedReviews) {
+    const roleEntry = roles[review.role] ?? {
+      role: review.role,
+      ...emptyGroup(),
+    };
+    roleEntry.rebuttedReviews += 1;
+    roles[review.role] = roleEntry;
+    const aliasEntry = aliases[review.alias] ?? {
+      alias: review.alias,
+      ...emptyGroup(),
+    };
+    aliasEntry.rebuttedReviews += 1;
+    aliases[review.alias] = aliasEntry;
+  }
   const planReviewMarks: PlanReviewMarkCounts = { helpful: 0, unhelpful: 0 };
   for (const rec of all) {
     for (const mark of rec.outcome?.planReviewMarks ?? []) {
@@ -584,6 +632,7 @@ export function iterationMetrics(
     architect,
     planReviewMarks,
     unpricedTurns,
+    waste,
     incidents,
     loopIncidents: incidents.noProgressParks + incidents.emptyDiffParks,
     humanInterventions,
@@ -621,6 +670,7 @@ function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
   const incidents = emptyIncidents();
   const architect = emptyArchitect();
   const planReviewMarks: PlanReviewMarkCounts = { helpful: 0, unhelpful: 0 };
+  const waste = emptyWasteAccounting();
 
   const sumGroup = <T extends GroupMetrics>(
     total: T,
@@ -639,6 +689,10 @@ function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
     total.launches["change-request"] += entry.launches["change-request"];
     total.launches.failure += entry.launches.failure;
     total.launches.unknown += entry.launches.unknown;
+    for (const reason of WASTE_REASONS) {
+      total.waste[reason] += entry.waste[reason];
+    }
+    total.rebuttedReviews += entry.rebuttedReviews;
   };
   for (const iteration of iterations) {
     usage = addUsage(usage, iteration.usage);
@@ -687,6 +741,12 @@ function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
     architect.unpricedTurns += iteration.architect.unpricedTurns;
     planReviewMarks.helpful += iteration.planReviewMarks?.helpful ?? 0;
     planReviewMarks.unhelpful += iteration.planReviewMarks?.unhelpful ?? 0;
+    waste.turns += iteration.waste.turns;
+    for (const reason of WASTE_REASONS) {
+      waste.counts[reason] += iteration.waste.counts[reason];
+    }
+    waste.entries.push(...iteration.waste.entries);
+    waste.rebuttedReviews.push(...iteration.waste.rebuttedReviews);
   }
 
   architect.costShare = width(architect.usage.costUsd ?? 0, usage.costUsd ?? 0);
@@ -711,6 +771,7 @@ function totalsOf(iterations: IterationMetrics[]): MetricsTotals {
     architect,
     planReviewMarks,
     unpricedTurns,
+    waste,
     incidents,
     loopIncidents,
     humanInterventions,

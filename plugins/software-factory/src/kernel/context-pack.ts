@@ -117,6 +117,8 @@ export interface ContextPackInput {
   recordsDir: string;
   tasksDir: string;
   previousSummary?: string;
+  /** The previous iteration summary's `## Waste` section, carried into the pack. */
+  previousWaste?: string;
   digestPath?: string;
   tasks: TaskFile[];
   state: State;
@@ -299,6 +301,14 @@ export function renderContextPack(input: ContextPackInput): string {
     );
   }
 
+  if (input.previousWaste) {
+    lines.push(
+      "",
+      "## Waste (previous iteration summary)",
+      ...input.previousWaste.split("\n"),
+    );
+  }
+
   if (input.forwarded.length > 0) {
     lines.push("", "## Forwarded concerns (architect/owner)");
     for (const concern of input.forwarded) lines.push(formatForwarded(concern));
@@ -451,6 +461,7 @@ export function renderContextData(input: ContextPackInput): string {
       records: input.recordsDir,
       tasks: input.tasksDir,
       previousSummary: input.previousSummary ?? null,
+      previousWaste: input.previousWaste ?? null,
       previousDigest: input.digestPath ?? null,
       runConfig: input.runConfigPath ?? null,
     },

@@ -14,6 +14,7 @@ Write `{{pack_path}}`. It is an index, not a report:
 - Keep the task status table complete: every slug, status, kind, round, turns, deps and commit, plus the parked causes, pending waits, ready-with-no-turn causes, open records and the debt register with its ids. These decide dispatch, so the architect must never have to ask for them.
 - Keep the infra commands and the base-gate state complete.
 - For the plan check, the plan review, forwarded concerns, spike findings and PM answers decide section by section: keep it in full when it changes what the architect does now; otherwise name the pointer and summarise it in one line. A stale finding hidden behind a pointer is a failure; a long finding pasted beside its pointer is waste.
+- Carry the previous iteration's waste section (`previousWaste` in the data): one line per wasted turn with its record path and reason, plus the rebutted reviews counted apart. It names what to fix structurally this iteration; never drop a record path.
 - The code map is a path index. Keep the areas this iteration touches; fold the rest into a pointer to the checkout.
 - Every pointer is an absolute path or a record directory the architect can open. Never paste a file body.
 - No artificial cap: when a section matters, include all of it.
