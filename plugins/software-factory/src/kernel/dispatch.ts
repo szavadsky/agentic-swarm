@@ -6,6 +6,7 @@ import { derive } from "./derive.js";
 import { executeTaskAction, type TaskActionResult } from "./flow.js";
 import { stepTarget } from "./flow-context.js";
 import type { MergeResult } from "./integrate.js";
+import { runBoundaryTurn } from "./integration-lock.js";
 import { type Hold, readHolds, type Steer, scanInbox } from "./mailbox.js";
 import { next } from "./next.js";
 import {
@@ -449,13 +450,15 @@ export async function runDispatch(
       return { hold: activeHolds(holds, pending), steerTurn: false };
     }
 
-    await runSteerPm(runtime, {
-      iteration,
-      state,
-      tasks,
-      steers: claim,
-      cwd: runtime.paths.goalCheckout,
-    });
+    await runBoundaryTurn(runtime, { iteration, step: "pm" }, () =>
+      runSteerPm(runtime, {
+        iteration,
+        state,
+        tasks,
+        steers: claim,
+        cwd: runtime.paths.goalCheckout,
+      }),
+    );
     try {
       // The steer turn may have created tasks; validate holds against the files
       // on disk now, not the pre-turn list, so a hold naming a new task stands.
@@ -812,12 +815,17 @@ export async function runDispatch(
         );
         const slugs = undecidedParked(stallRecords, stallState, iteration);
         if (slugs.length > 0) {
-          const stalled = await runStallPm(runtime, {
-            iteration,
-            state: stallState,
-            slugs,
-            cwd: runtime.paths.goalCheckout,
-          });
+          const stalled = await runBoundaryTurn(
+            runtime,
+            { iteration, step: "pm" },
+            () =>
+              runStallPm(runtime, {
+                iteration,
+                state: stallState,
+                slugs,
+                cwd: runtime.paths.goalCheckout,
+              }),
+          );
           if (stalled.continued.length > 0) continue;
         }
       }
@@ -852,11 +860,16 @@ export async function runDispatch(
           openWork(checkState).length > 0 &&
           checked.length < runtime.limits.planCheckRounds
         ) {
-          const round = await runPlanCheckRound(runtime, {
-            iteration,
-            round: rounds + 1,
-            state: checkState,
-          });
+          const round = await runBoundaryTurn(
+            runtime,
+            { iteration, step: PLAN_CHECK_STEP },
+            () =>
+              runPlanCheckRound(runtime, {
+                iteration,
+                round: rounds + 1,
+                state: checkState,
+              }),
+          );
           if (round.status === "architect")
             planCheckFindings.push(...round.findings);
           planCheckVerdict = round.turn.verdict;

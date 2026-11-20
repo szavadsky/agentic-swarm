@@ -4,7 +4,6 @@ import { runWorktreeSetup } from "../core/checks/setup.js";
 import { commitAll, isAncestor } from "../core/git/commit.js";
 import { GitError, git } from "../core/git/exec.js";
 import { unmergedFiles } from "../core/git/merge.js";
-import { KeyedMutex } from "../core/mutex.js";
 import { preexistingRed, recordedBaseGates } from "./baseline.js";
 import { derive } from "./derive.js";
 import { DEFAULT_FLOWS } from "./derive-task.js";
@@ -14,6 +13,7 @@ import {
   newGateFailures,
   runGates,
 } from "./gates.js";
+import { integrationExclusive } from "./integration-lock.js";
 import {
   appendGateFlake,
   finishChecks,
@@ -50,9 +50,6 @@ export interface MergeOptions {
    */
   keptLand?: boolean;
 }
-
-/** One serial queue per goal; multiple tasks may ask, they never merge at once. */
-const mergeQueue = new KeyedMutex();
 
 function bySeq(a: StepRecord, b: StepRecord): number {
   return a.seq - b.seq || a.startedAt.localeCompare(b.startedAt);
@@ -247,7 +244,7 @@ export async function mergeTask(
   state: TaskState,
   opts: MergeOptions = {},
 ): Promise<MergeResult> {
-  return mergeQueue.runExclusive(runtime.paths.goalDir, async () => {
+  return integrationExclusive(runtime, async () => {
     const round = state.round;
     const records = await runtime.store.listRecords();
     if (

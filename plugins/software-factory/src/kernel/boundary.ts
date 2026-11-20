@@ -23,6 +23,7 @@ import { derive, openDebts } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
 import { boundaryTarget, compactSession, stepTarget } from "./flow-context.js";
 import { runKeptLand } from "./integrate.js";
+import { runBoundaryTurn } from "./integration-lock.js";
 import {
   collectSteerRoutes,
   expireHold,
@@ -45,7 +46,11 @@ import {
   PLAN_CHECK_STEP,
   runPlanCheckRound,
 } from "./plan-check.js";
-import { latestPlanReview, runPlanReview } from "./plan-review.js";
+import {
+  latestPlanReview,
+  PLAN_REVIEW_STEP,
+  runPlanReview,
+} from "./plan-review.js";
 import { type PmRung, runPm } from "./pm.js";
 import { scriptMeta } from "./record.js";
 import { spikeFinding } from "./spike-report.js";
@@ -285,11 +290,11 @@ export async function runBoundary(
           record.step === PLAN_CHECK_STEP &&
           record.endedAt,
       ).length + 1;
-    const checked = await runPlanCheckRound(runtime, {
-      iteration,
-      round,
-      state,
-    });
+    const checked = await runBoundaryTurn(
+      runtime,
+      { iteration, step: PLAN_CHECK_STEP },
+      () => runPlanCheckRound(runtime, { iteration, round, state }),
+    );
     if (checked.status === "architect")
       return {
         iteration,
@@ -310,7 +315,9 @@ export async function runBoundary(
   fs.mkdirSync(runtime.paths.sessionsDir, { recursive: true });
   const digestRel =
     (opts.digest ?? opts.relaunch) && records.length > 0
-      ? await writeLaunchDigest(runtime, iteration, records)
+      ? await runBoundaryTurn(runtime, { iteration, step: "digest" }, () =>
+          writeLaunchDigest(runtime, iteration, records),
+        )
       : null;
   const digestPath = digestRel
     ? path.join(runtime.store.goalDir, digestRel)
@@ -437,32 +444,34 @@ export async function runBoundary(
   const planBefore = snapshotPlan(planPath);
 
   const architectTurn = (resume: SessionRef | undefined) =>
-    runAgentTurn(runtime, {
-      target: boundaryTarget(runtime, "architect", iteration),
-      cwd: runtime.paths.goalCheckout,
-      meta: { iteration, step: "architect", round: 1 },
-      vars: {
-        turn,
-        iteration: String(iteration),
-        intent_path: path.join(runtime.store.goalDir, "intent.md"),
-        plan_path: path.join(runtime.store.goalDir, "plan.md"),
-        checkout: runtime.paths.goalCheckout,
-        pack_path: path.join(runtime.store.goalDir, packRel),
-        digest_path: digestPath ?? "",
-        steers: formatSteers(forArchitect),
-      },
-      expectation: KERNEL_TURN_STEPS.architect,
-      session: resume,
-      settle: async (_record, outcome, live) => {
-        if (!live || outcome?.decision !== "continue") return {};
-        const compacted = await compactSession(runtime, live);
-        if (!compacted) return {};
-        return {
-          session: compacted.session,
-          ...(compacted.usage ? { compactUsage: compacted.usage } : {}),
-        };
-      },
-    });
+    runBoundaryTurn(runtime, { iteration, step: "architect" }, () =>
+      runAgentTurn(runtime, {
+        target: boundaryTarget(runtime, "architect", iteration),
+        cwd: runtime.paths.goalCheckout,
+        meta: { iteration, step: "architect", round: 1 },
+        vars: {
+          turn,
+          iteration: String(iteration),
+          intent_path: path.join(runtime.store.goalDir, "intent.md"),
+          plan_path: path.join(runtime.store.goalDir, "plan.md"),
+          checkout: runtime.paths.goalCheckout,
+          pack_path: path.join(runtime.store.goalDir, packRel),
+          digest_path: digestPath ?? "",
+          steers: formatSteers(forArchitect),
+        },
+        expectation: KERNEL_TURN_STEPS.architect,
+        session: resume,
+        settle: async (_record, outcome, live) => {
+          if (!live || outcome?.decision !== "continue") return {};
+          const compacted = await compactSession(runtime, live);
+          if (!compacted) return {};
+          return {
+            session: compacted.session,
+            ...(compacted.usage ? { compactUsage: compacted.usage } : {}),
+          };
+        },
+      }),
+    );
 
   let result = await architectTurn(session);
   // An infra death is not a goal decision. Retry once de novo: the prompt is
@@ -610,14 +619,18 @@ export async function runBoundary(
   // R14: the plan gets a second reading after the architect turn. The review
   // is advisory and fresh; its findings reach the architect in the next pack.
   // Pre-flight requires the reviewer alias, so this step cannot be skipped.
-  await runPlanReview(runtime, { iteration, packRel });
+  await runBoundaryTurn(runtime, { iteration, step: PLAN_REVIEW_STEP }, () =>
+    runPlanReview(runtime, { iteration, packRel }),
+  );
 
-  const pm = await runPm(runtime, {
-    iteration,
-    state,
-    planPath,
-    cwd: runtime.paths.goalCheckout,
-  });
+  const pm = await runBoundaryTurn(runtime, { iteration, step: "pm" }, () =>
+    runPm(runtime, {
+      iteration,
+      state,
+      planPath,
+      cwd: runtime.paths.goalCheckout,
+    }),
+  );
   if (pm.status === "asked") {
     return {
       iteration,

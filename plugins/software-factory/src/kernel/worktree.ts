@@ -415,6 +415,17 @@ interface WorktreeState {
   status: string;
 }
 
+export interface ContainmentOptions {
+  /**
+   * Task turns check the goal artifacts and read merge records to explain a
+   * checkout move. A boundary turn runs in the integration checkout under the
+   * merge lock and owns the goal artifacts (the plan, the tasks, the digest),
+   * so it skips both the artifact state and the merge-record lookup; the
+   * checkout identity checks still run.
+   */
+  mode?: "task" | "boundary";
+}
+
 export interface ContainmentSnapshot {
   branch: string;
   /** Wall-clock start; a record spanning it may still write goal artifacts. */
@@ -425,7 +436,10 @@ export interface ContainmentSnapshot {
   maxSeq: number;
   /** Record directories already sealed at the snapshot; their files are history. */
   sealed: ReadonlySet<string>;
-  /** Every goal artifact except the operator's mailbox channels: path -> hash. */
+  /**
+   * Every goal artifact except the operator's mailbox channels: path -> hash.
+   * Empty in boundary mode, which skips the artifact state.
+   */
   artifacts: ReadonlyMap<string, string>;
   /** The integration branch ref; the merge queue advances it after a merge record. */
   integration: string;
@@ -626,15 +640,15 @@ function summarizePaths(paths: readonly string[]): string {
 async function appendContainmentIncident(
   runtime: KernelRuntime,
   taskWorktree: string,
-  records: readonly StepRecord[],
+  records: readonly StepRecord[] | undefined,
   cause: string,
 ): Promise<void> {
   const slug = path.basename(taskWorktree);
-  const own = records.filter((r) => r.slug === slug);
+  const all = records ?? (await runtime.store.listRecords());
+  const own = all.filter((r) => r.slug === slug);
   const latest = own.at(-1);
   const iteration =
-    latest?.iteration ??
-    records.reduce((max, r) => Math.max(max, r.iteration), 0);
+    latest?.iteration ?? all.reduce((max, r) => Math.max(max, r.iteration), 0);
   await runtime.store.appendRecord(
     {
       iteration,
@@ -657,6 +671,7 @@ async function appendContainmentIncident(
 export async function containmentSnapshot(
   runtime: KernelRuntime,
   taskWorktree: string,
+  opts: ContainmentOptions = {},
 ): Promise<ContainmentSnapshot> {
   const branch = await git(
     taskWorktree,
@@ -666,9 +681,12 @@ export async function containmentSnapshot(
   // Records read before the stamp and the walk: a sibling close whose files
   // land after the walk then still reads as open (in flight), never as a
   // closed record whose concurrent write would be blamed on the turn.
-  const records = await runtime.store.listRecords();
+  const boundary = opts.mode === "boundary";
+  const records = boundary ? [] : await runtime.store.listRecords();
   const at = new Date().toISOString();
-  const artifacts = artifactState(runtime.paths.goalDir);
+  const artifacts = boundary
+    ? new Map<string, string>()
+    : artifactState(runtime.paths.goalDir);
   const integration = await integrationHead(runtime);
   const root = await worktreeState(runtime.paths.repoRoot);
   const checkout = await worktreeState(runtime.paths.goalCheckout);
@@ -691,6 +709,7 @@ export async function containmentViolation(
   taskWorktree: string,
   expectedBranch: string,
   snapshot: ContainmentSnapshot,
+  opts: ContainmentOptions = {},
 ): Promise<string | undefined> {
   const breaches: string[] = [];
   const branch = await git(
@@ -710,23 +729,32 @@ export async function containmentViolation(
   // goal, so records read last explain every move those reads can see.
   const checkout = await worktreeState(runtime.paths.goalCheckout);
   const integration = await integrationHead(runtime);
-  const artifacts = artifactState(runtime.paths.goalDir);
-  const records = await runtime.store.listRecords();
+  const boundary = opts.mode === "boundary";
+  const artifacts = boundary ? undefined : artifactState(runtime.paths.goalDir);
+  // A boundary turn holds the merge lock, so no merge can move the checkout
+  // while it runs: a move the lock did not explain is the turn's own.
+  const records = boundary ? undefined : await runtime.store.listRecords();
   const mergeExplains = (commit: string): boolean =>
-    records.some(
+    records?.some(
       (r) => r.step === "merge" && r.ok !== false && r.commit === commit,
-    );
+    ) ?? false;
 
-  const settledAt = new Date().toISOString();
-  const changedArtifacts = artifactBreaches(snapshot.artifacts, artifacts, {
-    at: snapshot.at,
-    maxSeq: snapshot.maxSeq,
-    inFlight: snapshot.inFlight,
-    sealed: snapshot.sealed,
-    records,
-    declared: runtime.store.declaredWrites(),
-    pmActive: pmWroteDuring(records, snapshot.at, settledAt),
-  });
+  const changedArtifacts =
+    artifacts === undefined || records === undefined
+      ? []
+      : artifactBreaches(snapshot.artifacts, artifacts, {
+          at: snapshot.at,
+          maxSeq: snapshot.maxSeq,
+          inFlight: snapshot.inFlight,
+          sealed: snapshot.sealed,
+          records,
+          declared: runtime.store.declaredWrites(),
+          pmActive: pmWroteDuring(
+            records,
+            snapshot.at,
+            new Date().toISOString(),
+          ),
+        });
   if (changedArtifacts.length > 0) {
     breaches.push(
       `goal artifacts changed outside the worktree in ${runtime.paths.goalDir}: ${summarizePaths(changedArtifacts)}`,

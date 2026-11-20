@@ -19,6 +19,7 @@ import {
   settledTurns,
 } from "./dispatch.js";
 import { runFront } from "./front.js";
+import { runBoundaryTurn } from "./integration-lock.js";
 import {
   type Hold,
   type Steer,
@@ -553,24 +554,31 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
         // delivered to the PM as a steer, and that one turn routes the evidence
         // and any repair it warrants before dispatch.
         if (resume) {
-          digestSteer = await postLaunchDigest(
+          digestSteer = await runBoundaryTurn(
             runtime,
-            iteration,
-            await store.listRecords(),
+            { iteration, step: "digest" },
+            async () =>
+              postLaunchDigest(runtime, iteration, await store.listRecords()),
           );
           if (digestSteer) {
+            const steer = digestSteer;
             const tasks = await store.listTasks();
-            resumeSteerPm = await runSteerPm(runtime, {
-              iteration,
-              state: derive(
-                tasks,
-                await store.listRecords(),
-                runtime.configs.process.flows,
-              ),
-              tasks,
-              steers: [digestSteer],
-              cwd: runtime.paths.goalCheckout,
-            });
+            resumeSteerPm = await runBoundaryTurn(
+              runtime,
+              { iteration, step: "pm" },
+              async () =>
+                runSteerPm(runtime, {
+                  iteration,
+                  state: derive(
+                    tasks,
+                    await store.listRecords(),
+                    runtime.configs.process.flows,
+                  ),
+                  tasks,
+                  steers: [steer],
+                  cwd: runtime.paths.goalCheckout,
+                }),
+            );
           }
         }
         const processedBefore = await processedSteers(store);
@@ -585,7 +593,11 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
             (await architectRouteWaiting(store));
           front = { action: boundaryWaiting ? "boundary" : "dispatch" };
         } else {
-          front = await runFront(runtime, { iteration, state: before });
+          front = await runBoundaryTurn(
+            runtime,
+            { iteration, step: "front" },
+            () => runFront(runtime, { iteration, state: before }),
+          );
           if (front.action === "blocked") {
             const cause = `front turn ended the launch as blocked: ${
               front.cause ?? "unknown cause"
