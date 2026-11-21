@@ -103,7 +103,7 @@ export interface TurnTarget {
  * stored time it may serve again. Dispatch defers the work under this cause
  * instead of calling a tier already known dead.
  */
-function noLiveTierCause(
+export function noLiveTierCause(
   runtime: KernelRuntime,
   aliasName: string,
   chain: readonly ResolvedTier[],

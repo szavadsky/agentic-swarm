@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import path from "node:path";
 import type { AcpxConfig } from "../../src/harness/acpx/config.js";
 import { AcpxHarness } from "../../src/harness/acpx/harness.js";
+import type { Stop } from "../../src/harness/types.js";
 import { createAcpxStub } from "./acpx-stub.js";
 
 const TIMEOUTS = { idleMs: 10_000, wallMs: 30_000 };
@@ -388,14 +389,27 @@ function registerAcpxHarnessPart21(): void {
         binary: stub.binary,
         sessionDir: path.dirname(stub.binary),
         acpx: PI_ACPX,
-        // The quota case retries; default backoff would sleep 1s + 2s.
+        // A quota stop is final; backoff never sleeps.
         retry: { baseDelayMs: 1, maxDelayMs: 1 },
       });
       try {
+        const deadStops: Stop[] = [];
         const result = await harness.turn(
-          request(path.dirname(stub.binary), `[[mode:${testCase.mode}]]`),
+          request(path.dirname(stub.binary), `[[mode:${testCase.mode}]]`, {
+            pool: {
+              live: () => true,
+              dead: (stop: Stop) => deadStops.push(stop),
+            },
+          }),
         );
         expect(testCase.stop(result.stop)).toBe(true);
+        // The adapter forwards the pool, so a quota stop latches it once.
+        if (testCase.mode === "quota") {
+          expect(deadStops).toHaveLength(1);
+          expect(deadStops[0]?.kind).toBe("infra");
+        } else {
+          expect(deadStops).toEqual([]);
+        }
       } finally {
         stub.cleanup();
       }

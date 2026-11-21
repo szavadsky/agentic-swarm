@@ -132,9 +132,24 @@ export function poolResetAt(
 }
 
 /**
- * Latches one pool until `resetAt` and writes every latched pool, so a
- * relaunch reads the same set. The snapshot is taken inside the lock, after
- * the latch, so concurrent stops keep each other's pool.
+ * Latches `pool` until the later of any stored reset and `resetAt`, and returns
+ * the stored value. Synchronous, so a reader sees the latch before any write.
+ */
+export function latchPool(
+  pools: PoolResets,
+  pool: string,
+  resetAt: number,
+): number {
+  const stored = Math.max(pools.get(pool) ?? 0, resetAt);
+  pools.set(pool, stored);
+  return stored;
+}
+
+/**
+ * Latches one pool and writes every latched pool, so a relaunch reads the same
+ * set. The latch lands in memory before the file lock and the snapshot is taken
+ * inside it, so an in-flight reader sees the pool dead without waiting for the
+ * write, and concurrent stops keep each other's pool.
  */
 export async function markPoolExhausted(opts: {
   paths: Pick<GoalPaths, "sessionsDir" | "goalDir">;
@@ -143,8 +158,8 @@ export async function markPoolExhausted(opts: {
   resetAt: number;
 }): Promise<void> {
   const file = quotaPoolsPath(opts.paths);
+  latchPool(opts.pools, opts.pool, opts.resetAt);
   await writes.runExclusive(file, async () => {
-    opts.pools.set(opts.pool, opts.resetAt);
     const pools: Record<string, { resetAt: string }> = {};
     for (const [pool, resetAt] of opts.pools) {
       pools[pool] = { resetAt: new Date(resetAt).toISOString() };

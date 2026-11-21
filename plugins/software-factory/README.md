@@ -304,10 +304,14 @@ A tier that answers quota latches its pool. The stop's stated reset
 (`Resets in 130h19m23s`, `Resets in 33m53s`, `retry-after-ms=38240413`) sets
 that pool's cooldown, capped by `quota.maxResetMinutes` when the run config sets
 one; a stop whose text names no parseable reset falls back to
-`quota.resetMinutes` (default 300) from the stop. A quota stop whose stated wait
-is longer than the retry window skips the bounded retry and moves straight to
-the next model; without a stated wait the bounded retries stand. The launch
-stores the reset time in the goal's session store
+`quota.resetMinutes` (default 300) from the stop. A quota stop is final for the
+pool: a stated wait inside the retry window (`maxDelayMs`, 8 s) sleeps in full
+and retries once, and a quota stop again on that retry latches; a stop naming no
+wait, or a wait beyond the window, latches at once after one call. Every retry
+and every tier call reads the latch, so a latched pool makes no call and a
+later, shorter reset never shortens the stored one. A later tier drawing on a
+different pool is still called. The latch is visible in memory before the store
+write. The launch stores the reset time in the goal's session store
 (`quota-pools.yaml` beside the launch directories, so rotation keeps it), and a
 relaunch before that time skips the pool and starts on the next tier. An alias
 whose every tier is exhausted is unavailable: no harness call is made, and

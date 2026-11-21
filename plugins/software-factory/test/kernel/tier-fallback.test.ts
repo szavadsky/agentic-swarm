@@ -346,7 +346,7 @@ function registerAliasFallbackTiersPart7(): void {
 }
 
 function registerAliasFallbackTiersPart8(): void {
-  it("marks pool exhausted by subscription on quota and leaves another alias on that pool unavailable", async () => {
+  it("latches a shared pool on the first quota stop and makes its fallback call no one", async () => {
     const { repo, goal } = setupFlowRepo({
       aliases: {
         ...BASE_ALIASES,
@@ -370,10 +370,6 @@ function registerAliasFallbackTiersPart8(): void {
       const runtime = await makeRuntime(repo, goal, { a, b });
 
       a.scriptResult(quota());
-      b.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "fallback done" }));
-        return fakeTurnResult(req);
-      });
 
       const spec = {
         target: resolveTurn(runtime, "implementer", "implementer", "alias1"),
@@ -383,8 +379,10 @@ function registerAliasFallbackTiersPart8(): void {
         expectation: "any" as const,
       };
       const res = await runAgentTurn(runtime, spec);
-      expect(res.outcome?.status).toBe("done");
+      expect(res.record.stop).toEqual({ kind: "infra", cause: "quota" });
       expect(runtime.exhaustedPools.has("pool-shared")).toBe(true);
+      // The fallback draws on the same pool the quota stop just latched.
+      expect(b.calls).toHaveLength(0);
 
       // alias2's literal fallback shares pool-shared, so the exhausted pool
       // leaves it with no live tier: nothing is called on the dead pool.
@@ -399,6 +397,49 @@ function registerAliasFallbackTiersPart8(): void {
       expect(target2.unavailable).toContain("pool-shared resets at");
     } finally {
       cleanupFlowRepo(repo);
+    }
+  });
+}
+
+function registerAliasFallbackTiersPart16(): void {
+  it("stops an architect ladder on the first Claude quota stop and keeps that result", async () => {
+    const t = await tierRuntime(
+      { harness: "a", model: "ma-impl" },
+      {
+        architect: {
+          harness: "a",
+          model: "ma-opus",
+          subscription: "claude",
+          fallbacks: [
+            { model: "ma-sonnet", sharesPool: true },
+            { harness: "b", model: "mb-opus", sharesPool: true },
+          ],
+        },
+      },
+    );
+    try {
+      t.a.scriptResult(quota());
+      const result = await runAgentTurn(t.runtime, {
+        // The architect alias's ladder; the implementer prompt renders in this
+        // fixture and the prompt is not what the test is about.
+        target: resolveTurn(t.runtime, "implementer", "architect"),
+        cwd: t.repo.dir,
+        meta: { iteration: 1, slug: "a", step: "architect", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+
+      // The first tier's quota stop decides for the pool: Sonnet and the
+      // second harness' Opus tier make no call, and the quota result survives.
+      expect(result.record.stop).toEqual({ kind: "infra", cause: "quota" });
+      expect(
+        result.record.attempts?.map((attempt) => attempt.model.id),
+      ).toEqual(["ma-opus"]);
+      expect(t.a.calls.map((call) => call.model.id)).toEqual(["ma-opus"]);
+      expect(t.b.calls).toHaveLength(0);
+      expect(t.runtime.exhaustedPools.has("claude")).toBe(true);
+    } finally {
+      cleanupFlowRepo(t.repo);
     }
   });
 }
@@ -419,4 +460,6 @@ describe("alias fallback tiers", () => {
   registerAliasFallbackTiersPart7();
 
   registerAliasFallbackTiersPart8();
+
+  registerAliasFallbackTiersPart16();
 });

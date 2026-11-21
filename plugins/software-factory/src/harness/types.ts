@@ -155,6 +155,17 @@ export interface LiveAgents {
   steer(id: string, message: string): Promise<void>;
 }
 
+/**
+ * One tier's quota pool as the caller sees it. `live()` is the pre-call
+ * decision before every retry and fallback; `dead(stop)` latches the pool the
+ * moment a quota stop is final. The latch lands in memory before the store
+ * write, so a leg already in flight sees it.
+ */
+export interface PoolLatch {
+  live(): boolean;
+  dead(stop: Stop): void;
+}
+
 export interface TurnRequest {
   model: ModelRef;
   effort?: string;
@@ -164,6 +175,11 @@ export interface TurnRequest {
   session?: SessionRef;
   /** Same-harness fallback chain, tried in order after the primary. */
   fallbacks?: ModelRef[];
+  /**
+   * The quota pool this turn draws on. Absent when the caller tracks none: a
+   * quota stop is still final, but there is no latch for another leg to read.
+   */
+  pool?: PoolLatch;
   /** Where a harness without native structured output expects the agent to write its outcome. */
   outcomePath?: string;
   timeouts: { idleMs: number; wallMs: number };

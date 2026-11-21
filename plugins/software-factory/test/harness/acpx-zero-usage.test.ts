@@ -43,13 +43,13 @@ async function test3BothShapesNextFallbackModelRunsNoPart1() {
     modelBehaviors: {
       "opencode-go/primary": {
         sessionInfoError: {
-          httpStatusCode: 429,
+          httpStatusCode: 503,
           message: "Reconnecting... 5/5",
           additionalDetails:
-            "exceeded retry limit, last status: 429 Too Many Requests",
+            "exceeded retry limit, last status: 503 Service Unavailable",
           willRetry: true,
         },
-        reply: "exceeded retry limit, last status: 429 Too Many Requests",
+        reply: "exceeded retry limit, last status: 503 Service Unavailable",
       },
       "opencode-go/fallback": {
         reply: "delivered by fallback",
@@ -88,8 +88,8 @@ async function test3BothShapesNextFallbackModelRunsNoPart2(
     expect(result.attempts).toHaveLength(2);
     expect(result.attempts?.[0]?.stop).toEqual({
       kind: "infra",
-      cause: "quota",
-      details: expect.stringContaining("429 Too Many Requests"),
+      cause: "rate",
+      details: expect.stringContaining("503 Service Unavailable"),
     });
     expect(result.attempts?.[1]?.stop).toEqual({ kind: "done" });
     expect(countOutcomeRepairs(result.attempts ?? [])).toBe(0);

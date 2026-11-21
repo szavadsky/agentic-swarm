@@ -400,6 +400,45 @@ function registerAliasFallbackTiersPart15(): void {
   });
 }
 
+function registerAliasFallbackTiersPart17(): void {
+  it("makes no call when every tier's pool latches after the target was resolved", async () => {
+    const t = await tierRuntime({
+      harness: "a",
+      model: "ma",
+      subscription: "claude",
+      fallbacks: [{ harness: "b", model: "mb" }],
+    });
+    try {
+      const target = resolveTurn(t.runtime, "implementer", "implementer");
+      expect(target.tiers).toHaveLength(2);
+      // Another leg latches both pools between resolution and the first call.
+      latchPool(t.runtime, "claude");
+      latchPool(t.runtime, "b+mb");
+
+      const result = await runAgentTurn(t.runtime, {
+        target,
+        cwd: t.repo.dir,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+
+      const stop = result.record.stop;
+      if (stop === undefined) throw new Error("expected a stop");
+      expect(stop.kind).toBe("infra");
+      if (stop.kind !== "infra") throw new Error("expected an infra stop");
+      expect(stop.cause).toBe("unavailable");
+      expect(stop.details).toContain('alias "implementer" has no live tier');
+      expect(stop.details).toContain("claude resets at");
+      expect(stop.details).toContain("b+mb resets at");
+      expect(t.a.calls).toHaveLength(0);
+      expect(t.b.calls).toHaveLength(0);
+    } finally {
+      cleanupFlowRepo(t.repo);
+    }
+  });
+}
+
 describe("alias fallback tiers", () => {
   registerAliasFallbackTiersPart9();
 
@@ -414,4 +453,6 @@ describe("alias fallback tiers", () => {
   registerAliasFallbackTiersPart14();
 
   registerAliasFallbackTiersPart15();
+
+  registerAliasFallbackTiersPart17();
 });

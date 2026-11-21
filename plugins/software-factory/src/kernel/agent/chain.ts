@@ -2,6 +2,7 @@
 
 import { portable } from "../../harness/types.js";
 import type {
+  PoolLatch,
   ServedUsage,
   SessionRef,
   Stop,
@@ -9,8 +10,13 @@ import type {
   Usage,
 } from "../../harness/types.js";
 import { addUsage, reportsUsage, zeroUsage } from "../../harness/usage.js";
-import { tierPoolKey } from "../flow-context.js";
-import { markPoolExhausted, poolResetAt } from "../quota-pools.js";
+import { noLiveTierCause, tierPoolKey } from "../flow-context.js";
+import {
+  latchPool,
+  markPoolExhausted,
+  poolExhausted,
+  poolResetAt,
+} from "../quota-pools.js";
 import type { KernelRuntime } from "../types.js";
 import type { AgentTurnSpec, ChainResult, ChainState, Tier } from "./types.js";
 
@@ -163,6 +169,28 @@ export function mergeServed(
   return [...byModel].map(([id, usage]) => ({ model: { id }, usage }));
 }
 
+/**
+ * The tier's quota pool, read before every retry, fallback and tier call.
+ * `dead()` latches in memory at once; the store write follows in
+ * `markTierQuota`, so another leg's reader sees the decision first.
+ */
+function tierPool(runtime: KernelRuntime, tier: Tier): PoolLatch {
+  const pool = tierPoolKey(tier);
+  return {
+    live: () => !poolExhausted(runtime.exhaustedPools, pool),
+    dead: (stop) =>
+      latchPool(
+        runtime.exhaustedPools,
+        pool,
+        poolResetAt(
+          runtime.configs.run,
+          Date.now(),
+          stop.kind === "infra" ? stop.details : undefined,
+        ),
+      ),
+  };
+}
+
 /** One tier runs one harness call; a session crosses only when portable. */
 async function runChainTier(
   runtime: KernelRuntime,
@@ -185,6 +213,7 @@ async function runChainTier(
     outcomePath,
     timeouts,
     opaque: turnOpaque(tier.opaque, spec.opaque),
+    pool: tierPool(runtime, tier),
     ...(spec.onLive ? { onLive: spec.onLive } : {}),
   });
 }
@@ -226,10 +255,33 @@ async function markTierQuota(
 }
 
 /**
- * Walks the alias's tiers from `fromIndex`: one harness call per tier, each
- * with its own model, effort and opaque config, advancing on infrastructure
- * stops the tier's own retries could not cure. Every attempt is stamped with
- * the harness that ran it.
+ * The turn no longer has a live tier: every pool latched after the target was
+ * resolved. No harness call may run; the record carries the same cause the
+ * resolver would have named.
+ */
+function noLiveTierResult(
+  runtime: KernelRuntime,
+  spec: AgentTurnSpec,
+): TurnResult {
+  return {
+    stop: {
+      kind: "infra",
+      cause: "unavailable",
+      details: noLiveTierCause(runtime, spec.target.alias, spec.target.tiers),
+    },
+    text: "",
+    usage: zeroUsage(),
+    model: spec.target.model,
+    attempts: [],
+  };
+}
+
+/**
+ * Walks the alias's tiers from `fromIndex`: one harness call per live tier,
+ * each with its own model, effort and opaque config, advancing on
+ * infrastructure stops the tier's own retries could not cure. A tier whose
+ * pool is latched makes no call; every attempt is stamped with the harness
+ * that ran it.
  */
 export async function callChain(
   runtime: KernelRuntime,
@@ -251,6 +303,11 @@ export async function callChain(
   let result: TurnResult | undefined;
   for (;;) {
     const tier = spec.target.tiers[index]!;
+    if (poolExhausted(runtime.exhaustedPools, tierPoolKey(tier))) {
+      if (index + 1 >= spec.target.tiers.length) break;
+      index += 1;
+      continue;
+    }
     result = await runChainTier(
       runtime,
       spec,
@@ -268,8 +325,12 @@ export async function callChain(
     }
     index += 1;
   }
+  if (result === undefined) {
+    result = noLiveTierResult(runtime, spec);
+    absorbChainCall(state, result, spec.target.harness.id);
+  }
   return {
-    result: result!,
+    result,
     endIndex: index,
     attempts: state.attempts,
     usage: state.usage!,
