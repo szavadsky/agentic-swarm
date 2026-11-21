@@ -1,0 +1,79 @@
+{
+  "servers": {
+    "yamlls": {
+      "command": "npx",
+      "args": ["-y", "yaml-language-server", "--stdio"],
+      "fileTypes": [".yaml", ".yml"],
+      "rootMarkers": [".git"],
+      "settings": {
+        "redhat": { "telemetry": { "enabled": false } },
+        "yaml": {
+          "validate": true,
+          "hover": true,
+          "completion": true,
+          "format": { "enable": true },
+          "schemaStore": { "enable": false },
+          "kubernetesCRDStore": { "enable": false },
+          "schemas": {
+            "plugins/software-factory/config/schemas/assignment.schema.json": "assignment.yaml",
+            "plugins/software-factory/config/schemas/checks-result.schema.json": "checks.yaml",
+            "plugins/software-factory/config/schemas/context.schema.json": "context.yaml",
+            "plugins/software-factory/config/schemas/decisions.schema.json": [
+              "decisions/*.yaml",
+              "*consult-*/output.yaml",
+              "*architect-wave-report-*/output.yaml"
+            ],
+            "plugins/software-factory/config/schemas/developer-output.schema.json": [
+              "*-develop-*/output.yaml",
+              "*-test-first-*/output.yaml",
+              "*-poc-*/output.yaml",
+              "*-simple-implement-*/output.yaml",
+              "*-fix-round-*/output.yaml",
+              "*-integrate-*/output.yaml",
+              "*-test-assumptions-*/output.yaml"
+            ],
+            "plugins/software-factory/config/schemas/fact-finder-output.schema.json": [
+              "*-research-*/output.yaml",
+              "*context-pack*/output.yaml"
+            ],
+            "plugins/software-factory/config/schemas/gates-baseline.schema.json": "gates-baseline.yaml",
+            "plugins/software-factory/config/schemas/infra.schema.json": ["infra.yaml", "*-infra-*/output.yaml"],
+            "plugins/software-factory/config/schemas/pipeline.schema.json": [".factory/pipeline.yaml", "pipeline.default.yaml"],
+            "plugins/software-factory/config/schemas/plan-closeup.schema.json": [
+              "closeup-*.yaml",
+              "*plan-close-up-*/output.yaml",
+              "*architect-closeup-*/output.yaml"
+            ],
+            "plugins/software-factory/config/schemas/plan-edits.schema.json": [
+              "edits-*.yaml",
+              "*pm-edits-*/output.yaml",
+              "*pm-amend-*/output.yaml",
+              "*pm-single-item-*/output.yaml"
+            ],
+            "plugins/software-factory/config/schemas/plan.schema.json": [
+              "plan-*.yaml",
+              "*architect-plan-*/output.yaml",
+              "*architect-revise-*/output.yaml"
+            ],
+            "plugins/software-factory/config/schemas/project.schema.json": "project.yaml",
+            "plugins/software-factory/config/schemas/review.schema.json": [
+              "*-review-*/output.yaml",
+              "*-qa-*/output.yaml",
+              "*plan-review-*/output.yaml",
+              "*-review-output.yaml"
+            ],
+            "plugins/software-factory/config/schemas/state.schema.json": "state.yaml",
+            "plugins/software-factory/config/schemas/steer-classification.schema.json": "*.classification.yaml",
+            "plugins/software-factory/config/schemas/steer-item.schema.json": "q-*.yaml",
+            "plugins/software-factory/config/schemas/step-meta.schema.json": "meta.yaml",
+            "plugins/software-factory/config/schemas/triage.schema.json": ["triage.yaml", "*-triage-*/output.yaml"],
+            "plugins/software-factory/config/schemas/wave-closeup.schema.json": [
+              "wave-*.yaml",
+              "*wave-close-up-*/output.yaml"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
