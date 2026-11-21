@@ -5,6 +5,7 @@ import path from "node:path";
 import { isAncestor } from "../../core/git/commit.js";
 import { GitError, git } from "../../core/git/exec.js";
 import { parseWorktreeList } from "../../core/git/status.js";
+import { reapGateProcesses } from "../gates.js";
 import type { KernelRuntime } from "../types.js";
 import type { MergeAttempt } from "./types.js";
 
@@ -226,6 +227,7 @@ async function removeOwnWorktrees(
       resolved === path.resolve(ownScratch) ||
       resolved.startsWith(path.resolve(ownTasks) + path.sep);
     if (!own) continue;
+    await reapGateProcesses(resolved);
     await git(repoRoot, ["worktree", "remove", "--force", resolved], {
       allowFail: true,
     });
@@ -244,6 +246,7 @@ async function ensureIntegrationCheckout(
   );
   if (!registered.includes(path.resolve(goalCheckout))) {
     if (fs.existsSync(goalCheckout)) {
+      await reapGateProcesses(goalCheckout);
       fs.rmSync(goalCheckout, { recursive: true, force: true });
     }
     if (await branchExists(runtime, integrationBranch)) {
@@ -267,6 +270,7 @@ async function ensureIntegrationCheckout(
     { allowFail: true },
   );
   if (current.code !== 0 || current.stdout.trim() !== integrationBranch) {
+    await reapGateProcesses(goalCheckout);
     await git(repoRoot, ["worktree", "remove", "--force", goalCheckout], {
       allowFail: true,
     });
@@ -307,6 +311,7 @@ export async function removeMergeScratch(
   runtime: KernelRuntime,
 ): Promise<void> {
   const scratch = mergeScratchPath(runtime);
+  await reapGateProcesses(scratch);
   await runtime.repo.writeLock.runExclusive(async () => {
     await git(
       runtime.paths.repoRoot,
