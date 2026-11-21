@@ -5,6 +5,7 @@ import path from "node:path";
 import { runWorktreeSetup } from "../../core/checks/setup.js";
 import type { SetupResult } from "../../core/checks/setup.js";
 import { git } from "../../core/git/exec.js";
+import { reapGateProcesses } from "../gates.js";
 import type { KernelRuntime, TaskFile } from "../types.js";
 import type { EnsuredWorktree, WorktreeCreation } from "./types.js";
 import {
@@ -38,6 +39,7 @@ async function createTaskWorktree(
   startPoint: string,
 ): Promise<WorktreeCreation> {
   if (fs.existsSync(wtPath)) {
+    await reapGateProcesses(wtPath);
     fs.rmSync(wtPath, { recursive: true, force: true });
   }
   fs.mkdirSync(path.dirname(wtPath), { recursive: true });

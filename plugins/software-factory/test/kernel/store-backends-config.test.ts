@@ -112,6 +112,37 @@ describe("artifact backend config", () => {
       repo.cleanup();
     }
   });
+
+  it("refuses the repository itself as a same-repo artifacts root", () => {
+    const repo = createTmpRepo();
+    try {
+      for (const root of [".", "./", "artifacts/.."]) {
+        expect(() =>
+          resolveGoalPaths(
+            writeBackendRoot(repo, "same-repo", root),
+            repo.dir,
+            "demo",
+          ),
+        ).toThrow(/inside the repository/);
+      }
+      repo.writeFile(
+        ".factory/repo.yaml",
+        "baseBranch: main\nartifactRoot: .\nartifacts: { backend: same-repo }\n",
+      );
+      expect(() =>
+        resolveGoalPaths(loadConfigs(repo.dir), repo.dir, "demo"),
+      ).toThrow(/inside the repository/);
+      const folder = resolveGoalPaths(
+        writeBackendRoot(repo, "folder", "."),
+        repo.dir,
+        "demo",
+      );
+      expect(folder.artifacts).toEqual({ backend: "folder", root: repo.dir });
+      expect(folder.goalDir).toBe(path.join(repo.dir, "demo"));
+    } finally {
+      repo.cleanup();
+    }
+  });
 });
 
 describe("artifact backend writes", () => {

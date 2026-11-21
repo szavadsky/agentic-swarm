@@ -14,6 +14,8 @@ interface RunProcessOptions {
   stdin?: string;
   /** Aborts the child (group SIGTERM, then SIGKILL) and resolves with `aborted`. */
   signal?: AbortSignal;
+  /** Receives the child's pid once its process group exists; not on spawn failure. */
+  onSpawn?: (pid: number) => void;
 }
 
 export interface ProcessResult {
@@ -252,6 +254,8 @@ class ProcessRun {
     }
     this.child = spawned.child;
     registerGrouped(this.child);
+    const pid = this.child.pid;
+    if (pid && pid > 0) this.options.onSpawn?.(pid);
     this.wireStreams();
     writeStdin(this.child, this.options.stdin);
     this.wireAbort();

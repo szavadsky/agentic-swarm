@@ -421,6 +421,11 @@ describe("prompt debloat", () => {
       ["reviewer", 'a claimed "pre-existing" failure is a finding'],
       ["digest", "at most 80 lines"],
       ["plan-checker", "MUST report honestly"],
+      [
+        "plan-checker",
+        "Never report a `missing-dep` follow-up for a dependency satisfied this way",
+      ],
+      ["plan-checker", "name that parked slug under `cancel`"],
       ["steward", "Never rebase"],
     ];
     for (const [role, phrase] of keeps) {

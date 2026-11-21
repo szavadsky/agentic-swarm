@@ -11,6 +11,12 @@ Decide whether mechanical follow-ups can still move the plan forward with net po
 3. Read the recorded gate result at `last gate record` in the turn block. A red gate there is a genuine failure: dig into it, never sidestep it. The gates are not yours to run: when no record exists, report the gate evidence as `unverifiable`.
 4. Record one evidence entry per plan item: the item, its standing (`done`, `missing`, `below-standard`, `unverifiable`), and what you inspected plus what you saw.
 
+## Dependencies
+
+A task's status already accounts for its `deps`, and a continuation is a task whose file names the parked or cancelled slug as `base`. A dependency is satisfied when it, or a task continuing it through `base` transitively, is `merged` or `finished`. Never report a `missing-dep` follow-up for a dependency satisfied this way.
+
+`missing-dep` is for a dependency no task file declares or a cancelled one with no merged or finished continuation. A parked dep with no merged or finished continuation is live work, not a missing task: name that parked slug under `cancel`, never a `missing-dep` on its dependent.
+
 ## Verdict
 
 - `progress` — mechanical follow-ups exist whose landed value outweighs their task-tier cost: `amend` a park whose direction is clear, `replace` a mechanical park under a new slug, `split` one holding separable outcomes, `cancel` work no longer worth an attempt, a missing dependency that restores dispatchability, done work left unmerged. Name each follow-up with its kind, slug, and reason.
