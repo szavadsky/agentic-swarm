@@ -78,6 +78,19 @@ function readGoal(goalDir: string, rel: string): string {
   return fs.readFileSync(path.join(goalDir, rel), "utf8");
 }
 
+/** The boundary's steer turn: route the pending steer to the architect. */
+function routesSteerToArchitect(harness: FakeHarness, steer: string): void {
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(
+      outcome({
+        summary: `${steer} goes to the architect`,
+        steerRoutes: [{ steer, route: "architect" }],
+      }),
+    );
+    return fakeTurnResult(req);
+  });
+}
+
 describe("artifact single location", () => {
   it("writes no artifact content at two paths in one iteration with a spike and a steer", async () => {
     const goal = makeGoal();
@@ -98,6 +111,7 @@ async function writesNoArtifactContentAtTwoPathsPart1(
   await postSteer(store, "s1", STEER);
 
   const harness = new FakeHarness({ id: "fake" });
+  routesSteerToArchitect(harness, "s1");
   // Architect: edits the plan (the steer's constraint) and answers the steer.
   harness.script((req, ctx) => {
     expect(req.prompt).toContain("Keep the finding short");

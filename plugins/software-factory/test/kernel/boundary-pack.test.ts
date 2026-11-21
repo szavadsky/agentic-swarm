@@ -11,16 +11,15 @@ import {
   contextDataRelPath,
   contextPackRelPath,
 } from "../../src/kernel/context-pack.js";
+import { postSteer } from "../../src/kernel/mailbox.js";
 import { PACK_PREP_STEP } from "../../src/kernel/pack-prep.js";
 import {
   latestPlanReview,
   PLAN_REVIEW_STEP,
 } from "../../src/kernel/plan-review.js";
-import type { Outcome } from "../../src/kernel/types.js";
-import { postSteer } from "../../src/kernel/mailbox.js";
-import { rec, task, cause, causeText } from "./helpers.js";
 import { scriptMeta } from "../../src/kernel/record.js";
 import { createFolderStore, recordDirName } from "../../src/kernel/store.js";
+import type { Outcome } from "../../src/kernel/types.js";
 import {
   cleanup,
   launch,
@@ -31,13 +30,14 @@ import {
   writePlan,
   writeTask,
 } from "./e2e-helpers.js";
+import { cause, causeText, rec, task } from "./helpers.js";
 
 import {
   cleanupFlowRepo,
   makeRuntime,
   setupFlowRepo,
-  writeTask as writeRuntimeTask,
   whenTurn,
+  writeTask as writeRuntimeTask,
 } from "./s2-helpers.js";
 import { writeHold } from "./steer-helpers.js";
 
@@ -82,6 +82,15 @@ describe("boundary ready aging", () => {
 
       const planPath = path.join(runtime.store.goalDir, "plan.md");
       fs.writeFileSync(planPath, "# Plan\n\n## landed\n", "utf8");
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({
+            summary: "note routed to the architect",
+            steerRoutes: [{ steer: "note", route: "architect" }],
+          }),
+        );
+        return fakeTurnResult(req);
+      });
       harness.script((req, ctx) => {
         fs.appendFileSync(planPath, "\n## next\n", "utf8");
         ctx.writeOutcome(
@@ -201,6 +210,15 @@ async function namesReadySpikeHeldByOwnSteerAtPart1(
 
   const planPath = path.join(runtime.store.goalDir, "plan.md");
   fs.writeFileSync(planPath, "# Plan\n\n## landed\n", "utf8");
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(
+      outcome({
+        summary: "spike steer routed to the architect",
+        steerRoutes: [{ steer: "no-outcome-forensics", route: "architect" }],
+      }),
+    );
+    return fakeTurnResult(req);
+  });
   harness.script((req, ctx) => {
     fs.appendFileSync(planPath, "\n## next\n", "utf8");
     ctx.writeOutcome(

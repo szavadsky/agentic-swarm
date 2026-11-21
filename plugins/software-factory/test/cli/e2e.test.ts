@@ -87,6 +87,18 @@ async function capturedLog(
 function alphaRun(goalDir: string, taskDir: string): FakeHarness {
   const harness = new FakeHarness({ id: "fake" });
   harness.script((req, ctx) => {
+    ctx.writeOutcome(
+      outcome({
+        summary: "steers go to the architect",
+        steerRoutes: inboxIds(goalDir).map((id) => ({
+          steer: id,
+          route: "architect",
+        })),
+      }),
+    );
+    return fakeTurnResult(req);
+  });
+  harness.script((req, ctx) => {
     const ids = inboxIds(goalDir);
     fs.writeFileSync(path.join(goalDir, "plan.md"), PLAN, "utf8");
     ctx.writeOutcome(

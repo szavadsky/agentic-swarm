@@ -231,6 +231,7 @@ async function resumesBlockedFrontGoalWaitingPart1(goal: E2EGoal) {
   );
 
   scriptDigest(harness, goal.goalDir, 2);
+  routesSteerToArchitect(harness, "s1");
   harness.script((req, ctx) => {
     expect(req.prompt).toContain("You are the architect");
     expect(req.prompt).toContain(
@@ -745,6 +746,19 @@ function registerFrontLadderPart10(): void {
   }, 90_000);
 }
 
+/** The boundary's steer turn: route the pending steer to the architect. */
+function routesSteerToArchitect(harness: FakeHarness, steer: string): void {
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(
+      outcome({
+        summary: `${steer} goes to the architect`,
+        steerRoutes: [{ steer, route: "architect" }],
+      }),
+    );
+    return fakeTurnResult(req);
+  });
+}
+
 /** Asserts the pending steer bypassed front and implement for the architect. */
 function expectSteeredToArchitect(
   goal: ReturnType<typeof makeGoal>,
@@ -765,7 +779,7 @@ function expectSteeredToArchitect(
       "utf8",
     ),
   ).toContain("the API stays stable");
-  expect(harness.calls).toHaveLength(1);
+  expect(harness.calls).toHaveLength(2);
 }
 
 function registerFrontLadderPart11(): void {
@@ -786,6 +800,7 @@ function registerFrontLadderPart11(): void {
       );
 
       const harness = new FakeHarness({ id: "fake" });
+      routesSteerToArchitect(harness, "s1");
       harness.script((req, ctx) => {
         expect(req.prompt).toContain("You are the architect");
         expect(req.prompt).toContain(

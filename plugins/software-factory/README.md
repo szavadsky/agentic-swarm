@@ -395,9 +395,14 @@ Gates run once on the base; a red base is recorded and warned once, not fatal.
 ## Steering
 
 `factory steer --goal demo notes.md` (or `-` for stdin) puts the file in
-`mailbox/inbox` without a partial-file window. The architect reads it at the
-next boundary, marks it processed and writes its answer to
-`mailbox/outbox/steer-<id>.md`.
+`mailbox/inbox` without a partial-file window. A steer that arrives while
+dispatch runs gets one PM steer turn at the next poll. A steer that arrives
+while nothing is in flight takes the same PM turn at the next boundary, before
+the architect: the PM answers it, writes its task or spike, routes it to the
+intent agent, or hands it to the architect. An `intent` route is carried into
+`intent.md` first, and the architect's pack shows the diff and the steer
+record. A steer the PM cannot route reaches the architect, who marks it
+processed and writes its answer to `mailbox/outbox/steer-<id>.md`.
 
 A steer whose file starts with `urgent: true` frontmatter is the exception: it
 is not answered by the PM. Dispatch stops starting new work, in-flight tasks
