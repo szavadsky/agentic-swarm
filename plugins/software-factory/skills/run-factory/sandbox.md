@@ -53,6 +53,5 @@ Before a launch:
 4. Entries in `envAllowlist` are the credentials the harnesses actually need,
    nothing more.
 
-See [../README.md](../README.md) for the config layers and
-[../skills/run-factory/SKILL.md](../skills/run-factory/SKILL.md) for the run
-walkthrough.
+See [../../README.md](../../README.md) for the config layers and
+[SKILL.md](SKILL.md) for the run walkthrough.
