@@ -24,8 +24,8 @@ import { makeCause } from "./cause.js";
 import {
   type ContextPackInput,
   forwardedConcerns,
+  goalDebtRecords,
   readyAging,
-  recordsForAudience,
   renderContextData,
   renderContextPack,
 } from "./context-pack.js";
@@ -387,7 +387,7 @@ async function packGovernance(
       audience: { kind: "goal" },
     }),
     debts: openDebts(
-      recordsForAudience(context.records, context.tasks, { kind: "goal" }),
+      goalDebtRecords(context.records, context.tasks, context.state.epics),
       planText,
     ),
     runConfigPath: context.opts.runConfigPath,
