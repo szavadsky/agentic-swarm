@@ -1,17 +1,22 @@
 # Agentic software factory — INTENT
 
-**Intent** is the WHAT and its invariants; it changes only by owner decision. **Notes on implementation** are the HOW, shiftable on real behavior. Status and evidence do not live here — they live in iteration summaries and the dashboard. Two exceptions, both owner-confirmed and deleted once fixed: *Concerns and contradictions* at the end of the notes — points where the current build falls short of the intent — and *Observed* lines under a note — concrete cases (code path, record, number) where the current build shows why that mechanic matters — each followed, where the direction is clear, by an *Improve* line: the direction of the fix, not a plan.
+**Intent** is the WHAT and its invariants; it changes only by owner decision. **Mechanics** are the HOW, shiftable on real behavior. Status and evidence do not live here — they live in iteration summaries and the dashboard.
+*Concerns and contradictions* at the end of the notes — points where the current build falls short of the intent — and *Observed* lines under a note — concrete cases (code path, record, number) where the current build shows why that mechanic matters — each followed, where the direction is clear, by an *Improve* line: the direction of the fix, not a plan.
+s.
 
-This document supersedes `bootstrap/context/factory.v2.md` and the design of `plugins/software-builder` wherever they contradict it. Components and code are reusable; everything in v2 not rejected here is worth consideration — intent, principles and practical observation decide. Avoid ceremony; stay focused on practical tasks.
+
 
 ## Intent
 
 Modern harnesses deliver a decent story (several hundred lines of code). The agentic software factory is an orchestration framework on top of harnesses that delivers up to a saga (an entire product) or a major refactoring — token-efficient, slop-free, steerable, observable, autonomous, scalable from a trivial edit to a saga. One goal may span many epics and tens of tasks per iteration, across multiple resumable iterations; no size ceiling.
 
 - Stop in the middle, relaunch — it keeps going; no architect intervention required.
-- The saga flow (hierarchy) is required and built as specified.
-- Language agnostic: the factory is built in TypeScript, but target repos may use any language and toolchain; nothing in the kernel assumes one.
-
+- Auto scales from "trivial" to "task" to "epic" to "saga"
+- Harness agnostic 
+- Configurable for different flows and type of projects, from
+   - software delivery: stack, testing and build framework agnostic
+   - Chip and industrial design
+   - 
 ### Model economics
 - Architect-tier (expensive) models do only what a human architect does: convert intent into actionable but directional plans, directional interfaces, key-algorithm direction, tradeoffs above task level. They are called with a prepared context pack and work agentically and subagentically — launching scouts/tasks and waiting for them is fine, with no limits on them. They write no code beyond key interfaces and no verbose documents. Each architect produces one markdown plan, written for architect/reviewer friendliness and efficiency — never schema-consistent files; maintaining file schemas is not architect work.
 - The architect's plan is reviewed for impracticality, unclarity and rule violations — real bugs are not unusual. Which model reviews is config: task tier or frontier, always from a fresh context. The review is advisory input, not a veto: the architect considers it, and "consider" spans the full range — from ignoring it on a factual judgement, to clarifying the plan, to realizing "oops" and changing it. During self-improvement the architect samples whether the review was helpful (one issue caught earlier reduces work 10x).
@@ -183,7 +188,7 @@ Modern harnesses deliver a decent story (several hundred lines of code). The age
 ### Delivery
 - The factory is a plugin with a skill "run factory": where to put the intent, how to configure, what to launch, what to see, where the user sees the HTML; kernel and config are skill resources.
 
-## Notes on implementation
+## Mechanics
 
 ### Loop causes designed out
 - Over-prescription and mechanical checks on agent output (e.g. which files changed) create loops and no value. A turn is judged by what the agent delivers, the gates and the review; a check on agent output stays only on evidence that it prevents real defects.
