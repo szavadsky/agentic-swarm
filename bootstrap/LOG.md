@@ -879,3 +879,7 @@ Verbatim, newest last; each with what it changed.
 - Legs: deepseek 12t $1.03, hy4 18t $0, ernie 7t $0, sonnet 1t $0.12, deepseek-free 1t $0 (opencode packprep), opus 1t unpriced (architect 01247). Cost $1.15 partial ($0.13/merge, cheapest). 40 agent + 68 script turns. Incidents: 0 infra retries, 3 fallback hops, 0 outcome-repairs, 0 conflicts, 0 flakes, 1 empty-diff, 1 loop; 0 failures (2 QA + 1 reviewer glitches). Work: 168 files +18349/-15815, 81 runs/16 gates, gate wall 6004s.
 - Friction: pm-validate file-size-tests dep-edit invalid-outcomes x2 (PM/plancheck friction); J-slice integration rule assumption (slices ordered over shared files). Landing gates 1592/0 (589s — suite keeps slowing, noted in steer).
 - Operator: STOP + report (single iteration order, no auto-loop).
+
+### 2026-11-21 — RED PROMOTION 1034c7a7f788 (2nd, owner ruling: promote always)
+- promote.sh refused (exit 1): "per-gate walls > runs the tests gate with its declared 1800 s wall and an undeclared gate with 900 s" fails on the snapshot copy; live tree green (landing gates 1592/0). Snapshot-only failure, 2nd consecutive promote refusal (previous: run-factory-skill sandbox page). Pattern: packaging-sensitive tests (docs-rm? wall-config in snapshot layout?) red on export while green live.
+- Operator manually promoted per ruling (faithful replication: archive rev 1034c7a7, install + typecheck green, suite recorded 1 fail), moved pin, repointed current, pruned old. Pin 1034c7a7f788 LIVE with 1 known snapshot-only failure. Steered with test notes.
