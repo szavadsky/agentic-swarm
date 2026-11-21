@@ -25,6 +25,7 @@ import {
   type ContextPackInput,
   forwardedConcerns,
   goalDebtRecords,
+  type PlanReviewPack,
   readyAging,
   renderContextData,
   renderContextPack,
@@ -55,7 +56,7 @@ import {
 } from "./plan-check.js";
 import { goalPlan } from "./plan-file.js";
 import { latestPlanReview } from "./plan-review.js";
-import { runSteerPm } from "./pm.js";
+import { planBulletEditFindings, runSteerPm } from "./pm.js";
 import { scriptMeta } from "./record.js";
 import type { KernelRuntime } from "./types.js";
 import { integrationHead } from "./worktree.js";
@@ -393,7 +394,30 @@ async function packGovernance(
     runConfigPath: context.opts.runConfigPath,
     openRecords: await openRecords(runtime.store),
     planCheck: latestPlanCheck(context.records),
-    planReview: latestPlanReview(context.records),
+    planReview: await planReviewWithKernel(context),
+  };
+}
+
+/**
+ * The latest reviewer findings plus the kernel's open-bullet edits. A plan
+ * return answers the reviewer findings; an edit no reviewer raised still has
+ * to reach the architect, and a config without a return turn reads it here.
+ */
+async function planReviewWithKernel(
+  context: ConsultContext,
+): Promise<PlanReviewPack | undefined> {
+  const review = latestPlanReview(context.records);
+  const kernel = await planBulletEditFindings(
+    context.runtime,
+    context.tasks,
+    context.state,
+  );
+  if (!review && kernel.length === 0) return undefined;
+  return {
+    iteration: review?.iteration ?? context.iteration,
+    reviewers: review?.reviewers ?? [],
+    technical: [...(review?.technical ?? []), ...kernel],
+    planNotes: review?.planNotes ?? [],
   };
 }
 

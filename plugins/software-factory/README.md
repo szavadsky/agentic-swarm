@@ -200,6 +200,14 @@ iteration. With `never`, the findings reach the next architect's pack, which
 asks for the same marks. The return runs on the architect boundary step's
 alias; its prompt is `planReturn.prompt`.
 
+The kernel adds one technical finding of its own: an in-place edit to the
+bullet of a task whose file already exists. A task file is immutable outside
+amend, so the finding names the one sanctioned fix — `cancelled:` plus a new
+slug, or a `base` continuation — instead of letting the edit drop. The derive
+turn stores each plan's bullets in `iterations/<n>/plan-bullets.json`; the
+comparison catches a bullet or any of its nested lines. New, merged, cancelled
+and unchanged bullets are not findings.
+
 A flow step may name `alternates: [<alias>…]` to change the model on retry:
 the step's alias runs first, and after each failure-kind launch — no outcome
 after the reminders, an agent-declared `failed`/`blocked`, or fix rounds
