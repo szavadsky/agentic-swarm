@@ -24,6 +24,19 @@ import type { GateConfig, GatePattern, KernelRuntime } from "./types.js";
 
 export const GATE_TIMEOUT_SEC = 900;
 
+/**
+ * The wall one gate runs under: its declared `timeoutSec` when that is a
+ * positive finite number, else the shared default. `runProcess` treats zero or
+ * a negative wall as no timeout at all, so an invalid declaration must land on
+ * the ceiling rather than disable it.
+ */
+export function gateTimeoutSec(gate: Pick<GateConfig, "timeoutSec">): number {
+  const wall = gate.timeoutSec;
+  return typeof wall === "number" && Number.isFinite(wall) && wall > 0
+    ? wall
+    : GATE_TIMEOUT_SEC;
+}
+
 export {
   GATE_OUTPUT_CAP,
   capGateOutput,
@@ -109,7 +122,7 @@ function runGateCommand(
         cmd: command,
         cwd,
         env,
-        timeoutSec: GATE_TIMEOUT_SEC,
+        timeoutSec: gateTimeoutSec(gate),
         maxOutputBytes: GATE_OUTPUT_CAP * 4,
       });
     }
@@ -192,13 +205,14 @@ function gatePassed(
 
 /** The one line a fix turn reads: why the gate is red, or `pass`. */
 function gateSummary(
+  gate: GateConfig,
   res: ProcessResult,
   parsed: ParsedJunit | undefined,
   junitError: string | undefined,
   ok: boolean,
 ): string {
   if (ok) return "pass";
-  if (res.timedOut) return `timed out after ${GATE_TIMEOUT_SEC}s`;
+  if (res.timedOut) return `timed out after ${gateTimeoutSec(gate)}s`;
   if (res.code === 126 || res.code === 127) return `exit ${res.code}`;
   if (junitError) return junitError;
   if (parsed) return junitSummary(parsed, res.code);
@@ -258,7 +272,7 @@ export async function runDeclaredGate(
     check: {
       name: gate.id,
       ok,
-      summary: gateSummary(res, parsed, junitError, ok),
+      summary: gateSummary(gate, res, parsed, junitError, ok),
       output: capped.output,
       fingerprint: fingerprintText(
         `${gate.id}:${junitIdentity(parsed) || capped.output}`,

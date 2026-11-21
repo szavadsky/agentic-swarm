@@ -1034,6 +1034,11 @@ export interface GateConfig {
    * exits; `pattern` names a runner whose printed failures the kernel reads.
    */
   format?: { junit?: string; pattern?: GatePattern };
+  /**
+   * Wall for this gate's command, in seconds. Absent or not a positive finite
+   * number falls back to `GATE_TIMEOUT_SEC`; it never disables the timeout.
+   */
+  timeoutSec?: number;
 }
 
 /**

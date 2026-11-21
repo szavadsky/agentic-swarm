@@ -33,6 +33,7 @@ export interface FlowRepoOptions {
     serial?: string[];
     env?: Record<string, string>;
     format?: { junit?: string; pattern?: "pytest" | "jest" | "cargo" };
+    timeoutSec?: number;
   }[];
   setup?: string[];
   /** Raw `.factory/process.yaml` override. */
@@ -142,6 +143,7 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
         ...(g.serial ? { serial: g.serial } : {}),
         ...(g.env ? { env: g.env } : {}),
         ...(g.format ? { format: g.format } : {}),
+        ...(g.timeoutSec !== undefined ? { timeoutSec: g.timeoutSec } : {}),
       })),
       ...(opts.identity ? { identity: opts.identity } : {}),
     }),

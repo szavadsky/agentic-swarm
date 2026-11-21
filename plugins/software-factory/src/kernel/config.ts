@@ -51,6 +51,8 @@ const gateSchema = z
     id: z.string().min(1),
     command: z.string().min(1),
     serial: z.array(z.string().min(1)).default([]),
+    /** Per-gate wall in seconds; non-positive falls back to the 900 s default. */
+    timeoutSec: z.number().optional(),
     env: z
       .record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), gateEnvDirSchema)
       .optional(),

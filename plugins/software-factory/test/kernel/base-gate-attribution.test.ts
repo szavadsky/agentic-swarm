@@ -4,6 +4,7 @@ import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { formatBaseGates } from "../../src/kernel/baseline.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
+import { isInfraCheck } from "../../src/kernel/gates.js";
 import { preflight } from "../../src/kernel/preflight.js";
 import { task } from "./helpers.js";
 import {
@@ -41,6 +42,32 @@ describe("base gate status", () => {
       "base abcdef1234 was red before any task (pre-existing):\n### package: exit 1\nmissing fixed.txt",
     );
   });
+});
+
+describe("base gate walls", () => {
+  it("records a timed-out base gate under its declared wall as infra", async () => {
+    const { repo, goal } = setupFlowRepo({
+      gates: [{ id: "slow", command: "sleep 5", timeoutSec: 0.2 }],
+    });
+    try {
+      const runtime = await makeRuntime(repo, goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      const pre = await preflight({
+        configs: runtime.configs,
+        paths: runtime.paths,
+        store: runtime.store,
+        harnesses: runtime.harnesses,
+      });
+      expect(pre.base?.infra).toBe(true);
+      expect(pre.base?.ok).toBe(false);
+      const [slow] = pre.base!.checks;
+      expect(slow?.summary).toBe("timed out after 0.2s");
+      expect(isInfraCheck(slow!)).toBe(true);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
 });
 
 describe("base gate attribution", () => {
