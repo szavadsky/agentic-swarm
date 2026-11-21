@@ -207,7 +207,6 @@ export function writeTask(goalDir: string, text: string): void {
   fs.writeFileSync(path.join(goalDir, "tasks", `${slug}.md`), text, "utf8");
 }
 
-/** Scripts the optional digest scout: it annotates the table the script already wrote. */
 /** The boundary's steer turn: route each pending steer to the architect. */
 export function scriptSteerRoutes(
   harness: FakeHarness,
@@ -224,6 +223,7 @@ export function scriptSteerRoutes(
   });
 }
 
+/** Scripts the optional digest scout: it annotates the table the script already wrote. */
 export function scriptDigest(
   harness: FakeHarness,
   goalDir: string,
