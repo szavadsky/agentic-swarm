@@ -858,8 +858,8 @@ export interface RecordStore {
   /** Absolute path of one of the record's files. */
   file(record: StepRecord, name: RecordFile): string;
   /**
-   * The reviewer prompt's `checks_log`: the pre-existing
-   * `<records>/<iteration>/<slug>/<step>` layout, not a record directory.
+   * The reviewer prompt's `checks_log`: the record's own directory, which the
+   * store materialized when the record started.
    */
   checksLog(record: StepRecord): string;
   /** Every record directory on disk, in name order. */

@@ -313,13 +313,7 @@ class FolderStore implements ArtifactStore {
     return {
       dir: (record) => this.recordDirOf(record),
       file: (record, name) => path.join(this.recordDirOf(record), name),
-      checksLog: (record) =>
-        path.join(
-          this.recordsDir,
-          String(record.iteration),
-          record.slug ?? "unknown",
-          record.step,
-        ),
+      checksLog: (record) => this.recordDirOf(record),
       dirs: () => this.recordDirs(),
       list: () => this.listRecords(),
       start: (meta) => this.startRecord(meta),

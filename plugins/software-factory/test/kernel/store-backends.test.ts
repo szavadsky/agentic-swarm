@@ -72,6 +72,11 @@ describe("KERNEL0 scenario over every artifact backend", () => {
               "utf8",
             ),
           ).toContain("*");
+          const checks = records.find(
+            (record) => record.slug === "alpha" && record.step === "checks",
+          );
+          expect(checks).toBeDefined();
+          expect(fs.existsSync(store.records.checksLog(checks!))).toBe(true);
         }
 
         if (backend === "same-repo") {

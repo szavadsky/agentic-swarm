@@ -5,7 +5,6 @@
  * reconciliation.
  */
 import fs from "node:fs";
-import path from "node:path";
 import { git } from "../core/git/exec.js";
 import { formatCause, makeCause } from "./cause.js";
 import {
@@ -59,16 +58,16 @@ export async function previousWaste(
 }
 
 /** The previous iteration's summary for one epic, when it has one. */
-export function previousEpicSummary(
-  goalDir: string,
+export async function previousEpicSummary(
+  store: ArtifactStore,
   iteration: number,
   epic: string,
-): string | undefined {
+): Promise<string | undefined> {
   if (iteration <= 0) return undefined;
   const rel = epicSummaryRelPath(iteration, epic);
-  return fs.existsSync(path.join(goalDir, rel))
-    ? path.join(goalDir, rel)
-    : undefined;
+  return (await store.readFile(rel)) === null
+    ? undefined
+    : store.pathOf({ area: "goal", rel });
 }
 
 /** Every registered plan's text: the ownership view a debt register reads. */

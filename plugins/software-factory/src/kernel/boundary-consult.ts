@@ -91,8 +91,8 @@ async function epicPackInput(
     headHash: await integrationHead(runtime),
     recordsDir: runtime.store.pathOf({ area: "records" }),
     tasksDir: runtime.store.tasks.dir,
-    previousSummary: previousEpicSummary(
-      runtime.store.goalDir,
+    previousSummary: await previousEpicSummary(
+      runtime.store,
       opts.iteration - 1,
       opts.epic,
     ),
