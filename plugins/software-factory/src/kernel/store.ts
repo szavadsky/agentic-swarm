@@ -230,8 +230,6 @@ export interface ArtifactWriter {
   prepare(): Promise<void>;
   /** Commits the artifact tree; null when nothing changed. */
   commit(goal: string): Promise<string | null>;
-  /** Commit SHAs this writer made, oldest first. */
-  readonly commits: string[];
 }
 
 class FolderStore implements ArtifactStore {
@@ -275,10 +273,6 @@ class FolderStore implements ArtifactStore {
     this.plans = this.planArea();
     this.mailbox = this.mailboxArea();
     this.iterations = this.iterationArea();
-  }
-
-  committed(): readonly string[] {
-    return this.writer?.commits ?? [];
   }
 
   /** Makes the artifacts durable; every mutation ends here before it returns. */

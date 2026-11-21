@@ -16,7 +16,7 @@ import {
 import { writePriceCache } from "../../src/kernel/openrouter.js";
 import type { PriceTable } from "../../src/kernel/pricing.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
-import { createFolderStore } from "../../src/kernel/store.js";
+import { createArtifactStore } from "../../src/kernel/store-backend.js";
 import type {
   KernelRuntime,
   Outcome,
@@ -196,11 +196,7 @@ export async function makeRuntime(
     configs.run.aliases.qa = configs.run.aliases.reviewer;
   }
   const paths = resolveGoalPaths(configs, repo.dir, goal);
-  const store = createFolderStore(
-    paths.goalDir,
-    path.dirname(paths.goalDir),
-    {},
-  );
+  const store = createArtifactStore(paths, {});
   await store.ensureLayout();
   const runtime: KernelRuntime = {
     paths,

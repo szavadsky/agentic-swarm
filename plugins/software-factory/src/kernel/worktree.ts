@@ -6,6 +6,7 @@ import { isAncestor } from "../core/git/commit.js";
 import { GitError, git } from "../core/git/exec.js";
 import { parseWorktreeList } from "../core/git/status.js";
 import { isPlanPath } from "./plan-file.js";
+import { STORE_COMMIT_TRAILER } from "./store-backend.js";
 import { sealedRecordDirs } from "./store.js";
 import { makeCause } from "./cause.js";
 import type {
@@ -873,12 +874,47 @@ function integrationBreaches(
   return breaches;
 }
 
+/** True when a commit body carries the store's attribution trailer. */
+function storeAuthored(message: string): boolean {
+  const marker = `${STORE_COMMIT_TRAILER}: `;
+  return message.split("\n").some((line) => line.startsWith(marker));
+}
+
+/**
+ * True when every commit from the snapshot head to now is the store's own
+ * write. A store commit stacked on an operator commit leaves that operator
+ * commit in the range without the trailer, so the range is not exempt.
+ */
+async function storeCommitsOnly(
+  repoRoot: string,
+  from: string,
+  to: string,
+): Promise<boolean> {
+  // A rewrite that leaves the snapshot head unreachable is never the store's.
+  const reachable = await git(
+    repoRoot,
+    ["merge-base", "--is-ancestor", from, to],
+    { allowFail: true },
+  );
+  if (reachable.code !== 0) return false;
+  const log = await git(
+    repoRoot,
+    ["log", "--format=%B%x00", `${from}..${to}`],
+    {
+      allowFail: true,
+    },
+  );
+  if (log.code !== 0) return false;
+  const commits = log.stdout.split("\0").filter((body) => body.trim() !== "");
+  return commits.length > 0 && commits.every(storeAuthored);
+}
+
 /** Operator moves in the repo root that a turn cannot have made. */
-function outsideBreaches(
+async function outsideBreaches(
   root: WorktreeState,
   snapshot: ContainmentSnapshot,
   runtime: KernelRuntime,
-): string[] {
+): Promise<string[]> {
   const statusKey = (status: string) =>
     statusOutsideArtifacts(
       status,
@@ -888,8 +924,12 @@ function outsideBreaches(
   // A same-repo artifact commit is the store's own write, not the operator's.
   const storeCommit =
     root.head !== snapshot.root.head &&
-    runtime.store.committed().includes(root.head) &&
-    statusKey(root.status) === statusKey(snapshot.root.status);
+    statusKey(root.status) === statusKey(snapshot.root.status) &&
+    (await storeCommitsOnly(
+      runtime.paths.repoRoot,
+      snapshot.root.head,
+      root.head,
+    ));
   const outside: string[] = [];
   if (!storeCommit && root.head !== snapshot.root.head) {
     outside.push(`HEAD moved in ${runtime.paths.repoRoot}`);
@@ -956,7 +996,7 @@ async function recordOutsideChanges(
   // The operator may commit or edit in the main checkout while a turn runs. The
   // task cannot have made that change and must still merge; record it instead.
   const root = await worktreeState(runtime.paths.repoRoot);
-  const outside = outsideBreaches(root, snapshot, runtime);
+  const outside = await outsideBreaches(root, snapshot, runtime);
   if (outside.length === 0) return;
   await appendContainmentIncident(
     runtime,

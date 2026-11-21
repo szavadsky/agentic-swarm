@@ -1009,12 +1009,6 @@ export interface ArtifactStore {
    * its artifacts while a turn is contained.
    */
   declaredWrites(): readonly DeclaredWrite[];
-  /**
-   * Commit SHAs this store's backend persisted, oldest first. The folder
-   * backend commits nothing; containment uses this to tell a store's own
-   * artifact commit apart from an operator's.
-   */
-  committed(): readonly string[];
 }
 
 /** A runner whose printed failure report the kernel parses by name. */

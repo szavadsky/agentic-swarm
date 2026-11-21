@@ -10,6 +10,7 @@ import {
   resolveGoalPaths,
 } from "../../src/kernel/config.js";
 import {
+  STORE_COMMIT_TRAILER,
   createArtifactStore,
   isPrivateArtifact,
 } from "../../src/kernel/store-backend.js";
@@ -130,13 +131,14 @@ describe("artifact backend config", () => {
       );
       await folderStore.writeFile("notes.txt", "folder\n");
       await sameRepoStore.writeFile("notes.txt", "same-repo\n");
-      expect(folderStore.committed()).toEqual([]);
-      expect(sameRepoStore.committed().length).toBeGreaterThan(0);
       expect(tracked(sameRepo.repo)).toContain(
         ".factory/artifacts/demo/notes.txt",
       );
       expect(tracked(folder.repo)).not.toContain(
         ".factory/artifacts/demo/notes.txt",
+      );
+      expect(sameRepo.repo.git(["log", "-1", "--format=%B"]).stdout).toContain(
+        `${STORE_COMMIT_TRAILER}: demo`,
       );
     } finally {
       removeGoal(folder);
@@ -220,7 +222,9 @@ describe("artifact backend config", () => {
       const store = createArtifactStore(tempGoalPaths(repo), {});
       await store.ensureLayout();
       await store.writeFile("notes.txt", "local\n");
-      expect(store.committed().length).toBeGreaterThan(0);
+      expect(gitIn(storeRoot, ["log", "-1", "--format=%B"])).toContain(
+        `${STORE_COMMIT_TRAILER}: demo`,
+      );
       expect(gitIn(storeRoot, ["remote"])).toBe("");
       expect(
         gitIn(storeRoot, ["ls-tree", "-r", "--name-only", "HEAD"]),
