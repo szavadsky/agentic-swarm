@@ -15,12 +15,43 @@ Modern harnesses deliver a decent story (several hundred lines of code). The age
 - Harness agnostic 
 - Configurable for different flows and type of projects, from
    - software delivery: stack, testing and build framework agnostic
-   - Chip and industrial design
-   - 
+   - Silicon and industrial design
+   - Deep research
+   - Loop based optimization
 ### Model economics
-- Architect-tier (expensive) models do only what a human architect does: convert intent into actionable but directional plans, directional interfaces, key-algorithm direction, tradeoffs above task level. They are called with a prepared context pack and work agentically and subagentically — launching scouts/tasks and waiting for them is fine, with no limits on them. They write no code beyond key interfaces and no verbose documents. Each architect produces one markdown plan, written for architect/reviewer friendliness and efficiency — never schema-consistent files; maintaining file schemas is not architect work.
+
+ The cost (or subscription use) between frontier model (Opus, Fable, Astra), and capable implementer models (DeepSeek/Qwen Flash, Haiku, Luna,  Sol on Low) ~40–80x;  + sometimes there are "free" up to limit models. The speed is also varies dramatically, sometimes 10x.
+  For humans, even with global pay differentials, the price delta  30% –5x  (with sometimes 10x performance delta). Agentic factory need to agressively leverage cheaper models - focused tasks, context preparation for large, etc.  
+
+For the purpose of design, we consider the following models:
+
+- **Architect**  (expensive) models do only what a human architect does: convert intent into actionable but directional plans, directional interfaces, key-algorithm direction, tradeoffs above task level. They are called with a prepared context pack and work agentically and subagentically — launching scouts/tasks and waiting for them is fine, with no limits on them. They write no code beyond key interfaces and no verbose documents. Each architect produces one markdown plan, written for architect/reviewer friendliness and efficiency — never schema-consistent files; maintaining file schemas is not architect work.
+
+- **Sr. Implementer/Workhorse** - focused task, code review, debugging, research, etc
+
+- **Simple** ~ orchestration, context preparation, schema repair, commits,  running gates, etc
+
+### How Factory works
+#### Patterns we avoid
+   - "Smart orchestrator top" swarms agents - it somtimes works for medium scoped task, but considerable research shows that it is not always cheaper than smart model doing end 2 end. In our experience,  in addition of burning a lot of tokens on trivial orchestration mechanics, if something goes not trivial, orchestrator tend to overtake all the work
+   - "Smart planner" - in our experience, plan get sometimes mode detailed than code. Also, it assumes smart planner can think everything to perfection. In reality, all development must be experiment and test driven.
+   - "Smart reviewer" - although it is benefical to have smart reveiwer, we found that 
+      - A Flash class model, with focused context does decent reviews
+      - The context that reviewer has to build is not different from what planner has to build, and review result is not different from a plan. 
+#### Immutable part coded in orchestration kernel
+##### Key players
+   - Key orchestration player is script **kernel**. It invokes harnesses with agents, reads structured structured artefacts prepared by agents and check steers by users, executes  
+   - To enable parallel operations, rollbacks, etc, we leverage git, git worktrees or  compatible modern performance alternatives
+   - Our key technical player is "architect" aka principal engineer. His responsibility is to derive technical direction (directional, but not detailed plans), ensure code quality, readability = he defines "what has to be done directionally, in roughly what order, how to act on importnant concerns brought by engineers or steers by user. Architect is revieweing status of the project and defining/editing directional plan at most once per iteration. That includes code review (same context is leveraged). Architect owns "directional plan that defines WHAT have to be done (subject to yet unknowns) to bring project to desired state (as per INTENT) without adding technical debt or quality issues". Architect involvement is subject to configurable "architect pipelines" - context preparation, review etc
+   - Once architect defined "plan", technial judgement is plan complete or extra work that need to be done more or less in scope of the technical decisions by architect owned by "plan completness checker". He also triages implementers concerns. 
+   - Our key agentic orchestration  player is "PM" . His job is to repair artefacts/figure out status when KERNEL can not, convert plan to specific tasks, triage steers.
+   - **stewart** is invoked when merges to main create conflicts, ci/cd failures etc
+   - **infra** is responsible to define what commands kernel need to run in scope of the goal as fast/slow tests, worktree preparation, compile, lint, etc ;  and aknowledges yellow/red status and specific failures/flakiness  
+
+
+
 - The architect's plan is reviewed for impracticality, unclarity and rule violations — real bugs are not unusual. Which model reviews is config: task tier or frontier, always from a fresh context. The review is advisory input, not a veto: the architect considers it, and "consider" spans the full range — from ignoring it on a factual judgement, to clarifying the plan, to realizing "oops" and changing it. During self-improvement the architect samples whether the review was helpful (one issue caught earlier reduces work 10x).
-- Architect-tier costs or subscription use are ~40–80x the cheap capable tier (vs 2–3x for human architects); the architect dominates the bill. Optimize overall cost on that ratio (~50x).
+-; the architect dominates the bill. Optimize overall cost on that ratio (~50x).
 - Measure work and usage where feasible and not burdensome: per-model token use (assume the prefix is cached when not reported separately), number of turns, and work done — edits, test runs, etc. Be realistic about what can be counted: ACP harnesses do not report cost or tokens (ACP `usage_update`/`usage` may be extractable), and OpenCode Go does not report subscription costs. Exact cost accounting is not a goal beyond analysis during the self-improvement build, to make sure nothing is wasted; subscription subsidies, street pricing and local hosting alter the cost structure anyway. Where a price is needed, it comes from the harness or from OpenRouter, with a local cache; nothing is hardcoded. Reported cost misleads: the Claude subscription reports about list price while its real subsidy is ~30x, agy's is ~300x, and OpenCode Go sometimes reports 0, so a reported cost ratio is not a good indicator.
 - Wasted turns: a turn whose change is implemented and then rebutted after review/QA is NOT wasted — that is the accepted tax for quality, compactness and readability, and fully rebutted reviews are accounted separately. A turn IS wasted when the implementer completely fails (tokens spent, nothing lands), the agent does the job but the structure fails it (protocol, containment, outcome channel), or flaky tests cause an incorrect rejection. Wasted turns are investigated by spikes and their root causes addressed.
 - Quota management is not a primary purpose; subscription throttling and fallback in dispatch are a feature (see the concurrency rule in Config-driven flows).
