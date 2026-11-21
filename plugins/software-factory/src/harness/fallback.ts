@@ -10,7 +10,10 @@ export interface RetryPolicy {
   /** Extra calls shared by the whole chain, only for retryable causes. */
   retries: number;
   baseDelayMs: number;
-  /** Longest single backoff; a quota stop naming a longer wait is not retried. */
+  /**
+   * Longest single backoff, and the longest stated quota wait a retry may sit
+   * out: a quota stop naming a longer wait is not retried.
+   */
   maxDelayMs: number;
 }
 
@@ -33,14 +36,14 @@ export function isRetryableInfra(stop: Stop): boolean {
 }
 
 /**
- * A quota stop whose stated wait is longer than the retry window cannot be
- * cleared by another call seconds later: the chain advances instead. Rate and
- * network stops, and quota stops naming no wait, keep the bounded retries.
+ * A quota stop's stated reset, when it names one. A retry before that reset
+ * cannot succeed: a wait inside `maxDelayMs` is slept in full and a longer one
+ * skips the retry. Rate and network stops, and quota stops naming no wait,
+ * keep the bounded backoff.
  */
-function quotaWaitBeyondWindow(stop: Stop, maxDelayMs: number): boolean {
-  if (stop.kind !== "infra" || stop.cause !== "quota") return false;
-  const waitMs = statedWaitMs(stop.details);
-  return waitMs !== undefined && waitMs > maxDelayMs;
+function quotaStatedWait(stop: Stop): number | undefined {
+  if (stop.kind !== "infra" || stop.cause !== "quota") return undefined;
+  return statedWaitMs(stop.details);
 }
 
 export interface AttemptOutput<T> {
@@ -87,12 +90,15 @@ async function runModelAttempts<T>(
     attempts.push({ model, stop: outcome.stop, usage: outcome.usage });
     if (outcome.stop.kind !== "infra") return outcome;
     if (counters.retriesLeft > 0 && isRetryableInfra(outcome.stop)) {
-      if (quotaWaitBeyondWindow(outcome.stop, policy.maxDelayMs))
+      const statedWait = quotaStatedWait(outcome.stop);
+      if (statedWait !== undefined && statedWait > policy.maxDelayMs)
         return outcome;
-      const delay = Math.min(
-        policy.baseDelayMs * 2 ** counters.retryIndex,
-        policy.maxDelayMs,
-      );
+      const delay =
+        statedWait ??
+        Math.min(
+          policy.baseDelayMs * 2 ** counters.retryIndex,
+          policy.maxDelayMs,
+        );
       counters.retriesLeft -= 1;
       counters.retryIndex += 1;
       if (delay > 0) await sleep(delay);

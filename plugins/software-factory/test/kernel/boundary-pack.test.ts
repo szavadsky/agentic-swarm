@@ -11,16 +11,15 @@ import {
   contextDataRelPath,
   contextPackRelPath,
 } from "../../src/kernel/context-pack.js";
+import { postSteer } from "../../src/kernel/mailbox.js";
 import { PACK_PREP_STEP } from "../../src/kernel/pack-prep.js";
 import {
   latestPlanReview,
   PLAN_REVIEW_STEP,
 } from "../../src/kernel/plan-review.js";
-import type { Outcome } from "../../src/kernel/types.js";
-import { postSteer } from "../../src/kernel/mailbox.js";
-import { rec, task, cause, causeText } from "./helpers.js";
 import { scriptMeta } from "../../src/kernel/record.js";
 import { createFolderStore, recordDirName } from "../../src/kernel/store.js";
+import type { KernelRuntime, Outcome } from "../../src/kernel/types.js";
 import {
   cleanup,
   launch,
@@ -28,16 +27,18 @@ import {
   outcome,
   scriptDigest,
   simpleTask,
+  stateOf,
   writePlan,
   writeTask,
 } from "./e2e-helpers.js";
+import { cause, causeText, rec, task } from "./helpers.js";
 
 import {
   cleanupFlowRepo,
   makeRuntime,
   setupFlowRepo,
-  writeTask as writeRuntimeTask,
   whenTurn,
+  writeTask as writeRuntimeTask,
 } from "./s2-helpers.js";
 import { writeHold } from "./steer-helpers.js";
 
@@ -52,6 +53,7 @@ describe("boundary context pack", () => {
   registerBoundaryContextPackPart2();
   registerBoundaryContextPackPart3();
   registerBoundaryContextPackPart4();
+  registerBoundaryContextPackPart5();
 });
 
 describe("boundary ready aging", () => {
@@ -82,6 +84,15 @@ describe("boundary ready aging", () => {
 
       const planPath = path.join(runtime.store.goalDir, "plan.md");
       fs.writeFileSync(planPath, "# Plan\n\n## landed\n", "utf8");
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(
+          outcome({
+            summary: "note routed to the architect",
+            steerRoutes: [{ steer: "note", route: "architect" }],
+          }),
+        );
+        return fakeTurnResult(req);
+      });
       harness.script((req, ctx) => {
         fs.appendFileSync(planPath, "\n## next\n", "utf8");
         ctx.writeOutcome(
@@ -201,6 +212,15 @@ async function namesReadySpikeHeldByOwnSteerAtPart1(
 
   const planPath = path.join(runtime.store.goalDir, "plan.md");
   fs.writeFileSync(planPath, "# Plan\n\n## landed\n", "utf8");
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(
+      outcome({
+        summary: "spike steer routed to the architect",
+        steerRoutes: [{ steer: "no-outcome-forensics", route: "architect" }],
+      }),
+    );
+    return fakeTurnResult(req);
+  });
   harness.script((req, ctx) => {
     fs.appendFileSync(planPath, "\n## next\n", "utf8");
     ctx.writeOutcome(
@@ -357,6 +377,114 @@ async function dropsOwnedDebtFromPackArchitectPart2(
   expect(register).toContain("- none open");
   expect(register).not.toContain(debtId);
   expect(register).not.toContain(debtText);
+}
+
+/** Seeds one finished epic whose merged task left a blocking debt open. */
+async function seedFinishedEpicDebt(
+  runtime: KernelRuntime,
+): Promise<{ debtId: string; debtText: string }> {
+  await writeRuntimeTask(runtime, task("alpha.build", { epic: "alpha" }));
+  fs.writeFileSync(path.join(runtime.store.goalDir, "plan.md"), PLAN, "utf8");
+  const debtText =
+    "alpha finished with an open debt: the timeout path has no remover";
+  const implementMeta = {
+    iteration: 1,
+    slug: "alpha.build",
+    step: "implement",
+    round: 1,
+    actor: "agent",
+  } as const;
+  const debtRecord = await runtime.store.appendRecord(implementMeta, {
+    ok: true,
+    outcome: {
+      status: "done",
+      summary: "shipped with debt",
+      concerns: [{ kind: "debt", calibration: "architect", text: debtText }],
+      forward: [],
+    },
+  });
+  await runtime.store.appendRecord(
+    {
+      iteration: 1,
+      slug: "alpha.build",
+      step: "merge",
+      round: 1,
+      actor: "script",
+    },
+    { ok: true },
+  );
+  // The subarchitect finishes the epic without closing the debt it left open.
+  await runtime.store.appendRecord(
+    {
+      iteration: 1,
+      step: "subarchitect",
+      round: 1,
+      actor: "agent",
+      architect: "alpha",
+    },
+    {
+      ok: true,
+      outcome: {
+        status: "done",
+        summary: "alpha complete",
+        concerns: [],
+        forward: [],
+        decision: "done",
+      },
+    },
+  );
+  const debtId = `${recordDirName(debtRecord.seq, implementMeta)}#1`;
+  return { debtId, debtText };
+}
+
+async function escalatesFinishedEpicDebtToGoalPart1(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+) {
+  const harness = new FakeHarness({ id: "fake" });
+  const runtime = await makeRuntime(repo, goal, { fake: harness });
+  const { debtId, debtText } = await seedFinishedEpicDebt(runtime);
+  const before = await stateOf(runtime.store.goalDir);
+  expect(before.epics.alpha?.done).toBe(true);
+  expect(before.goal).toBe("active");
+  harness.script(
+    (req, ctx) => {
+      const match = /- context pack: `([^`]+)`/.exec(req.prompt);
+      if (!match?.[1]) throw new Error("turn prompt names no context pack");
+      const pack = fs.readFileSync(match[1], "utf8");
+      const register = pack.slice(pack.indexOf("## Debt register"));
+      expect(register).toContain(debtId);
+      expect(register).toContain(debtText);
+      ctx.writeOutcome(
+        outcome({
+          summary: "closed the finished epic's debt",
+          decision: "done",
+          debtClosed: [{ id: debtId, reason: "the remover landed" }],
+        }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "architect" }) },
+  );
+  const boundary = await runBoundary(runtime, { relaunch: false });
+
+  return { runtime, boundary, debtId, debtText };
+}
+
+async function escalatesFinishedEpicDebtToGoalPart2(
+  scope: Awaited<ReturnType<typeof escalatesFinishedEpicDebtToGoalPart1>>,
+) {
+  const { runtime, boundary, debtId, debtText } = scope;
+  expect(boundary.decision).toBe("done");
+  const pack = fs.readFileSync(
+    path.join(runtime.store.goalDir, contextPackRelPath(boundary.iteration)),
+    "utf8",
+  );
+  const register = pack.slice(pack.indexOf("## Debt register"));
+  expect(register).toContain(debtId);
+  expect(register).toContain(debtText);
+  const after = await stateOf(runtime.store.goalDir);
+  expect(after.goal).toBe("done");
 }
 
 async function neverTruncatesStatusTableHundredPart1(
@@ -857,4 +985,16 @@ function registerBoundaryContextPackPart4(): void {
       cleanup(goal);
     }
   });
+}
+
+function registerBoundaryContextPackPart5(): void {
+  it("routes a finished epic's blocking debt to the goal architect's pack", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const scope1 = await escalatesFinishedEpicDebtToGoalPart1(repo, goal);
+      await escalatesFinishedEpicDebtToGoalPart2(scope1);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 90_000);
 }

@@ -12,6 +12,7 @@ import {
   expectDispatch,
   outcome,
   scriptDigest,
+  scriptSteerRoutes,
   stateOf,
 } from "./e2e-helpers.js";
 import { scriptStallLeave } from "./s2-helpers.js";
@@ -286,6 +287,7 @@ async function steerBeta2(ctx: E2ECtx): Promise<void> {
 /** Launch 2's architect and PM turns answer the steer. */
 function scriptLaunch2Planning(second: FakeHarness, ctx: E2ECtx): void {
   scriptDigest(second, ctx.goalDir, 2);
+  scriptSteerRoutes(second, [ctx.steerId]);
   second.script((req, turnedCtx) => {
     expect(req.prompt).toContain("- turn: `relaunch`");
     expect(req.prompt).toContain(ctx.steerId);
@@ -401,7 +403,7 @@ async function expectLaunch2Steer(ctx: E2ECtx): Promise<void> {
   expect(summaryOf(ctx.goalDir, 2)).toContain("merged: beta2, gamma");
   const two = await metricsOf(ctx.goalDir);
   expect(two.iterations.map((i) => i.n)).toEqual([1, 2]);
-  expect(two.iterations[1]!.turns).toBe(12);
+  expect(two.iterations[1]!.turns).toBe(13);
   expect(two.iterations[1]!.humanInterventions).toBe(1);
   expect(two.iterations[1]!.merged).toEqual(["beta2", "gamma"]);
   expect(two.totals.merged).toEqual(["alpha", "beta2", "gamma"]);

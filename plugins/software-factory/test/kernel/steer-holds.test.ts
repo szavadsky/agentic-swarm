@@ -8,6 +8,7 @@ import {
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
 import { runBoundary } from "../../src/kernel/boundary.js";
+import { formatCause } from "../../src/kernel/cause.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import {
   holdsDir,
@@ -17,7 +18,7 @@ import {
 } from "../../src/kernel/mailbox.js";
 import { scriptMeta } from "../../src/kernel/record.js";
 import { spikeReportPath } from "../../src/kernel/spike-report.js";
-import { task, cause, causeText } from "./helpers.js";
+import { cause, causeText, task } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -28,14 +29,13 @@ import {
   writeTask,
 } from "./s2-helpers.js";
 import {
-  writePlan,
-  editPlan,
-  writeHold,
-  tasks,
-  implementer,
   approver,
+  editPlan,
+  implementer,
+  tasks,
+  writeHold,
+  writePlan,
 } from "./steer-holds-helpers.js";
-import { formatCause } from "../../src/kernel/cause.js";
 
 describe("mid-run steer holds", () => {
   registerMidRunSteerHoldsPart1();
@@ -314,6 +314,42 @@ async function holdsUnstartedTasksWithoutParkingPart1(
   return { harness, runtime, records };
 }
 
+/** The boundary routes the structured steer, the architect answers it, and its PM tail leaves it alone. */
+function scriptBoundarySteerAnswer(
+  harness: FakeHarness,
+  runtime: Awaited<ReturnType<typeof makeRuntime>>,
+): void {
+  harness.script((req, ctx) => {
+    expect(req.prompt).toContain("Second line with details.");
+    ctx.writeOutcome(
+      outcome({
+        summary: "s1 goes to the architect",
+        steerRoutes: [{ steer: "s1", route: "architect" }],
+      }),
+    );
+    return fakeTurnResult(req);
+  });
+  harness.script((req, ctx) => {
+    expect(req.prompt).toContain(
+      "- s1 (mailbox/inbox/s1.md): Keep alpha unmerged until I answer.",
+    );
+    editPlan(runtime);
+    ctx.writeOutcome(
+      outcome({
+        summary: "answered the steer",
+        decision: "continue",
+        forward: ["steer s1: hold alpha; I will review the branch"],
+      }),
+    );
+    return fakeTurnResult(req);
+  });
+  harness.script((req, ctx) => {
+    expect(req.prompt).not.toContain("Second line with details.");
+    ctx.writeOutcome(outcome({ summary: "tasks unchanged" }));
+    return fakeTurnResult(req);
+  });
+}
+
 async function holdsUnstartedTasksWithoutParkingPart2(
   scope: Awaited<ReturnType<typeof holdsUnstartedTasksWithoutParkingPart1>>,
 ) {
@@ -343,25 +379,9 @@ async function holdsUnstartedTasksWithoutParkingPart2(
     fs.existsSync(path.join(runtime.store.goalDir, "mailbox/inbox/s1.md")),
   ).toBe(true);
 
-  // The steer then takes the boundary path: only the architect answers it.
-  harness.script((req, ctx) => {
-    expect(req.prompt).toContain(
-      "- s1 (mailbox/inbox/s1.md): Keep alpha unmerged until I answer.",
-    );
-    editPlan(runtime);
-    ctx.writeOutcome(
-      outcome({
-        summary: "answered the steer",
-        decision: "continue",
-        forward: ["steer s1: hold alpha; I will review the branch"],
-      }),
-    );
-    return fakeTurnResult(req);
-  });
-  harness.script((req, ctx) => {
-    ctx.writeOutcome(outcome({ summary: "tasks unchanged" }));
-    return fakeTurnResult(req);
-  });
+  // The steer then takes the boundary path: the boundary's steer turn routes
+  // it to the architect, who answers it.
+  scriptBoundarySteerAnswer(harness, runtime);
 
   return { ...scope, steerTurns };
 }
@@ -394,8 +414,9 @@ async function holdsUnstartedTasksWithoutParkingPart3(
   expect(fs.existsSync(path.join(holdsDir(runtime.store), "s1.yaml"))).toBe(
     false,
   );
-  // The boundary PM turn does not restructure the steer a second time.
-  expect(steerTurns()).toBe(1);
+  // The mid-iteration turn structured it and the boundary's steer turn routed
+  // it once; the boundary's PM tail does not restructure it.
+  expect(steerTurns()).toBe(2);
 
   // The hold is gone: the tasks that waited now run.
   harness.script(implementer("beta.txt"));
@@ -406,7 +427,7 @@ async function holdsUnstartedTasksWithoutParkingPart3(
   expect(resumed.reason).toBe("boundary");
   expect((await tasks(runtime)).tasks.beta!.status).toBe("merged");
   expect((await tasks(runtime)).tasks.delta!.status).toBe("merged");
-  expect(steerTurns()).toBe(1);
+  expect(steerTurns()).toBe(2);
 }
 
 function registerMidRunSteerHoldsPart1(): void {

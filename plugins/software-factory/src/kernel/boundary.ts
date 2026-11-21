@@ -12,6 +12,7 @@ import {
   partitionSteers,
   prepareBoundary,
   refreshAfterChecker,
+  routeUnroutedSteers,
   runChecker,
   writeDigest,
   writePack,
@@ -39,6 +40,7 @@ export async function runBoundary(
   if (checked) return checked;
   await refreshAfterChecker(context);
   await writeDigest(context);
+  await routeUnroutedSteers(context);
   await partitionSteers(context);
   await writePack(context);
   const architect = await runArchitectStage(context);

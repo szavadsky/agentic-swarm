@@ -49,6 +49,9 @@ describe("agent containment", () => {
   registerAgentContainmentPart17();
   registerAgentContainmentPart18();
   registerAgentContainmentPart19();
+  registerAgentContainmentPart20();
+  registerAgentContainmentPart21();
+  registerAgentContainmentPart22();
 });
 
 async function ignoresSiblingRecordOpensAcrossPart1(
@@ -1135,6 +1138,115 @@ function registerAgentContainmentPart19(): void {
         checkout,
       );
       await refusesMergeWhoseIntegrationHeadPart2(repo, scope1);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+/** A flow repo whose artifact store commits into the main checkout. */
+function sameRepoFlow(): ReturnType<typeof setupFlowRepo> {
+  const flow = setupFlowRepo();
+  const config = yaml.parse(flow.repo.readFile(".factory/repo.yaml"));
+  config.artifacts = { backend: "same-repo", root: ".factory/artifacts" };
+  flow.repo.writeFile(".factory/repo.yaml", yaml.stringify(config));
+  flow.repo.commit("same-repo artifacts");
+  return flow;
+}
+
+async function sameRepoSnapshot(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+) {
+  const runtime = await makeRuntime(repo, goal, {
+    fake: new FakeHarness({ id: "fake" }),
+  });
+  const file = task("task", { scope: ["task.txt"] });
+  await writeTask(runtime, file);
+  const ensured = await ensureTaskWorktree(runtime, file);
+  const snapshot = await containmentSnapshot(runtime, ensured.path);
+  return { runtime, ensured, snapshot };
+}
+
+function registerAgentContainmentPart20(): void {
+  it("exempts a same-repo store commit that lands during the turn", async () => {
+    const { repo, goal } = sameRepoFlow();
+    try {
+      const { runtime, ensured, snapshot } = await sameRepoSnapshot(repo, goal);
+      await runtime.store.writeFile("plan.md", "# Plan\n");
+
+      expect(
+        await containmentViolation(
+          runtime,
+          ensured.path,
+          ensured.branch,
+          snapshot,
+        ),
+      ).toBeUndefined();
+      const incidents = (await runtime.store.listRecords()).filter(
+        (r) => r.step === "containment",
+      );
+      expect(incidents).toHaveLength(0);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+function registerAgentContainmentPart21(): void {
+  it("records an operator commit stacked under a same-repo store commit", async () => {
+    const { repo, goal } = sameRepoFlow();
+    try {
+      const { runtime, ensured, snapshot } = await sameRepoSnapshot(repo, goal);
+      repo.writeFile("operator.txt", "operator\n");
+      repo.commit("operator edit");
+      await runtime.store.writeFile("plan.md", "# Plan\n");
+
+      expect(
+        await containmentViolation(
+          runtime,
+          ensured.path,
+          ensured.branch,
+          snapshot,
+        ),
+      ).toBeUndefined();
+      const incidents = (await runtime.store.listRecords()).filter(
+        (r) => r.step === "containment",
+      );
+      expect(incidents).toHaveLength(1);
+      expect(incidents[0]!.cause?.kind).toBe("outside-change");
+      expect(causeText(incidents[0]!.cause)).toContain(
+        `HEAD moved in ${repo.dir}`,
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+function registerAgentContainmentPart22(): void {
+  it("records a main-checkout rewrite under a same-repo store commit", async () => {
+    const { repo, goal } = sameRepoFlow();
+    try {
+      const { runtime, ensured, snapshot } = await sameRepoSnapshot(repo, goal);
+      repo.git(["reset", "--soft", "HEAD~1"]);
+      await runtime.store.writeFile("plan.md", "# Plan\n");
+
+      expect(
+        await containmentViolation(
+          runtime,
+          ensured.path,
+          ensured.branch,
+          snapshot,
+        ),
+      ).toBeUndefined();
+      const incidents = (await runtime.store.listRecords()).filter(
+        (r) => r.step === "containment",
+      );
+      expect(incidents).toHaveLength(1);
+      expect(causeText(incidents[0]!.cause)).toContain(
+        `HEAD moved in ${repo.dir}`,
+      );
     } finally {
       cleanupFlowRepo(repo);
     }

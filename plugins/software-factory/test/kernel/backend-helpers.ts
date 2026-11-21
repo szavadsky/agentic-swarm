@@ -1,6 +1,4 @@
-// biome-ignore-all lint/complexity: backend matrix fixtures
 import { expect } from "bun:test";
-// biome-ignore-all lint/complexity: end-to-end backend matrix
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";

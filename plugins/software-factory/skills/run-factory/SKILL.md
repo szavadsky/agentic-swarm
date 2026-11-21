@@ -34,7 +34,7 @@ Three layers, merged and validated with one report naming file and key:
 - Worktree and session roots belong to the run layer and must be outside the
   repo; pre-flight refuses a root inside it.
 - The whole factory is assumed to run inside a sandbox:
-  [sandbox.md](../../docs/sandbox.md).
+  [sandbox.md](sandbox.md).
 
 ## 3. Launch
 

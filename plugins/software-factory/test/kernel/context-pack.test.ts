@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   forwardedConcerns,
+  goalDebtRecords,
   readyAging,
   recordsForAudience,
   renderContextData,
@@ -281,6 +282,106 @@ function routesTaskDebtOnlyEpicSDebtPart2(
   expect(top).not.toContain("beta-only debt");
   expect(alpha).toContain("alpha-only debt");
   expect(alpha).not.toContain("beta-only debt");
+}
+
+const FINISHED_EPIC_DEBT =
+  "alpha finished with an open debt: the timeout path has no remover";
+const FINISHED_EPIC_NOTE = "alpha note: rename the timeout helper";
+const LIVE_EPIC_DEBT = "beta is still open: cache keys can collide";
+
+/** A task record raising the given debts, with the ids ingest would assign. */
+function epicDebtRecord(
+  seq: number,
+  slug: string,
+  debts: { text: string; id: string; calibration: "architect" | "fyi" }[],
+): ReturnType<typeof rec> {
+  return rec(seq, {
+    slug,
+    step: "implement",
+    outcome: {
+      status: "done",
+      summary: `${slug} shipped`,
+      concerns: debts.map((debt) => ({
+        kind: "debt" as const,
+        calibration: debt.calibration,
+        text: debt.text,
+        id: debt.id,
+      })),
+      forward: [],
+    },
+  });
+}
+
+/** One epic's subarchitect turn: done finishes it, continue keeps it live. */
+function epicDecision(
+  seq: number,
+  epic: string,
+  value: "done" | "continue",
+): ReturnType<typeof rec> {
+  return rec(seq, {
+    slug: undefined,
+    step: "subarchitect",
+    architect: epic,
+    outcome: {
+      status: "done",
+      summary: `epic ${epic} ${value}`,
+      concerns: [],
+      forward: [],
+      decision: value,
+    },
+  });
+}
+
+function escalatesFinishedEpicDebtPart1() {
+  const chained = [
+    task("alpha.build", { epic: "alpha" }),
+    task("beta.build", { epic: "beta" }),
+  ];
+  const alphaDebtId = "00001-i1-alpha.build-implement-r1#1";
+  const alphaNoteId = "00001-i1-alpha.build-implement-r1#2";
+  const betaDebtId = "00002-i1-beta.build-implement-r1#1";
+  const records = [
+    epicDebtRecord(1, "alpha.build", [
+      { text: FINISHED_EPIC_DEBT, id: alphaDebtId, calibration: "architect" },
+      { text: FINISHED_EPIC_NOTE, id: alphaNoteId, calibration: "fyi" },
+    ]),
+    epicDebtRecord(2, "beta.build", [
+      { text: LIVE_EPIC_DEBT, id: betaDebtId, calibration: "architect" },
+    ]),
+    script(3, { step: "merge", slug: "alpha.build", ok: true }),
+    script(4, { step: "merge", slug: "beta.build", ok: true }),
+    epicDecision(5, "alpha", "done"),
+    epicDecision(6, "beta", "continue"),
+  ];
+  const state = derive(chained, records);
+
+  return { chained, records, state, alphaDebtId, alphaNoteId };
+}
+
+function escalatesFinishedEpicDebtPart2(
+  scope: ReturnType<typeof escalatesFinishedEpicDebtPart1>,
+) {
+  const { chained, records, state, alphaDebtId, alphaNoteId } = scope;
+  expect(state.epics.alpha?.done).toBe(true);
+  expect(state.epics.beta?.done).toBe(false);
+  // The finished epic's blocking debt escalates; its fyi note and the live
+  // epic's debt stay inside their own registers.
+  expect(openDebts(goalDebtRecords(records, chained, state.epics))).toEqual([
+    {
+      id: alphaDebtId,
+      text: FINISHED_EPIC_DEBT,
+      calibration: "architect",
+      source: "alpha.build implement r1",
+      iteration: 1,
+      seq: 1,
+    },
+  ]);
+  // Escalating copies the record up; the epic's own register is unchanged.
+  expect(
+    openDebts(
+      recordsForAudience(records, chained, { kind: "epic", epic: "alpha" }),
+    ).map((debt) => debt.id),
+  ).toEqual([alphaDebtId, alphaNoteId]);
 }
 
 function keepsEveryTaskReviewDebtListedPart1() {
@@ -839,6 +940,11 @@ function registerContextPackPart7(): void {
   it("routes a task debt only to its epic's debt register", () => {
     const scope1 = routesTaskDebtOnlyEpicSDebtPart1();
     routesTaskDebtOnlyEpicSDebtPart2(scope1);
+  });
+
+  it("escalates a finished epic's debt to the goal register, not a live epic's", () => {
+    const scope1 = escalatesFinishedEpicDebtPart1();
+    escalatesFinishedEpicDebtPart2(scope1);
   });
 
   it("lists every open debt with its id and drops the closed one", () => {

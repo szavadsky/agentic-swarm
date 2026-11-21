@@ -10,10 +10,10 @@ import { resolveGoalPaths } from "./config.js";
 import {
   capGateOutput,
   formatFailingChecks,
-  GATE_TIMEOUT_SEC,
   type GateInfra,
   gateSignatureKey,
   gateSignatures,
+  gateTimeoutSec,
   isInfraCheck,
   isStaleGateCheck,
   runDeclaredGate,
@@ -22,6 +22,7 @@ import {
 import type {
   ArtifactStore,
   ConfigBundle,
+  GateConfig,
   RecordStart,
   StepRecord,
 } from "./types.js";
@@ -168,17 +169,21 @@ function scratchPath(configs: ConfigBundle, repoRoot: string): string {
 
 /** A gate's check; a timeout or unstartable command is infra, not a red tree. */
 function gateCheck(
-  gateId: string,
+  gate: GateConfig,
   res: ProcessResult,
   check: CheckResult,
 ): CheckResult {
   if (res.timedOut) {
-    return infra(gateId, `timed out after ${GATE_TIMEOUT_SEC}s`, check.output);
+    return infra(
+      gate.id,
+      `timed out after ${gateTimeoutSec(gate)}s`,
+      check.output,
+    );
   }
   // 126/127 means the command itself could not start: an environment failure,
   // not a verdict on the tree under test.
   if (res.code === 126 || res.code === 127) {
-    return infra(gateId, `could not run: exit ${res.code}`, check.output);
+    return infra(gate.id, `could not run: exit ${res.code}`, check.output);
   }
   return check;
 }
@@ -237,7 +242,7 @@ async function runBaseGates(
     const checks: CheckResult[] = [];
     for (const gate of configs.repo.gates) {
       const { res, check } = await runDeclaredGate(repoRoot, dir, gate);
-      checks.push(gateCheck(gate.id, res, check));
+      checks.push(gateCheck(gate, res, check));
     }
     return checks;
   } finally {
