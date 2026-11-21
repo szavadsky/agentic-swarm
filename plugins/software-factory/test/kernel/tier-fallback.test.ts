@@ -6,7 +6,7 @@ import type { SessionRef } from "../../src/harness/types.js";
 import { runAgentTurn } from "../../src/kernel/agent.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
-import { resolveTurn } from "../../src/kernel/flow-context.js";
+import { resolveTurn, tierPoolKey } from "../../src/kernel/flow-context.js";
 import type { KernelRuntime } from "../../src/kernel/types.js";
 import type { TmpRepo } from "../helpers/tmp-repo.js";
 import { task, causeText } from "./helpers.js";
@@ -96,6 +96,8 @@ describe("alias fallback tiers", () => {
   registerAliasFallbackTiersPart11();
   registerAliasFallbackTiersPart12();
   registerAliasFallbackTiersPart13();
+  registerAliasFallbackTiersPart14();
+  registerAliasFallbackTiersPart15();
 });
 
 async function skipsExhaustedPoolRestDispatchPart1(
@@ -439,13 +441,13 @@ function registerAliasFallbackTiersPart8(): void {
           harness: "a",
           model: "ma",
           subscription: "pool-shared",
-          fallbacks: [{ harness: "b", model: "mb" }],
+          fallbacks: [{ harness: "b", model: "mb", sharesPool: true }],
         },
         alias2: {
           harness: "a",
           model: "ma2",
           subscription: "pool-shared",
-          fallbacks: [{ harness: "b", model: "mb2" }],
+          fallbacks: [{ harness: "b", model: "mb2", sharesPool: true }],
         },
       },
     });
@@ -471,7 +473,7 @@ function registerAliasFallbackTiersPart8(): void {
       expect(res.outcome?.status).toBe("done");
       expect(runtime.exhaustedPools.has("pool-shared")).toBe(true);
 
-      // alias2's literal fallback inherits pool-shared, so the exhausted pool
+      // alias2's literal fallback shares pool-shared, so the exhausted pool
       // leaves it with no live tier: nothing is called on the dead pool.
       const target2 = resolveTurn(
         runtime,
@@ -602,7 +604,7 @@ function registerAliasFallbackTiersPart12(): void {
           model: "mb",
           effort: "high",
           subscription: "inner",
-          fallbacks: [{ model: "mb2" }],
+          fallbacks: [{ model: "mb2", sharesPool: true }],
         },
       },
     );
@@ -682,6 +684,77 @@ function registerAliasFallbackTiersPart13(): void {
       expect(
         resolveTurn(t.runtime, "implementer", "implementer").harness.id,
       ).toBe("b");
+    } finally {
+      cleanupFlowRepo(t.repo);
+    }
+  });
+}
+
+function registerAliasFallbackTiersPart14(): void {
+  it("keys a changed fallback by harness+model unless it declares its pool or sharing", async () => {
+    const t = await tierRuntime({
+      harness: "a",
+      model: "ma",
+      subscription: "claude",
+      fallbacks: [
+        { harness: "b", model: "mb" },
+        { harness: "b", model: "mb-own", subscription: "go" },
+        { harness: "b", model: "mb-shared", sharesPool: true },
+        { model: "ma", effort: "high" },
+      ],
+    });
+    try {
+      const target = resolveTurn(t.runtime, "implementer", "implementer");
+      // The unchanged tier keeps the Claude pool; a changed tier with neither
+      // declaration is keyed harness+model, never the alias's subscription.
+      expect(target.tiers.map(tierPoolKey)).toEqual([
+        "claude",
+        "b+mb",
+        "go",
+        "claude",
+        "claude",
+      ]);
+      expect(target.tiers[1]!.subscription).toBeUndefined();
+      expect(target.tiers[2]!.subscription).toBe("go");
+      expect(target.tiers[3]!.subscription).toBe("claude");
+    } finally {
+      cleanupFlowRepo(t.repo);
+    }
+  });
+}
+
+function registerAliasFallbackTiersPart15(): void {
+  it("latches a changed fallback on its own key, not the alias pool", async () => {
+    const t = await tierRuntime({
+      harness: "a",
+      model: "ma",
+      subscription: "claude",
+      fallbacks: [{ harness: "b", model: "mb" }],
+    });
+    try {
+      // The primary's pool is dead: the fallback is the only live tier and must
+      // not be dropped with the Claude pool it no longer draws on.
+      latchPool(t.runtime, "claude");
+      const target = resolveTurn(t.runtime, "implementer", "implementer");
+      expect(target.tiers.map((tier) => tier.model.id)).toEqual(["mb"]);
+      expect(target.subscription).toBeUndefined();
+
+      t.b.scriptResult(quota());
+      const result = await runAgentTurn(t.runtime, {
+        target,
+        cwd: t.repo.dir,
+        meta: { iteration: 1, slug: "a", step: "implement", round: 1 },
+        vars: implementerVars,
+        expectation: "any",
+      });
+      expect(result.record.stop).toEqual({ kind: "infra", cause: "quota" });
+      expect(t.a.calls).toHaveLength(0);
+      expect(t.runtime.exhaustedPools.has("b+mb")).toBe(true);
+
+      const after = resolveTurn(t.runtime, "implementer", "implementer");
+      expect(after.tiers).toEqual([]);
+      expect(after.unavailable).toContain("claude resets at");
+      expect(after.unavailable).toContain("b+mb resets at");
     } finally {
       cleanupFlowRepo(t.repo);
     }

@@ -209,6 +209,7 @@ describe("pre-flight", () => {
   registerPreFlightPart47();
   registerPreFlightPart48();
   registerPreFlightPart49();
+  registerPreFlightPart50();
 });
 
 describe("configuration report", () => {
@@ -1993,6 +1994,102 @@ sessions: { dir: SESSIONS_DIR }
       );
       expect(harness.calls).toEqual([]);
       expect(await f.input.store.listRecords()).toEqual([]);
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+}
+
+/** A run config whose implementer owns pool "pool" and carries one fallback tier. */
+function poolRun(tier: string): string {
+  return RUN_HEAD_NO_HIGHEST.replace(
+    "implementer: { harness: fake, model: impl }",
+    `implementer: { harness: fake, model: impl, subscription: pool, fallbacks: [${tier}] }`,
+  ).replace(
+    "limits: { concurrency: { overall: 2 }, iterations: 1 }",
+    "limits: { concurrency: { overall: 2, perSubscription: { pool: 1, go: 1 } }, iterations: 1 }",
+  );
+}
+
+function registerPreFlightPart50(): void {
+  registerFallbackPoolRefusal();
+  registerFallbackPoolEdges();
+}
+
+function registerFallbackPoolRefusal(): void {
+  it("refuses a fallback that changes harness or model and names no pool", async () => {
+    const f = await fixture(
+      poolRun("{ harness: fake, model: near, effort: high }"),
+    );
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "aliases.implementer.fallbacks.0.subscription",
+          message: expect.stringContaining("sharesPool: true"),
+        }),
+      );
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("accepts a changed fallback that names its own subscription or shares the pool", async () => {
+    for (const tier of [
+      "{ model: near, subscription: go }",
+      "{ model: near, sharesPool: true }",
+    ]) {
+      const f = await fixture(poolRun(tier));
+      try {
+        await expect(preflight(f.input)).resolves.toBeDefined();
+      } finally {
+        f.repo.cleanup();
+      }
+    }
+  });
+}
+
+function registerFallbackPoolEdges(): void {
+  it("keeps an unchanged fallback on the alias subscription", async () => {
+    const f = await fixture(poolRun("{ model: impl, effort: high }"));
+    try {
+      await expect(preflight(f.input)).resolves.toBeDefined();
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("does not demand a pool where no alias subscription exists to inherit", async () => {
+    const f = await fixture(
+      RUN_HEAD_NO_HIGHEST.replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: fake, model: impl, fallbacks: [{ model: near, effort: high }] }",
+      ),
+    );
+    try {
+      await expect(preflight(f.input)).resolves.toBeDefined();
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+
+  it("refuses sharesPool when the alias names no subscription", async () => {
+    const f = await fixture(
+      RUN_HEAD_NO_HIGHEST.replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: fake, model: impl, fallbacks: [{ model: near, sharesPool: true }] }",
+      ),
+    );
+    try {
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "aliases.implementer.fallbacks.0.sharesPool",
+          message: expect.stringContaining(
+            "needs the alias to name a subscription",
+          ),
+        }),
+      );
     } finally {
       f.repo.cleanup();
     }

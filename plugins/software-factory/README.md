@@ -283,8 +283,14 @@ routing, not a retry. Each fallback tier either
 names its own model, harness and effort, and the quota pool it draws on, or
 names another alias (`{ alias: backup }`) and reuses that alias's whole ladder,
 each of its tiers keeping its own quota pool; pre-flight refuses a missing alias
-or a fallback cycle. A turn that lands on a tier keeps the launch on it, and
-dispatch throttles each pool and model within the overall limit.
+or a fallback cycle. A tier that changes the primary's harness or model cannot
+inherit the alias's subscription: it must name its own `subscription` or set
+`sharesPool: true` to draw on the alias's, or its pool key is `harness+model`.
+Pre-flight refuses an alias that names a subscription and such a tier with
+neither declaration. A tier that keeps the primary's harness and model keeps
+inheriting the alias's subscription. A turn that lands on a tier keeps the
+launch on it, and dispatch throttles each pool and model within the overall
+limit.
 
 A tier that answers quota latches its pool. The stop's stated reset
 (`Resets in 130h19m23s`, `Resets in 33m53s`, `retry-after-ms=38240413`) sets

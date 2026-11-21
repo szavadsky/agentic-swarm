@@ -44,6 +44,7 @@ describe("three config layers", () => {
   threeConfigLayersPart26();
   threeConfigLayersPart27();
   threeConfigLayersPart28();
+  threeConfigLayersPart29();
 });
 
 describe("run-config extends", () => {
@@ -1306,6 +1307,46 @@ function threeConfigLayersPart28() {
     fs.writeFileSync(runYaml, run("/session"));
     expect(loadConfigs(root).run.harnesses!.pi!.acpx!.usage!.command).toBe(
       "/session",
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+function threeConfigLayersPart29() {
+  it("parses a sharesPool fallback and refuses one that also names a subscription", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    const runYaml = path.join(root, ".factory/run.yaml");
+    const run = (tier: string) =>
+      [
+        "aliases:",
+        "  implementer: { harness: omp, model: p, subscription: go,",
+        `    fallbacks: [${tier}] }`,
+        "limits: { iterations: 1 }",
+        "",
+      ].join("\n");
+
+    fs.writeFileSync(runYaml, run("{ model: m, sharesPool: true }"));
+    expect(loadConfigs(root).run.aliases.implementer!.fallbacks).toEqual([
+      { model: "m", sharesPool: true },
+    ]);
+
+    fs.writeFileSync(
+      runYaml,
+      run("{ model: m, subscription: go, sharesPool: true }"),
+    );
+    let error: unknown;
+    try {
+      loadConfigs(root);
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(ConfigError);
+    expect((error as ConfigError).findings).toContainEqual(
+      expect.objectContaining({
+        key: "aliases.implementer.fallbacks.0",
+        message: expect.stringMatching(/both subscription and sharesPool/),
+      }),
     );
     fs.rmSync(root, { recursive: true, force: true });
   });

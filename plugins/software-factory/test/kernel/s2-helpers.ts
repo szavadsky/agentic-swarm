@@ -61,6 +61,7 @@ export interface FlowRepoOptions {
             model: string;
             effort?: string;
             subscription?: string;
+            sharesPool?: true;
           }
       )[];
       timeouts?: { idleMs: number; wallMs: number };
