@@ -12,6 +12,9 @@ gates:
   - id: tests
     command: plugins/software-factory/scripts/gates.sh plugins/software-factory tests
     env: { TMPDIR: .cache/gate }
+    # The suite's wall is the test-suite-optimize cut, not this ceiling; 1800
+    # keeps a slow but healthy run from parking as infra at the shared 900.
+    timeoutSec: 1800
     # run-tests.ts writes the gate's JUnit report here (FACTORY_JUNIT_PATH); the
     # kernel reads the same file, so a red names the failed cases on base too.
     format: { junit: .cache/gate/junit.xml }

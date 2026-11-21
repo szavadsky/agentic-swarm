@@ -8,8 +8,7 @@ import { testPriceSource } from "../helpers/price-source.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { scriptKernelRoleFallbacks } from "../kernel/fake-defaults.js";
 
-const PACKAGE_ROOT = path.resolve(import.meta.dir, "../..");
-const SKILL_DIR = path.join(PACKAGE_ROOT, "skills/run-factory");
+const SKILL_DIR = path.resolve(import.meta.dir, "../../skills/run-factory");
 
 const PLAN = `# Milestone 1 — alpha
 
@@ -181,12 +180,10 @@ function cliArgs(argv: string[]): string[] {
 const runs: Array<{ args: string[]; result: Captured }> = [];
 
 describe("run-factory skill", () => {
-  it("ships kernel and config resources and a linked sandbox page", () => {
+  it("ships kernel, config and sandbox resources through resolvable links", () => {
     expect(fs.existsSync(path.join(SKILL_DIR, "kernel.md"))).toBe(true);
     expect(fs.existsSync(path.join(SKILL_DIR, "config.md"))).toBe(true);
-    expect(fs.existsSync(path.join(PACKAGE_ROOT, "docs", "sandbox.md"))).toBe(
-      true,
-    );
+    expect(fs.existsSync(path.join(SKILL_DIR, "sandbox.md"))).toBe(true);
 
     // A skill is only usable when its bundled links resolve from its directory.
     const skill = fs.readFileSync(path.join(SKILL_DIR, "SKILL.md"), "utf8");
@@ -198,6 +195,7 @@ describe("run-factory skill", () => {
     }
     expect(links).toContain("kernel.md");
     expect(links).toContain("config.md");
+    expect(links).toContain("sandbox.md");
   });
 
   it("runs the skill walkthrough from a fresh checkout on the fake harness", async () => {

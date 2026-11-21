@@ -2,13 +2,17 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import yaml from "yaml";
 import type { CheckResult } from "../../src/core/checks/types.js";
+import { repoConfigSchema } from "../../src/kernel/config.js";
 import {
+  GATE_TIMEOUT_SEC,
   gateSignatures,
+  gateTimeoutSec,
   isInfraCheck,
   runGates,
 } from "../../src/kernel/gates.js";
-import type { KernelRuntime } from "../../src/kernel/types.js";
+import type { GateConfig, KernelRuntime } from "../../src/kernel/types.js";
 
 function check(patch: Partial<CheckResult> = {}): CheckResult {
   return {
@@ -19,6 +23,28 @@ function check(patch: Partial<CheckResult> = {}): CheckResult {
     fingerprint: "x",
     ...patch,
   };
+}
+
+function declaredGate(patch: Partial<GateConfig> = {}): GateConfig {
+  return { id: "gate", command: "true", serial: [], ...patch };
+}
+
+/**
+ * The repo config of the tree under test. The gate export copies only the
+ * package, so it names that tree through FACTORY_TREE_ROOT; a plain checkout
+ * finds the config four levels above this test file.
+ */
+function shippedRepoConfigPath(): string {
+  const tree = process.env.FACTORY_TREE_ROOT;
+  const candidates = [
+    ...(tree ? [path.join(tree, ".factory/repo.yaml")] : []),
+    path.resolve(import.meta.dir, "../../../../.factory/repo.yaml"),
+  ];
+  const found = candidates.find((file) => fs.existsSync(file));
+  if (found === undefined) {
+    throw new Error(`repo config not found: ${candidates.join(", ")}`);
+  }
+  return found;
 }
 
 function runtimeWith(
@@ -257,6 +283,69 @@ describe("a capped JUnit report", () => {
       });
       const stored = run!.details as { junit: { cases: unknown[] } };
       expect(stored.junit.cases).toHaveLength(100);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("per-gate walls", () => {
+  it("runs the tests gate with its declared 1800 s wall and an undeclared gate with 900 s", () => {
+    const repo = repoConfigSchema.parse(
+      yaml.parse(fs.readFileSync(shippedRepoConfigPath(), "utf8")),
+    );
+    const tests = repo.gates.find((gate) => gate.id === "tests");
+    expect(tests).toBeDefined();
+    expect(gateTimeoutSec(tests!)).toBe(1800);
+    expect(gateTimeoutSec(declaredGate({ id: "typecheck" }))).toBe(
+      GATE_TIMEOUT_SEC,
+    );
+    expect(GATE_TIMEOUT_SEC).toBe(900);
+  });
+
+  it("parses a gate's declared wall and keeps an undeclared one absent", () => {
+    const repo = repoConfigSchema.parse({
+      gates: [
+        { id: "tests", command: "bun test", timeoutSec: 1800 },
+        { id: "lint", command: "biome check" },
+      ],
+    });
+    expect(repo.gates.map((gate) => gate.timeoutSec)).toEqual([
+      1800,
+      undefined,
+    ]);
+  });
+
+  it("falls back to the shared wall for absent, zero, negative or non-numeric walls", () => {
+    const repo = repoConfigSchema.parse({
+      gates: [
+        { id: "zero", command: "true", timeoutSec: 0 },
+        { id: "negative", command: "true", timeoutSec: -5 },
+      ],
+    });
+    for (const gate of repo.gates) expect(gateTimeoutSec(gate)).toBe(900);
+    expect(gateTimeoutSec({})).toBe(900);
+    for (const timeoutSec of [Number.NaN, "1800"]) {
+      expect(
+        gateTimeoutSec({
+          timeoutSec,
+        } as unknown as Pick<GateConfig, "timeoutSec">),
+      ).toBe(900);
+    }
+  });
+
+  it("stops a gate at its declared wall and names that wall", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gate-wall-"));
+    try {
+      const [run] = await runGates(
+        runtimeWith(root, [
+          declaredGate({ id: "slow", command: "sleep 5", timeoutSec: 0.2 }),
+        ]),
+        root,
+      );
+      expect(run!.ok).toBe(false);
+      expect(run!.summary).toBe("timed out after 0.2s");
+      expect(run!.details).toMatchObject({ roots: [root] });
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

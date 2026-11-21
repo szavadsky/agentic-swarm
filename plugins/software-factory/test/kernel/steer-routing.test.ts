@@ -7,11 +7,12 @@ import {
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
 import { runBoundary } from "../../src/kernel/boundary.js";
+import { formatCause } from "../../src/kernel/cause.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { holdsDir, postSteer } from "../../src/kernel/mailbox.js";
 import { appendPark } from "../../src/kernel/record.js";
 import { spikeReportPath } from "../../src/kernel/spike-report.js";
-import { task, cause, causeText } from "./helpers.js";
+import { cause, causeText, task } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -22,16 +23,15 @@ import {
   writeTask,
 } from "./s2-helpers.js";
 import {
-  writePlan,
-  editPlan,
-  writeHold,
-  stateOf,
-  implementer,
   approver,
-  outboxOf,
+  editPlan,
+  implementer,
   inboxHas,
+  outboxOf,
+  stateOf,
+  writeHold,
+  writePlan,
 } from "./steer-helpers.js";
-import { formatCause } from "../../src/kernel/cause.js";
 
 describe("steer PM routing", () => {
   steerPMRoutingPart1();
@@ -516,7 +516,18 @@ async function exhaustedFailedTaskRouteReachesPart2(
 
   // The architect sees the steer verbatim and answers it; the failed
   // rung's answer claims an amendment that never happened, so the
-  // boundary must never read it.
+  // boundary must never read it. The boundary first routes the still-
+  // unrouted steer to the architect.
+  harness.script((req, ctx) => {
+    writeHold(runtime, "s1", []);
+    ctx.writeOutcome(
+      outcome({
+        summary: "s1 goes to the architect",
+        steerRoutes: [{ steer: "s1", route: "architect" }],
+      }),
+    );
+    return fakeTurnResult(req);
+  });
   harness.script((req, ctx) => {
     expect(req.prompt).toContain("s1 (mailbox/inbox/s1.md)");
     editPlan(runtime);

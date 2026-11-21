@@ -7,6 +7,7 @@ import {
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
 import { runBoundary } from "../../src/kernel/boundary.js";
+import { formatCause } from "../../src/kernel/cause.js";
 import { type DispatchResult, runDispatch } from "../../src/kernel/dispatch.js";
 import {
   holdsDir,
@@ -14,7 +15,7 @@ import {
   quarantineDir,
   readHolds,
 } from "../../src/kernel/mailbox.js";
-import { task, cause, causeText } from "./helpers.js";
+import { cause, causeText, task } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -23,14 +24,28 @@ import {
   writeTask,
 } from "./s2-helpers.js";
 import {
-  writePlan,
-  editPlan,
-  writeHold,
-  tasks,
-  implementer,
   approver,
+  editPlan,
+  implementer,
+  tasks,
+  writeHold,
+  writePlan,
 } from "./steer-holds-helpers.js";
-import { formatCause } from "../../src/kernel/cause.js";
+
+/** The boundary's steer turn: route each pending steer before the architect. */
+function routesSteers(
+  routes: { steer: string; route: "architect" | "stall" }[],
+): FakeTurnHandler {
+  return (req, ctx) => {
+    ctx.writeOutcome(
+      outcome({
+        summary: `routed ${routes.map((entry) => entry.steer).join(", ")}`,
+        steerRoutes: routes,
+      }),
+    );
+    return fakeTurnResult(req);
+  };
+}
 
 describe("mid-run steer holds", () => {
   registerMidRunSteerHoldsPart1();
@@ -58,6 +73,7 @@ async function answersSteerFileNamedSpacesOrColonPart1(
   );
   writeHold(runtime, "my steer:1", ["alpha"]);
 
+  harness.script(routesSteers([{ steer: "my steer:1", route: "architect" }]));
   harness.script((req, ctx) => {
     expect(req.prompt).toContain(
       "- my steer:1 (mailbox/inbox/my steer:1.md): Hold alpha until I answer.",
@@ -141,6 +157,7 @@ async function expiresUnansweredSteerWhoseIdPart1(
     return fakeTurnResult(req);
   };
 
+  harness.script(routesSteers([{ steer: 'we"ird', route: "stall" }]));
   harness.script(ignoreSteer);
   harness.script(unchanged);
   const first = await runBoundary(runtime, { relaunch: false });
@@ -207,6 +224,7 @@ async function leavesTaskAloneWhenSteerIdEqualsPart1(
     return fakeTurnResult(req);
   };
 
+  harness.script(routesSteers([{ steer: "alpha", route: "architect" }]));
   harness.script(ignoreSteer);
   harness.script(unchanged);
   expect((await runBoundary(runtime, { relaunch: false })).decision).toBe(
@@ -281,6 +299,7 @@ async function rePresentsUnansweredSteerThenPart1(
   };
 
   // First unanswered boundary: the steer is recorded, its hold still gates.
+  harness.script(routesSteers([{ steer: "s1", route: "stall" }]));
   harness.script(ignoreSteer);
   harness.script(unchanged);
   const first = await runBoundary(runtime, { relaunch: false });
@@ -628,6 +647,12 @@ function registerMidRunSteerHoldsPart5(): void {
       await postSteer(runtime.store, "s1", "Keep the API stable.");
       await postSteer(runtime.store, "s2", "Keep the API stable.");
 
+      harness.script(
+        routesSteers([
+          { steer: "s1", route: "architect" },
+          { steer: "s2", route: "architect" },
+        ]),
+      );
       harness.script((req, ctx) => {
         expect(req.prompt).toContain(
           "- s1 (mailbox/inbox/s1.md): Keep the API stable.",

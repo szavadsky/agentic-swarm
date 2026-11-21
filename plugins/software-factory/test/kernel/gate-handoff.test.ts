@@ -57,14 +57,10 @@ describe("gate-handoff-log", () => {
       expect(prompts).toHaveLength(1);
       expect(prompts[0]).toContain("- checks: `pass`");
       expect(prompts[0]).toContain(`- checks tree: \`${checks!.tree}\``);
-      expect(prompts[0]).toContain(
-        `- checks log: \`${path.join(
-          runtime.store.recordsDir,
-          String(checks!.iteration),
-          "task",
-          "checks",
-        )}\``,
-      );
+      const checksLog = runtime.store.records.checksLog(checks!);
+      expect(prompts[0]).toContain(`- checks log: \`${checksLog}\``);
+      expect(fs.existsSync(checksLog)).toBe(true);
+      expect(fs.existsSync(path.join(checksLog, "started.yaml"))).toBe(true);
     } finally {
       cleanupFlowRepo(repo);
     }

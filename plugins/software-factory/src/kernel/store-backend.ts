@@ -36,6 +36,12 @@ const FOLDER_IGNORE_MARKER = "# Factory goal records live here";
 
 const ADD_BATCH = 200;
 
+/**
+ * The trailer the store puts in every commit it authors. Containment reads it
+ * to tell a store write apart from an operator commit stacked with one.
+ */
+export const STORE_COMMIT_TRAILER = "Factory-Store-Commit";
+
 /** True for a repo-relative path no backend may commit. */
 export function isPrivateArtifact(rel: string): boolean {
   const parts = rel.split("/");
@@ -66,8 +72,6 @@ const checkoutQueues = new KeyedMutex();
  * out of the artifact commit.
  */
 class GitArtifactWriter implements ArtifactWriter {
-  readonly commits: string[] = [];
-
   constructor(
     private readonly checkout: string,
     /** Repo-relative directory the store owns; `.` for a separate repo. */
@@ -103,13 +107,12 @@ class GitArtifactWriter implements ArtifactWriter {
       await git(this.checkout, [
         "commit",
         "-m",
-        `factory: ${goal} artifacts`,
+        `factory: ${goal} artifacts\n\n${STORE_COMMIT_TRAILER}: ${goal}`,
         "--only",
         "--",
         ...staged,
       ]);
       const sha = (await git(this.checkout, ["rev-parse", "HEAD"])).stdout;
-      this.commits.push(sha);
       if (this.remote) await git(this.checkout, ["push", "origin", "HEAD"]);
       return sha;
     });

@@ -24,16 +24,16 @@ import { makeCause } from "./cause.js";
 import {
   type ContextPackInput,
   forwardedConcerns,
+  goalDebtRecords,
   readyAging,
-  recordsForAudience,
   renderContextData,
   renderContextPack,
 } from "./context-pack.js";
 import { derive, openDebts } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
-import { carryIntentSteers, intentChanges } from "./intent.js";
 import { runKeptLand } from "./integrate.js";
 import { runBoundaryTurn } from "./integration-lock.js";
+import { carryIntentSteers, intentChanges } from "./intent.js";
 import {
   collectSteerRoutes,
   expireHold,
@@ -55,6 +55,7 @@ import {
 } from "./plan-check.js";
 import { goalPlan } from "./plan-file.js";
 import { latestPlanReview } from "./plan-review.js";
+import { runSteerPm } from "./pm.js";
 import { scriptMeta } from "./record.js";
 import type { KernelRuntime } from "./types.js";
 import { integrationHead } from "./worktree.js";
@@ -138,6 +139,58 @@ export async function refreshAfterChecker(
   context: ConsultContext,
 ): Promise<void> {
   context.records = await context.runtime.store.listRecords();
+  context.state = derive(
+    context.tasks,
+    context.records,
+    context.runtime.configs.process.flows,
+  );
+}
+
+/** Steer ids an earlier boundary already put before the architect. */
+function presentedSteers(records: ConsultContext["records"]): Set<string> {
+  return new Set(
+    records
+      .filter((record) => record.step === "steer-presented" && record.slug)
+      .map((record) => record.slug as string),
+  );
+}
+
+/**
+ * An idle-arriving steer has no committed route, so before the architect's
+ * turn it takes the same PM steer-routing rung dispatch runs mid-iteration:
+ * the PM may answer it, carry it into the intent, or route it to the
+ * architect. `intent` and `architect` routes stay pending, so the pack below
+ * still shows the steer; a route that fails leaves it for the architect.
+ *
+ * A steer an earlier boundary already presented is left alone: the PM has had
+ * its one chance and the architect is the owner's consumer. An urgent steer is
+ * the owner's exception, exactly as dispatch treats it: no PM turn.
+ */
+export async function routeUnroutedSteers(
+  context: ConsultContext,
+): Promise<void> {
+  const routed = collectSteerRoutes(context.records);
+  const presented = presentedSteers(context.records);
+  const claim = context.steers.filter(
+    (steer) =>
+      !steer.urgent && !routed.has(steer.id) && !presented.has(steer.id),
+  );
+  if (claim.length === 0) return;
+  await runBoundaryTurn(
+    context.runtime,
+    { iteration: context.iteration, step: "pm" },
+    () =>
+      runSteerPm(context.runtime, {
+        iteration: context.iteration,
+        state: context.state,
+        tasks: context.tasks,
+        steers: claim,
+        cwd: context.runtime.paths.goalCheckout,
+      }),
+  );
+  // A routed task or spike writes files the pack and the architect must see.
+  context.records = await context.runtime.store.listRecords();
+  context.tasks = await context.runtime.store.listTasks();
   context.state = derive(
     context.tasks,
     context.records,
@@ -334,7 +387,7 @@ async function packGovernance(
       audience: { kind: "goal" },
     }),
     debts: openDebts(
-      recordsForAudience(context.records, context.tasks, { kind: "goal" }),
+      goalDebtRecords(context.records, context.tasks, context.state.epics),
       planText,
     ),
     runConfigPath: context.opts.runConfigPath,

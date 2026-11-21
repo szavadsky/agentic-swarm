@@ -11,6 +11,19 @@ describe("KERNEL0 scenario 6 — steer reaches the architect and is answered", (
   steerUnansweredTest();
 });
 
+/** The boundary's steer turn: route the pending steer to the architect. */
+function routesToArchitect(harness: FakeHarness, steer: string): void {
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(
+      outcome({
+        summary: "steer goes to the architect",
+        steerRoutes: [{ steer, route: "architect" }],
+      }),
+    );
+    return fakeTurnResult(req);
+  });
+}
+
 function steerAnsweredTest(): void {
   it("puts the steer in the pack and prompt, then processed + outbox", async () => {
     const goal = makeGoal();
@@ -24,6 +37,7 @@ function steerAnsweredTest(): void {
       );
 
       const harness = new FakeHarness({ id: "fake" });
+      routesToArchitect(harness, "s1");
       harness.script((req, ctx) => {
         expect(req.prompt).toContain("s1 (mailbox/inbox/s1.md)");
         expect(req.prompt).toContain("Keep the public API names stable");
@@ -77,6 +91,7 @@ function steerUnansweredTest(): void {
       await postSteer(store, "s2", "Do not touch the billing module.");
 
       const harness = new FakeHarness({ id: "fake" });
+      routesToArchitect(harness, "s2");
       harness.script((req, ctx) => {
         expect(req.prompt).toContain("s2");
         ctx.writeOutcome(

@@ -208,6 +208,22 @@ export function writeTask(goalDir: string, text: string): void {
 }
 
 /** Scripts the optional digest scout: it annotates the table the script already wrote. */
+/** The boundary's steer turn: route each pending steer to the architect. */
+export function scriptSteerRoutes(
+  harness: FakeHarness,
+  steers: readonly string[],
+): void {
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(
+      outcome({
+        summary: "steers go to the architect",
+        steerRoutes: steers.map((steer) => ({ steer, route: "architect" })),
+      }),
+    );
+    return fakeTurnResult(req);
+  });
+}
+
 export function scriptDigest(
   harness: FakeHarness,
   goalDir: string,

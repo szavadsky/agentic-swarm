@@ -7,6 +7,7 @@ import {
 } from "../../src/harness/fallback.js";
 import type { ModelRef, Stop } from "../../src/harness/types.js";
 import { zeroUsage } from "../../src/harness/usage.js";
+import { installFakeClock } from "../helpers/fake-clock.js";
 
 const A: ModelRef = { id: "provider/a" };
 const B: ModelRef = { id: "provider/b" };
@@ -34,6 +35,8 @@ describe("runWithFallbacks", () => {
   runWithFallbacksPart4();
   runWithFallbacksPart5();
   runWithFallbacksPart6();
+  runWithFallbacksPart7();
+  runWithFallbacksPart8();
 });
 
 function runWithFallbacksPart1() {
@@ -100,9 +103,33 @@ function runWithFallbacksPart2() {
 }
 
 function runWithFallbacksPart3() {
-  it("keeps the bounded retries within the window and for other causes", async () => {
+  it("retries a quota stop at its stated wait inside the window", async () => {
+    const calls: string[] = [];
+    const sleeps: number[] = [];
+    const result = await runWithFallbacks({
+      primary: A,
+      retry: { retries: 1, baseDelayMs: 10, maxDelayMs: 8_000 },
+      run: async (model) => {
+        calls.push(model.id);
+        return calls.length === 1
+          ? output({
+              kind: "infra",
+              cause: "quota",
+              details: "retry-after-ms=8000",
+            })
+          : output(done, model.id);
+      },
+      sleep: async (ms) => {
+        sleeps.push(ms);
+      },
+    });
+    expect(calls).toEqual([A.id, A.id]);
+    expect(sleeps).toEqual([8_000]);
+    expect(result.outcome.stop).toEqual(done);
+  });
+
+  it("keeps the bounded retries for rate and network stops", async () => {
     const cases = [
-      { cause: "quota", details: "retry-after-ms=8000" },
       { cause: "rate", details: "retry-after-ms=38240413" },
       { cause: "network", details: "retry-after-ms=38240413" },
     ] as const;
@@ -235,5 +262,65 @@ function runWithFallbacksPart5() {
 function runWithFallbacksPart6() {
   it("deduplicates a fallback identical to the primary", () => {
     expect(modelChain(A, [A, B, { id: B.id }])).toEqual([A, B]);
+  });
+}
+
+function runWithFallbacksPart7() {
+  it("makes no call before a quota stop's stated reset", async () => {
+    const clock = installFakeClock();
+    try {
+      const callsAt: number[] = [];
+      const calls: string[] = [];
+      const sleeps: number[] = [];
+      const reset: Stop = {
+        kind: "infra",
+        cause: "quota",
+        details: "retry-after-ms=5000",
+      };
+      const result = await runWithFallbacks({
+        primary: A,
+        retry: { retries: 1, baseDelayMs: 10, maxDelayMs: 8_000 },
+        run: async (model) => {
+          callsAt.push(Date.now());
+          calls.push(model.id);
+          return callsAt.length === 1 ? output(reset) : output(done, model.id);
+        },
+        sleep: async (ms) => {
+          sleeps.push(ms);
+          clock.advance(ms);
+        },
+      });
+      expect(sleeps).toEqual([5_000]);
+      expect(calls).toEqual([A.id, A.id]);
+      expect(callsAt).toHaveLength(2);
+      const [first, second] = callsAt;
+      if (first === undefined || second === undefined)
+        throw new Error("expected two calls");
+      expect(second - first).toBe(5_000);
+      expect(result.outcome.stop).toEqual(done);
+    } finally {
+      clock.restore();
+    }
+  });
+}
+
+function runWithFallbacksPart8() {
+  it("keeps both probes when a quota stop states no reset", async () => {
+    const calls: string[] = [];
+    const sleeps: number[] = [];
+    const result = await runWithFallbacks({
+      primary: A,
+      retry: { retries: 2, baseDelayMs: 10 },
+      run: async (model) => {
+        calls.push(model.id);
+        return output(quota, model.id);
+      },
+      sleep: async (ms) => {
+        sleeps.push(ms);
+      },
+    });
+    expect(calls).toEqual([A.id, A.id, A.id]);
+    expect(sleeps).toEqual([10, 20]);
+    expect(result.outcome.stop).toEqual(quota);
   });
 }
