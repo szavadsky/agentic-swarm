@@ -14,6 +14,7 @@ import type {
 import {
   FRONT_STOP_STEP,
   OPEN_TASK_STATUSES,
+  baseContinuations,
   depsSatisfied,
   isRecoveryCrash,
 } from "./shared.js";
@@ -180,11 +181,12 @@ export function buildTaskStates(
   taskStates: Record<string, TaskState>,
   epics: Record<string, EpicState>,
 ): void {
+  const continuations = baseContinuations(tasks);
   for (const task of tasks) {
     const reduction = reductions.get(task.slug)!;
     const status: TaskStatus =
       statuses.get(task.slug) ??
-      (depsSatisfied(task, statuses) ? "ready" : "pending");
+      (depsSatisfied(task, statuses, continuations) ? "ready" : "pending");
     statuses.set(task.slug, status);
     taskStates[task.slug] = taskStateFor(task, reduction, status);
     if (task.epic !== undefined) {
