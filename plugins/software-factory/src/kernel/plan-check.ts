@@ -11,7 +11,7 @@ import {
   runPlanCheckPm,
   snapshotTurn,
 } from "./pm.js";
-import { formatPlanList } from "./plan-file.js";
+import { formatPlanList, planBullets } from "./plan-file.js";
 import { scriptMeta } from "./record.js";
 import type {
   ArtifactStore,
@@ -39,20 +39,12 @@ const OPEN_STATUSES: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
   "parked",
 ]);
 
-/** A top-level plan bullet: `- <slug> — <title>` (the em dash is the plan's). */
-const PLAN_BULLET = /^-\s+(\S+)\s+—/u;
-
 /**
  * The slugs one plan names as task bullets. Prose mentions and nested bullets
  * (`  - done: …`) name no task, so a follow-up cannot hide behind them.
  */
 export function planSlugs(plan: string): Set<string> {
-  const slugs = new Set<string>();
-  for (const line of plan.split(/\r?\n/)) {
-    const match = PLAN_BULLET.exec(line);
-    if (match) slugs.add(match[1]!);
-  }
-  return slugs;
+  return new Set(planBullets(plan).keys());
 }
 
 /**

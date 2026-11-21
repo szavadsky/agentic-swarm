@@ -91,6 +91,70 @@ export function isPlanPath(rel: string): boolean {
   return rel === "plan.md" || /^epics\/[a-z0-9-]+\.md$/.test(rel);
 }
 
+/** A top-level task bullet: `- <slug> — ...`; the em dash is the plan's. */
+const TASK_BULLET = /^-\s+(\S+)\s+—/u;
+
+export interface PlanBullet {
+  slug: string;
+  /** 1-based line of the bullet's first line. */
+  line: number;
+  /**
+   * The bullet's own lines as written: its top-level line plus every indented
+   * line that follows it. Prose, headings and the next top-level line end it.
+   */
+  text: string;
+}
+
+/**
+ * The task bullets one plan carries, by slug. Prose mentions and nested
+ * bullets (`  - done: …`) name no task, so a rule about "the bullet" reads the
+ * same lines the plan-checker's slug scan does.
+ */
+export function planBullets(text: string): Map<string, PlanBullet> {
+  const bullets = new Map<string, PlanBullet>();
+  let open: { slug: string; line: number; lines: string[] } | undefined;
+  const emit = (): void => {
+    if (open) {
+      bullets.set(open.slug, {
+        slug: open.slug,
+        line: open.line,
+        text: open.lines.join("\n"),
+      });
+    }
+  };
+  for (const [index, line] of text.split(/\r?\n/).entries()) {
+    const match = TASK_BULLET.exec(line);
+    if (match) {
+      open = { slug: match[1]!, line: index + 1, lines: [line] };
+      emit();
+      continue;
+    }
+    if (!open) continue;
+    if (line.trim() === "" || /^\s+\S/u.test(line)) {
+      open.lines.push(line);
+      emit();
+      continue;
+    }
+    open = undefined;
+  }
+  return bullets;
+}
+
+/**
+ * The plan's explicit leave decisions: a line `cancelled: <slug> — reason`.
+ * Absence of a bullet says nothing, so no cancellation is ever inferred from
+ * the plan mentioning a task less. A line without the em dash and a reason is
+ * prose, not a decision.
+ */
+export function planCancellations(text: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const line of text.split(/\r?\n/)) {
+    const match = /^\s*cancelled:\s+(\S+)\s+—\s*(\S.*?)\s*$/u.exec(line);
+    if (match) out.set(match[1]!, match[2]!);
+  }
+  return out;
+}
+
 /**
  * A nested list item per plan for a prompt: `- goal: <abs>` or
  * ``- epic `auth`: <abs>``. The continuation indent keeps every line inside the

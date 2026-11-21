@@ -1,0 +1,72 @@
+import { describe, expect, it } from "bun:test";
+import yaml from "yaml";
+import { FakeHarness } from "../../src/harness/fake/index.js";
+import {
+  containmentSnapshot,
+  containmentViolation,
+  ensureTaskWorktree,
+} from "../../src/kernel/worktree.js";
+import { task, causeText } from "./helpers.js";
+import {
+  cleanupFlowRepo,
+  makeRuntime,
+  setupFlowRepo,
+  writeTask,
+} from "./s2-helpers.js";
+
+/** A flow repo whose artifact store commits into the main checkout. */
+function sameRepoFlow(): ReturnType<typeof setupFlowRepo> {
+  const flow = setupFlowRepo();
+  const config = yaml.parse(flow.repo.readFile(".factory/repo.yaml"));
+  config.artifacts = { backend: "same-repo", root: ".factory/artifacts" };
+  flow.repo.writeFile(".factory/repo.yaml", yaml.stringify(config));
+  flow.repo.commit("same-repo artifacts");
+  return flow;
+}
+
+async function sameRepoSnapshot(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+) {
+  const runtime = await makeRuntime(repo, goal, {
+    fake: new FakeHarness({ id: "fake" }),
+  });
+  const file = task("task", { scope: ["task.txt"] });
+  await writeTask(runtime, file);
+  const ensured = await ensureTaskWorktree(runtime, file);
+  const snapshot = await containmentSnapshot(runtime, ensured.path);
+  return { runtime, ensured, snapshot };
+}
+
+function registerAgentContainmentPart22(): void {
+  it("records a main-checkout rewrite under a same-repo store commit", async () => {
+    const { repo, goal } = sameRepoFlow();
+    try {
+      const { runtime, ensured, snapshot } = await sameRepoSnapshot(repo, goal);
+      repo.git(["reset", "--soft", "HEAD~1"]);
+      await runtime.store.writeFile("plan.md", "# Plan\n");
+
+      expect(
+        await containmentViolation(
+          runtime,
+          ensured.path,
+          ensured.branch,
+          snapshot,
+        ),
+      ).toBeUndefined();
+      const incidents = (await runtime.store.listRecords()).filter(
+        (r) => r.step === "containment",
+      );
+      expect(incidents).toHaveLength(1);
+      expect(causeText(incidents[0]!.cause)).toContain(
+        `HEAD moved in ${repo.dir}`,
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+describe("agent containment", () => {
+  registerAgentContainmentPart22();
+});

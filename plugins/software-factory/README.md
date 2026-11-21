@@ -200,6 +200,14 @@ iteration. With `never`, the findings reach the next architect's pack, which
 asks for the same marks. The return runs on the architect boundary step's
 alias; its prompt is `planReturn.prompt`.
 
+The kernel adds one technical finding of its own: an in-place edit to the
+bullet of a task whose file already exists. A task file is immutable outside
+amend, so the finding names the one sanctioned fix — `cancelled:` plus a new
+slug, or a `base` continuation — instead of letting the edit drop. The derive
+turn stores each plan's bullets in `iterations/<n>/plan-bullets.json`; the
+comparison catches a bullet or any of its nested lines. New, merged, cancelled
+and unchanged bullets are not findings.
+
 A flow step may name `alternates: [<alias>…]` to change the model on retry:
 the step's alias runs first, and after each failure-kind launch — no outcome
 after the reminders, an agent-declared `failed`/`blocked`, or fix rounds
@@ -283,17 +291,27 @@ routing, not a retry. Each fallback tier either
 names its own model, harness and effort, and the quota pool it draws on, or
 names another alias (`{ alias: backup }`) and reuses that alias's whole ladder,
 each of its tiers keeping its own quota pool; pre-flight refuses a missing alias
-or a fallback cycle. A turn that lands on a tier keeps the launch on it, and
-dispatch throttles each pool and model within the overall limit.
+or a fallback cycle. A tier that changes the primary's harness or model cannot
+inherit the alias's subscription: it must name its own `subscription` or set
+`sharesPool: true` to draw on the alias's, or its pool key is `harness+model`.
+Pre-flight refuses an alias that names a subscription and such a tier with
+neither declaration. A tier that keeps the primary's harness and model keeps
+inheriting the alias's subscription. A turn that lands on a tier keeps the
+launch on it, and dispatch throttles each pool and model within the overall
+limit.
 
 A tier that answers quota latches its pool. The stop's stated reset
 (`Resets in 130h19m23s`, `Resets in 33m53s`, `retry-after-ms=38240413`) sets
 that pool's cooldown, capped by `quota.maxResetMinutes` when the run config sets
 one; a stop whose text names no parseable reset falls back to
-`quota.resetMinutes` (default 300) from the stop. A quota stop whose stated wait
-is longer than the retry window skips the bounded retry and moves straight to
-the next model; without a stated wait the bounded retries stand. The launch
-stores the reset time in the goal's session store
+`quota.resetMinutes` (default 300) from the stop. A quota stop is final for the
+pool: a stated wait inside the retry window (`maxDelayMs`, 8 s) sleeps in full
+and retries once, and a quota stop again on that retry latches; a stop naming no
+wait, or a wait beyond the window, latches at once after one call. Every retry
+and every tier call reads the latch, so a latched pool makes no call and a
+later, shorter reset never shortens the stored one. A later tier drawing on a
+different pool is still called. The latch is visible in memory before the store
+write. The launch stores the reset time in the goal's session store
 (`quota-pools.yaml` beside the launch directories, so rotation keeps it), and a
 relaunch before that time skips the pool and starts on the next tier. An alias
 whose every tier is exhausted is unavailable: no harness call is made, and

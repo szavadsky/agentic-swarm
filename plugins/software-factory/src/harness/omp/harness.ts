@@ -53,6 +53,7 @@ export class OmpHarness implements Harness {
       primary: req.model,
       fallbacks: req.fallbacks,
       retry: this.retry,
+      pool: req.pool,
       run: async (model) => {
         const value = await runOmpTurn(this.runtime, req, model);
         return {

@@ -42,7 +42,7 @@ import {
   runArchitectReturn,
   runPlanReview,
 } from "./plan-review.js";
-import { runPm } from "./pm.js";
+import { planBulletEditFindings, runPm } from "./pm.js";
 import { scriptMeta } from "./record.js";
 import type { StepRecord } from "./types.js";
 
@@ -336,12 +336,17 @@ export async function reviewChangedPlans(
           ...(entry.architect ? { architect: entry.architect } : {}),
         }),
     );
-    if (
-      review.findings &&
-      review.findings.technical.length > 0 &&
-      policy === "on-technical-concerns"
-    ) {
-      const findings = review.findings;
+    const kernel = await planBulletEditFindings(
+      context.runtime,
+      context.tasks,
+      context.state,
+      entry.plan.rel,
+    );
+    const findings = {
+      technical: [...(review.findings?.technical ?? []), ...kernel],
+      planNotes: review.findings?.planNotes ?? [],
+    };
+    if (findings.technical.length > 0 && policy === "on-technical-concerns") {
       await runBoundaryTurn(
         context.runtime,
         { iteration: context.iteration, step: PLAN_RETURN_STEP },

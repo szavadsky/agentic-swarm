@@ -14,6 +14,7 @@ import type {
   TaskFile,
 } from "../types.js";
 import { existingTasks, pmLadderNote } from "./prompts.js";
+import { openTaskTexts, storePlanBulletBaseline } from "./plan-bullets.js";
 import {
   cancelPlanNamed,
   findingKey,
@@ -175,6 +176,7 @@ export async function runPm(
         runtime,
         opts,
         setup.plansBefore,
+        setup.taskSnapshot,
         setup.baseline,
         findings,
         outcome,
@@ -232,17 +234,28 @@ async function endFailedRung(
 /**
  * The turn's writes are usable: keep them and run every plan's cancellations.
  * Only a finding the turn did not introduce remains, and no rung can fix it.
+ * The accepted derive turn stores the plan bullets it wrote task files from,
+ * so the next plan return can report an edit to an open bullet.
  */
 async function acceptPmTurn(
   runtime: KernelRuntime,
   opts: { iteration: number; state: State },
   plansBefore: readonly PlanSnapshot[],
+  taskSnapshot: Map<string, string>,
   baseline: string[],
   findings: string[],
   outcome: Outcome,
   rungs: PmRung[],
 ): Promise<PmRun> {
   await cancelPlanNamed(runtime, opts.state, plansBefore, opts.iteration);
+  await storePlanBulletBaseline(
+    runtime,
+    opts.iteration,
+    plansBefore
+      .filter((before) => before.exists)
+      .map((before) => ({ rel: before.plan.rel, text: before.text })),
+    openTaskTexts(taskSnapshot, opts.state),
+  );
   const remaining = unfixedBaseline(baseline, findings);
   if (remaining.length > 0) {
     return { status: "architect", findings: remaining, rungs };

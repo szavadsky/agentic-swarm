@@ -1,5 +1,9 @@
 /** Fallback tier checks. */
 
+import {
+  fallbackChangesPrimary,
+  fallbackTierSubscription,
+} from "../flow-context-targets.js";
 import type { AliasConfig, FallbackModelConfig } from "../types.js";
 import type { AliasContext } from "./types.js";
 import { add, checkedModel, registryMessage, resolveEffort } from "./models.js";
@@ -63,19 +67,50 @@ async function checkTierModel(
   if (singleTier) fallback.effort = resolved;
 }
 
-/** Checks one fallback tier, its harness and its quota pool. */
+/**
+ * Checks one fallback tier, its harness and its quota pool. A tier that
+ * changes the primary's harness or model cannot inherit the alias's
+ * subscription; it must name its own or declare `sharesPool`.
+ */
 async function checkFallbackTier(
   ctx: AliasContext,
   tierKey: string,
   fallback: FallbackModelConfig,
   alias: AliasConfig,
-  rotation: readonly { harness: string }[],
+  rotation: readonly { harness: string; model: string }[],
 ): Promise<void> {
   if (fallback.harness !== undefined && !ctx.harnesses.has(fallback.harness)) {
     add(ctx, `${tierKey}.harness`, registryMessage(ctx, fallback.harness));
     return;
   }
-  const tierSubscription = fallback.subscription ?? alias.subscription;
+  const changesPrimary = [alias, ...rotation].some((primary) =>
+    fallbackChangesPrimary(fallback, primary),
+  );
+  const sharesPool = fallback.sharesPool === true;
+  if (sharesPool && alias.subscription === undefined) {
+    add(
+      ctx,
+      `${tierKey}.sharesPool`,
+      "sharesPool: true needs the alias to name a subscription",
+    );
+  }
+  if (
+    changesPrimary &&
+    alias.subscription !== undefined &&
+    fallback.subscription === undefined &&
+    !sharesPool
+  ) {
+    add(
+      ctx,
+      `${tierKey}.subscription`,
+      `fallback changes harness or model from the alias primary, so it cannot inherit subscription "${alias.subscription}"; name its own subscription or set sharesPool: true`,
+    );
+  }
+  const tierSubscription = fallbackTierSubscription(
+    fallback,
+    alias.subscription,
+    changesPrimary,
+  );
   if (
     tierSubscription !== undefined &&
     !ctx.subscriptions.has(tierSubscription)
