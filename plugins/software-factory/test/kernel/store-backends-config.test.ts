@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity: backend config matrix
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -16,7 +15,7 @@ import {
 } from "../../src/kernel/store-backend.js";
 import type { ArtifactBackend } from "../../src/kernel/types.js";
 import { initGoal } from "../../src/cli/commands.js";
-import { createTmpRepo } from "../helpers/tmp-repo.js";
+import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import {
   BACKENDS,
   bareFiles,
@@ -26,6 +25,62 @@ import {
   tempGoalPaths,
   tracked,
 } from "./backend-helpers.js";
+
+/** Writes a repository config for `backend` rooted at `root`, then loads it. */
+function writeBackendRoot(
+  repo: TmpRepo,
+  backend: ArtifactBackend,
+  root: string,
+) {
+  repo.writeFile(
+    ".factory/repo.yaml",
+    `baseBranch: main\nartifactRoot: .factory/artifacts\nartifacts: { backend: ${backend}, root: ${JSON.stringify(root)} }\n`,
+  );
+  return loadConfigs(repo.dir);
+}
+
+/** A root on the wrong side of the repository boundary is rejected loudly. */
+function expectRejectedRoots(repo: TmpRepo): void {
+  expect(() =>
+    resolveGoalPaths(
+      writeBackendRoot(repo, "same-repo", path.join(repo.dir, "..", "outside")),
+      repo.dir,
+      "demo",
+    ),
+  ).toThrow(/inside the repository/);
+  expect(() =>
+    resolveGoalPaths(
+      writeBackendRoot(repo, "git-repo", ".factory/separate"),
+      repo.dir,
+      "demo",
+    ),
+  ).toThrow(/outside the repository/);
+}
+
+/** Each accepted root resolves to the goal directory it names. */
+function expectResolvedRoots(repo: TmpRepo): void {
+  const inside = resolveGoalPaths(
+    writeBackendRoot(repo, "same-repo", ".factory/artifacts"),
+    repo.dir,
+    "demo",
+  );
+  expect(inside.artifacts).toEqual({
+    backend: "same-repo",
+    root: path.join(repo.dir, ".factory/artifacts"),
+  });
+  expect(inside.goalDir).toBe(path.join(repo.dir, ".factory/artifacts/demo"));
+
+  const separate = resolveGoalPaths(
+    writeBackendRoot(repo, "git-repo", "../artifact-store"),
+    repo.dir,
+    "demo",
+  );
+  expect(separate.artifacts.backend).toBe("git-repo");
+  expect(separate.artifacts.root).toBe(
+    path.resolve(repo.dir, "..", "artifact-store"),
+  );
+  expect(separate.goalDir.startsWith(repo.dir)).toBe(false);
+}
 
 describe("artifact backend config", () => {
   it("parses each backend by name and defaults to the plain folder", () => {
@@ -51,56 +106,15 @@ describe("artifact backend config", () => {
   it("keeps same-repo inside the repository and git-repo outside it", () => {
     const repo = createTmpRepo();
     try {
-      const write = (backend: ArtifactBackend, root: string) => {
-        repo.writeFile(
-          ".factory/repo.yaml",
-          `baseBranch: main\nartifactRoot: .factory/artifacts\nartifacts: { backend: ${backend}, root: ${JSON.stringify(root)} }\n`,
-        );
-        return loadConfigs(repo.dir);
-      };
-      expect(() =>
-        resolveGoalPaths(
-          write("same-repo", path.join(repo.dir, "..", "outside")),
-          repo.dir,
-          "demo",
-        ),
-      ).toThrow(/inside the repository/);
-      expect(() =>
-        resolveGoalPaths(
-          write("git-repo", ".factory/separate"),
-          repo.dir,
-          "demo",
-        ),
-      ).toThrow(/outside the repository/);
-
-      const inside = resolveGoalPaths(
-        write("same-repo", ".factory/artifacts"),
-        repo.dir,
-        "demo",
-      );
-      expect(inside.artifacts).toEqual({
-        backend: "same-repo",
-        root: path.join(repo.dir, ".factory/artifacts"),
-      });
-      expect(inside.goalDir).toBe(
-        path.join(repo.dir, ".factory/artifacts/demo"),
-      );
-
-      const separate = resolveGoalPaths(
-        write("git-repo", "../artifact-store"),
-        repo.dir,
-        "demo",
-      );
-      expect(separate.artifacts.backend).toBe("git-repo");
-      expect(separate.artifacts.root).toBe(
-        path.resolve(repo.dir, "..", "artifact-store"),
-      );
-      expect(separate.goalDir.startsWith(repo.dir)).toBe(false);
+      expectRejectedRoots(repo);
+      expectResolvedRoots(repo);
     } finally {
       repo.cleanup();
     }
   });
+});
 
+describe("artifact backend writes", () => {
   it("keeps sessions, logs and raw agent I/O out of artifact history", () => {
     for (const rel of [
       "sessions/launch/raw.jsonl",
@@ -145,7 +159,9 @@ describe("artifact backend config", () => {
       removeGoal(sameRepo);
     }
   }, 60_000);
+});
 
+describe("artifact backend roots", () => {
   it("places a folder backend outside the repository when its root says so", async () => {
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), "factory-outside-"));
     const repo = createTmpRepo();
@@ -187,7 +203,9 @@ describe("artifact backend config", () => {
       repo.cleanup();
     }
   });
+});
 
+describe("artifact backend commits", () => {
   it("does not sweep an operator's staged work into a same-repo artifact commit", async () => {
     const goal = await makeBackendGoal("same-repo");
     try {
@@ -234,7 +252,9 @@ describe("artifact backend config", () => {
       fs.rmSync(temp, { recursive: true, force: true });
     }
   }, 60_000);
+});
 
+describe("artifact backend init", () => {
   it("initialises a goal inside a separate artifact repository", async () => {
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), "factory-init-repo-"));
     const bare = path.join(temp, "artifacts.git");
@@ -268,7 +288,9 @@ describe("artifact backend config", () => {
       fs.rmSync(temp, { recursive: true, force: true });
     }
   }, 60_000);
+});
 
+describe("artifact backend recovery", () => {
   it("replaces the folder backend's ignore when the repo switches to same-repo", async () => {
     const goal = await makeBackendGoal("folder");
     try {
