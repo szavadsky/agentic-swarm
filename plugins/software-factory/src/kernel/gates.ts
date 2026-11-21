@@ -9,6 +9,7 @@ import {
 import { fingerprintText } from "../core/fingerprint.js";
 import { KeyedMutex } from "../core/mutex.js";
 import { runProcess, type ProcessResult } from "../core/proc.js";
+import { trackGateGroup } from "./gate-processes.js";
 import {
   GATE_OUTPUT_CAP,
   capGateOutput,
@@ -49,6 +50,7 @@ export {
   gateSignatureKey,
   gateSignatures,
 } from "./gates-signatures.js";
+export { reapGateProcesses } from "./gate-processes.js";
 
 /**
  * Branch checks and merged-result gates share ports, caches and build dirs only
@@ -118,13 +120,18 @@ function runGateCommand(
         });
       }
       if (extraEnv) env = { ...env, ...extraEnv };
-      return runProcess({
+      let release: (() => void) | undefined;
+      const run = runProcess({
         cmd: command,
         cwd,
         env,
         timeoutSec: gateTimeoutSec(gate),
         maxOutputBytes: GATE_OUTPUT_CAP * 4,
+        onSpawn: (pid) => {
+          release = trackGateGroup(cwd, pid);
+        },
       });
+      return run.finally(() => release?.());
     }
     return gateMutexes.runExclusive(`${repoRoot}\u0000${name}`, () =>
       launch(index + 1),

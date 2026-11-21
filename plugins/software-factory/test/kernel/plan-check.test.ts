@@ -24,7 +24,7 @@ import { PLAN_CHECK_ROUTES_STEP, runPlanCheckPm } from "../../src/kernel/pm.js";
 import { appendCancel, scriptMeta } from "../../src/kernel/record.js";
 import { parseTaskFile, renderTaskFile } from "../../src/kernel/tasks.js";
 import { testPriceSource } from "../helpers/price-source.js";
-import { rec, task, cause, causeText } from "./helpers.js";
+import { rec, script, task, cause, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -2008,6 +2008,24 @@ function registerPlanCheckerPart12(): void {
     const brief = planCheckBrief(state, tasks);
     expect(brief).toContain("- a | parked |");
     expect(brief).toContain("- a: blocked: stuck");
+  });
+
+  it("briefs a dependent as ready when a merged continuation stands in for its parked dep", () => {
+    const tasks = [
+      task("a"),
+      task("b", { base: "a" }),
+      task("c", { deps: ["a"] }),
+    ];
+    const state = derive(tasks, [
+      rec(1, {
+        slug: "a",
+        step: "park",
+        ok: true,
+        cause: cause("empty-diff: no changes"),
+      }),
+      script(2, { slug: "b", step: "merge", ok: true, commit: "deadbeef" }),
+    ]);
+    expect(planCheckBrief(state, tasks)).toContain("- c | ready |");
   });
 }
 

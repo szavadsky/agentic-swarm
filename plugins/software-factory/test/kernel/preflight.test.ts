@@ -7,7 +7,7 @@ import {
   resolveHarnessBinaries,
 } from "../../src/cli/harnesses.js";
 import { FakeHarness } from "../../src/harness/fake/index.js";
-import type { Harness } from "../../src/harness/types.js";
+import type { Harness, ModelProbe, ModelRef } from "../../src/harness/types.js";
 import { recordedBaseGates } from "../../src/kernel/baseline.js";
 import {
   ConfigError,
@@ -23,6 +23,7 @@ import {
 } from "../../src/kernel/preflight.js";
 import { runGoal } from "../../src/kernel/launch.js";
 import { createFolderStore } from "../../src/kernel/store.js";
+import { testPriceSource } from "../helpers/price-source.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { task } from "./helpers.js";
 
@@ -91,6 +92,24 @@ function splitHarnesses(f: Fixture): Map<string, Harness> {
 
 function withScouts(runYaml: string, scouts: string): string {
   return runYaml.replace("limits:", `${scouts}\nlimits:`);
+}
+
+/** A fake harness whose live session probe is its only model source. */
+class ProbeHarness extends FakeHarness {
+  constructor(
+    id: string,
+    private readonly models: readonly string[],
+  ) {
+    super({ id });
+  }
+
+  async probe(model: ModelRef): Promise<ModelProbe> {
+    return {
+      listed: this.models.includes(model.id),
+      available: [...this.models],
+      effort: [],
+    };
+  }
 }
 
 async function fixture(
@@ -187,6 +206,9 @@ describe("pre-flight", () => {
   registerPreFlightPart44();
   registerPreFlightPart45();
   registerPreFlightPart46();
+  registerPreFlightPart47();
+  registerPreFlightPart48();
+  registerPreFlightPart49();
 });
 
 describe("configuration report", () => {
@@ -1839,6 +1861,140 @@ function registerPreFlightPart46(): void {
       else process.env.TMPDIR = previousTmp;
       f.repo.cleanup();
       fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+}
+
+function registerPreFlightPart47(): void {
+  it("refuses an unlisted model on every leg shape: primary, explicit fallback, inherited fallback and alternate", async () => {
+    const run = RUN_HEAD_NO_HIGHEST.replace(
+      "architect: { harness: fake, model: arch, effort: max }",
+      "architect: { harness: fake, model: arch-ghost, effort: max, fallbacks: [{ harness: other, model: other-ghost }] }",
+    )
+      .replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: fake, model: impl, fallbacks: [{ model: impl-ghost }] }",
+      )
+      .replace(
+        "limits:",
+        "  implementer-alt: { harness: fake, model: alt-ghost }\nlimits:",
+      );
+    const f = await fixture(run);
+    try {
+      // No boundary or step alias names this one: only `alternates` does.
+      f.configs.process.flows["implement-review"]!.steps[0]!.alternates = [
+        "implementer-alt",
+      ];
+      const harnesses = new Map(f.input.harnesses);
+      harnesses.set("other", new FakeHarness({ id: "other" }));
+      const unlisted = new Set([
+        "arch-ghost",
+        "other-ghost",
+        "impl-ghost",
+        "alt-ghost",
+      ]);
+      const err = await refusal({
+        ...f.input,
+        harnesses,
+        catalog: async (_harness, model) => !unlisted.has(model),
+        baseGates: false,
+      });
+      const file = path.join(f.repo.dir, ".factory/run.yaml");
+      expect(err.findings).toContainEqual({
+        file,
+        key: "aliases.architect.model",
+        message: 'model "arch-ghost" is not listed by harness "fake"',
+      });
+      expect(err.findings).toContainEqual({
+        file,
+        key: "aliases.architect.fallbacks.0.model",
+        message: 'fallback "other-ghost" is not listed by harness "other"',
+      });
+      expect(err.findings).toContainEqual({
+        file,
+        key: "aliases.implementer.fallbacks.0.model",
+        message: 'fallback "impl-ghost" is not listed by harness "fake"',
+      });
+      expect(err.findings).toContainEqual({
+        file,
+        key: "aliases.implementer-alt.model",
+        message: 'model "alt-ghost" is not listed by harness "fake"',
+      });
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+}
+
+function registerPreFlightPart48(): void {
+  it("refuses a fallback from the live probe of the fallback's own harness", async () => {
+    const f = await fixture(
+      RUN_HEAD_NO_HIGHEST.replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: fake, model: impl, fallbacks: [{ harness: probing, model: far }] }",
+      ),
+    );
+    try {
+      const harnesses = new Map(f.input.harnesses);
+      harnesses.set("probing", new ProbeHarness("probing", ["near"]));
+      const catalog: ModelCatalog = async (harness) => {
+        if (harness === "probing") throw new Error("catalog must not decide");
+        return true;
+      };
+      const err = await refusal({
+        ...f.input,
+        harnesses,
+        catalog,
+        baseGates: false,
+      });
+      expect(err.findings).toContainEqual({
+        file: path.join(f.repo.dir, ".factory/run.yaml"),
+        key: "aliases.implementer.fallbacks.0.model",
+        message:
+          'fallback "far" is not listed by harness "probing"; available models: near',
+      });
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+}
+
+function registerPreFlightPart49(): void {
+  it("refuses the launch before dispatch when an alternate leg's model is unlisted", async () => {
+    const run = `${RUN_HEAD_NO_HIGHEST.replace(
+      "implementer-b: { harness: fake, model: impl-b }",
+      "implementer-b: { harness: fake, model: alt-ghost }",
+    )}worktreeRoot: WORKTREE_ROOT
+sessions: { dir: SESSIONS_DIR }
+`;
+    const f = await fixture(run);
+    try {
+      // The same config passes when every model is listed: the refusal is the
+      // leg's model, not some other finding.
+      await expect(
+        preflight({ ...f.input, catalog: async () => true, baseGates: false }),
+      ).resolves.toBeDefined();
+      const harness = new FakeHarness({ id: "fake" });
+      const failed = await runGoal({
+        repo: f.repo.dir,
+        goal: "demo",
+        iterations: 1,
+        harnesses: { fake: harness },
+        modelCatalog: async (_harness, model) => model !== "alt-ghost",
+        baseGates: false,
+        priceSource: testPriceSource(f.repo.dir),
+      }).catch((err) => err);
+      expect(failed).toBeInstanceOf(PreflightError);
+      expect((failed as PreflightError).findings).toContainEqual(
+        expect.objectContaining({
+          key: "aliases.implementer-b.model",
+          message: 'model "alt-ghost" is not listed by harness "fake"',
+        }),
+      );
+      expect(harness.calls).toEqual([]);
+      expect(await f.input.store.listRecords()).toEqual([]);
+    } finally {
+      f.repo.cleanup();
     }
   });
 }

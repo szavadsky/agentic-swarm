@@ -16,6 +16,7 @@ import {
   gateTimeoutSec,
   isInfraCheck,
   isStaleGateCheck,
+  reapGateProcesses,
   runDeclaredGate,
   UNIDENTIFIED_GATE_FAILURE,
 } from "./gates.js";
@@ -246,6 +247,7 @@ async function runBaseGates(
     }
     return checks;
   } finally {
+    await reapGateProcesses(dir);
     await git(root, ["worktree", "remove", "--force", dir], {
       allowFail: true,
     });

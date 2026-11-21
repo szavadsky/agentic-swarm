@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import yaml from "yaml";
 import type { CheckResult } from "../../src/core/checks/types.js";
 import { repoConfigSchema } from "../../src/kernel/config.js";
 import {
@@ -27,24 +26,6 @@ function check(patch: Partial<CheckResult> = {}): CheckResult {
 
 function declaredGate(patch: Partial<GateConfig> = {}): GateConfig {
   return { id: "gate", command: "true", serial: [], ...patch };
-}
-
-/**
- * The repo config of the tree under test. The gate export copies only the
- * package, so it names that tree through FACTORY_TREE_ROOT; a plain checkout
- * finds the config four levels above this test file.
- */
-function shippedRepoConfigPath(): string {
-  const tree = process.env.FACTORY_TREE_ROOT;
-  const candidates = [
-    ...(tree ? [path.join(tree, ".factory/repo.yaml")] : []),
-    path.resolve(import.meta.dir, "../../../../.factory/repo.yaml"),
-  ];
-  const found = candidates.find((file) => fs.existsSync(file));
-  if (found === undefined) {
-    throw new Error(`repo config not found: ${candidates.join(", ")}`);
-  }
-  return found;
 }
 
 function runtimeWith(
@@ -290,13 +271,12 @@ describe("a capped JUnit report", () => {
 });
 
 describe("per-gate walls", () => {
-  it("runs the tests gate with its declared 1800 s wall and an undeclared gate with 900 s", () => {
-    const repo = repoConfigSchema.parse(
-      yaml.parse(fs.readFileSync(shippedRepoConfigPath(), "utf8")),
-    );
-    const tests = repo.gates.find((gate) => gate.id === "tests");
-    expect(tests).toBeDefined();
-    expect(gateTimeoutSec(tests!)).toBe(1800);
+  // The package-only export carries no `.factory/repo.yaml`, so the wall test
+  // declares its gates inline; that file is the schema-validation gate's.
+  it("runs a declared 1800 s tests gate at that wall and an undeclared gate at 900 s", () => {
+    expect(
+      gateTimeoutSec(declaredGate({ id: "tests", timeoutSec: 1800 })),
+    ).toBe(1800);
     expect(gateTimeoutSec(declaredGate({ id: "typecheck" }))).toBe(
       GATE_TIMEOUT_SEC,
     );
