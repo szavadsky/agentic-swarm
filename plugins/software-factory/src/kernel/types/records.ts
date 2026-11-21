@@ -293,7 +293,8 @@ export type IterationFile =
   | "context-data.json"
   | "summary.md"
   | "digest.md"
-  | "metrics.yaml";
+  | "metrics.yaml"
+  | "plan-bullets.json";
 
 export interface IterationStore {
   /** Goal-relative path of one iteration file. */

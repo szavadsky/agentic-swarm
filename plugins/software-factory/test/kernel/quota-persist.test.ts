@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import yaml from "yaml";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
@@ -9,6 +10,7 @@ import { resolveTurn } from "../../src/kernel/flow-context.js";
 import {
   DEFAULT_POOL_RESET_MINUTES,
   loadPoolResets,
+  markPoolExhausted,
   poolExhausted,
   poolResetAt,
   quotaPoolsPath,
@@ -103,6 +105,87 @@ describe("exhausted-pool persistence", () => {
   registerExhaustedPoolPersistencePart1();
   registerExhaustedPoolPersistencePart2();
   registerExhaustedPoolPersistencePart3();
+});
+
+function tempPoolPaths(): { sessionsDir: string; goalDir: string } {
+  const sessionsDir = fs.mkdtempSync(path.join(os.tmpdir(), "quota-pools-"));
+  return { sessionsDir, goalDir: path.join(sessionsDir, "demo") };
+}
+
+describe("pool latch reset", () => {
+  it("never shortens a stored reset", async () => {
+    const paths = tempPoolPaths();
+    try {
+      const pools = new Map<string, number>();
+      const now = Date.now();
+      const long = now + 130 * 60 * 60_000;
+      const short = now + 5 * 60 * 60_000;
+      await markPoolExhausted({
+        paths,
+        pools,
+        pool: "claude",
+        resetAt: long,
+      });
+      await markPoolExhausted({
+        paths,
+        pools,
+        pool: "claude",
+        resetAt: short,
+      });
+      expect(pools.get("claude")).toBe(long);
+      let stored = yaml.parse(fs.readFileSync(quotaPoolsPath(paths), "utf8"));
+      expect(Date.parse(stored.pools.claude.resetAt)).toBe(long);
+
+      const later = long + 60 * 60_000;
+      await markPoolExhausted({
+        paths,
+        pools,
+        pool: "claude",
+        resetAt: later,
+      });
+      expect(pools.get("claude")).toBe(later);
+      stored = yaml.parse(fs.readFileSync(quotaPoolsPath(paths), "utf8"));
+      expect(Date.parse(stored.pools.claude.resetAt)).toBe(later);
+    } finally {
+      fs.rmSync(paths.sessionsDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("pool latch visibility", () => {
+  it("latches in memory before the store write, and both concurrent stops persist", async () => {
+    const paths = tempPoolPaths();
+    try {
+      const pools = new Map<string, number>();
+      const claude = Date.now() + 60_000;
+      const go = Date.now() + 120_000;
+      const first = markPoolExhausted({
+        paths,
+        pools,
+        pool: "claude",
+        resetAt: claude,
+      });
+      const second = markPoolExhausted({
+        paths,
+        pools,
+        pool: "go",
+        resetAt: go,
+      });
+
+      // A reader in another leg sees both latches before either write lands.
+      expect(poolExhausted(pools, "claude")).toBe(true);
+      expect(poolExhausted(pools, "go")).toBe(true);
+      expect(fs.existsSync(quotaPoolsPath(paths))).toBe(false);
+
+      await Promise.all([first, second]);
+      const stored = yaml.parse(fs.readFileSync(quotaPoolsPath(paths), "utf8"));
+      expect(Object.keys(stored.pools).sort()).toEqual(["claude", "go"]);
+      expect(Date.parse(stored.pools.claude.resetAt)).toBe(claude);
+      expect(Date.parse(stored.pools.go.resetAt)).toBe(go);
+    } finally {
+      fs.rmSync(paths.sessionsDir, { recursive: true, force: true });
+    }
+  });
 });
 
 async function skipsPoolRelaunchBeforeStoredResetPart1(

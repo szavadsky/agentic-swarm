@@ -5,7 +5,7 @@ import {
   modelChain,
   runWithFallbacks,
 } from "../../src/harness/fallback.js";
-import type { ModelRef, Stop } from "../../src/harness/types.js";
+import type { ModelRef, PoolLatch, Stop } from "../../src/harness/types.js";
 import { zeroUsage } from "../../src/harness/usage.js";
 import { installFakeClock } from "../helpers/fake-clock.js";
 
@@ -17,8 +17,29 @@ function output(stop: Stop, value = "ok"): AttemptOutput<string> {
 }
 
 const quota: Stop = { kind: "infra", cause: "quota" };
+const rate: Stop = { kind: "infra", cause: "rate" };
 const auth: Stop = { kind: "infra", cause: "auth" };
 const done: Stop = { kind: "done" };
+
+/** A pool a test latches by hand, recording every stop the loop marks dead. */
+function latchRecorder() {
+  let live = true;
+  const deadStops: Stop[] = [];
+  return {
+    pool: {
+      live: () => live,
+      dead: (stop: Stop) => {
+        live = false;
+        deadStops.push(stop);
+      },
+    } satisfies PoolLatch,
+    deadStops,
+    /** Latches without a stop, like a sibling leg's quota call landing mid-run. */
+    latch: () => {
+      live = false;
+    },
+  };
+}
 
 // The recorded quota stops that clustered retries: a provider-stated wait in
 // hours/minutes and the millisecond header a 429 carries. Both exceed any
@@ -32,11 +53,14 @@ describe("runWithFallbacks", () => {
   runWithFallbacksPart1();
   runWithFallbacksPart2();
   runWithFallbacksPart3();
+  runWithFallbacksPart3b();
+  runWithFallbacksPart3c();
   runWithFallbacksPart4();
   runWithFallbacksPart5();
   runWithFallbacksPart6();
   runWithFallbacksPart7();
   runWithFallbacksPart8();
+  runWithFallbacksPart9();
 });
 
 function runWithFallbacksPart1() {
@@ -56,36 +80,40 @@ function runWithFallbacksPart1() {
     expect(result.outcome.value).toBe(A.id);
   });
 
-  it("retries a quota failure on the same model before falling back", async () => {
+  it("makes one call when a quota stop names no wait, and latches the pool", async () => {
     const calls: string[] = [];
-    const sleeps: number[] = [];
+    const recorder = latchRecorder();
     const result = await runWithFallbacks({
       primary: A,
-      retry: { retries: 1, baseDelayMs: 10, maxDelayMs: 10 },
+      fallbacks: [B],
+      retry: { retries: 2, baseDelayMs: 10 },
+      pool: recorder.pool,
       run: async (model) => {
         calls.push(model.id);
-        return calls.length === 1 ? output(quota) : output(done, model.id);
+        return output(quota, model.id);
       },
-      sleep: async (ms) => {
-        sleeps.push(ms);
+      sleep: async () => {
+        throw new Error("must not sleep");
       },
     });
-    expect(calls).toEqual([A.id, A.id]);
-    expect(sleeps).toEqual([10]);
-    expect(result.outcome.stop).toEqual(done);
-    expect(result.attempts.map((a) => a.model.id)).toEqual([A.id, A.id]);
+    expect(calls).toEqual([A.id]);
+    expect(result.attempts.map((a) => a.model.id)).toEqual([A.id]);
+    expect(result.outcome.stop).toEqual(quota);
+    expect(recorder.deadStops).toEqual([quota]);
   });
 }
 
 function runWithFallbacksPart2() {
-  it("advances without retrying when a quota stop states a wait beyond the window", async () => {
+  it("makes one call when a quota stop states a wait beyond the window", async () => {
     for (const details of statedQuotaDetails) {
       const calls: string[] = [];
+      const recorder = latchRecorder();
       const stop: Stop = { kind: "infra", cause: "quota", details };
       const result = await runWithFallbacks({
         primary: A,
         fallbacks: [B],
         retry: { retries: 2, baseDelayMs: 10, maxDelayMs: 8_000 },
+        pool: recorder.pool,
         run: async (model) => {
           calls.push(model.id);
           return output(stop, model.id);
@@ -94,10 +122,11 @@ function runWithFallbacksPart2() {
           throw new Error("must not sleep");
         },
       });
-      // One call per dead leg: no retry on the primary, straight to the next.
-      expect(calls).toEqual([A.id, B.id]);
-      expect(result.attempts.map((a) => a.model.id)).toEqual([A.id, B.id]);
+      // The first leg's stop chooses for the pool: no retry, no later model.
+      expect(calls).toEqual([A.id]);
+      expect(result.attempts.map((a) => a.model.id)).toEqual([A.id]);
       expect(result.outcome.stop).toEqual(stop);
+      expect(recorder.deadStops).toEqual([stop]);
     }
   });
 }
@@ -106,18 +135,19 @@ function runWithFallbacksPart3() {
   it("retries a quota stop at its stated wait inside the window", async () => {
     const calls: string[] = [];
     const sleeps: number[] = [];
+    const recorder = latchRecorder();
+    const stop: Stop = {
+      kind: "infra",
+      cause: "quota",
+      details: "retry-after-ms=8000",
+    };
     const result = await runWithFallbacks({
       primary: A,
       retry: { retries: 1, baseDelayMs: 10, maxDelayMs: 8_000 },
+      pool: recorder.pool,
       run: async (model) => {
         calls.push(model.id);
-        return calls.length === 1
-          ? output({
-              kind: "infra",
-              cause: "quota",
-              details: "retry-after-ms=8000",
-            })
-          : output(done, model.id);
+        return calls.length === 1 ? output(stop) : output(done, model.id);
       },
       sleep: async (ms) => {
         sleeps.push(ms);
@@ -126,8 +156,42 @@ function runWithFallbacksPart3() {
     expect(calls).toEqual([A.id, A.id]);
     expect(sleeps).toEqual([8_000]);
     expect(result.outcome.stop).toEqual(done);
+    // The retry answered, so the pool is still live for the next leg.
+    expect(recorder.deadStops).toEqual([]);
   });
+}
 
+function runWithFallbacksPart3b() {
+  it("latches when the retry at a stated wait also stops on quota", async () => {
+    const calls: string[] = [];
+    const sleeps: number[] = [];
+    const recorder = latchRecorder();
+    const stop: Stop = {
+      kind: "infra",
+      cause: "quota",
+      details: "retry-after-ms=5000",
+    };
+    const result = await runWithFallbacks({
+      primary: A,
+      fallbacks: [B],
+      retry: { retries: 2, baseDelayMs: 10, maxDelayMs: 8_000 },
+      pool: recorder.pool,
+      run: async (model) => {
+        calls.push(model.id);
+        return output(stop);
+      },
+      sleep: async (ms) => {
+        sleeps.push(ms);
+      },
+    });
+    expect(calls).toEqual([A.id, A.id]);
+    expect(sleeps).toEqual([5_000]);
+    expect(result.outcome.stop).toEqual(stop);
+    expect(recorder.deadStops).toEqual([stop]);
+  });
+}
+
+function runWithFallbacksPart3c() {
   it("keeps the bounded retries for rate and network stops", async () => {
     const cases = [
       { cause: "rate", details: "retry-after-ms=38240413" },
@@ -203,7 +267,7 @@ function runWithFallbacksPart4() {
       retry: { retries: 1, baseDelayMs: 1, maxDelayMs: 1 },
       run: async (model) => {
         calls.push(model.id);
-        return output(model.id === B.id ? done : quota, model.id);
+        return output(model.id === B.id ? done : rate, model.id);
       },
       sleep: async () => {},
     });
@@ -238,9 +302,12 @@ function runWithFallbacksPart5() {
       fallbacks: [B],
       retry: { retries: 0 },
       run: async (model) =>
-        output(model.id === A.id ? quota : { kind: "infra", cause: "rate" }),
+        output(model.id === A.id ? rate : { kind: "infra", cause: "network" }),
     });
-    expect(result.outcome.stop).toEqual({ kind: "infra", cause: "rate" });
+    expect(result.outcome.stop).toEqual({
+      kind: "infra",
+      cause: "network",
+    });
     expect(result.attempts).toHaveLength(2);
   });
 
@@ -305,11 +372,12 @@ function runWithFallbacksPart7() {
 }
 
 function runWithFallbacksPart8() {
-  it("keeps both probes when a quota stop states no reset", async () => {
+  it("makes one call when a quota stop states no reset", async () => {
     const calls: string[] = [];
     const sleeps: number[] = [];
     const result = await runWithFallbacks({
       primary: A,
+      fallbacks: [B],
       retry: { retries: 2, baseDelayMs: 10 },
       run: async (model) => {
         calls.push(model.id);
@@ -319,8 +387,51 @@ function runWithFallbacksPart8() {
         sleeps.push(ms);
       },
     });
-    expect(calls).toEqual([A.id, A.id, A.id]);
-    expect(sleeps).toEqual([10, 20]);
+    // The reversed i7 acceptance: no cheap no-reset probes, one call decides.
+    expect(calls).toEqual([A.id]);
+    expect(sleeps).toEqual([]);
     expect(result.outcome.stop).toEqual(quota);
+  });
+}
+
+function runWithFallbacksPart9() {
+  it("makes no retry call once a concurrent leg latched the pool", async () => {
+    const calls: string[] = [];
+    const recorder = latchRecorder();
+    const result = await runWithFallbacks({
+      primary: A,
+      fallbacks: [B],
+      retry: { retries: 2, baseDelayMs: 10 },
+      pool: recorder.pool,
+      run: async (model) => {
+        calls.push(model.id);
+        recorder.latch();
+        return output(rate);
+      },
+      sleep: async () => {
+        throw new Error("must not sleep");
+      },
+    });
+    expect(calls).toEqual([A.id]);
+    expect(result.outcome.stop).toEqual(rate);
+  });
+
+  it("makes no fallback call once the pool is latched", async () => {
+    const calls: string[] = [];
+    const recorder = latchRecorder();
+    const result = await runWithFallbacks({
+      primary: A,
+      fallbacks: [B],
+      retry: { retries: 0 },
+      pool: recorder.pool,
+      run: async (model) => {
+        calls.push(model.id);
+        recorder.latch();
+        return output(rate);
+      },
+    });
+    expect(calls).toEqual([A.id]);
+    expect(result.attempts.map((a) => a.model.id)).toEqual([A.id]);
+    expect(result.outcome.stop).toEqual(rate);
   });
 }

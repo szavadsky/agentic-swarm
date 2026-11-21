@@ -77,10 +77,25 @@ export const fallbackSchema = z.union([
       model: z.string().min(1),
       /** Effort level; defaults to the alias's resolved effort. */
       effort: z.string().min(1).optional(),
-      /** Quota pool this tier draws on; defaults to the alias's subscription. */
+      /**
+       * Quota pool this tier draws on; defaults to the alias's subscription
+       * only when the tier keeps the primary's harness and model.
+       */
       subscription: z.string().min(1).optional(),
+      /**
+       * Draws on the alias's subscription although the tier changes the
+       * primary's harness or model; without either declaration such a tier is
+       * keyed `harness+model`.
+       */
+      sharesPool: z.literal(true).optional(),
     })
-    .strict(),
+    .strict()
+    .refine(
+      (fallback) =>
+        fallback.subscription === undefined ||
+        fallback.sharesPool === undefined,
+      "fallback names both subscription and sharesPool; declare one",
+    ),
 ]);
 
 /** One rotation entry: replaces the alias primary on the iterations that select it. */

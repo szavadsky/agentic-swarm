@@ -56,16 +56,12 @@ export const OMP_THINKING_LEVELS: readonly string[] = [
   "auto",
 ];
 
-/** Built-ins an unattended factory turn may use; `task` enables pinned subagents. */
-export const DEFAULT_TOOLS = [
-  "read",
-  "bash",
-  "edit",
-  "write",
-  "glob",
-  "grep",
-  "task",
-];
+/**
+ * Built-ins an unattended factory turn may use. `task` is omitted: its
+ * in-session workers run on a quota pool the factory cannot see or latch, so a
+ * turn enables them only by naming `task` in its opaque `tools`.
+ */
+export const DEFAULT_TOOLS = ["read", "bash", "edit", "write", "glob", "grep"];
 
 export function selectorOf(
   model: ModelRef | string | undefined,

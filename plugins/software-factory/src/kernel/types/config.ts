@@ -135,8 +135,16 @@ export interface FallbackModelConfig {
   model: string;
   /** Effort level; defaults to the alias's resolved effort. */
   effort?: string;
-  /** Quota pool this tier draws on; defaults to the alias's subscription. */
+  /**
+   * Quota pool this tier draws on; defaults to the alias's subscription only
+   * when the tier keeps the primary's harness and model.
+   */
   subscription?: string;
+  /**
+   * Draws on the alias's subscription although the tier changes the primary's
+   * harness or model. Without it such a tier is keyed `harness+model`.
+   */
+  sharesPool?: true;
 }
 
 /** One rotation entry: the alias's primary harness, model and effort for an iteration. */

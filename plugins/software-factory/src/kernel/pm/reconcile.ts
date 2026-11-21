@@ -5,6 +5,7 @@ import {
   steerProvenance,
 } from "../mailbox.js";
 import type { PlanFile } from "../plan-file.js";
+import { planCancellations } from "../plan-file.js";
 import { appendCancel, scriptMeta } from "../record.js";
 import {
   parseTaskFile,
@@ -158,21 +159,6 @@ function cancelledSlugs(state: State): string[] {
     .filter(([, task]) => task.status === "cancelled")
     .map(([slug]) => slug)
     .sort();
-}
-
-/**
- * The plan's explicit leave decisions: a line `cancelled: <slug> — reason`
- * retires that task. Absence of a bullet says nothing, so no cancellation is
- * ever inferred from the plan mentioning a task less. A line without the em
- * dash and a reason is prose, not a decision.
- */
-function planCancellations(plan: string): Map<string, string> {
-  const out = new Map<string, string>();
-  for (const line of plan.split("\n")) {
-    const match = /^\s*cancelled:\s+(\S+)\s+—\s*(\S.*?)\s*$/u.exec(line);
-    if (match) out.set(match[1]!, match[2]!);
-  }
-  return out;
 }
 
 /**

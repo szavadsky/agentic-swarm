@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { OmpHarness } from "../../src/harness/omp/harness.js";
+import type { Stop } from "../../src/harness/types.js";
 
 const FAKE_OMP = `#!/usr/bin/env bun
 const readline = require("node:readline");
@@ -61,7 +62,7 @@ describe("OmpHarness fallback chain", () => {
 });
 
 function ompHarnessFallbackChainPart1() {
-  it("retries quota then walks to the fallback and reports every hop", async () => {
+  it("makes one call on a quota stop, latches the pool and skips the fallback", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-fallback-"));
     try {
       const binary = path.join(tmp, "fake-omp.js");
@@ -71,6 +72,11 @@ function ompHarnessFallbackChainPart1() {
         sessionDir: path.join(tmp, "sessions"),
         retry: { retries: 0 },
       });
+      const deadStops: Stop[] = [];
+      const pool = {
+        live: () => true,
+        dead: (stop: Stop) => deadStops.push(stop),
+      };
 
       const result = await harness.turn({
         model: { id: "provider/bad" },
@@ -78,24 +84,19 @@ function ompHarnessFallbackChainPart1() {
         cwd: tmp,
         prompt: "go",
         timeouts: { idleMs: 10_000, wallMs: 20_000 },
+        pool,
       });
 
-      expect(result.stop).toEqual({ kind: "done" });
-      expect(result.text).toBe("from good");
-      expect(result.model.id).toBe("provider/good");
-      expect(result.attempts?.map((attempt) => attempt.model.id)).toEqual([
-        "provider/bad",
-        "provider/good",
-      ]);
-      expect(result.attempts?.[0]?.stop).toEqual({
+      const quotaStop = {
         kind: "infra",
         cause: "quota",
         details: "429 Free usage limit reached",
-      });
-      expect(result.usage.in).toBe(5);
-      expect(result.usage.out).toBe(2);
-      expect(result.usage.cacheRead).toBe(2);
-      expect(result.usage.costUsd).toBe(0.02);
+      } as const;
+      expect(result.stop).toEqual(quotaStop);
+      expect(result.attempts?.map((attempt) => attempt.model.id)).toEqual([
+        "provider/bad",
+      ]);
+      expect(deadStops).toEqual([quotaStop]);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
@@ -135,6 +136,11 @@ function ompHarnessFallbackChainPart2() {
         cause: "network",
         details: "fetch failed ECONNRESET",
       });
+      // The delivered fallback's usage is the turn's usage.
+      expect(result.usage.in).toBe(5);
+      expect(result.usage.out).toBe(2);
+      expect(result.usage.cacheRead).toBe(2);
+      expect(result.usage.costUsd).toBe(0.02);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }

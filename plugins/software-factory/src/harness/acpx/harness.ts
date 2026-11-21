@@ -59,6 +59,7 @@ export class AcpxHarness implements Harness {
       primary: req.model,
       fallbacks: req.fallbacks,
       retry: this.retry,
+      pool: req.pool,
       run: async (model) => {
         const value = await runAcpxTurn(this.runtime, req, model);
         return {

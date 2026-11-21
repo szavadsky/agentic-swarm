@@ -7,6 +7,7 @@ import { poolExhausted } from "./quota-pools.js";
 import type {
   AliasConfig,
   BoundaryStep,
+  FallbackModelConfig,
   KernelRuntime,
   RepairSpec,
   Timeouts,
@@ -34,6 +35,35 @@ export function tierPoolKey(tier: {
     typeof tier.harness === "string" ? tier.harness : tier.harness.id;
   const modelId = typeof tier.model === "string" ? tier.model : tier.model.id;
   return `${harnessId}+${modelId}`;
+}
+
+/**
+ * Whether a literal fallback runs on a harness or model other than the given
+ * primary. An unnamed harness is the primary's, so only the model can differ.
+ */
+export function fallbackChangesPrimary(
+  fallback: Pick<FallbackModelConfig, "harness" | "model">,
+  primary: { harness: string; model: string },
+): boolean {
+  return (
+    fallback.model !== primary.model ||
+    (fallback.harness !== undefined && fallback.harness !== primary.harness)
+  );
+}
+
+/**
+ * The pool a literal fallback draws on: its own subscription, the alias's when
+ * it keeps the primary's harness and model or declares `sharesPool`, and none
+ * (so the key is harness+model) when it changes either without declaring.
+ */
+export function fallbackTierSubscription(
+  fallback: FallbackModelConfig,
+  aliasSubscription: string | undefined,
+  changesPrimary: boolean,
+): string | undefined {
+  if (fallback.subscription !== undefined) return fallback.subscription;
+  if (changesPrimary && fallback.sharesPool !== true) return undefined;
+  return aliasSubscription;
 }
 
 /** Everything one turn needs to run: the resolved prompt, alias, harness, model and its own limits. */
@@ -73,7 +103,7 @@ export interface TurnTarget {
  * stored time it may serve again. Dispatch defers the work under this cause
  * instead of calling a tier already known dead.
  */
-function noLiveTierCause(
+export function noLiveTierCause(
   runtime: KernelRuntime,
   aliasName: string,
   chain: readonly ResolvedTier[],
@@ -188,11 +218,14 @@ function pushTier(
 
 /**
  * Appends one alias's ladder to `out`: its primary for the iteration, then
- * each fallback in order. A literal fallback defaults its effort and
- * subscription to this alias's; a fallback that names another alias
- * contributes that alias's whole ladder on the same iteration, so each of its
- * tiers keeps the named alias's own defaults and quota pools. An alias already
- * on `path` is a cycle, refused at pre-flight and never walked twice here.
+ * each fallback in order. A literal fallback defaults its effort and, when it
+ * keeps the primary's harness and model or declares `sharesPool`, its
+ * subscription to this alias's; one that changes either without declaring
+ * draws on no subscription and is keyed `harness+model`. A fallback that names
+ * another alias contributes that alias's whole ladder on the same iteration,
+ * so each of its tiers keeps the named alias's own defaults and quota pools. An
+ * alias already on `path` is a cycle, refused at pre-flight and never walked
+ * twice here.
  */
 function collectTiers(
   runtime: KernelRuntime,
@@ -226,14 +259,19 @@ function collectTiers(
       collectTiers(runtime, target, iteration, [...path, target], out);
       continue;
     }
+    const tierHarness = fallback.harness ?? primary.harness;
+    const changesPrimary = fallbackChangesPrimary(fallback, {
+      harness: primary.harness,
+      model: primary.model,
+    });
     pushTier(
       runtime,
       out,
       aliasName,
-      fallback.harness ?? primary.harness,
+      tierHarness,
       fallback.model,
       fallback.effort ?? primary.effort,
-      fallback.subscription ?? alias.subscription,
+      fallbackTierSubscription(fallback, alias.subscription, changesPrimary),
     );
   }
 }

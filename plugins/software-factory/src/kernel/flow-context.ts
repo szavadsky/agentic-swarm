@@ -37,6 +37,7 @@ export type { TurnTarget } from "./flow-context-targets.js";
 export {
   architectureTarget,
   boundaryTarget,
+  noLiveTierCause,
   resolveTurn,
   subarchitectTarget,
   tierPoolKey,
