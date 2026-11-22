@@ -12,8 +12,8 @@ consult, bounded by `limits.planCheckRounds`; the consult runs on `architect`,
 when nothing is open, or when the bound is hit. State is derived from task
 files and append-only records; there is no state file to repair. After the
 first iteration a pack-preparer turn turns the script's full status data into
-the iteration's index pack; when it fails, the script render is the pack and
-the fallback is recorded as a glitch.
+the iteration's index pack; when it fails, it tries its alias fallback chain before the
+script renders a bounded index pack and the fallback is recorded as a glitch.
 
 ## Commands
 

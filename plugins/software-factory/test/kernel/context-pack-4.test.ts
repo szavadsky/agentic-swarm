@@ -9,7 +9,7 @@ import { rec, script, task } from "./helpers.js";
 const tasks = [task("a"), task("b", { deps: ["a"] })];
 
 function registerContextPackPart8(): void {
-  it("renders each spike finding under its slug, indenting a multi-line report", () => {
+  it("renders each spike finding as a pointer and size, never a body", () => {
     const spikes = [task("probe", { kind: "spike", flow: "spike" })];
     const pack = renderContextPack({
       goal: "demo",
@@ -31,8 +31,9 @@ function registerContextPackPart8(): void {
       debts: [],
     });
     expect(pack).toContain(
-      "## Spike findings\n- probe:\n  # Finding\n  Cursor wins.\n",
+      "## Spike findings\n- probe: .factory/spikes/probe.md (22 bytes)\n",
     );
+    expect(pack).not.toContain("Cursor wins.");
   });
 }
 
