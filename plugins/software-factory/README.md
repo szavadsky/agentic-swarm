@@ -469,3 +469,38 @@ task is unset only when nothing merged or no turn had a known cost. A free
 model prices to a known `$0` through its all-zero table entry, and its tokens
 still carry the signal. `factory benchmark --goal <name>` prints these
 aggregates as rows.
+
+## Loop-based optimization
+
+Loop-based optimization goals (such as algorithmic speedups, throughput tuning,
+cache optimization, or memory reduction) run entirely on the shipped task types
+(`spike`, `development`, `trivial`) and the standard boundary iteration loop with
+no new configuration keys or custom flows:
+
+- **Candidate spikes (`type: spike`)**: When exploring multiple or uncertain
+  optimization approaches (e.g. SIMD vectorization vs. arena allocation vs.
+  lock-free buffers), the architect plans parallel candidate spikes. Each spike
+  runs in its own worktree on the researcher alias, benchmarks or prototypes the
+  hypothesis against measurement commands configured in `repo.gates`, and
+  commits quantitative findings and trade-offs to `.factory/spikes/<slug>.md`.
+  Spikes finish without merging to the goal branch (`kind: spike`), ensuring
+  unselected explorations leave no code diff or dead scaffolding in repository
+  history.
+- **Architect selection**: At the iteration boundary, the architect consult reads
+  the context pack containing the committed spike reports (via `spikeFinding`),
+  evaluates the empirical benchmark measurements against baseline, selects the
+  winning approach, and rejects unviable or high-risk candidates.
+- **Implementation (`type: development`)**: The architect schedules implementation
+  tasks for the chosen approaches. The PM derives them, and they execute across
+  worktrees under the `implement-review` flow, verifying performance against the
+  target gates and passing QA and review before merging.
+- **Cleanup tasks**: Merged optimization waves often deprecate legacy code paths,
+  scalar fallbacks, temporary fixtures, or transitional profiling hooks. Post-merge
+  cleanup is scheduled by the architect in the subsequent iteration as standard
+  `development` (or `trivial`) tasks. Because tasks execute in isolated worktrees
+  and cannot predict concurrent wave changes, cleanup after a wave belongs cleanly
+  at the next boundary rather than within the individual optimization tasks.
+- **Loop convergence**: The boundary repeats this cycle—characterizing updated
+  baselines, testing candidate variations, merging winners, and cleaning
+  transitional debt—until the architect verifies that performance targets are
+  achieved and declares the goal done.
