@@ -1,11 +1,15 @@
 import type { z } from "zod";
 import { qaOutcomeSchema } from "./qa.js";
 import {
+  normalizeSlug,
   type Outcome,
   outcomeSchema,
+  outcomeSlugSchema,
   type TaskFile,
   type TaskTypeDefinition,
 } from "./types.js";
+
+export { normalizeSlug, outcomeSchema, outcomeSlugSchema };
 
 /**
  * The kernel's fixed output schemas. A task type names one of these; it never

@@ -54,12 +54,32 @@ export const steerRouteEntrySchema = z.object({
 });
 
 /**
+ * Strips markdown code ticks and surrounding whitespace from a slug.
+ * Empty after stripping is rejected by the schema.
+ */
+export function normalizeSlug(raw: string): string {
+  return raw.replace(/^[\s`]+|[\s`]+$/g, "");
+}
+
+/** Schema that normalises a slug string at the schema boundary. */
+export const outcomeSlugSchema = z.preprocess(
+  (val) => (typeof val === "string" ? normalizeSlug(val) : val),
+  z.string().min(1),
+);
+
+/** Schema that normalises an optional slug string at the schema boundary. */
+const optionalOutcomeSlugSchema = z.preprocess(
+  (val) => (typeof val === "string" ? normalizeSlug(val) : val),
+  z.string().min(1).optional(),
+);
+
+/**
  * What the decider does with one parked slug: amend keeps the slug (a new
  * revision of its file), cancel spends it, replace and split continue the kept
  * branch under new slugs, leave defers to the architect.
  */
 export const stallRouteEntrySchema = z.object({
-  slug: z.string().min(1),
+  slug: outcomeSlugSchema,
   action: z.enum(["amend", "cancel", "replace", "split", "leave"]),
   reason: z.string().min(1),
 });
@@ -68,7 +88,7 @@ export type StallDecision = StallRouteEntry["action"];
 
 /** One plan item's check result: what the checker inspected and what it showed. */
 export const planCheckEvidenceSchema = z.object({
-  item: z.string().min(1),
+  item: outcomeSlugSchema,
   status: z.enum(["done", "missing", "below-standard", "unverifiable"]),
   evidence: z.string().min(1),
 });
@@ -90,9 +110,9 @@ export const planCheckFollowUpSchema = z.object({
     "unmerged",
   ]),
   /** The slug this follow-up acts on: a parked task, or the pending task a dead dep blocks. */
-  slug: z.string().min(1),
+  slug: outcomeSlugSchema,
   /** A missing-dep follow-up's dead dependency; absent for every other kind. */
-  dep: z.string().optional(),
+  dep: optionalOutcomeSlugSchema,
   reason: z.string().min(1),
 });
 export type PlanCheckFollowUp = z.infer<typeof planCheckFollowUpSchema>;
@@ -116,7 +136,7 @@ export type PlanCheckVerdict = PlanCheck["verdict"];
  * it for the architect.
  */
 export const planCheckRouteEntrySchema = z.object({
-  slug: z.string().min(1),
+  slug: outcomeSlugSchema,
   action: z.enum(["continue", "leave"]),
   reason: z.string().min(1),
 });
