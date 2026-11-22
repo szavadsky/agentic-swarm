@@ -233,11 +233,19 @@ function gateDetails(
   capped: CappedGateOutput,
   parsed: ParsedJunit | undefined,
   junitError: string | undefined,
+  res?: ProcessResult,
 ): Record<string, unknown> {
   const details: Record<string, unknown> = {
     roots: [cwd],
     truncated: capped.truncated,
   };
+  if (res?.timedOut) {
+    details.kind = "infra";
+    details.cause = `timed out after ${gateTimeoutSec(gate)}s`;
+  } else if (res && (res.code === 126 || res.code === 127)) {
+    details.kind = "infra";
+    details.cause = `exit ${res.code}`;
+  }
   if (gate.format?.pattern) details.pattern = gate.format.pattern;
   // The record keeps a capped report; the verdict above read every case.
   if (parsed) details.junit = capJunit(parsed);
@@ -285,7 +293,7 @@ export async function runDeclaredGate(
         `${gate.id}:${junitIdentity(parsed) || capped.output}`,
         { lowercase: false },
       ),
-      details: gateDetails(gate, cwd, capped, parsed, junitError),
+      details: gateDetails(gate, cwd, capped, parsed, junitError, res),
     },
   };
 }
