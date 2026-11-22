@@ -153,47 +153,62 @@ const RUN_CONFIGS = fs
   .map((name) => name.slice(0, -".yaml".length))
   .sort();
 
-async function expectShippedPreflight(name: string): Promise<void> {
-  const runPath = path.join(BOOTSTRAP_RUN, `${name}.yaml`);
+async function shippedPreflightFixture(name: string, runDir = BOOTSTRAP_RUN) {
+  const runPath = path.join(runDir, `${name}.yaml`);
   const repo = createTmpRepo();
-  try {
-    repo.writeFile(
-      ".factory/repo.yaml",
-      "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n",
-    );
-    repo.commit("factory config");
-    const configs = loadConfigs(repo.dir, { runConfigPath: runPath });
-    // Keep the probe off the operator's real session/worktree roots.
-    const base = path.basename(repo.dir);
-    configs.run.sessions.dir = path.join(
-      path.dirname(repo.dir),
-      `${base}-preflight-sessions`,
-    );
-    configs.run.worktreeRoot = path.join(
-      path.dirname(repo.dir),
-      `${base}-preflight-wt`,
-    );
-    const paths = resolveGoalPaths(configs, repo.dir, "shipped");
-    fs.mkdirSync(paths.goalDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(paths.goalDir, "intent.md"),
-      "# Goal\n\nShipped pre-flight probe.\n",
-      "utf8",
-    );
-    const store = createFolderStore(paths.goalDir, undefined, {});
-    await store.ensureLayout();
-    // No catalog or binaries: the alias set, effort levels and roots are
-    // what the shipped config owns, and every harness is registered here.
-    const harnesses = new Map<string, Harness>();
-    for (const id of ["agy", "claude-code", "codex", "omp", "opencode", "pi"])
-      harnesses.set(
+  repo.writeFile(
+    ".factory/repo.yaml",
+    "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n",
+  );
+  repo.commit("factory config");
+  const configs = loadConfigs(repo.dir, { runConfigPath: runPath });
+  // Keep the probe off the operator's real session/worktree roots.
+  const base = path.basename(repo.dir);
+  configs.run.sessions.dir = path.join(
+    path.dirname(repo.dir),
+    `${base}-preflight-sessions`,
+  );
+  configs.run.worktreeRoot = path.join(
+    path.dirname(repo.dir),
+    `${base}-preflight-wt`,
+  );
+  const paths = resolveGoalPaths(configs, repo.dir, "shipped");
+  fs.mkdirSync(paths.goalDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(paths.goalDir, "intent.md"),
+    "# Goal\n\nShipped pre-flight probe.\n",
+    "utf8",
+  );
+  const store = createFolderStore(paths.goalDir, undefined, {});
+  await store.ensureLayout();
+  // No catalog or binaries: the alias set, effort levels and roots are
+  // what the shipped config owns, and every harness is registered here.
+  const harnesses = new Map<string, Harness>();
+  for (const id of ["agy", "claude-code", "codex", "omp", "opencode", "pi"])
+    harnesses.set(
+      id,
+      new FakeHarness({
         id,
-        new FakeHarness({
-          id,
-          caps: { effort: ["low", "medium", "high", "max"] },
-        }),
-      );
-    const result = await preflight({ configs, paths, store, harnesses });
+        caps: { effort: ["low", "medium", "high", "max"] },
+      }),
+    );
+  return {
+    preflightInput: { configs, paths, store, harnesses },
+    configs,
+    repo,
+  };
+}
+
+async function expectShippedPreflight(
+  name: string,
+  runDir = BOOTSTRAP_RUN,
+): Promise<void> {
+  const { preflightInput, configs, repo } = await shippedPreflightFixture(
+    name,
+    runDir,
+  );
+  try {
+    const result = await preflight(preflightInput);
     // The alias was not merely present: pre-flight checked it and resolved
     // the effort it names (none on shakedown's free alternate).
     expect(result.aliases).toHaveProperty("implementer-b");
@@ -413,4 +428,69 @@ async function missingAliasRefused(): Promise<void> {
 
 describe("shipped run config with a missing alias", () => {
   it("is refused by pre-flight", missingAliasRefused);
+});
+
+async function shippedRunConfigMissingYamlServer(): Promise<void> {
+  const tmpDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "factory-missing-yaml-server-"),
+  );
+  const configsDir = path.join(tmpDir, "configs");
+  fs.cpSync(BOOTSTRAP_RUN, configsDir, { recursive: true });
+  const gitDir = path.join(tmpDir, "bin");
+  fs.mkdirSync(gitDir);
+  const gitBin = Bun.which("git");
+  if (gitBin) fs.symlinkSync(gitBin, path.join(gitDir, "git"));
+  const { preflightInput, repo } = await shippedPreflightFixture(
+    "self",
+    configsDir,
+  );
+  const binaries = Object.fromEntries(
+    [...preflightInput.harnesses.keys()].map((id) => [id, process.execPath]),
+  );
+  const originalPath = process.env.PATH;
+  const inheritedGitDirs = (originalPath ?? "")
+    .split(path.delimiter)
+    .filter((dir) => {
+      try {
+        fs.accessSync(path.join(dir, "git"), fs.constants.X_OK);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+  const clampedPath = [gitDir, ...inheritedGitDirs].join(path.delimiter);
+  process.env.PATH = clampedPath;
+  expect(
+    clampedPath.split(path.delimiter).some((dir) => {
+      try {
+        fs.accessSync(
+          path.join(dir, "yaml-language-server"),
+          fs.constants.X_OK,
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    }),
+  ).toBe(false);
+  try {
+    let err: unknown;
+    try {
+      await preflight({ ...preflightInput, binaries });
+    } catch (caught) {
+      err = caught;
+    }
+    expect(err).toBeInstanceOf(PreflightError);
+    const report = (err as PreflightError).report;
+    expect(report).toContain("lsp");
+    expect(report).toContain("yaml-language-server");
+  } finally {
+    process.env.PATH = originalPath;
+    repo.cleanup();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+describe("shipped run config with a missing yaml language server", () => {
+  it("is refused by pre-flight", shippedRunConfigMissingYamlServer);
 });

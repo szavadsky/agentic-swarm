@@ -13,6 +13,7 @@ import {
   writeArtifactLsp,
 } from "../../src/kernel/artifact-lsp.js";
 import { runGoal } from "../../src/kernel/launch.js";
+import { kernelSchemaFiles } from "../helpers/kernel-schema-files.js";
 import { testPriceSource } from "../helpers/price-source.js";
 import { cleanup, makeGoal } from "./e2e-helpers.js";
 import { withKernelRoleFallbacks } from "./fake-defaults.js";
@@ -104,7 +105,7 @@ describe("launch provisioning", () => {
       const config = artifactLspConfigPath(goal.goalDir);
       expect(fs.existsSync(config)).toBe(true);
       expect(fs.readdirSync(path.join(goal.goalDir, "schemas"))).toHaveLength(
-        7,
+        8,
       );
       const parsed = JSON.parse(fs.readFileSync(config, "utf8")) as {
         servers: Record<string, { fileTypes?: string[] }>;
@@ -125,16 +126,10 @@ describe("launch provisioning", () => {
 async function writesEveryKernelSchemaOneConfigPart1() {
   const written = await writeArtifactLsp(goalDir);
 
-  expect(fs.readdirSync(path.join(goalDir, "schemas")).sort()).toEqual([
-    "class.schema.json",
-    "hold.schema.json",
-    "outcome.schema.json",
-    "process.schema.json",
-    "repo.schema.json",
-    "run.schema.json",
-    "task.schema.json",
-  ]);
-  expect(written.schemas).toHaveLength(7);
+  expect(fs.readdirSync(path.join(goalDir, "schemas")).sort()).toEqual(
+    kernelSchemaFiles(),
+  );
+  expect(written.schemas).toHaveLength(kernelSchemaFiles().length);
   expect(written.config).toBe(artifactLspConfigPath(goalDir));
   expect(fs.existsSync(written.config)).toBe(true);
 

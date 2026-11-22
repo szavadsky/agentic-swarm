@@ -6,17 +6,8 @@ import yaml from "yaml";
 import { z } from "zod";
 import { dispatch } from "../../src/cli/dispatch.js";
 import { loadRunConfig } from "../../src/kernel/config.js";
+import { kernelSchemaFiles } from "../helpers/kernel-schema-files.js";
 import { findShippedRunConfigsDir } from "../helpers/run-configs.js";
-
-const FILES = [
-  "class.schema.json",
-  "hold.schema.json",
-  "outcome.schema.json",
-  "process.schema.json",
-  "repo.schema.json",
-  "run.schema.json",
-  "task.schema.json",
-];
 
 async function runSchemas(args: string[]): Promise<{
   code: number;
@@ -64,6 +55,42 @@ interface JsonSchema {
 const SHIPPED_RUN_DIR = findShippedRunConfigsDir();
 
 describe("factory schemas", () => {
+  factorySchemasPart1();
+  factorySchemasPart2();
+});
+
+function expectKernelSchemaContent(out: string) {
+  const task = JSON.parse(
+    fs.readFileSync(path.join(out, "task.schema.json"), "utf8"),
+  ) as JsonSchema;
+  expect(task.$schema).toContain("json-schema.org");
+  expect(task.type).toBe("object");
+  expect(task.required).toContain("slug");
+  expect(task.required).toContain("title");
+  // Input mode: a field the parser defaults stays optional for editors.
+  expect(task.required).not.toContain("kind");
+  // The exported schema refuses what the parser refuses.
+  expect(task.additionalProperties).toBe(false);
+  expect(task.properties?.after).toBeUndefined();
+
+  const outcome = JSON.parse(
+    fs.readFileSync(path.join(out, "outcome.schema.json"), "utf8"),
+  ) as JsonSchema;
+  expect(outcome.properties?.status?.enum).toContain("done");
+
+  const qa = JSON.parse(
+    fs.readFileSync(path.join(out, "qa.schema.json"), "utf8"),
+  ) as JsonSchema;
+  expect(qa.properties?.status?.enum).toContain("done");
+  expect(qa.properties?.qa).toBeDefined();
+
+  const hold = JSON.parse(
+    fs.readFileSync(path.join(out, "hold.schema.json"), "utf8"),
+  ) as JsonSchema;
+  expect(hold.required).toEqual(expect.arrayContaining(["slugs", "goal"]));
+}
+
+function factorySchemasPart1() {
   it(
     "writes every kernel schema as JSON Schema into a new directory",
     withTmp(async (root) => {
@@ -71,30 +98,9 @@ describe("factory schemas", () => {
       const result = await runSchemas(["--out", out]);
       expect(result.code).toBe(0);
       expect(result.err).toBe("");
-      expect(fs.readdirSync(out).sort()).toEqual(FILES);
+      expect(fs.readdirSync(out).sort()).toEqual(kernelSchemaFiles());
 
-      const task = JSON.parse(
-        fs.readFileSync(path.join(out, "task.schema.json"), "utf8"),
-      ) as JsonSchema;
-      expect(task.$schema).toContain("json-schema.org");
-      expect(task.type).toBe("object");
-      expect(task.required).toContain("slug");
-      expect(task.required).toContain("title");
-      // Input mode: a field the parser defaults stays optional for editors.
-      expect(task.required).not.toContain("kind");
-      // The exported schema refuses what the parser refuses.
-      expect(task.additionalProperties).toBe(false);
-      expect(task.properties?.after).toBeUndefined();
-
-      const outcome = JSON.parse(
-        fs.readFileSync(path.join(out, "outcome.schema.json"), "utf8"),
-      ) as JsonSchema;
-      expect(outcome.properties?.status?.enum).toContain("done");
-
-      const hold = JSON.parse(
-        fs.readFileSync(path.join(out, "hold.schema.json"), "utf8"),
-      ) as JsonSchema;
-      expect(hold.required).toEqual(expect.arrayContaining(["slugs", "goal"]));
+      expectKernelSchemaContent(out);
     }),
   );
 
@@ -112,41 +118,7 @@ describe("factory schemas", () => {
     expect(result.code).toBe(1);
     expect(result.err).toContain("schemas requires --out <dir>");
   });
-});
-
-describe.skipIf(!SHIPPED_RUN_DIR)(
-  "factory schemas: shipped run configs",
-  () => {
-    it(
-      "validates every shipped run config against the exported run schema",
-      withTmp(async (root) => {
-        const out = path.join(root, "schemas");
-        expect((await runSchemas(["--out", out])).code).toBe(0);
-        // The written file, not the schema it came from: an editor reads this.
-        const validator = z.fromJSONSchema(exportedRunSchema(out));
-        const configs = fs
-          .readdirSync(SHIPPED_RUN_DIR!)
-          .filter((name) => name.endsWith(".yaml"))
-          .sort();
-        expect(configs.length).toBeGreaterThan(0);
-        const failures: string[] = [];
-        for (const name of configs) {
-          const config = yaml.parse(
-            fs.readFileSync(path.join(SHIPPED_RUN_DIR!, name), "utf8"),
-          );
-          const result = validator.safeParse(config);
-          if (!result.success) {
-            const issue = result.error.issues[0]!;
-            failures.push(
-              `${name}: ${issue.path.join(".") || "(root)"}: ${issue.message}`,
-            );
-          }
-        }
-        expect(failures).toEqual([]);
-      }),
-    );
-  },
-);
+}
 
 type ExportedSchema = Parameters<typeof z.fromJSONSchema>[0];
 
@@ -205,4 +177,95 @@ function expectAuthoredRunLayer(out: string, root: string): void {
     "utf8",
   );
   expect(() => loadRunConfig(unknown)).toThrow(/Unrecognized key/);
+}
+
+interface ShippedRunConfigProbe {
+  out: string;
+  configs: string[];
+  runSchema: ExportedSchema;
+}
+
+/** Writes the schemas once and returns the exported run schema and configs. */
+async function shippedRunConfigProbe(
+  root: string,
+): Promise<ShippedRunConfigProbe> {
+  const out = path.join(root, "schemas");
+  expect((await runSchemas(["--out", out])).code).toBe(0);
+  // The written file, not the schema it came from: an editor reads this.
+  const runSchema = exportedRunSchema(out);
+  const validator = z.fromJSONSchema(runSchema);
+  const configs = fs
+    .readdirSync(SHIPPED_RUN_DIR!)
+    .filter((name) => name.endsWith(".yaml"))
+    .sort();
+  const failures: string[] = [];
+  for (const name of configs) {
+    const config = yaml.parse(
+      fs.readFileSync(path.join(SHIPPED_RUN_DIR!, name), "utf8"),
+    );
+    const result = validator.safeParse(config);
+    if (!result.success) {
+      const issue = result.error.issues[0]!;
+      failures.push(
+        `${name}: ${issue.path.join(".") || "(root)"}: ${issue.message}`,
+      );
+    }
+  }
+  return { out, configs, runSchema };
+}
+
+/** Every shipped config is a file the exported schema accepts. */
+function validatesEveryShippedRunConfig(): void {
+  it(
+    "validates every shipped run config against the exported run schema",
+    withTmp(async (root) => {
+      const { configs } = await shippedRunConfigProbe(root);
+      // A shipped file the gate never loads is no coverage at all.
+      expect(configs.length).toBeGreaterThan(0);
+      expect(configs).toContain("self.yaml");
+    }),
+  );
+}
+
+/** Artifact LSP reaches omp through the base config every overlay inherits. */
+function carriesInheritedArtifactLsp(): void {
+  it(
+    "carries artifact LSP in the base config every overlay inherits",
+    withTmp(async (root) => {
+      const { out } = await shippedRunConfigProbe(root);
+      const base = yaml.parse(
+        fs.readFileSync(path.join(SHIPPED_RUN_DIR!, "base.yaml"), "utf8"),
+      ) as Record<string, unknown>;
+      // The overlays state only what they change: `lsp` is inherited, so
+      // every shipped config runs omp without `--no-lsp` without restating it.
+      expect(base.lsp).toBe(true);
+      const configs = fs
+        .readdirSync(SHIPPED_RUN_DIR!)
+        .filter((name) => name.endsWith(".yaml") && name !== "base.yaml")
+        .sort();
+      expect(configs.length).toBeGreaterThan(0);
+      const off: string[] = [];
+      for (const name of configs) {
+        if (!loadRunConfig(path.join(SHIPPED_RUN_DIR!, name)).lsp) {
+          off.push(name);
+        }
+      }
+      expect(off).toEqual([]);
+      // The written schema is what an editor validates the key against.
+      const run = JSON.parse(
+        fs.readFileSync(path.join(out, "run.schema.json"), "utf8"),
+      ) as JsonSchema;
+      expect(run.properties?.lsp).toBeDefined();
+    }),
+  );
+}
+
+function factorySchemasPart2() {
+  describe.skipIf(!SHIPPED_RUN_DIR)(
+    "factory schemas: shipped run configs",
+    () => {
+      validatesEveryShippedRunConfig();
+      carriesInheritedArtifactLsp();
+    },
+  );
 }

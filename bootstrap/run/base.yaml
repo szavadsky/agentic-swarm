@@ -131,3 +131,5 @@ sessions:
   keepRuns: 5
 
 worktreeRoot: ~/.local/share/factory/worktrees
+
+lsp: true

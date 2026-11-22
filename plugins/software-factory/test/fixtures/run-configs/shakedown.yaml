@@ -146,5 +146,5 @@ sessions:
 quota:
   resetMinutes: 300
 worktreeRoot: ~/.local/share/factory/worktrees
-lsp: false
+lsp: true
 portability: []

@@ -369,7 +369,6 @@ Current build (`main`, run `delta` i1–i9) vs the intent above. *not built* —
 
 ### Config and harness
 - *not built* — generic or project-specific coding rules. No config key; one fixed fragment ([`clean-code.md`](plugins/software-factory/prompts/clean-code.md)).
-- *deviates* — artifact LSP. JSON Schemas and `.omp/lsp.json` are written ([`schemas.ts:85-108`](plugins/software-factory/src/kernel/schemas.ts), [`artifact-lsp.ts:89-99`](plugins/software-factory/src/kernel/artifact-lsp.ts)); no run config sets `lsp`, so omp runs with `--no-lsp` ([`omp/runtime.ts:157-163`](plugins/software-factory/src/harness/omp/runtime.ts)). QA outcome schema is not exported ([`qa.ts:26`](plugins/software-factory/src/kernel/qa.ts)).
 - *deviates* — model diversity. In the active run config QA and reviewer use the same alias pair ([`self-quota.yaml:24-32`](bootstrap/run/self-quota.yaml), :67-90).
 - *deviates* — "throttles per subscription and falls back". A capped pool only waits; fallback starts only after a quota answer ([`dispatch-admit.ts:115-123`](plugins/software-factory/src/kernel/dispatch-admit.ts), [`fallback.ts:195-212`](plugins/software-factory/src/harness/fallback.ts)).
 - *deviates* — canary goals. No canary goal has run ([i9 pack:225](/home/slava/aiexp/agentic-swarm.wt/v3/.factory/artifacts/delta/iterations/9/context-pack.md)).

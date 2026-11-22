@@ -42,7 +42,7 @@ directory's dependency graph and flow existence against the merged process
 config, class.yaml, outcome.yaml keyed by the step in the sibling
 started.yaml or `--step`, mailbox/holds/*.yaml, repo.yaml, run.yaml,
 process.yaml); exit 0 valid, 1 invalid or unknown kind. `schemas` writes every
-kernel file schema as JSON Schema (`task`, `outcome`, `hold`, `class`, `repo`,
+kernel file schema as JSON Schema (`task`, `outcome`, `qa`, `hold`, `class`, `repo`,
 `run`, `process`) into `--out` for editors and the artifact LSP. `variables`
 renders `prompts/VARIABLES.md` from the typed prompt-variable descriptor; the
 prompt tests fail when the committed file differs from that render.
