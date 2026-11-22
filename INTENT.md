@@ -380,7 +380,6 @@ Current build (`main`, run `delta` i1–i9) vs the intent above. *not built* —
 ### Artifacts, context, git
 - *deviates* — worktree cleanup. Only worktrees under the current repo-id root are removed, at launch ([`worktree/checkout.ts:210-235`](plugins/software-factory/src/kernel/worktree/checkout.ts)); after i9, 8 delta task worktrees from the old pin root were left behind (5 merged, 1 finished spike) and had to be removed by hand.
 - *not built* — hashes for the architect (before goal, before last iteration). Task turns get `base_hash`/`head_hash` ([`flow-turn.ts:84-90`](plugins/software-factory/src/kernel/flow-turn.ts)); the architect gets only the current head ([`VARIABLES.md:30-46`](plugins/software-factory/prompts/VARIABLES.md)).
-- *deviates* — cleanliness heuristic. Checks size and extension only ([`cleanliness.ts:32-64`](plugins/software-factory/src/kernel/cleanliness.ts)); repo.yaml has no cleanliness block, so it always passes; no revision follow-up prompt.
 - *friction* — plan carries history. Delta [`plan.md`](/home/slava/aiexp/agentic-swarm.wt/v3/.factory/artifacts/delta/plan.md) is 838 lines: milestones R–X of closed iterations plus A–J; the architect re-reads it every consult.
 - *friction* — pack preparer. It wrote the i7 and i8 packs; at i9 it stopped on quota and the script rendered a 2,179-line pack ([01425](/home/slava/aiexp/agentic-swarm.wt/v3/.factory/artifacts/delta/records/01425-i9-packprep-fallback-r1/end.yaml), [i9 pack](/home/slava/aiexp/agentic-swarm.wt/v3/.factory/artifacts/delta/iterations/9/context-pack.md)).
 

@@ -101,6 +101,12 @@ function finishReduction(
     gateLastCall: terminal
       ? undefined
       : (state.gateFix && state.gateLastCall) || undefined,
+    cleanlinessRevision: terminal
+      ? undefined
+      : state.cleanlinessRevision || undefined,
+    cleanlinessJustified: terminal
+      ? undefined
+      : state.cleanlinessJustified || undefined,
   };
 }
 

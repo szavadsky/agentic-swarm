@@ -79,6 +79,7 @@ export const repoConfigSchema = z
       .object({
         maxFileSizeBytes: z.number().int().positive().optional(),
         allowedExtensions: z.array(z.string().min(1)).optional(),
+        maxOutOfScopeFiles: z.number().int().nonnegative().optional(),
       })
       .strict()
       .optional(),

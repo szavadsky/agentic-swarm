@@ -170,6 +170,8 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     prompt: "implementer",
     variables: {
       task_path: "path to this task's file: frontmatter plus brief",
+      cleanliness_revision:
+        "`true` when this turn is a cleanliness revision turn; selects `cleanliness-revision`",
       front_pack:
         "path to the front's context pack for a front-classified trivial or task goal; empty string when no front classified this task",
       worktree: "path to the task worktree to edit",
@@ -192,6 +194,12 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       outcome_schema:
         "outcome YAML skeleton from the kernel schema; renderer default",
     },
+  },
+  {
+    file: "cleanliness-revision.md",
+    intro:
+      "The cleanliness revision follow-up instruction (fix or justify), included by `implementer.md` on a cleanliness revision turn. It contains no turn variables.",
+    variables: {},
   },
   {
     file: "qa.md",
@@ -221,7 +229,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       prior_findings:
         "the last acceptance's findings (QA or review), numbered; empty before the first acceptance",
       fix_dispositions:
-        "the current fix round's summary plus one numbered reply per prior finding; empty in round 1; renderer default",
+        "the current fix round's summary plus one numbered reply per prior finding; round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; renderer default",
       outcome_path:
         "path where the outcome file must be written when the harness asks for a file",
       validate_cmd:
@@ -290,7 +298,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       upscope_ask:
         "escalation ask for a standalone task review, answered as `upscope: yes|no` with the verdict; empty string when this task is part of an architect plan",
       fix_dispositions:
-        "the current fix round's summary plus one numbered reply per prior finding; empty string in round 1; renderer default",
+        "the current fix round's summary plus one numbered reply per prior finding; round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; renderer default",
     },
   },
   {

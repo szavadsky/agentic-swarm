@@ -94,6 +94,7 @@ export interface RepoConfig {
   cleanliness?: {
     maxFileSizeBytes?: number;
     allowedExtensions?: string[];
+    maxOutOfScopeFiles?: number;
   };
 }
 

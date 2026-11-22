@@ -14,6 +14,7 @@ import {
 } from "./s2-helpers.js";
 
 const implementerVars = {
+  cleanliness_revision: "false",
   task_path: "/g/tasks/a.md",
   report_path: "",
   front_pack: "",

@@ -84,6 +84,8 @@ export interface TaskReduction {
   loop?: ProgressRepeat;
   gateFix?: boolean;
   gateLastCall?: boolean;
+  cleanlinessRevision?: boolean;
+  cleanlinessJustified?: boolean;
 }
 
 export interface PendingChecks {

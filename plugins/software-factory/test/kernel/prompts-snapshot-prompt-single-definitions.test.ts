@@ -111,6 +111,7 @@ const ROLES: Record<string, Record<string, string>> = {
     tiers: TIERS,
   },
   implementer: {
+    cleanliness_revision: "false",
     task_path: "/goal/tasks/alpha.md",
     front_pack: "/goal/iterations/3/context-pack.md",
     worktree: "/worktrees/demo-tasks/alpha",
@@ -349,7 +350,11 @@ function crossFragmentRepeats(
 }
 
 function promptSingleDefinitionsPart1() {
-  const ALLOWED_REPEATS: Record<string, string[]> = {};
+  const ALLOWED_REPEATS: Record<string, string[]> = {
+    qa: [
+      "round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty",
+    ],
+  };
 
   it("defines every 8-word sentence and clause once: no repeat inside one rendered prompt or across two fragments", () => {
     const rendered = new Map<string, string>();

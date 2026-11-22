@@ -12,6 +12,7 @@ import {
   isBareRecoverySeal,
   mergeGateNames,
   parkedGateNames,
+  type PendingChecks,
   phaseAfter,
   redChecksText,
   sameFailingSet,
@@ -20,6 +21,61 @@ import type { ReduceContext, ReduceState } from "./derive-task-state.js";
 import { isInfraCheck } from "./gates.js";
 import { checksFixLimit, isLastChecksFixCall } from "./review.js";
 import type { Cause, StepRecord } from "./types.js";
+
+function advancePendingChecks(
+  context: ReduceContext,
+  state: ReduceState,
+  pending: PendingChecks,
+): void {
+  state.cleanlinessRevision = false;
+  state.gateFix = false;
+  state.gateLastCall = false;
+  state.stepIndex = pending.nextIndex;
+  state.phase = pending.mergeAfter
+    ? phaseAfter(context.flow, context.steps.length, context.task.kind)
+    : phaseAfter(context.flow, state.stepIndex, context.task.kind);
+}
+
+function handleCleanlinessRevision(
+  context: ReduceContext,
+  state: ReduceState,
+  red: readonly CheckResult[],
+): void {
+  state.cleanlinessRevision = true;
+  state.cleanlinessRevised = true;
+  state.gateFix = false;
+  state.gateLastCall = false;
+  state.gateFailure = failingChecksText(red);
+  state.gateRed = failingNames(red);
+  state.stepIndex = 0;
+  state.phase = context.firstStep;
+}
+
+function settleChecksVerdict(
+  context: ReduceContext,
+  state: ReduceState,
+  red: readonly CheckResult[],
+  pending: PendingChecks,
+): void {
+  const isJustified =
+    state.cleanlinessRevision &&
+    state.cleanlinessJustified &&
+    !red.some((check) => check.name !== "cleanliness");
+  if (isJustified) {
+    advancePendingChecks(context, state, pending);
+    return;
+  }
+  const isFirstCleanlinessHit =
+    red.some((check) => check.name === "cleanliness") &&
+    !state.cleanlinessRevised &&
+    !red.some((check) => check.name !== "cleanliness");
+  if (isFirstCleanlinessHit) {
+    handleCleanlinessRevision(context, state, red);
+    return;
+  }
+  state.cleanlinessRevision = false;
+  settleRedChecks(context, state, red, pending);
+}
 
 /** A red checks run settles the pending gate verdict: park, fix, or advance. */
 export function applyChecks(
@@ -41,14 +97,9 @@ export function applyChecks(
     );
     state.phase = "parked";
   } else if (rec.ok === false) {
-    settleRedChecks(context, state, red, pending);
+    settleChecksVerdict(context, state, red, pending);
   } else {
-    state.gateFix = false;
-    state.gateLastCall = false;
-    state.stepIndex = pending.nextIndex;
-    state.phase = pending.mergeAfter
-      ? phaseAfter(context.flow, context.steps.length, context.task.kind)
-      : phaseAfter(context.flow, state.stepIndex, context.task.kind);
+    advancePendingChecks(context, state, pending);
   }
   state.pendingChecks = null;
 }
@@ -63,6 +114,7 @@ function settleRedChecks(
   const deferred = pending.emptyFix;
   if (
     deferred &&
+    !state.cleanlinessJustified &&
     (state.gateRed === undefined || sameFailingSet(red, state.gateRed))
   ) {
     // The fix changed nothing and the same checks still fail: a deterministic

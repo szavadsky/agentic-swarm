@@ -286,6 +286,7 @@ export function loadPrompts(
     defaults: {
       validate_cmd: validateCmd(),
       author: "implementer",
+      cleanliness_revision: "false",
       fix_dispositions: "",
       outcome_schema: outcomeSchemaVar(),
       task_frontmatter: taskFrontmatterVar(),

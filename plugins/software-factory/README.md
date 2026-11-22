@@ -86,7 +86,13 @@ gates:
     format: { pattern: jest }                    # runner whose output it parses
     serial: [database]                          # gates naming a mutex never overlap
     env: { TMPDIR: .cache/gate }                # per-worktree scratch directory
+cleanliness:                                    # optional; default rules active without it
+  maxFileSizeBytes: 1048576                     # default: 1048576 (1 MB)
+  allowedExtensions: [ts, json, md]             # default: extensions present in base tree
+  maxOutOfScopeFiles: 3                         # default: 3
 ```
+
+Cleanliness checks run by default without repo config to detect large files, disallowed/new extensions, temp/weights/huge outputs, and excessive files out of task scope. A cleanliness hit sends the author one revision follow-up turn (fix or justify) before review; if justified, the task advances to review without re-looping and the reviewer evaluates the justification. Tightened thresholds may be configured under `cleanliness` in `.factory/repo.yaml`.
 
 The tracked repo layer names no worktree root: checkouts, sessions and harness
 policy belong to the run layer, so one checkout never silently shadows another.

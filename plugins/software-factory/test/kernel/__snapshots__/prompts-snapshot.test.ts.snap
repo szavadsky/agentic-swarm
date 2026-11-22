@@ -832,7 +832,7 @@ No praise, no restating, no taste without a rule or an observable consequence.
 - gate commands:
   - test: bun test
 - prior findings: \`\` — the last acceptance's numbered findings; empty before the first acceptance
-- fix dispositions: \`\` — empty in round 1; each prior finding is judged on its change or reply
+- fix dispositions: \`\` — round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; each prior finding is judged on its change or reply
 - outcome path: \`/worktrees/demo-tasks/alpha/outcome.yaml\`
 "
 `;
@@ -959,7 +959,7 @@ Forward only what the calibration calls remarkable.
 - base gates: base abc1234def: green — the base tree's recorded gate result, the evidence a red gate predates this task: a claimed "pre-existing" failure is a finding unless this record lists it; when it is \`not recorded\`, every such claim is a finding
 - prior findings: \`\` — empty in round 1; numbered, each answered by a change, a reply, or both
 - standalone upscope: \`\` — empty when this task is part of an architect plan; then give no upscope field
-- fix dispositions: \`\` — empty in round 1. Re-judge each finding against the diff or its reply; a reply is judged on its argument, not on whether the diff evidences it.
+- fix dispositions: \`\` — round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty. Re-judge each finding against the diff or its reply; a reply is judged on its argument, not on whether the diff evidences it.
 - checks: \`pass\`
 - checks tree: \`3ba247e47772a8ba5874d089990419f572432df8\`
 - checks log: \`/goal/records/1/alpha/checks\`

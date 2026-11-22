@@ -140,7 +140,7 @@ function trackFingerprint(
     replyCount > 0 &&
     committedNothing(context.task.kind, rec, priorTree);
   const emptyGateFix =
-    state.gateFix &&
+    (state.gateFix || state.cleanlinessRevision) &&
     !state.changesPending &&
     carriedWork !== true &&
     answeredStep !== undefined &&
@@ -168,6 +168,38 @@ function trackFingerprint(
   return answeredReview;
 }
 
+function checkTerminalStatus(state: ReduceState, rec: StepRecord): boolean {
+  if (rec.stop?.kind === "refusal") {
+    state.park = makeCause("refused", rec.stop.details ?? "no details");
+    state.phase = "parked";
+    return true;
+  }
+  const status = rec.outcome?.status;
+  const summary = rec.outcome?.summary ?? "no summary";
+  if (status === "blocked" || status === "failed" || status === "upscope") {
+    state.park = makeCause(status, summary);
+    state.phase = "parked";
+    return true;
+  }
+  return false;
+}
+
+function checkCleanlinessJustification(
+  state: ReduceState,
+  rec: StepRecord,
+): void {
+  if (!state.cleanlinessRevision) return;
+  const hasReplies = Boolean(
+    rec.outcome?.replies && rec.outcome.replies.length > 0,
+  );
+  const hasSummary = Boolean(
+    rec.outcome?.summary && rec.outcome.summary.trim().length > 0,
+  );
+  if (hasReplies || hasSummary) {
+    state.cleanlinessJustified = true;
+  }
+}
+
 /** A counted turn's step rules: stop statuses, empty diff, then its step kind. */
 function applyFlowStepTurn(
   context: ReduceContext,
@@ -181,24 +213,7 @@ function applyFlowStepTurn(
 
   state.round = Math.max(state.round, rec.round);
   state.commit = rec.commit ?? state.commit;
-  const outcome = rec.outcome;
-  const status = outcome?.status;
-  const summary = outcome?.summary ?? "no summary";
-  if (rec.stop?.kind === "refusal") {
-    state.park = makeCause("refused", rec.stop.details ?? "no details");
-    state.phase = "parked";
-    return;
-  }
-  if (status === "blocked" || status === "failed") {
-    state.park = makeCause(status, summary);
-    state.phase = "parked";
-    return;
-  }
-  if (status === "upscope") {
-    state.park = makeCause("upscope", summary);
-    state.phase = "parked";
-    return;
-  }
+  if (checkTerminalStatus(state, rec)) return;
 
   const idx = context.flowIndex.get(rec.step)!;
   const step = context.steps[idx]!;
@@ -213,17 +228,18 @@ function applyFlowStepTurn(
   );
   if (empty.parked) return;
   if (step.qa) {
-    applyQa(context, state, rec, outcome, idx);
+    applyQa(context, state, rec, rec.outcome, idx);
     return;
   }
   if (step.adjudicate !== undefined) {
-    applyAdjudicator(context, state, rec, outcome, idx);
+    applyAdjudicator(context, state, rec, rec.outcome, idx);
     return;
   }
   if (step.review) {
-    applyReview(context, state, rec, outcome, idx, step);
+    applyReview(context, state, rec, rec.outcome, idx, step);
     return;
   }
+  checkCleanlinessJustification(state, rec);
   applyAnswer(context, state, idx, turn, empty.deferred);
 }
 
@@ -255,7 +271,7 @@ function settleEmptyDiff(
       state.phase = "parked";
       return { deferred: null, parked: true };
     }
-    if (state.gateFix) {
+    if (state.gateFix || state.cleanlinessRevision) {
       // The fix answered red checks with no diff; the following checks settle it.
       return { deferred: { step: rec.step, round: rec.round }, parked: false };
     }

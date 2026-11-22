@@ -2,6 +2,10 @@
 Commit the report at `{{ report_path }}` first, then refine it.
 
 {% endif -%}
+{%- if cleanliness_revision == "true" -%}
+{% include 'cleanliness-revision' %}
+
+{% endif -%}
 {%- include 'implementer-body' -%}
 
 ## This turn

@@ -4,4 +4,4 @@
 - base gates: {{base_gates}} — the base tree's recorded gate result, the evidence a red gate predates this task: a claimed "pre-existing" failure is a finding unless this record lists it; when it is `not recorded`, every such claim is a finding
 - prior findings: `{{prior_findings}}` — empty in round 1; numbered, each answered by a change, a reply, or both
 - standalone upscope: `{{upscope_ask}}` — empty when this task is part of an architect plan; then give no upscope field
-- fix dispositions: `{{fix_dispositions}}` — empty in round 1. Re-judge each finding against the diff or its reply; a reply is judged on its argument, not on whether the diff evidences it.
+- fix dispositions: `{{fix_dispositions}}` — round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty. Re-judge each finding against the diff or its reply; a reply is judged on its argument, not on whether the diff evidences it.

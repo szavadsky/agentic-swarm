@@ -101,10 +101,12 @@ function commonVars(
   worktree: string,
   round: number,
   handoff: Handoff,
+  state?: TaskState,
 ): Record<string, string> {
   const { checks } = handoff;
   return {
     task_path: runtime.store.tasks.path(task.slug),
+    cleanliness_revision: state?.cleanlinessRevision ? "true" : "false",
     worktree,
     // Where a spike commits its finding; empty for every other task.
     report_path: task.kind === "spike" ? spikeReportPath(task.slug) : "",
@@ -141,9 +143,9 @@ export function promptVars(
   const handoff = readHandoff(records, task, flow, state, stepId);
   const { qaStep, acceptance, review } = handoff;
   return {
-    ...commonVars(runtime, task, worktree, round, handoff),
+    ...commonVars(runtime, task, worktree, round, handoff, state),
     prior_findings: priorFindings(qaStep, acceptance, review),
-    fix_dispositions: fixDispositions(records, task.slug, flow, round),
+    fix_dispositions: fixDispositions(records, task.slug, flow, round, state),
     front_pack: frontPack(runtime, task, records) ?? "",
     // The standalone escalation ask for the reviewer; empty when this task is
     // part of an architect plan. The implementer template ignores it.
