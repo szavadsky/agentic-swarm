@@ -201,6 +201,7 @@ function iterationMetricsResult(
     usage.costUsd ?? 0,
   );
   acc.architect.tokenShare = width(acc.architect.tokens, tokens);
+  acc.architect.turnShare = width(acc.architect.turns, recs.length);
   return {
     n: parts.n,
     status: parts.status,

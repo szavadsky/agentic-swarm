@@ -441,8 +441,8 @@ references it): status, merged/finished/parked tasks, remarkable concerns,
 assumptions and debt, and a waste section naming every wasted turn's record
 with rebutted reviews counted apart. The next iteration's context pack carries
 that waste section. `metrics.yaml` is rebuilt from the usage records;
-`mailbox/outbox/metrics.yaml` references it: architect launches, architect
-cost and token share, cost and list cost per merged task, incident counts
+`mailbox/outbox/metrics.yaml` references it: architect launches and turn count, architect
+cost, token and turn share, cost and list cost per merged task, incident counts
 (infra retries, fallback hops, outcome-repair turns, merge conflicts,
 merged-gate failures, and round-limit, no-progress, empty-diff and overflow
 parks), loop incidents (no-progress and empty-diff parks; a spike's empty

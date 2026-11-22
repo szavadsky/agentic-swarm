@@ -213,15 +213,19 @@ async function matchesUsageRecordsScriptedRunPart4(
 ) {
   const { one, metrics, store } = scope;
   expect(one.architect.launches).toBe(1);
+  expect(one.architect.turns).toBe(1);
   expect(one.architect.tokens).toBe(8_510);
   expect(one.architect.costShare).toBeCloseTo(0.1 / 0.43, 10);
   expect(one.architect.tokenShare).toBeCloseTo(8_510 / 34_073, 10);
+  expect(one.architect.turnShare).toBeCloseTo(1 / 6, 10);
 
   expect(metrics.totals.iterations).toBe(1);
   expect(metrics.totals.turns).toBe(6);
   expect(metrics.totals.tokens).toBe(34_073);
   expect(metrics.totals.merged).toEqual(["alpha"]);
   expect(metrics.totals.usage.costUsd).toBeCloseTo(0.43, 10);
+  expect(metrics.totals.architect.turns).toBe(1);
+  expect(metrics.totals.architect.turnShare).toBeCloseTo(1 / 6, 10);
 
   const iterationFile = yaml.parse(
     (await store.readFile("iterations/1/metrics.yaml"))!,

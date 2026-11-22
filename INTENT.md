@@ -391,7 +391,6 @@ Current build (`main`, run `delta` i1–i9) vs the intent above. *not built* —
 - *deviates* — dashboard. Hand-written LiquidJS HTML, no library ([`dashboard-template.ts`](plugins/software-factory/src/kernel/dashboard-template.ts)); the "Intent completion" card counts merged/live tasks ([`dashboard.ts:114-147`](plugins/software-factory/src/kernel/dashboard.ts)); no intent-wise works / not built / friction view.
 - *deviates* — pinned build. `factory run` does not check the pin ([`bootstrap/promote.sh`](bootstrap/promote.sh) only creates it); delta i6 was promoted by hand with a suite test red ([LOG.md:872-873](/home/slava/aiexp/agentic-swarm.wt/v3/bootstrap/LOG.md)).
 - *deviates* — lint. Complexity 15, 50 lines per function ([`biome.json:30-49`](plugins/software-factory/biome.json)) and 500-line files ([`check-file-size.ts`](plugins/software-factory/scripts/check-file-size.ts)) are enforced; interface/implementation separation is not.
-- *not built* — architect share of turns in per-iteration metrics; only launches, token share and cost share ([`metrics/types.ts:85-91`](plugins/software-factory/src/kernel/metrics/types.ts)).
 
 ## Glossary
 - **Goal**: one intent, one directory; relaunching the same directory is "the same goal".

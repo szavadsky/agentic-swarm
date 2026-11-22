@@ -75,11 +75,13 @@ export function tokenTotal(usage: Usage): number {
 
 export function emptyArchitect(): ArchitectMetrics {
   return {
+    turns: 0,
     launches: 0,
     usage: zeroUsage(),
     tokens: 0,
     costShare: 0,
     tokenShare: 0,
+    turnShare: 0,
     unpricedTurns: 0,
   };
 }
@@ -414,6 +416,7 @@ export function recordArchitect(
   part: Usage,
 ): void {
   if (role !== "architect" && rec.step !== "architect") return;
+  architect.turns += 1;
   architect.launches += 1;
   architect.unpricedTurns += unpriced;
   architect.usage = addUsage(architect.usage, part);
