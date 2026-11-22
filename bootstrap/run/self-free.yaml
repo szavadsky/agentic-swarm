@@ -1,0 +1,194 @@
+# Self-run on current availability (owner, 2026-11-21):
+# - OpenCode Go paid models EXHAUSTED (deepseek v41 / muse spark via Go): not used.
+# - Claude subscription OK: architect (Opus), escalation (Sonnet).
+# - OpenCode: free models only — deepseek-v4.1-flash-free, muse-ember.
+# - Antigravity (agy, gemini flash) available.
+# - OpenRouter ernie free: omp only. hy4 free: omp (opencode-go free row) and OpenCode.
+# Steps of one flow sit on different models (implementer / QA / reviewer).
+extends: base.yaml
+aliases:
+  architect:
+    harness: claude-code
+    model: opus
+    subscription: claude
+    timeouts:
+      wallMs: 14400000 # 4 h: single turns must not die on the 1 h default
+    fallbacks:
+      - model: sonnet
+        effort: high
+        sharesPool: true
+      - harness: omp
+        model: anthropic/claude-opus-5-5
+        effort: high
+        sharesPool: true
+  escalation:
+    harness: claude-code
+    model: sonnet
+    effort: high
+    subscription: claude
+    timeouts:
+      wallMs: 14400000
+    fallbacks:
+      - harness: agy
+        model: gemini-3.8-flash
+        effort: high
+        subscription: antigravity
+  implementer:
+    harness: agy
+    model: gemini-3.8-flash
+    effort: high
+    subscription: antigravity
+    timeouts:
+      wallMs: 14400000 # 4 h: suite-heavy turns exceed 1 h
+    fallbacks:
+      - harness: opencode
+        model: opencode/deepseek-v4.1-flash-free
+        subscription: opencode-free
+      - harness: opencode
+        model: opencode/muse-ember-1.0
+        subscription: opencode-free
+  implementer-b:
+    harness: opencode
+    model: opencode/muse-ember-1.0
+    subscription: opencode-free
+    timeouts:
+      wallMs: 14400000
+    fallbacks:
+      - harness: opencode
+        model: opencode/deepseek-v4.1-flash-free
+        subscription: opencode-free
+      - harness: agy
+        model: gemini-3.8-flash
+        effort: high
+        subscription: antigravity
+  researcher:
+    harness: opencode
+    model: opencode/deepseek-v4.1-flash-free
+    subscription: opencode-free
+    fallbacks:
+      - harness: agy
+        model: gemini-3.8-flash
+        effort: high
+        subscription: antigravity
+  qa:
+    harness: omp
+    model: openrouter/baidu/ernie-5.5-flash-preview:free
+    effort: high
+    subscription: openrouter-free
+    timeouts:
+      wallMs: 14400000
+    fallbacks:
+      - harness: omp
+        model: opencode-go/hy4-flash-free
+        effort: high
+        subscription: opencode-go-free
+  reviewer:
+    harness: opencode
+    model: opencode/deepseek-v4.1-flash-free
+    subscription: opencode-free
+    timeouts:
+      wallMs: 14400000
+    fallbacks:
+      - harness: opencode
+        model: opencode/muse-ember-1.0
+        subscription: opencode-free
+  plan-reviewer:
+    harness: opencode
+    model: opencode/muse-ember-1.0
+    subscription: opencode-free
+    timeouts:
+      wallMs: 14400000
+    fallbacks:
+      - harness: opencode
+        model: opencode/deepseek-v4.1-flash-free
+        subscription: opencode-free
+  plan-checker:
+    harness: opencode
+    model: opencode/hy4-flash-free
+    effort: high
+    subscription: opencode-free
+    timeouts:
+      wallMs: 14400000
+    fallbacks:
+      - harness: omp
+        model: openrouter/baidu/ernie-5.5-flash-preview:free
+        effort: high
+        subscription: openrouter-free
+  pm:
+    harness: omp
+    model: openrouter/baidu/ernie-5.5-flash-preview:free
+    subscription: openrouter-free
+    escalateTo: escalation
+    fallbacks:
+      - harness: opencode
+        model: opencode/hy4-flash-free
+        effort: high
+        subscription: opencode-free
+  pack-preparer:
+    harness: omp
+    model: opencode-go/hy4-flash-free
+    effort: high
+    subscription: opencode-go-free
+    fallbacks:
+      - harness: opencode
+        model: opencode/deepseek-v4.1-flash-free
+        subscription: opencode-free
+  digest:
+    harness: omp
+    model: openrouter/baidu/ernie-5.5-flash-preview:free
+    subscription: openrouter-free
+    fallbacks:
+      - harness: opencode
+        model: opencode/hy4-flash-free
+        effort: high
+        subscription: opencode-free
+  intent:
+    harness: opencode
+    model: opencode/hy4-flash-free
+    effort: high
+    subscription: opencode-free
+    fallbacks:
+      - harness: omp
+        model: openrouter/baidu/ernie-5.5-flash-preview:free
+        subscription: openrouter-free
+  steward:
+    harness: opencode
+    model: opencode/deepseek-v4.1-flash-free
+    subscription: opencode-free
+    fallbacks:
+      - harness: agy
+        model: gemini-3.8-flash
+        effort: high
+        subscription: antigravity
+
+harnesses:
+  # No `compact`: agy submits `/compact` to the model as a prompt and compacts nothing.
+  agy:
+    acpx:
+      agent: agy acp
+      raw: true
+      effort:
+        configId: thought_level
+        modelBases: { gemini-3.8-flash: [low, medium, high] }
+      usage: { cache: true }
+    options: { args: [--approve-all] }
+  claude-code:
+    acpx:
+      agent: claude
+      compact: true
+      effort: { configId: effort }
+    options: { args: [--approve-all] }
+
+scouts:
+  model: openrouter/baidu/ernie-5.5-flash-preview:free
+  effort: high
+priceIds:
+  opencode/hy4-flash-free: reflection/beam-1.0-501b-a23b
+  opencode-go/hy4-flash-free: reflection/beam-1.0-501b-a23b
+  opus: anthropic/claude-opus-5-5
+  sonnet: anthropic/claude-sonnet-5-5
+
+limits:
+  concurrency:
+    overall: 3
+    perSubscription: { claude: 1, antigravity: 2, opencode-free: 2, openrouter-free: 1, opencode-go-free: 1 }
