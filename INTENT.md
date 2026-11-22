@@ -295,7 +295,7 @@ flowchart TD
 
 ### Gates
 - A tree is judged once: a gate result is keyed by the tree it ran on, and the result and log go to the agents that follow.
-- Gates shall be reasonably fast and shall use no API/model calls. Slow gates run only case by case.
+- Gates shall be reasonably fast (nothing in factory need minutes)  and shall use no API/model calls. Slow gates run only case by case.
 - Skip the merge-check when the merged tree equals the checked tree; make the factory's suite safe in parallel worktrees (ports, caches, build dirs per worktree); no repo-wide gate mutex.
 
 ### Harness access layer
@@ -329,7 +329,7 @@ flowchart TD
 - The operator session gives requirements — which subset of the intent is the current phase — operates, recovers from major issues, and reports bugs and incidents as steers. It does not prescribe milestones or plans.
 - During self-improvement the architect is concerned with both mechanical solidity and agentic behavior — e.g. how useful review feedback was — and may plan spikes that investigate previous sessions' behavior.
 
-#### Bootstrap models/harness (one run config, not a factory assumption)
+#### Bootstrap models/harness 
 
 - Architect: Claude Opus 5.5 at high (omp, Claude Code). Escalation implementer: Sonnet 5.5 — minimize use.
 - Plan reviewer: muse contributor 1.3 at max.
