@@ -16,6 +16,8 @@ import {
   resolveGoalPaths,
 } from "../../src/kernel/config.js";
 import { PreflightError, preflight } from "../../src/kernel/preflight.js";
+import { resolveTurn } from "../../src/kernel/flow-context.js";
+import type { KernelRuntime } from "../../src/kernel/types.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { shippedRunConfigsDir } from "../helpers/run-configs.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
@@ -267,6 +269,61 @@ describe("self-rotate run config", () => {
     // The owner adopts rotation by pointing a run at self-rotate; self.yaml
     // itself stays unrotated.
     expect(selfImplementer!.rotate).toEqual([]);
+  });
+});
+
+describe("self-free run config", () => {
+  it("resolves the reviewer chain with a claude-code sonnet fallback", async () => {
+    const runPath = path.join(BOOTSTRAP_RUN, "self-free.yaml");
+    const repo = createTmpRepo();
+    try {
+      repo.writeFile(
+        ".factory/repo.yaml",
+        "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n",
+      );
+      repo.commit("factory config");
+      const configs = loadConfigs(repo.dir, { runConfigPath: runPath });
+      const paths = resolveGoalPaths(configs, repo.dir, "self-free");
+      const harnesses = new Map<string, Harness>();
+      for (const id of ["agy", "claude-code", "codex", "omp", "opencode", "pi"])
+        harnesses.set(
+          id,
+          new FakeHarness({
+            id,
+            caps: { effort: ["low", "medium", "high", "max"] },
+          }),
+        );
+      const runtime = {
+        paths,
+        configs,
+        harnesses,
+        prompts: { reviewer: { template: "", schema: {} } },
+        exhaustedPools: new Map(),
+      } as unknown as KernelRuntime;
+
+      const target = resolveTurn(runtime, "reviewer", "reviewer");
+      expect(target.tiers).toHaveLength(3);
+      expect(target.tiers[0]).toMatchObject({
+        harness: harnesses.get("opencode"),
+        model: { id: "opencode-go/muse-spark-1.3-contributor", effort: "high" },
+        effort: "high",
+        subscription: "opencode-go",
+      });
+      expect(target.tiers[1]).toMatchObject({
+        harness: harnesses.get("opencode"),
+        model: { id: "opencode-go/deepseek-v4.1-flash" },
+        effort: "high",
+        subscription: "opencode-go",
+      });
+      expect(target.tiers[2]).toMatchObject({
+        harness: harnesses.get("claude-code"),
+        model: { id: "sonnet", effort: "high" },
+        effort: "high",
+        subscription: "claude",
+      });
+    } finally {
+      repo.cleanup();
+    }
   });
 });
 

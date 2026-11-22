@@ -97,6 +97,10 @@ aliases:
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
         subscription: opencode-go
+      - harness: claude-code
+        model: sonnet
+        effort: high
+        subscription: claude
   plan-reviewer:
     harness: opencode
     model: opencode-go/deepseek-v4.1-flash
