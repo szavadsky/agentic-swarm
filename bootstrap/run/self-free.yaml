@@ -111,6 +111,10 @@ aliases:
     fallbacks:
       - model: opencode-go/muse-spark-1.3-contributor
         subscription: opencode-go
+      - harness: claude-code
+        model: opus
+        effort: high
+        subscription: claude
   plan-checker:
     harness: opencode
     model: opencode-go/hy4-flash-free
@@ -121,6 +125,10 @@ aliases:
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
         subscription: opencode-go
+      - harness: claude-code
+        model: opus
+        effort: high
+        subscription: claude
   pm:
     harness: opencode
     model: opencode-go/deepseek-v4.1-flash
