@@ -68,9 +68,10 @@ export function summaryHeadLines(render: SummaryRender): string[] {
 export function summaryMetricsLines(render: SummaryRender): string[] {
   const computed = render.computed;
   const { usage, unpricedTurns, incidents, loopIncidents } = computed;
+  const architectShare = `${(computed.architect.turnShare * 100).toFixed(1)}%`;
   return [
     "## Metrics",
-    `- turns: ${render.agentTurns} agent, ${render.scriptTurns} script`,
+    `- turns: ${render.agentTurns} agent, ${render.scriptTurns} script; architect share ${architectShare}`,
     `- tokens: input ${usage.in}, cached ${usage.cacheRead}, output ${usage.out}, reasoning ${usage.reasoningOut}`,
     `- cost: ${costText(usage.costUsd, unpricedTurns)}`,
     `- list cost: ${costText(usage.listCostUsd, unpricedTurns)}`,

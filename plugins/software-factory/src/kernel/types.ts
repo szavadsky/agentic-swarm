@@ -6,7 +6,9 @@
 export {
   concernSchema,
   debtClosedEntrySchema,
+  normalizeSlug,
   outcomeSchema,
+  outcomeSlugSchema,
   planCheckEvidenceSchema,
   planCheckFollowUpSchema,
   planCheckRouteEntrySchema,

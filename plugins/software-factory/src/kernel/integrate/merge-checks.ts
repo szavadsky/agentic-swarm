@@ -111,14 +111,15 @@ async function mergeChecks(
   await finishChecks(gate, ran, { preexisting });
   const red = newGateFailures(ran, preexisting);
   if (red.length > 0) {
-    await failMerge(
-      runtime,
-      task,
-      iteration,
-      round,
-      makeCause("gates", red.map((c) => c.name).join(", ")),
-      ran,
-    );
+    const actionable = red.filter((c) => !isInfraCheck(c));
+    const cause =
+      actionable.length > 0
+        ? makeCause("gates", actionable.map((c) => c.name).join(", "))
+        : makeCause(
+            "infra",
+            `gate could not start: ${red.map((c) => c.name).join(", ")}`,
+          );
+    await failMerge(runtime, task, iteration, round, cause, ran);
     return undefined;
   }
   return { checks: ran };

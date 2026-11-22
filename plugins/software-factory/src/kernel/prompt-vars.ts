@@ -74,6 +74,7 @@ export const PROMPT_COMPOSITIONS: readonly PromptComposition[] = [
   {
     prompt: "implementer",
     partials: [
+      "`cleanliness-revision`",
       "`implementer-body`",
       "`clean-code`",
       "`scope` (`plan-read-only`)",

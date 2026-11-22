@@ -326,6 +326,7 @@ describe("per-gate walls", () => {
       expect(run!.ok).toBe(false);
       expect(run!.summary).toBe("timed out after 0.2s");
       expect(run!.details).toMatchObject({ roots: [root] });
+      expect(isInfraCheck(run!)).toBe(true);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

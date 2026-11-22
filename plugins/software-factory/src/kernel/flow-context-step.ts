@@ -50,7 +50,12 @@ export function isFixTurn(
   stepId: string,
 ): boolean {
   const steps = agentSteps(flow);
-  return steps[0]?.id === stepId && (state.round > 1 || state.gateFix === true);
+  return (
+    steps[0]?.id === stepId &&
+    (state.round > 1 ||
+      state.gateFix === true ||
+      state.cleanlinessRevision === true)
+  );
 }
 
 /**

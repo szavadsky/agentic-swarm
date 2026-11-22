@@ -230,7 +230,7 @@ sessions:
 quota:
   resetMinutes: 300
 worktreeRoot: ~/.local/share/factory/worktrees
-lsp: false
+lsp: true
 scouts:
   model: opencode-go/deepseek-v4.1-flash
 portability: []

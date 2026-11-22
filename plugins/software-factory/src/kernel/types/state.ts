@@ -78,6 +78,10 @@ export interface TaskState {
   gateFix?: boolean;
   /** True when this gate-fix turn is the last allowed fix turn before red gates park. */
   gateLastCall?: boolean;
+  /** True when a cleanliness hit earns one revision follow-up turn before review. */
+  cleanlinessRevision?: boolean;
+  /** True when the author justified a cleanliness hit to advance to review. */
+  cleanlinessJustified?: boolean;
 }
 
 export type GoalStatus = "active" | "done" | "blocked";

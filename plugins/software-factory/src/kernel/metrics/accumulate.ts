@@ -121,6 +121,7 @@ function totalsResult(
     totals.usage.costUsd ?? 0,
   );
   totals.architect.tokenShare = width(totals.architect.tokens, totals.tokens);
+  totals.architect.turnShare = width(totals.architect.turns, totals.turns);
   return {
     iterations: iterations.length,
     turns: totals.turns,

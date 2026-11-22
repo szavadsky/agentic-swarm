@@ -5,7 +5,7 @@
  */
 import { formatFixDispositions } from "./record.js";
 import { isVerdictStep } from "./review.js";
-import type { FlowDefinition, StepRecord } from "./types.js";
+import type { FlowDefinition, StepRecord, TaskState } from "./types.js";
 
 export function bySeq(a: StepRecord, b: StepRecord): number {
   return a.seq - b.seq || a.startedAt.localeCompare(b.startedAt);
@@ -66,15 +66,17 @@ export function lastProductiveTurn(
 /**
  * The current fix round's per-finding dispositions for the deferred review:
  * every reply by its finding number, plus the fix summary. Round 1 has no fix
- * to judge, and a stale turn must never speak for this one.
+ * to judge unless a cleanliness revision turn ran, and a stale turn must never
+ * speak for this one.
  */
 export function fixDispositions(
   records: StepRecord[],
   slug: string,
   flow: FlowDefinition,
   round: number,
+  state?: TaskState,
 ): string {
-  if (round < 2) return "";
+  if (round < 2 && !state?.cleanlinessJustified) return "";
   const fix = lastProductiveTurn(records, slug, flow);
   if (!fix || fix.round !== round || !fix.outcome) return "";
   return formatFixDispositions(fix.outcome);

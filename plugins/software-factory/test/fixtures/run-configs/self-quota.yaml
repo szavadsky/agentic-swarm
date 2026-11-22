@@ -296,7 +296,7 @@ sessions:
 quota:
   resetMinutes: 300
 worktreeRoot: ~/.local/share/factory/worktrees
-lsp: false
+lsp: true
 scouts:
   model: openrouter/baidu/ernie-5.5-flash-preview:free
   effort: high

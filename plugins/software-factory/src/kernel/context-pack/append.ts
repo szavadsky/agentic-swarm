@@ -3,6 +3,7 @@
 import { formatCause } from "../cause.js";
 import { OPEN_TASK_STATUSES } from "../derive.js";
 import type { OpenDebt } from "../derive.js";
+import { spikeReportPath } from "../spike-report.js";
 import type { Cause, TaskFile } from "../types.js";
 import type { ContextPackInput, ForwardedConcern } from "./types.js";
 import { formatPlanFinding, numberedPlanFindings } from "./plan-findings.js";
@@ -314,7 +315,9 @@ export function appendSpikeFindings(
   for (const { slug, finding } of [...input.spikeFindings].sort((a, b) =>
     a.slug.localeCompare(b.slug),
   )) {
-    lines.push(`- ${slug}:`, ...finding.split("\n").map((l) => `  ${l}`));
+    lines.push(
+      `- ${slug}: ${spikeReportPath(slug)} (${Buffer.byteLength(finding, "utf8")} bytes)`,
+    );
   }
 }
 

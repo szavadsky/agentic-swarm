@@ -174,5 +174,5 @@ sessions:
 quota:
   resetMinutes: 300
 worktreeRoot: ../runtime/worktrees
-lsp: false
+lsp: true
 portability: []

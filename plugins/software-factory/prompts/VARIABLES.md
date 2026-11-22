@@ -9,7 +9,7 @@ Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable
 - `front` — `task-size`, `plan-read-only`, `calibration`, `outcome`, `task-frontmatter`
 - `intent` — `calibration`, `outcome`
 - `pm` — `task-size`, `plan-read-only`, `spike-report-general`, `calibration`, `outcome`, `task-frontmatter`
-- `implementer` — `implementer-body`, `clean-code`, `scope` (`plan-read-only`), `calibration`, `outcome`
+- `implementer` — `cleanliness-revision`, `implementer-body`, `clean-code`, `scope` (`plan-read-only`), `calibration`, `outcome`
 - `qa` — `implementer-body`, `finding-standards`, `outcome`
 - `reviewer` — `<author>-body` (`implementer-body` by default), `review-<author>` duties, `review-<author>-turn` inputs, `verdict`
 - `review-architect` — `architect-assignment`, `plan-standard` (`task-size`), `plan-rules`, `finding-standards`, `outcome`
@@ -128,6 +128,7 @@ The turn's record carries the unified diff of the edit; the next architect pack 
 ## implementer.md
 
 - `task_path` — path to this task's file: frontmatter plus brief
+- `cleanliness_revision` — `true` when this turn is a cleanliness revision turn; selects `cleanliness-revision`
 - `front_pack` — path to the front's context pack for a front-classified trivial or task goal; empty string when no front classified this task
 - `worktree` — path to the task worktree to edit
 - `resume_note` — follow-up notice for a turn resumed in the front's session: the task branch plus the absolute-path rules; empty string on a de-novo turn
@@ -139,6 +140,10 @@ The turn's record carries the unified diff of the edit; the next architect pack 
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default
+
+## cleanliness-revision.md
+
+The cleanliness revision follow-up instruction (fix or justify), included by `implementer.md` on a cleanliness revision turn. It contains no turn variables.
 
 ## qa.md
 
@@ -157,7 +162,7 @@ The QA step's acceptance prompt: the implementer's Work, Bounds and Code standar
 - `checks_log` — the checks record's directory; `unknown` without a checks record
 - `gate_commands` — configured compile/lint/test commands as `- id: command` lines; `none` when empty
 - `prior_findings` — the last acceptance's findings (QA or review), numbered; empty before the first acceptance
-- `fix_dispositions` — the current fix round's summary plus one numbered reply per prior finding; empty in round 1; renderer default
+- `fix_dispositions` — the current fix round's summary plus one numbered reply per prior finding; round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; renderer default
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome YAML skeleton narrowed to `status`, `summary`, `concerns` and `qa`; supplied by the turn
@@ -195,7 +200,7 @@ The ship-or-park decision, included by `review-implementer.md` on the last call.
 - `base_gates` — the base tree's recorded gate result, and the only evidence a red gate predates the task: commit plus `green`, the pre-existing failing checks, or `not recorded`; a claimed pre-existing failure is a finding unless this record lists it
 - `prior_findings` — previous round's numbered summary and concerns, plus any legacy forward lines (summary first); empty string in round 1
 - `upscope_ask` — escalation ask for a standalone task review, answered as `upscope: yes|no` with the verdict; empty string when this task is part of an architect plan
-- `fix_dispositions` — the current fix round's summary plus one numbered reply per prior finding; empty string in round 1; renderer default
+- `fix_dispositions` — the current fix round's summary plus one numbered reply per prior finding; round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; renderer default
 
 ## adjudicator.md
 

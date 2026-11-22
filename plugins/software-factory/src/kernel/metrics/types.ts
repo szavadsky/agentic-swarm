@@ -82,12 +82,14 @@ export interface PlanReviewMarkCounts {
 }
 
 export interface ArchitectMetrics {
+  turns: number;
   launches: number;
   usage: Usage;
   tokens: number;
   /** 0 when no turn had a known cost, or when all known costs are 0. */
   costShare: number;
   tokenShare: number;
+  turnShare: number;
   unpricedTurns: number;
 }
 

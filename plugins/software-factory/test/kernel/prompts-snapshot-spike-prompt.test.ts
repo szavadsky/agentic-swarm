@@ -120,6 +120,7 @@ const ROLES: Record<string, Record<string, string>> = {
     tiers: TIERS,
   },
   implementer: {
+    cleanliness_revision: "false",
     task_path: "/goal/tasks/alpha.md",
     front_pack: "/goal/iterations/3/context-pack.md",
     worktree: "/worktrees/demo-tasks/alpha",

@@ -130,6 +130,7 @@ export function sumArchitect(
   total: ArchitectMetrics,
   part: ArchitectMetrics,
 ): void {
+  total.turns += part.turns;
   total.launches += part.launches;
   total.usage = addUsage(total.usage, part.usage);
   total.tokens += part.tokens;

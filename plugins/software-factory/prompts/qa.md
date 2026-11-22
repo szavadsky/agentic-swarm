@@ -39,5 +39,5 @@ This is QA's last acceptance call: `changes` is not an available verdict. Accept
 - gate commands:
   {{gate_commands}}
 - prior findings: `{{prior_findings}}` — the last acceptance's numbered findings; empty before the first acceptance
-- fix dispositions: `{{fix_dispositions}}` — empty in round 1; each prior finding is judged on its change or reply
+- fix dispositions: `{{fix_dispositions}}` — round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; each prior finding is judged on its change or reply
 - outcome path: `{{outcome_path}}`

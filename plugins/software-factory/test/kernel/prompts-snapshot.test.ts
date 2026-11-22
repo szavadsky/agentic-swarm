@@ -114,6 +114,7 @@ const ROLES: Record<string, Record<string, string>> = {
   },
   implementer: {
     task_path: "/goal/tasks/alpha.md",
+    cleanliness_revision: "false",
     front_pack: "/goal/iterations/3/context-pack.md",
     worktree: "/worktrees/demo-tasks/alpha",
     resume_note: "",

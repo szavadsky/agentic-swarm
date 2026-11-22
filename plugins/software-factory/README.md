@@ -12,8 +12,8 @@ consult, bounded by `limits.planCheckRounds`; the consult runs on `architect`,
 when nothing is open, or when the bound is hit. State is derived from task
 files and append-only records; there is no state file to repair. After the
 first iteration a pack-preparer turn turns the script's full status data into
-the iteration's index pack; when it fails, the script render is the pack and
-the fallback is recorded as a glitch.
+the iteration's index pack; when it fails, it tries its alias fallback chain before the
+script renders a bounded index pack and the fallback is recorded as a glitch.
 
 ## Commands
 
@@ -42,7 +42,7 @@ directory's dependency graph and flow existence against the merged process
 config, class.yaml, outcome.yaml keyed by the step in the sibling
 started.yaml or `--step`, mailbox/holds/*.yaml, repo.yaml, run.yaml,
 process.yaml); exit 0 valid, 1 invalid or unknown kind. `schemas` writes every
-kernel file schema as JSON Schema (`task`, `outcome`, `hold`, `class`, `repo`,
+kernel file schema as JSON Schema (`task`, `outcome`, `qa`, `hold`, `class`, `repo`,
 `run`, `process`) into `--out` for editors and the artifact LSP. `variables`
 renders `prompts/VARIABLES.md` from the typed prompt-variable descriptor; the
 prompt tests fail when the committed file differs from that render.
@@ -86,7 +86,13 @@ gates:
     format: { pattern: jest }                    # runner whose output it parses
     serial: [database]                          # gates naming a mutex never overlap
     env: { TMPDIR: .cache/gate }                # per-worktree scratch directory
+cleanliness:                                    # optional; default rules active without it
+  maxFileSizeBytes: 1048576                     # default: 1048576 (1 MB)
+  allowedExtensions: [ts, json, md]             # default: extensions present in base tree
+  maxOutOfScopeFiles: 3                         # default: 3
 ```
+
+Cleanliness checks run by default without repo config to detect large files, disallowed/new extensions, temp/weights/huge outputs, and excessive files out of task scope. A cleanliness hit sends the author one revision follow-up turn (fix or justify) before review; if justified, the task advances to review without re-looping and the reviewer evaluates the justification. Tightened thresholds may be configured under `cleanliness` in `.factory/repo.yaml`.
 
 The tracked repo layer names no worktree root: checkouts, sessions and harness
 policy belong to the run layer, so one checkout never silently shadows another.
@@ -441,8 +447,8 @@ references it): status, merged/finished/parked tasks, remarkable concerns,
 assumptions and debt, and a waste section naming every wasted turn's record
 with rebutted reviews counted apart. The next iteration's context pack carries
 that waste section. `metrics.yaml` is rebuilt from the usage records;
-`mailbox/outbox/metrics.yaml` references it: architect launches, architect
-cost and token share, cost and list cost per merged task, incident counts
+`mailbox/outbox/metrics.yaml` references it: architect launches and turn count, architect
+cost, token and turn share, cost and list cost per merged task, incident counts
 (infra retries, fallback hops, outcome-repair turns, merge conflicts,
 merged-gate failures, and round-limit, no-progress, empty-diff and overflow
 parks), loop incidents (no-progress and empty-diff parks; a spike's empty

@@ -99,6 +99,15 @@ async function leavesTaskAloneWhenSteerIdEqualsPart2(
   scope: Awaited<ReturnType<typeof leavesTaskAloneWhenSteerIdEqualsPart1>>,
 ) {
   const { state, harness, runtime } = scope;
+  const outbox = fs.readFileSync(
+    path.join(runtime.store.goalDir, "mailbox/outbox/steer-alpha.md"),
+    "utf8",
+  );
+  expect(outbox).toContain("# Steer alpha");
+  expect(outbox).toContain(
+    "steer alpha was left unanswered at two boundaries; its hold expired",
+  );
+  expect(outbox).toContain("Source: mailbox/inbox/alpha.md");
   expect(state.tasks.alpha!.status).toBe("ready");
   expect(state.tasks.alpha!.turns).toBe(0);
   expect(state.tasks.alpha!.round).toBe(1);

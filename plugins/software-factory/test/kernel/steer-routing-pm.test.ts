@@ -298,7 +298,10 @@ async function spikeWritesStandaloneTaskWhosePart3(
   expect(pack).not.toContain("- s1: mailbox/inbox/s1.md");
   expect(pack).toContain("- s1 [spike]");
   expect(pack).toContain("## Spike findings");
-  expect(pack).toContain("  Cursor pagination wins.");
+  expect(pack).toContain(
+    `- probe-page: ${spikeReportPath("probe-page")} (34 bytes)`,
+  );
+  expect(pack).not.toContain("Cursor pagination wins.");
 }
 
 function steerPMRoutingPart2() {

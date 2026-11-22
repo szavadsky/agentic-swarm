@@ -41,6 +41,9 @@ export interface ReduceState {
   gateFailure?: string;
   /** Sorted actionable failing names behind the current gate fix. */
   gateRed?: string[];
+  cleanlinessRevision: boolean;
+  cleanlinessRevised: boolean;
+  cleanlinessJustified: boolean;
   /** The gate fix came from merged-result gates: green checks merge, skipping review. */
   mergeFix: boolean;
   /** The last review's `changes` still awaits its answer. */
@@ -75,6 +78,9 @@ export function createReduceState(
     gateFix: false,
     gateLastCall: false,
     gateFixCount: 0,
+    cleanlinessRevision: false,
+    cleanlinessRevised: false,
+    cleanlinessJustified: false,
     mergeFix: false,
     changesPending: false,
     replyOnlyFix: false,

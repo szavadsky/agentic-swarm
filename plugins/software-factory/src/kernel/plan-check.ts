@@ -13,19 +13,20 @@ import {
 } from "./pm.js";
 import { formatPlanList, planBullets } from "./plan-file.js";
 import { scriptMeta } from "./record.js";
-import type {
-  ArtifactStore,
-  Cause,
-  KernelRuntime,
-  Outcome,
-  PlanCheck,
-  PlanCheckEvidence,
-  PlanCheckFollowUp,
-  PlanCheckVerdict,
-  State,
-  StepRecord,
-  TaskFile,
-  TaskStatus,
+import {
+  type ArtifactStore,
+  type Cause,
+  type KernelRuntime,
+  normalizeSlug,
+  type Outcome,
+  type PlanCheck,
+  type PlanCheckEvidence,
+  type PlanCheckFollowUp,
+  type PlanCheckVerdict,
+  type State,
+  type StepRecord,
+  type TaskFile,
+  type TaskStatus,
 } from "./types.js";
 
 /** Agent step of a plan-checker turn; slug-less, so it stays out of the item's turn count. */
@@ -44,7 +45,12 @@ const OPEN_STATUSES: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
  * (`  - done: …`) name no task, so a follow-up cannot hide behind them.
  */
 export function planSlugs(plan: string): Set<string> {
-  return new Set(planBullets(plan).keys());
+  const slugs = new Set<string>();
+  for (const raw of planBullets(plan).keys()) {
+    const slug = normalizeSlug(raw);
+    if (slug.length > 0) slugs.add(slug);
+  }
+  return slugs;
 }
 
 /**
@@ -63,7 +69,7 @@ export function validatePlanCheck(
   const outside = [
     ...new Set(
       outcome.planCheck.followUps
-        .map((followUp) => followUp.slug)
+        .map((followUp) => normalizeSlug(followUp.slug))
         .filter((slug) => !named.has(slug)),
     ),
   ];

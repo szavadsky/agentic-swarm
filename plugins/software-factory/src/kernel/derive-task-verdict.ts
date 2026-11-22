@@ -23,6 +23,8 @@ export function advanceAfterQa(
   state.stepIndex = idx + 1;
   state.gateFix = false;
   state.gateLastCall = false;
+  state.cleanlinessRevision = false;
+  state.cleanlinessJustified = false;
   state.mergeFix = false;
   state.changesPending = false;
   // The checks before QA already judged this tree: do not spend a second run
@@ -48,6 +50,8 @@ export function advancePastStep(
   state.stepIndex = idx + 1;
   state.gateFix = false;
   state.gateLastCall = false;
+  state.cleanlinessRevision = false;
+  state.cleanlinessJustified = false;
   state.mergeFix = false;
   state.changesPending = false;
   state.pendingChecks = null;
@@ -159,6 +163,8 @@ function applyChanges(
   const adjudicator = context.steps[idx + 1];
   state.gateFix = false;
   state.gateLastCall = false;
+  state.cleanlinessRevision = false;
+  state.cleanlinessJustified = false;
   state.mergeFix = false;
   state.pendingChecks = null;
   state.changesPending = true;
@@ -187,6 +193,8 @@ export function startFixRound(
   state.stepIndex = 0;
   state.gateFix = false;
   state.gateLastCall = false;
+  state.cleanlinessRevision = false;
+  state.cleanlinessJustified = false;
   state.mergeFix = false;
   state.phase = context.firstStep;
   state.changesPending = true;

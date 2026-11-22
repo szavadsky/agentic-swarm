@@ -170,6 +170,8 @@ function taskStateFor(
     loop: terminal ? undefined : reduction.loop,
     gateFix: terminal ? undefined : reduction.gateFix,
     gateLastCall: terminal ? undefined : reduction.gateLastCall,
+    cleanlinessRevision: terminal ? undefined : reduction.cleanlinessRevision,
+    cleanlinessJustified: terminal ? undefined : reduction.cleanlinessJustified,
   };
 }
 

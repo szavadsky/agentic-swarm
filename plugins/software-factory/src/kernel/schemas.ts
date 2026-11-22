@@ -8,6 +8,7 @@ import {
 } from "./config.js";
 import { classSchema } from "./flow-context.js";
 import { holdFileSchema } from "./mailbox.js";
+import { qaOutcomeSchema } from "./qa.js";
 import { taskFrontmatterSchema } from "./tasks.js";
 import { outcomeSchema } from "./types.js";
 
@@ -85,6 +86,7 @@ function runLayerSchema(): JsonNode {
 const kernelSchemas = {
   task: () => inputSchema(taskFrontmatterSchema),
   outcome: () => inputSchema(outcomeSchema),
+  qa: () => inputSchema(qaOutcomeSchema),
   hold: () => inputSchema(holdFileSchema),
   class: () => inputSchema(classSchema),
   repo: () => inputSchema(repoConfigSchema),

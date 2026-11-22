@@ -148,6 +148,12 @@ async function expireUnansweredSteer(
 ): Promise<void> {
   const { runtime } = context;
   await expireHold(runtime.store, steer.id);
+  const reason = `steer ${steer.id} was left unanswered at two boundaries; its hold expired`;
+  await writeOutbox(
+    runtime.store,
+    steer.id,
+    `# Steer ${steer.id}\n\n${reason}\n\nSource: ${steer.relPath}`,
+  );
   await runtime.store.appendRecord(
     scriptMeta(context.iteration, "steer-unanswered", { slug: steer.id }),
     {
@@ -158,7 +164,7 @@ async function expireUnansweredSteer(
       ),
       outcome: {
         status: "done",
-        summary: `steer ${steer.id} was left unanswered at two boundaries; its hold expired`,
+        summary: reason,
         concerns: [
           {
             kind: "debt",
