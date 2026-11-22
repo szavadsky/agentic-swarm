@@ -3,7 +3,7 @@
 # - Antigravity (agy, gemini flash) available.
 # - OpenCode Go subscriptions: deepseek-v4.1-flash, muse-spark-1.3-contributor,
 #   hy4-flash-free.
-# - OpenCode harness: only free flash models (deepseek/minimax/beam/hy4).
+# - OpenCode harness: only free flash models (deepseek/hy4/beam).
 # - OpenRouter ernie free: omp only. hy4 free: omp and opencode.
 # - ember is NOT free; not used.
 # Steps of one flow sit on different models (implementer / QA / reviewer).
@@ -41,16 +41,16 @@ aliases:
     fallbacks:
       - harness: opencode
         model: opencode-go/deepseek-v4.1-flash
-        effort: max
+        effort: high
         subscription: opencode-go
       - harness: opencode
         model: opencode-go/muse-spark-1.3-contributor
-        effort: max
+        effort: high
         subscription: opencode-go
   implementer-b:
     harness: opencode
     model: opencode-go/deepseek-v4.1-flash
-    effort: max
+    effort: high
     subscription: opencode-go
     timeouts:
       wallMs: 14400000
@@ -64,11 +64,11 @@ aliases:
   researcher:
     harness: opencode
     model: opencode-go/muse-spark-1.3-contributor
-    effort: max
+    effort: high
     subscription: opencode-go
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
-        effort: max
+        effort: high
         subscription: opencode-go
   qa:
     harness: omp
@@ -84,7 +84,7 @@ aliases:
         subscription: opencode-go
   reviewer:
     harness: opencode
-    model: opencode/minimax-m3.1-flash-free
+    model: opencode/deepseek-v4.1-flash-free
     subscription: opencode-free
     timeouts:
       wallMs: 14400000
@@ -93,7 +93,7 @@ aliases:
         subscription: opencode-free
   plan-reviewer:
     harness: opencode
-    model: opencode/minimax-m3.1-flash-free
+    model: opencode/hy4-flash-free
     subscription: opencode-free
     timeouts:
       wallMs: 14400000
@@ -135,6 +135,7 @@ aliases:
   digest:
     harness: omp
     model: openrouter/baidu/ernie-5.5-flash-preview:free
+    effort: high
     subscription: openrouter-free
     fallbacks:
       - harness: opencode
