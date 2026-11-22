@@ -171,6 +171,15 @@ async function expiresUnansweredSteerWhoseIdPart2(
   expect(expired[0]?.outcome?.concerns[0]?.evidence).toBe(
     'mailbox/inbox/we"ird.md',
   );
+  const outbox = fs.readFileSync(
+    path.join(runtime.store.goalDir, 'mailbox/outbox/steer-we"ird.md'),
+    "utf8",
+  );
+  expect(outbox).toContain('# Steer we"ird');
+  expect(outbox).toContain(
+    'steer we"ird was left unanswered at two boundaries; its hold expired',
+  );
+  expect(outbox).toContain('Source: mailbox/inbox/we"ird.md');
 }
 
 async function rePresentsUnansweredSteerThenPart1(
@@ -249,6 +258,15 @@ async function rePresentsUnansweredSteerThenPart2(
   expect(expired?.outcome?.concerns[0]?.calibration).toBe("architect");
   expect(expired?.outcome?.concerns[0]?.text).toContain("s1");
   expect(expired?.outcome?.concerns[0]?.evidence).toBe("mailbox/inbox/s1.md");
+  const outbox = fs.readFileSync(
+    path.join(runtime.store.goalDir, "mailbox/outbox/steer-s1.md"),
+    "utf8",
+  );
+  expect(outbox).toContain("# Steer s1");
+  expect(outbox).toContain(
+    "steer s1 was left unanswered at two boundaries; its hold expired",
+  );
+  expect(outbox).toContain("Source: mailbox/inbox/s1.md");
 
   // Third boundary: the architect finally answers the still-pending steer.
   harness.script((req, ctx) => {
