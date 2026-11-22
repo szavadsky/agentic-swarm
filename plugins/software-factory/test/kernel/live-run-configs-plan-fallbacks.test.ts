@@ -93,4 +93,27 @@ describe("self-free run config plan review fallbacks", () => {
       repo.cleanup();
     }
   });
+
+  it("resolves the pack-preparer and digest chains with a claude-code opus fallback", () => {
+    const repo = createTmpRepo();
+    try {
+      const { runtime, harnesses } = createSelfFreeRuntime(repo);
+      expectSelfFreeTierChain(
+        runtime,
+        harnesses,
+        "pack-preparer",
+        "opencode-go/deepseek-v4.1-flash",
+        "opencode-go/hy4-flash-free",
+      );
+      expectSelfFreeTierChain(
+        runtime,
+        harnesses,
+        "digest",
+        "opencode-go/hy4-flash-free",
+        "opencode-go/deepseek-v4.1-flash",
+      );
+    } finally {
+      repo.cleanup();
+    }
+  });
 });

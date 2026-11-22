@@ -150,6 +150,10 @@ aliases:
     fallbacks:
       - model: opencode-go/hy4-flash-free
         subscription: opencode-go
+      - harness: claude-code
+        model: opus
+        effort: high
+        subscription: claude
   digest:
     harness: opencode
     model: opencode-go/hy4-flash-free
@@ -158,6 +162,10 @@ aliases:
     fallbacks:
       - model: opencode-go/deepseek-v4.1-flash
         subscription: opencode-go
+      - harness: claude-code
+        model: opus
+        effort: high
+        subscription: claude
   intent:
     harness: opencode
     model: opencode-go/deepseek-v4.1-flash
