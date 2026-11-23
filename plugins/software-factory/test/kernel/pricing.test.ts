@@ -95,6 +95,18 @@ function priceUsageAtAggregationTimePart2() {
       addUsage(usage({ costUsd: 0.2 }), usage({ costUsd: 0 })).costUsd,
     ).toBe(0.2);
   });
+
+  it("keeps a repriced table figure out of the harness column", () => {
+    // A harness that reported nothing takes its cost from the table; repricing
+    // for metrics must not turn that estimate into a harness report.
+    const once = pricedUsage(usage({ in: 1_000_000 }), "paid/one", TABLE);
+    expect(once.usage.harnessCostUsd).toBeUndefined();
+
+    const again = pricedUsage(once.usage, "paid/one", TABLE);
+    expect(again.usage.costUsd).toBeCloseTo(4, 10);
+    expect(again.usage.listCostUsd).toBeCloseTo(4, 10);
+    expect(again.usage.harnessCostUsd).toBeUndefined();
+  });
 }
 
 function harnessIdMatchingAgainstOpenRouterPart1() {

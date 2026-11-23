@@ -223,17 +223,23 @@ describe("status concerns and metrics", () => {
         calibration: "owner",
       });
 
-      expect(status.cost.totalUsd).toBeCloseTo(0.6, 10);
+      expect(status.cost.harnessCostUsd).toBeCloseTo(0.6, 10);
+      expect(status.cost.listCostUsd).toBeNull();
+      expect(status.cost.harnessCostPerMergedTask).toBeCloseTo(0.6, 10);
+      expect(status.cost.listCostPerMergedTask).toBeNull();
       expect(status.cost.unpricedTurns).toBe(0);
-      expect(status.cost.perMergedTask).toBeCloseTo(0.6, 10);
       expect(status.cost.byRole.architect).toEqual({
         turns: 1,
         tokens: 150,
-        costUsd: 0.1,
+        harnessCostUsd: 0.1,
+        listCostUsd: null,
         unpricedTurns: 0,
       });
-      expect(status.cost.byRole.implementer!.costUsd).toBeCloseTo(0.5, 10);
-      expect(status.cost.byModel.fake!.costUsd).toBeCloseTo(0.6, 10);
+      expect(status.cost.byRole.implementer!.harnessCostUsd).toBeCloseTo(
+        0.5,
+        10,
+      );
+      expect(status.cost.byModel.fake!.harnessCostUsd).toBeCloseTo(0.6, 10);
 
       expect(status.work.turns).toBe(2);
       expect(status.work.edits).toBe(2);
@@ -272,7 +278,7 @@ describe("status file", () => {
       const slugs = (tasks: { slug: string }[]) => tasks.map((t) => t.slug);
       expect(slugs(parsed.tasks.merged)).toEqual(["merged1"]);
       expect(parsed.epics).toEqual({ core: ["merged1"] });
-      expect(parsed.cost.totalUsd).toBeCloseTo(0.6, 10);
+      expect(parsed.cost.harnessCostUsd).toBeCloseTo(0.6, 10);
 
       const file = path.join(store.goalDir, STATUS_REL_PATH);
       expect(fs.readFileSync(file, "utf8")).toBe(stored!);
@@ -300,7 +306,7 @@ interface StatusSnapshot {
     open: { slug: string; turns: number }[];
     merged: { slug: string }[];
   };
-  cost: { totalUsd: number | null };
+  cost: { harnessCostUsd: number | null };
   work: { turns: number };
 }
 
@@ -333,9 +339,11 @@ describe("status before the kernel runs", () => {
       expect(parsed.distance).toEqual({ pending: [], parks: [], openDebt: [] });
       expect(parsed.epics).toBeUndefined();
       expect(parsed.cost).toEqual({
-        totalUsd: null,
+        harnessCostUsd: null,
+        listCostUsd: null,
+        harnessCostPerMergedTask: null,
+        listCostPerMergedTask: null,
         unpricedTurns: 0,
-        perMergedTask: null,
         byRole: {},
         byModel: {},
       });
@@ -393,7 +401,7 @@ describe("status refresh points", () => {
       );
       const finished = snapshot(finishedJson);
       expect(finished.tasks!.open[0]!.turns).toBe(3);
-      expect(finished.cost!.totalUsd).toBeCloseTo(0.03, 10);
+      expect(finished.cost!.harnessCostUsd).toBeCloseTo(0.03, 10);
       expect(finished.work!.turns).toBe(3);
       expect(
         fs.readFileSync(path.join(goalDir, DASHBOARD_REL_PATH), "utf8"),

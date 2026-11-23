@@ -14,7 +14,8 @@ interface CostRow {
   name: string;
   turns: string;
   tokens: string;
-  cost: string;
+  harnessCost: string;
+  listCost: string;
   unpricedTurns: string;
 }
 
@@ -40,10 +41,12 @@ interface DashboardSummary {
   percent: number;
   tasks: StatusTask[];
   spend: {
-    total: string;
+    harnessCost: string;
+    listCost: string;
     tokens: string;
     unpricedTurns: string;
-    perMergedTask: string;
+    harnessPerMergedTask: string;
+    listPerMergedTask: string;
   };
   costRoles: CostRow[];
   costModels: CostRow[];
@@ -83,7 +86,8 @@ function costRows(groups: Record<string, StatusCost>): CostRow[] {
       name,
       turns: count(row.turns),
       tokens: count(row.tokens),
-      cost: money(row.costUsd),
+      harnessCost: money(row.harnessCostUsd),
+      listCost: money(row.listCostUsd),
       unpricedTurns: count(row.unpricedTurns),
     }));
 }
@@ -130,10 +134,12 @@ function summaryOf(status: StatusDocument): DashboardSummary {
       ...status.tasks.cancelled,
     ],
     spend: {
-      total: money(status.cost.totalUsd),
+      harnessCost: money(status.cost.harnessCostUsd),
+      listCost: money(status.cost.listCostUsd),
       tokens: count(tokens),
       unpricedTurns: count(status.cost.unpricedTurns),
-      perMergedTask: money(status.cost.perMergedTask),
+      harnessPerMergedTask: money(status.cost.harnessCostPerMergedTask),
+      listPerMergedTask: money(status.cost.listCostPerMergedTask),
     },
     costRoles: costRows(status.cost.byRole),
     costModels: costRows(status.cost.byModel),

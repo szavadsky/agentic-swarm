@@ -75,7 +75,10 @@ export interface StatusConcern {
 export interface StatusCost {
   turns: number;
   tokens: number;
-  costUsd: number | null;
+  /** Sum of the figures the harnesses reported; null when none reported one. */
+  harnessCostUsd: number | null;
+  /** OpenRouter list-price equivalent; null when no model is priced. */
+  listCostUsd: number | null;
   unpricedTurns: number;
 }
 
@@ -110,9 +113,11 @@ export interface StatusDocument {
   };
   concerns: StatusConcern[];
   cost: {
-    totalUsd: number | null;
+    harnessCostUsd: number | null;
+    listCostUsd: number | null;
+    harnessCostPerMergedTask: number | null;
+    listCostPerMergedTask: number | null;
     unpricedTurns: number;
-    perMergedTask: number | null;
     byRole: Record<string, StatusCost>;
     byModel: Record<string, StatusCost>;
   };
@@ -267,7 +272,8 @@ function costOf(
     out[name] = {
       turns: entry.turns,
       tokens: entry.tokens,
-      costUsd: entry.usage.costUsd ?? null,
+      harnessCostUsd: entry.usage.harnessCostUsd ?? null,
+      listCostUsd: entry.usage.listCostUsd ?? null,
       unpricedTurns: entry.unpricedTurns,
     };
   }
@@ -305,9 +311,11 @@ function workView(totals: MetricsTotals): StatusDocument["work"] {
 
 function costView(totals: MetricsTotals): StatusDocument["cost"] {
   return {
-    totalUsd: totals.usage.costUsd ?? null,
+    harnessCostUsd: totals.usage.harnessCostUsd ?? null,
+    listCostUsd: totals.usage.listCostUsd ?? null,
     unpricedTurns: totals.unpricedTurns,
-    perMergedTask: totals.costPerMergedTask,
+    harnessCostPerMergedTask: totals.harnessCostPerMergedTask,
+    listCostPerMergedTask: totals.listCostPerMergedTask,
     byRole: costOf(totals.roles),
     byModel: costOf(totals.models),
   };

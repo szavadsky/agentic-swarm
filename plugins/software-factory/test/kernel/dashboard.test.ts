@@ -27,9 +27,11 @@ function emptySnapshot(): StatusDocument {
     distance: { pending: [], parks: [], openDebt: [] },
     concerns: [],
     cost: {
-      totalUsd: null,
+      harnessCostUsd: null,
+      listCostUsd: null,
       unpricedTurns: 0,
-      perMergedTask: null,
+      harnessCostPerMergedTask: null,
+      listCostPerMergedTask: null,
       byRole: {},
       byModel: {},
     },
@@ -70,11 +72,24 @@ describe("dashboard content", () => {
     );
     expect(html).toContain("Cache invalidation needs &lt;follow-up&gt;");
 
-    expect(html).toContain("$0.60");
-    expect(html).toContain("$0.60 per merged task");
+    expect(html).toContain(
+      "<span>Harness-reported total</span><strong>$0.60</strong>",
+    );
+    expect(html).toContain(
+      "<span>List-price estimate total</span><strong>$1.35</strong>",
+    );
+    expect(html).toContain(
+      "<span>Harness-reported per merged task</span><strong>$0.60</strong>",
+    );
+    expect(html).toContain(
+      "<span>List-price estimate per merged task</span><strong>$1.35</strong>",
+    );
+    expect(html).toContain("<strong>$0.60</strong> harness-reported");
+    expect(html).toContain("<strong>$1.35</strong> list-price estimate");
     expect(html).toContain("1,350 tokens");
     expect(html).toContain("$0.10");
     expect(html).toContain("$0.50");
+    expect(html).toContain("$1.20");
     expect(html).toContain("architect");
     expect(html).toContain("implementer");
   });
@@ -91,6 +106,45 @@ describe("dashboard escaping", () => {
 
     expect(html).toContain("&#34;&gt;&lt;img s");
     expect(html).not.toContain("<img");
+  });
+});
+
+describe("dashboard cost split", () => {
+  it("renders n/a for a missing harness total and keeps the list estimate", () => {
+    const doc = fixture();
+    doc.cost.harnessCostUsd = null;
+
+    const html = renderDashboard(doc);
+
+    expect(html).toContain("<strong>n/a</strong> harness-reported");
+    expect(html).toContain("<strong>$1.35</strong> list-price estimate");
+  });
+
+  it("renders n/a for a missing list total and keeps the harness total", () => {
+    const doc = fixture();
+    doc.cost.listCostUsd = null;
+
+    const html = renderDashboard(doc);
+
+    expect(html).toContain("<strong>$0.60</strong> harness-reported");
+    expect(html).toContain("<strong>n/a</strong> list-price estimate");
+  });
+
+  it("renders n/a for a role row with no harness figure and shows its list figure", () => {
+    const doc = fixture();
+    const implementer = doc.cost.byRole.implementer;
+    if (!implementer) throw new Error("fixture has no implementer cost");
+    implementer.harnessCostUsd = null;
+
+    const html = renderDashboard(doc);
+
+    expect(html).toContain(
+      '<tr><td>implementer</td><td class="num">1</td><td class="num">1,200</td><td class="num">n/a</td><td class="num">$1.20</td><td class="num">0</td></tr>',
+    );
+    expect(html).toContain(
+      '<th scope="col" class="num">Harness-reported</th><th scope="col" class="num">List-price estimate</th>',
+    );
+    expect(html).not.toContain("exact");
   });
 });
 
