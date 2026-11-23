@@ -4,6 +4,7 @@ import type { Usage } from "../../harness/types.js";
 import { addUsage, zeroUsage } from "../../harness/usage.js";
 import { pricedRecord } from "../pricing.js";
 import type { PriceTable } from "../pricing.js";
+import { qaOnlyCatches, type QaOnlyCatches } from "../qa.js";
 import type { SummaryStatus } from "../summary.js";
 import type { StepRecord } from "../types.js";
 import { wasteAccounting } from "../waste.js";
@@ -180,6 +181,7 @@ interface IterationMetricsParts {
   incidents: IncidentCounts;
   waste: WasteAccounting;
   planReviewMarks: PlanReviewMarkCounts;
+  qaOnlyCatches: QaOnlyCatches;
 }
 
 /** Assembles one iteration's metrics from its accumulated parts. */
@@ -222,6 +224,7 @@ function iterationMetricsResult(
     models: acc.models,
     architect: acc.architect,
     planReviewMarks: parts.planReviewMarks,
+    qaOnlyCatches: parts.qaOnlyCatches,
     unpricedTurns,
     waste: parts.waste,
     incidents,
@@ -253,6 +256,7 @@ export function iterationMetrics(
   );
   const acc = accumulateTurns(recs, roleByStep, prices, priceIds);
   const all = records.filter((r) => r.iteration === n);
+  const qaOnly = qaOnlyCatches(all);
   const { incidents, waste, planReviewMarks } = iterationIncidents(
     all,
     recs,
@@ -271,5 +275,6 @@ export function iterationMetrics(
     incidents,
     waste,
     planReviewMarks,
+    qaOnlyCatches: qaOnly,
   });
 }

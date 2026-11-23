@@ -68,6 +68,39 @@ describe("runCleanlinessCheck with repo config", () => {
   });
 });
 
+describe("runCleanlinessCheck package-relative scope", () => {
+  it("passes for plugin-relative paths when maxOutOfScopeFiles is 0", async () => {
+    const { root, runtime } = await setupTest({ maxOutOfScopeFiles: 0 });
+    const pluginRoot = path.join(root, "plugins", "software-factory");
+    fs.mkdirSync(path.join(pluginRoot, "src"), { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginRoot, "src", "main.ts"),
+      "export const main = true;\n",
+    );
+    fs.writeFileSync(
+      path.join(pluginRoot, "src", "util.ts"),
+      "export const util = true;\n",
+    );
+    await git(root, ["add", "."]);
+    await git(root, ["commit", "-m", "plugin files"]);
+
+    const task: TaskFile = {
+      slug: "test-task",
+      title: "Test task",
+      kind: "development",
+      flow: "implement-review",
+      deps: [],
+      scope: ["src/main.ts", "src/util.ts"],
+      revision: 0,
+      source: "M5",
+      body: "Test body",
+    };
+
+    const result = await runCleanlinessCheck(runtime, root, "HEAD~1", task);
+    expect(result.ok).toBe(true);
+  });
+});
+
 describe("runCleanlinessCheck default rules hit", () => {
   it("default cleanliness rules are active without repo config", async () => {
     const { root, runtime } = await setupTest(undefined);
