@@ -14,11 +14,9 @@
  * The export carries only the package, so both roots arrive in the
  * environment: FACTORY_REPO_ROOT carries the artifact checkout (tasks, class,
  * outcomes) and FACTORY_TREE_ROOT the git toplevel of the tree under test
- * (repo config, bootstrap/run). The tests gate reads the shipped run configs
- * from FACTORY_TREE_ROOT/bootstrap/run, so a tree that names none fails it
- * instead of silently skipping every config. A caller may point
- * FACTORY_REPO_ROOT at another checkout carrying the artifact tree (e.g. the
- * ops checkout).
+ * (its repo/run config and process override for schema-validation). A caller
+ * may point FACTORY_REPO_ROOT at another checkout carrying the artifact tree
+ * (e.g. the ops checkout).
  * Otherwise the invoking directory wins when it carries the artifact tree; a
  * bare checkout (task worktree, merge scratch) falls back to the worktree on
  * the repo's base branch, where the operator runs, and finally to the

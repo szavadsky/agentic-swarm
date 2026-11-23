@@ -25,7 +25,7 @@ const TREE_TEST = [
   'import path from "node:path";',
   'it("gates against the rev tree", () => {',
   "  const tree = process.env.FACTORY_TREE_ROOT!;",
-  '  expect(fs.existsSync(path.join(tree, "bootstrap/run/tree.yaml"))).toBe(true);',
+  '  expect(fs.existsSync(path.join(tree, "bootstrap/promote.sh"))).toBe(true);',
   "});",
   "",
 ].join("\n");
@@ -59,7 +59,6 @@ function fakeRepo(): TmpRepo {
   );
   repo.writeFile("plugins/software-factory/test/ok.test.ts", OK_TEST);
   repo.writeFile("plugins/software-factory/test/tree.test.ts", TREE_TEST);
-  repo.writeFile("bootstrap/run/tree.yaml", "aliases: {}\n");
   repo.writeFile("bootstrap/promote.sh", fs.readFileSync(PROMOTE!, "utf8"));
   repo.commit("fake pin package");
   return repo;

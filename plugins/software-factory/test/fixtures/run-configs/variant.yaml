@@ -1,0 +1,22 @@
+# An overlay over the fake base: composition, rotation and a cross-harness
+# fallback chain, all on fake names.
+extends: base.yaml
+aliases:
+  reviewer:
+    harness: fake-acpx
+    model: fake-route/primary
+    effort: xhigh
+    fallbacks:
+      - model: fake-route/secondary
+        effort: low
+      - harness: fake-native
+        model: fake/review-alt
+        effort: medium
+  implementer:
+    rotate:
+      - harness: fake-acpx
+        model: fake-route/secondary
+        effort: low
+      - harness: fake-native
+        model: fake/impl-rot
+        effort: high

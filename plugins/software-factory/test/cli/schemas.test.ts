@@ -7,7 +7,6 @@ import { z } from "zod";
 import { dispatch } from "../../src/cli/dispatch.js";
 import { loadRunConfig } from "../../src/kernel/config.js";
 import { kernelSchemaFiles } from "../helpers/kernel-schema-files.js";
-import { findShippedRunConfigsDir } from "../helpers/run-configs.js";
 
 async function runSchemas(args: string[]): Promise<{
   code: number;
@@ -52,7 +51,10 @@ interface JsonSchema {
   additionalProperties?: boolean;
 }
 
-const SHIPPED_RUN_DIR = findShippedRunConfigsDir();
+const RUN_CONFIG_FIXTURES = path.resolve(
+  import.meta.dir,
+  "../fixtures/run-configs",
+);
 
 describe("factory schemas", () => {
   factorySchemasPart1();
@@ -186,29 +188,28 @@ function expectAuthoredRunLayer(out: string, root: string): void {
   expect(() => loadRunConfig(unknown)).toThrow(/Unrecognized key/);
 }
 
-interface ShippedRunConfigProbe {
+interface RunConfigFixtureProbe {
   out: string;
   configs: string[];
-  runSchema: ExportedSchema;
+  failures: string[];
 }
 
-/** Writes the schemas once and returns the exported run schema and configs. */
-async function shippedRunConfigProbe(
+/** Writes the schemas once and returns each rejection of a fixture config. */
+async function runConfigFixtureProbe(
   root: string,
-): Promise<ShippedRunConfigProbe> {
+): Promise<RunConfigFixtureProbe> {
   const out = path.join(root, "schemas");
   expect((await runSchemas(["--out", out])).code).toBe(0);
   // The written file, not the schema it came from: an editor reads this.
-  const runSchema = exportedRunSchema(out);
-  const validator = z.fromJSONSchema(runSchema);
+  const validator = z.fromJSONSchema(exportedRunSchema(out));
   const configs = fs
-    .readdirSync(SHIPPED_RUN_DIR!)
+    .readdirSync(RUN_CONFIG_FIXTURES)
     .filter((name) => name.endsWith(".yaml"))
     .sort();
   const failures: string[] = [];
   for (const name of configs) {
     const config = yaml.parse(
-      fs.readFileSync(path.join(SHIPPED_RUN_DIR!, name), "utf8"),
+      fs.readFileSync(path.join(RUN_CONFIG_FIXTURES, name), "utf8"),
     );
     const result = validator.safeParse(config);
     if (!result.success) {
@@ -218,18 +219,21 @@ async function shippedRunConfigProbe(
       );
     }
   }
-  return { out, configs, runSchema };
+  return { out, configs, failures };
 }
 
-/** Every shipped config is a file the exported schema accepts. */
-function validatesEveryShippedRunConfig(): void {
+/** Every fixture config is a file the exported schema accepts. */
+function validatesEveryRunConfigFixture(): void {
   it(
-    "validates every shipped run config against the exported run schema",
+    "validates every run-config fixture against the exported run schema",
     withTmp(async (root) => {
-      const { configs } = await shippedRunConfigProbe(root);
-      // A shipped file the gate never loads is no coverage at all.
+      const { configs, failures } = await runConfigFixtureProbe(root);
+      expect(failures).toEqual([]);
+      // A fixture the gate never loads is no coverage at all.
       expect(configs.length).toBeGreaterThan(0);
-      expect(configs).toContain("self.yaml");
+      expect(configs).toEqual(
+        expect.arrayContaining(["base.yaml", "variant.yaml"]),
+      );
     }),
   );
 }
@@ -239,21 +243,21 @@ function carriesInheritedArtifactLsp(): void {
   it(
     "carries artifact LSP in the base config every overlay inherits",
     withTmp(async (root) => {
-      const { out } = await shippedRunConfigProbe(root);
+      const { out } = await runConfigFixtureProbe(root);
       const base = yaml.parse(
-        fs.readFileSync(path.join(SHIPPED_RUN_DIR!, "base.yaml"), "utf8"),
+        fs.readFileSync(path.join(RUN_CONFIG_FIXTURES, "base.yaml"), "utf8"),
       ) as Record<string, unknown>;
-      // The overlays state only what they change: `lsp` is inherited, so
-      // every shipped config runs omp without `--no-lsp` without restating it.
+      // The overlay states only what it changes: `lsp` is inherited, so
+      // every fixture config keeps LSP on without restating it.
       expect(base.lsp).toBe(true);
       const configs = fs
-        .readdirSync(SHIPPED_RUN_DIR!)
-        .filter((name) => name.endsWith(".yaml") && name !== "base.yaml")
+        .readdirSync(RUN_CONFIG_FIXTURES)
+        .filter((name) => name.endsWith(".yaml"))
         .sort();
       expect(configs.length).toBeGreaterThan(0);
       const off: string[] = [];
       for (const name of configs) {
-        if (!loadRunConfig(path.join(SHIPPED_RUN_DIR!, name)).lsp) {
+        if (!loadRunConfig(path.join(RUN_CONFIG_FIXTURES, name)).lsp) {
           off.push(name);
         }
       }
@@ -268,11 +272,8 @@ function carriesInheritedArtifactLsp(): void {
 }
 
 function factorySchemasPart2() {
-  describe.skipIf(!SHIPPED_RUN_DIR)(
-    "factory schemas: shipped run configs",
-    () => {
-      validatesEveryShippedRunConfig();
-      carriesInheritedArtifactLsp();
-    },
-  );
+  describe("factory schemas: run-config fixtures", () => {
+    validatesEveryRunConfigFixture();
+    carriesInheritedArtifactLsp();
+  });
 }

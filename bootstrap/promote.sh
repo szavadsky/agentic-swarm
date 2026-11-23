@@ -18,17 +18,13 @@ mkdir -p "$pins"
 tmp="$(mktemp -d "$pins/.tmp.XXXXXX")" # same filesystem as the pins: the final rename is atomic
 trap 'rm -rf "$tmp"' EXIT
 
-# The no-model suite reads the shipped configs from the tree the gate names;
-# this rev's copy is the one the pin was exported from, never the operator's.
-tree_paths=()
-for tree_path in bootstrap/run bootstrap/promote.sh; do
-  if git -C "$repo" cat-file -e "$rev:$tree_path" 2>/dev/null; then
-    tree_paths+=("$tree_path")
-  fi
-done
+# The no-model suite exercises fake-name run configs shipped inside the
+# package; the gate names the rev tree for the one repo-level file a test
+# reaches for (bootstrap/promote.sh). Shipped run configs stay out of the
+# pin: tests load fake names, never the operator's.
 unset FACTORY_TREE_ROOT
-if [ "${#tree_paths[@]}" -gt 0 ]; then
-  git -C "$repo" archive "$rev" "${tree_paths[@]}" | tar -x -C "$tmp"
+if git -C "$repo" cat-file -e "$rev:bootstrap/promote.sh" 2>/dev/null; then
+  git -C "$repo" archive "$rev" bootstrap/promote.sh | tar -x -C "$tmp"
   export FACTORY_TREE_ROOT="$tmp"
 fi
 

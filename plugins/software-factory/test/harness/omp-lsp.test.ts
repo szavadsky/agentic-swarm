@@ -7,8 +7,6 @@ import { createRealHarnesses } from "../../src/cli/harnesses.js";
 import { OmpHarness } from "../../src/harness/omp/harness.js";
 import { turnLspConfigPath } from "../../src/harness/omp/lsp.js";
 import { writeArtifactLsp } from "../../src/kernel/artifact-lsp.js";
-import { loadRunConfig } from "../../src/kernel/config.js";
-import { shippedRunConfigsDir } from "../helpers/run-configs.js";
 
 const FAKE_OMP = `#!/usr/bin/env bun
 const fs = require("node:fs");
@@ -408,14 +406,4 @@ function ompArtifactLSPPart2() {
       f.cleanup();
     }
   }, 30_000);
-
-  it("enables artifact LSP in the shipped run configs", () => {
-    const dir = shippedRunConfigsDir();
-    const files = fs.readdirSync(dir).filter((file) => file.endsWith(".yaml"));
-    expect(files.length).toBeGreaterThan(0);
-    for (const file of files) {
-      const config = loadRunConfig(path.join(dir, file));
-      expect(config.lsp).toBe(true);
-    }
-  });
 }
