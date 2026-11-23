@@ -13,6 +13,16 @@ export interface OmpPromptError {
   code?: string;
 }
 
+/** The `prompt_result` frame's data; only the fields the turn reads. */
+export interface OmpPromptResult {
+  /** Terminal status omp reports for the prompt. */
+  status?: "completed" | "error" | "aborted";
+  /** Error object omp attaches when `status` is "error". */
+  error?: OmpPromptError;
+  /** A subarchitect child keeps its session open after the prompt settles. */
+  sessionSettled?: boolean;
+}
+
 const AUTH =
   /unauthori[sz]ed|forbidden|invalid api key|no api key|missing api key|credential|model .*not found|no-route|model unavailable/i;
 const OVERFLOW =
@@ -113,7 +123,7 @@ export interface OmpTurnFailure {
 export interface OmpTurnOutcomeInput {
   abortReason?: "idle" | "wall";
   failure?: OmpTurnFailure;
-  promptResult?: any;
+  promptResult?: OmpPromptResult;
   lastStopReason?: string;
   usage?: Usage;
   text?: string;
@@ -148,7 +158,7 @@ export function classifyOmpTurn(input: OmpTurnOutcomeInput): Stop {
     return { kind: "infra", cause: "timeout" };
   }
   if (input.promptResult?.status === "error") {
-    return classifyOmpError(input.promptResult.error as OmpPromptError);
+    return classifyOmpError(input.promptResult.error);
   }
   if (input.promptResult?.status === "aborted") return { kind: "cancelled" };
   if (input.promptResult?.status === "completed") {

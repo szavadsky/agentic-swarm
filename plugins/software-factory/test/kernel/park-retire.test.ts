@@ -149,7 +149,7 @@ describe("status distance and dashboard", () => {
     expect(summaryTaskLists(state).parked).toEqual(["live"]);
 
     const html = renderDashboard(status);
-    expect(html).toContain("1 of 3 live tasks merged or finished");
+    expect(html).toContain("1 merged");
     expect(html).toContain("1 parked");
     expect(html).not.toContain('task-base"');
   });

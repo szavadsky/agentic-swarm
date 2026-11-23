@@ -31,8 +31,8 @@ function terminateChildGroup(
   if (pid <= 0) return;
   try {
     process.kill(-pid, signal);
-  } catch (err: any) {
-    if (err?.code !== "ESRCH") {
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException | null | undefined)?.code !== "ESRCH") {
       try {
         process.kill(pid, signal);
       } catch {}

@@ -257,12 +257,12 @@ export class FakeHarness implements Harness {
     // restarts the cache lifetime, as the real adapters report. Only a
     // handler-set session (a different ref than the request carried) passes
     // through untouched, so tests can stage a cold transcript.
-    const overridden =
-      outcome.session !== undefined && outcome.session !== req.session;
-    const base = overridden
-      ? outcome.session!
-      : (req.session ?? this.newSession(req));
-    const session = overridden
+    const override =
+      outcome.session !== undefined && outcome.session !== req.session
+        ? outcome.session
+        : undefined;
+    const base = override ?? req.session ?? this.newSession(req);
+    const session = override
       ? base
       : { ...base, lastRequestStartedAt: new Date().toISOString() };
     this.sessions.set(session.id, session);

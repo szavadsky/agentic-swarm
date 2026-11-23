@@ -78,7 +78,8 @@ export function countOutcomeRepairs(
   if (!attempts) return 0;
   let repairs = 0;
   for (let i = 1; i < attempts.length; i += 1) {
-    if (attempts[i - 1]!.stop.kind !== "infra") repairs += 1;
+    const previous = attempts[i - 1];
+    if (previous !== undefined && previous.stop.kind !== "infra") repairs += 1;
   }
   return repairs;
 }

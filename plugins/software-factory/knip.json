@@ -2,6 +2,6 @@
   "$schema": "https://knip.dev/schema.json",
   "ignoreExportsUsedInFile": true,
   "ignore": ["vendor/**"],
-  "ignoreBinaries": ["agy", "codex", "pi"],
+  "ignoreBinaries": ["tool-w", "tool-x", "tool-y", "tool-z"],
   "entry": ["scripts/promote.ts", "scripts/bootstrap-dispatch.ts"]
 }

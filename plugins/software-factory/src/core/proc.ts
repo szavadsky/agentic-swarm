@@ -77,13 +77,16 @@ class HeadTailBuffer {
     this.tailChunks.push(chunk);
     this.tailBytes += chunk.length;
     while (this.tailBytes > this.maxTailBytes && this.tailChunks.length > 1) {
-      const first = this.tailChunks.shift()!;
+      const first = this.tailChunks.shift();
+      if (first === undefined) break;
       this.tailBytes -= first.length;
     }
     if (this.tailBytes > this.maxTailBytes) {
-      const only = this.tailChunks[0]!;
-      this.tailChunks[0] = only.subarray(only.length - this.maxTailBytes);
-      this.tailBytes = this.maxTailBytes;
+      const only = this.tailChunks[0];
+      if (only !== undefined) {
+        this.tailChunks[0] = only.subarray(only.length - this.maxTailBytes);
+        this.tailBytes = this.maxTailBytes;
+      }
     }
   }
 
@@ -140,8 +143,9 @@ function commandSpec(
   cmd: string | string[],
 ): { executable: string; args: string[] } | { error: string } {
   if (typeof cmd === "string") return { executable: "bash", args: ["-c", cmd] };
-  if (cmd.length === 0) return { error: "Empty command array" };
-  return { executable: cmd[0]!, args: cmd.slice(1) };
+  const [executable, ...args] = cmd;
+  if (executable === undefined) return { error: "Empty command array" };
+  return { executable, args };
 }
 
 /** The child environment: TMPDIR overrides plus the run config's allowlist. */
@@ -179,8 +183,9 @@ function spawnChild(
         stdio: ["pipe", "pipe", "pipe"],
       }),
     };
-  } catch (err: any) {
-    return { stderr: err?.message ?? String(err) };
+  } catch (err) {
+    const message = (err as { message?: unknown } | null | undefined)?.message;
+    return { stderr: typeof message === "string" ? message : String(err) };
   }
 }
 

@@ -109,7 +109,7 @@ export function renderContextPack(input: ContextPackInput): string {
   appendIntentChanges(lines, input);
   appendSpikeFindings(lines, input);
   appendTaskFiles(lines, input);
-  return lines.join("\n") + "\n";
+  return `${lines.join("\n")}\n`;
 }
 
 /**
@@ -183,6 +183,42 @@ function contextSteers(input: ContextPackInput) {
   });
 }
 
+/** The document's path block; an absent optional path stays null. */
+function contextPaths(input: ContextPackInput) {
+  return {
+    intent: input.intentPath,
+    plan: input.planPath,
+    checkout: input.checkout,
+    integrationBranch: input.integrationBranch,
+    headHash: input.headHash,
+    goalStartHash: input.goalStartHash ?? null,
+    lastIterationHash: input.lastIterationHash ?? null,
+    records: input.recordsDir,
+    tasks: input.tasksDir,
+    previousSummary: input.previousSummary ?? null,
+    previousWaste: input.previousWaste ?? null,
+    previousDigest: input.digestPath ?? null,
+    runConfig: input.runConfigPath ?? null,
+  };
+}
+
+/** Spike findings sorted by slug. */
+function contextSpikeFindings(input: ContextPackInput) {
+  return [...(input.spikeFindings ?? [])].sort((a, b) =>
+    a.slug.localeCompare(b.slug),
+  );
+}
+
+/** Task files sorted by slug, each at its goal-relative path. */
+function contextTaskFiles(input: ContextPackInput) {
+  return [...input.tasks]
+    .sort((a, b) => a.slug.localeCompare(b.slug))
+    .map((task) => ({
+      slug: task.slug,
+      path: `${input.tasksDir}/${task.slug}.md`,
+    }));
+}
+
 export function renderContextData(input: ContextPackInput): string {
   const statuses = contextTaskStatuses(input);
   const parked = contextParked(statuses);
@@ -192,21 +228,7 @@ export function renderContextData(input: ContextPackInput): string {
     goal: input.goal,
     iteration: input.iteration,
     epic: input.epic ?? null,
-    paths: {
-      intent: input.intentPath,
-      plan: input.planPath,
-      checkout: input.checkout,
-      integrationBranch: input.integrationBranch,
-      headHash: input.headHash,
-      goalStartHash: input.goalStartHash ?? null,
-      lastIterationHash: input.lastIterationHash ?? null,
-      records: input.recordsDir,
-      tasks: input.tasksDir,
-      previousSummary: input.previousSummary ?? null,
-      previousWaste: input.previousWaste ?? null,
-      previousDigest: input.digestPath ?? null,
-      runConfig: input.runConfigPath ?? null,
-    },
+    paths: contextPaths(input),
     tasks: statuses,
     epics: input.state.epics,
     parked,
@@ -223,15 +245,8 @@ export function renderContextData(input: ContextPackInput): string {
     baseGates: input.baseGates ?? null,
     steers,
     pmAnswers: input.pmAnswers ?? [],
-    spikeFindings: [...(input.spikeFindings ?? [])].sort((a, b) =>
-      a.slug.localeCompare(b.slug),
-    ),
-    taskFiles: [...input.tasks]
-      .sort((a, b) => a.slug.localeCompare(b.slug))
-      .map((task) => ({
-        slug: task.slug,
-        path: `${input.tasksDir}/${task.slug}.md`,
-      })),
+    spikeFindings: contextSpikeFindings(input),
+    taskFiles: contextTaskFiles(input),
   };
   return `${JSON.stringify(data, null, 2)}\n`;
 }

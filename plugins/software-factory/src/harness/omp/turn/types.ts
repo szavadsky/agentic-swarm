@@ -8,6 +8,7 @@ import type {
   TurnRequest,
   Usage,
 } from "../../types.js";
+import type { OmpPromptResult } from "../classify.js";
 import type { OmpRpc } from "../rpc.js";
 import type { OmpRuntime } from "../runtime.js";
 import type { OmpStats } from "../usage.js";
@@ -20,7 +21,7 @@ export interface TurnLaunch {
 }
 
 export interface PromptExchange {
-  promptResult: any;
+  promptResult: OmpPromptResult | undefined;
   promptFailed: Error | undefined;
 }
 
@@ -32,12 +33,12 @@ export interface OmpTurnFinish {
   rpc: OmpRpc;
   baseline: OmpStats | undefined;
   startedAtMs: number;
-  promptResult: any;
+  promptResult: OmpPromptResult | undefined;
   promptFailed: Error | undefined;
   abortReason: "idle" | "wall" | undefined;
   aborted: boolean;
   lastModelEventAtMs: number | undefined;
-  retainedFrames: any[];
+  retainedFrames: readonly unknown[];
   resume: string | undefined;
   resumeDir: string;
   attempts: TurnAttempt[];

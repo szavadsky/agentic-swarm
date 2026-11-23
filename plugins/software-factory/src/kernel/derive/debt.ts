@@ -3,6 +3,7 @@
 import type { ConcernId, RecordedConcern, StepRecord } from "../types.js";
 import type { OpenDebt } from "./types.js";
 import { bySeq } from "./shared.js";
+import { quotes } from "../text-match.js";
 
 function normalizeDebtText(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
@@ -14,17 +15,6 @@ const PLAN_BULLET = /^-\s+(.+)$/;
 /** A line's cited ingest ids: `<recordId>#<n>` tokens, never a longer id's prefix. */
 function citedIds(line: string): Set<string> {
   return new Set(line.match(/[\w.-]+#\d+/g) ?? []);
-}
-
-/**
- * A quote matches when it equals the debt text or the two contain each other.
- * A short fragment (<24 chars on the shorter side) never matches, so
- * `debt closed: tests` cannot retire an unrelated paragraph.
- */
-function quotes(a: string, b: string): boolean {
-  if (a === b) return true;
-  if (Math.min(a.length, b.length) < 24) return false;
-  return a.includes(b) || b.includes(a);
 }
 
 /** Every ingested debt concern's normalized text, by the id ingest assigned it. */

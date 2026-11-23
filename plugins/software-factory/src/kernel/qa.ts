@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { recordDirName } from "./store.js";
+import { quotes as sameFinding } from "./text-match.js";
 import { type Outcome, outcomeSchema, type StepRecord } from "./types.js";
 
 /** Maximum number of QA-only catch findings sampled in metrics and totals. */
@@ -73,17 +74,6 @@ export function qaReportOf(outcome: Outcome | undefined): QaReport | undefined {
 
 function normalizeFinding(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-/**
- * Same finding, same words: normalized equality first, then containment,
- * but only when the shorter text meets the debt register's 24-character
- * floor, so a generic phrase cannot match an unrelated log.
- */
-function sameFinding(a: string, b: string): boolean {
-  if (a === b) return true;
-  if (Math.min(a.length, b.length) < 24) return false;
-  return a.includes(b) || b.includes(a);
 }
 
 /** One earlier finding with the record position that delivered it. */

@@ -4,19 +4,19 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  type CanaryVerdict,
   loadCanaryProven,
   runCanary,
-  type CanaryVerdict,
 } from "../../kernel/canary.js";
 import { formatCause } from "../../kernel/cause.js";
 import { loadConfigs, resolveGoalPaths } from "../../kernel/config.js";
 import type { LaunchResult } from "../../kernel/launch.js";
 import { runGoal } from "../../kernel/launch.js";
-import { writePromptVariables } from "../../kernel/prompt-vars.js";
 import {
   dryRunPrompts,
   writePromptRenders,
 } from "../../kernel/prompt-dry-run.js";
+import { writePromptVariables } from "../../kernel/prompt-vars.js";
 import { writeKernelSchemas } from "../../kernel/schemas.js";
 import { benchmarkGoal, formatBenchmark } from "../benchmark.js";
 import {
@@ -49,7 +49,8 @@ function printStatus(out: Awaited<ReturnType<typeof statusGoal>>): void {
     `goal ${out.goal}: ${out.state.goal} (iteration ${out.state.iteration})`,
   );
   for (const slug of Object.keys(out.state.tasks).sort()) {
-    const task = out.state.tasks[slug]!;
+    const task = out.state.tasks[slug];
+    if (task === undefined) continue;
     const commit = task.commit ? ` (commit ${task.commit.slice(0, 8)})` : "";
     const cause = task.cause ? ` — ${formatCause(task.cause)}` : "";
     console.log(`  ${slug}: ${task.status}${commit}${cause}`);
@@ -184,7 +185,7 @@ function canaryCombination(parsed: ParsedArgs): {
 } {
   const aliasName =
     parsed.alias ??
-    (parsed.file && parsed.file.includes("/") ? undefined : parsed.file);
+    (parsed.file?.includes("/") ? undefined : parsed.file);
   const configs = loadConfigs(path.resolve(parsed.repo), {
     runConfigPath: parsed.runConfig,
   });
@@ -200,7 +201,7 @@ function canaryCombination(parsed: ParsedArgs): {
       effort: alias.effort,
     };
   }
-  if (parsed.file && parsed.file.includes("/")) {
+  if (parsed.file?.includes("/")) {
     const [harnessId, modelId] = parsed.file.split("/");
     if (!harnessId || !modelId)
       throw new Error("canary requires a <harness/model> combination");
