@@ -5,6 +5,8 @@
  * reconciliation.
  */
 import fs from "node:fs";
+import { git } from "../core/git/exec.js";
+import { recordedGoalStart } from "./baseline.js";
 import { formatCause, makeCause } from "./cause.js";
 import { epicSummaryRelPath, type SpikeFinding } from "./context-pack.js";
 import { OPEN_TASK_STATUSES } from "./derive.js";
@@ -50,6 +52,52 @@ export async function previousWaste(
   if (iteration <= 0) return undefined;
   const text = await store.iterations.read(iteration, "summary.md");
   return text === null ? undefined : summaryWaste(text);
+}
+
+/** The head that iteration's pack recorded, the commit the iteration started from. */
+export async function recordedIterationHead(
+  store: ArtifactStore,
+  iteration: number,
+): Promise<string | undefined> {
+  if (iteration <= 0) return undefined;
+  const text = await store.iterations.read(iteration, "context-data.json");
+  if (text === null) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    console.warn(
+      `[factory] iteration ${iteration}: context-data.json is not valid JSON: ${(err as Error).message}`,
+    );
+    return undefined;
+  }
+  const headHash = (parsed as { paths?: { headHash?: unknown } } | null)?.paths
+    ?.headHash;
+  return typeof headHash === "string" ? headHash : undefined;
+}
+
+/** The pack's historical hashes: where the goal started and where its last iteration started. */
+export interface RecordedPackHashes {
+  goalStartHash: string | undefined;
+  lastIterationHash: string | undefined;
+}
+
+/**
+ * Both historical hashes, read from records rather than the checkout: the goal
+ * start from the earliest pre-flight base (after iteration 1, from the head
+ * iteration 1's pack recorded when no base was gated), the last iteration from
+ * the head its pack recorded, the commit it started from.
+ */
+export async function recordedPackHashes(
+  store: ArtifactStore,
+  records: readonly StepRecord[],
+  iteration: number,
+): Promise<RecordedPackHashes> {
+  const goalStartHash =
+    recordedGoalStart(records) ??
+    (iteration > 1 ? await recordedIterationHead(store, 1) : undefined);
+  const lastIterationHash = await recordedIterationHead(store, iteration - 1);
+  return { goalStartHash, lastIterationHash };
 }
 
 /** The previous iteration's summary for one epic, when it has one. */

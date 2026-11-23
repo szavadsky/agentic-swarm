@@ -115,6 +115,16 @@ export interface ContextPackInput {
   checkout: string;
   integrationBranch: string;
   headHash: string;
+  /**
+   * The commit the goal's integration branch started from, read from the records;
+   * absent when none was recorded.
+   */
+  goalStartHash?: string;
+  /**
+   * The head the previous iteration's pack recorded, the commit it started from;
+   * absent in the first iteration.
+   */
+  lastIterationHash?: string;
   recordsDir: string;
   tasksDir: string;
   previousSummary?: string;

@@ -75,6 +75,24 @@ export function recordedBaseGates(
   };
 }
 
+/**
+ * The base the earliest pre-flight run recorded, the commit the goal started from.
+ * Later launches record their own heads, so only the earliest run is the goal start.
+ */
+export function recordedGoalStart(
+  records: readonly StepRecord[],
+): string | undefined {
+  return records
+    .filter(
+      (r) =>
+        (r.step === "baseline" || r.step === BASELINE_INFRA_STEP) &&
+        r.actor === "script" &&
+        r.endedAt &&
+        r.base,
+    )
+    .sort((a, b) => a.seq - b.seq)[0]?.base;
+}
+
 /** What a prompt says when pre-flight recorded no trustworthy base run. */
 export const BASE_GATES_NOT_RECORDED = "not recorded";
 
