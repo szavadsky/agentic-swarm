@@ -179,7 +179,13 @@ function outOfScopeFiles(
     if (!fs.existsSync(fullPath)) continue;
     const norm = file.replace(/^\.?\//, "");
     const inScope = normalizedScope.some(
-      (s) => norm === s || norm.startsWith(`${s}/`),
+      (s) =>
+        norm === s ||
+        norm.startsWith(`${s}/`) ||
+        // task scopes are package-relative while diff paths are repo-root-relative,
+        // so a scope can name a subpath at any directory boundary.
+        norm.includes(`/${s}/`) ||
+        norm.endsWith(`/${s}`),
     );
     if (!inScope) {
       outOfScope.push(file);

@@ -3,14 +3,38 @@
 import fs from "node:fs";
 import path from "node:path";
 import { git } from "../../core/git/exec.js";
-import {
-  parseWorktreeEntries,
-  type WorktreeEntry,
-} from "../../core/git/status.js";
 import { derive } from "../derive.js";
 import { reapGateProcesses } from "../gates.js";
 import type { KernelRuntime, TaskStatus } from "../types.js";
 import { goalName, mergeScratchPath, taskBranchPrefix } from "./names.js";
+
+interface WorktreeEntry {
+  path: string;
+  branch?: string;
+  detached: boolean;
+}
+
+function field(block: string, key: string): string | undefined {
+  const prefix = `${key} `;
+  const line = block
+    .split("\n")
+    .find((candidate) => candidate.startsWith(prefix));
+  return line?.slice(prefix.length);
+}
+
+function parseWorktreeEntries(output: string): WorktreeEntry[] {
+  const entries: WorktreeEntry[] = [];
+  for (const block of output.split("\n\n")) {
+    const wt = field(block, "worktree");
+    if (!wt) continue;
+    entries.push({
+      path: wt,
+      branch: field(block, "branch"),
+      detached: block.split("\n").includes("detached"),
+    });
+  }
+  return entries;
+}
 
 /** Statuses whose worktree no longer carries work the factory needs. */
 const TERMINAL: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
