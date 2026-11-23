@@ -17,7 +17,6 @@ import {
   OPEN_TASK_STATUSES,
   baseContinuations,
   depsSatisfied,
-  isRecoveryCrash,
   landingFacts,
   supersedingContinuation,
 } from "./shared.js";

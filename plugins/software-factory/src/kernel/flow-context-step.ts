@@ -4,7 +4,7 @@
  * repeated failure escalates to.
  */
 
-import { isRecoveryCrash } from "./derive/shared.js";
+import { isRecoveryCrash } from "./recovery-seal.js";
 import { frontTarget, frontTaskClass } from "./flow-context-front.js";
 import { bySeq } from "./flow-context-history.js";
 import type { TurnTarget } from "./flow-context-targets.js";
