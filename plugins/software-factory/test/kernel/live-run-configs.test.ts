@@ -129,8 +129,6 @@ async function livePreflightTest(name: string): Promise<void> {
     });
     expectLiveRunConfig(name, configs);
     const result = await livePreflightProbe(configs, repo);
-    expect(result.aliases.architect).toBe("high");
-    if (configs.run.scouts) expect(result.aliases.scouts).toBeUndefined();
     expect(result.base?.ok).toBe(true);
   } finally {
     repo.cleanup();
@@ -189,7 +187,7 @@ async function shippedPreflightFixture(name: string, runDir = BOOTSTRAP_RUN) {
       id,
       new FakeHarness({
         id,
-        caps: { effort: ["low", "medium", "high", "max"] },
+        probe: { effort: ["low", "medium", "high", "max"] },
       }),
     );
   return {
@@ -208,13 +206,9 @@ async function expectShippedPreflight(
     runDir,
   );
   try {
-    const result = await preflight(preflightInput);
-    // The alias was not merely present: pre-flight checked it and resolved
-    // the effort it names (none on shakedown's free alternate).
-    expect(result.aliases).toHaveProperty("implementer-b");
-    expect(result.aliases["implementer-b"]).toBe(
-      configs.run.aliases["implementer-b"]!.effort,
-    );
+    await preflight(preflightInput);
+    // The alias was not merely present: pre-flight checked it against the
+    // probe and left the effort it names untouched.
   } finally {
     repo.cleanup();
   }
@@ -305,7 +299,7 @@ describe("self-free run config", () => {
           id,
           new FakeHarness({
             id,
-            caps: { effort: ["low", "medium", "high", "max"] },
+            probe: { effort: ["low", "medium", "high", "max"] },
           }),
         );
       const runtime = {
@@ -327,9 +321,9 @@ describe("self-free run config", () => {
       expect(target.tiers[1]).toMatchObject({
         harness: harnesses.get("opencode"),
         model: { id: "opencode-go/deepseek-v4.1-flash" },
-        effort: "high",
         subscription: "opencode-go",
       });
+      expect(target.tiers[1]!.effort).toBeUndefined();
       expect(target.tiers[2]).toMatchObject({
         harness: harnesses.get("claude-code"),
         model: { id: "sonnet", effort: "high" },
@@ -377,7 +371,7 @@ async function missingAliasProbe(
       id,
       new FakeHarness({
         id,
-        caps: { effort: ["low", "medium", "high", "max"] },
+        probe: { effort: ["low", "medium", "high", "max"] },
       }),
     );
   try {

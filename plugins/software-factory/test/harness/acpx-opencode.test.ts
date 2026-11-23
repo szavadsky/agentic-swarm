@@ -85,7 +85,6 @@ async function runsRawAgentSetsEffortRecordsUsagePart1(
       compact: "none",
       subagents: "none",
       structuredOutput: "none",
-      effort: [],
       usage: { cache: true, cost: true },
     },
   );

@@ -28,7 +28,7 @@ function createSelfFreeRuntime(repo: TmpRepo): {
       id,
       new FakeHarness({
         id,
-        caps: { effort: ["low", "medium", "high", "max"] },
+        probe: { effort: ["low", "medium", "high", "max"] },
       }),
     );
   const runtime = {
@@ -56,12 +56,15 @@ function expectSelfFreeTierChain(
     effort: "high",
     subscription: "opencode-go",
   });
+  // The fallback names no effort: it runs at the harness default and never
+  // inherits the alias's level.
   expect(target.tiers[1]).toMatchObject({
     harness: harnesses.get("opencode"),
     model: { id: fallbackModel },
-    effort: "high",
     subscription: "opencode-go",
   });
+  expect(target.tiers[1]!.effort).toBeUndefined();
+  expect(target.tiers[1]!.model.effort).toBeUndefined();
   expect(target.tiers[2]).toMatchObject({
     harness: harnesses.get("claude-code"),
     model: { id: "opus", effort: "high" },

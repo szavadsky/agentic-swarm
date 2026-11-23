@@ -132,6 +132,10 @@ function totalsResult(
     tokens: totals.tokens,
     costPerMergedTask: costPerTask(totals.merged, totals.usage.costUsd),
     listCostPerMergedTask: costPerTask(totals.merged, totals.usage.listCostUsd),
+    harnessCostPerMergedTask: costPerTask(
+      totals.merged,
+      totals.usage.harnessCostUsd,
+    ),
     roles: totals.roles,
     aliases: totals.aliases,
     models: totals.models,

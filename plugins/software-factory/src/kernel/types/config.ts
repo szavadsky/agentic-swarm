@@ -52,7 +52,8 @@ export interface GateConfig {
  *
  * - `folder`: a plain directory, gitignored when it lives inside the repo.
  * - `same-repo`: a directory inside the repo, committed after every kernel
- *   write so orchestration artifacts are never left unmerged on a branch.
+ *   write and replayed onto the goal branch, so orchestration artifacts are
+ *   never left unmerged on a task branch.
  * - `git-repo`: a separate git repository, committed and pushed after every
  *   write.
  */
@@ -120,7 +121,7 @@ export interface ProcessConfig {
   presets?: Record<string, { calibration: string }>;
 }
 
-/** One fallback tier: another alias's whole ladder, or a model with its own effort. */
+/** One fallback tier: another alias's whole ladder, or a model with its own effort (never inherited). */
 export type FallbackConfig = FallbackAliasConfig | FallbackModelConfig;
 
 /** A fallback that reuses another alias's ladder, primary first. */
@@ -134,7 +135,7 @@ export interface FallbackModelConfig {
   /** Harness id; defaults to the alias's harness. */
   harness?: string;
   model: string;
-  /** Effort level; defaults to the alias's resolved effort. */
+  /** Effort level; absent means the harness default. */
   effort?: string;
   /**
    * Quota pool this tier draws on; defaults to the alias's subscription only

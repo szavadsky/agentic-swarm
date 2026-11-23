@@ -378,12 +378,11 @@ same launch.
 
 Pre-flight resolves every alias (and fallback) through the harness, checks the
 model list, the effort level, binaries, the base branch, and that
-session/worktree roots are writable and outside the repo. `effort` names a
-literal level the model accepts, `auto`, or `harness-default` (omit the level);
-`effort: highest` is refused. An omp `@` alias is the exception: omp resolves
-it inside its own chain, so there is no catalog entry and no per-model effort
-list; its effort must be one omp's `--thinking` flag parses (`off`, `minimal`,
-`low`, `medium`, `high`, `xhigh`, `max`, `auto`) — or absent.
+session/worktree roots are writable and outside the repo. `effort` must be a
+level the harness probe reports for that model; a model that reports no effort
+negotiates none, so any configured level is refused and an absent one leaves
+the model default. An omp `@` alias answers with the union of catalogued
+levels plus `auto`.
 
 `harnesses.<id>` binds an adapter (`acpx:`) or executable and carries
 `options` passed untouched: acpx reads `args`/`env` (pre-flight refuses an

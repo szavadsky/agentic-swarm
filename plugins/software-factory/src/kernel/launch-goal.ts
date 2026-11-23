@@ -13,6 +13,7 @@ import { steersWaiting } from "./launch-resume.js";
 import type { GoalRun } from "./launch-run.js";
 import { prepareLaunch, recoverOrInfra } from "./launch-setup.js";
 import { drainHeldNotes } from "./mailbox.js";
+import { landStoreCommits } from "./store-backend.js";
 import type { LaunchResult, RunGoalOptions } from "./launch-types.js";
 import type { State } from "./types.js";
 
@@ -114,6 +115,10 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     };
     await runIterations(run);
     await drainHeldNotes(store);
+    // The run's last writes settle on the goal branch too, not just the
+    // checkout the next launch reads; a crash before this leaves them for
+    // recovery to land.
+    await landStoreCommits(setup.paths);
     return await launchResult(opts, run);
   } finally {
     lock.release();

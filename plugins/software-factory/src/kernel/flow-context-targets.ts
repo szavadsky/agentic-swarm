@@ -218,7 +218,7 @@ function pushTier(
 
 /**
  * Appends one alias's ladder to `out`: its primary for the iteration, then
- * each fallback in order. A literal fallback defaults its effort and, when it
+ * each fallback in order. A literal fallback carries its own effort and, when it
  * keeps the primary's harness and model or declares `sharesPool`, its
  * subscription to this alias's; one that changes either without declaring
  * draws on no subscription and is keyed `harness+model`. A fallback that names
@@ -270,7 +270,7 @@ function collectTiers(
       aliasName,
       tierHarness,
       fallback.model,
-      fallback.effort ?? primary.effort,
+      fallback.effort,
       fallbackTierSubscription(fallback, alias.subscription, changesPrimary),
     );
   }

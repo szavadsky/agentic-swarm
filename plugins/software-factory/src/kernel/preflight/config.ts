@@ -279,7 +279,6 @@ export function aliasContext(
     subscriptions: new Set(
       Object.keys(input.configs.run.limits.concurrency.perSubscription),
     ),
-    capsCache: new Map(),
     modelCache: new Map(),
     probeCache: new Map(),
   };
@@ -288,12 +287,10 @@ export function aliasContext(
 export async function resolveAliases(
   ctx: AliasContext,
   aliases: Record<string, AliasConfig>,
-): Promise<Record<string, string | undefined>> {
-  const resolved: Record<string, string | undefined> = {};
+): Promise<void> {
   for (const [name, alias] of Object.entries(aliases)) {
-    await checkAlias(ctx, name, alias, resolved);
+    await checkAlias(ctx, name, alias);
   }
-  return resolved;
 }
 
 /** Writable-root checks for the scratch worktree root and the sessions dir. */
@@ -402,18 +399,4 @@ export async function configFindings(
   // the plan spent.
   findings.push(...(await tierFindings(store, configs.run.aliases)));
   return findings;
-}
-
-/** Writes the resolved effort levels back into the in-memory run config. */
-export function applyResolvedEfforts(
-  configs: ConfigBundle,
-  resolved: Record<string, string | undefined>,
-): void {
-  for (const [name, effort] of Object.entries(resolved)) {
-    if (name === "scouts") {
-      if (configs.run.scouts) configs.run.scouts.effort = effort;
-    } else if (configs.run.aliases[name]) {
-      configs.run.aliases[name]!.effort = effort;
-    }
-  }
 }

@@ -53,7 +53,7 @@ function splitHarnesses(f: Fixture): Map<string, Harness> {
     "omp",
     new FakeHarness({
       id: "omp",
-      caps: { effort: ["low", "medium", "high", "max"] },
+      probe: { effort: ["low", "medium", "high", "max", "auto"] },
     }),
   );
   return harnesses;
@@ -90,7 +90,7 @@ async function fixture(
   await store.ensureLayout();
   const harness = new FakeHarness({
     id: "fake",
-    caps: { effort: ["low", "high", "max"] },
+    probe: { effort: ["low", "high", "max"] },
   });
   const harnesses = new Map<string, Harness>([["fake", harness]]);
   return { repo, configs, paths, input: { configs, paths, store, harnesses } };
@@ -193,8 +193,8 @@ function registerPreFlightPart11(): void {
       };
       f.configs.run.aliases.escalation = { harness: "fake", model: "esc" };
       delete f.configs.run.aliases.pm;
-      const result = await preflight(f.input);
-      expect(result.aliases.architect).toBe("max");
+      await preflight(f.input);
+      expect(f.configs.run.aliases.architect!.effort).toBe("max");
       expect(f.configs.run.aliases.front).toBeUndefined();
     } finally {
       f.repo.cleanup();
@@ -230,9 +230,13 @@ function registerPreFlightPart12(): void {
       ),
     );
     try {
+      // Probe-less, so the injected catalog decides the model list.
+      const harnesses = new Map<string, Harness>([
+        ["fake", new FakeHarness({ id: "fake" })],
+      ]);
       const catalog: ModelCatalog = async (_harness, model) =>
         model !== "ghost" && model !== "gone/model";
-      const err = await refusal({ ...f.input, catalog });
+      const err = await refusal({ ...f.input, harnesses, catalog });
       const keys = err.findings.map((x) => x.key);
       expect(keys).toContain("aliases.pm.model");
       expect(keys).toContain("aliases.architect.fallbacks.0.model");
@@ -279,12 +283,12 @@ function registerPreFlightPart14(): void {
         seen.push(`${harness}/${model}`);
         return model !== "@free";
       };
-      const result = await preflight({
+      await preflight({
         ...f.input,
         harnesses: splitHarnesses(f),
         catalog,
       });
-      expect(result.aliases.implementer).toBeUndefined();
+      expect(f.configs.run.aliases.implementer!.effort).toBeUndefined();
       expect(seen).not.toContain("omp/@free");
     } finally {
       f.repo.cleanup();
@@ -303,12 +307,12 @@ function registerPreFlightPart15(): void {
     try {
       const catalog: ModelCatalog = async (_harness, model) =>
         model !== "@free";
-      const result = await preflight({
+      await preflight({
         ...f.input,
         harnesses: splitHarnesses(f),
         catalog,
       });
-      expect(result.aliases.implementer).toBe("auto");
+      expect(f.configs.run.aliases.implementer!.effort).toBe("auto");
     } finally {
       f.repo.cleanup();
     }
@@ -316,7 +320,7 @@ function registerPreFlightPart15(): void {
 }
 
 function registerPreFlightPart16(): void {
-  it("refuses effort: highest on an @-prefixed omp alias, naming the alias and omp's levels", async () => {
+  it("refuses an unlisted level on an @-prefixed omp alias", async () => {
     const f = await fixture(
       SPLIT_HARNESSES.replace(
         "model: impl }",
@@ -330,7 +334,7 @@ function registerPreFlightPart16(): void {
           file: f.configs.files?.run,
           key: "aliases.implementer.effort",
           message:
-            'effort "highest" is not an omp thinking level; alias "@free" accepts: off, minimal, low, medium, high, xhigh, max, auto',
+            'effort "highest" is not supported; model accepts: low, medium, high, max, auto',
         }),
       );
     } finally {
@@ -340,12 +344,9 @@ function registerPreFlightPart16(): void {
 }
 
 function registerPreFlightPart17(): void {
-  it("refuses an effort omp does not parse on an @-prefixed omp alias", async () => {
+  it("refuses an unlisted level on a plain omp model", async () => {
     const f = await fixture(
-      SPLIT_HARNESSES.replace(
-        "model: impl }",
-        'model: "@free", effort: ultra }',
-      ),
+      SPLIT_HARNESSES.replace("model: impl }", "model: impl, effort: ultra }"),
     );
     try {
       const err = await refusal({ ...f.input, harnesses: splitHarnesses(f) });
@@ -353,7 +354,7 @@ function registerPreFlightPart17(): void {
         expect.objectContaining({
           key: "aliases.implementer.effort",
           message:
-            'effort "ultra" is not an omp thinking level; alias "@free" accepts: off, minimal, low, medium, high, xhigh, max, auto',
+            'effort "ultra" is not supported; model accepts: low, medium, high, max, auto',
         }),
       );
     } finally {
@@ -363,7 +364,7 @@ function registerPreFlightPart17(): void {
 }
 
 function registerPreFlightPart18(): void {
-  it("validates a literal level on a plain omp model through the catalog", async () => {
+  it("validates a literal level on a plain omp model through its probe", async () => {
     const f = await fixture(
       SPLIT_HARNESSES.replace("model: impl }", "model: impl, effort: max }"),
     );
@@ -373,31 +374,32 @@ function registerPreFlightPart18(): void {
         seen.push(`${harness}/${model}`);
         return true;
       };
-      const result = await preflight({
+      await preflight({
         ...f.input,
         harnesses: splitHarnesses(f),
         catalog,
       });
-      expect(seen).toContain("omp/impl");
-      expect(result.aliases.implementer).toBe("max");
+      // The live probe answers for a probed harness; the catalog is the
+      // fallback for probe-less ones.
+      expect(seen).not.toContain("omp/impl");
       expect(f.configs.run.aliases.implementer?.effort).toBe("max");
     } finally {
       f.repo.cleanup();
     }
   });
 
-  it("accepts auto on a plain omp model whose caps do not list it", async () => {
+  it("accepts auto on a plain omp model when the probe reports it", async () => {
     const f = await fixture(
       SPLIT_HARNESSES.replace("model: impl }", "model: impl, effort: auto }"),
     );
     try {
       const catalog: ModelCatalog = async () => true;
-      const result = await preflight({
+      await preflight({
         ...f.input,
         harnesses: splitHarnesses(f),
         catalog,
       });
-      expect(result.aliases.implementer).toBe("auto");
+      expect(f.configs.run.aliases.implementer!.effort).toBe("auto");
     } finally {
       f.repo.cleanup();
     }

@@ -194,9 +194,9 @@ footer { margin-top: 2rem; color: var(--muted); font-size: .78rem; }
   </article>
   <article class="card">
     <span class="label">Spend</span>
-    <strong class="value">{{ summary.spend.total }}</strong>
+    <p><strong>{{ summary.spend.harnessCost }}</strong> harness-reported</p>
+    <p><strong>{{ summary.spend.listCost }}</strong> list-price estimate</p>
     <p>{{ summary.spend.tokens }} tokens · {{ summary.spend.unpricedTurns }} unpriced turns</p>
-    <p>{{ summary.spend.perMergedTask }} per merged task</p>
   </article>
   <article class="card">
     <span class="label">Open work</span>
@@ -350,8 +350,10 @@ footer { margin-top: 2rem; color: var(--muted); font-size: .78rem; }
 <section id="cost" class="panel" aria-labelledby="cost-heading">
   <h2 id="cost-heading">Cost</h2>
   <div class="stats">
-    <div><span>Total</span><strong>{{ summary.spend.total }}</strong></div>
-    <div><span>Per merged task</span><strong>{{ summary.spend.perMergedTask }}</strong></div>
+    <div><span>Harness-reported total</span><strong>{{ summary.spend.harnessCost }}</strong></div>
+    <div><span>List-price estimate total</span><strong>{{ summary.spend.listCost }}</strong></div>
+    <div><span>Harness-reported per merged task</span><strong>{{ summary.spend.harnessPerMergedTask }}</strong></div>
+    <div><span>List-price estimate per merged task</span><strong>{{ summary.spend.listPerMergedTask }}</strong></div>
     <div><span>Tokens</span><strong>{{ summary.spend.tokens }}</strong></div>
     <div><span>Unpriced turns</span><strong>{{ summary.spend.unpricedTurns }}</strong></div>
   </div>
@@ -359,10 +361,10 @@ footer { margin-top: 2rem; color: var(--muted); font-size: .78rem; }
   {% if summary.costRoles.size > 0 %}
   <div class="table-wrap">
   <table>
-    <thead><tr><th scope="col">Role</th><th scope="col" class="num">Turns</th><th scope="col" class="num">Tokens</th><th scope="col" class="num">Cost</th><th scope="col" class="num">Unpriced</th></tr></thead>
+    <thead><tr><th scope="col">Role</th><th scope="col" class="num">Turns</th><th scope="col" class="num">Tokens</th><th scope="col" class="num">Harness-reported</th><th scope="col" class="num">List-price estimate</th><th scope="col" class="num">Unpriced</th></tr></thead>
     <tbody>
     {% for row in summary.costRoles %}
-      <tr><td>{{ row.name | escape }}</td><td class="num">{{ row.turns }}</td><td class="num">{{ row.tokens }}</td><td class="num">{{ row.cost }}</td><td class="num">{{ row.unpricedTurns }}</td></tr>
+      <tr><td>{{ row.name | escape }}</td><td class="num">{{ row.turns }}</td><td class="num">{{ row.tokens }}</td><td class="num">{{ row.harnessCost }}</td><td class="num">{{ row.listCost }}</td><td class="num">{{ row.unpricedTurns }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -374,10 +376,10 @@ footer { margin-top: 2rem; color: var(--muted); font-size: .78rem; }
   {% if summary.costModels.size > 0 %}
   <div class="table-wrap">
   <table>
-    <thead><tr><th scope="col">Model</th><th scope="col" class="num">Turns</th><th scope="col" class="num">Tokens</th><th scope="col" class="num">Cost</th><th scope="col" class="num">Unpriced</th></tr></thead>
+    <thead><tr><th scope="col">Model</th><th scope="col" class="num">Turns</th><th scope="col" class="num">Tokens</th><th scope="col" class="num">Harness-reported</th><th scope="col" class="num">List-price estimate</th><th scope="col" class="num">Unpriced</th></tr></thead>
     <tbody>
     {% for row in summary.costModels %}
-      <tr><td>{{ row.name | escape }}</td><td class="num">{{ row.turns }}</td><td class="num">{{ row.tokens }}</td><td class="num">{{ row.cost }}</td><td class="num">{{ row.unpricedTurns }}</td></tr>
+      <tr><td>{{ row.name | escape }}</td><td class="num">{{ row.turns }}</td><td class="num">{{ row.tokens }}</td><td class="num">{{ row.harnessCost }}</td><td class="num">{{ row.listCost }}</td><td class="num">{{ row.unpricedTurns }}</td></tr>
     {% endfor %}
     </tbody>
   </table>

@@ -6,7 +6,6 @@ import { checkPortability, checkScouts } from "../preflight-aliases.js";
 import type { PreflightInput, PreflightResult } from "./types.js";
 import {
   aliasContext,
-  applyResolvedEfforts,
   baseBranchFindings,
   configFindings,
   harnessBinaries,
@@ -35,8 +34,8 @@ export async function preflight(
   findings.push(...binaries.findings);
 
   const ctx = aliasContext(input, files, findings, binaries.unavailable);
-  const resolvedAliases = await resolveAliases(ctx, configs.run.aliases);
-  await checkScouts(ctx, configs, resolvedAliases);
+  await resolveAliases(ctx, configs.run.aliases);
+  await checkScouts(ctx, configs);
   checkPortability(ctx, configs);
   findings.push(...(await rootFindings(paths, files)));
 
@@ -47,7 +46,7 @@ export async function preflight(
   all.push(...(await unconfiguredTaskFindings(store)));
   if (all.length > 0) throw new PreflightError(all);
 
-  const result: PreflightResult = { aliases: resolvedAliases };
+  const result: PreflightResult = {};
   if (base.baseCommit && input.baseGates !== false) {
     result.base = await checkBase(
       configs,
@@ -57,6 +56,5 @@ export async function preflight(
       base.baseCommit,
     );
   }
-  applyResolvedEfforts(configs, resolvedAliases);
   return result;
 }
