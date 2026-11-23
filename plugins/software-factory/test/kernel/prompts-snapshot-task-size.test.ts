@@ -117,6 +117,7 @@ const ROLES: Record<string, Record<string, string>> = {
     worktree: "/worktrees/demo-tasks/alpha",
     resume_note: "",
     report_path: ".factory/spikes/alpha.md",
+    env_notes: "",
     setup_command: "bun install",
     gate_commands: "- test: bun test\n- typecheck: bun run typecheck",
     base_gates: "base abc1234def: green",

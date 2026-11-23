@@ -300,6 +300,8 @@ export function loadPrompts(
       validate_cmd: validateCmd(),
       author: "implementer",
       cleanliness_revision: "false",
+      // A task with no environment notes renders none; promptVars supplies them per task.
+      env_notes: "",
       fix_dispositions: "",
       outcome_schema: outcomeSchemaVar(),
       task_frontmatter: taskFrontmatterVar(),

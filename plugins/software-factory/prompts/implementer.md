@@ -8,6 +8,14 @@ Commit the report at `{{ report_path }}` first, then refine it.
 {% endif -%}
 {%- include 'implementer-body' -%}
 
+{%- if env_notes != '' -%}
+
+## Environment notes
+
+{{ env_notes }}
+
+{% endif -%}
+
 ## This turn
 
 - task: `{{task_path}}`

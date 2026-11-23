@@ -133,6 +133,7 @@ The turn's record carries the unified diff of the edit; the next architect pack 
 - `worktree` — path to the task worktree to edit
 - `resume_note` — follow-up notice for a turn resumed in the front's session: the task branch plus the absolute-path rules; empty string on a de-novo turn
 - `report_path` — repo-relative path a spike commits its finding to (`.factory/spikes/<slug>.md`); empty string on a development task; when set, it also opens the prompt with the commit-first sentence
+- `env_notes` — the task file's environment notes as `- ` bullet lines (infra facts, known flakes, workarounds); empty string when the task has none
 - `setup_command` — worktree bootstrap command (dependencies etc.); `none` when not needed
 - `gate_commands` — configured compile/lint/test commands as `- id: command` lines; `none` when empty
 - `base_gates` — the base tree's recorded gate result: commit plus `green`, or the pre-existing failing checks; `not recorded` when pre-flight has no trustworthy base run

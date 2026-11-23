@@ -9,7 +9,7 @@ import { formatCause, makeCause } from "../cause.js";
 import { boundaryTarget, compactSession } from "../flow-context.js";
 import { abortMerge, resolveVars, settleMergeTurn } from "../merge-conflict.js";
 import { KERNEL_TURN_STEPS } from "../outcome.js";
-import { materialHash } from "../tasks.js";
+import { materialHash } from "../task-material.js";
 import type {
   Cause,
   KernelRuntime,
@@ -18,6 +18,7 @@ import type {
   TaskFile,
   TaskState,
 } from "../types.js";
+import type { EnsuredWorktree } from "../worktree.js";
 import {
   containmentSnapshot,
   containmentViolation,
@@ -25,7 +26,6 @@ import {
   headSha,
   integrationHead,
 } from "../worktree.js";
-import type { EnsuredWorktree } from "../worktree.js";
 import type { MergeAttempt, StewardAttempt } from "./types.js";
 
 export function pointerConcern(

@@ -36,7 +36,7 @@ import {
   isLastReviewCall,
   reviewRoundLimit,
 } from "./review.js";
-import { materialHash } from "./tasks.js";
+import { materialHash } from "./task-material.js";
 import type { StepRecord } from "./types.js";
 import {
   containmentViolation,

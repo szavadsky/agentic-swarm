@@ -179,6 +179,8 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
         "follow-up notice for a turn resumed in the front's session: the task branch plus the absolute-path rules; empty string on a de-novo turn",
       report_path:
         "repo-relative path a spike commits its finding to (`.factory/spikes/<slug>.md`); empty string on a development task; when set, it also opens the prompt with the commit-first sentence",
+      env_notes:
+        "the task file's environment notes as `- ` bullet lines (infra facts, known flakes, workarounds); empty string when the task has none",
       setup_command:
         "worktree bootstrap command (dependencies etc.); `none` when not needed",
       gate_commands:
