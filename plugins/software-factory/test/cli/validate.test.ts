@@ -1,81 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import { dispatch } from "../../src/cli/dispatch.js";
-import { BOUNDARY_STEPS } from "../../src/kernel/types.js";
-
-function taskFile(slug: string, deps: string[]): string {
-  return `---\nslug: ${slug}\ntitle: ${slug}\nkind: task\nflow: implement-review\ndeps: [${deps.join(", ")}]\nscope:\n  - "src/**"\n---\n\nDone when: ${slug} works\n`;
-}
-
-function writeFile(root: string, rel: string, content: string): string {
-  const abs = path.join(root, rel);
-  fs.mkdirSync(path.dirname(abs), { recursive: true });
-  fs.writeFileSync(abs, content, "utf8");
-  return abs;
-}
-
-/**
- * The minimal run config that satisfies `process.yaml`'s defaults: every
- * boundary alias, reviewer and flow alias, no subscription pool needed.
- */
-function validRunConfig(): string {
-  const names = new Set<string>([
-    ...BOUNDARY_STEPS,
-    "plan-reviewer",
-    "pack-preparer",
-    "plan-checker",
-    "implementer",
-    "implementer-b",
-    "researcher",
-    "reviewer",
-    "qa",
-    "steward",
-  ]);
-  const lines = [...names].map(
-    (name) => `  ${name}: { harness: fake, model: ${name}-model }`,
-  );
-  return `aliases:\n${lines.join("\n")}\n`;
-}
-
-async function runValidate(
-  file: string,
-  extraArgs: string[] = [],
-): Promise<{
-  code: number;
-  out: string;
-  err: string;
-}> {
-  const logs: string[] = [];
-  const errors: string[] = [];
-  const origLog = console.log;
-  const origErr = console.error;
-  console.log = (...args: unknown[]) => {
-    logs.push(args.map(String).join(" "));
-  };
-  console.error = (...args: unknown[]) => {
-    errors.push(args.map(String).join(" "));
-  };
-  try {
-    const code = await dispatch(["validate", ...extraArgs, file]);
-    return { code, out: logs.join("\n"), err: errors.join("\n") };
-  } finally {
-    console.log = origLog;
-    console.error = origErr;
-  }
-}
-
-function withTmp(fn: (root: string) => Promise<void>): () => Promise<void> {
-  return async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-validate-"));
-    try {
-      await fn(root);
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
-  };
-}
+import {
+  runValidate,
+  taskFile,
+  validRunConfig,
+  withTmp,
+  writeFile,
+} from "../helpers/validate.js";
 
 function registerFactoryValidatePart1(): void {
   it(
@@ -406,7 +337,7 @@ function registerFactoryValidatePart9(): void {
   );
 }
 
-function registerFactoryValidateCrossLayer(): void {
+function registerFactoryValidateCrossLayerAliases(): void {
   it(
     "reports the missing alias class to the run config",
     withTmp(async (root) => {
@@ -426,7 +357,9 @@ function registerFactoryValidateCrossLayer(): void {
       expect(result.err).toContain(file);
     }),
   );
+}
 
+function registerFactoryValidateCrossLayerReferences(): void {
   it(
     "reports an unknown flow and schema on a task type",
     withTmp(async (root) => {
@@ -465,7 +398,9 @@ function registerFactoryValidateCrossLayer(): void {
       expect(result.err).toContain(file);
     }),
   );
+}
 
+function registerFactoryValidateCrossLayerChains(): void {
   it(
     "reports a missing fallback alias class",
     withTmp(async (root) => {
@@ -496,7 +431,9 @@ function registerFactoryValidateCrossLayer(): void {
       );
     }),
   );
+}
 
+function registerFactoryValidateCrossLayerPass(): void {
   it(
     "passes a valid fake config with no harness probe",
     withTmp(async (root) => {
@@ -528,5 +465,11 @@ describe("factory validate", () => {
 
   registerFactoryValidatePart9();
 
-  registerFactoryValidateCrossLayer();
+  registerFactoryValidateCrossLayerAliases();
+
+  registerFactoryValidateCrossLayerReferences();
+
+  registerFactoryValidateCrossLayerChains();
+
+  registerFactoryValidateCrossLayerPass();
 });
