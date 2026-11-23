@@ -4,7 +4,12 @@ import type {
   TurnAttempt,
   Usage,
 } from "../harness/types.js";
-import { addUsage, reportsUsage, zeroUsage } from "../harness/usage.js";
+import {
+  addUsage,
+  reportsUsage,
+  tokenTotal,
+  zeroUsage,
+} from "../harness/usage.js";
 
 /** USD per million tokens for one model. All four rates are required. */
 export interface ModelPrice {
@@ -156,17 +161,6 @@ export function matchPrice(
 }
 
 const PER_MTOK = 1_000_000;
-
-function tokenTotal(usage: Usage): number {
-  return (
-    usage.in +
-    usage.cacheRead +
-    usage.cacheWrite5m +
-    usage.cacheWrite1h +
-    usage.out +
-    usage.reasoningOut
-  );
-}
 
 /**
  * OpenRouter price for one usage in USD, ignoring any harness figure: the

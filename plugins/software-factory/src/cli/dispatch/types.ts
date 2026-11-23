@@ -21,6 +21,8 @@ export interface ParsedArgs {
   out?: string;
   /** `factory status --json`: print the machine-readable snapshot. */
   json?: boolean;
+  /** `factory prompts --dry-run`: render every prompt for the loaded config. */
+  dryRun?: boolean;
   help: boolean;
   version: boolean;
 }

@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import { git } from "../core/git/exec.js";
 import { runAgentTurn } from "./agent.js";
-import { frontClassTypesVar } from "./front.js";
+import { frontClassTypesVar, gateCommands } from "./front.js";
 import { shallowCodeMap } from "./context-pack.js";
 import { FrontClassError, readFrontClass } from "./flow-context.js";
 import { resolveTurn, type TurnTarget } from "./flow-context-targets.js";
@@ -114,14 +114,6 @@ async function runBranchStep(
       forward: [],
     },
   });
-}
-
-function gateCommands(runtime: KernelRuntime): string {
-  return (
-    runtime.configs.repo.gates
-      .map((gate) => `- ${gate.id}: ${gate.command}`)
-      .join("\n") || "none"
-  );
 }
 
 /** The template variables one ingestion agent step reads. */

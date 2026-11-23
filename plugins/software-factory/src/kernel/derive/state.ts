@@ -1,6 +1,7 @@
 /** Reducing records and tasks into the goal's task, epic and status state. */
 
 import { DEFAULT_FLOWS, reduceTask } from "../derive-task.js";
+import { isRecoveryCrash } from "../recovery-seal.js";
 import type {
   EpicState,
   FlowDefinition,

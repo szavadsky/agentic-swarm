@@ -4,6 +4,7 @@ import type { Stop, TurnAttempt, Usage } from "../../harness/types.js";
 import {
   addUsage,
   countOutcomeRepairs,
+  tokenTotal,
   zeroUsage,
 } from "../../harness/usage.js";
 import { qaReportOf } from "../qa.js";
@@ -60,17 +61,6 @@ export function costText(
   if (unpricedTurns === 0) return `$${(costUsd ?? 0).toFixed(4)}`;
   if (costUsd === undefined) return `unknown (${unknown})`;
   return `$${costUsd.toFixed(4)} (partial; ${unknown})`;
-}
-
-export function tokenTotal(usage: Usage): number {
-  return (
-    usage.in +
-    usage.cacheRead +
-    usage.cacheWrite5m +
-    usage.cacheWrite1h +
-    usage.out +
-    usage.reasoningOut
-  );
 }
 
 export function emptyArchitect(): ArchitectMetrics {

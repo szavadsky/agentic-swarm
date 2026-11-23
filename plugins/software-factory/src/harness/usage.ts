@@ -11,6 +11,17 @@ export function zeroUsage(): Usage {
   };
 }
 
+export function tokenTotal(usage: Usage): number {
+  return (
+    usage.in +
+    usage.cacheRead +
+    usage.cacheWrite5m +
+    usage.cacheWrite1h +
+    usage.out +
+    usage.reasoningOut
+  );
+}
+
 /**
  * Field-wise sum; the token counters stay disjoint. Each cost column stays
  * known when either side knows it, so an explicit $0 never degrades to

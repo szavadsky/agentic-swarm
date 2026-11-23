@@ -88,14 +88,6 @@ function mustRun(
   return res;
 }
 
-/** The pins root promote writes under; FACTORY_PIN_ROOT relocates it. */
-function pinsRoot(env: NodeJS.ProcessEnv): string {
-  return path.resolve(
-    env.FACTORY_PIN_ROOT ??
-      path.join(os.homedir(), ".local/share/factory/pins"),
-  );
-}
-
 /** Builds kept: FACTORY_PINS_KEPT, default 5. */
 function keptCount(env: NodeJS.ProcessEnv): number {
   const kept = Number(env.FACTORY_PINS_KEPT ?? "5");
@@ -307,7 +299,10 @@ export function promotePin(opts: PromoteOptions): number {
     repo,
     env,
   ).stdout.trim();
-  const pins = pinsRoot(env);
+  const pins = path.resolve(
+    env.FACTORY_PIN_ROOT ??
+      path.join(os.homedir(), ".local/share/factory/pins"),
+  );
   const kept = keptCount(env);
   const build = path.join(pins, rev);
   fs.mkdirSync(pins, { recursive: true });

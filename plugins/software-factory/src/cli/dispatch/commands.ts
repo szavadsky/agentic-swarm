@@ -13,6 +13,10 @@ import { loadConfigs, resolveGoalPaths } from "../../kernel/config.js";
 import type { LaunchResult } from "../../kernel/launch.js";
 import { runGoal } from "../../kernel/launch.js";
 import { writePromptVariables } from "../../kernel/prompt-vars.js";
+import {
+  dryRunPrompts,
+  writePromptRenders,
+} from "../../kernel/prompt-dry-run.js";
 import { writeKernelSchemas } from "../../kernel/schemas.js";
 import { benchmarkGoal, formatBenchmark } from "../benchmark.js";
 import {
@@ -289,6 +293,29 @@ function schemasCommand(parsed: ParsedArgs): number {
   return 0;
 }
 
+/** `prompts`: render every prompt for the loaded config, printing or writing them to a dir. */
+function promptsCommand(parsed: ParsedArgs): number {
+  if (!parsed.dryRun) throw new Error("prompts requires --dry-run");
+  const repoRoot = path.resolve(parsed.repo);
+  const config = loadConfigs(repoRoot, {
+    runConfigPath: parsed.runConfig,
+  });
+  const renders = dryRunPrompts(config, repoRoot);
+  if (parsed.out) {
+    const written = writePromptRenders(renders, parsed.out);
+    for (const file of written) console.log(file);
+    console.log(
+      `prompts: ${written.length} render(s) written to ${path.resolve(parsed.out)}`,
+    );
+  } else {
+    for (const render of renders) {
+      console.log(`===== ${render.name} =====`);
+      console.log(render.text);
+    }
+  }
+  return 0;
+}
+
 const COMMANDS: Record<string, CommandHandler> = {
   run: runCommand,
   init: initCommand,
@@ -299,6 +326,7 @@ const COMMANDS: Record<string, CommandHandler> = {
   validate: validateCommand,
   variables: variablesCommand,
   schemas: schemasCommand,
+  prompts: promptsCommand,
 };
 
 /** Main dispatch entrypoint; each command maps to one kernel or mailbox call. */
@@ -325,6 +353,7 @@ export async function dispatch(
       "validate",
       "schemas",
       "variables",
+      "prompts",
     ];
     if (!parsed.command || known.includes(parsed.command)) {
       console.log(usageFor(parsed.command));
