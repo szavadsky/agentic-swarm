@@ -7,22 +7,22 @@ import { createAcpxStub } from "./acpx-stub.js";
 
 const TIMEOUTS = { idleMs: 10_000, wallMs: 30_000 };
 
-const CODEX_PRICE = {
+const AGENT_B_PRICE = {
   input: 0.15,
   cachedInput: 0.003,
   output: 0.6,
   reasoning: 0.6,
 };
 
-const PI_ACPX: AcpxConfig = {
-  agent: "pi",
+const AGENT_A_ACPX: AcpxConfig = {
+  agent: "agent-a",
   effort: {
     configId: "thought_level",
   },
 };
 
-const CODEX_ACPX: AcpxConfig = {
-  agent: "codex",
+const AGENT_B_ACPX: AcpxConfig = {
+  agent: "agent-b",
   effort: {
     configId: "reasoning_effort",
   },
@@ -35,7 +35,7 @@ function request(
   extra: Record<string, unknown> = {},
 ) {
   return {
-    model: { id: "opencode-go/beam-free" },
+    model: { id: "fake-host/lamp-mini-free" },
     cwd,
     prompt,
     timeouts: TIMEOUTS,
@@ -60,7 +60,7 @@ async function retriesDeNovoWhenResumedSessionSPart1(
 
   expect(second.stop).toEqual({ kind: "done" });
   expect(second.text).toBe("ALPHA");
-  expect(second.session?.id).toMatch(/^pi-/);
+  expect(second.session?.id).toMatch(/^agent-a-/);
   expect(second.session?.id).not.toBe(first.session!.id);
   expect(second.attempts?.map((attempt) => attempt.stop)).toEqual([
     {
@@ -106,10 +106,10 @@ function registerAcpxHarnessPart10(): void {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "pi",
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -122,7 +122,7 @@ function registerAcpxHarnessPart10(): void {
 
       expect(second.stop).toEqual({ kind: "done" });
       expect(second.text).toBe("ALPHA");
-      expect(second.session?.id).toMatch(/^pi-/);
+      expect(second.session?.id).toMatch(/^agent-a-/);
       expect(second.session?.id).not.toBe(first.session!.id);
 
       // The lost resume is recorded, not silently replaced.
@@ -162,10 +162,10 @@ function registerAcpxHarnessPart11(): void {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "pi",
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     });
     try {
       const scope1 = await retriesDeNovoWhenResumedSessionSPart1(stub, harness);
@@ -217,10 +217,10 @@ function registerAcpxHarnessPart12(): void {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "pi",
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -248,10 +248,10 @@ function registerAcpxHarnessPart13(): void {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "pi",
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -273,8 +273,8 @@ function registerAcpxHarnessPart13(): void {
 }
 
 function registerAcpxHarnessPart14(): void {
-  it("maps codex usage into Usage and leaves cost to OpenRouter pricing", async () => {
-    // The live codex probe reported in 556 / cache-read 5760 / out 4.
+  it("maps agent-b usage into Usage and leaves cost to OpenRouter pricing", async () => {
+    // The live probe reported in 556 / cache-read 5760 / out 4.
     const stub = createAcpxStub({
       usage: {
         totalTokens: 6320,
@@ -286,15 +286,15 @@ function registerAcpxHarnessPart14(): void {
     });
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "codex",
+      id: "agent-b",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: CODEX_ACPX,
+      acpx: AGENT_B_ACPX,
     });
     try {
       const result = await harness.turn({
         ...request(path.dirname(stub.binary), "Say [[text:PONG]]"),
-        model: { id: "deepseek-v4.1-flash" },
+        model: { id: "vendor/mini-flash" },
         effort: "high",
       });
 
@@ -310,8 +310,8 @@ function registerAcpxHarnessPart14(): void {
       });
       expect(result.usage.costUsd).toBeUndefined();
       expect(
-        priceUsage(result.usage, "deepseek-v4.1-flash", {
-          "deepseek-v4.1-flash": CODEX_PRICE,
+        priceUsage(result.usage, "vendor/mini-flash", {
+          "vendor/mini-flash": AGENT_B_PRICE,
         }),
       ).toBeCloseTo((556 * 0.15 + 5760 * 0.003 + 4 * 0.6) / 1_000_000, 12);
 
@@ -322,8 +322,8 @@ function registerAcpxHarnessPart14(): void {
         "high",
       ]);
       const prompt = stub.invocations().at(-1)!;
-      expect(prompt[prompt.indexOf("--model") + 1]).toBe("deepseek-v4.1-flash");
-      expect(prompt.indexOf("--model")).toBeLessThan(prompt.indexOf("codex"));
+      expect(prompt[prompt.indexOf("--model") + 1]).toBe("vendor/mini-flash");
+      expect(prompt.indexOf("--model")).toBeLessThan(prompt.indexOf("agent-b"));
     } finally {
       stub.cleanup();
     }

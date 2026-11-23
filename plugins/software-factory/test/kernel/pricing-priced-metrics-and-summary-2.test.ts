@@ -108,7 +108,7 @@ async function wiresPriceCacheIntoSummaryMetricsPart2(
       forward: [],
       decision: "done",
     });
-    // Mirror opencode: the harness reports a literal 0 it cannot price.
+    // The harness reports a literal 0 it cannot price.
     return fakeTurnResult(req, {
       usage: usage({ in: 1_000_000, out: 1_000_000, costUsd: 0 }),
     });
@@ -301,33 +301,35 @@ describe("run-config price ids", () => {
     const run = runConfigSchema.parse(
       yaml.parse(`
 aliases:
-  architect: { harness: omp, model: anthropic/claude-opus-5-5, fallbacks: [{ model: opencode-go/deepseek-v4.1-flash }] }
-  implementer: { harness: opencode, model: opencode/deepseek-v4.1-flash-free }
+  architect: { harness: omp, model: vendor/flagship-5, fallbacks: [{ model: local-host/mini-flash }] }
+  implementer: { harness: fake, model: local-host/mini-flash-free }
 priceIds:
-  opencode/beam-free: reflection/beam-1.0-501b-a23b
+  local-host/mini-flash: vendor/mini-flash
+  local-host/mini-flash-free: vendor/mini-flash
+  local/lamp-mini-free: vendor/lamp-1
 `),
     );
     const catalog: PriceTable = {
-      "anthropic/claude-opus-5-5": {
+      "vendor/flagship-5": {
         input: 4,
         cachedInput: 0.2,
         output: 20,
         reasoning: 20,
       },
-      "deepseek/deepseek-v4.1-flash": {
+      "vendor/mini-flash": {
         input: 0.0507,
         cachedInput: 0.001,
         output: 0.2028,
         reasoning: 0.2028,
       },
-      "reflection/beam-1.0-501b-a23b": {
+      "vendor/lamp-1": {
         input: 0.3,
         cachedInput: 0.04,
         output: 1,
         reasoning: 1,
       },
     };
-    expect(run.aliases.architect!.model).toBe("anthropic/claude-opus-5-5");
+    expect(run.aliases.architect!.model).toBe("vendor/flagship-5");
     for (const alias of Object.values(run.aliases)) {
       expect(matchPrice(catalog, alias.model, run.priceIds)).toBeDefined();
       for (const fb of alias.fallbacks) {
@@ -336,7 +338,7 @@ priceIds:
       }
     }
     expect(
-      matchPrice(catalog, "opencode/beam-free", run.priceIds),
+      matchPrice(catalog, "local/lamp-mini-free", run.priceIds),
     ).toBeDefined();
   });
 });

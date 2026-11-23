@@ -265,16 +265,18 @@ describe("shipped compaction config", () => {
     }
   });
 
-  it("records why agy does not compact", () => {
-    const agy = configs.flatMap(({ name, run }) =>
-      run.harnesses?.agy ? [{ name, entry: run.harnesses.agy }] : [],
+  it("records why an adapter-less harness does not compact", () => {
+    const agentless = configs.flatMap(({ name, run }) =>
+      Object.entries(run.harnesses ?? {})
+        .filter(([, entry]) => entry.compaction?.enabled === false)
+        .map(([id, entry]) => ({ name: `${name}: ${id}`, entry })),
     );
-    expect(agy.length).toBeGreaterThan(0);
-    for (const { name, entry } of agy) {
+    expect(agentless.length).toBeGreaterThan(0);
+    for (const { name, entry } of agentless) {
       expect(entry.compaction!.enabled).toBe(false);
       expect(typeof entry.compaction!.reason).toBe("string");
       expect(entry.compaction!.reason!.trim()).not.toBe("");
-      // The adapter must not claim a command agy does not have.
+      // The adapter must not claim a command the harness does not have.
       expect(entry.acpx?.compact).not.toBe(true);
     }
   });
@@ -285,11 +287,11 @@ describe("acpx session cache TTL", () => {
     const stub = createAcpxStub();
     const cwd = path.dirname(stub.binary);
     const harness = new AcpxHarness({
-      id: "pi",
+      id: "agent-a",
       retention: "long",
       binary: stub.binary,
       sessionDir: cwd,
-      acpx: { agent: "pi" },
+      acpx: { agent: "agent-a" },
     });
     try {
       const result = await harness.turn({

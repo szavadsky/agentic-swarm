@@ -2,15 +2,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-/** Harness executables no default test may spawn, by exact basename. */
+/** Fake harness executables no default test may spawn, by exact basename. */
 const HARNESS_BINARIES = new Set([
   "omp",
   "acpx",
-  "opencode",
-  "claude",
-  "agy",
-  "codex",
-  "pi",
+  "tool-x",
+  "tool-y",
+  "tool-z",
+  "tool-w",
+  "tool-v",
 ]);
 
 /** True for localhost, 127/8 and ::1 (brackets, case and trailing dot tolerated). */

@@ -112,6 +112,16 @@ codingRules: .factory/prompts/coding-rules.md   # optional; replaces the factory
 
 Cleanliness checks run by default without repo config to detect large files, disallowed/new extensions, and temp/weights/huge outputs. A cleanliness hit sends the author one revision follow-up turn with three exits: clean up the files, add them to `.gitignore`, or list them under `cleanliness.allowedFiles` in `.factory/repo.yaml`. The follow-up is never repeated; an author who keeps a file explains it, and the reviewer evaluates the reason. Tightened thresholds may be configured under `cleanliness` in `.factory/repo.yaml`.
 
+No real harness, model or subscription names appear in `src/` or `test/`
+(`scripts/real-names-gate.ts`, driven by `config/real-names.json`, is a
+lint-gate check): the names are checked against that JSON list, the omp
+adapter is the only exempt directory, and the name list itself is excluded.
+The price-source API endpoint is not a name and is never listed. Pricing
+matches a harness id against the price table exactly, or through a run-config
+`priceIds` entry; a turn the harness does not price and the config does not
+name stays unpriced. Verified adapter behaviours live in
+`config/acpx-verify.md` so the acpx code carries no names.
+
 `codingRules` names a repo-relative markdown file whose text replaces the factory default `clean-code` partial in the implementer, QA, reviewer, steward and adjudicator prompts. When `codingRules` is absent the factory default renders; when present the file replaces it rather than appending, and a missing file is a config error. The path must stay worktree-relative and cannot escape the repo.
 
 The tracked repo layer names no worktree root: checkouts, sessions and harness

@@ -65,7 +65,7 @@ function priceUsageAtAggregationTimePart1() {
 
 function priceUsageAtAggregationTimePart2() {
   it("treats all-zero counters as unreported, even on a table-listed or free model", () => {
-    // pi via acpx reports no usage; a real turn always consumes input.
+    // A harness via acpx that reports no usage; a real turn always consumes input.
     expect(priceUsage(usage(), "paid/one", TABLE)).toBeUndefined();
     expect(priceUsage(usage(), "free/zero", TABLE)).toBeUndefined();
     expect(
@@ -78,7 +78,7 @@ function priceUsageAtAggregationTimePart2() {
   });
 
   it("reprices a harness zero that contradicts a table entry", () => {
-    // opencode reports a literal 0 for turns it cannot price; the table fills it in.
+    // A harness reports a literal 0 for turns it cannot price; the table fills it in.
     expect(
       priceUsage(usage({ costUsd: 0, in: 1_000_000 }), "paid/one", TABLE),
     ).toBeCloseTo(4, 10);
@@ -109,33 +109,33 @@ function priceUsageAtAggregationTimePart2() {
   });
 }
 
-function harnessIdMatchingAgainstOpenRouterPart1() {
-  const OPENROUTER: PriceTable = {
-    "anthropic/claude-opus-5-5": {
+function harnessIdMatchingPart1() {
+  const TABLE_ROWS: PriceTable = {
+    "vendor/flagship-5": {
       input: 4,
       cachedInput: 0.2,
       output: 20,
       reasoning: 20,
     },
-    "deepseek/deepseek-v4.1-flash": {
+    "vendor/mini-flash": {
       input: 0.0507,
       cachedInput: 0.001,
       output: 0.2028,
       reasoning: 0.2028,
     },
-    "minimax/minimax-m3.1-flash": {
+    "vendor/hopper-flash": {
       input: 0.075,
       cachedInput: 0.0075,
       output: 0.3,
       reasoning: 0.3,
     },
-    "baidu/ernie-5.5-flash-preview:free": {
+    "vendor/tiny-preview:free": {
       input: 0,
       cachedInput: 0,
       output: 0,
       reasoning: 0,
     },
-    "reflection/beam-1.0-501b-a23b": {
+    "vendor/lamp-1": {
       input: 0.3,
       cachedInput: 0.04,
       output: 1,
@@ -143,86 +143,74 @@ function harnessIdMatchingAgainstOpenRouterPart1() {
     },
   };
 
-  return { OPENROUTER };
+  return { TABLE_ROWS };
 }
 
-function harnessIdMatchingAgainstOpenRouterPart2(
-  scope: ReturnType<typeof harnessIdMatchingAgainstOpenRouterPart1>,
+function harnessIdMatchingPart2(
+  scope: ReturnType<typeof harnessIdMatchingPart1>,
 ) {
-  const { OPENROUTER } = scope;
-  it("matches exact, provider-stripped, bare and effort-suffixed ids", () => {
-    expect(matchPrice(OPENROUTER, "anthropic/claude-opus-5-5")?.input).toBe(4);
-    // A surplus harness provider prefix is stripped before matching.
+  const { TABLE_ROWS } = scope;
+  it("matches a table id exactly, case-insensitively", () => {
+    expect(matchPrice(TABLE_ROWS, "vendor/flagship-5")?.input).toBe(4);
+    expect(matchPrice(TABLE_ROWS, "Vendor/Flagship-5")?.input).toBe(4);
+    expect(matchPrice(TABLE_ROWS, "mystery/model")).toBeUndefined();
+  });
+
+  it("strips no harness prefix: an id from another provider must name its price id or stay unpriced", () => {
+    // A bare candidate no longer names the model: matching is exact-only.
+    expect(matchPrice(TABLE_ROWS, "other/mini-flash")).toBeUndefined();
+    expect(matchPrice(TABLE_ROWS, "other-host/mini-flash")).toBeUndefined();
+    // ...unless the run config names the price id.
     expect(
-      matchPrice(OPENROUTER, "opencode-go/deepseek-v4.1-flash")?.input,
+      matchPrice(TABLE_ROWS, "other-host/mini-flash", {
+        "other-host/mini-flash": "vendor/mini-flash",
+      })?.input,
     ).toBeCloseTo(0.0507, 10);
-    // A bare harness id names the model, not its host.
-    expect(matchPrice(OPENROUTER, "deepseek-v4.1-flash")?.input).toBeCloseTo(
-      0.0507,
-      10,
-    );
-    // The recorded id keeps the effort suffix; only acpx's --model gets the base.
+  });
+
+  it("strips no effort suffix: the recorded id must be exact or mapped", () => {
+    // A `-high` suffixed id names nothing exactly, so it needs a priceIds row.
+    expect(matchPrice(TABLE_ROWS, "vendor/hopper-flash-high")).toBeUndefined();
     expect(
-      matchPrice(OPENROUTER, "minimax-m3.1-flash-high")?.input,
+      matchPrice(TABLE_ROWS, "vendor/hopper-flash-high", {
+        "vendor/hopper-flash-high": "vendor/hopper-flash",
+      })?.input,
     ).toBeCloseTo(0.075, 10);
-    expect(matchPrice(OPENROUTER, "mystery/model")).toBeUndefined();
-    // A qualified id that matches nothing exactly is another provider's
-    // model, not this one: the same suffix must not match across providers.
-    expect(matchPrice(OPENROUTER, "other/deepseek-v4.1-flash")).toBeUndefined();
   });
 
   it("lets an explicit priceId win and leaves a stale mapping unpriced", () => {
     expect(
-      matchPrice(OPENROUTER, "opencode/beam-free", {
-        "opencode/beam-free": "reflection/beam-1.0-501b-a23b",
+      matchPrice(TABLE_ROWS, "local/lamp-free", {
+        "local/lamp-free": "vendor/lamp-1",
       })?.input,
     ).toBeCloseTo(0.3, 10);
     // A mapping that names nothing is unpriced, never a silent mismatch.
     expect(
-      matchPrice(OPENROUTER, "opencode/beam-free", {
-        "opencode/beam-free": "retired/beam-0.9",
+      matchPrice(TABLE_ROWS, "local/lamp-free", {
+        "local/lamp-free": "retired/lamp-0",
       }),
     ).toBeUndefined();
   });
 }
 
-function harnessIdMatchingAgainstOpenRouterPart3(
-  scope: ReturnType<typeof harnessIdMatchingAgainstOpenRouterPart1>,
-) {
-  const { OPENROUTER } = scope;
-  it("prices a free-tier turn at $0 actual with the paid list equivalent", () => {
-    expect(isFreeTierId("opencode/beam-free")).toBe(true);
-    expect(isFreeTierId("baidu/ernie-5.5-flash-preview:free")).toBe(true);
-    expect(isFreeTierId("MiniMax/M3-FREE")).toBe(true);
+function freeTierPart(scope: ReturnType<typeof harnessIdMatchingPart1>) {
+  const { TABLE_ROWS } = scope;
+  it("detects a free-tier id by its own marker and prices a free turn at $0 with the list equivalent", () => {
+    expect(isFreeTierId("local/lamp-free")).toBe(true);
+    expect(isFreeTierId("vendor/tiny-preview:free")).toBe(true);
+    expect(isFreeTierId("Vendor/Mini-FREE")).toBe(true);
     expect(isFreeTierId("free/zero")).toBe(false);
     expect(isFreeTierId("paid/one")).toBe(false);
-    const paid = pricedUsage(
-      usage({ costUsd: 0, in: 1_000_000 }),
-      "opencode/minimax-m3.1-flash-free",
-      OPENROUTER,
-    );
-    expect(paid.costKnown).toBe(true);
-    expect(paid.usage.costUsd).toBe(0);
-    expect(paid.usage.listCostUsd).toBeCloseTo(0.075, 10);
-    expect(paid.usage.harnessCostUsd).toBe(0);
-    // A free-tier id with no paid equivalent stays unknown, never $0.
+    // A free-tier id with a no-cost table row prices to a known $0.
     expect(
-      priceUsage(usage({ in: 1 }), "opencode/nothing-free", OPENROUTER),
+      priceUsage(usage({ in: 1 }), "vendor/tiny-preview:free", TABLE_ROWS),
+    ).toBe(0);
+    expect(
+      priceUsage(usage({ in: 1 }), "other-host/nothing-free", TABLE_ROWS),
     ).toBeUndefined();
     expect(
-      priceTableOnly(usage({ in: 1 }), "opencode/nothing-free", OPENROUTER),
+      priceTableOnly(usage({ in: 1 }), "other-host/nothing-free", TABLE_ROWS),
     ).toBeUndefined();
-  });
-
-  it("prices an ernie turn from the :free entry at a known $0", () => {
-    const priced = pricedUsage(
-      usage({ in: 1_000_000, out: 500_000 }),
-      "openrouter/baidu/ernie-5.5-flash-preview:free",
-      OPENROUTER,
-    );
-    expect(priced.costKnown).toBe(true);
-    expect(priced.usage.costUsd).toBe(0);
-    expect(priced.usage.listCostUsd).toBe(0);
   });
 }
 
@@ -232,10 +220,10 @@ describe("price usage at aggregation time", () => {
   priceUsageAtAggregationTimePart2();
 });
 
-describe("harness id matching against the OpenRouter table", () => {
-  const scope1 = harnessIdMatchingAgainstOpenRouterPart1();
-  harnessIdMatchingAgainstOpenRouterPart2(scope1);
-  harnessIdMatchingAgainstOpenRouterPart3(scope1);
+describe("harness id matching against the price table", () => {
+  const scope1 = harnessIdMatchingPart1();
+  harnessIdMatchingPart2(scope1);
+  freeTierPart(scope1);
 });
 
 describe("served model split", () => {

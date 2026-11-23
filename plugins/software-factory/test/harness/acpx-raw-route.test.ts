@@ -7,12 +7,12 @@ import { createAcpxStub } from "./acpx-stub.js";
 const TIMEOUTS = { idleMs: 10_000, wallMs: 30_000 };
 
 /**
- * The run config's opencode binding: acpx's built-in `opencode` route resolves
- * opencode 1.19.5 and fails on the installed 2.2.7 data dir, while the raw
- * `opencode acp` route runs the installed CLI (probe §0).
+ * A run config binds a harness via acpx's built-in route, which resolves
+ * against the installed agent and fails on the installed data dir, while the
+ * raw `agent-c acp` route runs the installed CLI (probe §0).
  */
-const OPENCODE_ACPX: AcpxConfig = {
-  agent: "opencode acp",
+const AGENT_C_ACPX: AcpxConfig = {
+  agent: "agent-c acp",
   raw: true,
   effort: {
     configId: "effort",
@@ -20,9 +20,9 @@ const OPENCODE_ACPX: AcpxConfig = {
   usage: { cache: true },
 };
 
-// The installed opencode 2.2.7 ACP result: output and reasoning are separate
+// The installed agent's ACP result: output and reasoning are separate
 // counters and the total sums input+output+reasoning+cache read/write.
-const OPENCODE_USAGE = {
+const AGENT_C_USAGE = {
   totalTokens: 7220,
   inputTokens: 7163,
   cachedReadTokens: 20,
@@ -37,7 +37,7 @@ function request(
   extra: Record<string, unknown> = {},
 ) {
   return {
-    model: { id: "opencode-go/deepseek-v4.1-flash" },
+    model: { id: "vendor/mini-flash" },
     cwd,
     prompt,
     timeouts: TIMEOUTS,
@@ -45,10 +45,10 @@ function request(
   };
 }
 
-describe("AcpxHarness opencode raw route", () => {
-  registerAcpxHarnessOpencodeRawRoutePart1();
-  registerAcpxHarnessOpencodeRawRoutePart2();
-  registerAcpxHarnessOpencodeRawRoutePart3();
+describe("AcpxHarness raw route", () => {
+  registerAcpxHarnessRawRoutePart1();
+  registerAcpxHarnessRawRoutePart2();
+  registerAcpxHarnessRawRoutePart3();
 });
 
 async function runsRawAgentSetsEffortRecordsUsagePart1(
@@ -64,11 +64,11 @@ async function runsRawAgentSetsEffortRecordsUsagePart1(
   expect(result.stop).toEqual({ kind: "done" });
   expect(result.text).toBe("PONG");
   expect(result.model).toEqual({
-    id: "opencode-go/deepseek-v4.1-flash",
+    id: "vendor/mini-flash",
     effort: "high",
   });
-  expect(result.session?.harness).toBe("opencode");
-  expect(result.session?.id).toMatch(/^opencode-/);
+  expect(result.session?.harness).toBe("agent-c");
+  expect(result.session?.id).toMatch(/^agent-c-/);
   expect(result.usage).toEqual({
     in: 7163,
     cacheRead: 20,
@@ -79,15 +79,13 @@ async function runsRawAgentSetsEffortRecordsUsagePart1(
     costUsd: 0.0032,
   });
 
-  expect(await harness.caps({ id: "opencode-go/deepseek-v4.1-flash" })).toEqual(
-    {
-      resume: true,
-      compact: "none",
-      subagents: "none",
-      structuredOutput: "none",
-      usage: { cache: true, cost: true },
-    },
-  );
+  expect(await harness.caps({ id: "vendor/mini-flash" })).toEqual({
+    resume: true,
+    compact: "none",
+    subagents: "none",
+    structuredOutput: "none",
+    usage: { cache: true, cost: true },
+  });
 
   const calls = stub.invocations();
   const create = calls.find(
@@ -110,7 +108,7 @@ async function runsRawAgentSetsEffortRecordsUsagePart2(
   ] as const) {
     // The raw route has no positional agent: `--agent` is global and must
     // precede the subcommand.
-    expect(args[args.indexOf("--agent") + 1]).toMatch(/(^|\/)opencode acp$/);
+    expect(args[args.indexOf("--agent") + 1]).toMatch(/(^|\/)agent-c acp$/);
     expect(args.indexOf("--agent")).toBeLessThan(args.indexOf(verb));
   }
   expect(set.slice(set.indexOf("set"))).toEqual([
@@ -120,9 +118,7 @@ async function runsRawAgentSetsEffortRecordsUsagePart2(
     "effort",
     "high",
   ]);
-  expect(prompt[prompt.indexOf("--model") + 1]).toBe(
-    "opencode-go/deepseek-v4.1-flash",
-  );
+  expect(prompt[prompt.indexOf("--model") + 1]).toBe("vendor/mini-flash");
   expect(prompt.indexOf("--model")).toBeLessThan(prompt.indexOf("prompt"));
   expect(prompt.slice(prompt.indexOf("prompt"))).toEqual([
     "prompt",
@@ -132,18 +128,18 @@ async function runsRawAgentSetsEffortRecordsUsagePart2(
   ]);
 }
 
-function registerAcpxHarnessOpencodeRawRoutePart1(): void {
+function registerAcpxHarnessRawRoutePart1(): void {
   it("runs the raw agent, sets effort and records the usage_update cost", async () => {
     const stub = createAcpxStub({
-      usage: OPENCODE_USAGE,
+      usage: AGENT_C_USAGE,
       cost: { amount: 0.0032, currency: "USD" },
     });
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "opencode",
+      id: "agent-c",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: OPENCODE_ACPX,
+      acpx: AGENT_C_ACPX,
     });
     try {
       const scope1 = await runsRawAgentSetsEffortRecordsUsagePart1(
@@ -157,18 +153,18 @@ function registerAcpxHarnessOpencodeRawRoutePart1(): void {
   });
 }
 
-function registerAcpxHarnessOpencodeRawRoutePart2(): void {
+function registerAcpxHarnessRawRoutePart2(): void {
   it("resumes the session without reporting the cumulative cost again", async () => {
     const stub = createAcpxStub({
-      usage: OPENCODE_USAGE,
+      usage: AGENT_C_USAGE,
       cost: { amount: 0.004, currency: "USD" },
     });
     const options = {
       retention: "short" as const,
-      id: "opencode",
+      id: "agent-c",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: OPENCODE_ACPX,
+      acpx: AGENT_C_ACPX,
     };
     try {
       const cwd = path.dirname(stub.binary);
@@ -213,18 +209,18 @@ function registerAcpxHarnessOpencodeRawRoutePart2(): void {
   });
 }
 
-function registerAcpxHarnessOpencodeRawRoutePart3(): void {
+function registerAcpxHarnessRawRoutePart3(): void {
   it("leaves cost unknown when the reported currency is not USD", async () => {
     const stub = createAcpxStub({
-      usage: OPENCODE_USAGE,
+      usage: AGENT_C_USAGE,
       cost: { amount: 5, currency: "EUR" },
     });
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "opencode",
+      id: "agent-c",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: OPENCODE_ACPX,
+      acpx: AGENT_C_ACPX,
     });
     try {
       const result = await harness.turn(

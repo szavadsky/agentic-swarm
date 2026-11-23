@@ -15,7 +15,7 @@ const POLICY = {
   features: { unexpectedStopDetection: false },
   tools: { approvalMode: "yolo", xdev: false },
   compaction: { experimentalContextManagement: false },
-  disabledProviders: ["native", "claude"],
+  disabledProviders: ["native", "fake-provider"],
   retry: { enabled: false, modelFallback: false },
 } as const;
 
@@ -47,7 +47,7 @@ function ompOverlayPart1() {
 
   it("pins retention and subagent models over configured options", () => {
     const overlay = ompOverlay({
-      subagentModel: "opencode-go/longcat-2.5-free",
+      subagentModel: "fake-host/mini-2.5-free",
       retention: "long",
       options: {
         providers: { cacheRetention: "short" },
@@ -59,7 +59,7 @@ function ompOverlayPart1() {
     expect(overlay.providers).toEqual({ cacheRetention: "long" });
     expect(overlay.modelRoles).toEqual({
       keep: true,
-      task: "opencode-go/longcat-2.5-free",
+      task: "fake-host/mini-2.5-free",
     });
 
     const task = overlay.task as Record<string, unknown>;
@@ -72,7 +72,7 @@ function ompOverlayPart1() {
       "sonic",
       "security-reviewer",
     ]) {
-      expect(overrides[agent]).toBe("opencode-go/longcat-2.5-free");
+      expect(overrides[agent]).toBe("fake-host/mini-2.5-free");
     }
   });
 }
@@ -97,7 +97,7 @@ function ompOverlayPart2() {
     try {
       const opts = {
         retention: "short" as const,
-        subagentModel: "opencode-go/longcat-2.5-free",
+        subagentModel: "fake-host/mini-2.5-free",
       };
       const first = await writeOmpOverlay(opts, tmp);
       const second = await writeOmpOverlay(opts, tmp);

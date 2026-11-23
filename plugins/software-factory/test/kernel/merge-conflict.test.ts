@@ -87,7 +87,7 @@ function registerMergeConflictsPart1(): void {
             kind: "infra",
             cause: "auth",
             details:
-              "provider.no-route Model unavailable: opencode/does-not-exist-free",
+              "provider.no-route Model unavailable: local-host/missing-free",
           },
         }),
       );
@@ -107,7 +107,7 @@ function registerMergeConflictsPart1(): void {
       expect(result.cause).toEqual({
         kind: "boundary",
         detail:
-          "task: auth: provider.no-route Model unavailable: opencode/does-not-exist-free",
+          "task: auth: provider.no-route Model unavailable: local-host/missing-free",
       });
       // Implement, QA and review compacted; the infra-stopped steward turn did not.
       expect(harness.compactions).toHaveLength(3);

@@ -133,8 +133,8 @@ function registerPreFlightPart1(): void {
 function registerPreFlightPart2(): void {
   it("refuses malformed acpx option shapes, naming the key", async () => {
     const runYaml = `${RUN_HEAD_NO_HIGHEST}harnesses:
-  opencode:
-    acpx: { agent: opencode }
+  agent-c:
+    acpx: { agent: agent-c }
     options:
       args: "--approve-all"
       env: { TOKEN: 1 }
@@ -145,18 +145,18 @@ function registerPreFlightPart2(): void {
       const err = await refusal(f.input);
       expect(err.findings).toContainEqual({
         file: path.join(f.repo.dir, ".factory", "run.yaml"),
-        key: "harnesses.opencode.options.args",
+        key: "harnesses.agent-c.options.args",
         message: 'Invalid "args" option: expected string array, got string',
       });
       expect(err.findings).toContainEqual({
         file: path.join(f.repo.dir, ".factory", "run.yaml"),
-        key: "harnesses.opencode.options.env",
+        key: "harnesses.agent-c.options.env",
         message:
           'Invalid "env" option: expected string-to-string object, got object with non-string values',
       });
       expect(
         err.findings.some(
-          (finding) => finding.key === "harnesses.opencode.options.approveAll",
+          (finding) => finding.key === "harnesses.agent-c.options.approveAll",
         ),
       ).toBe(false);
     } finally {
@@ -170,8 +170,8 @@ function registerPreFlightPart3(): void {
     const runYaml = `${RUN_HEAD_NO_HIGHEST}worktreeRoot: WORKTREE_ROOT
 sessions: { dir: SESSIONS_DIR, retention: short }
 harnesses:
-  opencode:
-    acpx: { agent: opencode }
+  agent-c:
+    acpx: { agent: agent-c }
     options: { args: "--approve-all" }
 `;
     const f = await fixture(runYaml);
@@ -186,7 +186,7 @@ harnesses:
       expect(failed).toBeInstanceOf(PreflightError);
       expect((failed as PreflightError).findings).toContainEqual({
         file: path.join(f.repo.dir, ".factory", "run.yaml"),
-        key: "harnesses.opencode.options.args",
+        key: "harnesses.agent-c.options.args",
         message: 'Invalid "args" option: expected string array, got string',
       });
     } finally {
@@ -198,8 +198,8 @@ harnesses:
 function registerPreFlightPart4(): void {
   it("accepts string acpx args and env and leaves other option keys opaque", async () => {
     const runYaml = `${RUN_HEAD_NO_HIGHEST}harnesses:
-  opencode:
-    acpx: { agent: opencode }
+  agent-c:
+    acpx: { agent: agent-c }
     options:
       args: ["--approve-all"]
       env: { TOKEN: "value" }

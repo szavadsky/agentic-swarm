@@ -35,7 +35,7 @@ function acpxTranscriptPart1() {
           sessionId: "s",
           update: {
             sessionUpdate: "agent_message_chunk",
-            content: { type: "text", text: "pi v1.5.2" },
+            content: { type: "text", text: "agent-a v1.5.2" },
           },
         },
       },
@@ -101,7 +101,7 @@ function acpxTranscriptPart2() {
 }
 
 function acpxTranscriptPart3() {
-  it("maps codex prompt usage with reasoning kept disjoint from text output", () => {
+  it("maps agent-b prompt usage with reasoning kept disjoint from text output", () => {
     expect(
       usageFromAcpxResult({
         totalTokens: 100,
@@ -120,8 +120,8 @@ function acpxTranscriptPart3() {
     });
   });
 
-  it("keeps opencode's separate output and reasoning counters", () => {
-    // opencode's total adds reasoning on top of output and cache; codex/agy's
+  it("keeps agent-c's separate output and reasoning counters", () => {
+    // agent-c's total adds reasoning on top of output and cache; agent-b's
     // total already contains it, so the same numbers must not be subtracted.
     expect(
       usageFromAcpxResult({
@@ -218,11 +218,11 @@ function acpxTranscriptPart6() {
     expect(summary.usage.costUsd).toBeUndefined();
   });
 
-  it("parses pi's /session token report", () => {
+  it("parses agent-a's /session token report", () => {
     // The exact shape from the probe: human text, cumulative session counters.
     const report =
       "Session: 01a1d37f-1c1e-…\n" +
-      "Session file: /home/slava/.pi/agent/sessions/--tmp-acpx-pi-1--/s.jsonl\n" +
+      "Session file: /home/slava/.agent-a/agent/sessions/--tmp-acpx-agent-a-1--/s.jsonl\n" +
       "Messages: 7\n" +
       "Cost: 0\n" +
       "Tokens: in 2403, out 87, cache read 1216, cache write 0, total 3706";

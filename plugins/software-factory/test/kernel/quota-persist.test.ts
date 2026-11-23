@@ -123,29 +123,29 @@ describe("pool latch reset", () => {
       await markPoolExhausted({
         paths,
         pools,
-        pool: "claude",
+        pool: "pool-a",
         resetAt: long,
       });
       await markPoolExhausted({
         paths,
         pools,
-        pool: "claude",
+        pool: "pool-a",
         resetAt: short,
       });
-      expect(pools.get("claude")).toBe(long);
+      expect(pools.get("pool-a")).toBe(long);
       let stored = yaml.parse(fs.readFileSync(quotaPoolsPath(paths), "utf8"));
-      expect(Date.parse(stored.pools.claude.resetAt)).toBe(long);
+      expect(Date.parse(stored.pools["pool-a"].resetAt)).toBe(long);
 
       const later = long + 60 * 60_000;
       await markPoolExhausted({
         paths,
         pools,
-        pool: "claude",
+        pool: "pool-a",
         resetAt: later,
       });
-      expect(pools.get("claude")).toBe(later);
+      expect(pools.get("pool-a")).toBe(later);
       stored = yaml.parse(fs.readFileSync(quotaPoolsPath(paths), "utf8"));
-      expect(Date.parse(stored.pools.claude.resetAt)).toBe(later);
+      expect(Date.parse(stored.pools["pool-a"].resetAt)).toBe(later);
     } finally {
       fs.rmSync(paths.sessionsDir, { recursive: true, force: true });
     }
@@ -157,13 +157,13 @@ describe("pool latch visibility", () => {
     const paths = tempPoolPaths();
     try {
       const pools = new Map<string, number>();
-      const claude = Date.now() + 60_000;
+      const poolA = Date.now() + 60_000;
       const go = Date.now() + 120_000;
       const first = markPoolExhausted({
         paths,
         pools,
-        pool: "claude",
-        resetAt: claude,
+        pool: "pool-a",
+        resetAt: poolA,
       });
       const second = markPoolExhausted({
         paths,
@@ -173,14 +173,14 @@ describe("pool latch visibility", () => {
       });
 
       // A reader in another leg sees both latches before either write lands.
-      expect(poolExhausted(pools, "claude")).toBe(true);
+      expect(poolExhausted(pools, "pool-a")).toBe(true);
       expect(poolExhausted(pools, "go")).toBe(true);
       expect(fs.existsSync(quotaPoolsPath(paths))).toBe(false);
 
       await Promise.all([first, second]);
       const stored = yaml.parse(fs.readFileSync(quotaPoolsPath(paths), "utf8"));
-      expect(Object.keys(stored.pools).sort()).toEqual(["claude", "go"]);
-      expect(Date.parse(stored.pools.claude.resetAt)).toBe(claude);
+      expect(Object.keys(stored.pools).sort()).toEqual(["go", "pool-a"]);
+      expect(Date.parse(stored.pools["pool-a"].resetAt)).toBe(poolA);
       expect(Date.parse(stored.pools.go.resetAt)).toBe(go);
     } finally {
       fs.rmSync(paths.sessionsDir, { recursive: true, force: true });
@@ -380,7 +380,7 @@ function registerExhaustedPoolPersistencePart2(): void {
       fs.writeFileSync(file, "pools: [\n", "utf8");
       await expect(loadPoolResets(paths)).rejects.toThrow(/not valid YAML/);
 
-      fs.writeFileSync(file, "pools:\n  claude: {}\n", "utf8");
+      fs.writeFileSync(file, "pools:\n  pool-a: {}\n", "utf8");
       await expect(loadPoolResets(paths)).rejects.toThrow(/is invalid/);
     } finally {
       cleanupFlowRepo(repo);

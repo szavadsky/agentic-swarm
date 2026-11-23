@@ -340,7 +340,7 @@ describe("role prompts", () => {
   });
 
   it("keeps role text out of a separate system channel", () => {
-    // The harness contract has `system`, but OpenCode has no system flag; role
+    // The harness contract has `system`, but a harness has no system flag; role
     // identity must therefore live in the rendered prompt itself (KERNEL0 S3).
     const rendered = library().render("architect", ROLES.architect!);
     expect(rendered.startsWith("You are the architect")).toBe(true);

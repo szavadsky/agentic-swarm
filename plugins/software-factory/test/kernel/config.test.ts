@@ -51,13 +51,13 @@ function threeConfigLayersPart2() {
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
     const run = path.join(root, ".factory/run.yaml");
     expect(loadConfigs(root).run.portability).toEqual([]);
-    fs.writeFileSync(run, "portability: [{ from: opencode, to: omp }]\n");
+    fs.writeFileSync(run, "portability: [{ from: agent-c, to: omp }]\n");
     expect(loadConfigs(root).run.portability).toEqual([
-      { from: "opencode", to: "omp" },
+      { from: "agent-c", to: "omp" },
     ]);
     fs.writeFileSync(
       run,
-      "portability: [{ from: opencode, to: omp, how: quota }]\n",
+      "portability: [{ from: agent-c, to: omp, how: quota }]\n",
     );
     expect(() => loadConfigs(root)).toThrow(ConfigError);
     fs.rmSync(root, { recursive: true, force: true });

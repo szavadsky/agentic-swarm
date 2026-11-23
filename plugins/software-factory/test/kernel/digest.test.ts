@@ -166,7 +166,7 @@ async function writesScriptFactsThenScoutAddsPart3(
 
 async function agreesMetricsAllZeroMultiAttemptPart1(runtime: KernelRuntime) {
   await runtime.store.ensureLayout();
-  // pi via acpx: all-zero counters are no usage report, even on a priced model.
+  // An acpx agent: all-zero counters are no usage report, even on a priced model.
   await runtime.store.appendRecord(
     {
       iteration: 1,

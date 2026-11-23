@@ -50,7 +50,7 @@ export interface AcpxTurnSummary {
   stopReason?: string;
   sessionId?: string;
   errors: AcpxError[];
-  /** Adapter error metadata extracted from session_info_update, e.g. _meta.codex.error. */
+  /** Adapter error metadata extracted from session_info_update, e.g. _meta.<agent>.error. */
   adapterError?: AcpxError;
 }
 

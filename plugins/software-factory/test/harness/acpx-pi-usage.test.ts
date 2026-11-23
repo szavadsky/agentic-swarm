@@ -11,8 +11,8 @@ const PER_PROMPT = {
   cacheRead: 5,
   cacheWrite: 2,
 };
-const PI_ACPX: AcpxConfig = {
-  agent: "pi",
+const AGENT_A_ACPX: AcpxConfig = {
+  agent: "agent-a",
   effort: { configId: "thought_level" },
   usage: { cache: true, command: "/session" },
 };
@@ -23,7 +23,7 @@ function request(
   extra: Record<string, unknown> = {},
 ) {
   return {
-    model: { id: "opencode-go/beam-free" },
+    model: { id: "fake-host/lamp-mini-free" },
     cwd,
     prompt,
     timeouts: TIMEOUTS,
@@ -31,7 +31,7 @@ function request(
   };
 }
 
-describe("AcpxHarness pi usage command", () => {
+describe("AcpxHarness agent-a usage command", () => {
   registerAcpxHarnessPiUsageCommandPart1();
   registerAcpxHarnessPiUsageCommandPart2();
   registerAcpxHarnessPiUsageCommandPart3();
@@ -156,10 +156,10 @@ function registerAcpxHarnessPiUsageCommandPart1(): void {
     const stub = createAcpxStub({ sessionUsage: PER_PROMPT });
     const options = {
       retention: "short" as const,
-      id: "pi",
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     };
     try {
       const cwd = path.dirname(stub.binary);
@@ -169,7 +169,7 @@ function registerAcpxHarnessPiUsageCommandPart1(): void {
 
       expect(first.stop).toEqual({ kind: "done" });
       expect(first.text).toBe("ONE");
-      // pi's prompt result carries no usage; these are the /session totals.
+      // A prompt result carrying no usage; these are the /session totals.
       expect(first.usage).toEqual(TURN_USAGE);
       expect(first.session?.cumulativeUsage).toEqual(first.usage);
 
@@ -196,10 +196,10 @@ function registerAcpxHarnessPiUsageCommandPart2(): void {
     });
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "pi",
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -252,10 +252,10 @@ function registerAcpxHarnessPiUsageCommandPart3(): void {
     });
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "pi",
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: { ...PI_ACPX, compact: true },
+      acpx: { ...AGENT_A_ACPX, compact: true },
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -306,10 +306,10 @@ function registerAcpxHarnessPiUsageCommandPart4(): void {
     const stub = createAcpxStub({ sessionUsage: PER_PROMPT });
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "pi",
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     });
     try {
       const scope1 = await leavesResumedTurnUnknownWhenRefHasPart1(

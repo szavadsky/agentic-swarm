@@ -40,7 +40,7 @@ interface Fixture {
 /** Architect and implementer on different harnesses; omp is the scouts consumer. */
 const SPLIT_HARNESSES = RUN_HEAD_NO_HIGHEST.replace(
   "architect: { harness: fake, model: arch, effort: max }",
-  "architect: { harness: claude-code, model: arch }",
+  "architect: { harness: agent-x, model: arch }",
 ).replace(
   "implementer: { harness: fake, model: impl }",
   "implementer: { harness: omp, model: impl }",
@@ -48,7 +48,7 @@ const SPLIT_HARNESSES = RUN_HEAD_NO_HIGHEST.replace(
 
 function splitHarnesses(f: Fixture): Map<string, Harness> {
   const harnesses = new Map(f.input.harnesses);
-  harnesses.set("claude-code", new FakeHarness({ id: "claude-code" }));
+  harnesses.set("agent-x", new FakeHarness({ id: "agent-x" }));
   harnesses.set(
     "omp",
     new FakeHarness({
@@ -157,7 +157,10 @@ function registerPreFlightPart19(): void {
 function registerPreFlightPart20(): void {
   it("checks scouts against omp, not the architect's harness", async () => {
     const f = await fixture(
-      withScouts(SPLIT_HARNESSES, "scouts: { model: ernie, effort: max }"),
+      withScouts(
+        SPLIT_HARNESSES,
+        "scouts: { model: scout-model, effort: max }",
+      ),
     );
     try {
       const probed: string[] = [];
@@ -176,7 +179,7 @@ function registerPreFlightPart20(): void {
         catalog,
       });
       expect(f.configs.run.scouts!.effort).toBe("max");
-      expect(probed).toContain("ernie");
+      expect(probed).toContain("scout-model");
     } finally {
       f.repo.cleanup();
     }
@@ -186,14 +189,14 @@ function registerPreFlightPart20(): void {
 function registerPreFlightPart21(): void {
   it("refuses a scouts model omp does not list, naming omp", async () => {
     const f = await fixture(
-      withScouts(SPLIT_HARNESSES, "scouts: { model: ernie }"),
+      withScouts(SPLIT_HARNESSES, "scouts: { model: scout-model }"),
     );
     try {
-      // The probe reports ernie as unlisted (only impl is listed).
+      // The probe reports scout-model as unlisted (only impl is listed).
       const harnesses = splitHarnesses(f);
       const omp = new FakeHarness({ id: "omp" });
       omp.probe = async (model) =>
-        model.id === "ernie"
+        model.id === "scout-model"
           ? { listed: false, available: ["impl"], effort: null }
           : {
               listed: true,
@@ -206,7 +209,7 @@ function registerPreFlightPart21(): void {
         expect.objectContaining({
           key: "scouts.model",
           message:
-            'model "ernie" is not listed by harness "omp"; available models: impl',
+            'model "scout-model" is not listed by harness "omp"; available models: impl',
         }),
       );
       expect(err.report).toContain('harness "omp"');
@@ -219,7 +222,7 @@ function registerPreFlightPart21(): void {
 function registerPreFlightPart22(): void {
   it("refuses a scouts block when no alias or fallback runs on omp", async () => {
     const f = await fixture(
-      withScouts(RUN_HEAD_NO_HIGHEST, "scouts: { model: ernie }"),
+      withScouts(RUN_HEAD_NO_HIGHEST, "scouts: { model: scout-model }"),
     );
     try {
       const err = await refusal(f.input);
@@ -243,7 +246,7 @@ function registerPreFlightPart22(): void {
           "implementer: { harness: omp, model: impl }",
           "implementer: { harness: fake, model: impl, fallbacks: [{ harness: omp, model: impl-omp }] }",
         ),
-        "scouts: { model: ernie }",
+        "scouts: { model: scout-model }",
       ),
     );
     try {
@@ -257,7 +260,7 @@ function registerPreFlightPart22(): void {
       };
       harnesses.set("omp", omp);
       await preflight({ ...f.input, harnesses });
-      expect(probed).toContain("ernie");
+      expect(probed).toContain("scout-model");
     } finally {
       f.repo.cleanup();
     }

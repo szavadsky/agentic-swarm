@@ -82,8 +82,8 @@ export class AcpxHarness implements Harness {
   /**
    * Session-end compaction over acpx's `/compact` adapter command. ACP has no
    * compaction method, so the command must be the whole prompt; the config flag
-   * only marks agents verified to accept it. pi answers "Nothing to compact"
-   * as ACP -32603 for a small session: that session stays as it was, usable.
+   * only marks agents verified to accept it (config/acpx-verify.md). A small
+   * session answers ACP -32603 "Nothing to compact" and stays usable.
    * Every other failure throws, and the kernel's `compactSession` contains it
    * so the turn that ended still settles with the uncompacted ref.
    */

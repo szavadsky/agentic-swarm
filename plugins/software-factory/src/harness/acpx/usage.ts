@@ -1,10 +1,10 @@
 import type { Usage } from "../types.js";
 
 /**
- * pi's `/session` reply is human text, not JSON (acpx probe §4):
+ * A `/session` reply is human text, not JSON:
  * `Tokens: in 2403, out 87, cache read 1216, cache write 0, total 3706`.
  * The counters are cumulative for the session; output already includes any
- * reasoning pi did, so it stays in `out` and `reasoningOut` stays zero.
+ * reasoning, so it stays in `out` and `reasoningOut` stays zero.
  */
 export function usageFromAcpxSessionText(text: string): Usage | undefined {
   const match =

@@ -25,9 +25,8 @@ import {
 } from "./s2-helpers.js";
 import { withKernelRoleFallbacks } from "./fake-defaults.js";
 
-/** The scrubbed one-line text an opencode provider.no-route stop carries. */
-const NO_ROUTE =
-  "provider.no-route Model unavailable: opencode/does-not-exist-free";
+/** The scrubbed one-line text a provider.no-route stop carries. */
+const NO_ROUTE = "provider.no-route Model unavailable: local-host/missing-free";
 
 describe("infra stop details", () => {
   registerInfraStopDetailsPart1();

@@ -17,7 +17,7 @@ import { rec, script, cause } from "./helpers.js";
 
 const PRICES: PriceTable = {
   "paid/one": { input: 4, cachedInput: 0.2, output: 20, reasoning: 20 },
-  "baidu/ernie-5.5-flash-preview:free": {
+  "vendor/tiny-preview:free": {
     input: 0,
     cachedInput: 0,
     output: 0,
@@ -41,15 +41,15 @@ async function splitsAliasTurnSSpendByModelsPart1(
   store: ReturnType<typeof createFolderStore>,
 ) {
   await store.ensureLayout();
-  const ernie = "openrouter/baidu/ernie-5.5-flash-preview:free";
+  const tiny = "vendor/tiny-preview:free";
   const records = [
     rec(1, {
       alias: "digest",
-      model: { id: ernie },
+      model: { id: tiny },
       usage: priced({ in: 2_000_000 }),
       served: [
         {
-          model: { id: ernie },
+          model: { id: tiny },
           usage: priced({ in: 1_000_000, costUsd: 0 }),
         },
         { model: { id: "paid/one" }, usage: priced({ in: 1_000_000 }) },
@@ -60,11 +60,11 @@ async function splitsAliasTurnSSpendByModelsPart1(
     rec(2, {
       slug: "b",
       alias: "digest",
-      model: { id: ernie },
+      model: { id: tiny },
       usage: priced({ in: 2_000 }),
       served: [
         {
-          model: { id: ernie },
+          model: { id: tiny },
           usage: priced({ in: 1_000, costUsd: 0 }),
         },
         { model: { id: "mystery/hop" }, usage: priced({ in: 1_000 }) },
@@ -82,23 +82,23 @@ async function splitsAliasTurnSSpendByModelsPart1(
   ) as GoalMetrics;
   const one = metrics.iterations[0]!;
 
-  return { ernie, one };
+  return { tiny, one };
 }
 
 async function splitsAliasTurnSSpendByModelsPart2(
   scope: Awaited<ReturnType<typeof splitsAliasTurnSSpendByModelsPart1>>,
 ) {
-  const { one, ernie } = scope;
-  expect(one.models[ernie]!.turns).toBe(2);
-  expect(one.models[ernie]!.usage.in).toBe(1_001_000);
-  expect(one.models[ernie]!.usage.costUsd).toBe(0);
-  expect(one.models[ernie]!.unpricedTurns).toBe(0);
+  const { one, tiny } = scope;
+  expect(one.models[tiny]!.turns).toBe(2);
+  expect(one.models[tiny]!.usage.in).toBe(1_001_000);
+  expect(one.models[tiny]!.usage.costUsd).toBe(0);
+  expect(one.models[tiny]!.unpricedTurns).toBe(0);
   expect(one.models["paid/one"]!.turns).toBe(1);
   expect(one.models["paid/one"]!.usage.in).toBe(1_000_000);
   expect(one.models["paid/one"]!.usage.costUsd).toBeCloseTo(4, 10);
 
   // Committed work belongs to the record's own model row, once.
-  expect(one.models[ernie]!.edits).toBe(2);
+  expect(one.models[tiny]!.edits).toBe(2);
   expect(one.models["paid/one"]!.edits).toBe(0);
 
   // A served model with no row is unpriced, never $0.

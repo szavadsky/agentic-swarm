@@ -5,8 +5,8 @@ import path from "node:path";
 import { OmpHarness } from "../../../src/harness/omp/harness.js";
 
 const live = process.env.FACTORY_LIVE === "1" ? describe : describe.skip;
-const PARENT = { id: "opencode-go/beam-free" };
-const SUBAGENT = "opencode-go/longcat-2.5-free";
+const PARENT = { id: "local-host/lamp-mini-free" };
+const SUBAGENT = "local-host/mini-2.5-free";
 const TIMEOUTS = { idleMs: 120_000, wallMs: 240_000 };
 
 function jsonlFiles(dir: string): string[] {
@@ -129,7 +129,7 @@ async function twoTurnResumeOutcomeOutsideCwdPart2(
     .filter((entry) => String(entry.role ?? "").startsWith("subagent:"));
   expect(changes.length).toBeGreaterThan(0);
   expect(
-    changes.some((entry) => String(entry.model).includes("longcat-2.5-free")),
+    changes.some((entry) => String(entry.model).includes("mini-2.5-free")),
   ).toBe(true);
   console.log(
     "omp live",
