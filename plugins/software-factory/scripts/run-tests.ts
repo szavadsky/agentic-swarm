@@ -24,13 +24,17 @@ import {
   type ParsedJunit,
 } from "../src/core/checks/junit.js";
 
-/** Parallel test workers; tuned for this suite on a many-core box. */
-const WORKERS = 8;
+/**
+ * Parallel test workers. Scales with CPU count but caps at 12: each worker
+ * holds a test repo in tmp, so more workers than that exhausts small tmpfs.
+ */
+const WORKERS = Math.min(12, os.cpus().length);
 
 /**
- * Files that run in one serial worker ahead of the parallel sweep.
+ * Files that run with `--parallel=1` ahead of the parallel sweep because they
+ * race under parallel isolation. Empty: every file runs in the sweep.
  */
-const SERIAL: readonly string[] = ["test/kernel/budget-drain.test.ts"];
+const SERIAL: readonly string[] = [];
 
 interface FileTimings {
   version: number;
@@ -74,7 +78,8 @@ interface RunResult {
   signal: NodeJS.Signals | null;
 }
 
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-tests-"));
+const tmpBase = process.env.TMPDIR ?? os.tmpdir();
+const tmpDir = fs.mkdtempSync(path.join(tmpBase, "factory-tests-"));
 const timingsPath = path.join(tmpDir, "timings.json");
 /**
  * Where this run writes its JUnit report. A gate that declares
@@ -91,13 +96,15 @@ const forwarded = process.argv.slice(2);
 const runs: string[][] =
   forwarded.length > 0
     ? [[`--parallel=${WORKERS}`, ...forwarded]]
-    : [
-        ["--parallel=1", ...SERIAL],
-        [
-          `--parallel=${WORKERS}`,
-          ...SERIAL.flatMap((file) => ["--path-ignore-patterns", file]),
-        ],
-      ];
+    : SERIAL.length > 0
+      ? [
+          ["--parallel=1", ...SERIAL],
+          [
+            `--parallel=${WORKERS}`,
+            ...SERIAL.flatMap((file) => ["--path-ignore-patterns", file]),
+          ],
+        ]
+      : [[`--parallel=${WORKERS}`]];
 const started = performance.now();
 let active: ReturnType<typeof spawn> | undefined;
 let interrupted: NodeJS.Signals | undefined;
@@ -191,7 +198,9 @@ try {
   const shape =
     forwarded.length > 0
       ? `focused; slowest: ${slowest}`
-      : `--parallel=${WORKERS}; serial: ${SERIAL.length} files; slowest: ${slowest}`;
+      : SERIAL.length > 0
+        ? `--parallel=${WORKERS}; serial: ${SERIAL.length} files; slowest: ${slowest}`
+        : `--parallel=${WORKERS}; slowest: ${slowest}`;
   console.error(`tests gate: wall ${wall.toFixed(1)}s (${shape})`);
   if (failed) {
     for (const test of failedTests(report)) {

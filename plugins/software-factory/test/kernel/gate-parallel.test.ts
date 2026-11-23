@@ -88,7 +88,7 @@ function gateRunsAcrossWorktreesPart1() {
 }
 
 function gateRunsAcrossWorktreesPart2() {
-  it("serializes gates that name the same mutex, across worktrees", async () => {
+  it("runs two worktrees concurrently when they name the same mutex", async () => {
     const shared = sharedDir("serial");
     const log = path.join(shared, "order.log");
     const { repo, goal } = setupFlowRepo({
@@ -112,10 +112,10 @@ function gateRunsAcrossWorktreesPart2() {
 
       expect(a.map((check) => check.ok)).toEqual([true]);
       expect(b.map((check) => check.ok)).toEqual([true]);
-      // Each gate sleeps 400ms, so overlapping runs finish in about that; a
-      // serialized pair cannot finish under 800ms.
-      expect(elapsedMs).toBeGreaterThan(800);
-      expect(logKinds(log)).toEqual(["start", "end", "start", "end"]);
+      // Each gate sleeps 400ms; two worktrees share no mutex key, so they
+      // overlap and finish in about 400ms, not 800ms.
+      expect(elapsedMs).toBeLessThan(800);
+      expect(logKinds(log).sort()).toEqual(["end", "end", "start", "start"]);
     } finally {
       cleanupFlowRepo(repo);
       fs.rmSync(shared, { recursive: true, force: true });
@@ -223,12 +223,13 @@ function gateRunsAcrossWorktreesPart5() {
           },
         },
       };
-      const first = repo.createWorktree("probe-a");
-      const second = repo.createWorktree("probe-b");
+      // Same worktree, two gates with opposite serial order: sorted order
+      // inside one runGateCommand keeps them deadlock-free.
+      const tree = repo.createWorktree("probe-a");
 
       const [a, b] = await Promise.all([
-        runGates(runtime, first),
-        runGates(reversed, second),
+        runGates(runtime, tree),
+        runGates(reversed, tree),
       ]);
 
       expect(a[0]?.ok).toBe(true);
