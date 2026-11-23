@@ -70,7 +70,9 @@ async function seedPlan(goal: ReturnType<typeof makeGoal>): Promise<void> {
 }
 
 /** Bind a turn's handler to the record name it serves. */
-function whenStep(step: string): (req: never) => boolean {
+function whenStep(
+  step: string,
+): (req: Parameters<typeof fakeTurnResult>[0]) => boolean {
   return (req) => fakeTurnIdentity(req).step === step;
 }
 
@@ -148,7 +150,24 @@ function scriptArchitectAnswer(harness: FakeHarness): void {
   );
 }
 
-describe("a stop answers every routed steer with a held note", () => {
+/** Architect turn that edits the plan and leaves the steer for the next consult. */
+function scriptArchitectNoAnswer(harness: FakeHarness, planPath: string): void {
+  harness.script(
+    (req, ctx) => {
+      fs.appendFileSync(planPath, "\n## next consult\n", "utf8");
+      ctx.writeOutcome(
+        outcome({
+          summary: "steer left for the next consult",
+          decision: "continue",
+        }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: (req) => fakeTurnIdentity(req).step === "architect" },
+  );
+}
+
+function stopOnInfraWritesHeldNote(): void {
   it("writes a held note when the run stops on infra after routing", async () => {
     const goal = makeGoal();
     try {
@@ -169,7 +188,27 @@ describe("a stop answers every routed steer with a held note", () => {
       cleanup(goal);
     }
   }, 60_000);
+}
 
+function iterationBoundWritesHeldNote(): void {
+  it("writes a held note when the iteration bound stops a routed steer", async () => {
+    const goal = makeGoal();
+    try {
+      writePlan(goal.goalDir, PLAN);
+      await post(goal, "Keep the public API names stable.\n");
+      const harness = new FakeHarness({ id: "fake" });
+      scriptSteerToArchitect(harness);
+      scriptArchitectNoAnswer(harness, goal.planPath);
+      await expectLaunch(3, goal.repo, harness);
+      expect(outboxText(goal) ?? "").toContain("Held, not yet processed");
+      expect(inboxExists(goal)).toBe(true);
+    } finally {
+      cleanup(goal);
+    }
+  }, 60_000);
+}
+
+function relaunchCompletesHeldNote(): void {
   it("completes a held note with the real answer on the next launch", async () => {
     const goal = makeGoal();
     try {
@@ -197,7 +236,9 @@ describe("a stop answers every routed steer with a held note", () => {
       cleanup(goal);
     }
   }, 60_000);
+}
 
+function stopBeforeRoutingLeavesPending(): void {
   it("leaves a steer pending when the run stops before routing", async () => {
     const goal = makeGoal();
     try {
@@ -213,7 +254,9 @@ describe("a stop answers every routed steer with a held note", () => {
       cleanup(goal);
     }
   }, 60_000);
+}
 
+function normalCompletionWritesOneAnswer(): void {
   it("writes no held note when the run completes normally", async () => {
     const goal = makeGoal();
     try {
@@ -231,7 +274,9 @@ describe("a stop answers every routed steer with a held note", () => {
       cleanup(goal);
     }
   }, 60_000);
+}
 
+function infraMidLaunchWritesHeldNote(): void {
   it("writes a held note when the architect stops on infra mid-launch", async () => {
     const goal = makeGoal();
     try {
@@ -254,4 +299,13 @@ describe("a stop answers every routed steer with a held note", () => {
       cleanup(goal);
     }
   }, 60_000);
+}
+
+describe("a stop answers every routed steer with a held note", () => {
+  stopOnInfraWritesHeldNote();
+  iterationBoundWritesHeldNote();
+  relaunchCompletesHeldNote();
+  stopBeforeRoutingLeavesPending();
+  normalCompletionWritesOneAnswer();
+  infraMidLaunchWritesHeldNote();
 });

@@ -169,3 +169,56 @@ export async function writeOutbox(
   await store.mailbox.write("outbox", name, `${text.trim()}\n`);
   return store.mailbox.rel("outbox", name);
 }
+
+/** The line every provisional answer carries; the real answer replaces the whole file. */
+const HELD_NOTE = "Held, not yet processed";
+
+function isHeldNote(text: string): boolean {
+  return text.includes(HELD_NOTE);
+}
+
+function heldNoteText(steer: Steer): string {
+  return `# Steer ${steer.id}\n\n${HELD_NOTE}: the run stopped before an answer landed. The steer stays in the inbox and the next launch answers it.\n\nSource: ${steer.relPath}`;
+}
+
+/**
+ * Writes the provisional answer for one steer a stop left pending. An answer
+ * already in the outbox is never replaced: a crash between that answer and its
+ * mark-processed leaves one reply, and the steer's next pass completes the
+ * same file. Returns null when the answer was kept.
+ */
+async function writeHeldNote(
+  store: ArtifactStore,
+  steer: Steer,
+): Promise<string | null> {
+  const existing = await store.mailbox.read("outbox", `steer-${steer.id}.md`);
+  if (existing !== null && !isHeldNote(existing)) return null;
+  return writeOutbox(store, steer.id, heldNoteText(steer));
+}
+
+/** The steer's provisional note, or null when its outbox is empty or holds an answer. */
+async function readHeldNote(
+  store: ArtifactStore,
+  steerId: string,
+): Promise<string | null> {
+  const text = await store.mailbox.read("outbox", `steer-${steerId}.md`);
+  return text !== null && isHeldNote(text) ? text : null;
+}
+
+/**
+ * Answers every steer a launch stop left pending: a steer with a committed
+ * route gets the provisional outbox note the next launch replaces with the
+ * real answer. A steer with no route never reached the PM, so the stop leaves
+ * it untouched for the turn that decides its route; a note already in place is
+ * not rewritten. The inbox file stays, so the steer is still processed by the
+ * next launch.
+ */
+export async function drainHeldNotes(store: ArtifactStore): Promise<void> {
+  const records: StepRecord[] = await store.listRecords();
+  const routes = collectSteerRoutes(records);
+  for (const steer of await scanInbox(store)) {
+    if (!routes.has(steer.id)) continue;
+    if ((await readHeldNote(store, steer.id)) !== null) continue;
+    await writeHeldNote(store, steer);
+  }
+}
