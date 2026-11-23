@@ -151,7 +151,7 @@ async function validateFrontTasks(
   }
 }
 
-function gateCommands(runtime: KernelRuntime): string {
+export function gateCommands(runtime: KernelRuntime): string {
   return (
     runtime.configs.repo.gates
       .map((gate) => `- ${gate.id}: ${gate.command}`)
