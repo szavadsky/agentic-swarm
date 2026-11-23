@@ -118,7 +118,7 @@ export function summaryTaskLists(
   const cancelled: string[] = [];
   for (const slug of Object.keys(state.tasks).sort()) {
     const status = state.tasks[slug]!.status;
-    if (status === "parked") {
+    if (status === "parked" && state.tasks[slug]!.supersededBy === undefined) {
       parked.push(slug);
     } else if (status === "pending" || status === "ready") {
       pending.push(slug);

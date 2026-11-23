@@ -72,6 +72,12 @@ export interface TaskState {
   verdict?: ReviewVerdict;
   /** A derived terminal outcome that still needs its park record. */
   park?: Cause;
+  /**
+   * A parked task whose kept work landed through a `base` continuation: the
+   * slug whose verified merge came after this park. Status and distance read it
+   * to stop counting the park.
+   */
+  supersededBy?: string;
   /** No-progress over the item's history; the next action is the loop park. */
   loop?: ProgressRepeat;
   /** A red gate run sent the task back to implement: the fix turn resumes its session, and only a merged-result fix skips the next review. */

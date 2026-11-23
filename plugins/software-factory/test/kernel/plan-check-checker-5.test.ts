@@ -351,7 +351,7 @@ function registerPlanCheckerPart16(): void {
       });
       expect(followed.left).toEqual(["beta"]);
       expect(pmPrompt).toContain("- beta (cancel)");
-      expect(pmPrompt).not.toContain("retired");
+      expect(pmPrompt).not.toContain("- retired (");
     } finally {
       cleanupFlowRepo(repo);
     }

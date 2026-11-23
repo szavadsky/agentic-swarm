@@ -26,7 +26,14 @@ function emptySnapshot(): StatusDocument {
     iteration: 0,
     iterations: 0,
     updatedAt: "2026-01-01T00:00:00.000Z",
-    tasks: { open: [], merged: [], finished: [], parked: [], cancelled: [] },
+    tasks: {
+      open: [],
+      merged: [],
+      finished: [],
+      parked: [],
+      superseded: [],
+      cancelled: [],
+    },
     distance: { pending: [], parks: [], openDebt: [] },
     concerns: [],
     cost: {

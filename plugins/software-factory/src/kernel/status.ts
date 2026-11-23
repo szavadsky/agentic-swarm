@@ -50,6 +50,11 @@ export interface StatusTask {
   turns: number;
   commit?: string;
   cause?: Cause;
+  /**
+   * A parked task whose work landed through a base continuation; not counted
+   * as live work.
+   */
+  supersededBy?: string;
   /** `records/<dir>` of the slug's latest record. */
   record?: string;
 }
@@ -112,6 +117,11 @@ export interface StatusDocument {
     merged: StatusTask[];
     finished: StatusTask[];
     parked: StatusTask[];
+    /**
+     * Parks whose kept work landed through a `base` continuation; counted
+     * apart from live parks.
+     */
+    superseded: StatusTask[];
     cancelled: StatusTask[];
   };
   distance: {
@@ -201,16 +211,19 @@ function statusTask(
     turns: state.turns,
     ...(state.commit ? { commit: state.commit } : {}),
     ...(state.cause ? { cause: state.cause } : {}),
+    ...(state.supersededBy ? { supersededBy: state.supersededBy } : {}),
     ...(record ? { record: recordPath(record) } : {}),
   };
 }
 
 function groupTasks(tasks: StatusTask[]): StatusDocument["tasks"] {
+  const parked = tasks.filter((task) => task.status === "parked");
   return {
     open: tasks.filter((task) => OPEN.has(task.status)),
     merged: tasks.filter((task) => task.status === "merged"),
     finished: tasks.filter((task) => task.status === "finished"),
-    parked: tasks.filter((task) => task.status === "parked"),
+    parked: parked.filter((task) => !task.supersededBy),
+    superseded: parked.filter((task) => task.supersededBy),
     cancelled: tasks.filter((task) => task.status === "cancelled"),
   };
 }

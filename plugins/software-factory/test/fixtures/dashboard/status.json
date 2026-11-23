@@ -56,6 +56,7 @@
         "record": "records/00003-i1-parked1-review-r2"
       }
     ],
+    "superseded": [],
     "cancelled": [
       {
         "slug": "cancelled1",
