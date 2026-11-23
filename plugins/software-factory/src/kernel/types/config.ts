@@ -25,9 +25,9 @@ export interface GateConfig {
   id: string;
   command: string;
   /**
-   * Mutex names held while this gate runs. Within one factory process, gates
-   * naming the same mutex never overlap, in one run or in concurrent runs in
-   * other worktrees; a gate that names none never waits for one.
+   * Mutex names held while this gate runs. Same-named gates in one worktree
+   * never overlap; two worktrees never wait on each other because the key
+   * includes the worktree.
    */
   serial: string[];
   /**

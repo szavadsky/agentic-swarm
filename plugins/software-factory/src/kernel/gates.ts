@@ -55,9 +55,10 @@ export { reapGateProcesses } from "./gate-processes.js";
 /**
  * Branch checks and merged-result gates share ports, caches and build dirs only
  * as far as a repo declares; a gate that names a mutex in `serial` holds it for
- * its own command, and a gate that names none never waits. Keyed by the repo
- * that declared it and the name, so one repo's declaration cannot serialize
- * another's runs in the same process.
+ * its own command, and a gate that names none never waits. Keyed by the
+ * worktree, so concurrent runs in different worktrees of the same repo never
+ * serialize on each other; only two gates in the same worktree naming the same
+ * mutex wait.
  */
 const gateMutexes = new KeyedMutex();
 
@@ -93,7 +94,6 @@ function gateEnvDirs(
  * command, so the rest of the run — and every other worktree's run — proceeds.
  */
 function runGateCommand(
-  repoRoot: string,
   cwd: string,
   gate: GateConfig,
   command: string,
@@ -133,7 +133,7 @@ function runGateCommand(
       });
       return run.finally(() => release?.());
     }
-    return gateMutexes.runExclusive(`${repoRoot}\u0000${name}`, () =>
+    return gateMutexes.runExclusive(`${cwd}\u0000${name}`, () =>
       launch(index + 1),
     );
   };
@@ -263,7 +263,6 @@ function gateDetails(
  * identically on base and in a task worktree.
  */
 export async function runDeclaredGate(
-  repoRoot: string,
   cwd: string,
   gate: GateConfig,
 ): Promise<DeclaredGateRun> {
@@ -272,7 +271,6 @@ export async function runDeclaredGate(
     : undefined;
   if (junitPath) fs.rmSync(junitPath, { force: true });
   const res = await runGateCommand(
-    repoRoot,
     cwd,
     gate,
     gate.command,
@@ -316,7 +314,7 @@ export async function runGates(
       ? runtime.configs.repo.gates
       : runtime.configs.repo.gates.filter((gate) => only.has(gate.id));
   for (const gate of gates) {
-    const { check } = await runDeclaredGate(runtime.paths.repoRoot, cwd, gate);
+    const { check } = await runDeclaredGate(cwd, gate);
     results.push(check);
   }
   return results;
