@@ -1,7 +1,7 @@
 /** Public result shapes of the goal, steer and validation commands. */
 
-import type { State } from "../../kernel/types.js";
 import type { PriceSource } from "../../kernel/openrouter.js";
+import type { State } from "../../kernel/types.js";
 
 export interface InitResult {
   goalDir: string;
@@ -33,6 +33,8 @@ export interface ValidateFileOptions {
   step?: string;
   /** Repo root fallback when the file lives outside any repo. */
   repo?: string;
+  /** Names the run layer explicitly, including differently named files. */
+  runConfig?: string;
 }
 
 export interface ValidateResult {

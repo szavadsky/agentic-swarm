@@ -2,8 +2,10 @@
 
 Merged in order: package defaults, then the repo layer, then the run layer.
 Every layer is validated on load and one report names the file and key that
-failed. `factory validate <.factory/repo.yaml|run.yaml|process.yaml>` checks a
-layer with the gate's validators.
+failed. `factory validate <.factory/repo.yaml|run.yaml|process.yaml>` checks
+one file with the gate's validators; for a repo, process or run file it also
+checks the three layers together (see
+[Validating a run config](#validating-a-run-config)).
 
 ## Repo layer — `.factory/repo.yaml`
 
@@ -163,3 +165,32 @@ written.
 
 See [SKILL.md](SKILL.md) for the run walkthrough and [kernel.md](kernel.md) for
 what the commands do.
+
+## Validating a run config
+
+`factory validate --run-config <file>` is the operator's check for a real run
+config (and for the repo and process files beside it). A run file named
+`run.yaml` also validates positionally; any other name needs the flag, as in
+`factory validate --run-config ../../bootstrap/run/self.yaml`. That flag
+also selects the run layer when a repo or process file is the positional
+file. It never launches a harness:
+no process is spawned, no model list is probed, no pool is called. It loads
+the three layers exactly as a launch would and reports, naming the owning
+file and key:
+
+- every alias the process layer requires (boundary steps, architecture
+  reviewers, flow steps, alternates, different-model follow-ups) that the run
+  layer does not define;
+- every task type that names a flow or a kernel outcome schema the process
+  layer does not define;
+- every quota pool named by `aliases.<name>.subscription` that
+  `limits.concurrency.perSubscription` does not define;
+- `aliases.<name>.escalateTo` and `aliases.<name>.fallbacks[<n>].alias` that
+  name a run-config alias that does not exist, and escalation and fallback
+  chains that cycle.
+
+A scratch run file outside a repo is checked against the process defaults and
+an optional `--repo` fallback; a file inside a repo is checked against that
+repo's process override. The pre-flight that runs at launch still does the
+live checks (model lists, effort probe, binaries, writable roots, base
+gates); this command is the offline subset that shares its static checks.

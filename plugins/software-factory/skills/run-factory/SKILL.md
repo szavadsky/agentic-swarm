@@ -88,9 +88,9 @@ bun bin/factory.ts benchmark --repo "$REPO" --goal demo
   consult reads it as `[urgent]`.
 - Failed turn: open its `records/<n>-…/` directory (`started.yaml`, `end.yaml`,
   `outcome.yaml`, logs) before relaunching.
-- `factory validate <file>` checks one schema-enforced file with the gate's
-  validators; `factory schemas --out <dir>` writes JSON Schemas for editors and
-  the artifact LSP.
+- `factory validate [--run-config <file>] [<file>]` checks one
+  schema-enforced file with the gate's validators; `factory schemas --out <dir>`
+  writes JSON Schemas for editors and the artifact LSP.
 
 ## 6. Prompt templating
 

@@ -8,7 +8,9 @@ export { pinBuildOf, pinRefusal } from "./preflight/pin.js";
 export {
   DEFAULT_MIN_TMP_FREE_BYTES,
   PreflightError,
+  escalationFindings,
   fallbackAliasFindings,
+  requiredAliases,
   tmpHeadroom,
 } from "./preflight/checks.js";
 export { acpxOptionFindings } from "./preflight/config.js";
