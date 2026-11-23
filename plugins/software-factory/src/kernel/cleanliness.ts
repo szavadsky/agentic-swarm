@@ -1,11 +1,11 @@
 import { git } from "../core/git/exec.js";
 import type { CheckResult } from "../core/checks/types.js";
-import type { KernelRuntime, TaskFile } from "./types.js";
+import type { KernelRuntime } from "./types.js";
 import fs from "node:fs";
 import path from "node:path";
+import yaml from "yaml";
 
 export const DEFAULT_MAX_FILE_SIZE_BYTES = 1048576; // 1 MB
-export const DEFAULT_MAX_OUT_OF_SCOPE_FILES = 3;
 
 const STANDARD_SOURCE_EXTENSIONS = new Set([
   "ts",
@@ -163,49 +163,77 @@ async function newExtensions(
   return lines;
 }
 
-function outOfScopeFiles(
-  files: string[],
-  cwd: string,
-  scope: string[] | undefined,
-  maxOutOfScope: number,
-): string[] {
-  if (!scope || scope.length === 0) return [];
-  const normalizedScope = scope.map((s) =>
-    s.replace(/^\.?\//, "").replace(/\/$/, ""),
-  );
-  const outOfScope: string[] = [];
-  for (const file of files) {
-    const fullPath = path.join(cwd, file);
-    if (!fs.existsSync(fullPath)) continue;
-    const norm = file.replace(/^\.?\//, "");
-    const inScope = normalizedScope.some(
-      (s) => norm === s || norm.startsWith(`${s}/`),
-    );
-    if (!inScope) {
-      outOfScope.push(file);
-    }
+const REPO_CONFIG = path.join(".factory", "repo.yaml");
+
+function normalizeFile(file: string): string {
+  return file.replace(/^\.\//, "");
+}
+
+/**
+ * The repo config's allowed-file list, read from this worktree so a revision
+ * turn's `.factory/repo.yaml` edit takes effect even though the kernel loaded
+ * its config before that edit. An invalid list fails the check rather than
+ * silently exempting nothing.
+ */
+function readAllowedFiles(cwd: string): {
+  allowedFiles: Set<string>;
+  errors: string[];
+} {
+  const allowedFiles = new Set<string>();
+  const configPath = path.join(cwd, REPO_CONFIG);
+  if (!fs.existsSync(configPath)) return { allowedFiles, errors: [] };
+  let data: unknown;
+  try {
+    data = yaml.parse(fs.readFileSync(configPath, "utf8"));
+  } catch (err) {
+    return {
+      allowedFiles,
+      errors: [
+        `Cleanliness override: ${REPO_CONFIG} is not valid YAML (${(err as Error).message.split("\n")[0]})`,
+      ],
+    };
   }
-  if (outOfScope.length > maxOutOfScope) {
-    return [
-      `Too many files outside task scope (${outOfScope.length} files: ${outOfScope.join(", ")})`,
-    ];
+  const cleanliness =
+    data && typeof data === "object"
+      ? (data as { cleanliness?: unknown }).cleanliness
+      : undefined;
+  const list =
+    cleanliness && typeof cleanliness === "object"
+      ? (cleanliness as { allowedFiles?: unknown }).allowedFiles
+      : undefined;
+  if (list === undefined) return { allowedFiles, errors: [] };
+  if (
+    !Array.isArray(list) ||
+    list.some((entry) => typeof entry !== "string" || entry.trim() === "")
+  ) {
+    return {
+      allowedFiles,
+      errors: [
+        `Cleanliness override: ${REPO_CONFIG} cleanliness.allowedFiles must be a list of paths`,
+      ],
+    };
   }
-  return [];
+  for (const entry of list) allowedFiles.add(normalizeFile(entry.trim()));
+  return { allowedFiles, errors: [] };
 }
 
 export async function runCleanlinessCheck(
   runtime: KernelRuntime,
   cwd: string,
   base: string,
-  task?: TaskFile,
 ): Promise<CheckResult> {
   const config = runtime.configs.repo.cleanliness;
   const maxBytes = config?.maxFileSizeBytes ?? DEFAULT_MAX_FILE_SIZE_BYTES;
-  const maxOutOfScope =
-    config?.maxOutOfScopeFiles ?? DEFAULT_MAX_OUT_OF_SCOPE_FILES;
+
+  const override = readAllowedFiles(cwd);
+  for (const file of config?.allowedFiles ?? [])
+    override.allowedFiles.add(normalizeFile(file));
 
   const diffResult = await git(cwd, ["diff", "--name-only", base]);
-  const files = diffResult.stdout.split("\n").filter(Boolean);
+  const files = diffResult.stdout
+    .split("\n")
+    .filter(Boolean)
+    .filter((file) => !override.allowedFiles.has(normalizeFile(file)));
 
   const { lines: artifactLines, flagged: artifactFlagged } =
     disallowedArtifacts(files, cwd);
@@ -214,10 +242,10 @@ export async function runCleanlinessCheck(
     : await newExtensions(files, cwd, base, artifactFlagged);
 
   const outputLines = [
+    ...override.errors,
     ...oversizedFiles(files, cwd, maxBytes),
     ...artifactLines,
     ...extLines,
-    ...outOfScopeFiles(files, cwd, task?.scope, maxOutOfScope),
   ];
 
   const ok = outputLines.length === 0;

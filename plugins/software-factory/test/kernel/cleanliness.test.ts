@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { runCleanlinessCheck } from "../../src/kernel/cleanliness.js";
-import type { KernelRuntime, TaskFile } from "../../src/kernel/types.js";
+import { derive } from "../../src/kernel/derive.js";
+import type { KernelRuntime, StepRecord } from "../../src/kernel/types.js";
+import { rec, script, task } from "./helpers.js";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -9,7 +11,7 @@ import { git } from "../../src/core/git/exec.js";
 async function setupTest(config?: {
   maxFileSizeBytes?: number;
   allowedExtensions?: string[];
-  maxOutOfScopeFiles?: number;
+  allowedFiles?: string[];
 }) {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), "factory-cleanliness-test-"),
@@ -30,6 +32,11 @@ async function setupTest(config?: {
   const runtime = { configs } as unknown as KernelRuntime;
 
   return { root, runtime };
+}
+
+function writeRepoConfig(root: string, body: string): void {
+  fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+  fs.writeFileSync(path.join(root, ".factory", "repo.yaml"), body);
 }
 
 describe("runCleanlinessCheck with repo config", () => {
@@ -80,61 +87,185 @@ describe("runCleanlinessCheck default rules hit", () => {
     const newExtFile = path.join(root, "notes.xyz");
     fs.writeFileSync(newExtFile, "text");
 
-    // 4. Too many files out of task scope
-    for (let i = 1; i <= 4; i++) {
-      fs.writeFileSync(path.join(root, `out${i}.ts`), `code ${i}`);
-    }
-
     await git(root, ["add", "."]);
     await git(root, ["commit", "-m", "dirty"]);
 
-    const task: TaskFile = {
-      slug: "test-task",
-      title: "Test task",
-      kind: "development",
-      flow: "implement-review",
-      deps: [],
-      scope: ["src/main.ts"],
-      revision: 0,
-      source: "M5",
-      body: "Test body",
-    };
-
-    const result = await runCleanlinessCheck(runtime, root, "HEAD~1", task);
+    const result = await runCleanlinessCheck(runtime, root, "HEAD~1");
     expect(result.ok).toBe(false);
     expect(result.output).toContain("Large file: large.ts");
     expect(result.output).toContain("Disallowed artifact: model.pt");
     expect(result.output).toContain("Disallowed artifact: cache.tmp");
     expect(result.output).toContain("New extension: notes.xyz (.xyz)");
-    expect(result.output).toContain("Too many files outside task scope");
+    expect(result.output).not.toContain("outside task scope");
   });
 });
 
 describe("runCleanlinessCheck default rules pass", () => {
-  it("passes when diff adheres to default cleanliness rules without repo config", async () => {
+  it("passes when the change adheres to the default rules", async () => {
     const { root, runtime } = await setupTest(undefined);
 
-    // Add a normal small .ts file matching scope and existing extension
     const validFile = path.join(root, "clean.ts");
     fs.writeFileSync(validFile, "export const clean = true;\n");
 
     await git(root, ["add", "clean.ts"]);
     await git(root, ["commit", "-m", "clean"]);
 
-    const task: TaskFile = {
-      slug: "test-task",
-      title: "Test task",
-      kind: "development",
-      flow: "implement-review",
-      deps: [],
-      scope: ["clean.ts"],
-      revision: 0,
-      source: "M5",
-      body: "Test body",
-    };
-
-    const result = await runCleanlinessCheck(runtime, root, "HEAD~1", task);
+    const result = await runCleanlinessCheck(runtime, root, "HEAD~1");
     expect(result.ok).toBe(true);
     expect(result.summary).toBe("pass");
   });
+
+  it("passes a multi-file change: no task scope is judged", async () => {
+    const { root, runtime } = await setupTest(undefined);
+
+    for (let i = 1; i <= 5; i++) {
+      fs.writeFileSync(
+        path.join(root, `out${i}.ts`),
+        `export const v${i} = 1;\n`,
+      );
+    }
+
+    await git(root, ["add", "."]);
+    await git(root, ["commit", "-m", "multi-file"]);
+
+    const result = await runCleanlinessCheck(runtime, root, "HEAD~1");
+    expect(result.ok).toBe(true);
+    expect(result.output).toBe("Clean");
+  });
+});
+
+describe("runCleanlinessCheck allowed-file override", () => {
+  it("passes a file the tracked repo config names", async () => {
+    const { root, runtime } = await setupTest({ allowedFiles: ["data.csv"] });
+
+    fs.writeFileSync(path.join(root, "data.csv"), "x".repeat(1048576 + 10));
+    await git(root, ["add", "data.csv"]);
+    await git(root, ["commit", "-m", "data"]);
+
+    const result = await runCleanlinessCheck(runtime, root, "HEAD~1");
+    expect(result.ok).toBe(true);
+  });
+
+  it("passes a file the worktree repo config names", async () => {
+    const { root, runtime } = await setupTest(undefined);
+
+    fs.writeFileSync(path.join(root, "data.csv"), "x".repeat(1048576 + 10));
+    await git(root, ["add", "data.csv"]);
+    await git(root, ["commit", "-m", "data"]);
+
+    const before = await runCleanlinessCheck(runtime, root, "HEAD~1");
+    expect(before.ok).toBe(false);
+    expect(before.output).toContain("Large file: data.csv");
+    expect(before.output).toContain("New extension: data.csv (.csv)");
+
+    // The revision turn adds the override without reloading the launch config.
+    writeRepoConfig(root, "cleanliness:\n  allowedFiles:\n    - data.csv\n");
+    await git(root, ["add", ".factory/repo.yaml"]);
+    await git(root, ["commit", "-m", "override"]);
+
+    const after = await runCleanlinessCheck(runtime, root, "HEAD~2");
+    expect(after.ok).toBe(true);
+  });
+
+  it("fails loudly when the worktree override is malformed", async () => {
+    const { root, runtime } = await setupTest(undefined);
+
+    writeRepoConfig(root, "cleanliness:\n  allowedFiles: data.csv\n");
+    fs.writeFileSync(path.join(root, "clean.ts"), "export const c = 1;\n");
+    await git(root, ["add", "."]);
+    await git(root, ["commit", "-m", "bad override"]);
+
+    const result = await runCleanlinessCheck(runtime, root, "HEAD~1");
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain(
+      "cleanliness.allowedFiles must be a list of paths",
+    );
+  });
+});
+
+describe("runCleanlinessCheck ignored files", () => {
+  it("passes a gitignored large file", async () => {
+    const { root, runtime } = await setupTest(undefined);
+
+    fs.writeFileSync(path.join(root, ".gitignore"), "ignored.log\n");
+    await git(root, ["add", ".gitignore"]);
+    await git(root, ["commit", "-m", "ignore"]);
+
+    fs.writeFileSync(path.join(root, "ignored.log"), "x".repeat(2 * 1048576));
+
+    const result = await runCleanlinessCheck(runtime, root, "HEAD~1");
+    expect(result.ok).toBe(true);
+  });
+});
+
+const flow = {
+  "implement-review": {
+    steps: [
+      { id: "implement", prompt: "implementer", alias: "implementer" },
+      { id: "review", prompt: "reviewer", alias: "reviewer", review: true },
+    ],
+  },
+} as any;
+
+function implementRecord(seq: number): StepRecord {
+  return rec(seq, {
+    step: "implement",
+    tree: "tree-1",
+    commit: "c1",
+    base: "c0",
+    outcome: {
+      status: "done",
+      summary: "implemented",
+      concerns: [],
+      forward: [],
+    },
+  });
+}
+
+const hitCases = [
+  {
+    name: "large file",
+    write: (root: string) =>
+      fs.writeFileSync(path.join(root, "large.ts"), Buffer.alloc(1048576 + 10)),
+    output: "Large file: large.ts",
+  },
+  {
+    name: "temp file",
+    write: (root: string) =>
+      fs.writeFileSync(path.join(root, "cache.tmp"), "temp"),
+    output: "Disallowed artifact: cache.tmp",
+  },
+  {
+    name: "new extension",
+    write: (root: string) =>
+      fs.writeFileSync(path.join(root, "notes.xyz"), "text"),
+    output: "New extension: notes.xyz (.xyz)",
+  },
+];
+
+describe("cleanliness hit routing", () => {
+  for (const hit of hitCases) {
+    it(`a ${hit.name} earns exactly one cleanliness follow-up`, async () => {
+      const { root, runtime } = await setupTest(undefined);
+      hit.write(root);
+      await git(root, ["add", "."]);
+      await git(root, ["commit", "-m", "hit"]);
+
+      const result = await runCleanlinessCheck(runtime, root, "HEAD~1");
+      expect(result.ok).toBe(false);
+      expect(result.output).toContain(hit.output);
+
+      const state = derive(
+        [task("a")],
+        [
+          implementRecord(1),
+          script(2, { step: "checks", ok: false, checks: [result] }),
+        ],
+        flow,
+      );
+      expect(state.tasks.a!.phase).toBe("implement");
+      expect(state.tasks.a!.cleanlinessRevision).toBe(true);
+      expect(state.tasks.a!.gateFix).toBeUndefined();
+    });
+  }
 });
