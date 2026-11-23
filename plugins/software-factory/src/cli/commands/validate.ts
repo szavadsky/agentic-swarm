@@ -12,15 +12,6 @@ import {
   processOverrideSchema,
   repoConfigSchema,
 } from "../../kernel/config.js";
-import {
-  outcomeSchemaFor,
-  outcomeSchemaNames,
-} from "../../kernel/outcome-schemas.js";
-import {
-  escalationFindings,
-  fallbackAliasFindings,
-  requiredAliases,
-} from "../../kernel/preflight.js";
 import { classSchema } from "../../kernel/flow-context.js";
 import { holdFileSchema } from "../../kernel/mailbox.js";
 import {
@@ -29,12 +20,21 @@ import {
   parseOutcome,
   validateExpectation,
 } from "../../kernel/outcome.js";
+import {
+  outcomeSchemaFor,
+  outcomeSchemaNames,
+} from "../../kernel/outcome-schemas.js";
 import { PLAN_CHECK_STEP, validatePlanCheck } from "../../kernel/plan-check.js";
 import { existingPlans, registeredPlans } from "../../kernel/plan-file.js";
 import {
   PLAN_REVIEW_STEP,
   validatePlanReviewDelivery,
 } from "../../kernel/plan-review.js";
+import {
+  escalationFindings,
+  fallbackAliasFindings,
+  requiredAliases,
+} from "../../kernel/preflight.js";
 import { qaOutcomeSchema } from "../../kernel/qa.js";
 import { isAcceptanceStep, isLastReviewCall } from "../../kernel/review.js";
 import { createFolderStore } from "../../kernel/store.js";
@@ -43,8 +43,8 @@ import {
   validateTaskFlows,
   validateTaskGraph,
 } from "../../kernel/tasks.js";
-import { outcomeSchema } from "../../kernel/types.js";
 import type { ProcessConfig } from "../../kernel/types.js";
+import { outcomeSchema } from "../../kernel/types.js";
 import type { ValidateFileOptions, ValidateResult } from "./types.js";
 
 /** One schema-enforced file kind `factory validate` recognizes, by path. */
@@ -342,7 +342,7 @@ function crossLayerBundle(
   let bundle: ReturnType<typeof loadConfigs>;
   try {
     bundle = loadConfigs(root, {
-      runConfigPath: kind === "run" ? abs : undefined,
+      runConfigPath: kind === "run" ? abs : opts.runConfig,
     });
   } catch (err) {
     return [`${abs}: ${(err as Error).message}`];
@@ -439,13 +439,14 @@ export async function validateFile(
   opts: ValidateFileOptions = {},
 ): Promise<ValidateResult> {
   const abs = path.resolve(file);
+  const runConfig = opts.runConfig ? path.resolve(opts.runConfig) : undefined;
   const stat = await fs.promises.stat(abs).catch(() => null);
   if (!stat) throw new Error(`no such file: ${file}`);
   if (!stat.isFile()) throw new Error(`not a file: ${file}`);
-  const kind = inferValidateKind(abs);
+  const kind = runConfig === abs ? "run" : inferValidateKind(abs);
   if (!kind) {
     throw new Error(
-      `unknown file kind: ${file} (expected ${KNOWN_VALIDATE_KINDS})`,
+      `unknown file kind: ${file} (expected ${KNOWN_VALIDATE_KINDS}; use --run-config for run files)`,
     );
   }
   const text = await fs.promises.readFile(abs, "utf8");
@@ -472,6 +473,6 @@ export async function validateFile(
       findings = zodFindings(text, abs, processOverrideSchema);
       break;
   }
-  findings.push(...crossLayerFindings(abs, kind, opts));
+  findings.push(...crossLayerFindings(abs, kind, { ...opts, runConfig }));
   return { findings };
 }

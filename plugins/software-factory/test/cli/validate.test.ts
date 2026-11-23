@@ -364,15 +364,15 @@ function registerFactoryValidateCrossLayerReferences(): void {
     "reports an unknown flow and schema on a task type",
     withTmp(async (root) => {
       writeFile(root, ".factory/run.yaml", validRunConfig());
-      writeFile(
+      const processFile = writeFile(
         root,
         ".factory/process.yaml",
         "taskTypes:\n  broken: { flow: ghost-flow, kind: development, schema: ghost-schema }\n",
       );
-      writeFile(root, ".factory/repo.yaml", "baseBranch: main\n");
       const file = writeFile(root, ".factory/repo.yaml", "baseBranch: main\n");
       const result = await runValidate(file);
       expect(result.code).toBe(1);
+      expect(result.err).toContain(processFile);
       expect(result.err).toContain(
         `taskTypes.broken.flow: flow "ghost-flow" is not configured`,
       );

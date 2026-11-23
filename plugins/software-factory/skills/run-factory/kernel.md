@@ -15,7 +15,7 @@ bun bin/factory.ts run     --repo <path> --goal <name> [--run-config <file>] [--
 bun bin/factory.ts status  --repo <path> --goal <name> [--json]
 bun bin/factory.ts benchmark --repo <path> --goal <name>
 bun bin/factory.ts steer   --repo <path> --goal <name> <file | ->
-bun bin/factory.ts validate [--step <id>] <file>
+bun bin/factory.ts validate [--step <id>] [--run-config <file>] [<file>]
 bun bin/factory.ts schemas --out <dir>
 bun bin/factory.ts variables --out <file>
 ```
@@ -28,7 +28,7 @@ bun bin/factory.ts variables --out <file>
 | `status --json` | Prints `status.json`, the snapshot written after each agent launch and finish. Before the first launch it derives the same document. |
 | `benchmark` | Prints one goal's benchmark rows from `metrics.yaml` and its records. |
 | `steer` | Writes a steer file into the mailbox inbox atomically. |
-| `validate` | Checks one schema-enforced file with the gate's validators: `tasks/*.md`, `class.yaml`, `outcome.yaml`, `mailbox/holds/*.yaml`, `repo.yaml`, `run.yaml`, `process.yaml`. A repo, process or run file also gets the cross-layer checks (required aliases, task-type flows/schemas, quota pools) — launches nothing. Exit 0 valid, 1 invalid or unknown kind. |
+| `validate` | Checks one schema-enforced file with the gate's validators: `tasks/*.md`, `class.yaml`, `outcome.yaml`, `mailbox/holds/*.yaml`, `repo.yaml`, `run.yaml`, `process.yaml`. `--run-config` names the run config explicitly, including one not named `run.yaml`. A repo, process or run file also gets the cross-layer checks (required aliases, task-type flows/schemas, quota pools) — launches nothing. Exit 0 valid, 1 invalid or unknown kind. |
 | `schemas` | Writes every kernel schema as JSON Schema (`task`, `outcome`, `hold`, `class`, `repo`, `run`, `process`). |
 | `variables` | Renders `prompts/VARIABLES.md` from the typed prompt-variable descriptor. |
 

@@ -24,7 +24,7 @@ bun bin/factory.ts run    --repo <path> --goal <name> --run-config <file> [--ite
 bun bin/factory.ts status --repo <path> --goal <name> [--json]
 bun bin/factory.ts benchmark --repo <path> --goal <name>
 bun bin/factory.ts steer  --repo <path> --goal <name> <file | ->
-bun bin/factory.ts validate [--step <id>] <file>
+bun bin/factory.ts validate [--step <id>] [--run-config <file>] [<file>]
 bun bin/factory.ts schemas --out <dir>
 bun bin/factory.ts variables --out <file>
 ```

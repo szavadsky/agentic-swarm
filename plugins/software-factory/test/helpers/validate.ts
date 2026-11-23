@@ -39,7 +39,7 @@ export function validRunConfig(): string {
 }
 
 export async function runValidate(
-  file: string,
+  file: string | undefined,
   extraArgs: string[] = [],
 ): Promise<{
   code: number;
@@ -57,7 +57,11 @@ export async function runValidate(
     errors.push(args.map(String).join(" "));
   };
   try {
-    const code = await dispatch(["validate", ...extraArgs, file]);
+    const args = ["validate", ...extraArgs];
+    if (file !== undefined) {
+      args.push(file);
+    }
+    const code = await dispatch(args);
     return { code, out: logs.join("\n"), err: errors.join("\n") };
   } finally {
     console.log = origLog;

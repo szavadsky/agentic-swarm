@@ -1,10 +1,10 @@
 /** The command table and the process exit codes each command returns. */
 
 import path from "node:path";
-import { loadConfigs } from "../../kernel/config.js";
 import { formatCause } from "../../kernel/cause.js";
-import { runGoal } from "../../kernel/launch.js";
+import { loadConfigs } from "../../kernel/config.js";
 import type { LaunchResult } from "../../kernel/launch.js";
+import { runGoal } from "../../kernel/launch.js";
 import { writePromptVariables } from "../../kernel/prompt-vars.js";
 import { writeKernelSchemas } from "../../kernel/schemas.js";
 import { benchmarkGoal, formatBenchmark } from "../benchmark.js";
@@ -20,8 +20,8 @@ import {
   createRealModelCatalog,
   resolveHarnessBinaries,
 } from "../harnesses.js";
-import type { CliDeps, CommandHandler, ParsedArgs } from "./types.js";
 import { parseCliArgs } from "./args.js";
+import type { CliDeps, CommandHandler, ParsedArgs } from "./types.js";
 import { ROOT_USAGE, usageFor } from "./usage.js";
 
 function exitCode(result: LaunchResult): number {
@@ -148,18 +148,20 @@ async function steerCommand(parsed: ParsedArgs): Promise<number> {
 }
 
 async function validateCommand(parsed: ParsedArgs): Promise<number> {
-  if (!parsed.file) throw new Error("validate requires a file path");
-  const result = await validateFile(parsed.file, {
+  const file = parsed.file ?? parsed.runConfig;
+  if (!file) throw new Error("validate requires a file path or --run-config");
+  const result = await validateFile(file, {
     step: parsed.step,
     repo: parsed.repo,
+    runConfig: parsed.runConfig,
   });
   for (const finding of result.findings) console.error(finding);
   if (result.findings.length > 0) return 1;
   if (result.stepIndependent)
     console.log(
-      `${parsed.file}: no --step and no started.yaml: step-independent checks only`,
+      `${file}: no --step and no started.yaml: step-independent checks only`,
     );
-  console.log(`${parsed.file}: valid`);
+  console.log(`${file}: valid`);
   return 0;
 }
 

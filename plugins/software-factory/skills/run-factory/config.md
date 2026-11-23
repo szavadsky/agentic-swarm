@@ -159,8 +159,12 @@ what the commands do.
 
 ## Validating a run config
 
-`factory validate <run.yaml>` is the operator's check for a real run config
-(and for the repo and process files beside it). It never launches a harness:
+`factory validate --run-config <file>` is the operator's check for a real run
+config (and for the repo and process files beside it). A run file named
+`run.yaml` also validates positionally; any other name needs the flag, as in
+`factory validate --run-config ../../bootstrap/run/self.yaml`. That flag
+also selects the run layer when a repo or process file is the positional
+file. It never launches a harness:
 no process is spawned, no model list is probed, no pool is called. It loads
 the three layers exactly as a launch would and reports, naming the owning
 file and key:
