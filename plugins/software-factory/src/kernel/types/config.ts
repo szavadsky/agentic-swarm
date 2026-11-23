@@ -1,7 +1,7 @@
 /** Repository, run and fallback configuration shapes. */
 
 import type { Repo } from "../../core/git/repo.js";
-import type { Harness } from "../../harness/types.js";
+import type { CacheTtl, Harness } from "../../harness/types.js";
 import type { PriceSource } from "../openrouter.js";
 import type { PromptLibrary } from "../prompts.js";
 import type {
@@ -9,6 +9,7 @@ import type {
   BoundaryStep,
   FlowDefinition,
   HierarchyConfig,
+  IngestionStepConfig,
   Limits,
   Timeouts,
   TurnSpec,
@@ -52,7 +53,8 @@ export interface GateConfig {
  *
  * - `folder`: a plain directory, gitignored when it lives inside the repo.
  * - `same-repo`: a directory inside the repo, committed after every kernel
- *   write so orchestration artifacts are never left unmerged on a branch.
+ *   write and replayed onto the goal branch, so orchestration artifacts are
+ *   never left unmerged on a task branch.
  * - `git-repo`: a separate git repository, committed and pushed after every
  *   write.
  */
@@ -91,10 +93,12 @@ export interface RepoConfig {
   identity?: { name: string; email: string };
   setup: string[];
   gates: GateConfig[];
+  /** Repo-relative rule file replacing the factory default coding rules; absent uses the factory default. */
+  codingRules?: string;
   cleanliness?: {
     maxFileSizeBytes?: number;
     allowedExtensions?: string[];
-    maxOutOfScopeFiles?: number;
+    allowedFiles?: string[];
   };
 }
 
@@ -107,6 +111,8 @@ export interface ProcessConfig {
   taskTypes: Record<string, TaskTypeDefinition>;
   /** Each kernel boundary step's prompt and alias; pre-flight requires these aliases. */
   boundary: Record<BoundaryStep, TurnSpec>;
+  /** The goal-start step sequence: the branch first, the classifier, then extra steps. */
+  ingestion?: IngestionStepConfig[];
   /** The plan review flow that completes before the PM derives tasks. */
   architecture: ArchitectureConfig;
   /** Hierarchy depth and the epic architect's prompt; absent reads as depth 1. */
@@ -115,12 +121,14 @@ export interface ProcessConfig {
   repairPrompt?: string;
   /** Outcome reminders after the first attempt; a task file's `repairTurns` overrides it for that task's turns only. */
   reminders: number;
+  /** Wasted turns of one cause across iterations at or above which the pack proposes a spike; defaults to 2. */
+  wasteSpikeThreshold?: number;
   calibration?: string;
   promptsDir?: string;
   presets?: Record<string, { calibration: string }>;
 }
 
-/** One fallback tier: another alias's whole ladder, or a model with its own effort. */
+/** One fallback tier: another alias's whole ladder, or a model with its own effort (never inherited). */
 export type FallbackConfig = FallbackAliasConfig | FallbackModelConfig;
 
 /** A fallback that reuses another alias's ladder, primary first. */
@@ -134,7 +142,7 @@ export interface FallbackModelConfig {
   /** Harness id; defaults to the alias's harness. */
   harness?: string;
   model: string;
-  /** Effort level; defaults to the alias's resolved effort. */
+  /** Effort level; absent means the harness default. */
   effort?: string;
   /**
    * Quota pool this tier draws on; defaults to the alias's subscription only
@@ -173,12 +181,26 @@ export interface AliasConfig {
   timeouts?: Timeouts;
 }
 
+/** One harness entry's compaction policy; disabling it records why. */
+export interface HarnessCompactionConfig {
+  enabled: boolean;
+  /** Why this harness does not compact; present when `enabled` is false. */
+  reason?: string;
+  /**
+   * Review rounds whose ended session is compacted. Absent compacts every
+   * review round; non-review steps ignore the rule. Round numbers are 1-based.
+   */
+  reviewIterations?: number[];
+}
+
 /** One run-config harness entry: an adapter binding, executable override or opaque options. */
 export interface HarnessConfig {
   /** Adapter binding; absent for a native adapter that only takes a binary. */
   acpx?: import("../../harness/acpx/config.js").AcpxConfig;
   /** Executable override; absent resolves through PATH. */
   binary?: string;
+  /** Compaction configuration for this harness; absent means the adapter's capability. */
+  compaction?: HarnessCompactionConfig;
   /** Opaque adapter options: acpx `args`/`env`, omp overlay keys. */
   options?: Record<string, unknown>;
 }
@@ -213,7 +235,7 @@ export interface RunConfig {
     /** Minimum free bytes in the temporary directory. */
     minTmpFreeBytes?: number;
   };
-  sessions: { dir: string; keepRuns: number; retention: "short" | "long" };
+  sessions: { dir: string; keepRuns: number; retention: CacheTtl };
   /**
    * Quota-pool cooldown: a quota stop's stated reset sets the pool's skip
    * window, capped by `maxResetMinutes` when set; without a stated reset the
@@ -265,6 +287,12 @@ export interface KernelRuntime {
   harnesses: ReadonlyMap<string, Harness>;
   prompts: PromptLibrary;
   limits: Limits;
+  /**
+   * `harness+model` combinations that passed a canary run. Loaded from the
+   * session store at launch; rotation only picks proven combinations. Narrow
+   * per-test runtimes may omit it; rotation then stays ungated.
+   */
+  provenCombinations?: Set<string>;
   /**
    * Quota pool keys (subscription, or harness+model when none) latched by a
    * quota stop, mapped to the epoch ms they may serve again. Loaded from the

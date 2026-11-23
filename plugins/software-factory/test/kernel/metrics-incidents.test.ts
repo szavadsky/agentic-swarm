@@ -269,13 +269,17 @@ async function countsEachIncidentKindReportsPart2(
 
   expect(summaryIncidents(text)).toEqual(one.incidents);
   expect(text).toContain("- loop incidents: 2");
-  expect(text).toContain("| role | turns | tokens | cost | prompt bytes |");
-  expect(text).toContain("| implementer | 2 | 55 | $0.0500 | 500 |");
-  expect(text).toContain("| architect | 1 | 11 | $0.0100 | 100 |");
-  expect(text).toContain("| reviewer | 1 | 44 | $0.0400 | 400 |");
-  expect(text).toContain("| alias | turns | tokens | cost | prompt bytes |");
-  expect(text).toContain("| cheap | 1 | 22 | $0.0200 | 200 |");
-  expect(text).toContain("| escalated | 1 | 33 | $0.0300 | 300 |");
+  expect(text).toContain(
+    "| role | turns | tokens | harness-reported | list-price estimate | prompt bytes |",
+  );
+  expect(text).toContain("| implementer | 2 | 55 | $0.0500 | n/a | 500 |");
+  expect(text).toContain("| architect | 1 | 11 | $0.0100 | n/a | 100 |");
+  expect(text).toContain("| reviewer | 1 | 44 | $0.0400 | n/a | 400 |");
+  expect(text).toContain(
+    "| alias | turns | tokens | harness-reported | list-price estimate | prompt bytes |",
+  );
+  expect(text).toContain("| cheap | 1 | 22 | $0.0200 | n/a | 200 |");
+  expect(text).toContain("| escalated | 1 | 33 | $0.0300 | n/a | 300 |");
 }
 
 function registerIterationMetricsIncidentsAndSpendTablesPart1(): void {

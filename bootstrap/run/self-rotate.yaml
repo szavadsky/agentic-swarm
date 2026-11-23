@@ -23,12 +23,14 @@ aliases:
         model: opencode-go/deepseek-v4.1-flash
 harnesses:
   pi:
+    compaction: { enabled: true }
     acpx:
       agent: pi
       compact: true
       effort: { configId: thought_level }
       usage: { cache: true, command: "/session" }
   codex:
+    compaction: { enabled: true }
     acpx:
       agent: codex
       compact: true

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { writeYamlAtomic } from "../../core/records/io.js";
+import type { CacheTtl } from "../types.js";
 
 /** Agents omp ships with; their bundled frontmatter would otherwise inherit the parent model. */
 const BUNDLED_SUBAGENTS = [
@@ -15,7 +16,7 @@ export interface OmpOverlayOptions {
   /** Cheap model every spawned subagent must run on. */
   subagentModel?: string;
   /** Provider cache lifetime from `sessions.retention`. */
-  retention?: "short" | "long";
+  retention: CacheTtl;
   /**
    * Harness-entry `options`: omp config keys, passed through untouched. The
    * shipped run config carries the unattended policy (memory/auto-learn off,
@@ -37,9 +38,7 @@ function record(
   );
 }
 
-export function ompOverlay(
-  opts: OmpOverlayOptions = {},
-): Record<string, unknown> {
+export function ompOverlay(opts: OmpOverlayOptions): Record<string, unknown> {
   const overlay: Record<string, unknown> = { ...opts.options };
   // sessions.retention is the run's cache policy, so it wins over a stale
   // providers block copied into the harness entry. The copy keeps that entry
@@ -47,9 +46,8 @@ export function ompOverlay(
   const providers = {
     ...(record(overlay.providers, "providers") ?? {}),
   };
-  if (opts.retention) providers.cacheRetention = opts.retention;
-  if (Object.keys(providers).length > 0) overlay.providers = providers;
-  else delete overlay.providers;
+  providers.cacheRetention = opts.retention;
+  overlay.providers = providers;
 
   if (opts.subagentModel) {
     overlay.task = {

@@ -27,17 +27,22 @@ describe("omp overlay", () => {
 
 function ompOverlayPart1() {
   it("passes the harness entry's options through untouched", () => {
-    const overlay = ompOverlay({ options: { ...POLICY } });
+    const overlay = ompOverlay({
+      retention: "long",
+      options: { ...POLICY },
+    });
     for (const [key, value] of Object.entries(POLICY)) {
       expect(overlay[key]).toEqual(value);
     }
   });
 
-  it("adds no harness policy when the entry has no options", () => {
-    const overlay = ompOverlay();
+  it("adds only the cache TTL when the entry has no options", () => {
+    const overlay = ompOverlay({ retention: "short" });
     for (const key of Object.keys(POLICY)) {
+      if (key === "providers") continue;
       expect(overlay[key]).toBeUndefined();
     }
+    expect(overlay.providers).toEqual({ cacheRetention: "short" });
   });
 
   it("pins retention and subagent models over configured options", () => {
@@ -82,7 +87,7 @@ function ompOverlayPart2() {
   });
 
   it("leaves subagent routing untouched when the caller gives no cheap model", () => {
-    const overlay = ompOverlay();
+    const overlay = ompOverlay({ retention: "short" });
     expect(overlay.task).toBeUndefined();
     expect(overlay.modelRoles).toBeUndefined();
   });
@@ -90,7 +95,10 @@ function ompOverlayPart2() {
   it("writes a content-addressed overlay under the session store", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-overlay-"));
     try {
-      const opts = { subagentModel: "opencode-go/longcat-2.5-free" };
+      const opts = {
+        retention: "short" as const,
+        subagentModel: "opencode-go/longcat-2.5-free",
+      };
       const first = await writeOmpOverlay(opts, tmp);
       const second = await writeOmpOverlay(opts, tmp);
       expect(first).toBe(second);
@@ -105,6 +113,7 @@ function ompOverlayPart2() {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-overlay-"));
     try {
       const runtime = new OmpRuntime({
+        retention: "short",
         sessionDir: tmp,
         options: { memory: { backend: "off" }, defaultThinkingLevel: "low" },
       });
@@ -121,10 +130,10 @@ function ompOverlayPart2() {
 }
 
 function ompOverlayPart3() {
-  it("writes cacheRetention short from a runtime built without a retention", async () => {
+  it("writes cacheRetention short when the run config declares short", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omp-overlay-"));
     try {
-      const runtime = new OmpRuntime({ sessionDir: tmp });
+      const runtime = new OmpRuntime({ retention: "short", sessionDir: tmp });
       const overlayPath = await runtime.overlay();
       const written = await readYaml<{
         providers: { cacheRetention: string };
@@ -151,7 +160,10 @@ function ompOverlayPart3() {
 
   it("throws on malformed providers option", () => {
     expect(() =>
-      ompOverlay({ options: { providers: "invalid" as any } }),
+      ompOverlay({
+        retention: "short",
+        options: { providers: "invalid" as any },
+      }),
     ).toThrow(/Invalid "providers" option: expected object, got string/);
   });
 }

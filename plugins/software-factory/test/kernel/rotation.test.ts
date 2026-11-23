@@ -32,6 +32,7 @@ function tiers(runtime: KernelRuntime, iteration?: number) {
 describe("alias rotation", () => {
   aliasRotationPart1();
   aliasRotationPart2();
+  aliasRotationProven();
 });
 
 async function dispatchesTwoIterationsOntoTwoPart1(
@@ -148,6 +149,57 @@ function aliasRotationPart1() {
         ["a", "ma-base", "low"],
         ["a", "m-fallback", "low"],
       ]);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+function aliasRotationProven(): void {
+  it("skips an unproven rotation entry and keeps the proven one", async () => {
+    const { repo, goal } = setupFlowRepo({
+      aliases: {
+        implementer: {
+          harness: "a",
+          model: "ma-base",
+          rotate: [
+            { harness: "a", model: "ma-zero" },
+            { harness: "b", model: "mb-one" },
+          ],
+        },
+      },
+    });
+    try {
+      const runtime = await makeRuntime(repo, goal, {
+        a: new FakeHarness({ id: "a" }),
+        b: new FakeHarness({ id: "b" }),
+      });
+      runtime.provenCombinations = new Set(["b+mb-one"]);
+      // Both iterations select the only proven entry.
+      expect(tiers(runtime, 1)).toEqual([["b", "mb-one", undefined]]);
+      expect(tiers(runtime, 2)).toEqual([["b", "mb-one", undefined]]);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("keeps the alias's own primary when no rotation entry is proven", async () => {
+    const { repo, goal } = setupFlowRepo({
+      aliases: {
+        implementer: {
+          harness: "a",
+          model: "ma-base",
+          rotate: [{ harness: "b", model: "mb-one" }],
+        },
+      },
+    });
+    try {
+      const runtime = await makeRuntime(repo, goal, {
+        a: new FakeHarness({ id: "a" }),
+        b: new FakeHarness({ id: "b" }),
+      });
+      runtime.provenCombinations = new Set(["a+ma-base"]);
+      expect(tiers(runtime, 1)).toEqual([["a", "ma-base", undefined]]);
     } finally {
       cleanupFlowRepo(repo);
     }

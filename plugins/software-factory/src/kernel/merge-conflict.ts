@@ -52,6 +52,7 @@ export function resolveVars(
   head: string,
   conflicts: string[],
   records: StepRecord[],
+  gateLogPath?: string,
 ): Record<string, string> {
   const base = recordedBaseGates(records);
   return {
@@ -59,6 +60,7 @@ export function resolveVars(
     branch,
     integration_head: head,
     conflicts: conflicts.join(", ") || "none",
+    gate_log_path: gateLogPath ?? "none",
     gate_commands:
       runtime.configs.repo.gates
         .map((g) => `- ${g.id}: ${g.command}`)

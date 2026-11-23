@@ -61,6 +61,7 @@ function runtimeFor(stub: AcpxStub, config: AcpxConfig): AcpxRuntime {
     command: { binary: stub.binary, prefix: [] },
     sessionDir: path.dirname(stub.binary),
     acpx: config,
+    retention: "short",
   };
 }
 
@@ -85,6 +86,7 @@ function registerAcpxHarnessSessionCompactionPart1(): void {
   it("runs /compact as the whole prompt on the named session and parses the summary", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -124,6 +126,7 @@ function registerAcpxHarnessSessionCompactionPart2(): void {
   it("returns a compacted ref and the next turn resumes the same session", async () => {
     const stub = createAcpxStub();
     const options = {
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -186,6 +189,7 @@ function registerAcpxHarnessSessionCompactionPart3(): void {
       usage: { cache: true },
     };
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "opencode",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -219,6 +223,7 @@ function registerAcpxHarnessSessionCompactionPart4(): void {
   it("treats pi's Nothing to compact as a usable session, not a failure", async () => {
     const stub = createAcpxStub({ compact: "nothing" });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -262,6 +267,7 @@ function registerAcpxHarnessSessionCompactionPart5(): void {
   it("contains a failed compaction and keeps the session resumable", async () => {
     const stub = createAcpxStub({ compact: "fail" });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -291,6 +297,7 @@ function registerAcpxHarnessSessionCompactionPart6(): void {
   it("never sends /compact to an agent without declared support", async () => {
     const stub = createAcpxStub({ usage: AGENT_USAGE });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "agy",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -322,6 +329,7 @@ function registerAcpxHarnessSessionCompactionPart7(): void {
   it("keeps a long turn's cache hot through its last model event and skips once idle", async () => {
     const stub = createAcpxStub({ promptDelayMs: 100 });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),

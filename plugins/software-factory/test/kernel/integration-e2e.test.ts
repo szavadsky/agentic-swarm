@@ -119,7 +119,7 @@ function runYaml(repoDir: string): string {
     "  digest: { harness: fake, model: fake-digest }",
     "limits: { iterations: 1, concurrency: { overall: 1 } }",
     `worktreeRoot: ../${base}-wt`,
-    `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
+    `sessions: { dir: ../${base}-sessions, keepRuns: 2, retention: short }`,
     "",
   ].join("\n");
 }
@@ -257,7 +257,7 @@ async function expectLaunch1(ctx: E2ECtx): Promise<void> {
   ).toBe(true);
   const one = await metricsOf(ctx.goalDir);
   expect(one.iterations.map((i) => i.n)).toEqual([1]);
-  expect(one.iterations[0]!.turns).toBe(14);
+  expect(one.iterations[0]!.turns).toBe(15);
   expect(one.iterations[0]!.merged).toEqual(["alpha"]);
   expect(one.iterations[0]!.parked).toEqual(["beta"]);
   ctx.betaTip = ctx.repo

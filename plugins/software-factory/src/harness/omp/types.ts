@@ -1,5 +1,5 @@
 import type { RetryPolicy } from "../fallback.js";
-import type { ModelRef } from "../types.js";
+import type { CacheTtl, ModelRef } from "../types.js";
 
 /** Harness configuration carried through `TurnRequest.opaque`. */
 export interface OmpTurnOpaque {
@@ -22,8 +22,8 @@ export interface OmpHarnessOptions {
   sessionDir: string;
   /** Cheap model for subagents spawned inside a turn. */
   subagentModel?: ModelRef | string;
-  /** Provider cache window; the launch overlay and the session stamp share it. */
-  retention?: "short" | "long";
+  /** Provider cache TTL from `sessions.retention`; no default. */
+  retention: CacheTtl;
   retry?: Partial<RetryPolicy>;
   /** Harness-entry `options`: omp overlay keys, passed through untouched. */
   options?: Record<string, unknown>;
@@ -40,21 +40,15 @@ export interface OmpHarnessOptions {
 export const OMP_ID = "omp";
 
 /**
- * Every value omp's `--thinking` flag parses; any other string fails its
- * argument parse before a session starts (`omp --thinking highest` is the
- * observed case). `models --json` carries per-model lists, but an `@` alias
- * has no catalog entry, so this enum is all pre-flight can know of it.
+ * Whether a model id is an omp role/chain alias (`@free`) rather than a
+ * catalogue selector. Aliases resolve inside omp's own chain: `models --json`
+ * carries no entry for them, so an alias probed through the CLI reports the
+ * union of every catalogued thinking list plus `auto`, the CLI-enum level no
+ * model list carries.
  */
-export const OMP_THINKING_LEVELS: readonly string[] = [
-  "off",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-  "auto",
-];
+export function isOmpAlias(modelId: string): boolean {
+  return modelId.startsWith("@");
+}
 
 /**
  * Built-ins an unattended factory turn may use. `task` is omitted: its

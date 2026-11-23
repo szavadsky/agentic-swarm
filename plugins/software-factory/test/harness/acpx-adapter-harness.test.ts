@@ -105,6 +105,7 @@ function registerAcpxHarnessPart10(): void {
   it("retries de novo with a new name when the resumed session is gone", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -160,6 +161,7 @@ function registerAcpxHarnessPart11(): void {
   it("retries de novo when the resumed session's effort set answers NO_SESSION", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -214,6 +216,7 @@ function registerAcpxHarnessPart12(): void {
   it("stops with infra details and no session when the retry also answers NO_SESSION", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -244,6 +247,7 @@ function registerAcpxHarnessPart13(): void {
   it("gives two fresh sessions in the same worktree distinct names", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -281,6 +285,7 @@ function registerAcpxHarnessPart14(): void {
       },
     });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "codex",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),

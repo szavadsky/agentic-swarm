@@ -3,6 +3,8 @@
 export type { ModelCatalog } from "./preflight-aliases.js";
 
 export type { PreflightInput } from "./preflight/types.js";
+// The pin gate refuses a launch, not a config; it lives with the checks.
+export { pinBuildOf, pinRefusal } from "./preflight/pin.js";
 export {
   DEFAULT_MIN_TMP_FREE_BYTES,
   PreflightError,

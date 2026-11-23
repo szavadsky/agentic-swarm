@@ -229,7 +229,7 @@ function registerAliasFallbackTiersPart11(): void {
 }
 
 function registerAliasFallbackTiersPart12(): void {
-  it("expands a fallback that names another alias and keeps its pools and effort", async () => {
+  it("expands a fallback that names another alias and keeps its pools", async () => {
     const t = await tierRuntime(
       {
         harness: "a",
@@ -259,7 +259,9 @@ function registerAliasFallbackTiersPart12(): void {
       ).toEqual([
         ["a", "ma", undefined, "outer"],
         ["b", "mb", "high", "inner"],
-        ["b", "mb2", "high", "inner"],
+        // The literal tier names no effort of its own: the harness default,
+        // never an inherited level.
+        ["b", "mb2", undefined, "inner"],
       ]);
 
       // One pool covers the named alias's whole ladder: both its tiers drop.

@@ -155,6 +155,7 @@ function registerAcpxHarnessPiUsageCommandPart1(): void {
   it("records /session totals and deltas a resumed turn against the ref", async () => {
     const stub = createAcpxStub({ sessionUsage: PER_PROMPT });
     const options = {
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -194,6 +195,7 @@ function registerAcpxHarnessPiUsageCommandPart2(): void {
       sessionCommand: "fail",
     });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -249,6 +251,7 @@ function registerAcpxHarnessPiUsageCommandPart3(): void {
       compactUsage: { input: 30, output: 3, cacheRead: 1 },
     });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -302,6 +305,7 @@ function registerAcpxHarnessPiUsageCommandPart4(): void {
   it("leaves a resumed turn unknown when the ref has no baseline, then recovers", async () => {
     const stub = createAcpxStub({ sessionUsage: PER_PROMPT });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),

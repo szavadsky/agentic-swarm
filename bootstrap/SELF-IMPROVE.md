@@ -33,7 +33,7 @@ The operator never:
 ## One iteration
 
 1. Nothing live: `pgrep -af "factory.ts run"` prints nothing; `git -C $V3 status --short` is empty.
-2. `$V3/bootstrap/promote.sh > /tmp/promote.log 2>&1`.
+2. `$V3/bootstrap/promote.sh > /tmp/promote.log 2>&1`. It records typecheck and suite verdicts in `<pin>/gate.yaml`; a red build is kept as a recorded pin but never linked as `current`.
 3. Launch in the background with no deadline; the result is delivered on exit. Never poll.
    ```bash
    bun run $PIN/bin/factory.ts run --repo $V3 --goal self --run-config $V3/bootstrap/run/self.yaml --iterations 1 > /tmp/self-iN.log 2>&1; echo "exit=$?"; tail -4 /tmp/self-iN.log
@@ -82,7 +82,7 @@ A question the architect asked (exit 2): answer only when `INTENT.md` or `Phase1
 | Symptom | Act |
 |---|---|
 | Launch cannot start, or exits 1 before its first record | Read the log tail. Environment (lock, stale worktree, auth, quota): fix it, relaunch. Kernel defect: smallest fix with a test on `factory-v3`, journal it, report it as an incident. |
-| `promote.sh` fails | Rerun once. Fails again: do not promote; incident report with the failing test names; launch from the previous pin. |
+| `promote.sh` fails | Rerun once. Fails again: do not promote; incident report with the failing test names; launch from the previous pin. A recorded-red pin is refused by `factory run`; launching it on an owner ruling takes `--pin-gate-override <reason>`, which is recorded. |
 | Gates red after merging `factory/self` | Rerun once. Still red: do not land on `main`, do not promote; incident report; launch from the previous pin. Not fixed by that iteration → stop and report. |
 | Merge conflict `factory/self` → `factory-v3` | `git merge --abort`; stop and report. |
 | Run must be stopped | One `pkill -INT -f "factory.ts run"`; wait for the exit; journal; incident report; relaunch. |

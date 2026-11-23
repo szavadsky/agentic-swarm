@@ -1,8 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { doneWhen, materialHash } from "../../src/kernel/task-material.js";
 import {
-  doneWhen,
   isValidTaskSlug,
-  materialHash,
   parseTaskFile,
   renderTaskFile,
   validateTaskFlows,
@@ -10,7 +9,7 @@ import {
 } from "../../src/kernel/tasks.js";
 import type { TaskStatus } from "../../src/kernel/types.js";
 import { task } from "./helpers.js";
-import { TEXT, TYPES, TYPED } from "./tasks-fixtures.js";
+import { TEXT, TYPED, TYPES } from "./tasks-fixtures.js";
 
 describe("task files", () => {
   taskFilesPart1();
@@ -23,6 +22,7 @@ describe("task files", () => {
   taskFilesPart8();
   taskFilesPart9();
   taskFilesPart10();
+  taskFilesPart11();
 });
 
 function taskFilesPart1() {
@@ -423,5 +423,46 @@ function taskFilesPart10() {
     ).toEqual([
       'task "a" uses flow "constructor": flow "constructor" is not configured',
     ]);
+  });
+}
+function taskFilesPart11() {
+  it("parses environment notes and keeps them through an amend rewrite", () => {
+    const amended = TEXT.replace(
+      "source: Milestone auth / refresh",
+      [
+        "source: Milestone auth / refresh",
+        "revision: 1",
+        "envNotes:",
+        "  - bun install needs the network",
+        "  - auth.test.ts flakes on its first run",
+      ].join("\n"),
+    );
+    const parsed = parseTaskFile(amended, "auth.token-refresh");
+    expect(parsed.envNotes).toEqual([
+      "bun install needs the network",
+      "auth.test.ts flakes on its first run",
+    ]);
+    expect(parsed.revision).toBe(1);
+    const round = parseTaskFile(renderTaskFile(parsed), parsed.slug);
+    expect(round.envNotes).toEqual(parsed.envNotes);
+    expect(materialHash({ ...parsed, envNotes: undefined })).toBe(
+      materialHash(parsed),
+    );
+  });
+
+  it("renders no environment-notes key for a task without them", () => {
+    const parsed = parseTaskFile(TEXT, "auth.token-refresh");
+    expect(parsed.envNotes).toBeUndefined();
+    expect(renderTaskFile(parsed)).not.toContain("envNotes");
+  });
+
+  it("rejects a blank environment note", () => {
+    const bad = TEXT.replace(
+      "source: Milestone auth / refresh",
+      "source: Milestone auth / refresh\nenvNotes:\n  - '  '",
+    );
+    expect(() => parseTaskFile(bad, "auth.token-refresh")).toThrow(
+      'frontmatter "envNotes" must be a list of non-empty strings',
+    );
   });
 }

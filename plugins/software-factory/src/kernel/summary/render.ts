@@ -1,12 +1,11 @@
 /** The summary head and metrics lines. */
 
-import { costText } from "../metrics.js";
 import { wasteLines } from "../waste-summary.js";
 import type { SummaryRender } from "./types.js";
 import {
   architectLines,
   budgetLines,
-  costByRoleLine,
+  costByRoleLines,
   decisionLines,
   incidentLines,
   launchTable,
@@ -14,6 +13,7 @@ import {
   orNone,
   parkedCauseLines,
   perMergedCost,
+  sourceCostText,
   spendTable,
 } from "./tables.js";
 
@@ -73,10 +73,10 @@ export function summaryMetricsLines(render: SummaryRender): string[] {
     "## Metrics",
     `- turns: ${render.agentTurns} agent, ${render.scriptTurns} script; architect share ${architectShare}`,
     `- tokens: input ${usage.in}, cached ${usage.cacheRead}, output ${usage.out}, reasoning ${usage.reasoningOut}`,
-    `- cost: ${costText(usage.costUsd, unpricedTurns)}`,
-    `- list cost: ${costText(usage.listCostUsd, unpricedTurns)}`,
-    costByRoleLine(render.named.roleNames),
-    `- cost per merged task: ${perMergedCost(computed.costPerMergedTask, unpricedTurns)}; list ${perMergedCost(computed.listCostPerMergedTask, unpricedTurns)}`,
+    `- harness-reported cost: ${sourceCostText(usage.harnessCostUsd, unpricedTurns)}`,
+    `- list-price estimate: ${sourceCostText(usage.listCostUsd, unpricedTurns)}`,
+    ...costByRoleLines(render.named.roleNames),
+    `- cost per merged task: harness-reported ${perMergedCost(computed.harnessCostPerMergedTask, unpricedTurns)}; list-price estimate ${perMergedCost(computed.listCostPerMergedTask, unpricedTurns)}`,
     `- work: ${computed.edits} files (+${computed.addedLines}/-${computed.removedLines}), ${computed.testRuns} test runs in ${computed.gateRuns} gate runs`,
     `- gate wall: ${(computed.gateWallMs / 1000).toFixed(1)}s gates, ${(computed.commitWallMs / 1000).toFixed(1)}s commits`,
     `- operator acts: ${computed.operatorActs} (${computed.humanInterventions} steers)`,

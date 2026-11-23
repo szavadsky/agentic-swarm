@@ -1,5 +1,5 @@
-import { DEFAULT_PARK_AMENDS } from "../config.js";
 import { formatCause, makeCause } from "../cause.js";
+import { DEFAULT_PARK_AMENDS } from "../config.js";
 import type { TurnTarget } from "../flow-context.js";
 import {
   planCheckProvenance,
@@ -7,7 +7,7 @@ import {
   steerProvenance,
 } from "../mailbox.js";
 import { formatParkDefault } from "../park-route.js";
-import { doneWhen, materialHash } from "../tasks.js";
+import { doneWhen, materialHash } from "../task-material.js";
 import type {
   Cause,
   KernelRuntime,

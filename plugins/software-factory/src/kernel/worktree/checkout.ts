@@ -6,6 +6,7 @@ import { isAncestor } from "../../core/git/commit.js";
 import { GitError, git } from "../../core/git/exec.js";
 import { parseWorktreeList } from "../../core/git/status.js";
 import { reapGateProcesses } from "../gates.js";
+import { landStoreCommits } from "../store-backend.js";
 import type { KernelRuntime } from "../types.js";
 import type { MergeAttempt } from "./types.js";
 
@@ -295,6 +296,9 @@ export async function prepareIntegrationCheckout(
   // A crashed merge must not leave staged or conflicted state for the next launch.
   await git(goalCheckout, ["reset", "--hard", "HEAD"]);
   await git(goalCheckout, ["clean", "-fd"]);
+  // The goal branch receives the store's writes before it follows the base: a
+  // store write lands on both heads, so the merge sees one content, not two.
+  await landStoreCommits(runtime.paths);
   await followBase(runtime);
 }
 

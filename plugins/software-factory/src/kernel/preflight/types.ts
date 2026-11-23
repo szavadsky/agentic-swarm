@@ -19,5 +19,4 @@ export interface PreflightInput {
 
 export interface PreflightResult {
   base?: BaselineResult;
-  aliases: Record<string, string | undefined>;
 }

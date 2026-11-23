@@ -34,11 +34,14 @@ export function findStep(flow: FlowDefinition, id: string): FlowStep {
 /**
  * Gates run after a productive turn, immediately before an acceptance step
  * (QA or review, or the end). QA and the reviewer read the already-gated tree.
+ * In a DAG flow every productive turn gates: a parallel branch may read the
+ * previous branch's tree, so the seam between ready steps is a gate too.
  */
 export function checksDue(flow: FlowDefinition, id: string): boolean {
   // The resolve step is outside the agent sequence: its commit is the branch's
   // new tip, so the gates that decide the re-merge always run after it.
   if (id === "resolve") return true;
+  if (flow.dag === true) return true;
   const steps = agentSteps(flow);
   const next = steps[steps.findIndex((s) => s.id === id) + 1];
   return !next || isAcceptanceStep(next);
@@ -49,12 +52,20 @@ export function isFixTurn(
   state: TaskState,
   stepId: string,
 ): boolean {
+  const bumped =
+    state.round > 1 ||
+    state.gateFix === true ||
+    state.cleanlinessRevision === true;
+  if (!bumped) return false;
   const steps = agentSteps(flow);
+  if (steps[0]?.id === stepId) return true;
+  // A DAG's parallel steps also replay after a gate fix, so a later round of
+  // any productive step of one is a fix turn, like the first step's.
+  const productive = steps.filter((step) => !isVerdictStep(step));
   return (
-    steps[0]?.id === stepId &&
-    (state.round > 1 ||
-      state.gateFix === true ||
-      state.cleanlinessRevision === true)
+    flow.dag === true &&
+    state.round > 1 &&
+    productive.some((step) => step.id === stepId)
   );
 }
 

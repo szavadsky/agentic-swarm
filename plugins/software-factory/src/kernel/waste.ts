@@ -1,5 +1,6 @@
 import { countOutcomeRepairs } from "../harness/usage.js";
 import { formatCause } from "./cause.js";
+import { isGlitchTurn } from "./glitch.js";
 import { recordDirName } from "./store.js";
 import { KERNEL_STEPS } from "./types.js";
 import type { Cause, CauseKind, StepRecord } from "./types.js";
@@ -332,7 +333,8 @@ function addOwnCandidate(
   rec: StepRecord,
   candidate: Candidate | undefined,
 ): void {
-  if (!candidate) return;
+  // A glitch is a technical failure retried over, never a waste reason.
+  if (!candidate || isGlitchTurn(rec)) return;
   const previous = candidates.get(rec.seq);
   if (!previous || candidate.priority < previous.priority) {
     candidates.set(rec.seq, candidate);

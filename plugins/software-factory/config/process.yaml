@@ -66,6 +66,20 @@ flows:
         review: true
         changeRequests: 0
         deliverable: verdict
+# The goal-start ingestion sequence: `branch` first, then the `front`
+# classifier, then extra prompt steps (e.g. a requirements agent) in list
+# order. `branch` and `front` take only their id; the front's prompt and alias
+# are the `boundary.front` ones. A step's `when` names the classes it runs
+# for; a bigger goal's code map comes from a scout step pinned to
+# `when: [bigger]`, not from a `git ls-files` dump in every pack.
+ingestion:
+  - id: branch
+  - id: front
+  - id: scout
+    prompt: scout
+    alias: pm
+    deliverable: code map
+    when: [bigger]
 # The kernel turns outside any task flow. Each names its prompt and the alias
 # pre-flight requires; `front` runs on the PM alias, as before. A turn may also
 # name the repair ask its missing outcome renders and the product that ask

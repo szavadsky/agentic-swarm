@@ -6,6 +6,7 @@ import { statusGoal } from "../../src/cli/commands.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import type { Usage } from "../../src/harness/types.js";
 import {
+  DASHBOARD_ASSETS,
   DASHBOARD_REL_PATH,
   renderDashboard,
 } from "../../src/kernel/dashboard.js";
@@ -19,6 +20,7 @@ import {
   writeStatus,
 } from "../../src/kernel/status.js";
 import { createFolderStore } from "../../src/kernel/store.js";
+import { writeIntentStatus } from "../../src/kernel/summary/intent-status.js";
 import type { RecordStart } from "../../src/kernel/types.js";
 import { testPriceSource } from "../helpers/price-source.js";
 import { createTmpRepo } from "../helpers/tmp-repo.js";
@@ -40,6 +42,16 @@ function usage(costUsd: number, input: number, output: number): Usage {
     out: output,
     reasoningOut: 0,
     costUsd,
+  };
+}
+
+/** A price source that never fetches; the logged records keep their own usage. */
+function offlinePrices(root: string) {
+  return {
+    cachePath: path.join(root, "no-prices.json"),
+    fetchModels: async () => {
+      throw new Error("prices disabled in test");
+    },
   };
 }
 
@@ -223,17 +235,23 @@ describe("status concerns and metrics", () => {
         calibration: "owner",
       });
 
-      expect(status.cost.totalUsd).toBeCloseTo(0.6, 10);
+      expect(status.cost.harnessCostUsd).toBeCloseTo(0.6, 10);
+      expect(status.cost.listCostUsd).toBeNull();
+      expect(status.cost.harnessCostPerMergedTask).toBeCloseTo(0.6, 10);
+      expect(status.cost.listCostPerMergedTask).toBeNull();
       expect(status.cost.unpricedTurns).toBe(0);
-      expect(status.cost.perMergedTask).toBeCloseTo(0.6, 10);
       expect(status.cost.byRole.architect).toEqual({
         turns: 1,
         tokens: 150,
-        costUsd: 0.1,
+        harnessCostUsd: 0.1,
+        listCostUsd: null,
         unpricedTurns: 0,
       });
-      expect(status.cost.byRole.implementer!.costUsd).toBeCloseTo(0.5, 10);
-      expect(status.cost.byModel.fake!.costUsd).toBeCloseTo(0.6, 10);
+      expect(status.cost.byRole.implementer!.harnessCostUsd).toBeCloseTo(
+        0.5,
+        10,
+      );
+      expect(status.cost.byModel.fake!.harnessCostUsd).toBeCloseTo(0.6, 10);
 
       expect(status.work.turns).toBe(2);
       expect(status.work.edits).toBe(2);
@@ -258,12 +276,7 @@ describe("status file", () => {
       const written = await writeStatus({
         store,
         flows: {},
-        priceSource: {
-          cachePath: path.join(root, "no-prices.json"),
-          fetchModels: async () => {
-            throw new Error("prices disabled in test");
-          },
-        },
+        priceSource: offlinePrices(root),
       });
       expect(written).toBe(STATUS_REL_PATH);
       const stored = await readStatus(store);
@@ -272,7 +285,7 @@ describe("status file", () => {
       const slugs = (tasks: { slug: string }[]) => tasks.map((t) => t.slug);
       expect(slugs(parsed.tasks.merged)).toEqual(["merged1"]);
       expect(parsed.epics).toEqual({ core: ["merged1"] });
-      expect(parsed.cost.totalUsd).toBeCloseTo(0.6, 10);
+      expect(parsed.cost.harnessCostUsd).toBeCloseTo(0.6, 10);
 
       const file = path.join(store.goalDir, STATUS_REL_PATH);
       expect(fs.readFileSync(file, "utf8")).toBe(stored!);
@@ -295,12 +308,76 @@ describe("status file", () => {
   });
 });
 
+describe("status dashboard assets", () => {
+  it("writes the vendored assets the dashboard links", async () => {
+    const { root, store } = await fixtureStore();
+    try {
+      await writeIntentStatus(store, 1, [
+        { section: "Status", status: "works" },
+      ]);
+      await writeStatus({
+        store,
+        flows: {},
+        priceSource: offlinePrices(root),
+      });
+      const dashboard = fs.readFileSync(
+        path.join(store.goalDir, DASHBOARD_REL_PATH),
+        "utf8",
+      );
+      for (const asset of DASHBOARD_ASSETS) {
+        const file = path.join(store.goalDir, asset.rel);
+        const source = path.join(import.meta.dir, "../..", asset.source);
+        expect(fs.existsSync(file)).toBe(true);
+        expect(fs.readFileSync(file, "utf8")).toBe(
+          fs.readFileSync(source, "utf8"),
+        );
+        expect(dashboard).toContain(asset.rel);
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("status intent artifact", () => {
+  it("carries the architect's intent artifact into the snapshot and dashboard", async () => {
+    const { root, store } = await fixtureStore();
+    try {
+      await writeIntentStatus(store, 1, [
+        { section: "Sandbox", status: "not-built", note: "no bwrap" },
+      ]);
+      await writeStatus({
+        store,
+        flows: {},
+        priceSource: offlinePrices(root),
+      });
+      const stored = await readStatus(store);
+      const parsed = JSON.parse(stored!);
+      expect(parsed.intentStatus).toEqual({
+        iteration: 1,
+        sections: [
+          { section: "Sandbox", status: "not-built", note: "no bwrap" },
+        ],
+      });
+      const dashboard = fs.readFileSync(
+        path.join(store.goalDir, DASHBOARD_REL_PATH),
+        "utf8",
+      );
+      expect(dashboard).toContain("Sandbox");
+      expect(dashboard).toContain("badge intent-not-built");
+      expect(dashboard).toContain("no bwrap");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
 interface StatusSnapshot {
   tasks: {
     open: { slug: string; turns: number }[];
     merged: { slug: string }[];
   };
-  cost: { totalUsd: number | null };
+  cost: { harnessCostUsd: number | null };
   work: { turns: number };
 }
 
@@ -333,9 +410,11 @@ describe("status before the kernel runs", () => {
       expect(parsed.distance).toEqual({ pending: [], parks: [], openDebt: [] });
       expect(parsed.epics).toBeUndefined();
       expect(parsed.cost).toEqual({
-        totalUsd: null,
+        harnessCostUsd: null,
+        listCostUsd: null,
+        harnessCostPerMergedTask: null,
+        listCostPerMergedTask: null,
         unpricedTurns: 0,
-        perMergedTask: null,
         byRole: {},
         byModel: {},
       });
@@ -393,7 +472,7 @@ describe("status refresh points", () => {
       );
       const finished = snapshot(finishedJson);
       expect(finished.tasks!.open[0]!.turns).toBe(3);
-      expect(finished.cost!.totalUsd).toBeCloseTo(0.03, 10);
+      expect(finished.cost!.harnessCostUsd).toBeCloseTo(0.03, 10);
       expect(finished.work!.turns).toBe(3);
       expect(
         fs.readFileSync(path.join(goalDir, DASHBOARD_REL_PATH), "utf8"),

@@ -171,6 +171,7 @@ function registerAgentTurnOutcomeDeliveryPart2(): void {
     });
     const sessionDir = path.join(root, "sessions");
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir,

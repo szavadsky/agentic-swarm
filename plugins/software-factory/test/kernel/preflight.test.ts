@@ -86,7 +86,7 @@ async function fixture(
   await store.ensureLayout();
   const harness = new FakeHarness({
     id: "fake",
-    caps: { effort: ["low", "high", "max"] },
+    probe: { effort: ["low", "high", "max"] },
   });
   const harnesses = new Map<string, Harness>([["fake", harness]]);
   return { repo, configs, paths, input: { configs, paths, store, harnesses } };
@@ -103,13 +103,15 @@ async function refusal(input: PreflightInput): Promise<PreflightError> {
 }
 
 function registerPreFlightPart1(): void {
-  it("refuses effort: highest", async () => {
+  it("refuses an effort outside the probe's list", async () => {
     const f = await fixture(RUN_HEAD_NO_HIGHEST_WITH_HIGHEST);
     try {
       const err = await refusal(f.input);
       expect(err.findings).toContainEqual(
         expect.objectContaining({
           key: "aliases.architect.effort",
+          message:
+            'effort "highest" is not supported; model accepts: low, high, max',
         }),
       );
     } finally {
@@ -117,11 +119,10 @@ function registerPreFlightPart1(): void {
     }
   });
 
-  it("resolves effort: max to max", async () => {
+  it("keeps the authored effort untouched after a pass", async () => {
     const f = await fixture(RUN_HEAD_NO_HIGHEST);
     try {
-      const result = await preflight(f.input);
-      expect(result.aliases.architect).toBe("max");
+      await preflight(f.input);
       expect(f.configs.run.aliases.architect!.effort).toBe("max");
     } finally {
       f.repo.cleanup();
@@ -167,7 +168,7 @@ function registerPreFlightPart2(): void {
 function registerPreFlightPart3(): void {
   it("runGoal reports malformed acpx options before constructing adapters", async () => {
     const runYaml = `${RUN_HEAD_NO_HIGHEST}worktreeRoot: WORKTREE_ROOT
-sessions: { dir: SESSIONS_DIR }
+sessions: { dir: SESSIONS_DIR, retention: short }
 harnesses:
   opencode:
     acpx: { agent: opencode }
@@ -234,14 +235,19 @@ function registerPreFlightPart4(): void {
 }
 
 function registerPreFlightPart5(): void {
-  it("passes harness-default as no effort override", async () => {
+  it("treats a former sentinel as an ordinary level the probe must list", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace("effort: max", "effort: harness-default"),
     );
     try {
-      const result = await preflight(f.input);
-      expect(result.aliases.architect).toBeUndefined();
-      expect(f.configs.run.aliases.architect!.effort).toBeUndefined();
+      const err = await refusal(f.input);
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "aliases.architect.effort",
+          message:
+            'effort "harness-default" is not supported; model accepts: low, high, max',
+        }),
+      );
     } finally {
       f.repo.cleanup();
     }

@@ -326,3 +326,40 @@ describe("cleanliness revision promptVars", () => {
     expect(varsNormal.cleanliness_revision).toBe("false");
   });
 });
+
+describe("cleanliness revision one follow-up per hit kind", () => {
+  for (const output of [
+    "Large file: data.bin (2000000 bytes)",
+    "Disallowed artifact: cache.tmp",
+    "New extension: notes.xyz (.xyz)",
+  ]) {
+    it(`${output}: one revision turn, then the normal fix route`, () => {
+      const t1 = implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" });
+      const c2 = cleanlinessRedCheck(2, output);
+
+      const first = derive(sharedTasks, [t1, c2], sharedFlows);
+      expect(first.tasks.a!.phase).toBe("implement");
+      expect(first.tasks.a!.cleanlinessRevision).toBe(true);
+      expect(first.tasks.a!.gateFix).toBeUndefined();
+
+      const t3 = implement(3, 1, {
+        tree: "tree-2",
+        commit: "c2",
+        base: "c0",
+        outcome: {
+          status: "done",
+          summary: "",
+          concerns: [],
+          forward: [],
+          replies: [],
+        },
+      });
+      const c4 = cleanlinessRedCheck(4, output);
+
+      const second = derive(sharedTasks, [t1, c2, t3, c4], sharedFlows);
+      expect(second.tasks.a!.cleanlinessRevision).toBeUndefined();
+      expect(second.tasks.a!.gateFix).toBe(true);
+      expect(second.tasks.a!.phase).toBe("implement");
+    });
+  }
+});

@@ -21,6 +21,7 @@ import {
   writeTask,
 } from "./e2e-helpers.js";
 import { scriptStallLeave } from "./s2-helpers.js";
+import { workCalls } from "./fake-defaults.js";
 import { causeText } from "./helpers.js";
 
 function writeClass(goal: E2EGoal, text: string): void {
@@ -243,7 +244,7 @@ function registerFrontLadderPart6(): void {
       expect(fs.readFileSync(packPath, "utf8")).toBe(frontPack);
       expect(architect?.packBytes).toBe(Buffer.byteLength(frontPack, "utf8"));
       expect(records.filter((r) => r.step === "pm")).toEqual([]);
-      expect(harness.calls).toHaveLength(2);
+      expect(workCalls(harness)).toHaveLength(2);
     } finally {
       cleanup(goal);
     }

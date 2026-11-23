@@ -15,7 +15,26 @@ import { loadPromptLibrary, loadPrompts } from "../../src/kernel/prompts.js";
 import type { ProcessConfig, RunConfig } from "../../src/kernel/types.js";
 import { TEST_ARCHITECTURE, TEST_BOUNDARY } from "./helpers.js";
 
+/**
+ * The integration base adds the architect-only `intentStatus` field to the
+ * outcome schema. The scout snapshot renders the head's skeleton so it stays
+ * valid before and after the base merge; this branch's kernel schema is
+ * unchanged and the other roles keep it.
+ */
+const INTENT_STATUS_FIXTURE =
+  "intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction";
+
+function scoutOutcomeSchemaFixture(): string {
+  const schema = outcomeSchemaVar();
+  if (schema.includes("intentStatus:")) return schema;
+  return schema.replace(
+    "summary: one paragraph\n",
+    `summary: one paragraph\n${INTENT_STATUS_FIXTURE}\n`,
+  );
+}
+
 const OUTCOME_SCHEMA = outcomeSchemaVar();
+const SCOUT_OUTCOME_SCHEMA = scoutOutcomeSchemaFixture();
 
 const TASK_FRONTMATTER = taskFrontmatterVar();
 
@@ -81,6 +100,7 @@ const ROLES: Record<string, Record<string, string>> = {
     tasks_dir: "/goal/tasks",
     class_path: "/goal/class.yaml",
     pack_path: "/goal/iterations/3/context-pack.md",
+    code_map_path: "/goal/code-map.md",
     checkout: "/worktrees/demo",
     setup_command: "bun install",
     gate_commands: "- test: bun test",
@@ -119,6 +139,7 @@ const ROLES: Record<string, Record<string, string>> = {
     worktree: "/worktrees/demo-tasks/alpha",
     resume_note: "",
     report_path: ".factory/spikes/alpha.md",
+    env_notes: "",
     setup_command: "bun install",
     gate_commands: "- test: bun test\n- typecheck: bun run typecheck",
     base_gates: "base abc1234def: green",
@@ -182,6 +203,7 @@ const ROLES: Record<string, Record<string, string>> = {
     integration_head: "abc1234def5678",
     conflicts: "conflict.txt",
     gate_commands: "- test: bun test",
+    gate_log_path: "none",
     base_gates: "base abc1234def: green",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
@@ -217,6 +239,15 @@ const ROLES: Record<string, Record<string, string>> = {
     outcome_path: "/goal/records/00046-i3-packprep-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: OUTCOME_SCHEMA,
+  },
+  scout: {
+    iteration: "3",
+    intent_path: "/goal/intent.md",
+    checkout: "/worktrees/demo",
+    code_map_path: "/goal/code-map.md",
+    outcome_path: "/goal/records/00049-i3-scout-r1/outcome.yaml",
+    validate_cmd: "bun /factory/bin/factory.ts validate",
+    outcome_schema: SCOUT_OUTCOME_SCHEMA,
   },
   "review-architect": {
     iteration: "3",

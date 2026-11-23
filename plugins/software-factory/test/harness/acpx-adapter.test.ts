@@ -97,6 +97,7 @@ function registerAcpxHarnessPart1(): void {
   it("creates a named pi session, passes model and effort, and returns the last agent text", async () => {
     const stub = createAcpxStub({ banner: PI_BANNER });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -116,6 +117,7 @@ function registerAcpxHarnessPart2(): void {
     const stub = createAcpxStub({ usage: { totalTokens: 10 } });
     const sessionDir = path.join(path.dirname(stub.binary), "sessions");
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir,
@@ -166,6 +168,7 @@ function registerAcpxHarnessPart3(): void {
   it("scrubs token-shaped secrets before the stream reaches disk", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.join(path.dirname(stub.binary), "sessions"),
@@ -192,6 +195,7 @@ function registerAcpxHarnessPart4(): void {
     const cwd = path.dirname(stub.binary);
     const pidFile = path.join(cwd, "options-env.pid");
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -222,6 +226,7 @@ function registerAcpxHarnessPart5(): void {
     const cwd = path.dirname(stub.binary);
     const pidFile = path.join(cwd, "opaque-options-env.pid");
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -255,6 +260,7 @@ function registerAcpxHarnessPart6(): void {
     expect(
       () =>
         new AcpxHarness({
+          retention: "short",
           id: "pi",
           binary: "/bin/true",
           sessionDir: path.dirname("/bin/true"),
@@ -265,6 +271,7 @@ function registerAcpxHarnessPart6(): void {
     expect(
       () =>
         new AcpxHarness({
+          retention: "short",
           id: "pi",
           binary: "/bin/true",
           sessionDir: path.dirname("/bin/true"),
@@ -282,6 +289,7 @@ function registerAcpxHarnessPart7(): void {
     expect(
       () =>
         new AcpxHarness({
+          retention: "short",
           id: "pi",
           binary: "/bin/true",
           sessionDir: path.dirname("/bin/true"),
@@ -294,6 +302,7 @@ function registerAcpxHarnessPart7(): void {
     expect(
       () =>
         new AcpxHarness({
+          retention: "short",
           id: "pi",
           binary: "/bin/true",
           sessionDir: path.dirname("/bin/true"),
@@ -310,6 +319,7 @@ function registerAcpxHarnessPart8(): void {
   it("ignores non-args/env options in harness-entry", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -338,6 +348,7 @@ function registerAcpxHarnessPart9(): void {
   it("resumes the same named session from a second process without creating a new one", async () => {
     const stub = createAcpxStub();
     const options = {
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),

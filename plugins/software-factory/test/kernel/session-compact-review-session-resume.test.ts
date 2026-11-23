@@ -4,6 +4,7 @@ import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { type SessionRef } from "../../src/harness/types.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
+import { RESUME_FALLBACK_STEP } from "../../src/kernel/flow-context-sessions.js";
 import { followUpSession } from "../../src/kernel/flow-context.js";
 import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
 import { rec, task } from "./helpers.js";
@@ -162,6 +163,43 @@ async function startsDeNovoReasonLoggedAliasPart2(
   expect(warnings.join("\n")).toContain("does not match worktree");
 }
 
+async function startsDeNovoReasonLoggedAliasPart3(
+  scope: Awaited<ReturnType<typeof startsDeNovoReasonLoggedAliasPart1>>,
+): Promise<void> {
+  const { runtime, taskFile, fake, records, worktree } = scope;
+  // Same-harness resume writes no record; each refused resume writes one.
+  const resumed = await followUpSession(
+    runtime,
+    taskFile,
+    {
+      prompt: "reviewer",
+      alias: "reviewer",
+      harness: fake,
+      model: { id: "fake-review" },
+      tiers: [{ harness: fake, model: { id: "fake-review" } }],
+      tierOffset: 0,
+    },
+    "review",
+    records,
+    worktree,
+  );
+  expect(resumed?.id).toBe("review-session");
+  const fallbacks = (await runtime.store.listRecords()).filter(
+    (r) => r.step === RESUME_FALLBACK_STEP,
+  );
+  expect(fallbacks).toHaveLength(2);
+  expect(fallbacks.map((r) => r.cause?.kind)).toEqual(["resume", "resume"]);
+  expect(fallbacks[0]!.cause?.detail).toContain(
+    'alias changed from "reviewer" to "implementer"',
+  );
+  expect(fallbacks[1]!.cause?.detail).toContain("does not match worktree");
+  for (const fallback of fallbacks) {
+    expect(fallback.slug).toBe("task");
+    expect(fallback.actor).toBe("script");
+    expect(fallback.ok).toBe(false);
+  }
+}
+
 function registerReviewSessionResumePart4(): void {
   it("keeps the compacted transcript across a declared cross-harness switch", async () => {
     const { repo, goal } = setupFlowRepo(crossHarnessFlow);
@@ -195,13 +233,8 @@ function registerReviewSessionResumePart4(): void {
 }
 
 function registerReviewSessionResumePart5(): void {
-  it("starts de novo with the reason logged on an undeclared harness edge", async () => {
+  it("writes a resume error record before the de novo turn on an undeclared harness edge", async () => {
     const { repo, goal } = setupFlowRepo(crossHarnessFlow);
-    const warnings: string[] = [];
-    const originalWarn = console.warn;
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args.map(String).join(" "));
-    };
     try {
       const fake = new FakeHarness({ id: "fake" });
       const other = new FakeHarness({ id: "other" });
@@ -210,7 +243,8 @@ function registerReviewSessionResumePart5(): void {
       await writeTask(runtime, task("task", { scope: ["task.txt"] }));
       await runDispatch(runtime, { iteration: 1 });
 
-      const implement = (await runtime.store.listRecords())
+      const records = await runtime.store.listRecords();
+      const implement = records
         .filter((r) => r.slug === "task" && r.step === "implement")
         .sort((a, b) => a.seq - b.seq);
       expect(implement.map((r) => r.alias)).toEqual([
@@ -222,12 +256,23 @@ function registerReviewSessionResumePart5(): void {
       // No session crosses: the fix records a fresh session on the new harness.
       expect(implement[1]!.session?.harness).toBe("other");
       expect(implement[1]!.session?.compacted).toBe(true);
-      expect(warnings.join("\n")).toContain("starts de novo");
-      expect(warnings.join("\n")).toContain(
+      // The de novo turn carries the rendered prompt and its links.
+      expect(other.calls[0]!.prompt).toContain("task.md");
+
+      // The resume failure is a kernel record naming the harness pair, and
+      // it lands before the de novo turn. Exactly one, so it cannot loop.
+      const fallbacks = records.filter((r) => r.step === RESUME_FALLBACK_STEP);
+      expect(fallbacks).toHaveLength(1);
+      const fallback = fallbacks[0]!;
+      expect(fallback.slug).toBe("task");
+      expect(fallback.actor).toBe("script");
+      expect(fallback.ok).toBe(false);
+      expect(fallback.cause?.kind).toBe("resume");
+      expect(fallback.cause?.detail).toContain(
         'harness "fake" is not portable to "other"',
       );
+      expect(fallback.seq).toBeLessThan(implement[1]!.seq);
     } finally {
-      console.warn = originalWarn;
       cleanupFlowRepo(repo);
     }
   }, 60_000);
@@ -305,6 +350,7 @@ function registerReviewSessionResumePart7(): void {
     try {
       const scope1 = await startsDeNovoReasonLoggedAliasPart1(repo, goal);
       await startsDeNovoReasonLoggedAliasPart2(warnings, scope1);
+      await startsDeNovoReasonLoggedAliasPart3(scope1);
     } finally {
       console.warn = originalWarn;
       cleanupFlowRepo(repo);

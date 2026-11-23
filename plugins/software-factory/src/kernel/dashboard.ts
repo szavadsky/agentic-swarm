@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { Liquid } from "liquidjs";
 import { DASHBOARD_TEMPLATE } from "./dashboard-template.js";
 import type {
@@ -6,15 +8,51 @@ import type {
   StatusTask,
   StatusWork,
 } from "./status.js";
+import type { IntentStatusArtifact } from "./summary/intent-status.js";
+import type { ArtifactStore, IntentStatusEntry } from "./types.js";
 
 /** Goal-relative path of the static dashboard written beside status.json. */
 export const DASHBOARD_REL_PATH = "dashboard.html";
+
+export interface DashboardAsset {
+  /** Goal-relative path the page links. */
+  rel: string;
+  /** Plugin-relative source checked into the factory. */
+  source: string;
+}
+
+/**
+ * The page's only external loads. Both are MIT-licensed browser bundles kept in
+ * the factory's vendor directory; the goal directory gets its own copies so it
+ * opens from disk, survives a moved artifact folder, and never hits a network.
+ */
+export const DASHBOARD_ASSETS: readonly DashboardAsset[] = [
+  { rel: "vendor/pico.min.css", source: "vendor/pico.min.css" },
+  { rel: "vendor/chart.umd.min.js", source: "vendor/chart.umd.min.js" },
+];
+
+const PLUGIN_ROOT = path.resolve(import.meta.dir, "../..");
+
+/** Copies each vendored asset; byte-identical files are left untouched. */
+export async function writeDashboardAssets(
+  store: ArtifactStore,
+): Promise<void> {
+  for (const asset of DASHBOARD_ASSETS) {
+    const text = await fs.promises.readFile(
+      path.join(PLUGIN_ROOT, asset.source),
+      "utf8",
+    );
+    if ((await store.readFile(asset.rel)) === text) continue;
+    await store.writeFile(asset.rel, text);
+  }
+}
 
 interface CostRow {
   name: string;
   turns: string;
   tokens: string;
-  cost: string;
+  harnessCost: string;
+  listCost: string;
   unpricedTurns: string;
 }
 
@@ -29,21 +67,48 @@ interface WorkRow {
 
 type WorkTotals = Omit<WorkRow, "name">;
 
+interface IntentRow {
+  section: string;
+  /** Enum value, also the badge modifier. */
+  status: IntentStatusEntry["status"];
+  /** Display wording: `not-built` reads as "not built". */
+  label: string;
+  note: string | null;
+}
+
+/**
+ * The intent view derives only from the architect's artifact. `known` stays
+ * false for a missing artifact and for an artifact that lists no sections;
+ * neither case falls back to a task count.
+ */
+interface IntentView {
+  hasArtifact: boolean;
+  known: boolean;
+  iteration: number | null;
+  works: number;
+  notBuilt: number;
+  friction: number;
+  total: number;
+  rows: IntentRow[];
+  /** JSON for the chart script; `<` is escaped so a section name cannot close the tag. */
+  chartJson: string;
+}
+
 /**
  * The dashboard's derived view: Liquid stays a template language, so counts,
- * percentages, money and number formatting are settled here and tested as
- * values rather than re-derived inside markup.
+ * percentages, money, number formatting and chart JSON are settled here and
+ * tested as values rather than re-derived inside markup.
  */
 interface DashboardSummary {
-  done: number;
-  live: number;
-  percent: number;
+  intent: IntentView;
   tasks: StatusTask[];
   spend: {
-    total: string;
+    harnessCost: string;
+    listCost: string;
     tokens: string;
     unpricedTurns: string;
-    perMergedTask: string;
+    harnessPerMergedTask: string;
+    listPerMergedTask: string;
   };
   costRoles: CostRow[];
   costModels: CostRow[];
@@ -65,6 +130,12 @@ const USD_PRECISE = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 4,
 });
 
+const INTENT_LABEL: Record<IntentStatusEntry["status"], string> = {
+  works: "works",
+  "not-built": "not built",
+  friction: "friction",
+};
+
 function count(value: number): string {
   return INT.format(value);
 }
@@ -83,7 +154,8 @@ function costRows(groups: Record<string, StatusCost>): CostRow[] {
       name,
       turns: count(row.turns),
       tokens: count(row.tokens),
-      cost: money(row.costUsd),
+      harnessCost: money(row.harnessCostUsd),
+      listCost: money(row.listCostUsd),
       unpricedTurns: count(row.unpricedTurns),
     }));
 }
@@ -111,17 +183,40 @@ function workTotals(work: StatusDocument["work"]): WorkTotals {
   };
 }
 
+function intentView(artifact: IntentStatusArtifact | undefined): IntentView {
+  const rows: IntentRow[] = (artifact?.sections ?? []).map((entry) => ({
+    section: entry.section,
+    status: entry.status,
+    label: INTENT_LABEL[entry.status],
+    note: entry.note ?? null,
+  }));
+  const works = rows.filter((row) => row.status === "works").length;
+  const notBuilt = rows.filter((row) => row.status === "not-built").length;
+  const friction = rows.filter((row) => row.status === "friction").length;
+  const chartJson = JSON.stringify({
+    labels: ["Works", "Not built", "Friction"],
+    counts: [works, notBuilt, friction],
+  }).replace(/</g, "\\u003c");
+  return {
+    hasArtifact: artifact !== undefined,
+    known: rows.length > 0,
+    iteration: artifact?.iteration ?? null,
+    works,
+    notBuilt,
+    friction,
+    total: rows.length,
+    rows,
+    chartJson,
+  };
+}
+
 function summaryOf(status: StatusDocument): DashboardSummary {
-  const done = status.tasks.merged.length + status.tasks.finished.length;
-  const live = done + status.tasks.open.length + status.tasks.parked.length;
   const tokens = Object.values(status.cost.byRole).reduce(
     (sum, row) => sum + row.tokens,
     0,
   );
   return {
-    done,
-    live,
-    percent: live === 0 ? 0 : Math.round((done / live) * 100),
+    intent: intentView(status.intentStatus),
     tasks: [
       ...status.tasks.open,
       ...status.tasks.merged,
@@ -130,10 +225,12 @@ function summaryOf(status: StatusDocument): DashboardSummary {
       ...status.tasks.cancelled,
     ],
     spend: {
-      total: money(status.cost.totalUsd),
+      harnessCost: money(status.cost.harnessCostUsd),
+      listCost: money(status.cost.listCostUsd),
       tokens: count(tokens),
       unpricedTurns: count(status.cost.unpricedTurns),
-      perMergedTask: money(status.cost.perMergedTask),
+      harnessPerMergedTask: money(status.cost.harnessCostPerMergedTask),
+      listPerMergedTask: money(status.cost.listCostPerMergedTask),
     },
     costRoles: costRows(status.cost.byRole),
     costModels: costRows(status.cost.byModel),

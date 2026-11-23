@@ -1,6 +1,5 @@
-import { createHash } from "node:crypto";
-import { z, type ZodIssue } from "zod";
 import yaml from "yaml";
+import { type ZodIssue, z } from "zod";
 import type {
   FlowDefinition,
   State,
@@ -83,6 +82,18 @@ export const taskFrontmatterSchema = z
       .string()
       .default("")
       .describe("plan heading, front, steer, stall or plan-check turn"),
+    envNotes: z
+      .array(
+        z
+          .string()
+          .trim()
+          .min(1)
+          .describe("one environment fact, flake or workaround"),
+      )
+      .optional()
+      .describe(
+        "infra facts, known flakes and workarounds for this task's implementer turns",
+      ),
     repairTurns: z
       .number()
       .int()
@@ -157,6 +168,7 @@ function frontmatterIssue(
     revision: "a non-negative integer",
     base: "a non-empty string",
     source: "a string",
+    envNotes: "a list of non-empty strings",
     repairTurns: "a non-negative integer",
     turnMinutes: "a positive number",
   };
@@ -288,37 +300,11 @@ export function renderTaskFile(task: TaskFile): string {
   if (task.revision > 0) front.revision = task.revision;
   if (task.base) front.base = task.base;
   if (task.source) front.source = task.source;
+  if (task.envNotes !== undefined && task.envNotes.length > 0)
+    front.envNotes = task.envNotes;
   if (task.repairTurns !== undefined) front.repairTurns = task.repairTurns;
   if (task.turnMinutes !== undefined) front.turnMinutes = task.turnMinutes;
   return `---\n${yaml.stringify(front).trimEnd()}\n---\n\n${task.body.trim()}\n`;
-}
-
-/** The observable completion statement from the brief; part of the material hash. */
-export function doneWhen(body: string): string {
-  const line = body.split(/\r?\n/).find((l) => /^done when:/i.test(l.trim()));
-  return line ? line.trim() : "";
-}
-
-/**
- * Material hash: frozen-task comparisons must ignore cosmetic edits but catch
- * a changed dependency set, scope, epic, type, flow, tier, revision, kind,
- * slug or done-when.
- */
-export function materialHash(task: TaskFile): string {
-  const canonical = JSON.stringify([
-    task.slug,
-    task.kind,
-    task.flow,
-    task.type ?? "",
-    [...task.deps].sort(),
-    [...task.scope],
-    task.epic ?? "",
-    task.tier ?? "",
-    task.revision,
-    task.base ?? "",
-    doneWhen(task.body),
-  ]);
-  return createHash("sha1").update(canonical, "utf8").digest("hex");
 }
 
 /** The statuses that still have work left; every other status is history. */

@@ -187,7 +187,7 @@ function unlistedProbe(
   return {
     listed: false,
     available,
-    effort: [],
+    effort: null,
     ...effortField(selection),
   };
 }
@@ -255,7 +255,7 @@ async function readSession(context: ProbeContext): Promise<ModelProbe> {
   return {
     listed: true,
     available,
-    effort: effortOption ? optionValues(effortOption) : [],
+    effort: effortOption ? optionValues(effortOption) : null,
     ...effortField(context.selection),
   };
 }

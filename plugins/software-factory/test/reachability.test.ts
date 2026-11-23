@@ -19,6 +19,10 @@ const ALLOWLIST: Record<string, string> = {
     "standalone schema-validation entrypoint invoked by bun, not imported by production",
   "src/harness/lsp/frontmatter.ts":
     "standalone LSP entrypoint omp spawns by path, not imported by production",
+  "src/cli/commands/promote.ts":
+    "bootstrap entrypoint scripts/promote.ts runs from the tree, not imported by production",
+  "src/cli/commands/bootstrap-dispatch.ts":
+    "bootstrap entrypoint scripts/bootstrap-dispatch.ts runs from the tree, not imported by production",
 };
 
 /** Matches `import … from "x"`, `export … from "x"`, including `import type`. */

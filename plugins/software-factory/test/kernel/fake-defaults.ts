@@ -1,8 +1,12 @@
 import {
   type FakeHarness,
+  type FakeTurnHandler,
   fakeTurnIdentity,
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
+import fs from "node:fs";
+import path from "node:path";
+import { CODE_MAP_FILE } from "../../src/kernel/ingestion.js";
 import { PACK_PREP_STEP } from "../../src/kernel/pack-prep.js";
 import { PLAN_CHECK_STEP } from "../../src/kernel/plan-check.js";
 import { PLAN_REVIEW_STEP } from "../../src/kernel/plan-review.js";
@@ -18,7 +22,62 @@ const BACKGROUND_STEPS = new Set([
   PLAN_REVIEW_STEP,
   PACK_PREP_STEP,
   "digest",
+  "scout",
 ]);
+
+const planCheckFallback: FakeTurnHandler = (req, ctx) => {
+  ctx.writeOutcome({
+    ...EMPTY,
+    planCheck: { verdict: "architect", evidence: [], followUps: [] },
+  });
+  return fakeTurnResult(req);
+};
+
+const planReviewFallback: FakeTurnHandler = (req, ctx) => {
+  ctx.writeOutcome({ ...EMPTY, planReview: { technical: [], planNotes: [] } });
+  return fakeTurnResult(req);
+};
+
+const packPrepFallback: FakeTurnHandler = (req, ctx) => {
+  ctx.writeOutcome(EMPTY);
+  return fakeTurnResult(req);
+};
+
+const digestFallback: FakeTurnHandler = (req, ctx) => {
+  ctx.writeOutcome({ ...EMPTY, summary: "digest scout done" });
+  return fakeTurnResult(req);
+};
+
+const scoutFallback: FakeTurnHandler = (req, ctx) => {
+  const goalDir = path.resolve(path.dirname(req.outcomePath!), "../..");
+  fs.writeFileSync(
+    path.join(goalDir, CODE_MAP_FILE),
+    "- src/ — fixture files\n- test/ — fixture tests\n",
+  );
+  ctx.writeOutcome(EMPTY);
+  return fakeTurnResult(req);
+};
+
+const qaFallback: FakeTurnHandler = (req, ctx) => {
+  ctx.writeOutcome({
+    ...EMPTY,
+    summary: "qa accepted",
+    qa: { verdict: "accept", findings: [] },
+  });
+  return fakeTurnResult(req);
+};
+
+/** Binds a neutral turn to one background step, behind every explicit script. */
+function background(
+  harness: FakeHarness,
+  step: string,
+  handler: FakeTurnHandler,
+): void {
+  harness.script(handler, {
+    when: (req) => fakeTurnIdentity(req).step === step,
+    fallback: true,
+  });
+}
 
 /**
  * Every run config requires the full boundary vocabulary. Tests focused on
@@ -26,70 +85,16 @@ const BACKGROUND_STEPS = new Set([
  * consume another step's scripted turn.
  */
 export function scriptKernelRoleFallbacks(harness: FakeHarness): void {
-  harness.script(
-    (req, ctx) => {
-      ctx.writeOutcome({
-        ...EMPTY,
-        planCheck: { verdict: "architect", evidence: [], followUps: [] },
-      });
-      return fakeTurnResult(req);
-    },
-    {
-      when: (req) => fakeTurnIdentity(req).step === PLAN_CHECK_STEP,
-      fallback: true,
-    },
-  );
-  harness.script(
-    (req, ctx) => {
-      ctx.writeOutcome({
-        ...EMPTY,
-        planReview: { technical: [], planNotes: [] },
-      });
-      return fakeTurnResult(req);
-    },
-    {
-      when: (req) => fakeTurnIdentity(req).step === PLAN_REVIEW_STEP,
-      fallback: true,
-    },
-  );
-  harness.script(
-    (req, ctx) => {
-      ctx.writeOutcome(EMPTY);
-      return fakeTurnResult(req);
-    },
-    {
-      when: (req) => fakeTurnIdentity(req).step === PACK_PREP_STEP,
-      fallback: true,
-    },
-  );
-  harness.script(
-    (req, ctx) => {
-      ctx.writeOutcome({ ...EMPTY, summary: "digest scout done" });
-      return fakeTurnResult(req);
-    },
-    {
-      when: (req) => fakeTurnIdentity(req).step === "digest",
-      fallback: true,
-    },
-  );
-  // The default development flow includes QA. Tests focused on other steps
-  // still run that acceptance turn; a neutral accept keeps them from consuming
-  // another step's scripted turn. A test that wants QA findings binds its own
-  // handler for the step, which wins over this fallback.
-  harness.script(
-    (req, ctx) => {
-      ctx.writeOutcome({
-        ...EMPTY,
-        summary: "qa accepted",
-        qa: { verdict: "accept", findings: [] },
-      });
-      return fakeTurnResult(req);
-    },
-    {
-      when: (req) => fakeTurnIdentity(req).step === "qa",
-      fallback: true,
-    },
-  );
+  background(harness, PLAN_CHECK_STEP, planCheckFallback);
+  background(harness, PLAN_REVIEW_STEP, planReviewFallback);
+  background(harness, PACK_PREP_STEP, packPrepFallback);
+  background(harness, "digest", digestFallback);
+  // The shipped ingestion sequence scouts a bigger goal before the architect;
+  // tests focused on other turns still run that step.
+  background(harness, "scout", scoutFallback);
+  // The default development flow includes QA. A test that wants QA findings
+  // binds its own handler for the step, which wins over this fallback.
+  background(harness, "qa", qaFallback);
 }
 
 /** Register the mandatory boundary fallbacks and return the harness inline. */
