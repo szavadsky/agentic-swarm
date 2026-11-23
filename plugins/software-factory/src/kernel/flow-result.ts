@@ -8,7 +8,7 @@ import { parkCause } from "./flow-commit.js";
 import {
   checksDue,
   escalateFrontClassToBigger,
-  isStandaloneTask,
+  readFrontClass,
 } from "./flow-context.js";
 import { redGateCause, runTaskGates } from "./flow-gates.js";
 import { type TaskMeta, taskMeta } from "./flow-meta.js";
@@ -127,17 +127,21 @@ async function settleOutcome(
   outcome: StepRecord["outcome"],
 ): Promise<boolean> {
   const status = outcome?.status;
-  if (status === "blocked" || status === "failed" || status === "upscope") {
+  if (status === "upscope" || outcome?.upscope === "yes") {
+    await parkUpscope(runtime, task, meta, outcome);
+    return true;
+  }
+  if (status === "blocked" || status === "failed") {
     await appendPark(runtime.store, meta, parkCause(status, outcome?.summary));
     return true;
   }
   if (step.qa) return qaStepOutcome(runtime, step, state, meta, outcome);
   if (step.review) {
-    await reviewStepOutcome(runtime, task, step, state, meta, outcome);
+    await reviewStepOutcome(runtime, step, state, meta, outcome);
     return true;
   }
   if (step.adjudicate !== undefined) {
-    await adjudicateStepOutcome(runtime, task, meta, outcome);
+    await adjudicateStepOutcome(runtime, meta, outcome);
     return true;
   }
   return false;
@@ -171,29 +175,65 @@ async function qaStepOutcome(
   return false;
 }
 
-/** Escalation parks with the status-upscope cause; a standalone task also rewrites the class. */
+// The summary leads and the why follows.
+function upscopeDetail(summary: string | undefined, why: string): string {
+  return summary ? `${summary}; ${why}` : why;
+}
+
+/**
+ * Escalation parks with the status-upscope cause; a standalone task also
+ * rewrites the class. The task is not relaunchable by dispatch — the next
+ * launch's front reads the bigger class and runs the architect. A missing or
+ * invalid class.yaml records why and parks without rewriting.
+ */
 async function parkUpscope(
   runtime: KernelRuntime,
   task: TaskFile,
   meta: TaskMeta,
   outcome: StepRecord["outcome"],
 ): Promise<void> {
-  await appendPark(runtime.store, meta, parkCause("upscope", outcome?.summary));
-  if (isStandaloneTask(runtime, task)) escalateFrontClassToBigger(runtime);
+  let cls: ReturnType<typeof readFrontClass>;
+  try {
+    cls = readFrontClass(runtime);
+  } catch (err) {
+    await appendPark(
+      runtime.store,
+      meta,
+      makeCause(
+        "upscope",
+        upscopeDetail(
+          outcome?.summary,
+          `no readable class.yaml: ${(err as Error).message}`,
+        ),
+      ),
+    );
+    return;
+  }
+  const standalone =
+    cls !== null && cls.class !== "bigger" && cls.slug === task.slug;
+  if (standalone) escalateFrontClassToBigger(runtime);
+  await appendPark(
+    runtime.store,
+    meta,
+    parkCause(
+      "upscope",
+      cls === null
+        ? upscopeDetail(
+            outcome?.summary,
+            "no class.yaml: no bigger class to escalate to",
+          )
+        : outcome?.summary,
+    ),
+  );
 }
 
 async function reviewStepOutcome(
   runtime: KernelRuntime,
-  task: TaskFile,
   step: FlowStep,
   state: TaskState,
   meta: TaskMeta,
   outcome: StepRecord["outcome"],
 ): Promise<void> {
-  if (outcome?.upscope === "yes") {
-    await parkUpscope(runtime, task, meta, outcome);
-    return;
-  }
   const lastCall = isLastReviewCall(step, state.round);
   if (outcome?.verdict === "reject") {
     await appendPark(
@@ -225,14 +265,9 @@ async function reviewStepOutcome(
 
 async function adjudicateStepOutcome(
   runtime: KernelRuntime,
-  task: TaskFile,
   meta: TaskMeta,
   outcome: StepRecord["outcome"],
 ): Promise<void> {
-  if (outcome?.upscope === "yes") {
-    await parkUpscope(runtime, task, meta, outcome);
-    return;
-  }
   if (outcome?.verdict === "reject") {
     await appendPark(
       runtime.store,

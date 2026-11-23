@@ -81,7 +81,6 @@ beforeAll(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "schema-validation-"));
   write(".factory/repo.yaml", "baseBranch: main\n");
   write(".factory/run.yaml", "aliases: {}\n");
-  write("bootstrap/run/self.yaml", "aliases: {}\n");
   write(".factory/artifacts/demo/tasks/demo.task.md", VALID_TASK);
   write(".factory/artifacts/demo/class.yaml", "class: task\nslug: demo.task\n");
   write(".factory/artifacts/demo/mailbox/holds/steer-1.yaml", VALID_HOLD);
@@ -100,7 +99,6 @@ function freshCase(mutate?: () => void): void {
   fs.rmSync(path.join(root, "bootstrap"), { recursive: true, force: true });
   write(".factory/repo.yaml", "baseBranch: main\n");
   write(".factory/run.yaml", "aliases: {}\n");
-  write("bootstrap/run/self.yaml", "aliases: {}\n");
   write(".factory/artifacts/demo/tasks/demo.task.md", VALID_TASK);
   write(".factory/artifacts/demo/class.yaml", "class: task\nslug: demo.task\n");
   write(".factory/artifacts/demo/mailbox/holds/steer-1.yaml", VALID_HOLD);
@@ -129,9 +127,9 @@ describe("schema validation", () => {
 });
 
 /**
- * A branch that drops a run-config key and migrates its run library, beside
+ * A branch that drops a run-config key and migrates its run config, beside
  * the base checkout that still carries the key. Tree-owned files (repo/run
- * config, bootstrap/run) validate from FACTORY_TREE_ROOT; artifact files
+ * config) validate from FACTORY_TREE_ROOT; artifact files
  * (tasks, class, outcomes) validate from FACTORY_REPO_ROOT.
  */
 let tree: string;
@@ -149,19 +147,13 @@ function freshTwoRoots(options?: {
 }): void {
   for (const base of [tree, artifacts]) {
     fs.rmSync(path.join(base, ".factory"), { recursive: true, force: true });
-    fs.rmSync(path.join(base, "bootstrap"), { recursive: true, force: true });
   }
-  // The migrated tree: repo config and a run library without the key.
+  // The migrated tree: repo and run configs without the key.
   writeInto(tree, ".factory/repo.yaml", "baseBranch: main\n");
   writeInto(tree, ".factory/run.yaml", "aliases: {}\n");
-  writeInto(tree, "bootstrap/run/self.yaml", "aliases: {}\n");
   // The base checkout: unmigrated tree-owned files, valid artifact files.
   writeInto(artifacts, ".factory/repo.yaml", "baseBranch: 42\n");
-  writeInto(
-    artifacts,
-    "bootstrap/run/self.yaml",
-    "aliases: {}\ndroppedKey: 1\n",
-  );
+  writeInto(artifacts, ".factory/run.yaml", "aliases: {}\ndroppedKey: 1\n");
   writeInto(
     artifacts,
     ".factory/artifacts/demo/tasks/demo.task.md",
@@ -209,10 +201,9 @@ function schemaValidationPart1() {
     freshCase();
     const result = validRun();
     expect(result.code).toBe(0);
-    // Eight files: package process.yaml, repo/run config, bootstrap run
-    // layer, task, class, hold and outcome. The count proves each path ran;
-    // noteChecked increments only after the schema accepts the file.
-    expect(result.output).toContain("8 schema-enforced file(s) valid");
+    // Seven files: package process.yaml, repo/run config, task, class, hold
+    // and outcome. noteChecked increments only after the schema accepts one.
+    expect(result.output).toContain("7 schema-enforced file(s) valid");
   });
 
   it("passes a task file that names a configured type", () => {
@@ -221,7 +212,7 @@ function schemaValidationPart1() {
     );
     const result = validRun();
     expect(result.code).toBe(0);
-    expect(result.output).toContain("8 schema-enforced file(s) valid");
+    expect(result.output).toContain("7 schema-enforced file(s) valid");
   });
 
   it("fails on an invalid repo config and names the file", () => {
@@ -238,18 +229,18 @@ function schemaValidationPart1() {
     expect(result.output).toContain(factory("run.yaml"));
   });
 
-  it("fails on an invalid run config in the bootstrap library", () => {
+  it("does not read the tree's bootstrap run library", () => {
     freshCase(() => write("bootstrap/run/broken.yaml", "aliases: 7\n"));
     const result = validRun();
-    expect(result.code).toBe(1);
-    expect(result.output).toContain(
+    expect(result.code).toBe(0);
+    expect(result.output).not.toContain(
       path.join(root, "bootstrap", "run", "broken.yaml"),
     );
   });
 }
 
 function schemaValidationPart2() {
-  it("fails on an invalid FACTORY_RUN_CONFIG outside the run library", () => {
+  it("fails on an invalid FACTORY_RUN_CONFIG and names it", () => {
     freshCase(() => write("ops/current.yaml", "aliases: 7\n"));
     const result = run(PACKAGE_ROOT, {
       FACTORY_REPO_ROOT: root,
@@ -353,7 +344,6 @@ function schemaValidationPart4() {
 
   it("notes absent repo-level files without failing", () => {
     fs.rmSync(path.join(root, ".factory"), { recursive: true, force: true });
-    fs.rmSync(path.join(root, "bootstrap"), { recursive: true, force: true });
     const result = validRun();
     expect(result.code).toBe(0);
     expect(result.output).toContain("not present");
@@ -369,15 +359,11 @@ function registerTreeUnderTestPart1(): void {
     expect(result.output).toContain(artifacts);
   });
 
-  it("fails on a stale key in the tree's run library, naming the file", () => {
-    const stale = path.join(tree, "bootstrap", "run", "broken.yaml");
+  it("fails on a stale key in the tree's run config, naming the file", () => {
+    const stale = path.join(tree, ".factory", "run.yaml");
     freshTwoRoots({
       treeMutate: () =>
-        writeInto(
-          tree,
-          "bootstrap/run/broken.yaml",
-          "aliases: {}\ndroppedKey: 1\n",
-        ),
+        writeInto(tree, ".factory/run.yaml", "aliases: {}\ndroppedKey: 1\n"),
     });
     const result = twoRootRun();
     expect(result.code).toBe(1);

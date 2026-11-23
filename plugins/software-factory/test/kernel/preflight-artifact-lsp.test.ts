@@ -53,7 +53,7 @@ function splitHarnesses(f: Fixture): Map<string, Harness> {
     "omp",
     new FakeHarness({
       id: "omp",
-      caps: { effort: ["low", "medium", "high", "max"] },
+      probe: { effort: ["low", "medium", "high", "max"] },
     }),
   );
   return harnesses;
@@ -90,7 +90,7 @@ async function fixture(
   await store.ensureLayout();
   const harness = new FakeHarness({
     id: "fake",
-    caps: { effort: ["low", "high", "max"] },
+    probe: { effort: ["low", "high", "max"] },
   });
   const harnesses = new Map<string, Harness>([["fake", harness]]);
   return { repo, configs, paths, input: { configs, paths, store, harnesses } };
@@ -183,10 +183,8 @@ function preFlightArtifactLSPPart2(
     const empty = fs.mkdtempSync(path.join(os.tmpdir(), "no-yamlls-fake-"));
     toolPath(empty);
     try {
-      const result = await withPath(empty, () =>
-        preflight({ ...f.input, binaries }),
-      );
-      expect(result.aliases.architect).toBe("max");
+      await withPath(empty, () => preflight({ ...f.input, binaries }));
+      expect(f.configs.run.aliases.architect!.effort).toBe("max");
     } finally {
       f.repo.cleanup();
       fs.rmSync(empty, { recursive: true, force: true });

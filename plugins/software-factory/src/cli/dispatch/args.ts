@@ -52,6 +52,14 @@ const VALUE_FLAGS: readonly ValueFlag[] = [
     },
   },
   {
+    name: "--pin-gate-override",
+    apply: (result, value) => {
+      if (!value.trim())
+        throw new Error("--pin-gate-override requires a reason");
+      result.pinGateOverride = value.trim();
+    },
+  },
+  {
     name: "--intent",
     apply: (result, value) => {
       if (!value) throw new Error("--intent requires a file");
@@ -63,6 +71,13 @@ const VALUE_FLAGS: readonly ValueFlag[] = [
     apply: (result, value) => {
       if (!value) throw new Error("--step requires a step id");
       result.step = value;
+    },
+  },
+  {
+    name: "--alias",
+    apply: (result, value) => {
+      if (!value) throw new Error("--alias requires an alias name");
+      result.alias = value;
     },
   },
   {

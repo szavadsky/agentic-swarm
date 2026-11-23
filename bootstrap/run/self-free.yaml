@@ -184,8 +184,8 @@ aliases:
         subscription: opencode-go
 
 harnesses:
-  # No `compact`: agy submits `/compact` to the model as a prompt and compacts nothing.
   agy:
+    compaction: { enabled: false, reason: "/compact is sent to the model as a prompt and compacts nothing" }
     acpx:
       agent: agy acp
       raw: true
@@ -195,6 +195,7 @@ harnesses:
       usage: { cache: true }
     options: { args: [--approve-all] }
   claude-code:
+    compaction: { enabled: true }
     acpx:
       agent: claude
       compact: true

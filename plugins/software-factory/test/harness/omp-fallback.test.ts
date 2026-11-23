@@ -68,6 +68,7 @@ function ompHarnessFallbackChainPart1() {
       const binary = path.join(tmp, "fake-omp.js");
       fs.writeFileSync(binary, FAKE_OMP, { mode: 0o755 });
       const harness = new OmpHarness({
+        retention: "short",
         binary,
         sessionDir: path.join(tmp, "sessions"),
         retry: { retries: 0 },
@@ -110,6 +111,7 @@ function ompHarnessFallbackChainPart2() {
       const binary = path.join(tmp, "fake-omp.js");
       fs.writeFileSync(binary, FAKE_OMP, { mode: 0o755 });
       const harness = new OmpHarness({
+        retention: "short",
         binary,
         sessionDir: path.join(tmp, "sessions"),
         retry: { retries: 1, baseDelayMs: 0, maxDelayMs: 0 },

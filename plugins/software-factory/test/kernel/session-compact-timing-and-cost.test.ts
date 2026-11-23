@@ -375,6 +375,29 @@ function registerReviewSessionResumePart3(): void {
   }, 60_000);
 }
 
+function registerReviewSessionResumePart4(): void {
+  it("compacts only the configured review iterations", async () => {
+    const { repo, goal } = await resumesReviewsWhileImplementPart1();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      scriptFixRound(harness);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      runtime.configs.run.harnesses = {
+        fake: { compaction: { enabled: true, reviewIterations: [2] } },
+      };
+      await writeTask(runtime, task("task", { scope: ["task.txt"] }));
+      await runDispatch(runtime, { iteration: 1 });
+
+      const review = (await runtime.store.listRecords())
+        .filter((r) => r.slug === "task" && r.step === "review")
+        .sort((a, b) => a.seq - b.seq);
+      expect(review.map((r) => r.session?.compacted)).toEqual([false, true]);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
 describe("compaction timing and cost", () => {
   const PRICES = {
     "fake-impl": { input: 1, cachedInput: 0.5, output: 2, reasoning: 2 },
@@ -440,4 +463,6 @@ describe("review session resume", () => {
   registerReviewSessionResumePart2();
 
   registerReviewSessionResumePart3();
+
+  registerReviewSessionResumePart4();
 });

@@ -94,6 +94,11 @@ function priorFindings(
   return review?.outcome ? formatReviewFindings(review.outcome) : "";
 }
 
+/** The task's environment notes as prompt bullet lines; empty when it has none. */
+function formatEnvNotes(notes: string[] | undefined): string {
+  return (notes ?? []).map((note) => `- ${note}`).join("\n");
+}
+
 /** The task and worktree facts every turn renders. */
 function commonVars(
   runtime: KernelRuntime,
@@ -110,6 +115,7 @@ function commonVars(
     worktree,
     // Where a spike commits its finding; empty for every other task.
     report_path: task.kind === "spike" ? spikeReportPath(task.slug) : "",
+    env_notes: formatEnvNotes(task.envNotes),
     setup_command: runtime.configs.repo.setup.join(" && ") || "none",
     gate_commands:
       runtime.configs.repo.gates

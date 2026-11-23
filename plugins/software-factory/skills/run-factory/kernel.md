@@ -45,10 +45,11 @@ it into the repository or a separate one). The goal name must be kebab-case.
   class.yaml                  # the front's classification
   records/                    # one directory per settled step and round
   mailbox/{inbox,processed,outbox}/
-  iterations/<n>/{context-pack.md,summary.md,metrics.yaml}
+  iterations/<n>/{context-pack.md,summary.md,metrics.yaml,intent-status.json}
+  vendor/{pico.min.css,chart.umd.min.js}
   metrics.yaml
   status.json                 # machine-readable snapshot
-  dashboard.html              # static page rendered from status.json
+  dashboard.html              # static page rendered from status.json + intent-status.json
 ```
 
 ## Iteration lifecycle
@@ -77,8 +78,12 @@ decision parks the goal until a steer arrives.
 - `status.json` and `dashboard.html` sit beside the goal's task files. The
   kernel rewrites both after each agent launch and finish; `status --json`
   prints the stored snapshot.
-- `dashboard.html` is fully static: no server, no external assets, every value
-  escaped. Open the file directly in a browser and refresh after a launch.
+- `dashboard.html` is fully static: the kernel vendors Pico CSS and Chart.js
+  under `vendor/` and links them locally; no request leaves disk and every
+  value is escaped. Its intent section reads the newest
+  `iterations/<n>/intent-status.json` the architect's summary wrote, and says
+  `unknown` when none exists instead of deriving intent status from tasks.
+  Open the file directly in a browser and refresh after a launch.
 - `status` text is the quick read; `--json` is for editors, scripts and the
   dashboard's data source. Both derive from the same records.
 - `benchmark` adds cost, token, architect-share, work, incident and wall rows.

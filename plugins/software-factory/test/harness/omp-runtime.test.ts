@@ -58,6 +58,7 @@ describe("omp transient agent definitions", () => {
     const sessionDir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-omp-"));
     try {
       const runtime = new OmpRuntime({
+        retention: "short",
         binary: "/opt/omp",
         sessionDir,
       });
@@ -85,7 +86,11 @@ describe("omp transient agent definitions", () => {
   it("refuses a definition name that would escape the agents root", () => {
     const sessionDir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-omp-"));
     try {
-      const runtime = new OmpRuntime({ binary: "/opt/omp", sessionDir });
+      const runtime = new OmpRuntime({
+        binary: "/opt/omp",
+        sessionDir,
+        retention: "short",
+      });
       expect(() =>
         runtime.agentsDir([{ name: "../x", markdown: "role" }]),
       ).toThrow('invalid omp agent name "../x"');

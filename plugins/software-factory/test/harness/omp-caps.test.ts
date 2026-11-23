@@ -34,6 +34,7 @@ describe("omp caps", () => {
     const sessionDir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-omp-"));
     try {
       const modern = new OmpHarness({
+        retention: "short",
         binary: ompBinary(sessionDir, "18.22.2"),
         sessionDir,
       });
@@ -41,6 +42,7 @@ describe("omp caps", () => {
         "steer",
       );
       const older = new OmpHarness({
+        retention: "short",
         binary: ompBinary(sessionDir, "18.20.0"),
         sessionDir,
       });

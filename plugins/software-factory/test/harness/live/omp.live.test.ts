@@ -28,6 +28,7 @@ live("omp harness live smoke", () => {
     fs.mkdirSync(outbox);
     const outcomePath = path.join(outbox, "outcome.txt");
     const harness = new OmpHarness({
+      retention: "short",
       sessionDir: path.join(root, "sessions"),
       subagentModel: SUBAGENT,
       options: {
@@ -62,9 +63,11 @@ async function twoTurnResumeOutcomeOutsideCwdPart1(
   root: string,
 ) {
   const caps = await harness.caps(PARENT);
-  expect(caps.effort).toContain("low");
   expect(caps.compact).toBe("server");
   expect(caps.usage).toEqual({ cache: true, cost: true });
+  const probe = await harness.probe!(PARENT);
+  expect(probe.listed).toBe(true);
+  expect(probe.effort).toContain("low");
 
   const first = await harness.turn({
     model: PARENT,
@@ -107,14 +110,14 @@ async function twoTurnResumeOutcomeOutsideCwdPart1(
 
   const sessionsDir = path.join(root, "sessions", "omp", "sessions");
 
-  return { caps, first, second, spawned, sessionsDir };
+  return { first, second, spawned, sessionsDir };
 }
 
 async function twoTurnResumeOutcomeOutsideCwdPart2(
   started: number,
   scope: Awaited<ReturnType<typeof twoTurnResumeOutcomeOutsideCwdPart1>>,
 ) {
-  const { sessionsDir, caps, first, second, spawned } = scope;
+  const { sessionsDir, first, second, spawned } = scope;
   const changes = jsonlFiles(sessionsDir)
     .flatMap((file) =>
       fs
@@ -132,7 +135,7 @@ async function twoTurnResumeOutcomeOutsideCwdPart2(
     "omp live",
     JSON.stringify({
       wallMs: Date.now() - started,
-      caps: caps.effort,
+      model: first.model.id,
       turn1: {
         model: first.model,
         usage: first.usage,

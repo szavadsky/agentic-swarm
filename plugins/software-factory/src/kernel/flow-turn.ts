@@ -36,7 +36,7 @@ import {
   isLastReviewCall,
   reviewRoundLimit,
 } from "./review.js";
-import { materialHash } from "./tasks.js";
+import { materialHash } from "./task-material.js";
 import type { StepRecord } from "./types.js";
 import {
   containmentViolation,
@@ -214,7 +214,10 @@ async function commitTurn(
   );
   // An infra/refusal stop delivers no outcome; that session is not kept.
   if (!outcome || !live) return settled;
-  const compacted = await compactSession(runtime, live);
+  const compacted = await compactSession(runtime, live, {
+    review: step.review === true,
+    round: state.round,
+  });
   if (!compacted) return settled;
   return {
     ...settled,

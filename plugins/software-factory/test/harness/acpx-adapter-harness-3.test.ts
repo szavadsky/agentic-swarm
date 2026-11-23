@@ -60,6 +60,7 @@ function acpxHarnessPromptResultPrecedencePart1() {
     extra: Record<string, unknown> = {},
   ) {
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -222,6 +223,7 @@ function registerAcpxHarnessPart22(): void {
   it("maps a cancelled stop reason to cancelled even though acpx exits 0", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "codex",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -242,6 +244,7 @@ function registerAcpxHarnessPart23(): void {
   it("starts de novo instead of reusing a session bound to another cwd", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -273,6 +276,7 @@ function registerAcpxHarnessPart24(): void {
     const cwd = path.dirname(stub.binary);
     const pidFile = path.join(cwd, "child.pid");
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -307,6 +311,7 @@ function registerAcpxHarnessPart25(): void {
     const cwd = path.dirname(stub.binary);
     const pidFile = path.join(cwd, "child.pid");
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -337,6 +342,7 @@ function registerAcpxHarnessPart26(): void {
   it("a pre-aborted signal reports cancelled without spawning", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),

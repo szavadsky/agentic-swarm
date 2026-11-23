@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { git } from "../core/git/exec.js";
+import { git, GitError } from "../core/git/exec.js";
 import { porcelainStatus } from "../core/git/status.js";
 import { KeyedMutex } from "../core/mutex.js";
 import { type ArtifactWriter, createFolderStore } from "./store.js";
@@ -198,6 +198,125 @@ async function prepareSameRepo(root: string): Promise<void> {
     await fs.promises.mkdir(root, { recursive: true });
     await fs.promises.writeFile(ignore, GIT_REPO_IGNORE, "utf8");
   }
+}
+
+/** The goal a store commit trailer names, or null for a commit nobody authored. */
+function storeGoal(message: string): string | null {
+  const trailer = new RegExp(`^${STORE_COMMIT_TRAILER}: (.+)$`, "m");
+  const found = trailer.exec(message);
+  return found?.[1] ? found[1].trim() : null;
+}
+
+/** `HEAD` of a checkout, or null when it has no commit yet. */
+async function headOf(dir: string): Promise<string | null> {
+  const found = await git(dir, ["rev-parse", "--verify", "HEAD"], {
+    allowFail: true,
+  });
+  return found.code === 0 ? found.stdout.trim() : null;
+}
+
+/** Source commits already replayed onto the branch, by the `-x` trailer. */
+async function landedSources(
+  checkout: string,
+  head: string,
+): Promise<Set<string>> {
+  const log = await git(checkout, ["log", "--format=%B%x00", head], {
+    stripNewline: false,
+  });
+  const marker = /\(cherry picked from commit ([0-9a-f]{40})\)/g;
+  return new Set(
+    [...log.stdout.matchAll(marker)].map((found) => found[1] as string),
+  );
+}
+
+/**
+ * This goal's store commits that the branch has not seen: the base range
+ * excludes what the branch already merged, `landed` excludes what it already
+ * replayed with a new sha. Oldest first so the writes apply in order.
+ */
+async function pendingStoreCommits(
+  checkout: string,
+  branchHead: string,
+  source: string,
+  goal: string,
+  landed: ReadonlySet<string>,
+): Promise<string[]> {
+  const log = await git(
+    checkout,
+    ["log", "--reverse", "--format=%H%x00%B%x00", source, "--not", branchHead],
+    { stripNewline: false, allowFail: true },
+  );
+  if (log.code !== 0) return [];
+  const tokens = log.stdout.split("\0");
+  const pending: string[] = [];
+  for (let i = 0; i + 1 < tokens.length; i += 2) {
+    const sha = tokens[i]!.trim();
+    const body = tokens[i + 1] ?? "";
+    if (sha === "" || landed.has(sha)) continue;
+    if (storeGoal(body) !== goal) continue;
+    pending.push(sha);
+  }
+  return pending;
+}
+
+/**
+ * Lands the goal's store commits on the goal branch. `same-repo` writes every
+ * artifact into the operator's checkout; the branch the integration owns is
+ * where those writes become its history, replayed in order and attributed to
+ * the store. A missing checkout or branch has nothing to land yet.
+ *
+ * A conflicting hunk resolves to the landing: a moved branch head keeps its
+ * unrelated store work, and the live write is what settles on top of it.
+ */
+export async function landStoreCommits(paths: GoalPaths): Promise<string[]> {
+  if (paths.artifacts.backend !== "same-repo") return [];
+  const checkout = paths.goalCheckout;
+  if (!fs.existsSync(path.join(checkout, ".git"))) return [];
+  const branch = await git(checkout, ["rev-parse", "--abbrev-ref", "HEAD"], {
+    allowFail: true,
+  });
+  const on = branch.stdout.trim();
+  if (on !== paths.integrationBranch) {
+    // Landing anywhere else would put the goal's artifacts on a throwaway head.
+    // Do not spawn a checkout here: the integration path owns that lifecycle.
+    throw new Error(
+      `same-repo artifacts cannot land: ${checkout} is on "${on || "a detached HEAD"}", not "${paths.integrationBranch}"`,
+    );
+  }
+  const goal = path.basename(paths.goalDir);
+  return checkoutQueues.runExclusive(checkout, async () => {
+    const branchHead = await headOf(checkout);
+    const source = await headOf(paths.repoRoot);
+    if (branchHead === null || source === null) return [];
+    const landed = await landedSources(checkout, branchHead);
+    const pending = await pendingStoreCommits(
+      checkout,
+      branchHead,
+      source,
+      goal,
+      landed,
+    );
+    for (const sha of pending) {
+      const pick = await git(
+        checkout,
+        ["cherry-pick", "-x", "-X", "theirs", sha],
+        { allowFail: true },
+      );
+      if (pick.code === 0) continue;
+      if (/is now empty/i.test(pick.stderr)) {
+        await git(checkout, ["cherry-pick", "--skip"], { allowFail: true });
+        continue;
+      }
+      await git(checkout, ["cherry-pick", "--abort"], { allowFail: true });
+      throw new GitError(
+        `cherry-pick ${sha}`,
+        pick.code,
+        pick.stderr,
+        pick.stdout,
+      );
+    }
+    return pending;
+  });
 }
 
 /**

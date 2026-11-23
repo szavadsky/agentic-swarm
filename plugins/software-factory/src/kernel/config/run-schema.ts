@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { acpxConfigSchema } from "../../harness/acpx/config.js";
+import { CACHE_TTLS } from "../../harness/types.js";
 import { DEFAULT_POOL_RESET_MINUTES } from "../quota-pools.js";
 import { DEFAULT_TIMEOUTS } from "../types.js";
 import {
@@ -35,6 +36,8 @@ export const processConfigSchema = z
     /** Repair template a step renders when it names none. */
     repairPrompt: z.string().min(1).optional(),
     reminders: z.number().int().nonnegative().default(1),
+    /** Wasted turns of one cause across iterations that call for a spike; defaults to 2. */
+    wasteSpikeThreshold: z.number().int().positive().optional(),
     calibration: z.string().optional(),
     promptsDir: z.string().min(1).optional(),
     presets: z
@@ -75,7 +78,7 @@ export const fallbackSchema = z.union([
       /** Harness id; defaults to the alias's harness. */
       harness: z.string().min(1).optional(),
       model: z.string().min(1),
-      /** Effort level; defaults to the alias's resolved effort. */
+      /** Effort level; absent means the harness default. */
       effort: z.string().min(1).optional(),
       /**
        * Quota pool this tier draws on; defaults to the alias's subscription
@@ -133,6 +136,30 @@ export const aliasSchema = z
   .strict();
 
 /**
+ * A harness entry's compaction policy. Disabling it needs a recorded reason:
+ * the run config says why a harness's sessions stay uncompacted instead of
+ * leaving a YAML comment to explain the absence.
+ */
+export const compactionSchema = z
+  .object({
+    enabled: z.boolean(),
+    /** Why this harness does not compact; required when `enabled` is false. */
+    reason: z.string().min(1).optional(),
+    /**
+     * Review rounds whose ended session is compacted. Absent compacts every
+     * review round; non-review steps ignore the rule. Round numbers are 1-based.
+     */
+    reviewIterations: z.array(z.number().int().positive()).optional(),
+  })
+  .strict()
+  .refine(
+    (compaction) =>
+      compaction.enabled ||
+      (compaction.reason !== undefined && compaction.reason.trim() !== ""),
+    "compaction.reason is required when compaction is disabled",
+  );
+
+/**
  * A harness entry binds an adapter (`acpx`), overrides the executable a native
  * adapter runs (omp), or carries opaque adapter options; at least one is needed.
  */
@@ -145,6 +172,7 @@ export const harnessEntrySchema = z
      * Absent resolves through PATH.
      */
     binary: z.string().min(1).optional(),
+    compaction: compactionSchema.optional(),
     /**
      * Adapter-specific keys, opaque to the kernel except pre-flight's shape
      * check of the acpx `args`/`env`; omp merges the rest into its launch
@@ -159,6 +187,13 @@ export const harnessEntrySchema = z
       entry.binary !== undefined ||
       entry.options !== undefined,
     "harness entry needs an acpx binding, a binary override or options",
+  )
+  .refine(
+    (entry) =>
+      entry.acpx === undefined ||
+      entry.compaction?.enabled !== true ||
+      entry.acpx.compact === true,
+    "acpx compaction enabled needs acpx.compact: true",
   );
 
 const concurrencySchema = z
@@ -226,8 +261,11 @@ export const runConfigSchema = z
         /** Empty resolves to <worktreeRoot>/.sessions, outside the repo. */
         dir: z.string().default(""),
         keepRuns: z.number().int().nonnegative().default(5),
-        /** Provider cache window for omp sessions: 5 minutes, or 1 hour when long. */
-        retention: z.enum(["short", "long"]).default("short"),
+        /**
+         * Provider cache TTL from omp's enum. A declared sessions block must
+         * state it; an absent block keeps the factory's short window.
+         */
+        retention: z.enum(CACHE_TTLS),
       })
       .strict()
       .default(() => ({ dir: "", keepRuns: 5, retention: "short" as const })),

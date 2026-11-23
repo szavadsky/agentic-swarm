@@ -46,6 +46,7 @@ function detailsOf(stop: Stop): string {
 
 async function ompTurn(binary: string, dir: string) {
   const harness = new OmpHarness({
+    retention: "short",
     binary,
     sessionDir: path.join(dir, "sessions"),
     readyTimeoutMs: 2_000,
@@ -68,6 +69,7 @@ async function opencodeTurn(binary: string, dir: string) {
     usage: { cache: true },
   };
   const harness = new AcpxHarness({
+    retention: "short",
     id: "opencode",
     binary,
     sessionDir: path.join(dir, "sessions"),

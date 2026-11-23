@@ -55,7 +55,7 @@ function runYaml(repo: TmpRepo): string {
     "  pack-preparer: { harness: fake, model: fake-pack-prep }",
     "limits: { iterations: 1, concurrency: { overall: 1 } }",
     `worktreeRoot: ../${base}-wt`,
-    `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
+    `sessions: { dir: ../${base}-sessions, keepRuns: 2, retention: short }`,
     "",
   ].join("\n");
 }
@@ -179,23 +179,59 @@ function cliArgs(argv: string[]): string[] {
 
 const runs: Array<{ args: string[]; result: Captured }> = [];
 
-describe("run-factory skill", () => {
-  it("ships kernel, config and sandbox resources through resolvable links", () => {
-    expect(fs.existsSync(path.join(SKILL_DIR, "kernel.md"))).toBe(true);
-    expect(fs.existsSync(path.join(SKILL_DIR, "config.md"))).toBe(true);
-    expect(fs.existsSync(path.join(SKILL_DIR, "sandbox.md"))).toBe(true);
+/** The six operator surfaces a fresh reader must find in the skill. */
+const OPERATOR_SURFACES: ReadonlyArray<{
+  label: string;
+  pattern: RegExp;
+}> = [
+  { label: "intent placement", pattern: /intent/i },
+  { label: "config", pattern: /config/i },
+  { label: "launch", pattern: /launch/i },
+  { label: "dashboard location", pattern: /dashboard/i },
+  { label: "steers", pattern: /steer/i },
+  { label: "templating", pattern: /templating/i },
+];
 
-    // A skill is only usable when its bundled links resolve from its directory.
+function assertOperatorSurfacesCovered(skill: string): void {
+  const sections = skill
+    .split("\n")
+    .filter((line) => line.startsWith("## "))
+    .map((line) => line.slice(3).trim());
+  expect(sections.length).toBeGreaterThan(0);
+  const covered = new Map<string, string>();
+  for (const surface of OPERATOR_SURFACES) {
+    const hit = sections.find((section) => surface.pattern.test(section));
+    if (hit) covered.set(surface.label, hit);
+  }
+  expect([...covered.keys()]).toEqual(
+    OPERATOR_SURFACES.map((surface) => surface.label),
+  );
+}
+
+function assertSkillLinksResolve(): void {
+  expect(fs.existsSync(path.join(SKILL_DIR, "kernel.md"))).toBe(true);
+  expect(fs.existsSync(path.join(SKILL_DIR, "config.md"))).toBe(true);
+  expect(fs.existsSync(path.join(SKILL_DIR, "sandbox.md"))).toBe(true);
+  const skill = fs.readFileSync(path.join(SKILL_DIR, "SKILL.md"), "utf8");
+  const links = [...skill.matchAll(/\]\(([^)#\s]+)(?:#[^)]*)?\)/g)].map(
+    (match) => match[1]!,
+  );
+  for (const link of links) {
+    expect(fs.existsSync(path.resolve(SKILL_DIR, link))).toBe(true);
+  }
+  expect(links).toContain("kernel.md");
+  expect(links).toContain("config.md");
+  expect(links).toContain("sandbox.md");
+}
+
+describe("run-factory skill", () => {
+  it("covers every operator surface in the skill", () => {
     const skill = fs.readFileSync(path.join(SKILL_DIR, "SKILL.md"), "utf8");
-    const links = [...skill.matchAll(/\]\(([^)#\s]+)(?:#[^)]*)?\)/g)].map(
-      (match) => match[1]!,
-    );
-    for (const link of links) {
-      expect(fs.existsSync(path.resolve(SKILL_DIR, link))).toBe(true);
-    }
-    expect(links).toContain("kernel.md");
-    expect(links).toContain("config.md");
-    expect(links).toContain("sandbox.md");
+    assertOperatorSurfacesCovered(skill);
+  });
+
+  it("ships kernel, config and sandbox resources through resolvable links", () => {
+    assertSkillLinksResolve();
   });
 
   it("runs the skill walkthrough from a fresh checkout on the fake harness", async () => {

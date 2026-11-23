@@ -296,6 +296,8 @@ function aggregatesPerModelCostWorkPart2(
   expect(one.unpricedTurns).toBe(1);
   expect(one.costPerMergedTask).toBeCloseTo(8.2, 10);
   expect(one.listCostPerMergedTask).toBeCloseTo(8.2, 10);
+  expect(one.harnessCostPerMergedTask).toBe(0);
+  expect(metrics.totals.harnessCostPerMergedTask).toBe(0);
 
   // Operator acts: steers plus the two outside records.
   expect(one.humanInterventions).toBe(2);

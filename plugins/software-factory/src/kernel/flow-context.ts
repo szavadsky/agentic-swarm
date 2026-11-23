@@ -10,7 +10,6 @@ export {
   escalateFrontClassToBigger,
   FrontClassError,
   frontTarget,
-  isStandaloneTask,
   readFrontClass,
 } from "./flow-context-front.js";
 export {

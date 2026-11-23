@@ -5,6 +5,7 @@
 
 export {
   concernSchema,
+  intentStatusEntrySchema,
   debtClosedEntrySchema,
   normalizeSlug,
   outcomeSchema,
@@ -23,6 +24,7 @@ export {
 } from "./types/outcome.js";
 export type {
   Concern,
+  IntentStatusEntry,
   ConcernId,
   Outcome,
   PlanCheck,

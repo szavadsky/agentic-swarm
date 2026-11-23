@@ -93,10 +93,11 @@ async function fixture(
   const store = createFolderStore(paths.goalDir, undefined, {});
   await store.ensureLayout();
   const harnesses = new Map<string, Harness>([
-    ["omp", new FakeHarness({ id: "omp", caps: { effort: ["low", "high"] } })],
+    ["omp", new FakeHarness({ id: "omp", probe: { effort: ["low", "high"] } })],
     [
       "opencode",
       new AcpxHarness({
+        retention: "short",
         id: "opencode",
         binary: stub.binary,
         sessionDir: path.dirname(stub.binary),
@@ -145,6 +146,7 @@ describe("acpx live pre-flight", () => {
 describe("acpx harness registry", () => {
   it("binds harness ids from run config with no code", () => {
     const harnesses = createRealHarnesses({
+      retention: "short",
       sessionDir: "/tmp/sessions",
       harnesses: {
         nova: {
@@ -152,9 +154,11 @@ describe("acpx harness registry", () => {
             agent: "nova",
             effort: { configId: "nova_level" },
           },
+          compaction: { enabled: true },
         },
         opencode: {
           acpx: { agent: "opencode acp", raw: true },
+          compaction: { enabled: true },
         },
       },
     });
@@ -166,15 +170,21 @@ describe("acpx harness registry", () => {
   });
 
   it("registers no native opencode adapter", () => {
-    const harnesses = createRealHarnesses({ sessionDir: "/tmp/sessions" });
+    const harnesses = createRealHarnesses({
+      retention: "short",
+      sessionDir: "/tmp/sessions",
+    });
     expect(harnesses.opencode).toBeUndefined();
     expect(harnesses.omp).toBeDefined();
   });
 
   it("resolves a raw harness binary from its configured command", () => {
     const binaries = resolveHarnessBinaries({
-      nova: { acpx: { agent: "/opt/nova-test/bin/nova acp", raw: true } },
-      plain: { acpx: { agent: "plain" } },
+      nova: {
+        acpx: { agent: "/opt/nova-test/bin/nova acp", raw: true },
+        compaction: { enabled: true },
+      },
+      plain: { acpx: { agent: "plain" }, compaction: { enabled: true } },
     });
     expect(binaries.nova).toBe("/opt/nova-test/bin/nova");
     // A positional agent is served by the acpx dispatcher, whatever it is here.
@@ -209,7 +219,7 @@ function acpxLivePreFlightPart1() {
 }
 
 function acpxLivePreFlightPart2() {
-  it("refuses highest effort", async () => {
+  it("refuses an effort the live probe does not list", async () => {
     const stub = createAcpxStub({
       models: LIVE_MODELS,
       effortConfigId: "effort",
@@ -226,7 +236,9 @@ function acpxLivePreFlightPart2() {
           file: expect.stringContaining(".factory/run-acpx.yaml"),
         }),
       );
-      expect(err.report).toContain('effort "highest" is forbidden');
+      expect(err.report).toContain(
+        'effort "highest" is not supported; model accepts: none, high, default',
+      );
     } finally {
       failed.repo.cleanup();
     }
@@ -258,7 +270,7 @@ function acpxLivePreFlightPart3() {
 }
 
 function acpxLivePreFlightPart4() {
-  it("refuses highest in fallbacks", async () => {
+  it("refuses an unlisted effort in fallbacks", async () => {
     const stub = createAcpxStub({
       models: LIVE_MODELS,
       effortConfigId: "effort",
@@ -286,7 +298,9 @@ limits: { concurrency: { overall: 2 }, iterations: 1 }
     const f = await fixture(text, stub);
     try {
       const err = await refusal(f.input);
-      expect(err.report).toContain('effort "highest" is forbidden');
+      expect(err.report).toContain(
+        'effort "highest" is not supported; model accepts: low, medium',
+      );
     } finally {
       f.repo.cleanup();
     }
@@ -301,8 +315,7 @@ function acpxLivePreFlightPart5() {
     });
     const f = await fixture(runConfig({ pmModel: "model-a-high" }), stub);
     try {
-      const result = await preflight(f.input);
-      expect(result.aliases.pm).toBe("high");
+      await preflight(f.input);
       const create = sessionCalls(stub, "new")[0]!;
       expect(create[create.indexOf("--model") + 1]).toBe("model-a");
     } finally {

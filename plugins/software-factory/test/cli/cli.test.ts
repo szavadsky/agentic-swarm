@@ -40,7 +40,7 @@ function conflictingBaseRepo(): TmpRepo {
       "  pack-preparer: { harness: fake, model: fake-pack-prep }",
       "limits: { iterations: 1, concurrency: { overall: 1 } }",
       `worktreeRoot: ../${base}-wt`,
-      `sessions: { dir: ../${base}-sessions, keepRuns: 1 }`,
+      `sessions: { dir: ../${base}-sessions, keepRuns: 1, retention: short }`,
       "",
     ].join("\n"),
   );

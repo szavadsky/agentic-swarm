@@ -55,7 +55,7 @@ export interface BaseGateState {
  * red record cannot be inherited into tasks that start from a newer head.
  */
 export function recordedBaseGates(
-  records: StepRecord[],
+  records: readonly StepRecord[],
 ): BaseGateState | undefined {
   const latest = records
     .filter(

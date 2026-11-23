@@ -47,8 +47,6 @@ export class AcpxHarness implements Harness {
       compact: this.runtime.acpx.compact === true ? "server" : "none",
       subagents: "none",
       structuredOutput: "none",
-      // Live levels exist only inside a session; pre-flight probes them.
-      effort: [],
       // ACP carries cost on `usage_update`; a silent agent leaves it unknown.
       usage: { cache: this.runtime.acpx.usage?.cache ?? false, cost: true },
     };
@@ -151,6 +149,7 @@ function runtimeOf(opts: AcpxHarnessOptions): AcpxRuntime {
     command: resolveAcpxCommand(opts.binary),
     sessionDir: path.resolve(opts.sessionDir),
     envAllowlist: opts.envAllowlist,
+    retention: opts.retention,
     // The entry's opaque options win over the structured block; the adapter
     // reads only `args` and `env` from the result.
     acpx: {

@@ -3,7 +3,7 @@
  * builds harnesses for it, and the result it stops with. The launch modules
  * share these types; `launch.ts` re-exports them as the public face.
  */
-import type { Harness, ModelRef } from "../harness/types.js";
+import type { CacheTtl, Harness, ModelRef } from "../harness/types.js";
 import type { PriceSource } from "./openrouter.js";
 import type { ModelCatalog } from "./preflight.js";
 import type { DrainController, DrainSignal } from "./signals.js";
@@ -23,8 +23,8 @@ export interface HarnessFactoryContext {
   scouts?: ModelRef;
   /** Run-config harness entries; each acpx entry binds one harness id. */
   harnesses?: Record<string, HarnessConfig>;
-  /** Provider cache window from `sessions.retention`; omp overlay and session stamp share it. */
-  retention?: "short" | "long";
+  /** Provider cache window from `sessions.retention`; every adapter stamps it. */
+  retention: CacheTtl;
   /** Run-config `envAllowlist`: names a harness child inherits on top of the base set. */
   envAllowlist?: readonly string[];
   /** Artifact LSP enabled by the run config: the canonical config each omp turn installs. */
@@ -47,6 +47,10 @@ export interface RunGoalOptions {
   binaries?: Record<string, string | undefined>;
   signals?: DrainController;
   baseGates?: boolean;
+  /** The build this process executes from; absent reads the running package when it is a pin. */
+  pinBuild?: string;
+  /** The operator's audited reason for launching a pin whose recorded gate is not all-pass. */
+  pinGateOverride?: string;
   /** Price cache and fetcher; undefined means the shared cache plus network. */
   priceSource?: PriceSource;
 }

@@ -179,6 +179,8 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
         "follow-up notice for a turn resumed in the front's session: the task branch plus the absolute-path rules; empty string on a de-novo turn",
       report_path:
         "repo-relative path a spike commits its finding to (`.factory/spikes/<slug>.md`); empty string on a development task; when set, it also opens the prompt with the commit-first sentence",
+      env_notes:
+        "the task file's environment notes as `- ` bullet lines (infra facts, known flakes, workarounds); empty string when the task has none",
       setup_command:
         "worktree bootstrap command (dependencies etc.); `none` when not needed",
       gate_commands:
@@ -329,7 +331,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     file: "review-architect.md",
     prompt: "review-architect",
     intro:
-      "The plan-review prompt the architecture flow renders on each reviewer alias. It composes the architect's assignment and plan standard from fragments, adds the review focus, and delivers `planReview` findings (`technical`, `planNotes`) with no verdict. It never edits the plan.",
+      "The plan-review prompt the architecture flow renders on each reviewer alias. It composes the architect's assignment and whole body from fragments, adds the review focus, and delivers `planReview` findings (`technical`, `planNotes`) with no verdict. It never edits the plan.",
     variables: {
       iteration: "1-based iteration number of this launch",
       intent_path: "path to the goal's `intent.md`",
@@ -347,7 +349,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       task_types:
         "configured task types with their flow, kind and schema, read by the included plan standard; renderer default",
       tiers:
-        "run-config alias names, read by the included plan standard; renderer default",
+        "run-config alias names, read by the included architect scope; renderer default",
     },
   },
   {
@@ -403,6 +405,8 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       integration_head: "integration head sha the branch must absorb",
       conflicts:
         "conflicted files, comma-separated; `none` when the merge needs no resolution",
+      gate_log_path:
+        "path to the red merged result's gate log when this branch is a red-after-merge candidate; `none` when the merge needs no gate repair",
       gate_commands:
         "configured gate commands as `- id: command` lines; `none` when empty",
       base_gates:

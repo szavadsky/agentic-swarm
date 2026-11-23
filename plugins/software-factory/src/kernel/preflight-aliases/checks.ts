@@ -6,10 +6,10 @@ import type { AliasContext } from "./types.js";
 import {
   add,
   checkAliasIdentity,
+  checkEffort,
   checkPrimaryModel,
   checkRotation,
   checkedModel,
-  resolveEffort,
 } from "./models.js";
 import { checkFallbacks } from "./tiers.js";
 
@@ -17,11 +17,10 @@ export async function checkAlias(
   ctx: AliasContext,
   name: string,
   alias: AliasConfig,
-  effortOut: Record<string, string | undefined>,
 ): Promise<void> {
   const key = `aliases.${name}`;
   if (!checkAliasIdentity(ctx, key, alias)) return;
-  await checkPrimaryModel(ctx, key, name, alias, effortOut);
+  await checkPrimaryModel(ctx, key, alias);
   await checkRotation(ctx, key, alias);
   await checkFallbacks(ctx, key, alias);
 }
@@ -71,7 +70,6 @@ export function checkPortability(
 export async function checkScouts(
   ctx: AliasContext,
   configs: ConfigBundle,
-  effortOut: Record<string, string | undefined>,
 ): Promise<void> {
   const scouts = configs.run.scouts;
   if (!scouts) return;
@@ -92,11 +90,11 @@ export async function checkScouts(
     "model",
   );
   if (!checked) return;
-  effortOut.scouts = await resolveEffort(
+  checkEffort(
     ctx,
     "scouts",
     OMP_ID,
-    { id: scouts.model },
+    scouts.model,
     scouts.effort ?? checked.modelEffort,
     checked.effort,
   );

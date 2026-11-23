@@ -20,3 +20,7 @@ Keep one register under `## Architect register` in `plan.md`, one bullet per epi
 ## Steers
 
 Every steer gets one `steerAnswers: {steer, answer}` entry, citing the id from the pending steers. Silence is not an answer.
+
+## Intent status
+
+Every architect outcome carries `intentStatus`: one entry per intent section naming `works`, `not-built` or `friction`, with a short note where it helps. The kernel writes it to `iterations/<n>/intent-status.json`; the dashboard renders that artifact and never derives intent status from task counts.

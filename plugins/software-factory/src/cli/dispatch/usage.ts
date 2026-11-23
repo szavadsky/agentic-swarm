@@ -6,6 +6,7 @@ software-factory
 Commands:
   init                     Create the repo config, goal directory and intent
   run                      Run bounded iterations of one goal
+  canary                   Run the canary turns and record a pass for rotation
   status                   Show derived state, parked causes and the last summary
   benchmark                Print the benchmark rows for one goal's artifacts
   steer                    Drop a steering file into the goal inbox
@@ -33,12 +34,26 @@ written. An existing intent is never overwritten.
 
 const RUN_USAGE = `
 factory run --repo <path> --goal <name> [--iterations N] [--run-config <path>]
+            [--pin-gate-override <reason>]
 
 Loads the three config layers, runs pre-flight (models, effort, fallbacks,
 binaries, roots, base gates), takes the goal lock, recovers interrupted records
 and stale worktrees, then alternates one architect boundary with task dispatch.
+Launching from a pin requires its gate.yaml to record an all-pass gate;
+--pin-gate-override <reason> launches a missing or red pin and records the
+reason in the run's records.
 State is derived from <artifactRoot>/<goal>/{tasks,records}; there is no state
 file. Exit: 0 done, 1 failure, 2 blocked, 3 iteration limit, 130/143 signal.
+`;
+
+const CANARY_USAGE = `
+factory canary <harness/model> | --alias <name> [bigger]
+
+Runs a trivial goal and a standalone task against the named combination and
+records a pass where rotation reads it; --alias resolves the combination from
+the run config; bigger adds the small bigger goal architect legs need. The
+turns run in an isolated temp directory and never merge into the goal branch.
+Exit: 0 pass, 1 fail.
 `;
 
 const STATUS_USAGE = `
@@ -99,7 +114,7 @@ const SCHEMAS_USAGE = `
 factory schemas --out <dir>
 
 Writes every kernel file schema as JSON Schema, one <name>.schema.json per
-artifact: task, outcome, hold, class, repo, run and process. Creates the
+artifact: task, outcome, hold, class, repo, run, process and gate. Creates the
 directory. Editors and the artifact LSP consume these files. Exit: 0 written,
 1 error.
 `;
@@ -107,6 +122,7 @@ directory. Editors and the artifact LSP consume these files. Exit: 0 written,
 export function usageFor(command: string | undefined): string {
   if (command === "init") return INIT_USAGE;
   if (command === "run") return RUN_USAGE;
+  if (command === "canary") return CANARY_USAGE;
   if (command === "status") return STATUS_USAGE;
   if (command === "benchmark") return BENCHMARK_USAGE;
   if (command === "steer") return STEER_USAGE;

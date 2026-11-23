@@ -58,6 +58,7 @@ async function test3BothShapesNextFallbackModelRunsNoPart1() {
     },
   });
   const codexHarness = new AcpxHarness({
+    retention: "short",
     id: "codex",
     binary: codexStub.binary,
     sessionDir: path.dirname(codexStub.binary),
@@ -111,6 +112,7 @@ async function test3BothShapesNextFallbackModelRunsNoPart2(
     },
   });
   const piHarness = new AcpxHarness({
+    retention: "short",
     id: "pi",
     binary: piStub.binary,
     sessionDir: path.dirname(piStub.binary),
@@ -164,6 +166,7 @@ function acpxZeroUsageClassificationPart1() {
       },
     });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "codex",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -194,6 +197,7 @@ function acpxZeroUsageClassificationPart2() {
       sessionUsage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -233,6 +237,7 @@ function acpxZeroUsageClassificationPart3() {
       },
     });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "codex",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -264,6 +269,7 @@ function acpxZeroUsageClassificationPart4() {
       sessionUsage: { input: 100, output: 10, cacheRead: 5, cacheWrite: 2 },
     });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -298,6 +304,7 @@ function acpxZeroUsageClassificationPart5() {
   it("(4c) done stays done for an agent with no usage config (claude-code)", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "claude-code",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -334,6 +341,7 @@ function acpxZeroUsageClassificationPart6() {
       },
     });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "codex",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -371,6 +379,7 @@ function acpxZeroUsageClassificationPart7() {
       },
     });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "codex",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),

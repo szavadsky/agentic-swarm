@@ -1,8 +1,15 @@
 /** The command table and the process exit codes each command returns. */
 
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { loadConfigs } from "../../kernel/config.js";
+import { loadConfigs, resolveGoalPaths } from "../../kernel/config.js";
 import { formatCause } from "../../kernel/cause.js";
+import {
+  loadCanaryProven,
+  runCanary,
+  type CanaryVerdict,
+} from "../../kernel/canary.js";
 import { runGoal } from "../../kernel/launch.js";
 import type { LaunchResult } from "../../kernel/launch.js";
 import { writePromptVariables } from "../../kernel/prompt-vars.js";
@@ -72,6 +79,7 @@ async function runCommand(parsed: ParsedArgs, deps: CliDeps): Promise<number> {
     goal: parsed.goal,
     iterations: parsed.iterations,
     runConfigPath: parsed.runConfig,
+    pinGateOverride: parsed.pinGateOverride,
     harnesses: deps.harnesses,
     harnessFactory:
       deps.harnessFactory ?? (injected ? undefined : createRealHarnesses),
@@ -136,6 +144,105 @@ async function benchmarkCommand(parsed: ParsedArgs): Promise<number> {
   if (!parsed.goal) throw new Error("benchmark requires --goal <name>");
   console.log(formatBenchmark(await benchmarkGoal(parsed.repo, parsed.goal)));
   return 0;
+}
+
+/** The fake-harness canary turn: a minimal trivial/task/bigger turn on the target. */
+function fakeCanaryTurn(deps: CliDeps, harnessId: string) {
+  return async (opts: {
+    harnessId: string;
+    modelId: string;
+    effort?: string;
+    kind: "trivial" | "task" | "bigger";
+    cwd: string;
+  }): Promise<CanaryVerdict> => {
+    const harness = deps.harnesses?.[harnessId];
+    if (!harness) throw new Error(`harness "${harnessId}" is not registered`);
+    const result = await harness.turn({
+      model: { id: opts.modelId, effort: opts.effort },
+      cwd: opts.cwd,
+      prompt: `canary ${opts.kind}`,
+      timeouts: { idleMs: 60_000, wallMs: 300_000 },
+    });
+    if (result.stop.kind !== "done")
+      return { pass: false, reason: `turn stopped with ${result.stop.kind}` };
+    return { pass: true };
+  };
+}
+
+/**
+ * `canary`: run the canary turns for one harness/model combination and record
+ * a pass where rotation reads it. The combination is named as
+ * `<harness/model>` or through `--alias`; architect legs add `--bigger`.
+ * The turns run in an isolated temp directory, never in a goal checkout, so
+ * the canary never merges into the goal branch.
+ */
+/** The combination a `canary` command names: an alias or `<harness/model>`. */
+function canaryCombination(parsed: ParsedArgs): {
+  harnessId: string;
+  modelId: string;
+  effort?: string;
+} {
+  const aliasName =
+    parsed.alias ??
+    (parsed.file && parsed.file.includes("/") ? undefined : parsed.file);
+  const configs = loadConfigs(path.resolve(parsed.repo), {
+    runConfigPath: parsed.runConfig,
+  });
+  if (aliasName) {
+    const alias = configs.run.aliases[aliasName];
+    if (!alias)
+      throw new Error(
+        `alias "${aliasName}" not found in run config "${parsed.runConfig ?? ".factory/run.yaml"}"`,
+      );
+    return {
+      harnessId: alias.harness,
+      modelId: alias.model,
+      effort: alias.effort,
+    };
+  }
+  if (parsed.file && parsed.file.includes("/")) {
+    const [harnessId, modelId] = parsed.file.split("/");
+    if (!harnessId || !modelId)
+      throw new Error("canary requires a <harness/model> combination");
+    return { harnessId, modelId };
+  }
+  throw new Error(
+    "canary requires a <harness/model> combination or --alias <name>",
+  );
+}
+
+async function canaryCommand(
+  parsed: ParsedArgs,
+  deps: CliDeps,
+): Promise<number> {
+  const repoRoot = path.resolve(parsed.repo);
+  const configs = loadConfigs(repoRoot, { runConfigPath: parsed.runConfig });
+  const paths = resolveGoalPaths(configs, repoRoot, parsed.goal ?? "canary");
+  const { harnessId, modelId, effort } = canaryCombination(parsed);
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "factory-canary-"));
+  try {
+    const proven = await loadCanaryProven(paths);
+    const verdict = await runCanary(
+      {
+        harnessId,
+        modelId,
+        effort,
+        bigger: parsed.file?.includes("bigger") ?? false,
+        cwd,
+      },
+      fakeCanaryTurn(deps, harnessId),
+      proven,
+      paths,
+    );
+    if (!verdict.pass) {
+      console.error(`canary ${harnessId}/${modelId}: fail`);
+      return 1;
+    }
+    console.log(`canary ${harnessId}/${modelId}: pass`);
+    return 0;
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
 }
 
 async function steerCommand(parsed: ParsedArgs): Promise<number> {
@@ -211,6 +318,7 @@ const COMMANDS: Record<string, CommandHandler> = {
   run: runCommand,
   init: initCommand,
   status: statusCommand,
+  canary: canaryCommand,
   benchmark: benchmarkCommand,
   steer: steerCommand,
   validate: validateCommand,
@@ -236,6 +344,7 @@ export async function dispatch(
     const known = [
       "init",
       "run",
+      "canary",
       "status",
       "benchmark",
       "steer",

@@ -13,6 +13,7 @@ import {
   applyMerge,
   applyScriptFailure,
 } from "./derive-task-gates.js";
+import { settleDag } from "./derive-task-dag.js";
 import {
   createReduceState,
   type ReduceContext,
@@ -137,5 +138,6 @@ export function reduceTask(
     if (!rec.endedAt) continue;
     applyRecord(context, state, rec);
   }
+  settleDag(context, state, owned);
   return finishReduction(state, terminal);
 }

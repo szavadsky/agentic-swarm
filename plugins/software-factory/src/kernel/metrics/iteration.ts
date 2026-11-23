@@ -212,6 +212,10 @@ function iterationMetricsResult(
     tokens,
     costPerMergedTask: costPerTask(slugs.merged.length, usage.costUsd),
     listCostPerMergedTask: costPerTask(slugs.merged.length, usage.listCostUsd),
+    harnessCostPerMergedTask: costPerTask(
+      slugs.merged.length,
+      usage.harnessCostUsd,
+    ),
     roles: acc.roles,
     aliases: acc.aliases,
     models: acc.models,

@@ -126,6 +126,7 @@ const ROLES: Record<string, Record<string, string>> = {
     worktree: "/worktrees/demo-tasks/alpha",
     resume_note: "",
     report_path: ".factory/spikes/alpha.md",
+    env_notes: "",
     setup_command: "bun install",
     gate_commands: "- test: bun test\n- typecheck: bun run typecheck",
     base_gates: "base abc1234def: green",
@@ -189,6 +190,7 @@ const ROLES: Record<string, Record<string, string>> = {
     integration_head: "abc1234def5678",
     conflicts: "conflict.txt",
     gate_commands: "- test: bun test",
+    gate_log_path: "none",
     base_gates: "base abc1234def: green",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
@@ -306,24 +308,54 @@ function reviewerIncludesAuthorSBodyPart2() {
       lib.render("reviewer", { ...ROLES.reviewer!, author: "nobody" }),
     ).toThrow('Prompt fragment "review-nobody" not found');
   });
+}
 
-  it("includes the architect's assignment through fragments, not the whole body", () => {
+function reviewerIncludesArchitectBodyPart1() {
+  it("includes the architect's body verbatim, then the review focus and findings schema", () => {
     const lib = library();
+    const architect = lib.render("architect", ROLES.architect!);
     const rendered = lib.render("review-architect", ROLES["review-architect"]!);
-    // The shared assignment, plan standard and plan rules are the standard the
-    // plan must meet; the architect's turn order, steers and tiers are not the
-    // reviewer's.
-    expect(rendered).toContain("You are the architect");
-    expect(rendered).toContain("## Bounds");
-    expect(rendered).toContain("## What the plan carries");
-    expect(rendered).toContain("## Granularity and dispatch");
-    expect(rendered).toContain("## Debt, parked work and ADRs");
-    expect(rendered).toContain("Temporary debt only with a named remover");
-    expect(rendered).not.toContain("## Turn order");
-    expect(rendered).not.toContain("## Steers and calibration");
-    expect(rendered).not.toContain("You implement one task");
+    const bodyUpTo = (text: string, end: string): string => {
+      const start = text.indexOf("## Turn order\n");
+      expect(start, "no turn order").toBeGreaterThanOrEqual(0);
+      const endAt = text.indexOf(end, start);
+      expect(endAt, `no ${end}`).toBeGreaterThan(start);
+      return text.slice(start, endAt);
+    };
+    // The body is the architect's static text; only its outcome skeleton is
+    // the review turn's own narrowed schema.
+    expect(bodyUpTo(rendered, "## Outcome\n")).toBe(
+      bodyUpTo(architect, "## Outcome\n"),
+    );
+    for (const heading of [
+      "## Turn order\n",
+      "## What the plan carries\n",
+      "## Granularity and dispatch\n",
+      "## Debt, parked work and ADRs\n",
+      "## Tiers\n",
+      "## Calibration\n",
+      "## Outcome\n",
+    ]) {
+      expect(rendered.split(heading).length - 1, heading).toBe(1);
+    }
+    // The review focus sits after the body it judges, never inside it.
+    const duties = rendered.slice(rendered.indexOf("## Review\n"));
+    expect(duties.startsWith("## Review\n")).toBe(true);
+    expect(duties).toContain("You review the architect's plan");
+    expect(duties).toContain("### Focus, in order");
+    expect(duties).not.toContain("## Turn order");
+    // The review's outcome asks for findings and never for a verdict.
+    expect(rendered).toContain(
+      "planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}",
+    );
+    expect(rendered).not.toContain("verdict:");
     expect(rendered).not.toContain("- `verdict` is used on review steps");
-    expect(rendered).toContain("You review the architect's plan");
+    // Only the body is shared: the top architect's scope, marks and the
+    // implementer's work instructions stay out.
+    expect(rendered).not.toContain("## Your scope");
+    expect(rendered).not.toContain("## Steers");
+    expect(rendered).not.toContain("## Plan review marks");
+    expect(rendered).not.toContain("You implement one task");
     expect(rendered.split("## This turn").length - 1).toBe(1);
   });
 }
@@ -412,6 +444,8 @@ describe("reviewer includes its author's body", () => {
   reviewerIncludesAuthorSBodyPart1();
 
   reviewerIncludesAuthorSBodyPart2();
+
+  reviewerIncludesArchitectBodyPart1();
 });
 
 describe("review findings carry", () => {

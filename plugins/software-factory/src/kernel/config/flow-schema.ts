@@ -1,6 +1,7 @@
 /** Turn, flow, task-type, architecture and hierarchy schemas. */
 
 import { z } from "zod";
+import { dagEdges } from "../dag.js";
 import { BOUNDARY_STEPS } from "../types.js";
 import type { BoundaryStep } from "../types.js";
 
@@ -69,6 +70,12 @@ export const flowStepSchema = z
     alternates: z.array(z.string().min(1)).optional(),
     /** How this step's later turn follows the one it repairs. */
     followUp: followUpSchema.optional(),
+    /**
+     * Steps that complete before this one becomes ready. A flow that names no
+     * `after` is a plain linear flow; every other flow must name `after` on
+     * every step (see `flowSchema` below).
+     */
+    after: z.array(z.string().min(1)).optional(),
   })
   .strict()
   .refine(
@@ -103,11 +110,27 @@ export const flowStepSchema = z
     },
   );
 
-export const flowSchema = z
+/** Step ids the flow vocabulary reserves; never usable as `after` targets. */
+const RESERVED_STEP_IDS = new Set(["checks", "resolve"]);
+
+/** A flow's raw shape: the step list every refinement reads. */
+const flowBaseSchema = z
   .object({
     steps: z.array(flowStepSchema).min(1),
   })
-  .strict()
+  .strict();
+
+export const flowSchema = flowBaseSchema
+  .refine(
+    (flow) => {
+      const ids = flow.steps.map((step) => step.id);
+      return new Set(ids).size === ids.length;
+    },
+    {
+      message: "a flow's steps must not repeat a step id",
+      path: ["steps"],
+    },
+  )
   .refine(
     (flow) => {
       const steps = flow.steps.filter(
@@ -123,7 +146,74 @@ export const flowSchema = z
         "an adjudicate step must directly follow a review step: it adjudicates that review's findings",
       path: ["steps"],
     },
-  );
+  )
+  .refine(
+    (flow) => {
+      // The ready walk only ever visits agent steps, so a reserved id is
+      // never a usable target and never carries edges of its own.
+      const agentIds = new Set(
+        flow.steps
+          .filter((step) => !RESERVED_STEP_IDS.has(step.id))
+          .map((step) => step.id),
+      );
+      for (const step of flow.steps) {
+        if (step.after === undefined) continue;
+        if (RESERVED_STEP_IDS.has(step.id)) return false;
+        const missing = step.after.filter(
+          (pred) => pred === step.id || !agentIds.has(pred),
+        );
+        if (missing.length > 0) return false;
+      }
+      return true;
+    },
+    {
+      message:
+        "a step's after must name agent steps in the flow and exclude the step itself",
+      path: ["steps"],
+    },
+  )
+  .refine(
+    (flow) => {
+      // Cycle detection reads the same edges derive's topological order walks.
+      const agent = flow.steps.filter(
+        (step) => !RESERVED_STEP_IDS.has(step.id),
+      );
+      if (!agent.some((step) => step.after !== undefined)) return true;
+      const graph = dagEdges({ steps: agent });
+      const ids = agent.map((step) => step.id);
+      // Kahn with list order as the tiebreak, exactly topoOrder's walk.
+      const index = new Map(ids.map((id, i) => [id, i]));
+      const indegree = new Map(ids.map((id) => [id, 0]));
+      const dependents = new Map(ids.map((id) => [id, [] as string[]]));
+      for (let i = 0; i < ids.length; i += 1) {
+        const pre = new Set(graph[i]!);
+        indegree.set(ids[i]!, pre.size);
+        for (const pred of pre) dependents.get(pred)!.push(ids[i]!);
+      }
+      const order: string[] = [];
+      const free = ids.filter((id) => indegree.get(id) === 0);
+      while (free.length > 0) {
+        free.sort((a, b) => index.get(a)! - index.get(b)!);
+        const id = free.shift()!;
+        order.push(id);
+        for (const dependent of dependents.get(id)!) {
+          indegree.set(dependent, indegree.get(dependent)! - 1);
+          if (indegree.get(dependent) === 0) free.push(dependent);
+        }
+      }
+      return order.length === ids.length;
+    },
+    {
+      message: "a flow's after edges must not cycle",
+      path: ["steps"],
+    },
+  )
+  .transform((flow) => ({
+    ...flow,
+    ...(flow.steps.some((step) => step.after !== undefined)
+      ? { dag: true }
+      : {}),
+  }));
 
 /**
  * One task type: the flow a task runs, whether it is a spike or development

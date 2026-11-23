@@ -7,8 +7,6 @@ import ts from "typescript";
 
 const PACKAGE_ROOT = path.join(import.meta.dir, "..");
 const TEST_ROOT = import.meta.dir;
-/** The one sanctioned door: tests that reach `bootstrap/run` go through it. */
-const SANCTIONED_DOOR = "test/helpers/run-configs.ts";
 
 interface Resolution {
   file: string;
@@ -235,13 +233,11 @@ function escapes(ctx: Context, node: ts.Node): Resolution | undefined {
 
 /**
  * Every test-source resolution that lands outside the package, by file and
- * line, except inside the sanctioned door.
+ * line.
  */
 function findEscapes(root: string, testRoot: string): Resolution[] {
-  const sanctioned = path.resolve(root, SANCTIONED_DOOR);
   const found: Resolution[] = [];
   for (const file of testSources(testRoot)) {
-    if (path.resolve(file) === sanctioned) continue;
     const source = ts.createSourceFile(
       file,
       fs.readFileSync(file, "utf8"),
@@ -284,9 +280,8 @@ function scanFixture(files: Record<string, string>): Resolution[] {
 
 describe("package boundary", () => {
   it("keeps every test source resolving inside the package", () => {
-    // The package-only export carries no repo config or run library sibling,
-    // so a test that resolves one directly is red at promote, not here.
-    // `test/helpers/run-configs.ts` is the sanctioned door.
+    // The package-only export carries nothing beside the package, so a test
+    // that resolves a sibling is red at promote, not here.
     expect(findEscapes(PACKAGE_ROOT, TEST_ROOT)).toEqual([]);
   }, 30_000);
 
@@ -325,13 +320,11 @@ describe("package boundary", () => {
     ).toEqual([]);
   });
 
-  it("permits in-package resolutions and the sanctioned door", () => {
+  it("permits in-package resolutions", () => {
     expect(
       scanFixture({
         "test/inside/data.test.ts":
           'const data = path.resolve(import.meta.dir, "../fixtures/data.txt");\n',
-        "test/helpers/run-configs.ts":
-          'const run = path.resolve(import.meta.dir, "../../../bootstrap/run");\n',
       }),
     ).toEqual([]);
   });

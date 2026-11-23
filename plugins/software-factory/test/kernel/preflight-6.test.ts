@@ -52,14 +52,11 @@ class ProbeHarness extends FakeHarness {
     private readonly models: readonly string[],
   ) {
     super({ id });
-  }
-
-  async probe(model: ModelRef): Promise<ModelProbe> {
-    return {
+    this.probe = async (model: ModelRef): Promise<ModelProbe> => ({
       listed: this.models.includes(model.id),
       available: [...this.models],
-      effort: [],
-    };
+      effort: null,
+    });
   }
 }
 
@@ -94,7 +91,7 @@ async function fixture(
   await store.ensureLayout();
   const harness = new FakeHarness({
     id: "fake",
-    caps: { effort: ["low", "high", "max"] },
+    probe: { effort: ["low", "high", "max"] },
   });
   const harnesses = new Map<string, Harness>([["fake", harness]]);
   return { repo, configs, paths, input: { configs, paths, store, harnesses } };
@@ -177,28 +174,34 @@ function registerPreFlightPart46(): void {
   });
 }
 
+function ghostRun(): string {
+  return RUN_HEAD_NO_HIGHEST.replace(
+    "architect: { harness: fake, model: arch, effort: max }",
+    "architect: { harness: fake, model: arch-ghost, effort: max, fallbacks: [{ harness: other, model: other-ghost }] }",
+  )
+    .replace(
+      "implementer: { harness: fake, model: impl }",
+      "implementer: { harness: fake, model: impl, fallbacks: [{ model: impl-ghost }] }",
+    )
+    .replace(
+      "limits:",
+      "  implementer-alt: { harness: fake, model: alt-ghost }\nlimits:",
+    );
+}
+
 function registerPreFlightPart47(): void {
   it("refuses an unlisted model on every leg shape: primary, explicit fallback, inherited fallback and alternate", async () => {
-    const run = RUN_HEAD_NO_HIGHEST.replace(
-      "architect: { harness: fake, model: arch, effort: max }",
-      "architect: { harness: fake, model: arch-ghost, effort: max, fallbacks: [{ harness: other, model: other-ghost }] }",
-    )
-      .replace(
-        "implementer: { harness: fake, model: impl }",
-        "implementer: { harness: fake, model: impl, fallbacks: [{ model: impl-ghost }] }",
-      )
-      .replace(
-        "limits:",
-        "  implementer-alt: { harness: fake, model: alt-ghost }\nlimits:",
-      );
-    const f = await fixture(run);
+    const f = await fixture(ghostRun());
     try {
       // No boundary or step alias names this one: only `alternates` does.
       f.configs.process.flows["implement-review"]!.steps[0]!.alternates = [
         "implementer-alt",
       ];
-      const harnesses = new Map(f.input.harnesses);
-      harnesses.set("other", new FakeHarness({ id: "other" }));
+      // Probe-less harnesses, so the injected catalog decides the model list.
+      const harnesses = new Map<string, Harness>([
+        ["fake", new FakeHarness({ id: "fake" })],
+        ["other", new FakeHarness({ id: "other" })],
+      ]);
       const unlisted = new Set([
         "arch-ghost",
         "other-ghost",
@@ -277,7 +280,7 @@ function registerPreFlightPart49(): void {
       "implementer-b: { harness: fake, model: impl-b }",
       "implementer-b: { harness: fake, model: alt-ghost }",
     )}worktreeRoot: WORKTREE_ROOT
-sessions: { dir: SESSIONS_DIR }
+sessions: { dir: SESSIONS_DIR, retention: short }
 `;
     const f = await fixture(run);
     try {

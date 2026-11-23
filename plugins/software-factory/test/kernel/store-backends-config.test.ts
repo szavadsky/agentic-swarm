@@ -12,6 +12,7 @@ import {
   STORE_COMMIT_TRAILER,
   createArtifactStore,
   isPrivateArtifact,
+  landStoreCommits,
 } from "../../src/kernel/store-backend.js";
 import type { ArtifactBackend } from "../../src/kernel/types.js";
 import { initGoal } from "../../src/cli/commands.js";
@@ -281,6 +282,53 @@ describe("artifact backend commits", () => {
     } finally {
       repo.cleanup();
       fs.rmSync(temp, { recursive: true, force: true });
+    }
+  }, 60_000);
+});
+
+describe("artifact backend landing", () => {
+  it("lands a same-repo write over a moved goal branch head", async () => {
+    const repo = createTmpRepo();
+    try {
+      repo.writeFile(
+        ".factory/repo.yaml",
+        "baseBranch: main\nartifactRoot: .factory/artifacts\nartifacts: { backend: same-repo }\n",
+      );
+      repo.commit("factory config");
+      const paths = resolveGoalPaths(loadConfigs(repo.dir), repo.dir, "demo");
+      fs.mkdirSync(path.dirname(paths.goalCheckout), { recursive: true });
+      const checkout = repo.createWorktree("factory/demo", paths.goalCheckout);
+      const goalDir = path.join(checkout, ".factory/artifacts/demo");
+      fs.mkdirSync(goalDir, { recursive: true });
+      fs.writeFileSync(path.join(goalDir, "plan.md"), "# Plan\n\nstale\n");
+      fs.writeFileSync(path.join(goalDir, "branch.md"), "unrelated\n");
+      gitIn(checkout, ["add", "-A"]);
+      gitIn(checkout, [
+        "commit",
+        "-m",
+        `factory: demo artifacts\n\n${STORE_COMMIT_TRAILER}: demo`,
+      ]);
+
+      repo.writeFile(".factory/artifacts/demo/plan.md", "# Plan\n\nlive\n");
+      const source = repo.commit(
+        `factory: demo artifacts\n\n${STORE_COMMIT_TRAILER}: demo`,
+      );
+
+      expect(await landStoreCommits(paths)).toEqual([source]);
+      expect(fs.readFileSync(path.join(goalDir, "plan.md"), "utf8")).toBe(
+        "# Plan\n\nlive\n",
+      );
+      expect(fs.readFileSync(path.join(goalDir, "branch.md"), "utf8")).toBe(
+        "unrelated\n",
+      );
+      expect(gitIn(checkout, ["status", "--porcelain"])).toBe("");
+      expect(gitIn(checkout, ["log", "-1", "--format=%B"])).toContain(
+        `cherry picked from commit ${source}`,
+      );
+      // A second pass has nothing left to replay.
+      expect(await landStoreCommits(paths)).toEqual([]);
+    } finally {
+      repo.cleanup();
     }
   }, 60_000);
 });

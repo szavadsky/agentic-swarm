@@ -118,6 +118,13 @@ export interface FlowStep extends RepairSpec {
   alternates?: string[];
   /** How this step's later turn follows the one it repairs; default same-session. */
   followUp?: FollowUp;
+  /**
+   * Steps that must complete before this one becomes ready. Absent on a plain
+   * linear flow: the list order is the dependency. Steps keep their list slot
+   * as the topological tiebreak, so ready steps keep sequential execution in
+   * list order; checks and the merge stay at the flow's end.
+   */
+  after?: string[];
 }
 
 /**
@@ -141,6 +148,12 @@ export interface FollowUp {
 
 export interface FlowDefinition {
   steps: FlowStep[];
+  /**
+   * Flow-shape flag the loader sets: a config that names any `after` edge.
+   * Derive and gate dispatch only branch on it; a plain listing keeps the
+   * linear machine byte for byte.
+   */
+  dag?: boolean;
 }
 
 /** Limits the pure `next` needs; resolved from the three config layers. */

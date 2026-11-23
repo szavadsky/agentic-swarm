@@ -90,7 +90,10 @@ function registerAliasFallbackTiersPart1(): void {
         return fakeTurnResult(req);
       });
       t.runtime.configs.run.harnesses = {
-        b: { acpx: { agent: "b-agent", raw: true } },
+        b: {
+          acpx: { agent: "b-agent", raw: true },
+          compaction: { enabled: true },
+        },
       };
 
       const result = await runAgentTurn(t.runtime, {

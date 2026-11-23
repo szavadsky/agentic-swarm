@@ -80,7 +80,7 @@ export function setupRepo(): {
       "  pack-preparer: { harness: fake, model: fake-pack-prep }",
       "limits: { iterations: 3, concurrency: { overall: 1 } }",
       `worktreeRoot: ../${base}-wt`,
-      `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
+      `sessions: { dir: ../${base}-sessions, keepRuns: 2, retention: short }`,
       "",
     ].join("\n"),
   );

@@ -1,5 +1,7 @@
 {
   "$schema": "https://knip.dev/schema.json",
   "ignoreExportsUsedInFile": true,
-  "ignoreBinaries": ["agy", "codex", "pi"]
+  "ignore": ["vendor/**"],
+  "ignoreBinaries": ["agy", "codex", "pi"],
+  "entry": ["scripts/promote.ts", "scripts/bootstrap-dispatch.ts"]
 }

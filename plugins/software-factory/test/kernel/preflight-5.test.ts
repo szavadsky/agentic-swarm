@@ -69,7 +69,7 @@ async function fixture(
   await store.ensureLayout();
   const harness = new FakeHarness({
     id: "fake",
-    caps: { effort: ["low", "high", "max"] },
+    probe: { effort: ["low", "high", "max"] },
   });
   const harnesses = new Map<string, Harness>([["fake", harness]]);
   return { repo, configs, paths, input: { configs, paths, store, harnesses } };
@@ -206,8 +206,8 @@ function registerPreFlightPart39(): void {
       ),
     );
     try {
-      const result = await preflight(f.input);
-      expect(result.aliases.reviewer).toBe("max");
+      await preflight(f.input);
+      expect(f.configs.run.aliases.reviewer!.effort).toBe("max");
     } finally {
       f.repo.cleanup();
     }
@@ -216,7 +216,7 @@ function registerPreFlightPart39(): void {
   it("refuses session and worktree roots inside the repository", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST +
-        "sessions: { dir: .factory/sessions, keepRuns: 2 }\nworktreeRoot: .factory/worktrees\n",
+        "sessions: { dir: .factory/sessions, keepRuns: 2, retention: short }\nworktreeRoot: .factory/worktrees\n",
     );
     try {
       const err = await refusal(f.input);

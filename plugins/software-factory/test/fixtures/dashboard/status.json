@@ -105,21 +105,44 @@
       "record": "records/00002-i1-merged1-implement-r1"
     }
   ],
+  "intentStatus": {
+    "iteration": 2,
+    "sections": [
+      {
+        "section": "Status reporting <and> dashboard",
+        "status": "works",
+        "note": "Intent view reads the architect artifact"
+      },
+      {
+        "section": "Sandbox",
+        "status": "not-built"
+      },
+      {
+        "section": "Steering",
+        "status": "friction",
+        "note": "Debounce <tuning> still open"
+      }
+    ]
+  },
   "cost": {
-    "totalUsd": 0.6,
+    "harnessCostUsd": 0.6,
+    "listCostUsd": 1.35,
     "unpricedTurns": 0,
-    "perMergedTask": 0.6,
+    "harnessCostPerMergedTask": 0.6,
+    "listCostPerMergedTask": 1.35,
     "byRole": {
       "architect": {
         "turns": 1,
         "tokens": 150,
-        "costUsd": 0.1,
+        "harnessCostUsd": 0.1,
+        "listCostUsd": 0.15,
         "unpricedTurns": 0
       },
       "implementer": {
         "turns": 1,
         "tokens": 1200,
-        "costUsd": 0.5,
+        "harnessCostUsd": 0.5,
+        "listCostUsd": 1.2,
         "unpricedTurns": 0
       }
     },
@@ -127,7 +150,8 @@
       "fake": {
         "turns": 2,
         "tokens": 1350,
-        "costUsd": 0.6,
+        "harnessCostUsd": 0.6,
+        "listCostUsd": 1.35,
         "unpricedTurns": 0
       }
     }

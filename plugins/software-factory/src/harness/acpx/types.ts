@@ -1,5 +1,5 @@
 import type { RetryPolicy } from "../fallback.js";
-import type { Usage } from "../types.js";
+import type { CacheTtl, Usage } from "../types.js";
 import type { AcpxConfig } from "./config.js";
 
 export interface AcpxHarnessOptions {
@@ -16,6 +16,8 @@ export interface AcpxHarnessOptions {
   /** Run-config names this harness's children may inherit on top of the base set. */
   envAllowlist?: readonly string[];
   retry?: Partial<RetryPolicy>;
+  /** Provider cache TTL from `sessions.retention`; stamps every session this adapter returns. No default. */
+  retention: CacheTtl;
 }
 
 /** Executable plus leading args; `bunx` needs `acpx` before the CLI arguments. */

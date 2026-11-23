@@ -9,7 +9,7 @@ import {
   taskTypesVar,
   tierNamesVar,
 } from "./prompt-schema.js";
-import type { ProcessConfig, RunConfig } from "./types.js";
+import type { ProcessConfig, RepoConfig, RunConfig } from "./types.js";
 
 /**
  * Prompt templates render through LiquidJS in strict mode: an unknown variable
@@ -264,9 +264,13 @@ export const DEFAULT_PROMPT_AUTHOR = "implementer";
 export function loadPrompts(
   process: ProcessConfig,
   repoRoot: string,
-  options?: { aliases?: Record<string, unknown>; run?: RunConfig },
+  options?: {
+    aliases?: Record<string, unknown>;
+    run?: RunConfig;
+    repo?: RepoConfig;
+  },
 ): PromptLibrary {
-  const { aliases, run } = options ?? {};
+  const { aliases, run, repo } = options ?? {};
   const overrideDirs: string[] = [];
   if (process.promptsDir)
     overrideDirs.push(path.resolve(repoRoot, process.promptsDir));
@@ -280,6 +284,15 @@ export function loadPrompts(
   }
 
   if (calibration !== undefined) overrides.calibration = calibration;
+  if (repo?.codingRules !== undefined) {
+    const codingRulesPath = path.resolve(repoRoot, repo.codingRules);
+    if (!fs.existsSync(codingRulesPath)) {
+      throw new Error(
+        `coding rules file not found: ${repo.codingRules} (resolved to ${codingRulesPath})`,
+      );
+    }
+    overrides["clean-code"] = fs.readFileSync(codingRulesPath, "utf8");
+  }
   return loadPromptLibrary({
     builtinDir: path.join(packageRoot, "prompts"),
     overrideDirs,
@@ -292,6 +305,8 @@ export function loadPrompts(
       validate_cmd: validateCmd(),
       author: DEFAULT_PROMPT_AUTHOR,
       cleanliness_revision: "false",
+      // A task with no environment notes renders none; promptVars supplies them per task.
+      env_notes: "",
       fix_dispositions: "",
       outcome_schema: outcomeSchemaVar(),
       task_frontmatter: taskFrontmatterVar(),

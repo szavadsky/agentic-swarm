@@ -5,7 +5,12 @@ import { derive } from "../derive.js";
 import { revisionStart } from "../derive-task-facts.js";
 import { parkTask, taskMeta } from "../flow-meta.js";
 import type { KernelRuntime, StepRecord, TaskFile } from "../types.js";
-import type { StewardDead, StewardOptions, StewardResult } from "./types.js";
+import type {
+  StewardCandidate,
+  StewardDead,
+  StewardOptions,
+  StewardResult,
+} from "./types.js";
 import {
   attemptedThisWave,
   skipStewardWave,
@@ -35,17 +40,34 @@ export async function runSteward(
   // A turn that stopped on infra is not an attempt: its slug gets the
   // task-turn backoff, so a later wave retries it instead of skipping it.
   const attempted = attemptedThisWave(records, iteration);
-  const candidates = stewardCandidates(tasks, state, attempted, frozen);
+  const candidates = stewardCandidates(
+    tasks,
+    state,
+    attempted,
+    frozen,
+    records,
+    runtime.store,
+  );
   if (candidates.length === 0)
     return await skipStewardWave(runtime, records, iteration);
+  return await runStewardCandidates(runtime, tasks, candidates, iteration);
+}
 
+/** Runs the candidates through the steward in slug order, sharing one session. */
+async function runStewardCandidates(
+  runtime: KernelRuntime,
+  tasks: readonly TaskFile[],
+  candidates: readonly StewardCandidate[],
+  iteration: number,
+): Promise<StewardResult> {
   const attemptedSlugs: string[] = [];
   const landed: string[] = [];
   const unmerged: string[] = [];
   const dead: StewardDead[] = [];
   let session: SessionRef | undefined;
 
-  for (const slug of candidates) {
+  for (const candidate of candidates) {
+    const slug = candidate.slug;
     const task = tasks.find((t) => t.slug === slug)!;
     const fresh = await runtime.store.listRecords();
     const taskState = await stewardCandidateState(runtime, fresh, slug);
@@ -57,18 +79,11 @@ export async function runSteward(
       iteration,
       taskState,
       session,
+      candidate,
     );
     if (outcome.session) session = outcome.session;
-    if (outcome.kind === "cancelled") {
-      return {
-        skipped: false,
-        attempted: attemptedSlugs,
-        landed,
-        unmerged,
-        dead,
-        cancelled: true,
-      };
-    }
+    if (outcome.kind === "cancelled")
+      return cancelledResult(attemptedSlugs, landed, unmerged, dead);
     if (outcome.kind === "dead") {
       dead.push(outcome.dead);
       continue;
@@ -83,6 +98,23 @@ export async function runSteward(
     landed,
     unmerged,
     dead,
+  };
+}
+
+/** The wave interrupted by a cancelled steward leg. */
+function cancelledResult(
+  attempted: string[],
+  landed: string[],
+  unmerged: string[],
+  dead: StewardDead[],
+): StewardResult {
+  return {
+    skipped: false,
+    attempted,
+    landed,
+    unmerged,
+    dead,
+    cancelled: true,
   };
 }
 
