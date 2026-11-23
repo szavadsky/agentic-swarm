@@ -1,7 +1,7 @@
 import type { AgentTurnResult } from "../../agent.js";
 import { makeCause } from "../../cause.js";
-import { carryIntentSteers } from "../../intent.js";
 import { boundaryTarget, type TurnTarget } from "../../flow-context.js";
+import { carryIntentSteers } from "../../intent.js";
 import {
   expireHold,
   formatSteerRoute,
@@ -30,8 +30,8 @@ import {
   type PmRungStep,
   type PmTurnSetup,
   recordPmRejection,
-  runPmTurn,
   rungSteps,
+  runPmTurn,
   setupPmTurn,
 } from "../ladder.js";
 import { steerLadderNote } from "../prompts.js";
@@ -215,7 +215,9 @@ async function steerHoldFindings(
  * never blocks dispatch. Findings the graph already raised before the first
  * rung do not fail a rung: routing a steer is independent of a plan the PM
  * cannot derive; they come back as `architect` instead, the same outlet as a
- * steer that needs a ruling.
+ * steer that needs a ruling. The PM is not launched before a plan exists:
+ * with no plan every claimed steer is the architect's, who takes it into the
+ * whole plan.
  */
 export async function runSteerPm(
   runtime: KernelRuntime,
@@ -227,6 +229,9 @@ export async function runSteerPm(
     cwd: string;
   },
 ): Promise<SteerPmRun> {
+  if (!(await runtime.store.plans.exists())) {
+    return { status: "architect", routes: [], findings: [] };
+  }
   const setup = await setupPmTurn(runtime, opts);
   const claim = new Map(opts.steers.map((steer) => [steer.id, steer]));
   let failure: string[] = [];

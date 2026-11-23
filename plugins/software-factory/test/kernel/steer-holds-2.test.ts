@@ -17,6 +17,7 @@ import {
   implementer,
   tasks,
   writeHold,
+  writePlan,
 } from "./steer-holds-helpers.js";
 
 function registerMidRunSteerHoldsPart6(): void {
@@ -75,6 +76,7 @@ function registerMidRunSteerHoldsPart7(): void {
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
+      writePlan(runtime);
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       await writeTask(runtime, task("gamma", { scope: ["gamma.txt"] }));
 
@@ -120,6 +122,7 @@ function registerMidRunSteerHoldsPart8(): void {
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
+      writePlan(runtime);
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       const taskFile = path.join(runtime.store.tasksDir, "alpha.md");
       const original = fs.readFileSync(taskFile, "utf8");
@@ -159,61 +162,10 @@ function registerMidRunSteerHoldsPart8(): void {
   }, 60_000);
 }
 
-function registerMidRunSteerHoldsPart9(): void {
-  it("removes a plan the steer turn creates when none existed", async () => {
-    const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: { overall: 1 } },
-    });
-    try {
-      const harness = new FakeHarness({ id: "fake" });
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
-      const planPath = path.join(runtime.store.goalDir, "plan.md");
-      expect(fs.existsSync(planPath)).toBe(false);
-
-      harness.script(
-        implementer("alpha.txt", async () => {
-          await postSteer(runtime.store, "s1", "Structure me; do not plan.");
-        }),
-      );
-      harness.script((req, ctx) => {
-        // An empty plan.md would send the next front to the boundary instead of
-        // dispatching the tasks that already exist.
-        fs.writeFileSync(
-          planPath,
-          "# Plan\n\n## smuggled\nPM-authored direction.\n",
-          "utf8",
-        );
-        ctx.writeOutcome(outcome({ summary: "tried to write a plan" }));
-        return fakeTurnResult(req);
-      });
-      harness.script(approver("alpha is correct"));
-
-      const dispatched = await runDispatch(runtime, {
-        iteration: 1,
-        seenSteers: [],
-      });
-      expect(dispatched.reason).toBe("boundary");
-      expect(fs.existsSync(planPath)).toBe(false);
-      expect((await tasks(runtime)).tasks.alpha!.status).toBe("merged");
-
-      const guard = (await runtime.store.listRecords()).find(
-        (record) => record.step === "steer-reconcile",
-      );
-      expect(guard?.ok).toBe(false);
-      expect(causeText(guard?.cause)).toContain("plan.md");
-    } finally {
-      cleanupFlowRepo(repo);
-    }
-  }, 60_000);
-}
-
 describe("mid-run steer holds", () => {
   registerMidRunSteerHoldsPart6();
 
   registerMidRunSteerHoldsPart7();
 
   registerMidRunSteerHoldsPart8();
-
-  registerMidRunSteerHoldsPart9();
 });

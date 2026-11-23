@@ -38,6 +38,7 @@ async function ignoresMalformedHoldSteerTurnPart1(
 ) {
   const harness = new FakeHarness({ id: "fake" });
   const runtime = await makeRuntime(repo, goal, { fake: harness });
+  writePlan(runtime);
   await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
   await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
 

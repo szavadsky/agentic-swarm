@@ -193,7 +193,8 @@ async function resumesBlockedFrontGoalWaitingPart1(goal: E2EGoal) {
   );
 
   scriptDigest(harness, goal.goalDir, 2);
-  routesSteerToArchitect(harness, "s1");
+  // No plan before the first architect flow: no PM steer turn; the architect
+  // takes the steer directly.
   harness.script((req, ctx) => {
     expect(req.prompt).toContain("You are the architect");
     expect(req.prompt).toContain(
@@ -405,19 +406,6 @@ function registerFrontLadderPart2(): void {
       cleanup(goal);
     }
   }, 90_000);
-}
-
-/** The boundary's steer turn: route the pending steer to the architect. */
-function routesSteerToArchitect(harness: FakeHarness, steer: string): void {
-  harness.script((req, ctx) => {
-    ctx.writeOutcome(
-      outcome({
-        summary: `${steer} goes to the architect`,
-        steerRoutes: [{ steer, route: "architect" }],
-      }),
-    );
-    return fakeTurnResult(req);
-  });
 }
 
 describe("front ladder", () => {

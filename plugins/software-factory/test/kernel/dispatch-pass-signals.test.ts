@@ -11,19 +11,22 @@ import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { postSteer } from "../../src/kernel/mailbox.js";
 import { spikeReportPath } from "../../src/kernel/spike-report.js";
-import { task, cause } from "./helpers.js";
+import { cause, task } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
   outcome,
-  setupFlowRepo,
   scriptStallLeave,
+  setupFlowRepo,
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
 import { writeHold } from "./steer-helpers.js";
 
 const PLAN = "# Plan\n\n## alpha\nDo alpha.\n";
+
+/** The plan a mid-run dispatch starts from before the steer adds a task. */
+const MIDRUN_PLAN = "# Plan\n\nNo tasks filed yet.\n";
 
 /** Fallback work turns: implement writes `<slug>.txt` (and the spike report for `probe`), review approves. */
 function scriptWork(harness: FakeHarness): void {
@@ -122,6 +125,13 @@ async function dispatchesTaskSteerPMTurnCreatedPart1(
   const harness = new FakeHarness({ id: "fake" });
   scriptWork(harness);
   const runtime = await makeRuntime(repo, goal, { fake: harness });
+  // Mid-run dispatch: the first architect flow already delivered a plan, so
+  // the steer takes the PM's steer-routing turn.
+  fs.writeFileSync(
+    path.join(runtime.store.goalDir, "plan.md"),
+    MIDRUN_PLAN,
+    "utf8",
+  );
   await postSteer(runtime.store, "s1", "Add gamma.");
   harness.script(
     (req, ctx) => {

@@ -162,6 +162,7 @@ function presentedSteers(records: ConsultContext["records"]): Set<string> {
  * the PM may answer it, carry it into the intent, or route it to the
  * architect. `intent` and `architect` routes stay pending, so the pack below
  * still shows the steer; a route that fails leaves it for the architect.
+ * Before the first plan there is no PM turn: the steer goes to the architect.
  *
  * A steer an earlier boundary already presented is left alone: the PM has had
  * its one chance and the architect is the owner's consumer. An urgent steer is

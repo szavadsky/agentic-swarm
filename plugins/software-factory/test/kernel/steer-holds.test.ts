@@ -296,6 +296,7 @@ function registerMidRunSteerHoldsPart4(): void {
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
+      writePlan(runtime);
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       await writeTask(runtime, task("gamma", { scope: ["gamma.txt"] }));
 
@@ -342,6 +343,7 @@ function registerMidRunSteerHoldsPart5(): void {
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
+      writePlan(runtime);
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
       await writeTask(runtime, task("gamma", { scope: ["gamma.txt"] }));
 
