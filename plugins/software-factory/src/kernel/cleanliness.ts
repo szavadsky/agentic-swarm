@@ -163,6 +163,22 @@ async function newExtensions(
   return lines;
 }
 
+function scopePrefixes(files: string[], scope: string[]): string[] {
+  const prefixes = new Set<string>();
+  for (const entry of scope) {
+    for (const file of files) {
+      const norm = file.replace(/^\.?\//, "");
+      if (norm === entry || norm.startsWith(`${entry}/`)) {
+        prefixes.add("");
+      }
+      const marker = `/${entry}`;
+      const idx = norm.indexOf(marker);
+      if (idx > 0) prefixes.add(norm.slice(0, idx));
+    }
+  }
+  return [...prefixes];
+}
+
 function outOfScopeFiles(
   files: string[],
   cwd: string,
@@ -174,11 +190,15 @@ function outOfScopeFiles(
     s.replace(/^\.?\//, "").replace(/\/$/, ""),
   );
   const outOfScope: string[] = [];
+  const prefixes = scopePrefixes(files, normalizedScope);
+  const prefixedScope = prefixes.flatMap((prefix) =>
+    normalizedScope.map((s) => (prefix ? `${prefix}/${s}` : s)),
+  );
   for (const file of files) {
     const fullPath = path.join(cwd, file);
     if (!fs.existsSync(fullPath)) continue;
     const norm = file.replace(/^\.?\//, "");
-    const inScope = normalizedScope.some(
+    const inScope = prefixedScope.some(
       (s) => norm === s || norm.startsWith(`${s}/`),
     );
     if (!inScope) {
