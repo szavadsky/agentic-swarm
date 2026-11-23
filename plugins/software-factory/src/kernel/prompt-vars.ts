@@ -98,9 +98,8 @@ export const PROMPT_COMPOSITIONS: readonly PromptComposition[] = [
   {
     prompt: "review-architect",
     partials: [
-      "`architect-assignment`",
-      "`plan-standard` (`task-size`)",
-      "`plan-rules`",
+      "`architect-assignment` (`architect-bounds`)",
+      "`architect-body` (`architect-turn`, `plan-standard` (`task-size`), `architect-scope` (`plan-rules`, `calibration`))",
       "`finding-standards`",
       "`outcome`",
     ],
@@ -138,7 +137,7 @@ export const SHARED_DEFINITIONS =
 
 /** How the architect's body is split into fragments other roles reuse. */
 export const ARCHITECT_BODY_FRAGMENTS =
-  "The architect's body is assembled from fragments so a reviewer can share only the assignment and a subarchitect can share the whole body: `architect-bounds` (the bounds), `architect-turn` (the consult's turn order, completeness check, stop decision and plan edit), `plan-standard` (what the plan carries and its granularity, with `task-size`), `plan-rules` (debt, parked work and ADRs) and `architect-scope` (tiers and calibration, with `plan-rules` inside). `architect-body` is that shared body plus `outcome`; `architect-assignment` adds the top architect's role line before the bounds. `architect-goal` adds the top's scope (the whole goal, the register at depth 2, steers), and `architect-epic` adds the subarchitect's epic scope and upward brief. The plan reviewer includes `architect-assignment`, `plan-standard` and `plan-rules`; the architect's return includes `architect-assignment`.";
+  "The architect's body is assembled from fragments so a reviewer and a subarchitect share the whole body: `architect-bounds` (the bounds), `architect-turn` (the consult's turn order, completeness check, stop decision and plan edit), `plan-standard` (what the plan carries and its granularity, with `task-size`), `plan-rules` (debt, parked work and ADRs) and `architect-scope` (tiers and calibration, with `plan-rules` inside). `architect-body` is that shared body plus `outcome`; `architect-assignment` adds the top architect's role line before the bounds. `architect-goal` adds the top's scope (the whole goal, the register at depth 2, steers), and `architect-epic` adds the subarchitect's epic scope and upward brief. The plan reviewer includes `architect-assignment` and the whole `architect-body`; the architect's return includes `architect-assignment`.";
 
 /** The calibration partial's config-replacement rule. */
 export const CALIBRATION_PARTIAL =

@@ -329,7 +329,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     file: "review-architect.md",
     prompt: "review-architect",
     intro:
-      "The plan-review prompt the architecture flow renders on each reviewer alias. It composes the architect's assignment and plan standard from fragments, adds the review focus, and delivers `planReview` findings (`technical`, `planNotes`) with no verdict. It never edits the plan.",
+      "The plan-review prompt the architecture flow renders on each reviewer alias. It composes the architect's assignment and whole body from fragments, adds the review focus, and delivers `planReview` findings (`technical`, `planNotes`) with no verdict. It never edits the plan.",
     variables: {
       iteration: "1-based iteration number of this launch",
       intent_path: "path to the goal's `intent.md`",
@@ -347,7 +347,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       task_types:
         "configured task types with their flow, kind and schema, read by the included plan standard; renderer default",
       tiers:
-        "run-config alias names, read by the included plan standard; renderer default",
+        "run-config alias names, read by the included architect scope; renderer default",
     },
   },
   {
