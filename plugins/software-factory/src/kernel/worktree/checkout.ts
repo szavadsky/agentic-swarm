@@ -1,4 +1,4 @@
-/** Branch names, ref moves, base following, the integration checkout and its merge scratch. */
+/** Ref moves, base following, the integration checkout and the task-worktree sweep. */
 
 import fs from "node:fs";
 import path from "node:path";
@@ -8,28 +8,8 @@ import { parseWorktreeList } from "../../core/git/status.js";
 import { reapGateProcesses } from "../gates.js";
 import type { KernelRuntime } from "../types.js";
 import type { MergeAttempt } from "./types.js";
-
-/** Task branches and worktrees are goal-scoped and disposable. */
-export function taskBranchName(runtime: KernelRuntime, slug: string): string {
-  // Not nested under the integration branch: refs/heads/factory/<goal> would
-  // block refs/heads/factory/<goal>/<slug> as a file-vs-directory conflict.
-  const goal = path.basename(runtime.paths.goalDir);
-  return `factory-task/${goal}/${slug}`;
-}
-
-export function taskWorktreePath(runtime: KernelRuntime, slug: string): string {
-  const goal = path.basename(runtime.paths.goalDir);
-  return path.join(goalWorktreeRoot(runtime), `${goal}-tasks`, slug);
-}
-
-/**
- * The directory holding this goal's checkouts and nothing else. It follows the
- * resolved checkout, so an existing checkout at the pre-repo-id path keeps its
- * task worktrees and merge scratch beside it.
- */
-function goalWorktreeRoot(runtime: KernelRuntime): string {
-  return path.dirname(runtime.paths.goalCheckout);
-}
+import { goalWorktreeRoot, mergeScratchPath } from "./names.js";
+import { sweepWorktrees } from "./sweep.js";
 
 export async function integrationHead(runtime: KernelRuntime): Promise<string> {
   const res = await git(runtime.paths.repoRoot, [
@@ -202,38 +182,6 @@ async function followBase(runtime: KernelRuntime): Promise<void> {
   });
 }
 
-/**
- * Creates (or recovers) the stable integration checkout. It is the only
- * worktree the merge queue moves; task worktrees are disposable.
- */
-/** Removes this goal's leftover task worktrees and merge scratch. */
-async function removeOwnWorktrees(
-  runtime: KernelRuntime,
-  goalCheckout: string,
-  ownTasks: string,
-  ownScratch: string,
-): Promise<void> {
-  const { repoRoot } = runtime.paths;
-  // Recovery owns this goal's worktrees only: a sibling goal's checkout and
-  // task worktrees, and another repo sharing the root, are not ours to remove.
-  for (const wt of await registeredWorktrees(runtime)) {
-    const resolved = path.resolve(wt);
-    if (
-      resolved === path.resolve(goalCheckout) ||
-      resolved === path.resolve(repoRoot)
-    )
-      continue;
-    const own =
-      resolved === path.resolve(ownScratch) ||
-      resolved.startsWith(path.resolve(ownTasks) + path.sep);
-    if (!own) continue;
-    await reapGateProcesses(resolved);
-    await git(repoRoot, ["worktree", "remove", "--force", resolved], {
-      allowFail: true,
-    });
-  }
-}
-
 /** Creates the integration worktree, or recreates it on the wrong branch. */
 async function ensureIntegrationCheckout(
   runtime: KernelRuntime,
@@ -286,25 +234,14 @@ export async function prepareIntegrationCheckout(
   runtime: KernelRuntime,
 ): Promise<void> {
   const { goalCheckout, integrationBranch } = runtime.paths;
-  const goal = path.basename(runtime.paths.goalDir);
-  const ownTasks = path.join(goalWorktreeRoot(runtime), `${goal}-tasks`);
-  const ownScratch = mergeScratchPath(runtime);
   fs.mkdirSync(goalWorktreeRoot(runtime), { recursive: true });
-  await removeOwnWorktrees(runtime, goalCheckout, ownTasks, ownScratch);
+  await removeMergeScratch(runtime);
+  await sweepWorktrees(runtime);
   await ensureIntegrationCheckout(runtime, goalCheckout, integrationBranch);
   // A crashed merge must not leave staged or conflicted state for the next launch.
   await git(goalCheckout, ["reset", "--hard", "HEAD"]);
   await git(goalCheckout, ["clean", "-fd"]);
   await followBase(runtime);
-}
-
-/**
- * The merge queue's scratch worktree: detached at the integration head, so a
- * squash commit can be gated without touching the stable goal checkout.
- */
-function mergeScratchPath(runtime: KernelRuntime): string {
-  const goal = path.basename(runtime.paths.goalDir);
-  return path.join(goalWorktreeRoot(runtime), `${goal}-merge`);
 }
 
 export async function removeMergeScratch(

@@ -57,14 +57,46 @@ export async function porcelainStatus(
 }
 
 /**
+ * One entry of `git worktree list --porcelain`.
+ */
+export interface WorktreeEntry {
+  path: string;
+  /** Full ref as git prints it, e.g. `refs/heads/main`. */
+  branch?: string;
+  detached?: boolean;
+}
+
+/**
+ * Returns the value after `key ` on the first matching line of a
+ * `git worktree list --porcelain` block, or `undefined` when absent.
+ */
+function field(block: string, key: string): string | undefined {
+  const prefix = `${key} `;
+  for (const line of block.split("\n")) {
+    if (line.startsWith(prefix)) return line.slice(prefix.length);
+  }
+}
+
+/**
+ * Parses `git worktree list --porcelain` stdout into registered worktree entries.
+ */
+export function parseWorktreeEntries(stdout: string): WorktreeEntry[] {
+  const entries: WorktreeEntry[] = [];
+  for (const block of stdout.split("\n\n")) {
+    const path = field(block, "worktree");
+    if (path === undefined) continue;
+    const entry: WorktreeEntry = { path };
+    const branch = field(block, "branch");
+    if (branch !== undefined) entry.branch = branch;
+    if (block.split("\n").includes("detached")) entry.detached = true;
+    entries.push(entry);
+  }
+  return entries;
+}
+
+/**
  * Parses `git worktree list --porcelain` stdout into registered worktree paths.
  */
 export function parseWorktreeList(stdout: string): string[] {
-  const paths: string[] = [];
-  for (const line of stdout.split("\n")) {
-    if (line.startsWith("worktree ")) {
-      paths.push(line.slice("worktree ".length).trim());
-    }
-  }
-  return paths;
+  return parseWorktreeEntries(stdout).map((entry) => entry.path);
 }
