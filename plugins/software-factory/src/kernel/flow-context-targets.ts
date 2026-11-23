@@ -3,6 +3,7 @@
  * kernel/architecture boundary targets resolved from process config.
  */
 import type { Harness, ModelRef } from "../harness/types.js";
+import { canaryKey, isProven } from "./canary.js";
 import { poolExhausted } from "./quota-pools.js";
 import type {
   AliasConfig,
@@ -128,13 +129,14 @@ function targetForAlias(
   prompt: string,
   aliasName: string,
   iteration?: number,
+  proven?: ReadonlySet<string>,
 ): TurnTarget {
   const alias = runtime.configs.run.aliases[aliasName];
   if (!alias)
     throw new Error(
       `run config has no alias "${aliasName}" (needed by prompt "${prompt}")`,
     );
-  const chain = resolveChain(runtime, aliasName, iteration);
+  const chain = resolveChain(runtime, aliasName, iteration, proven);
   const available = chain.filter(
     (tier) => !poolExhausted(runtime.exhaustedPools, tierPoolKey(tier)),
   );
@@ -162,12 +164,25 @@ function targetForAlias(
  * The alias's primary entry for an iteration: its rotate entry when one is
  * configured, else the alias's own harness, model and effort. Iteration N
  * selects `rotate[N % rotate.length]`, so iteration 1 starts at index 1.
+ * Rotation only picks proven combinations: an entry with no passing canary
+ * record is skipped, and when none are proven the alias keeps its own
+ * primary.
  */
 function primaryEntry(
   alias: AliasConfig,
   iteration: number | undefined,
+  proven?: ReadonlySet<string>,
 ): { harness: string; model: string; effort?: string } {
-  const rotate = alias.rotate ?? [];
+  const rotateAll = alias.rotate ?? [];
+  // Only a non-empty registry gates: before any canary has been recorded,
+  // rotation stays as configured; once the first proof lands, unproven
+  // entries are skipped.
+  const rotate =
+    proven === undefined || proven.size === 0
+      ? rotateAll
+      : rotateAll.filter((entry) =>
+          isProven(proven, canaryKey(entry.harness, entry.model)),
+        );
   if (iteration === undefined || rotate.length === 0)
     return {
       harness: alias.harness,
@@ -233,9 +248,10 @@ function collectTiers(
   iteration: number | undefined,
   path: readonly string[],
   out: ChainTiers,
+  proven?: ReadonlySet<string>,
 ): void {
   const alias = runtime.configs.run.aliases[aliasName]!;
-  const primary = primaryEntry(alias, iteration);
+  const primary = primaryEntry(alias, iteration, proven);
   pushTier(
     runtime,
     out,
@@ -256,7 +272,7 @@ function collectTiers(
         throw new Error(
           `fallback alias chain forms a cycle: ${[...path, target].join(" -> ")}`,
         );
-      collectTiers(runtime, target, iteration, [...path, target], out);
+      collectTiers(runtime, target, iteration, [...path, target], out, proven);
       continue;
     }
     const tierHarness = fallback.harness ?? primary.harness;
@@ -285,9 +301,10 @@ function resolveChain(
   runtime: KernelRuntime,
   aliasName: string,
   iteration?: number,
+  proven?: ReadonlySet<string>,
 ): ResolvedTier[] {
   const out: ChainTiers = { seen: new Set(), tiers: [] };
-  collectTiers(runtime, aliasName, iteration, [aliasName], out);
+  collectTiers(runtime, aliasName, iteration, [aliasName], out, proven);
   return out.tiers;
 }
 
@@ -304,10 +321,17 @@ export function resolveTurn(
   aliasName: string,
   aliasOverride?: string,
   iteration?: number,
+  proven?: ReadonlySet<string>,
 ): TurnTarget {
   const override =
     aliasOverride && aliasOverride !== "default" ? aliasOverride : undefined;
-  return targetForAlias(runtime, prompt, override ?? aliasName, iteration);
+  return targetForAlias(
+    runtime,
+    prompt,
+    override ?? aliasName,
+    iteration,
+    proven ?? runtime.provenCombinations,
+  );
 }
 
 /** A step's repair ask; absent fields stay absent so the kernel default applies. */

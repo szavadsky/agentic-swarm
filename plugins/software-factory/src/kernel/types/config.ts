@@ -267,6 +267,12 @@ export interface KernelRuntime {
   prompts: PromptLibrary;
   limits: Limits;
   /**
+   * `harness+model` combinations that passed a canary run. Loaded from the
+   * session store at launch; rotation only picks proven combinations. Narrow
+   * per-test runtimes may omit it; rotation then stays ungated.
+   */
+  provenCombinations?: Set<string>;
+  /**
    * Quota pool keys (subscription, or harness+model when none) latched by a
    * quota stop, mapped to the epoch ms they may serve again. Loaded from the
    * session store at launch, so a relaunch before a stored reset skips the

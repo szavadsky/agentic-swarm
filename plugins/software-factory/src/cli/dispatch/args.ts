@@ -74,6 +74,13 @@ const VALUE_FLAGS: readonly ValueFlag[] = [
     },
   },
   {
+    name: "--alias",
+    apply: (result, value) => {
+      if (!value) throw new Error("--alias requires an alias name");
+      result.alias = value;
+    },
+  },
+  {
     name: "--out",
     apply: (result, value) => {
       if (!value) throw new Error("--out requires a path");

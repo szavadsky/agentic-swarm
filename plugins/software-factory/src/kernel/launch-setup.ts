@@ -34,6 +34,7 @@ import {
   pinRefusal,
   tmpHeadroom,
 } from "./preflight.js";
+import { loadCanaryProven } from "./canary.js";
 import { loadPrompts } from "./prompts.js";
 import { loadPoolResets } from "./quota-pools.js";
 import { scriptMeta } from "./record.js";
@@ -166,6 +167,7 @@ async function buildRuntime(
       run: configs.run,
     }),
     limits: toLimits(configs),
+    provenCombinations: await loadCanaryProven(paths),
     exhaustedPools: await loadPoolResets(paths),
     priceSource: opts.priceSource,
   };
