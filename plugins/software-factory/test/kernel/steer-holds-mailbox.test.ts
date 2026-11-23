@@ -12,7 +12,12 @@ import {
   setupFlowRepo,
   writeTask,
 } from "./s2-helpers.js";
-import { approver, implementer, tasks } from "./steer-holds-helpers.js";
+import {
+  approver,
+  implementer,
+  tasks,
+  writePlan,
+} from "./steer-holds-helpers.js";
 
 async function runGrowingSteerFirstPass(
   runtime: Awaited<ReturnType<typeof makeRuntime>>,
@@ -98,6 +103,7 @@ function registerMidRunSteerHoldsPart1(): void {
     try {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
+      writePlan(runtime);
       await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
 
       const inbox = path.join(runtime.store.goalDir, "mailbox/inbox");

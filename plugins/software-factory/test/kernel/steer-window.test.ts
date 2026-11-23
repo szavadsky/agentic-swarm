@@ -90,16 +90,6 @@ async function boundaryReadSteerPart1() {
 
   harness.script((req, ctx) => {
     expect(req.prompt).toContain(steer);
-    ctx.writeOutcome(
-      outcome({
-        summary: "steer routed to the architect",
-        steerRoutes: [{ steer: "s1", route: "architect" }],
-      }),
-    );
-    return fakeTurnResult(req);
-  });
-  harness.script((req, ctx) => {
-    expect(req.prompt).toContain(steer);
     writePlan(goal.goalDir, PLAN);
     ctx.writeOutcome(
       outcome({ summary: "planned alpha", decision: "continue" }),
@@ -130,22 +120,22 @@ async function boundaryReadSteerPart2(
   await launch(goal.repo, harness, 1);
 
   expect((await stateOf(goal.goalDir)).tasks.alpha!.status).toBe("merged");
-  // The boundary routed the steer once and the architect saw it; dispatch
-  // handed the same id back and ran no second steer turn over it.
+  // No plan before launch: no PM steer turn; the architect saw the steer and
+  // dispatch handed the same id back without a steer turn over it.
   const pm = (await store.listRecords()).filter(
     (record) => record.step === "pm",
   );
-  expect(pm.filter((record) => record.outcome?.steerRoutes)).toHaveLength(1);
-  expect(pm).toHaveLength(2);
+  expect(pm.filter((record) => record.outcome?.steerRoutes)).toHaveLength(0);
+  expect(pm).toHaveLength(1);
   expect(
     harness.calls
       .filter((call) => call.prompt.includes(steer))
       .map((call) => fakeTurnIdentity(call).step),
-  ).toEqual(["pm", "architect"]);
+  ).toEqual(["architect"]);
 }
 
-describe("steer read by the boundary", () => {
-  it("is not steered again when dispatch starts", async () => {
+describe("steer dropped before launch", () => {
+  it("goes to the first architect turn with no PM turn and is not steered again when dispatch starts", async () => {
     const scope = await boundaryReadSteerPart1();
     try {
       await boundaryReadSteerPart2(scope);
@@ -159,6 +149,10 @@ async function idleIntentSteerPart1(goal: ReturnType<typeof makeGoal>) {
   const harness = new FakeHarness({ id: "fake" });
   const store = createFolderStore(goal.goalDir, undefined, {});
   await store.ensureLayout();
+  writePlan(
+    goal.goalDir,
+    "# Milestone 0\n\n## setup\nPrepare the demo.\nDone when: the demo builds.\n",
+  );
   const steer = "Amend intent: drop the export requirement.";
   await postSteer(store, "s1", steer);
   const intentPath = path.join(goal.goalDir, "intent.md");
@@ -168,7 +162,7 @@ async function idleIntentSteerPart1(goal: ReturnType<typeof makeGoal>) {
     "utf8",
   );
 
-  // First turn: the boundary routes the idle steer before the architect.
+  // A plan exists: the boundary PM routes the idle steer before the architect.
   harness.script((req, ctx) => {
     expect(fakeTurnIdentity(req).step).toBe("pm");
     expect(req.prompt).toContain(steer);
@@ -251,7 +245,7 @@ async function idleIntentSteerPart2(
   expect(steps.indexOf("intent")).toBeLessThan(steps.indexOf("architect"));
 }
 
-describe("steer dropped with nothing in flight", () => {
+describe("steer dropped with nothing in flight after the first plan", () => {
   it("is routed at the boundary, carried into the intent, and shown to the architect", async () => {
     const goal = makeGoal();
     try {

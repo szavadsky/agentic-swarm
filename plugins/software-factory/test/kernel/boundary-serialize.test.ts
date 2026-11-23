@@ -14,7 +14,7 @@ import {
   outcome,
   writePlan,
 } from "./e2e-helpers.js";
-import { task, causeText } from "./helpers.js";
+import { causeText, task } from "./helpers.js";
 import {
   cleanupFlowRepo,
   goalCheckout,
@@ -28,6 +28,19 @@ const PLAN = `# Milestone 1
 
 ## later
 Nothing to dispatch yet; the plan is the architect's.
+`;
+
+/** The mid-run plan: its tasks are already filed when the steer arrives. */
+const LOCK_PLAN = `# Milestone 1
+
+## alpha
+Create alpha.txt.
+
+## beta
+Create beta.txt.
+
+## gamma
+Create gamma.txt.
 `;
 
 /** Shell single-quotes a path, so a temp dir with a quote cannot break a gate. */
@@ -155,6 +168,8 @@ async function holdsSteerPMTurnUntilMergeReleasesPart1(
 ) {
   const harness = new FakeHarness({ id: "fake" });
   const runtime = await makeRuntime(repo, goal, { fake: harness });
+  // Mid-run dispatch: the first architect flow already delivered a plan.
+  writePlan(runtime.store.goalDir, LOCK_PLAN);
   for (const slug of ["alpha", "beta", "gamma"])
     await writeTask(runtime, task(slug, { scope: [`${slug}.txt`] }));
 
