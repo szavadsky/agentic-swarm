@@ -4,9 +4,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { runDeclaredGate, runGates } from "../../src/kernel/gates.js";
-import type { GateConfig } from "../../src/kernel/types.js";
+import type { GateConfig, KernelRuntime } from "../../src/kernel/types.js";
 import { prepareIntegrationCheckout } from "../../src/kernel/worktree.js";
-import { cleanupFlowRepo, makeRuntime, setupFlowRepo } from "./s2-helpers.js";
+import { task } from "./helpers.js";
+import {
+  cleanupFlowRepo,
+  makeRuntime,
+  setupFlowRepo,
+  writeTask,
+} from "./s2-helpers.js";
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
@@ -60,6 +66,15 @@ function killGroup(leader: number | undefined): void {
 
 function tmpDir(kind: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `gate-${kind}-`));
+}
+
+/** The sweep only removes terminal task worktrees. */
+async function mergedTask(runtime: KernelRuntime, slug: string): Promise<void> {
+  await writeTask(runtime, task(slug));
+  await runtime.store.records.append(
+    { iteration: 1, step: "merge", round: 1, actor: "script", slug },
+    { ok: true },
+  );
 }
 
 describe("gate process tree lifecycle", () => {
@@ -159,6 +174,7 @@ function gateProcessTreeLifecyclePart3() {
     let leader: number | undefined;
     try {
       const runtime = await makeRuntime(repo, goal, {});
+      await mergedTask(runtime, "sleepy");
       const tasksRoot = path.join(runtime.paths.worktreeRoot, `${goal}-tasks`);
       const worktree = path.join(tasksRoot, "sleepy");
       repo.createWorktree(`factory-task/${goal}/sleepy`, worktree);
@@ -214,6 +230,7 @@ process.exit(0);
     let leader: number | undefined;
     try {
       const runtime = await makeRuntime(repo, goal, {});
+      await mergedTask(runtime, "sleepy");
       const tasksRoot = path.join(runtime.paths.worktreeRoot, `${goal}-tasks`);
       const worktree = path.join(tasksRoot, "sleepy");
       repo.createWorktree(`factory-task/${goal}/sleepy`, worktree);

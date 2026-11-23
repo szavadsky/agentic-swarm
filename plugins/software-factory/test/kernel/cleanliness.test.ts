@@ -100,6 +100,40 @@ describe("runCleanlinessCheck default rules hit", () => {
   });
 });
 
+describe("runCleanlinessCheck package-relative task scope", () => {
+  it("recognizes package-relative paths within task scope", async () => {
+    const { root, runtime } = await setupTest({ maxOutOfScopeFiles: 0 });
+
+    const mainFile = path.join(root, "plugins/software-factory/src/main.ts");
+    fs.mkdirSync(path.dirname(mainFile), { recursive: true });
+    fs.writeFileSync(mainFile, "export const main = true;\n");
+
+    const unrelatedFile = path.join(root, "unrelated.ts");
+    fs.writeFileSync(unrelatedFile, "export const unrelated = true;\n");
+
+    await git(root, ["add", "."]);
+    await git(root, ["commit", "-m", "dirty"]);
+
+    const task: TaskFile = {
+      slug: "test-task",
+      title: "Test task",
+      kind: "development",
+      flow: "implement-review",
+      deps: [],
+      scope: ["src/main.ts"],
+      revision: 0,
+      source: "M5",
+      body: "Test body",
+    };
+
+    const result = await runCleanlinessCheck(runtime, root, "HEAD~1", task);
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain(
+      "Too many files outside task scope (1 files: unrelated.ts)",
+    );
+  });
+});
+
 describe("runCleanlinessCheck default rules pass", () => {
   it("passes when the change adheres to the default rules", async () => {
     const { root, runtime } = await setupTest(undefined);

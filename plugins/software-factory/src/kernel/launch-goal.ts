@@ -16,6 +16,7 @@ import { drainHeldNotes } from "./mailbox.js";
 import { landStoreCommits } from "./store-backend.js";
 import type { LaunchResult, RunGoalOptions } from "./launch-types.js";
 import type { State } from "./types.js";
+import { sweepWorktrees } from "./worktree.js";
 
 async function runIterations(run: GoalRun): Promise<void> {
   while (run.loopIndex < run.runtime.limits.iterations) {
@@ -119,7 +120,9 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     // checkout the next launch reads; a crash before this leaves them for
     // recovery to land.
     await landStoreCommits(setup.paths);
-    return await launchResult(opts, run);
+    const result = await launchResult(opts, run);
+    if (result.stop === "done") await sweepWorktrees(runtime);
+    return result;
   } finally {
     lock.release();
     uninstall?.();

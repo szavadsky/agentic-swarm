@@ -1,4 +1,4 @@
-/** Branch names, ref moves, base following, the integration checkout and its merge scratch. */
+/** Ref moves, base following, the integration checkout and the task-worktree sweep. */
 
 import fs from "node:fs";
 import path from "node:path";
@@ -9,28 +9,8 @@ import { reapGateProcesses } from "../gates.js";
 import { landStoreCommits } from "../store-backend.js";
 import type { KernelRuntime } from "../types.js";
 import type { MergeAttempt } from "./types.js";
-
-/** Task branches and worktrees are goal-scoped and disposable. */
-export function taskBranchName(runtime: KernelRuntime, slug: string): string {
-  // Not nested under the integration branch: refs/heads/factory/<goal> would
-  // block refs/heads/factory/<goal>/<slug> as a file-vs-directory conflict.
-  const goal = path.basename(runtime.paths.goalDir);
-  return `factory-task/${goal}/${slug}`;
-}
-
-export function taskWorktreePath(runtime: KernelRuntime, slug: string): string {
-  const goal = path.basename(runtime.paths.goalDir);
-  return path.join(goalWorktreeRoot(runtime), `${goal}-tasks`, slug);
-}
-
-/**
- * The directory holding this goal's checkouts and nothing else. It follows the
- * resolved checkout, so an existing checkout at the pre-repo-id path keeps its
- * task worktrees and merge scratch beside it.
- */
-function goalWorktreeRoot(runtime: KernelRuntime): string {
-  return path.dirname(runtime.paths.goalCheckout);
-}
+import { goalWorktreeRoot, mergeScratchPath } from "./names.js";
+import { sweepWorktrees } from "./sweep.js";
 
 export async function integrationHead(runtime: KernelRuntime): Promise<string> {
   const res = await git(runtime.paths.repoRoot, [
@@ -296,9 +276,6 @@ export async function prepareIntegrationCheckout(
   keepSlugs: ReadonlySet<string> = new Set(),
 ): Promise<void> {
   const { goalCheckout, integrationBranch } = runtime.paths;
-  const goal = path.basename(runtime.paths.goalDir);
-  const ownTasks = path.join(goalWorktreeRoot(runtime), `${goal}-tasks`);
-  const ownScratch = mergeScratchPath(runtime);
   fs.mkdirSync(goalWorktreeRoot(runtime), { recursive: true });
   await removeOwnWorktrees(
     runtime,
@@ -315,15 +292,6 @@ export async function prepareIntegrationCheckout(
   // store write lands on both heads, so the merge sees one content, not two.
   await landStoreCommits(runtime.paths);
   await followBase(runtime);
-}
-
-/**
- * The merge queue's scratch worktree: detached at the integration head, so a
- * squash commit can be gated without touching the stable goal checkout.
- */
-function mergeScratchPath(runtime: KernelRuntime): string {
-  const goal = path.basename(runtime.paths.goalDir);
-  return path.join(goalWorktreeRoot(runtime), `${goal}-merge`);
 }
 
 export async function removeMergeScratch(
