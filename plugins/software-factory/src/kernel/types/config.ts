@@ -121,7 +121,7 @@ export interface ProcessConfig {
   presets?: Record<string, { calibration: string }>;
 }
 
-/** One fallback tier: another alias's whole ladder, or a model with its own effort. */
+/** One fallback tier: another alias's whole ladder, or a model with its own effort (never inherited). */
 export type FallbackConfig = FallbackAliasConfig | FallbackModelConfig;
 
 /** A fallback that reuses another alias's ladder, primary first. */
@@ -135,7 +135,7 @@ export interface FallbackModelConfig {
   /** Harness id; defaults to the alias's harness. */
   harness?: string;
   model: string;
-  /** Effort level; defaults to the alias's resolved effort. */
+  /** Effort level; absent means the harness default. */
   effort?: string;
   /**
    * Quota pool this tier draws on; defaults to the alias's subscription only

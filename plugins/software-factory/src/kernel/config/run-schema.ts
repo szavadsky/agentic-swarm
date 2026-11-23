@@ -75,7 +75,7 @@ export const fallbackSchema = z.union([
       /** Harness id; defaults to the alias's harness. */
       harness: z.string().min(1).optional(),
       model: z.string().min(1),
-      /** Effort level; defaults to the alias's resolved effort. */
+      /** Effort level; absent means the harness default. */
       effort: z.string().min(1).optional(),
       /**
        * Quota pool this tier draws on; defaults to the alias's subscription

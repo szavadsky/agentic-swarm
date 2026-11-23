@@ -254,7 +254,6 @@ function registerAcpxHarnessPart18(): void {
       compact: "none",
       subagents: "none",
       structuredOutput: "none",
-      effort: [],
       usage: { cache: true, cost: true },
     });
   });
@@ -339,7 +338,6 @@ function registerAcpxHarnessPart20(): void {
         "high",
       ]);
       expect(await harness.caps({ id: "nova-model" })).toMatchObject({
-        effort: [],
         usage: { cache: false, cost: true },
       });
     } finally {

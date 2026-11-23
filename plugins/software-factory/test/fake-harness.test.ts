@@ -40,13 +40,23 @@ function fakeHarnessKernelContractPart1() {
   it("reports its id and configured caps", async () => {
     const harness = new FakeHarness({
       id: "fake-test",
-      caps: { compact: "server", effort: ["low", "high"] },
+      caps: { compact: "server" },
+      probe: { effort: ["low", "high"] },
     });
     const caps = await harness.caps(model);
     expect(harness.id).toBe("fake-test");
     expect(caps.compact).toBe("server");
-    expect(caps.effort).toEqual(["low", "high"]);
     expect(caps.usage.cache).toBe(true);
+    expect((await harness.probe!(model)).effort).toEqual(["low", "high"]);
+  });
+
+  it("leaves the probe absent unless a canned answer is given", async () => {
+    expect(new FakeHarness({ id: "plain" }).probe).toBeUndefined();
+    const harness = new FakeHarness({
+      id: "probed",
+      probe: { effort: null },
+    });
+    expect((await harness.probe!({ id: "any" })).effort).toBeNull();
   });
 
   it("returns a completed TurnResult and creates session ids for fresh turns", async () => {

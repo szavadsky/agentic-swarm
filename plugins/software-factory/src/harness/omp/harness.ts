@@ -5,6 +5,7 @@ import type {
   Caps,
   CompactResult,
   Harness,
+  ModelProbe,
   ModelRef,
   SessionRef,
   TurnAttempt,
@@ -13,7 +14,7 @@ import type {
 } from "../types.js";
 import { actualModel, OmpRuntime } from "./runtime.js";
 import { runOmpTurn } from "./turn.js";
-import { OMP_ID, type OmpHarnessOptions } from "./types.js";
+import { isOmpAlias, OMP_ID, type OmpHarnessOptions } from "./types.js";
 
 export type { OmpHarnessOptions } from "./types.js";
 
@@ -31,20 +32,33 @@ export class OmpHarness implements Harness {
     this.retry = opts.retry ?? {};
   }
 
-  async caps(model: ModelRef): Promise<Caps> {
-    const models = await this.runtime.models();
-    const found = models.find(
-      (entry) =>
-        entry.selector === model.id ||
-        `${entry.provider}/${entry.id}` === model.id,
-    );
+  async caps(_model: ModelRef): Promise<Caps> {
     return {
       resume: true,
       compact: "server",
       subagents: (await this.runtime.supportsSteering()) ? "steer" : "spawn",
       structuredOutput: "none",
-      effort: Array.isArray(found?.thinking) ? [...found.thinking] : [],
       usage: { cache: true, cost: true },
+    };
+  }
+
+  /** Answers from `models --json`, alias names resolved against the CLI. */
+  async probe(model: ModelRef): Promise<ModelProbe> {
+    const models = await this.runtime.models();
+    if (isOmpAlias(model.id)) return aliasProbe(models);
+    const found = models.find((entry) => matchesId(entry, model.id));
+    if (found) return foundProbe(found);
+    const selectors = new Set<string>();
+    for (const entry of models) {
+      if (entry.selector) selectors.add(entry.selector);
+      if (entry.provider && entry.id)
+        selectors.add(`${entry.provider}/${entry.id}`);
+      if (entry.id) selectors.add(entry.id);
+    }
+    return {
+      listed: false,
+      available: [...selectors].sort((a, b) => a.localeCompare(b)),
+      effort: null,
     };
   }
 
@@ -108,4 +122,49 @@ export class OmpHarness implements Harness {
       await rpc.close(2_000);
     }
   }
+}
+
+type ModelEntry = Awaited<ReturnType<OmpRuntime["models"]>>[number];
+
+function matchesId(entry: ModelEntry, id: string): boolean {
+  return (
+    entry.selector === id ||
+    `${entry.provider}/${entry.id}` === id ||
+    entry.id === id
+  );
+}
+
+/**
+ * An alias's effort surface from the CLI alone: `models --json` has no
+ * per-alias list, so the alias accepts the union of every catalogued list
+ * (plus `auto`, the enum level no model list carries).
+ */
+function aliasProbe(models: readonly ModelEntry[]): ModelProbe {
+  const union = new Set<string>();
+  for (const entry of models) {
+    if (Array.isArray(entry.thinking)) {
+      for (const level of entry.thinking) union.add(level);
+    }
+  }
+  union.add("auto");
+  return {
+    listed: true,
+    available: [],
+    effort: [...union].sort((a, b) => a.localeCompare(b)),
+  };
+}
+
+function foundProbe(found: ModelEntry): ModelProbe {
+  if (!Array.isArray(found.thinking)) {
+    return { listed: true, available: [], effort: null };
+  }
+  // The CLI parses `--thinking auto` for every model even though no
+  // per-model list carries it.
+  const levels = new Set<string>(found.thinking);
+  levels.add("auto");
+  return {
+    listed: true,
+    available: [],
+    effort: [...levels].sort((a, b) => a.localeCompare(b)),
+  };
 }
