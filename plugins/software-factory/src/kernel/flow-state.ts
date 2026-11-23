@@ -57,6 +57,8 @@ export interface StepRun {
   target?: TurnTarget;
   session?: import("../harness/types.js").SessionRef;
   trivial: boolean;
+  /** This step's turn continues one recovery sealed as a bare crash. */
+  relaunch: boolean;
   turnCwd?: string;
   vars?: Record<string, string>;
   baseHash?: string;

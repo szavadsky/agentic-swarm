@@ -15,7 +15,7 @@ import {
   priorStepCommit,
   promptVars,
   revisionBase,
-  trivialResumeNote,
+  resumeNote,
 } from "./flow-context.js";
 import { parkTask, recordBaseAdvance, taskMeta } from "./flow-meta.js";
 import type { StepRun, TaskActionResult } from "./flow-state.js";
@@ -107,13 +107,23 @@ function setLastCallVars(run: StepRun, vars: Record<string, string>): void {
   }
 }
 
+/**
+ * A trivial turn still works in the front's session cwd, so its note names the
+ * absolute worktree; a relaunched turn continues its own worktree and only
+ * needs the branch and the assess-first ask.
+ */
 function setResumeNote(run: StepRun, vars: Record<string, string>): void {
-  if (!run.trivial || !run.session) return;
-  vars.resume_note = trivialResumeNote(
-    run.session.cwd,
-    run.ensured.path,
-    run.ensured.branch,
-  );
+  if (run.trivial && run.session) {
+    vars.resume_note = resumeNote(run.runtime.prompts, "trivial", {
+      branch: run.ensured.branch,
+      worktree: run.ensured.path,
+      sessionCwd: run.session.cwd,
+    });
+  } else if (run.relaunch) {
+    vars.resume_note = resumeNote(run.runtime.prompts, "relaunch", {
+      branch: run.ensured.branch,
+    });
+  }
 }
 
 function setResolveAsk(run: StepRun, vars: Record<string, string>): void {

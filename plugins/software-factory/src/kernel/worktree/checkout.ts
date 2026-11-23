@@ -206,21 +206,29 @@ async function followBase(runtime: KernelRuntime): Promise<void> {
  * Creates (or recovers) the stable integration checkout. It is the only
  * worktree the merge queue moves; task worktrees are disposable.
  */
-/** Removes this goal's leftover task worktrees and merge scratch. */
+/**
+ * Removes this goal's leftover task worktrees and merge scratch, except the
+ * worktrees of tasks whose interrupted turn the relaunch continues.
+ */
 async function removeOwnWorktrees(
   runtime: KernelRuntime,
   goalCheckout: string,
   ownTasks: string,
   ownScratch: string,
+  keepSlugs: ReadonlySet<string>,
 ): Promise<void> {
   const { repoRoot } = runtime.paths;
+  const keep = new Set(
+    [...keepSlugs].map((slug) => path.resolve(path.join(ownTasks, slug))),
+  );
   // Recovery owns this goal's worktrees only: a sibling goal's checkout and
   // task worktrees, and another repo sharing the root, are not ours to remove.
   for (const wt of await registeredWorktrees(runtime)) {
     const resolved = path.resolve(wt);
     if (
       resolved === path.resolve(goalCheckout) ||
-      resolved === path.resolve(repoRoot)
+      resolved === path.resolve(repoRoot) ||
+      keep.has(resolved)
     )
       continue;
     const own =
@@ -284,13 +292,20 @@ async function ensureIntegrationCheckout(
  */
 export async function prepareIntegrationCheckout(
   runtime: KernelRuntime,
+  keepSlugs: ReadonlySet<string> = new Set(),
 ): Promise<void> {
   const { goalCheckout, integrationBranch } = runtime.paths;
   const goal = path.basename(runtime.paths.goalDir);
   const ownTasks = path.join(goalWorktreeRoot(runtime), `${goal}-tasks`);
   const ownScratch = mergeScratchPath(runtime);
   fs.mkdirSync(goalWorktreeRoot(runtime), { recursive: true });
-  await removeOwnWorktrees(runtime, goalCheckout, ownTasks, ownScratch);
+  await removeOwnWorktrees(
+    runtime,
+    goalCheckout,
+    ownTasks,
+    ownScratch,
+    keepSlugs,
+  );
   await ensureIntegrationCheckout(runtime, goalCheckout, integrationBranch);
   // A crashed merge must not leave staged or conflicted state for the next launch.
   await git(goalCheckout, ["reset", "--hard", "HEAD"]);

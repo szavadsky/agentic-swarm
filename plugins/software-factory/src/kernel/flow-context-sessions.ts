@@ -13,6 +13,7 @@ import { frontTarget, lastFrontRecord } from "./flow-context-front.js";
 import { bySeq } from "./flow-context-history.js";
 import { findStep, flowOf } from "./flow-context-step.js";
 import type { TurnTarget } from "./flow-context-targets.js";
+import type { PromptLibrary } from "./prompts.js";
 import { sessionCacheHot } from "./sessions.js";
 import type {
   Cause,
@@ -275,24 +276,37 @@ function keptSession(
     : undefined;
 }
 
+/** Why a turn is rendered the resume fragment. */
+export type ResumeReason = "relaunch" | "trivial";
+
+/** The facts the resume fragment renders; empty strings for the parts a reason does not use. */
+export interface ResumeNoteOptions {
+  branch?: string;
+  worktree?: string;
+  sessionCwd?: string;
+}
+
 /**
- * The follow-up notice for a turn resumed in the front's session: the task
- * branch plus the absolute-path rules. The session's tools still run in the
- * front's cwd, so relative paths would land in the goal checkout instead of
- * the worktree — the notice makes the absolute worktree the only workplace.
- * The leading newline separates it from the `worktree:` line it follows; a
- * de-novo turn renders `resume_note` as the empty string instead.
+ * The resume fragment a relaunched turn carries. A relaunch continues the
+ * task branch and says to assess status first; a trivial turn also continues
+ * the front's session, so its note names the session cwd and the absolute
+ * worktree the tools must use instead. The leading newline separates the
+ * fragment from the `worktree:` line it follows.
  */
-export function trivialResumeNote(
-  sessionCwd: string,
-  worktree: string,
-  branch: string,
+export function resumeNote(
+  prompts: PromptLibrary,
+  reason: ResumeReason,
+  opts: ResumeNoteOptions = {},
 ): string {
-  return [
-    "",
-    `- branch: \`${branch}\``,
-    `- resume: this turn continues your front session; your tools run in \`${sessionCwd}\`, not the worktree. ` +
-      `Do all work under the absolute worktree path \`${worktree}\` — relative paths land in the session directory, outside your assignment. ` +
-      `Never write outside the worktree: the script rejects the turn on any change there.`,
-  ].join("\n");
+  const rendered = prompts.render("resume", {
+    reason,
+    branch: opts.branch ?? "",
+    worktree: opts.worktree ?? "",
+    session_cwd: opts.sessionCwd ?? "",
+  });
+  const lines = rendered
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  return lines.length > 0 ? `\n${lines.join("\n")}` : "";
 }
