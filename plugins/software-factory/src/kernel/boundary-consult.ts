@@ -20,6 +20,7 @@ import {
   infraCause,
   openRecords,
   previousEpicSummary,
+  recordedPackHashes,
   snapshotDiff,
   spikeFindings,
   taskSnapshot,
@@ -89,6 +90,7 @@ async function epicPackInput(
     checkout: runtime.paths.goalCheckout,
     integrationBranch: runtime.paths.integrationBranch,
     headHash: await integrationHead(runtime),
+    ...(await recordedPackHashes(runtime.store, opts.records, opts.iteration)),
     recordsDir: runtime.store.pathOf({ area: "records" }),
     tasksDir: runtime.store.tasks.dir,
     previousSummary: await previousEpicSummary(

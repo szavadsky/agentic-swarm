@@ -53,6 +53,11 @@ export function epicContextPackRelPath(
   return `iterations/${iteration}/epics/${epic}/context-pack.md`;
 }
 
+/** Short hash, or "not recorded" when the pack input has no hash. */
+function recordedHash(hash: string | undefined): string {
+  return hash ? short(hash) : "not recorded";
+}
+
 /**
  * Deterministic index, never pasted content (KERNEL0 §5): status, hashes,
  * rounds, infra commands and paths the architect can drill into. The render
@@ -70,6 +75,7 @@ export function renderContextPack(input: ContextPackInput): string {
     `- intent: ${input.intentPath}`,
     `- plan (architect edits this): ${input.planPath}`,
     `- goal checkout: ${input.checkout} (branch ${input.integrationBranch} at ${short(input.headHash)})`,
+    `- hashes: goal-start ${recordedHash(input.goalStartHash)}, last iteration ${recordedHash(input.lastIterationHash)}, head ${short(input.headHash)}`,
     `- records: ${input.recordsDir}`,
     `- previous iteration summary: ${input.previousSummary ?? "none"}`,
     `- previous-launch digest: ${input.digestPath ?? "none"}`,
@@ -190,6 +196,8 @@ export function renderContextData(input: ContextPackInput): string {
       checkout: input.checkout,
       integrationBranch: input.integrationBranch,
       headHash: input.headHash,
+      goalStartHash: input.goalStartHash ?? null,
+      lastIterationHash: input.lastIterationHash ?? null,
       records: input.recordsDir,
       tasks: input.tasksDir,
       previousSummary: input.previousSummary ?? null,

@@ -14,6 +14,7 @@ import {
   ownedPlanText,
   previousSummary,
   previousWaste,
+  recordedPackHashes,
   spikeFindings,
   unavailableAliases,
 } from "./boundary-context.js";
@@ -305,6 +306,11 @@ async function packInput(context: ConsultContext): Promise<ContextPackInput> {
   const aged = agedReady(context, holds);
   // A debt any active plan owns leaves the register, whichever architect wrote it.
   const planText = await ownedPlanText(runtime);
+  const hashes = await recordedPackHashes(
+    runtime.store,
+    context.records,
+    context.iteration,
+  );
   return {
     goal: path.basename(runtime.paths.goalDir),
     iteration: context.iteration,
@@ -313,6 +319,7 @@ async function packInput(context: ConsultContext): Promise<ContextPackInput> {
     checkout: runtime.paths.goalCheckout,
     integrationBranch: runtime.paths.integrationBranch,
     headHash: await integrationHead(runtime),
+    ...hashes,
     recordsDir: runtime.store.pathOf({ area: "records" }),
     tasksDir: runtime.store.tasks.dir,
     previousSummary: await previousSummary(

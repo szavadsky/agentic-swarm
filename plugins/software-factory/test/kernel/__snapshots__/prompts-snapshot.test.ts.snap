@@ -1317,7 +1317,7 @@ The intent and the plan are the architect's own documents. Point at them; quote 
 
 Write \`/goal/iterations/3/context-pack.md\`. It is an index, not a report:
 
-- Open with the goal, the iteration and the absolute paths from the data: intent, plan, checkout, records, previous summary, previous digest, run config and this data file.
+- Open with the goal, the iteration, the goal-start, last-iteration and head hashes, and the absolute paths from the data: intent, plan, checkout, records, previous summary, previous digest, run config and this data file.
 - Keep the task status table complete: every slug, status, kind, round, turns, deps and commit, plus the parked causes, pending waits, ready-with-no-turn causes, open records and the debt register with its ids. These decide dispatch, so the architect must never have to ask for them.
 - Keep the infra commands and the base-gate state complete.
 - For the plan check, the plan review, forwarded concerns, spike findings and PM answers decide section by section: keep it in full when it changes what the architect does now; otherwise name the pointer and summarise it in one line. A stale finding hidden behind a pointer is a failure; a long finding pasted beside its pointer is waste.
