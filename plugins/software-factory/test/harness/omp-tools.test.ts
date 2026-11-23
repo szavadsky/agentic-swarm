@@ -58,6 +58,7 @@ function createFakeOmp(): FakeOmp {
   fs.writeFileSync(binary, fakeOmpScript(logPath), { mode: 0o755 });
   return {
     harness: new OmpHarness({
+      retention: "short",
       binary,
       sessionDir: path.join(tmp, "sessions"),
       // The bundled-subagent model override is present but must not enable the tool.

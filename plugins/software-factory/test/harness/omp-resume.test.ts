@@ -167,6 +167,7 @@ async function retriesOnceDeNovoWhenResumedPart1(
   home: string,
 ) {
   const harness = new OmpHarness({
+    retention: "short",
     binary: fake.binary,
     sessionDir,
     readyTimeoutMs: 5_000,
@@ -258,6 +259,7 @@ function registerOmpResumePart2(): void {
     const home = defaultHome(sessionDir);
     try {
       const harness = new OmpHarness({
+        retention: "short",
         binary: fake.binary,
         sessionDir,
         readyTimeoutMs: 5_000,
@@ -305,6 +307,7 @@ function registerOmpResumePart3(): void {
     const home = defaultHome(sessionDir);
     try {
       const harness = new OmpHarness({
+        retention: "short",
         binary: fake.binary,
         sessionDir,
         readyTimeoutMs: 5_000,
@@ -353,6 +356,7 @@ function registerOmpResumePart4(): void {
     fs.mkdirSync(storedDir, { recursive: true });
     try {
       const harness = new OmpHarness({
+        retention: "short",
         binary: fake.binary,
         sessionDir,
         readyTimeoutMs: 5_000,
@@ -436,6 +440,7 @@ function registerOmpResumePart6(): void {
     const clock = installFakeClock(Date.parse("2026-11-16T12:00:00.000Z"));
     try {
       const harness = new OmpHarness({
+        retention: "short",
         binary: fake.binary,
         sessionDir,
         readyTimeoutMs: 5_000,

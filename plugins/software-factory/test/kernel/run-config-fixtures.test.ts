@@ -86,6 +86,7 @@ function fakeHarnesses(
   const harnesses = new Map<string, Harness>(
     Object.entries(
       createRealHarnesses({
+        retention: configs.run.sessions.retention,
         sessionDir,
         harnesses: configs.run.harnesses,
       }),

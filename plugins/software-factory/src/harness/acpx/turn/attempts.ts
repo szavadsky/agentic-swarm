@@ -180,7 +180,7 @@ export function turnSession(
     // turn's cache is refreshed while its final response streams. ACP
     // carries no request timestamp, so local receipt time is the evidence.
     lastRequestStartedAt: processResult.lastEventAt ?? new Date().toISOString(),
-    retentionTier: "short" as const,
+    retentionTier: context.runtime.retention,
     compacted: context.req.session?.compacted ?? false,
     // A failed usage command must not drop the delta baseline.
     ...(resumed && context.req.session?.cumulativeUsage

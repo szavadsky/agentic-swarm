@@ -77,7 +77,12 @@ async function turn(
   fs.writeFileSync(binary, FAKE_OMP, { mode: 0o755 });
   return {
     tmp,
-    harness: new OmpHarness({ binary, sessionDir, readyTimeoutMs: 5_000 }),
+    harness: new OmpHarness({
+      binary,
+      sessionDir,
+      retention: "short",
+      readyTimeoutMs: 5_000,
+    }),
   };
 }
 

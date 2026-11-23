@@ -1,5 +1,5 @@
 import type { RetryPolicy } from "../fallback.js";
-import type { ModelRef } from "../types.js";
+import type { CacheTtl, ModelRef } from "../types.js";
 
 /** Harness configuration carried through `TurnRequest.opaque`. */
 export interface OmpTurnOpaque {
@@ -22,8 +22,8 @@ export interface OmpHarnessOptions {
   sessionDir: string;
   /** Cheap model for subagents spawned inside a turn. */
   subagentModel?: ModelRef | string;
-  /** Provider cache window; the launch overlay and the session stamp share it. */
-  retention?: "short" | "long";
+  /** Provider cache TTL from `sessions.retention`; no default. */
+  retention: CacheTtl;
   retry?: Partial<RetryPolicy>;
   /** Harness-entry `options`: omp overlay keys, passed through untouched. */
   options?: Record<string, unknown>;

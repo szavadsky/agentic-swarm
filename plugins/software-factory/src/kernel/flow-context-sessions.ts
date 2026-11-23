@@ -23,11 +23,31 @@ import type {
   TaskFile,
 } from "./types.js";
 
-/** Compaction is cache hygiene, not a gate; a failure keeps the uncompacted ref. */
+/** The review turn whose ended session is being compacted: step role and 1-based round. */
+export interface CompactionReview {
+  review: boolean;
+  round: number;
+}
+
+/**
+ * Compaction is cache hygiene, not a gate; a failure keeps the uncompacted ref.
+ * The harness entry decides whether this harness compacts at all, and a review
+ * step's `reviewIterations` rule decides which review rounds do; every other
+ * step compacts whenever the session is hot.
+ */
 export async function compactSession(
   runtime: KernelRuntime,
   session: SessionRef,
+  review?: CompactionReview,
 ): Promise<CompactResult | undefined> {
+  const policy = runtime.configs?.run.harnesses?.[session.harness]?.compaction;
+  if (policy?.enabled === false) return undefined;
+  if (
+    review?.review &&
+    policy?.reviewIterations !== undefined &&
+    !policy.reviewIterations.includes(review.round)
+  )
+    return undefined;
   if (!sessionCacheHot(session)) return undefined;
   const harness = runtime.harnesses.get(session.harness);
   if (!harness?.compact) return undefined;

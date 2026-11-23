@@ -33,6 +33,7 @@ function acpxZeroUsageClassificationPart14() {
       },
     });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi-no-command",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),

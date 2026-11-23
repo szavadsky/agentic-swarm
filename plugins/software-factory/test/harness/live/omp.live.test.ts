@@ -28,6 +28,7 @@ live("omp harness live smoke", () => {
     fs.mkdirSync(outbox);
     const outcomePath = path.join(outbox, "outcome.txt");
     const harness = new OmpHarness({
+      retention: "short",
       sessionDir: path.join(root, "sessions"),
       subagentModel: SUBAGENT,
       options: {

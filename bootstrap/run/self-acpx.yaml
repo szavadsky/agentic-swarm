@@ -46,20 +46,21 @@ aliases:
 # or every shell command is denied (probe §7).
 harnesses:
   pi:
+    compaction: { enabled: true }
     acpx:
       agent: pi
       compact: true
       effort: { configId: thought_level }
       usage: { cache: true, command: "/session" }
   codex:
+    compaction: { enabled: true }
     acpx:
       agent: codex
       compact: true
       effort: { configId: reasoning_effort }
       usage: { cache: true }
-  # No `compact`: agy submits `/compact` to the model as a prompt, compacts
-  # nothing and still answers end_turn (compaction-probe.md §2).
   agy:
+    compaction: { enabled: false, reason: "/compact is sent to the model as a prompt and compacts nothing" }
     acpx:
       agent: agy acp
       raw: true

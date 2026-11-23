@@ -18,6 +18,15 @@ export type Caps = {
 };
 
 /**
+ * Provider cache TTL, omp's `providers.cacheRetention` enum
+ * (`auto|short|long|none`). The run config declares it; no adapter or kernel
+ * default stands in. `auto` is the provider's own default, so its window is
+ * unknown to the factory; `none` disables caching.
+ */
+export const CACHE_TTLS = ["auto", "short", "long", "none"] as const;
+export type CacheTtl = (typeof CACHE_TTLS)[number];
+
+/**
  * A harness's live answer for one model's effort surface. `null` means the
  * model has no effort selection (it passes with no effort and fails with
  * any); an array is the model's accepted levels, so an absent configured
@@ -94,7 +103,8 @@ export type SessionRef = {
   model: ModelRef;
   /** Last model-stream activity in the turn, or the turn's end when none arrived. */
   lastRequestStartedAt: string;
-  retentionTier: "short" | "long";
+  /** Cache TTL bound to this session. */
+  retentionTier: CacheTtl;
   compacted: boolean;
   /**
    * Session-cumulative token totals last read from the harness's usage command;

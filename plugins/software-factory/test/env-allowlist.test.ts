@@ -196,6 +196,7 @@ function spawnedChildEnvironmentsPart4() {
     const envFile = path.join(dir, "env.json");
     const stub = createAcpxStub({ envFile });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -228,6 +229,7 @@ function spawnedChildEnvironmentsPart5() {
     const envFile = path.join(dir, "env.json");
     const stub = createAcpxStub({ envFile });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),

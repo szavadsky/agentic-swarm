@@ -84,5 +84,6 @@ limits:
 sessions:
   dir: ../fake-sessions
   keepRuns: 2
+  retention: short
 worktreeRoot: ../fake-worktrees
 lsp: true

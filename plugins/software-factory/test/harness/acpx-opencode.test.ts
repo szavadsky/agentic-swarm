@@ -139,6 +139,7 @@ function registerAcpxHarnessOpencodeRawRoutePart1(): void {
       cost: { amount: 0.0032, currency: "USD" },
     });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "opencode",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -163,6 +164,7 @@ function registerAcpxHarnessOpencodeRawRoutePart2(): void {
       cost: { amount: 0.004, currency: "USD" },
     });
     const options = {
+      retention: "short" as const,
       id: "opencode",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -218,6 +220,7 @@ function registerAcpxHarnessOpencodeRawRoutePart3(): void {
       cost: { amount: 5, currency: "EUR" },
     });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "opencode",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),

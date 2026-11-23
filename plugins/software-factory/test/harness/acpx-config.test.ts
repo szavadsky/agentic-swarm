@@ -147,16 +147,20 @@ function harnessBinaryResolutionPart3() {
         path.join(root, ".factory/run.yaml"),
         [
           "harnesses:",
-          "  omp: { binary: /opt/omp-override }",
+          "  omp:",
+          "    binary: /opt/omp-override",
+          "    compaction: { enabled: true }",
           "  pi:",
           "    binary: /opt/acpx-override",
           "    acpx: { agent: pi }",
+          "    compaction: { enabled: false, reason: no compact command }",
           "",
         ].join("\n"),
       );
       const configs = loadConfigs(root);
       expect(configs.run.harnesses!.omp).toEqual({
         binary: "/opt/omp-override",
+        compaction: { enabled: true },
       });
       expect(configs.run.harnesses!.pi!.binary).toBe("/opt/acpx-override");
       expect(configs.run.harnesses!.pi!.acpx!.agent).toBe("pi");

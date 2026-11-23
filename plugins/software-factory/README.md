@@ -253,6 +253,13 @@ limits:
   iterations: 1
   iterationUsd: 5
 sessions: { dir: ~/.local/share/factory/sessions, keepRuns: 5, retention: short }
+harnesses:
+  opencode:
+    acpx: { agent: opencode acp, raw: true, compact: true }
+    compaction: { enabled: true }                     # the adapter has a real /compact command
+  agy:                                                # acpx adapter with no compaction command
+    acpx: { agent: agy acp, raw: true }
+    compaction: { enabled: false, reason: "/compact is sent to the model as a prompt and compacts nothing" }
 quota: { resetMinutes: 300 }                         # fallback cooldown; a stated reset wins; maxResetMinutes caps it
 worktreeRoot: ~/.local/share/factory/worktrees
 lsp: true                                             # artifact LSP on omp
@@ -269,6 +276,17 @@ inherited key (`scouts: null`, `fallbacks: null`). A missing base and an
 `bootstrap/run/base.yaml` carries the shared self-run aliases, the unattended
 omp policy, the price-id rows and the roots; every other shipped file is a thin
 overlay.
+
+`sessions.retention` is the provider cache TTL, omp's `providers.cacheRetention`
+enum (`auto|short|long|none`) and is required in a declared `sessions` block.
+`short` and `long` bound a compaction to the hot window (5 minutes and one hour);
+`none` disables caching and `auto` leaves the window to the provider, so neither
+compacts — set `short` to compact. A harness entry's `compaction.enabled` decides
+whether its sessions compact at all; disabling it requires a `reason`, and an
+`acpx` harness that enables it must also declare `acpx.compact: true`. A review
+step's harness may add `reviewIterations: [1, 2]`: only those 1-based review
+rounds compact, while every other step ignores the rule. Absent means every
+review round compacts.
 
 A task session resumes on the harness that recorded it. `portability: [{from, to}]`
 declares further directional edges: a session recorded on `from` may resume on
@@ -391,10 +409,13 @@ levels plus `auto`.
 `harnesses.<id>` binds an adapter (`acpx:`) or executable and carries
 `options` passed untouched: acpx reads `args`/`env` (pre-flight refuses an
 `args` that is not a string array or an `env` that is not a string-to-string
-map), omp merges the keys into its launch overlay (`sessions.retention` still
-owns `providers.cacheRetention`). The shipped `bootstrap/run/base.yaml` keeps the
-unattended omp policy there — memory/auto-learn/skills off, approval, disabled
-providers, retry — so no policy is compiled in.
+map), omp merges the keys into its launch overlay (`sessions.retention` owns
+`providers.cacheRetention`). Each entry's `compaction` block records whether its
+sessions compact and, when disabled, why (the `agy` entry: `/compact` reaches
+the model as a prompt and compacts nothing). The shipped
+`bootstrap/run/base.yaml` keeps the unattended omp policy there —
+memory/auto-learn/skills off, approval, disabled providers, retry — so no policy
+is compiled in.
 
 Every child a launch spawns runs on a fixed base environment (`PATH`, `HOME`,
 temp dirs, bun/node caches, git's optional locks, locale) instead of the

@@ -1,7 +1,7 @@
 /** Repository, run and fallback configuration shapes. */
 
 import type { Repo } from "../../core/git/repo.js";
-import type { Harness } from "../../harness/types.js";
+import type { CacheTtl, Harness } from "../../harness/types.js";
 import type { PriceSource } from "../openrouter.js";
 import type { PromptLibrary } from "../prompts.js";
 import type {
@@ -176,12 +176,26 @@ export interface AliasConfig {
   timeouts?: Timeouts;
 }
 
+/** One harness entry's compaction policy; disabling it records why. */
+export interface HarnessCompactionConfig {
+  enabled: boolean;
+  /** Why this harness does not compact; present when `enabled` is false. */
+  reason?: string;
+  /**
+   * Review rounds whose ended session is compacted. Absent compacts every
+   * review round; non-review steps ignore the rule. Round numbers are 1-based.
+   */
+  reviewIterations?: number[];
+}
+
 /** One run-config harness entry: an adapter binding, executable override or opaque options. */
 export interface HarnessConfig {
   /** Adapter binding; absent for a native adapter that only takes a binary. */
   acpx?: import("../../harness/acpx/config.js").AcpxConfig;
   /** Executable override; absent resolves through PATH. */
   binary?: string;
+  /** Compaction configuration for this harness; absent means the adapter's capability. */
+  compaction?: HarnessCompactionConfig;
   /** Opaque adapter options: acpx `args`/`env`, omp overlay keys. */
   options?: Record<string, unknown>;
 }
@@ -216,7 +230,7 @@ export interface RunConfig {
     /** Minimum free bytes in the temporary directory. */
     minTmpFreeBytes?: number;
   };
-  sessions: { dir: string; keepRuns: number; retention: "short" | "long" };
+  sessions: { dir: string; keepRuns: number; retention: CacheTtl };
   /**
    * Quota-pool cooldown: a quota stop's stated reset sets the pool's skip
    * window, capped by `maxResetMinutes` when set; without a stated reset the

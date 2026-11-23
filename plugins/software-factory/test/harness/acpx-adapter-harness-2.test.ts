@@ -141,6 +141,7 @@ function registerAcpxHarnessPart15(): void {
       },
     });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "agy",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -162,6 +163,7 @@ function registerAcpxHarnessPart16(): void {
       usage: { totalTokens: 10, inputTokens: 5, outputTokens: 5 },
     });
     const options = {
+      retention: "short" as const,
       id: "agy",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -215,6 +217,7 @@ function registerAcpxHarnessPart17(): void {
       usage: { totalTokens: 10, inputTokens: 5, outputTokens: 5 },
     });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "agy",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -243,6 +246,7 @@ function registerAcpxHarnessPart17(): void {
 function registerAcpxHarnessPart18(): void {
   it("advertises agy's static caps without inventing live effort levels", async () => {
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "agy",
       binary: "/nonexistent/agy",
       sessionDir: path.dirname("/nonexistent/agy"),
@@ -265,6 +269,7 @@ function registerAcpxHarnessPart19(): void {
       usage: { totalTokens: 10, inputTokens: 5, outputTokens: 5 },
     });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "pi",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -306,6 +311,7 @@ function registerAcpxHarnessPart20(): void {
       usage: { totalTokens: 10, inputTokens: 5, outputTokens: 5 },
     });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "nova",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -383,6 +389,7 @@ function registerAcpxHarnessPart21(): void {
     for (const testCase of cases) {
       const stub = createAcpxStub();
       const harness = new AcpxHarness({
+        retention: "short",
         id: "pi",
         binary: stub.binary,
         sessionDir: path.dirname(stub.binary),

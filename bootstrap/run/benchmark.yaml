@@ -42,6 +42,7 @@ priceIds:
 
 sessions:
   dir: ../runtime/sessions
+  retention: short
 
 worktreeRoot: ../runtime/worktrees
 

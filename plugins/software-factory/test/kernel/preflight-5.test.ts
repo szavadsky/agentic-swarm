@@ -216,7 +216,7 @@ function registerPreFlightPart39(): void {
   it("refuses session and worktree roots inside the repository", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST +
-        "sessions: { dir: .factory/sessions, keepRuns: 2 }\nworktreeRoot: .factory/worktrees\n",
+        "sessions: { dir: .factory/sessions, keepRuns: 2, retention: short }\nworktreeRoot: .factory/worktrees\n",
     );
     try {
       const err = await refusal(f.input);

@@ -66,6 +66,7 @@ function fixture(lspConfig?: string): {
   fs.mkdirSync(cwd, { recursive: true });
   return {
     harness: new OmpHarness({
+      retention: "short",
       binary,
       sessionDir: path.join(dir, "sessions"),
       // The fake records argv through the parent env; a child inherits a name
@@ -371,8 +372,14 @@ function ompArtifactLSPPart2() {
     fs.writeFileSync(source, content);
     try {
       const harnesses = createRealHarnesses({
+        retention: "short",
         sessionDir: path.join(f.dir, "factory-sessions"),
-        harnesses: { omp: { binary: path.join(f.dir, "fake-omp.js") } },
+        harnesses: {
+          omp: {
+            binary: path.join(f.dir, "fake-omp.js"),
+            compaction: { enabled: true },
+          },
+        },
         envAllowlist: ["FAKE_OMP_ARGV"],
         lsp: { config: source },
       });

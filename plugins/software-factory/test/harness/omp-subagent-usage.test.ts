@@ -57,6 +57,7 @@ describe("omp subagent usage", () => {
     fs.writeFileSync(binary, FAKE_OMP, { mode: 0o755 });
     try {
       const harness = new OmpHarness({
+        retention: "short",
         binary,
         sessionDir,
         readyTimeoutMs: 5_000,

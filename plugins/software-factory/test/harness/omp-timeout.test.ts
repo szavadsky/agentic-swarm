@@ -55,6 +55,7 @@ function fakeHarness(): {
   const binary = path.join(tmp, "fake-omp.js");
   fs.writeFileSync(binary, FAKE_OMP, { mode: 0o755 });
   const harness = new OmpHarness({
+    retention: "short",
     binary,
     sessionDir: path.join(tmp, "sessions"),
     // The fake reports its pid and can delay stats through the parent env;

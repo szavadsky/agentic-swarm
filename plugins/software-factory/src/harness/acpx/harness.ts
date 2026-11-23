@@ -149,6 +149,7 @@ function runtimeOf(opts: AcpxHarnessOptions): AcpxRuntime {
     command: resolveAcpxCommand(opts.binary),
     sessionDir: path.resolve(opts.sessionDir),
     envAllowlist: opts.envAllowlist,
+    retention: opts.retention,
     // The entry's opaque options win over the structured block; the adapter
     // reads only `args` and `env` from the result.
     acpx: {

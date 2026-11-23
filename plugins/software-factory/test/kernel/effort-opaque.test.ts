@@ -72,7 +72,7 @@ ${implementer}
   plan-reviewer: { harness: fake, model: ${NO_EFFORT} }
   pack-preparer: { harness: fake, model: ${NO_EFFORT} }
 worktreeRoot: WORKTREE_ROOT
-sessions: { dir: SESSIONS_DIR }
+sessions: { dir: SESSIONS_DIR, retention: short }
 limits: { concurrency: { overall: 2 }, iterations: 1 }
 `;
 }

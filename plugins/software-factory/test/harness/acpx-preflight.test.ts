@@ -97,6 +97,7 @@ async function fixture(
     [
       "opencode",
       new AcpxHarness({
+        retention: "short",
         id: "opencode",
         binary: stub.binary,
         sessionDir: path.dirname(stub.binary),
@@ -145,6 +146,7 @@ describe("acpx live pre-flight", () => {
 describe("acpx harness registry", () => {
   it("binds harness ids from run config with no code", () => {
     const harnesses = createRealHarnesses({
+      retention: "short",
       sessionDir: "/tmp/sessions",
       harnesses: {
         nova: {
@@ -152,9 +154,11 @@ describe("acpx harness registry", () => {
             agent: "nova",
             effort: { configId: "nova_level" },
           },
+          compaction: { enabled: true },
         },
         opencode: {
           acpx: { agent: "opencode acp", raw: true },
+          compaction: { enabled: true },
         },
       },
     });
@@ -166,15 +170,21 @@ describe("acpx harness registry", () => {
   });
 
   it("registers no native opencode adapter", () => {
-    const harnesses = createRealHarnesses({ sessionDir: "/tmp/sessions" });
+    const harnesses = createRealHarnesses({
+      retention: "short",
+      sessionDir: "/tmp/sessions",
+    });
     expect(harnesses.opencode).toBeUndefined();
     expect(harnesses.omp).toBeDefined();
   });
 
   it("resolves a raw harness binary from its configured command", () => {
     const binaries = resolveHarnessBinaries({
-      nova: { acpx: { agent: "/opt/nova-test/bin/nova acp", raw: true } },
-      plain: { acpx: { agent: "plain" } },
+      nova: {
+        acpx: { agent: "/opt/nova-test/bin/nova acp", raw: true },
+        compaction: { enabled: true },
+      },
+      plain: { acpx: { agent: "plain" }, compaction: { enabled: true } },
     });
     expect(binaries.nova).toBe("/opt/nova-test/bin/nova");
     // A positional agent is served by the acpx dispatcher, whatever it is here.

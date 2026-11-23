@@ -280,7 +280,7 @@ function registerPreFlightPart49(): void {
       "implementer-b: { harness: fake, model: impl-b }",
       "implementer-b: { harness: fake, model: alt-ghost }",
     )}worktreeRoot: WORKTREE_ROOT
-sessions: { dir: SESSIONS_DIR }
+sessions: { dir: SESSIONS_DIR, retention: short }
 `;
     const f = await fixture(run);
     try {

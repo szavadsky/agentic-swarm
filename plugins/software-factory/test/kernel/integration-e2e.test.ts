@@ -119,7 +119,7 @@ function runYaml(repoDir: string): string {
     "  digest: { harness: fake, model: fake-digest }",
     "limits: { iterations: 1, concurrency: { overall: 1 } }",
     `worktreeRoot: ../${base}-wt`,
-    `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
+    `sessions: { dir: ../${base}-sessions, keepRuns: 2, retention: short }`,
     "",
   ].join("\n");
 }

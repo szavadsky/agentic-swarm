@@ -168,7 +168,7 @@ function registerPreFlightPart2(): void {
 function registerPreFlightPart3(): void {
   it("runGoal reports malformed acpx options before constructing adapters", async () => {
     const runYaml = `${RUN_HEAD_NO_HIGHEST}worktreeRoot: WORKTREE_ROOT
-sessions: { dir: SESSIONS_DIR }
+sessions: { dir: SESSIONS_DIR, retention: short }
 harnesses:
   opencode:
     acpx: { agent: opencode }
