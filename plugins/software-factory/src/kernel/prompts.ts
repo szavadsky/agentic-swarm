@@ -9,7 +9,7 @@ import {
   taskTypesVar,
   tierNamesVar,
 } from "./prompt-schema.js";
-import type { ProcessConfig, RunConfig } from "./types.js";
+import type { ProcessConfig, RepoConfig, RunConfig } from "./types.js";
 
 /**
  * Prompt templates render through LiquidJS in strict mode: an unknown variable
@@ -259,9 +259,13 @@ export const CHECK_HANDOFF_DEFAULTS = {
 export function loadPrompts(
   process: ProcessConfig,
   repoRoot: string,
-  options?: { aliases?: Record<string, unknown>; run?: RunConfig },
+  options?: {
+    aliases?: Record<string, unknown>;
+    run?: RunConfig;
+    repo?: RepoConfig;
+  },
 ): PromptLibrary {
-  const { aliases, run } = options ?? {};
+  const { aliases, run, repo } = options ?? {};
   const overrideDirs: string[] = [];
   if (process.promptsDir)
     overrideDirs.push(path.resolve(repoRoot, process.promptsDir));
@@ -275,6 +279,15 @@ export function loadPrompts(
   }
 
   if (calibration !== undefined) overrides.calibration = calibration;
+  if (repo?.codingRules !== undefined) {
+    const codingRulesPath = path.resolve(repoRoot, repo.codingRules);
+    if (!fs.existsSync(codingRulesPath)) {
+      throw new Error(
+        `coding rules file not found: ${repo.codingRules} (resolved to ${codingRulesPath})`,
+      );
+    }
+    overrides["clean-code"] = fs.readFileSync(codingRulesPath, "utf8");
+  }
   return loadPromptLibrary({
     builtinDir: path.join(packageRoot, "prompts"),
     overrideDirs,

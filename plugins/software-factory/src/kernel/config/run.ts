@@ -226,6 +226,16 @@ export function loadConfigs(
     files.repo,
     findings,
   );
+  if (
+    repo?.codingRules !== undefined &&
+    !fs.existsSync(path.join(path.resolve(repoRoot), repo.codingRules))
+  ) {
+    findings.push({
+      file: files.repo,
+      key: "codingRules",
+      message: `coding rules file not found: ${repo.codingRules}`,
+    });
+  }
   const processData = processLayer(files, findings);
   const run = runLayer(files.run, findings);
   if (processData && run?.preset && processData.presets) {

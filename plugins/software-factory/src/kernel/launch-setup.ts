@@ -165,6 +165,7 @@ async function buildRuntime(
     prompts: loadPrompts(configs.process, repoRoot, {
       aliases: configs.run.aliases,
       run: configs.run,
+      repo: configs.repo,
     }),
     limits: toLimits(configs),
     provenCombinations: await loadCanaryProven(paths),

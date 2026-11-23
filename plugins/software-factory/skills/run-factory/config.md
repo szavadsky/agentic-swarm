@@ -27,6 +27,7 @@ gates:
 cleanliness:                                   # optional
   maxFileSizeBytes: 1048576
   allowedExtensions: [ts, json, md]
+codingRules: .factory/prompts/coding-rules.md  # optional; replaces the factory default clean-code partial
 ```
 
 - Gate `env` values are worktree-relative directories; the kernel creates them

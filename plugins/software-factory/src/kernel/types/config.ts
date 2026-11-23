@@ -92,6 +92,8 @@ export interface RepoConfig {
   identity?: { name: string; email: string };
   setup: string[];
   gates: GateConfig[];
+  /** Repo-relative rule file replacing the factory default coding rules; absent uses the factory default. */
+  codingRules?: string;
   cleanliness?: {
     maxFileSizeBytes?: number;
     allowedExtensions?: string[];

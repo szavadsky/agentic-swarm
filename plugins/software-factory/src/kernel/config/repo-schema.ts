@@ -26,6 +26,7 @@ function worktreePath(label: string) {
       { message: `${label} must be worktree-relative (no absolute, ~ or ..)` },
     );
 }
+const codingRulesPathSchema = worktreePath("coding rules file");
 const gateEnvDirSchema = worktreePath("env dirs");
 const gateJunitPathSchema = worktreePath("junit path");
 const gateSchema = z
@@ -75,6 +76,7 @@ export const repoConfigSchema = z
     identity: identitySchema.optional(),
     setup: z.array(z.string().min(1)).default([]),
     gates: z.array(gateSchema).default([]),
+    codingRules: codingRulesPathSchema.optional(),
     cleanliness: z
       .object({
         maxFileSizeBytes: z.number().int().positive().optional(),

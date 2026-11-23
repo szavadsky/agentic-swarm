@@ -94,9 +94,12 @@ cleanliness:                                    # optional; default rules active
   maxFileSizeBytes: 1048576                     # default: 1048576 (1 MB)
   allowedExtensions: [ts, json, md]             # default: extensions present in base tree
   allowedFiles: [data/benchmark.csv]            # optional; explicit files exempt from the heuristic
+codingRules: .factory/prompts/coding-rules.md   # optional; replaces the factory default clean-code partial
 ```
 
 Cleanliness checks run by default without repo config to detect large files, disallowed/new extensions, and temp/weights/huge outputs. A cleanliness hit sends the author one revision follow-up turn with three exits: clean up the files, add them to `.gitignore`, or list them under `cleanliness.allowedFiles` in `.factory/repo.yaml`. The follow-up is never repeated; an author who keeps a file explains it, and the reviewer evaluates the reason. Tightened thresholds may be configured under `cleanliness` in `.factory/repo.yaml`.
+
+`codingRules` names a repo-relative markdown file whose text replaces the factory default `clean-code` partial in the implementer, QA, reviewer, steward and adjudicator prompts. When `codingRules` is absent the factory default renders; when present the file replaces it rather than appending, and a missing file is a config error. The path must stay worktree-relative and cannot escape the repo.
 
 The tracked repo layer names no worktree root: checkouts, sessions and harness
 policy belong to the run layer, so one checkout never silently shadows another.
