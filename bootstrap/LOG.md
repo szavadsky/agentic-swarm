@@ -897,3 +897,11 @@ Verbatim, newest last; each with what it changed.
 - Wasted turns 3 (2 implementer quota, 1 packprep quota) — infra, not agent faults; 0 outcome repairs/rebuttals. Turns 35 agent/51 script; cost $1.615 partial (2 unpriced), $0.323/merge; legs opencode-go/deepseek-v4.1-flash 10t $0.997, opus 2t $0.618. Infra stop = correct behavior (no retries on exhausted pools), consistent with owner 'drain then stop' order.
 - Landing gates 1637/0 (273 files, 318s — +24 tests / +94 files from file-size-tests expansion).
 - Operator: owner ordered drain-then-STOP (NO relaunch). Quota resets: 11-23 (opencode-go), 11-24 (antigravity).
+
+### 2026-11-22 — goal `built` i1–i5 not journaled here; see its iteration summaries (ended active: 12 merged, 5 spikes, 19 ready unmerged, 29 pending, 2 parks)
+
+### 2026-11-22 — goal `full` init (owner): de novo, entire INTENT.md; GAPS.md as footnote
+- Owner edited INTENT.md (launch/iteration loops, goal branch, QA owner of tests, saga two passes, sandbox, cleanliness without task.scope, quota retry, fallback by role); gaps moved to `GAPS.md` and given to the goal as a footnote, architect works on the entire intent.
+- Leg availability (owner): pi, codex and the OpenCode Go key in the opencode harness NOT working for a few days. Working: omp OpenCode Go key (deepseek, muse-spark), hy4-flash-free, opencode-harness free deepseek/mimo, Command Code muse-ember (`cmdc acp` via acpx — operator PoC OK: file written, usage + cost reported, effort option low..max), ernie (omp), agy, Claude.
+- New run config `bootstrap/run/self-live.yaml`: architect Opus xhigh (Claude only); escalation Sonnet; implementer cmdc ember, implementer-b opencode deepseek-free, QA opencode mimo-free, reviewer/plan-reviewer/researcher omp muse-spark, PM/steward omp deepseek; free level digest/pack-prep hy4, intent/plan-checker ernie; omp Go deepseek in every chain; hy4 on its own pool `opencode-go-free`.
+- Plan: one iteration per launch, land + merge to main + promote between launches; target 5 full iterations (infra faults excluded).
