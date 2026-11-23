@@ -13,7 +13,7 @@ import { createAcpxStub } from "./harness/acpx-stub.js";
 /** Planted in the factory's own environment; no child may inherit it unasked. */
 const PLANTED = "FACTORY_PLANTED_SECRET";
 
-const PI_ACPX: AcpxConfig = { agent: "pi" };
+const FAKE_ACPX: AcpxConfig = { agent: "fake-agent" };
 
 /** Parses `env`/`printenv` output into name -> value. */
 function parseEnv(stdout: string): Record<string, string> {
@@ -197,15 +197,15 @@ function spawnedChildEnvironmentsPart4() {
     const stub = createAcpxStub({ envFile });
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "pi",
+      id: "fake-agent",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: FAKE_ACPX,
     });
     process.env[PLANTED] = "s3cret";
     try {
       const result = await harness.turn({
-        model: { id: "opencode-go/beam-free" },
+        model: { id: "fake-host/lamp-mini-free" },
         cwd: dir,
         prompt: "Say [[text:PONG]]",
         timeouts: { idleMs: 10_000, wallMs: 30_000 },
@@ -230,16 +230,16 @@ function spawnedChildEnvironmentsPart5() {
     const stub = createAcpxStub({ envFile });
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "pi",
+      id: "fake-agent",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: FAKE_ACPX,
       envAllowlist: [PLANTED],
     });
     process.env[PLANTED] = "inherited";
     try {
       await harness.turn({
-        model: { id: "opencode-go/beam-free" },
+        model: { id: "fake-host/lamp-mini-free" },
         cwd: dir,
         prompt: "Say [[text:PONG]]",
         timeouts: { idleMs: 10_000, wallMs: 30_000 },

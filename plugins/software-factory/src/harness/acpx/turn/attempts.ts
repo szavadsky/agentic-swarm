@@ -190,8 +190,8 @@ export function turnSession(
 }
 
 /**
- * The turn's usage and the session baseline to return. pi's prompt result
- * carries no usage, so its configured command is the only source. The command
+ * The turn's usage and the session baseline to return. A prompt result with
+ * no usage leaves its configured command as the only source. The command
  * reuses the session and never spends a model turn; a failure leaves the stop
  * and the prompt's usage exactly as they were.
  */

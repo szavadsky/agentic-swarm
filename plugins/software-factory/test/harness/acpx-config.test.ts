@@ -150,9 +150,9 @@ function harnessBinaryResolutionPart3() {
           "  omp:",
           "    binary: /opt/omp-override",
           "    compaction: { enabled: true }",
-          "  pi:",
+          "  agent-a:",
           "    binary: /opt/acpx-override",
-          "    acpx: { agent: pi }",
+          "    acpx: { agent: agent-a }",
           "    compaction: { enabled: false, reason: no compact command }",
           "",
         ].join("\n"),
@@ -162,8 +162,10 @@ function harnessBinaryResolutionPart3() {
         binary: "/opt/omp-override",
         compaction: { enabled: true },
       });
-      expect(configs.run.harnesses!.pi!.binary).toBe("/opt/acpx-override");
-      expect(configs.run.harnesses!.pi!.acpx!.agent).toBe("pi");
+      expect(configs.run.harnesses!["agent-a"]!.binary).toBe(
+        "/opt/acpx-override",
+      );
+      expect(configs.run.harnesses!["agent-a"]!.acpx!.agent).toBe("agent-a");
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -177,7 +179,7 @@ function harnessBinaryResolutionPart4() {
       fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
       fs.writeFileSync(
         path.join(root, ".factory/run.yaml"),
-        "harnesses:\n  pi: {}\n",
+        "harnesses:\n  agent-a: {}\n",
       );
       expect(() => loadConfigs(root)).toThrow(ConfigError);
       try {
@@ -185,7 +187,7 @@ function harnessBinaryResolutionPart4() {
       } catch (err) {
         expect((err as ConfigError).findings).toContainEqual(
           expect.objectContaining({
-            key: "harnesses.pi",
+            key: "harnesses.agent-a",
             message: expect.stringContaining("acpx"),
           }),
         );

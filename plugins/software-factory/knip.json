@@ -1,6 +1,6 @@
 {
   "$schema": "https://knip.dev/schema.json",
   "ignoreExportsUsedInFile": true,
-  "ignoreBinaries": ["agy", "codex", "pi"],
+  "ignoreBinaries": ["tool-w", "tool-x", "tool-y", "tool-z"],
   "entry": ["scripts/pin-gate.ts"]
 }

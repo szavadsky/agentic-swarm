@@ -12,14 +12,14 @@ const TIMEOUTS = { idleMs: 10_000, wallMs: 30_000 };
 // keep the retries (same attempts) but not the wait.
 const FAST_RETRY = { baseDelayMs: 1, maxDelayMs: 1 };
 
-const CODEX_ACPX: AcpxConfig = {
-  agent: "codex",
+const AGENT_B_ACPX: AcpxConfig = {
+  agent: "agent-b",
   effort: { configId: "reasoning_effort" },
   usage: { cache: true },
 };
 
-const PI_ACPX: AcpxConfig = {
-  agent: "pi",
+const AGENT_A_ACPX: AcpxConfig = {
+  agent: "agent-a",
   effort: { configId: "thought_level" },
   usage: { cache: true, command: "/session" },
 };
@@ -30,7 +30,7 @@ function request(
   extra: Record<string, unknown> = {},
 ) {
   return {
-    model: { id: "opencode-go/primary" },
+    model: { id: "fake-host/primary" },
     cwd,
     prompt,
     timeouts: TIMEOUTS,
@@ -41,7 +41,7 @@ function request(
 async function test3BothShapesNextFallbackModelRunsNoPart1() {
   const codexStub = createAcpxStub({
     modelBehaviors: {
-      "opencode-go/primary": {
+      "fake-host/primary": {
         sessionInfoError: {
           httpStatusCode: 503,
           message: "Reconnecting... 5/5",
@@ -51,7 +51,7 @@ async function test3BothShapesNextFallbackModelRunsNoPart1() {
         },
         reply: "exceeded retry limit, last status: 503 Service Unavailable",
       },
-      "opencode-go/fallback": {
+      "fake-host/fallback": {
         reply: "delivered by fallback",
         usage: { totalTokens: 100, inputTokens: 90, outputTokens: 10 },
       },
@@ -59,10 +59,10 @@ async function test3BothShapesNextFallbackModelRunsNoPart1() {
   });
   const codexHarness = new AcpxHarness({
     retention: "short",
-    id: "codex",
+    id: "agent-b",
     binary: codexStub.binary,
     sessionDir: path.dirname(codexStub.binary),
-    acpx: CODEX_ACPX,
+    acpx: AGENT_B_ACPX,
     retry: { retries: 0 },
   });
 
@@ -79,12 +79,12 @@ async function test3BothShapesNextFallbackModelRunsNoPart2(
     const cwd = path.dirname(codexStub.binary);
     const result = await codexHarness.turn({
       ...request(cwd, "task prompt"),
-      model: { id: "opencode-go/primary" },
-      fallbacks: [{ id: "opencode-go/fallback" }],
+      model: { id: "fake-host/primary" },
+      fallbacks: [{ id: "fake-host/fallback" }],
     });
 
     expect(result.stop).toEqual({ kind: "done" });
-    expect(result.model.id).toBe("opencode-go/fallback");
+    expect(result.model.id).toBe("fake-host/fallback");
     expect(result.text).toBe("delivered by fallback");
     expect(result.attempts).toHaveLength(2);
     expect(result.attempts?.[0]?.stop).toEqual({
@@ -98,25 +98,25 @@ async function test3BothShapesNextFallbackModelRunsNoPart2(
     codexStub.cleanup();
   }
 
-  // 3b: pi shape hops to fallback
+  // 3b: agent-a shape hops to fallback
   const piStub = createAcpxStub({
     modelBehaviors: {
-      "opencode-go/primary": {
+      "fake-host/primary": {
         sessionUsage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
         reply: "",
       },
-      "opencode-go/fallback": {
+      "fake-host/fallback": {
         sessionUsage: { input: 150, output: 20, cacheRead: 5, cacheWrite: 2 },
-        reply: "delivered by pi fallback",
+        reply: "delivered by agent fallback",
       },
     },
   });
   const piHarness = new AcpxHarness({
     retention: "short",
-    id: "pi",
+    id: "agent-a",
     binary: piStub.binary,
     sessionDir: path.dirname(piStub.binary),
-    acpx: PI_ACPX,
+    acpx: AGENT_A_ACPX,
     retry: { retries: 0 },
   });
 
@@ -133,13 +133,13 @@ async function test3BothShapesNextFallbackModelRunsNoPart3(
     const cwd = path.dirname(piStub.binary);
     const result = await piHarness.turn({
       ...request(cwd, "task prompt"),
-      model: { id: "opencode-go/primary" },
-      fallbacks: [{ id: "opencode-go/fallback" }],
+      model: { id: "fake-host/primary" },
+      fallbacks: [{ id: "fake-host/fallback" }],
     });
 
     expect(result.stop).toEqual({ kind: "done" });
-    expect(result.model.id).toBe("opencode-go/fallback");
-    expect(result.text).toBe("delivered by pi fallback");
+    expect(result.model.id).toBe("fake-host/fallback");
+    expect(result.text).toBe("delivered by agent fallback");
     expect(result.attempts).toHaveLength(2);
     expect(result.attempts?.[0]?.stop).toEqual({
       kind: "infra",
@@ -154,7 +154,7 @@ async function test3BothShapesNextFallbackModelRunsNoPart3(
 }
 
 function acpxZeroUsageClassificationPart1() {
-  it("(1) codex shape (end_turn, 429 text, no usage frame) yields infra: quota with details carrying 429 text", async () => {
+  it("(1) agent-b shape (end_turn, 429 text, no usage frame) yields infra: quota with details carrying 429 text", async () => {
     const errorText =
       "exceeded retry limit, last status: 429 Too Many Requests";
     const stub = createAcpxStub({
@@ -167,10 +167,10 @@ function acpxZeroUsageClassificationPart1() {
     });
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "codex",
+      id: "agent-b",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: CODEX_ACPX,
+      acpx: AGENT_B_ACPX,
       retry: FAST_RETRY,
     });
     try {
@@ -192,16 +192,16 @@ function acpxZeroUsageClassificationPart1() {
 }
 
 function acpxZeroUsageClassificationPart2() {
-  it("(2) pi shape (end_turn, no text, usage command reports zero tokens) yields infra: rate that fallback chain retries", async () => {
+  it("(2) agent-a shape (end_turn, no text, usage command reports zero tokens) yields infra: rate that fallback chain retries", async () => {
     const stub = createAcpxStub({
       sessionUsage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     });
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "pi",
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
       retry: FAST_RETRY,
     });
     try {
@@ -238,10 +238,10 @@ function acpxZeroUsageClassificationPart3() {
     });
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "codex",
+      id: "agent-b",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: CODEX_ACPX,
+      acpx: AGENT_B_ACPX,
       retry: FAST_RETRY,
     });
     try {
@@ -264,16 +264,16 @@ function acpxZeroUsageClassificationPart3() {
 }
 
 function acpxZeroUsageClassificationPart4() {
-  it("(4b) done stays done for resumed pi turn whose usage is unknown (no baseline)", async () => {
+  it("(4b) done stays done for resumed agent-a turn whose usage is unknown (no baseline)", async () => {
     const stub = createAcpxStub({
       sessionUsage: { input: 100, output: 10, cacheRead: 5, cacheWrite: 2 },
     });
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "pi",
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
       retry: FAST_RETRY,
     });
     try {
@@ -301,14 +301,14 @@ function acpxZeroUsageClassificationPart4() {
 }
 
 function acpxZeroUsageClassificationPart5() {
-  it("(4c) done stays done for an agent with no usage config (claude-code)", async () => {
+  it("(4c) done stays done for an agent with no usage config (agent with no usage config)", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "claude-code",
+      id: "agent-plain",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: { agent: "claude-code" },
+      acpx: { agent: "agent-plain" },
       options: { args: ["--approve-all"] },
       retry: FAST_RETRY,
     });
@@ -325,7 +325,7 @@ function acpxZeroUsageClassificationPart5() {
 }
 
 function acpxZeroUsageClassificationPart6() {
-  it("codex willRetry: true reconnect frames on a turn that later recovers are not errors", async () => {
+  it("agent-b willRetry: true reconnect frames on a turn that later recovers are not errors", async () => {
     const stub = createAcpxStub({
       sessionInfoError: {
         httpStatusCode: 429,
@@ -342,10 +342,10 @@ function acpxZeroUsageClassificationPart6() {
     });
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "codex",
+      id: "agent-b",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: CODEX_ACPX,
+      acpx: AGENT_B_ACPX,
       retry: FAST_RETRY,
     });
     try {
@@ -373,17 +373,17 @@ function acpxZeroUsageClassificationPart7() {
         willRetry: true,
       },
       modelBehaviors: {
-        "opencode-go/primary": {
+        "fake-host/primary": {
           reply: "task output with no error mention",
         },
       },
     });
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "codex",
+      id: "agent-b",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: CODEX_ACPX,
+      acpx: AGENT_B_ACPX,
       retry: FAST_RETRY,
     });
     try {

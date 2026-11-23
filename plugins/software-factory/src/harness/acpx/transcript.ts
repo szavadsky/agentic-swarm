@@ -46,11 +46,11 @@ export function usageFromAcpxResult(
   usage.in = first(source, names.input);
   usage.cacheRead = first(source, names.cacheRead);
   usage.cacheWrite5m = first(source, names.cacheWrite);
-  // codex and agy count thought inside output; opencode counts it on top and
-  // reports totalTokens = input+output+reasoning+cache read/write. That total
-  // is the only field that separates the two shapes; without it the codex/agy
-  // shape is assumed. Reading it wrong moves tokens between `out` and
-  // `reasoningOut` and drops them from the priced total.
+  // Some agents count thought inside output; others count it on top and
+  // report totalTokens = input+output+reasoning+cache read/write. That total
+  // is the only field that separates the two shapes; without it the inside
+  // shape is assumed (config/acpx-verify.md §3). Reading it wrong moves
+  // tokens between `out` and `reasoningOut` and drops them from the priced total.
   const total = first(source, ["totalTokens"]);
   const thoughtSeparate =
     reasoning > 0 &&
@@ -73,9 +73,9 @@ interface PromptResult {
 }
 
 /**
- * ACP `usage_update.cost` is the session-cumulative figure in USD (opencode
- * reads it from `session.get().cost`), not this turn's spend. Any other
- * currency is not a `Usage` dollar amount, so it stays unknown.
+ * ACP `usage_update.cost` is the session-cumulative figure in USD, not this
+ * turn's spend. Any other currency is not a `Usage` dollar amount, so it
+ * stays unknown (config/acpx-verify.md §4).
  */
 function usageUpdateCost(update: any): number | undefined {
   const cost = update?.cost;

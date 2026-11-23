@@ -100,7 +100,7 @@ function ompHarnessFakeProcessPart1() {
     const { harness, cleanup } = fakeHarness();
     try {
       const result = await harness.turn({
-        model: { id: "opencode-go/beam-free" },
+        model: { id: "local-host/lamp-mini-free" },
         cwd: os.tmpdir(),
         prompt: "hang",
         timeouts: { idleMs: 150, wallMs: 10_000 },
@@ -121,7 +121,7 @@ function ompHarnessFakeProcessPart1() {
     const { harness, cleanup } = fakeHarness();
     try {
       const result = await harness.turn({
-        model: { id: "opencode-go/beam-free" },
+        model: { id: "local-host/lamp-mini-free" },
         cwd: os.tmpdir(),
         prompt: "hang",
         timeouts: { idleMs: 0, wallMs: 150 },
@@ -143,7 +143,7 @@ function ompHarnessFakeProcessPart2() {
     try {
       const controller = new AbortController();
       const pending = harness.turn({
-        model: { id: "opencode-go/beam-free" },
+        model: { id: "local-host/lamp-mini-free" },
         cwd: os.tmpdir(),
         prompt: "hang",
         timeouts: { idleMs: 0, wallMs: 60_000 },
@@ -170,7 +170,7 @@ function ompHarnessFakeProcessPart3() {
     try {
       const controller = new AbortController();
       const result = await harness.turn({
-        model: { id: "opencode-go/beam-free" },
+        model: { id: "local-host/lamp-mini-free" },
         cwd: os.tmpdir(),
         prompt: "quick",
         timeouts: { idleMs: 0, wallMs: 60_000 },
@@ -198,7 +198,7 @@ function ompHarnessFakeProcessPart4() {
     try {
       const controller = new AbortController();
       const pending = harness.turn({
-        model: { id: "opencode-go/beam-free" },
+        model: { id: "local-host/lamp-mini-free" },
         cwd: os.tmpdir(),
         prompt: "hang",
         timeouts: { idleMs: 0, wallMs: 60_000 },
@@ -228,7 +228,7 @@ function ompHarnessFakeProcessPart5() {
       const controller = new AbortController();
       controller.abort();
       const result = await harness.turn({
-        model: { id: "opencode-go/beam-free" },
+        model: { id: "local-host/lamp-mini-free" },
         cwd: os.tmpdir(),
         prompt: "hang",
         timeouts: { idleMs: 0, wallMs: 60_000 },

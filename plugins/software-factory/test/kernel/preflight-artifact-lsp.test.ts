@@ -40,7 +40,7 @@ interface Fixture {
 /** Architect and implementer on different harnesses; omp is the scouts consumer. */
 const SPLIT_HARNESSES = RUN_HEAD_NO_HIGHEST.replace(
   "architect: { harness: fake, model: arch, effort: max }",
-  "architect: { harness: claude-code, model: arch }",
+  "architect: { harness: agent-x, model: arch }",
 ).replace(
   "implementer: { harness: fake, model: impl }",
   "implementer: { harness: omp, model: impl }",
@@ -48,7 +48,7 @@ const SPLIT_HARNESSES = RUN_HEAD_NO_HIGHEST.replace(
 
 function splitHarnesses(f: Fixture): Map<string, Harness> {
   const harnesses = new Map(f.input.harnesses);
-  harnesses.set("claude-code", new FakeHarness({ id: "claude-code" }));
+  harnesses.set("agent-x", new FakeHarness({ id: "agent-x" }));
   harnesses.set(
     "omp",
     new FakeHarness({
@@ -110,7 +110,7 @@ function preFlightArtifactLSPPart1() {
   const binaries = {
     omp: process.execPath,
     fake: process.execPath,
-    "claude-code": process.execPath,
+    "agent-x": process.execPath,
   };
 
   /** A PATH with git only: the base check still runs, the YAML server does not. */

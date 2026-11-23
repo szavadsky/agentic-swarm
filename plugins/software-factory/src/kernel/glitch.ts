@@ -16,8 +16,8 @@ function namesFailure(stop: Stop | undefined): boolean {
 /**
  * A glitch turn: zero reported usage, no outcome, no edits, and the stop
  * names no real failure. A turn that wrote an outcome is not a glitch even
- * at zero usage — a harness that never reports usage (pi via acpx) can
- * still deliver; its work is not a glitch. A stop naming a genuine infra
+ * at zero usage — a harness that never reports usage can still deliver;
+ * its work is not a glitch. A stop naming a genuine infra
  * cause (quota, network, auth, crash, timeout, overflow, rate) or a
  * model-side refusal/truncation keeps its own classification.
  */

@@ -47,7 +47,7 @@ export interface AcpxStubOptions {
   usage?: Record<string, number>;
   /**
    * Tokens one prompt adds to the stub session. When set, `/session` answers
-   * pi's cumulative report; absent leaves the command unimplemented.
+   * The agent's cumulative report; absent leaves the command unimplemented.
    */
   sessionUsage?: {
     input: number;
@@ -71,7 +71,7 @@ export interface AcpxStubOptions {
   /** ACP `usage_update` cost payload; absent means the update carries none. */
   cost?: { amount: number; currency: string };
   /**
-   * What `/compact` answers: success text, pi's small-session -32603, or a
+   * What `/compact` answers: success text, a small-session -32603, or a
    * different adapter failure. The command itself carries no marker, so this
    * is the stub's switch.
    */
@@ -328,7 +328,7 @@ if (prompt === "/session") {
   startPrompt();
   chunk(
     "Session: " + sessionId + "\\n" +
-      "Session file: " + path.join(stateDir, "pi-" + session + ".jsonl") + "\\n" +
+      "Session file: " + path.join(stateDir, "agent-" + session + ".jsonl") + "\\n" +
       "Messages: 1\\n" +
       "Cost: 0\\n" +
       "Tokens: in " + totals.in + ", out " + totals.out +
@@ -341,11 +341,11 @@ if (prompt === "/session") {
 }
 if (prompt === "/compact") {
   if (compactMode === "nothing") {
-    emit({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "Internal error", data: { details: "pi compact failed: Nothing to compact (session too small)" } } });
+    emit({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "Internal error", data: { details: "agent compact failed: Nothing to compact (session too small)" } } });
     process.exit(1);
   }
   if (compactMode === "fail") {
-    emit({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "Internal error", data: { details: "pi compact failed: summarizer unavailable" } } });
+    emit({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "Internal error", data: { details: "agent compact failed: summarizer unavailable" } } });
     process.exit(1);
   }
   startPrompt();
@@ -369,7 +369,7 @@ if (sessionInfoError) {
       update: {
         sessionUpdate: "session_info_update",
         _meta: {
-          codex: {
+          fakeagent: {
             error: sessionInfoError,
           },
         },

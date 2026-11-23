@@ -15,7 +15,7 @@ function request(
   extra: Record<string, unknown> = {},
 ) {
   return {
-    model: { id: "opencode-go/primary" },
+    model: { id: "fake-host/primary" },
     cwd,
     prompt,
     timeouts: TIMEOUTS,
@@ -27,18 +27,18 @@ function acpxZeroUsageClassificationPart14() {
   it("measures zero usage from usage config without command regardless of agent name", async () => {
     const stub = createAcpxStub({
       modelBehaviors: {
-        "opencode-go/primary": {
+        "fake-host/primary": {
           reply: "some unclassified reply",
         },
       },
     });
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "pi-no-command",
+      id: "agent-a-no-command",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
       acpx: {
-        agent: "pi",
+        agent: "fake-agent",
         usage: { cache: true },
       },
       retry: FAST_RETRY,

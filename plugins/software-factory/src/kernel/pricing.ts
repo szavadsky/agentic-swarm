@@ -16,72 +16,16 @@ export interface ModelPrice {
 }
 
 /**
- * OpenRouter model id -> price. A harness id absent from the table is unpriced,
- * not free: only a zero rate or a free-tier id with a known list price makes
- * a turn a known $0.
+ * Price-source model id -> price. A harness id absent from the table is
+ * unpriced, not free: only a zero rate or a free-tier id with a known list
+ * price makes a turn a known $0.
  */
 export type PriceTable = Record<string, ModelPrice>;
-
-/** Harness provider prefixes that never appear in OpenRouter ids. */
-const HARNESS_PREFIXES = ["opencode-go", "opencode", "openrouter"];
-
-/** Effort levels an adapter may leave suffixed on the recorded model id. */
-const EFFORT_SUFFIXES = ["low", "medium", "high", "xhigh", "max"];
 
 /** A free-tier id: the provider's own marker, `-free` or `:free`. */
 export function isFreeTierId(model: string): boolean {
   const lower = model.toLowerCase();
   return lower.endsWith("-free") || lower.endsWith(":free");
-}
-
-function stripHarnessPrefix(id: string): string {
-  const slash = id.indexOf("/");
-  if (slash < 0) return id;
-  if (HARNESS_PREFIXES.includes(id.slice(0, slash).toLowerCase()))
-    return id.slice(slash + 1);
-  return id;
-}
-
-function swapFreeSuffix(id: string): string | undefined {
-  const lower = id.toLowerCase();
-  if (lower.endsWith("-free")) return `${id.slice(0, -"-free".length)}:free`;
-  if (lower.endsWith(":free")) return `${id.slice(0, -":free".length)}-free`;
-  return undefined;
-}
-
-function stripFreeSuffix(id: string): string | undefined {
-  // Both suffixes are five characters; the paid equivalent prices the list.
-  if (!isFreeTierId(id)) return undefined;
-  return id.slice(0, -":free".length);
-}
-
-function stripEffortSuffix(id: string): string | undefined {
-  const dash = id.lastIndexOf("-");
-  if (dash < 0) return undefined;
-  if (EFFORT_SUFFIXES.includes(id.slice(dash + 1).toLowerCase()))
-    return id.slice(0, dash);
-  return undefined;
-}
-
-/**
- * One harness id as every OpenRouter id it could name: itself, the
- * provider-stripped form, the effort-stripped forms, and each one's free-tier
- * spellings plus the paid equivalent. Earlier candidates win.
- */
-function matchCandidates(model: string): string[] {
-  const out: string[] = [];
-  const push = (id: string | undefined): void => {
-    if (id !== undefined && !out.includes(id)) out.push(id);
-  };
-  for (const base of [model, stripHarnessPrefix(model)]) {
-    for (const root of [base, stripEffortSuffix(base)]) {
-      if (root === undefined) continue;
-      push(root);
-      push(swapFreeSuffix(root));
-      push(stripFreeSuffix(root));
-    }
-  }
-  return out;
 }
 
 function resolvePriceId(
@@ -94,51 +38,11 @@ function resolvePriceId(
   return key ? priceIds[key]! : model;
 }
 
-interface PriceIndex {
-  exact: Map<string, ModelPrice>;
-  suffixes: Map<string, Array<{ id: string; price: ModelPrice }>>;
-}
-
-function indexPrices(table: PriceTable): PriceIndex {
-  const exact = new Map<string, ModelPrice>();
-  const suffixes = new Map<string, Array<{ id: string; price: ModelPrice }>>();
-  for (const [id, price] of Object.entries(table)) {
-    const lower = id.toLowerCase();
-    if (!exact.has(lower)) exact.set(lower, price);
-    const segment = lower.slice(lower.lastIndexOf("/") + 1);
-    const group = suffixes.get(segment) ?? [];
-    group.push({ id, price });
-    suffixes.set(segment, group);
-  }
-  return { exact, suffixes };
-}
-
-function suffixPrice(
-  ids: string[],
-  suffixes: PriceIndex["suffixes"],
-): ModelPrice | undefined {
-  for (const id of ids) {
-    const lower = id.toLowerCase();
-    if (lower.includes("/")) continue;
-    const group = suffixes.get(lower);
-    if (!group) continue;
-    const [first] = [...group].sort(
-      (a, b) =>
-        Number(a.id.includes(":")) - Number(b.id.includes(":")) ||
-        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
-    );
-    return first!.price;
-  }
-  return undefined;
-}
-
 /**
  * The table entry for one harness model id. An explicit `priceIds` entry wins
- * over matching; then exact (case-insensitive), in candidate order; then the
- * provider-less suffix, but only for a bare candidate — a qualified id that
- * matches nothing exactly names another provider's model, not this one.
- * Suffix ties prefer a bare id over a `:variant`, then sort lexicographically,
- * so the match is deterministic. `undefined` means unpriced, never $0.
+ * over matching; then exact (case-insensitive) against the table. No prefix or
+ * suffix stripping: a `priceIds` entry is how a harness id names its price id,
+ * or it stays unpriced. `undefined` means unpriced, never $0.
  */
 export function matchPrice(
   table: PriceTable,
@@ -146,13 +50,11 @@ export function matchPrice(
   priceIds?: Record<string, string>,
 ): ModelPrice | undefined {
   if (!model) return undefined;
-  const ids = matchCandidates(resolvePriceId(model, priceIds));
-  const { exact, suffixes } = indexPrices(table);
-  for (const id of ids) {
-    const hit = exact.get(id.toLowerCase());
-    if (hit) return hit;
+  const id = resolvePriceId(model, priceIds).toLowerCase();
+  for (const [key, price] of Object.entries(table)) {
+    if (key.toLowerCase() === id) return price;
   }
-  return suffixPrice(ids, suffixes);
+  return undefined;
 }
 
 const PER_MTOK = 1_000_000;
@@ -169,9 +71,9 @@ function tokenTotal(usage: Usage): number {
 }
 
 /**
- * OpenRouter price for one usage in USD, ignoring any harness figure: the
+ * Table price for one usage in USD, ignoring any harness figure: the
  * harness id is matched against the table (`matchPrice`), so a free-tier id
- * prices at its paid equivalent — this is the list-price column. When
+ * with a named price id prices at its list — this is the list-price column. When
  * `cachedPrefix` is set and the harness did not split the cache (input only,
  * no cache counters), the input is priced at the cached rate: a resumed
  * turn's prefix is cached, and an unreported split on a resumed turn is that
@@ -208,12 +110,12 @@ export function priceTableOnly(
 
 /**
  * Cost of one turn in USD: a non-zero harness figure wins, otherwise the
- * OpenRouter price for the model. A harness `0` is unreported, because
- * harnesses such as opencode report 0 for turns they cannot price; a
- * free-tier id with a known list price is a known $0 turn — the subscription
- * paid nothing marginal, and the list column carries the economics.
- * `undefined` means unknown — the model matches nothing, the harness was
- * silent, or no usage was reported at all — and never means $0.
+ * table price for the model. A harness `0` is unreported, because a harness
+ * that cannot price its own turns reports 0; a free-tier id with a known
+ * list price is a known $0 turn — the subscription paid nothing marginal,
+ * and the list column carries the economics. `undefined` means unknown —
+ * the model matches nothing, the harness was silent, or no usage was
+ * reported at all — and never means $0.
  */
 export function priceUsage(
   usage: Usage,

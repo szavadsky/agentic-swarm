@@ -38,22 +38,22 @@ function runConfig(spec: RunSpec = {}): string {
   const pmModel = spec.pmModel ?? "model-a";
   return `aliases:
   architect: { harness: omp, model: arch, effort: high }
-  pm: { harness: opencode, model: ${pmModel}${spec.pmEffort ? `, effort: ${spec.pmEffort}` : ""} }
-  digest: { harness: opencode, model: model-a }
-  implementer: { harness: opencode, model: model-a }
-  implementer-b: { harness: opencode, model: model-a }
-  researcher: { harness: opencode, model: model-a }
-  reviewer: { harness: opencode, model: model-a${spec.reviewerEffort ? `, effort: ${spec.reviewerEffort}` : ""} }
-  qa: { harness: opencode, model: model-a }
-  steward: { harness: opencode, model: model-a }
-  plan-checker: { harness: opencode, model: model-a }
-  intent: { harness: opencode, model: model-a }
-  plan-reviewer: { harness: opencode, model: model-a }
-  pack-preparer: { harness: opencode, model: model-a }
+  pm: { harness: fake-harness, model: ${pmModel}${spec.pmEffort ? `, effort: ${spec.pmEffort}` : ""} }
+  digest: { harness: fake-harness, model: model-a }
+  implementer: { harness: fake-harness, model: model-a }
+  implementer-b: { harness: fake-harness, model: model-a }
+  researcher: { harness: fake-harness, model: model-a }
+  reviewer: { harness: fake-harness, model: model-a${spec.reviewerEffort ? `, effort: ${spec.reviewerEffort}` : ""} }
+  qa: { harness: fake-harness, model: model-a }
+  steward: { harness: fake-harness, model: model-a }
+  plan-checker: { harness: fake-harness, model: model-a }
+  intent: { harness: fake-harness, model: model-a }
+  plan-reviewer: { harness: fake-harness, model: model-a }
+  pack-preparer: { harness: fake-harness, model: model-a }
 harnesses:
-  opencode:
+  fake-harness:
     acpx:
-      agent: opencode
+      agent: fake-harness
       effort:
         configId: effort
         modelBases: { model-a: [none, high, default] }
@@ -95,13 +95,13 @@ async function fixture(
   const harnesses = new Map<string, Harness>([
     ["omp", new FakeHarness({ id: "omp", probe: { effort: ["low", "high"] } })],
     [
-      "opencode",
+      "fake-harness",
       new AcpxHarness({
         retention: "short",
-        id: "opencode",
+        id: "fake-harness",
         binary: stub.binary,
         sessionDir: path.dirname(stub.binary),
-        acpx: configs.run.harnesses!.opencode!.acpx!,
+        acpx: configs.run.harnesses!["fake-harness"]!.acpx!,
       }),
     ],
   ]);
@@ -113,7 +113,7 @@ async function fixture(
       paths,
       store,
       harnesses,
-      binaries: { omp: process.execPath, opencode: stub.binary },
+      binaries: { omp: process.execPath, "fake-harness": stub.binary },
       baseGates: false,
     },
   };
@@ -156,25 +156,25 @@ describe("acpx harness registry", () => {
           },
           compaction: { enabled: true },
         },
-        opencode: {
-          acpx: { agent: "opencode acp", raw: true },
+        "fake-harness": {
+          acpx: { agent: "fake-harness acp", raw: true },
           compaction: { enabled: true },
         },
       },
     });
     expect(harnesses.nova).toBeInstanceOf(AcpxHarness);
     expect(harnesses.nova!.id).toBe("nova");
-    expect(harnesses.opencode).toBeInstanceOf(AcpxHarness);
-    expect(harnesses.opencode!.id).toBe("opencode");
+    expect(harnesses["fake-harness"]).toBeInstanceOf(AcpxHarness);
+    expect(harnesses["fake-harness"]!.id).toBe("fake-harness");
     expect(harnesses.omp).toBeDefined();
   });
 
-  it("registers no native opencode adapter", () => {
+  it("registers no native fake-harness adapter", () => {
     const harnesses = createRealHarnesses({
       retention: "short",
       sessionDir: "/tmp/sessions",
     });
-    expect(harnesses.opencode).toBeUndefined();
+    expect(harnesses["fake-harness"]).toBeUndefined();
     expect(harnesses.omp).toBeDefined();
   });
 
@@ -258,7 +258,7 @@ function acpxLivePreFlightPart3() {
         expect.objectContaining({
           key: "aliases.pm.model",
           message:
-            'model "ghost-model" is not listed by harness "opencode"; available models: model-a, model-b',
+            'model "ghost-model" is not listed by harness "fake-harness"; available models: model-a, model-b',
         }),
       );
       expect(err.report).toContain("available models: model-a, model-b");
@@ -276,22 +276,22 @@ function acpxLivePreFlightPart4() {
       effortConfigId: "effort",
     });
     const text = `aliases:
-  pm: { harness: opencode, model: model-a, fallbacks: [{ model: model-b, effort: highest }] }
-  digest: { harness: opencode, model: model-a }
-  implementer: { harness: opencode, model: model-a }
-  implementer-b: { harness: opencode, model: model-b }
-  researcher: { harness: opencode, model: model-a }
-  reviewer: { harness: opencode, model: model-a }
-  qa: { harness: opencode, model: model-a }
-  steward: { harness: opencode, model: model-a }
-  plan-checker: { harness: opencode, model: model-a }
-  intent: { harness: opencode, model: model-a }
-  plan-reviewer: { harness: opencode, model: model-a }
-  pack-preparer: { harness: opencode, model: model-a }
+  pm: { harness: fake-harness, model: model-a, fallbacks: [{ model: model-b, effort: highest }] }
+  digest: { harness: fake-harness, model: model-a }
+  implementer: { harness: fake-harness, model: model-a }
+  implementer-b: { harness: fake-harness, model: model-b }
+  researcher: { harness: fake-harness, model: model-a }
+  reviewer: { harness: fake-harness, model: model-a }
+  qa: { harness: fake-harness, model: model-a }
+  steward: { harness: fake-harness, model: model-a }
+  plan-checker: { harness: fake-harness, model: model-a }
+  intent: { harness: fake-harness, model: model-a }
+  plan-reviewer: { harness: fake-harness, model: model-a }
+  pack-preparer: { harness: fake-harness, model: model-a }
 harnesses:
-  opencode:
+  fake-harness:
     acpx:
-      agent: opencode
+      agent: fake-harness
       effort: { configId: effort }
 limits: { concurrency: { overall: 2 }, iterations: 1 }
 `;

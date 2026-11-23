@@ -163,7 +163,7 @@ function registerAgentTurnOutcomeDeliveryPart2(): void {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-acpx-"));
     const stub = createAcpxStub({
       modelBehaviors: {
-        "opencode-go/beam-free": {
+        "local-host/lamp-mini-free": {
           reply:
             "```yaml\nstatus: done\nsummary: observed\ndecision: done\n```",
         },
@@ -172,16 +172,16 @@ function registerAgentTurnOutcomeDeliveryPart2(): void {
     const sessionDir = path.join(root, "sessions");
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "pi",
+      id: "agent-a",
       binary: stub.binary,
       sessionDir,
-      acpx: { agent: "pi" },
+      acpx: { agent: "agent-a" },
     });
     const runtime = runtimeFor(new FakeHarness({ id: "fake" }), root);
-    runtime.harnesses = new Map([["pi", harness]]);
+    runtime.harnesses = new Map([["agent-a", harness]]);
     runtime.configs.run.aliases.architect = {
-      harness: "pi",
-      model: "opencode-go/beam-free",
+      harness: "agent-a",
+      model: "local-host/lamp-mini-free",
     };
     await runtime.store.ensureLayout();
     const planPath = path.join(runtime.store.goalDir, "plan.md");

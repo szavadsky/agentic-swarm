@@ -127,9 +127,9 @@ function allowancesPart3() {
   it("does not mistake stub-like names for harness binaries", () => {
     expect(harnessName("acpx-stub.js")).toBeUndefined();
     expect(harnessName("fake-omp.js")).toBeUndefined();
-    expect(harnessName("/tmp/x/boom-opencode.js")).toBeUndefined();
+    expect(harnessName("/tmp/x/boom-tool-v.js")).toBeUndefined();
     expect(harnessName("omp")).toBe("omp");
-    expect(harnessName("/usr/bin/pi")).toBe("pi");
+    expect(harnessName("/usr/bin/tool-x")).toBe("tool-x");
   });
 }
 
@@ -239,24 +239,24 @@ function refusalsPart3() {
       HermeticViolation,
     );
     expect(() => Bun.spawn(["acpx", "--version"])).toThrow(HermeticViolation);
-    expect(() => spawn("codex", ["--version"])).toThrow(HermeticViolation);
-    expect(() => exec("pi --version", () => {})).toThrow(HermeticViolation);
-    expect(() => execFile("agy", ["--version"], () => {})).toThrow(
+    expect(() => spawn("tool-y", ["--version"])).toThrow(HermeticViolation);
+    expect(() => exec("tool-x --version", () => {})).toThrow(HermeticViolation);
+    expect(() => execFile("tool-z", ["--version"], () => {})).toThrow(
       HermeticViolation,
     );
     // spawnSync carries a spawn failure as result.error instead of throwing.
-    const synced = spawnSync("codex", ["--version"]);
+    const synced = spawnSync("tool-y", ["--version"]);
     expect(synced.error).toBeInstanceOf(HermeticViolation);
-    expect(() => execSync("pi --version", { stdio: "pipe" })).toThrow(
+    expect(() => execSync("tool-x --version", { stdio: "pipe" })).toThrow(
       HermeticViolation,
     );
     expect(() =>
-      execFileSync("claude", ["--version"], { stdio: "pipe" }),
+      execFileSync("tool-w", ["--version"], { stdio: "pipe" }),
     ).toThrow(HermeticViolation);
-    expect(() =>
-      Bun.spawnSync(["/usr/local/bin/opencode", "--version"]),
-    ).toThrow(HermeticViolation);
-    expect(() => Bun.spawnSync(["bash", "-c", "echo hi; agy run"])).toThrow(
+    expect(() => Bun.spawnSync(["/usr/local/bin/tool-v", "--version"])).toThrow(
+      HermeticViolation,
+    );
+    expect(() => Bun.spawnSync(["bash", "-c", "echo hi; tool-z run"])).toThrow(
       HermeticViolation,
     );
     expect(() => Bun.spawnSync(["bunx", "acpx", "--version"])).toThrow(
@@ -273,11 +273,11 @@ function refusalsPart4() {
     const binaries = [
       "omp",
       "acpx",
-      "opencode",
-      "claude",
-      "agy",
-      "codex",
-      "pi",
+      "tool-v",
+      "tool-w",
+      "tool-z",
+      "tool-y",
+      "tool-x",
     ];
     for (const binary of binaries) {
       expect(() => Bun.spawnSync([binary, "--version"])).toThrow(

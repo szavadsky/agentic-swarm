@@ -7,10 +7,10 @@ import { createAcpxStub } from "./acpx-stub.js";
 
 const TIMEOUTS = { idleMs: 10_000, wallMs: 30_000 };
 
-const PI_BANNER = "pi v1.5.2\n---\n\n## Skills\n";
+const AGENT_BANNER = "agent-a v1.5.2\n---\n\n## Skills\n";
 
-const PI_ACPX: AcpxConfig = {
-  agent: "pi",
+const AGENT_A_ACPX: AcpxConfig = {
+  agent: "agent-a",
   effort: {
     configId: "thought_level",
   },
@@ -22,7 +22,7 @@ function request(
   extra: Record<string, unknown> = {},
 ) {
   return {
-    model: { id: "opencode-go/beam-free" },
+    model: { id: "fake-host/lamp-mini-free" },
     cwd,
     prompt,
     timeouts: TIMEOUTS,
@@ -46,12 +46,12 @@ async function createsNamedPiSessionPassesModelPart1(
   expect(result.stop).toEqual({ kind: "done" });
   expect(result.text).toBe("PONG");
   expect(result.model).toEqual({
-    id: "opencode-go/beam-free",
+    id: "fake-host/lamp-mini-free",
     effort: "high",
   });
-  expect(result.session?.harness).toBe("pi");
-  expect(result.session?.id).toMatch(/^pi-/);
-  // pi reports no usage on the prompt; absence stays unknown, not a fake zero cost.
+  expect(result.session?.harness).toBe("agent-a");
+  expect(result.session?.id).toMatch(/^agent-a-/);
+  // agent-a reports no usage on the prompt; absence stays unknown, not a fake zero cost.
   expect(result.usage.costUsd).toBeUndefined();
   expect(result.usage.in).toBe(0);
 
@@ -67,8 +67,8 @@ async function createsNamedPiSessionPassesModelPart1(
   expect(prompt.at(-1)).toContain(`outcome path: \`${outcomePath}\``);
 
   for (const args of [create, set, prompt]) {
-    expect(args.indexOf("--format")).toBeLessThan(args.indexOf("pi"));
-    expect(args.indexOf("--cwd")).toBeLessThan(args.indexOf("pi"));
+    expect(args.indexOf("--format")).toBeLessThan(args.indexOf("agent-a"));
+    expect(args.indexOf("--cwd")).toBeLessThan(args.indexOf("agent-a"));
   }
   expect(create).toContain("--name");
   expect(create).toContain(result.session!.id);
@@ -86,22 +86,24 @@ async function createsNamedPiSessionPassesModelPart2(
 ) {
   const { prompt, result } = scope;
   expect(prompt).toContain("--model");
-  expect(prompt[prompt.indexOf("--model") + 1]).toBe("opencode-go/beam-free");
+  expect(prompt[prompt.indexOf("--model") + 1]).toBe(
+    "fake-host/lamp-mini-free",
+  );
   // acpx parses the positional agent with enablePositionalOptions: a global
-  // --model after `pi` is `unknown option '--model'`, exit 2.
-  expect(prompt.indexOf("--model")).toBeLessThan(prompt.indexOf("pi"));
+  // --model after `agent-a` is `unknown option '--model'`, exit 2.
+  expect(prompt.indexOf("--model")).toBeLessThan(prompt.indexOf("agent-a"));
   expect(prompt[prompt.indexOf("-s") + 1]).toBe(result.session!.id);
 }
 
 function registerAcpxHarnessPart1(): void {
-  it("creates a named pi session, passes model and effort, and returns the last agent text", async () => {
-    const stub = createAcpxStub({ banner: PI_BANNER });
+  it("creates a named agent-a session, passes model and effort, and returns the last agent text", async () => {
+    const stub = createAcpxStub({ banner: AGENT_BANNER });
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "pi",
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     });
     try {
       const scope1 = await createsNamedPiSessionPassesModelPart1(stub, harness);
@@ -118,10 +120,10 @@ function registerAcpxHarnessPart2(): void {
     const sessionDir = path.join(path.dirname(stub.binary), "sessions");
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "pi",
+      id: "agent-a",
       binary: stub.binary,
       sessionDir,
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -169,10 +171,10 @@ function registerAcpxHarnessPart3(): void {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "pi",
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.join(path.dirname(stub.binary), "sessions"),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     });
     try {
       const result = await harness.turn(
@@ -196,10 +198,10 @@ function registerAcpxHarnessPart4(): void {
     const pidFile = path.join(cwd, "options-env.pid");
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "pi",
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
       options: {
         args: ["--approve-all"],
         env: { ACPX_STUB_PID_FILE: pidFile },
@@ -227,10 +229,10 @@ function registerAcpxHarnessPart5(): void {
     const pidFile = path.join(cwd, "opaque-options-env.pid");
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "pi",
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
       options: {
         args: ["--approve-all"],
         env: { ACPX_STUB_PID_FILE: pidFile },
@@ -241,7 +243,7 @@ function registerAcpxHarnessPart5(): void {
       // the entry's args/env when it applies that block.
       const result = await harness.turn({
         ...request(cwd, "Say [[text:PONG]]"),
-        opaque: PI_ACPX,
+        opaque: AGENT_A_ACPX,
       });
       expect(result.text).toBe("PONG");
       const create = stub
@@ -261,10 +263,10 @@ function registerAcpxHarnessPart6(): void {
       () =>
         new AcpxHarness({
           retention: "short",
-          id: "pi",
+          id: "agent-a",
           binary: "/bin/true",
           sessionDir: path.dirname("/bin/true"),
-          acpx: PI_ACPX,
+          acpx: AGENT_A_ACPX,
           options: { args: "--approve-all" },
         }),
     ).toThrow('Invalid "args" option: expected string array, got string');
@@ -272,10 +274,10 @@ function registerAcpxHarnessPart6(): void {
       () =>
         new AcpxHarness({
           retention: "short",
-          id: "pi",
+          id: "agent-a",
           binary: "/bin/true",
           sessionDir: path.dirname("/bin/true"),
-          acpx: PI_ACPX,
+          acpx: AGENT_A_ACPX,
           options: { args: ["--approve-all", 1] },
         }),
     ).toThrow(
@@ -290,10 +292,10 @@ function registerAcpxHarnessPart7(): void {
       () =>
         new AcpxHarness({
           retention: "short",
-          id: "pi",
+          id: "agent-a",
           binary: "/bin/true",
           sessionDir: path.dirname("/bin/true"),
-          acpx: PI_ACPX,
+          acpx: AGENT_A_ACPX,
           options: { env: "ACPX_STUB_PID_FILE=/tmp/x" },
         }),
     ).toThrow(
@@ -303,10 +305,10 @@ function registerAcpxHarnessPart7(): void {
       () =>
         new AcpxHarness({
           retention: "short",
-          id: "pi",
+          id: "agent-a",
           binary: "/bin/true",
           sessionDir: path.dirname("/bin/true"),
-          acpx: PI_ACPX,
+          acpx: AGENT_A_ACPX,
           options: { env: { ACPX_STUB_PID_FILE: 1 } },
         }),
     ).toThrow(
@@ -320,10 +322,10 @@ function registerAcpxHarnessPart8(): void {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
       retention: "short" as const,
-      id: "pi",
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
       options: {
         args: ["--approve-all"],
         env: { FOO: "bar" },
@@ -349,10 +351,10 @@ function registerAcpxHarnessPart9(): void {
     const stub = createAcpxStub();
     const options = {
       retention: "short" as const,
-      id: "pi",
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     };
     const harness = new AcpxHarness(options);
     try {
