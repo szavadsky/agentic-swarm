@@ -78,8 +78,7 @@ interface RunResult {
   signal: NodeJS.Signals | null;
 }
 
-const tmpBase = process.env.TMPDIR ?? os.tmpdir();
-const tmpDir = fs.mkdtempSync(path.join(tmpBase, "factory-tests-"));
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-tests-"));
 const timingsPath = path.join(tmpDir, "timings.json");
 /**
  * Where this run writes its JUnit report. A gate that declares

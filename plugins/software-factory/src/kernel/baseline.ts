@@ -242,7 +242,7 @@ async function runBaseGates(
     }
     const checks: CheckResult[] = [];
     for (const gate of configs.repo.gates) {
-      const { res, check } = await runDeclaredGate(repoRoot, dir, gate);
+      const { res, check } = await runDeclaredGate(dir, gate);
       checks.push(gateCheck(gate, res, check));
     }
     return checks;

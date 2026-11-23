@@ -81,7 +81,7 @@ function gateProcessTreeLifecyclePart1() {
         serial: [],
         timeoutSec: 0.2,
       };
-      const { res } = await runDeclaredGate(dir, dir, gate);
+      const { res } = await runDeclaredGate(dir, gate);
       expect(res.timedOut).toBe(true);
 
       const leader = await waitForPid(leaderFile);
@@ -114,7 +114,7 @@ import { terminateAllChildGroups } from ${JSON.stringify(shutdownPath)};
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const [cwd, command, childFile] = process.argv.slice(1);
-const running = runDeclaredGate(cwd, cwd, {
+const running = runDeclaredGate(cwd, {
   id: "sleepy",
   command,
   serial: [],
@@ -199,7 +199,7 @@ import { runDeclaredGate } from ${JSON.stringify(gatesPath)};
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const [cwd, command, leaderFile, childFile] = process.argv.slice(1);
-void runDeclaredGate(cwd, cwd, {
+void runDeclaredGate(cwd, {
   id: "sleepy",
   command,
   serial: [],

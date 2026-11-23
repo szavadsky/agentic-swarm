@@ -263,7 +263,6 @@ function gateDetails(
  * identically on base and in a task worktree.
  */
 export async function runDeclaredGate(
-  repoRoot: string,
   cwd: string,
   gate: GateConfig,
 ): Promise<DeclaredGateRun> {
@@ -315,7 +314,7 @@ export async function runGates(
       ? runtime.configs.repo.gates
       : runtime.configs.repo.gates.filter((gate) => only.has(gate.id));
   for (const gate of gates) {
-    const { check } = await runDeclaredGate(runtime.paths.repoRoot, cwd, gate);
+    const { check } = await runDeclaredGate(cwd, gate);
     results.push(check);
   }
   return results;

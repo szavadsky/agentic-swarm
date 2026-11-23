@@ -58,47 +58,46 @@ function expectCapturedWall(result: Run, checkLastLine = true): void {
  * in a parallel worker exactly as the gate does.
  */
 let root: string;
+function writeFixture(name: string, lines: string[]): void {
+  fs.writeFileSync(path.join(root, name), lines.join("\n"));
+}
 
 beforeAll(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "run-tests-"));
-  fs.writeFileSync(
+  writeFixture("green.test.ts", [
+    'import { expect, it } from "bun:test";',
+    "",
+    'it("passes", () => {',
+    "  expect(1).toBe(1);",
+    "});",
+    "",
+  ]);
+  writeFixture("red.test.ts", [
+    'import { expect, it } from "bun:test";',
+    "",
+    'it("fails", () => {',
+    "  expect(1).toBe(2);",
+    "});",
+    "",
+  ]);
+  fs.mkdirSync(path.join(root, "sweep"));
+  fs.copyFileSync(
     path.join(root, "green.test.ts"),
-    [
-      'import { expect, it } from "bun:test";',
-      "",
-      'it("passes", () => {',
-      "  expect(1).toBe(1);",
-      "});",
-      "",
-    ].join("\n"),
+    path.join(root, "sweep", "only.test.ts"),
   );
-  fs.writeFileSync(
-    path.join(root, "red.test.ts"),
-    [
-      'import { expect, it } from "bun:test";',
-      "",
-      'it("fails", () => {',
-      "  expect(1).toBe(2);",
-      "});",
-      "",
-    ].join("\n"),
-  );
-  fs.writeFileSync(
-    path.join(root, "flaky.test.ts"),
-    [
-      'import { expect, it } from "bun:test";',
-      'import fs from "node:fs";',
-      'import path from "node:path";',
-      "",
-      'const marker = path.join(import.meta.dir, "flaky-once.marker");',
-      'it("fails once", () => {',
-      "  if (!fs.existsSync(marker)) return;",
-      "  fs.rmSync(marker);",
-      "  expect(1).toBe(2);",
-      "});",
-      "",
-    ].join("\n"),
-  );
+  writeFixture("flaky.test.ts", [
+    'import { expect, it } from "bun:test";',
+    'import fs from "node:fs";',
+    'import path from "node:path";',
+    "",
+    'const marker = path.join(import.meta.dir, "flaky-once.marker");',
+    'it("fails once", () => {',
+    "  if (!fs.existsSync(marker)) return;",
+    "  fs.rmSync(marker);",
+    "  expect(1).toBe(2);",
+    "});",
+    "",
+  ]);
 });
 
 afterAll(() => {
@@ -154,5 +153,13 @@ describe("tests gate runner", () => {
     } finally {
       fs.rmSync(report, { force: true });
     }
+  });
+
+  it("runs a test file that no pattern names when the gate sweeps", () => {
+    const sweep = run(path.join(root, "sweep"), []);
+    expect(sweep.code).toBe(0);
+    expect(sweep.output).toContain("1 pass");
+    expect(sweep.output).toContain("only.test.ts");
+    expectCapturedWall(sweep, true);
   });
 });
