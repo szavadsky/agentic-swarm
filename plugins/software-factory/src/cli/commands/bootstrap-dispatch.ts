@@ -1,6 +1,6 @@
 /**
  * `bootstrap/dispatch.sh`'s body: run one assignment file through the
- * OpenCode CLI on a free model (LOG D10). The assignment's worktree and
+ * Agent-d CLI on a free model (LOG D10). The assignment's worktree and
  * branch follow its name: ../<name> on factory-v3-<name>, created from
  * factory-v3 when missing. The event log (JSONL) goes outside git:
  * $FACTORY_BOOTSTRAP_RUNS or ~/.local/share/factory/bootstrap-runs.
@@ -40,8 +40,8 @@ export function stampNow(date: Date = new Date()): string {
 
 /** One free-tier run at a time: a free model takes the slot lock (LOG D14). */
 export function isFreeModel(model: string): boolean {
-  if (model === "opencode/big-pickle") return true;
-  if (!model.startsWith("opencode/")) return false;
+  if (model === "agent-d/big-pickle") return true;
+  if (!model.startsWith("agent-d/")) return false;
   return model.includes("-free");
 }
 
@@ -78,7 +78,7 @@ function runMust(
   return res;
 }
 
-/** Aggregates of one opencode JSONL event log, as the old jq pipes printed. */
+/** Aggregates of one agent-d JSONL event log, as the old jq pipes printed. */
 export interface LogSummary {
   session: string;
   steps: number;
@@ -157,7 +157,7 @@ export interface DispatchOptions {
 }
 
 /**
- * Runs one assignment through the OpenCode CLI in its worktree, printing the
+ * Runs one assignment through the Agent-d CLI in its worktree, printing the
  * summary the old dispatch.sh printed and returning its exit code. A missing
  * name prints usage and returns 1; a failed worktree add or install is a
  * hard error.
@@ -171,7 +171,7 @@ export async function dispatchAssignment(
     return 1;
   }
   const name = opts.name;
-  const model = opts.model ?? "opencode/deepseek-v4.1-flash-free#max";
+  const model = opts.model ?? "agent-d/model-c-free#max";
   const root = path.resolve(opts.root);
   const lower = name.toLowerCase();
   const wt = path.join(path.dirname(root), lower);
@@ -213,7 +213,7 @@ export async function dispatchAssignment(
   return status;
 }
 
-/** Runs the OpenCode CLI for one assignment, under the timeout. */
+/** Runs the Agent-d CLI for one assignment, under the timeout. */
 function runOpencode(opts: {
   name: string;
   model: string;
@@ -239,12 +239,12 @@ function runOpencode(opts: {
   args.push(opts.message);
   const runArgs: string[] = [
     opts.env.FACTORY_DISPATCH_TIMEOUT ?? "3h",
-    "opencode",
+    "agent-d",
     ...args,
   ];
   const opCmd = opts.free ? "flock" : "timeout";
   const opArgs = opts.free
-    ? [path.join(opts.slots, "opencode-free.lock"), "timeout", ...runArgs]
+    ? [path.join(opts.slots, "agent-d-free.lock"), "timeout", ...runArgs]
     : runArgs;
 
   const stdoutFd = fs.openSync(opts.log, "w");

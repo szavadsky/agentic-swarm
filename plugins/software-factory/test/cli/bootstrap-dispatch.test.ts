@@ -20,7 +20,7 @@ const DISPATCH_LOGIC = path.join(
   "src/cli/commands/bootstrap-dispatch.ts",
 );
 
-const OPENCODE_OK = `#!/bin/sh
+const AGENTD_OK = `#!/bin/sh
 printf '%s\n' '{"type":"step_start","sessionID":"ses_fake"}'
 printf '%s\n' '{"type":"tool_use"}'
 printf '%s\n' '{"type":"step_finish"}'
@@ -29,18 +29,18 @@ printf '%s\n' '{"type":"step_finish"}'
 exit 0
 `;
 
-const OPENCODE_RED = `#!/bin/sh
+const AGENTD_RED = `#!/bin/sh
 printf '%s\n' '{"type":"step_start","sessionID":"ses_red"}'
 printf '%s\n' '{"type":"error","error":"boom one"}'
 printf '%s\n' '{"type":"error","error":"boom two"}'
 exit 3
 `;
 
-/** A fake-OPENCODE bin dir on PATH, so no real agent ever launches. */
+/** A fake-AGENTD bin dir on PATH, so no real agent ever launches. */
 function fakeBinDir(script: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-fakebin-"));
-  fs.writeFileSync(path.join(dir, "opencode"), script, "utf8");
-  fs.chmodSync(path.join(dir, "opencode"), 0o755);
+  fs.writeFileSync(path.join(dir, "agent-d"), script, "utf8");
+  fs.chmodSync(path.join(dir, "agent-d"), 0o755);
   return dir;
 }
 
@@ -138,10 +138,10 @@ async function runIt(
 
 describe("dispatch helpers", () => {
   it("matches the shell's free-model test", () => {
-    expect(isFreeModel("opencode/deepseek-v4.1-flash-free#max")).toBe(true);
-    expect(isFreeModel("opencode/big-pickle")).toBe(true);
-    expect(isFreeModel("opencode/gpt-5.6-sol#max")).toBe(false);
-    expect(isFreeModel("anthropic/claude")).toBe(false);
+    expect(isFreeModel("agent-d/model-c-free#max")).toBe(true);
+    expect(isFreeModel("agent-d/big-pickle")).toBe(true);
+    expect(isFreeModel("agent-d/model-x#max")).toBe(false);
+    expect(isFreeModel("provider-z/model-z")).toBe(false);
   });
 
   it("stamps logs in the shell's %Y%m%dT%H%M%S shape", () => {
@@ -185,8 +185,8 @@ describe("dispatch helpers", () => {
 });
 
 describe("dispatch logic", () => {
-  it("creates the worktree, runs opencode and prints the summary", async () => {
-    const s = setup(OPENCODE_OK);
+  it("creates the worktree, runs agent-d and prints the summary", async () => {
+    const s = setup(AGENTD_OK);
     const logs = path.join(s.root, "logs");
     const lines: string[] = [];
     try {
@@ -214,8 +214,8 @@ describe("dispatch logic", () => {
     }
   }, 60_000);
 
-  it("returns opencode's exit code and prints the last errors", async () => {
-    const s = setup(OPENCODE_RED);
+  it("returns agent-d's exit code and prints the last errors", async () => {
+    const s = setup(AGENTD_RED);
     const lines: string[] = [];
     try {
       expect(await runIt(s, lines, { model: "custom/model" })).toBe(3);
@@ -229,11 +229,11 @@ describe("dispatch logic", () => {
   }, 60_000);
 
   it("takes the slot lock for a free model", async () => {
-    const s = setup(OPENCODE_OK);
+    const s = setup(AGENTD_OK);
     const slots = path.join(s.root, "slots");
     try {
       expect(await runIt(s, [])).toBe(0);
-      expect(fs.existsSync(path.join(slots, "opencode-free.lock"))).toBe(true);
+      expect(fs.existsSync(path.join(slots, "agent-d-free.lock"))).toBe(true);
     } finally {
       cleanupRun(s);
     }
@@ -244,7 +244,7 @@ describe.skipIf(DISPATCH_SH === undefined)(
   "dispatch.sh, the one-line face",
   () => {
     it("runs the logic through the script and passes arguments", () => {
-      const s = setup(OPENCODE_OK);
+      const s = setup(AGENTD_OK);
       try {
         const res = spawnSync(
           "bash",
