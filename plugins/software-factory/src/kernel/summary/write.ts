@@ -10,15 +10,16 @@ import {
   writeMetrics,
 } from "../metrics.js";
 import { loadPriceTable } from "../openrouter.js";
-import type { ArtifactStore, KernelRuntime } from "../types.js";
-import type { SummaryInput, SummaryRender } from "./types.js";
-import { baseGateLines, defaultStatus, distanceDebtLines } from "./tables.js";
+import type { ArtifactStore, KernelRuntime, StepRecord } from "../types.js";
 import {
   summaryNamedRows,
   summaryRemarkFacts,
   summaryTaskFacts,
 } from "./facts.js";
+import { writeIntentStatus } from "./intent-status.js";
 import { summaryHeadLines, summaryMetricsLines } from "./render.js";
+import { baseGateLines, defaultStatus, distanceDebtLines } from "./tables.js";
+import type { SummaryInput, SummaryRender } from "./types.js";
 
 /** Writes the summary and its outbox notice, returning the summary path. */
 async function writeSummaryFile(
@@ -35,6 +36,23 @@ async function writeSummaryFile(
     `${rel}\n`,
   );
   return rel;
+}
+
+/**
+ * The artifact must exist before the summary that reports it, so a crash
+ * never leaves a summary whose intent status the dashboard cannot read.
+ */
+async function writeArchitectIntentStatus(
+  store: ArtifactStore,
+  iteration: number,
+  architect: StepRecord | undefined,
+): Promise<void> {
+  if (!architect) return;
+  await writeIntentStatus(
+    store,
+    iteration,
+    architect.outcome?.intentStatus ?? [],
+  );
 }
 
 /**
@@ -89,6 +107,7 @@ export async function writeIterationSummary(
     baseLines: baseGateLines(recordedBaseGates(input.records)),
     distanceDebt: distanceDebtLines(facts.open),
   };
+  await writeArchitectIntentStatus(store, iteration, architect);
   const lines = [...summaryHeadLines(render), ...summaryMetricsLines(render)];
   return await writeSummaryFile(store, iteration, lines);
 }

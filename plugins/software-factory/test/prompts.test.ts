@@ -212,6 +212,7 @@ function promptsSchemaSkeletonsPart3() {
         "```yaml",
         "status: done | blocked | failed | upscope  # upscope on task steps only",
         "summary: one paragraph",
+        "intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction",
         "concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner",
         "debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it",
         "steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list",

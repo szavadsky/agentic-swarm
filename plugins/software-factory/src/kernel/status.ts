@@ -1,5 +1,9 @@
 import path from "node:path";
-import { DASHBOARD_REL_PATH, renderDashboard } from "./dashboard.js";
+import {
+  DASHBOARD_REL_PATH,
+  renderDashboard,
+  writeDashboardAssets,
+} from "./dashboard.js";
 import { derive, materialOpenDebts, type OpenDebt } from "./derive.js";
 import {
   DEFAULT_ROLE_BY_STEP,
@@ -12,6 +16,10 @@ import {
 import { loadPriceTable, type PriceSource } from "./openrouter.js";
 import type { PriceTable } from "./pricing.js";
 import { recordDirName } from "./store.js";
+import {
+  type IntentStatusArtifact,
+  readLatestIntentStatus,
+} from "./summary/intent-status.js";
 import type {
   ArtifactStore,
   Cause,
@@ -112,6 +120,8 @@ export interface StatusDocument {
     openDebt: StatusDebt[];
   };
   concerns: StatusConcern[];
+  /** Latest intent-wise status an architect summary wrote; absent until one does. */
+  intentStatus?: IntentStatusArtifact;
   cost: {
     harnessCostUsd: number | null;
     listCostUsd: number | null;
@@ -138,6 +148,8 @@ export interface StatusInput {
   goal: string;
   state: State;
   tasks: readonly TaskFile[];
+  /** Latest intent status artifact; absent before an architect summary writes one. */
+  intentStatus?: IntentStatusArtifact;
   records: readonly StepRecord[];
   /** Step id -> role; the process flows supply it at write time. */
   roleByStep?: Record<string, string>;
@@ -359,6 +371,7 @@ export function buildStatus(input: StatusInput): StatusDocument {
     cost: costView(totals),
     work: workView(totals),
     ...(epics ? { epics } : {}),
+    ...(input.intentStatus ? { intentStatus: input.intentStatus } : {}),
   };
 }
 
@@ -380,11 +393,13 @@ export async function collectStatus(
 ): Promise<StatusDocument> {
   const tasks = await source.store.listTasks();
   const records = await source.store.listRecords();
+  const state = derive(tasks, records, source.flows);
   return buildStatus({
     goal: path.basename(source.store.goalDir),
-    state: derive(tasks, records, source.flows),
+    state,
     tasks,
     records,
+    intentStatus: await readLatestIntentStatus(source.store, state.iteration),
     roleByStep: rolesByStep(source.flows),
     prices: await loadPriceTable(source.priceSource),
     priceIds: source.priceIds,
@@ -397,6 +412,7 @@ export async function writeStatus(source: StatusSource): Promise<string> {
   // Render before either write: a template failure never leaves a fresh
   // status.json beside a dashboard describing the previous snapshot.
   const dashboard = renderDashboard(status);
+  await writeDashboardAssets(source.store);
   await source.store.writeFile(STATUS_REL_PATH, renderStatus(status));
   await source.store.writeFile(DASHBOARD_REL_PATH, dashboard);
   return STATUS_REL_PATH;

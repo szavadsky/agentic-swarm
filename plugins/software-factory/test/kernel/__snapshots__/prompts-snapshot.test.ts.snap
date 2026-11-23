@@ -35,6 +35,10 @@ Keep one register under \`## Architect register\` in \`plan.md\`, one bullet per
 
 Every steer gets one \`steerAnswers: {steer, answer}\` entry, citing the id from the pending steers. Silence is not an answer.
 
+## Intent status
+
+Every architect outcome carries \`intentStatus\`: one entry per intent section naming \`works\`, \`not-built\` or \`friction\`, with a short note where it helps. The kernel writes it to \`iterations/<n>/intent-status.json\`; the dashboard renders that artifact and never derives intent status from task counts.
+
 ## Turn order
 
 Every turn, in this order.
@@ -125,6 +129,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -283,6 +288,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -398,6 +404,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -579,6 +586,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -689,6 +697,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -896,6 +905,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -1019,6 +1029,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -1100,6 +1111,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -1171,6 +1183,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -1267,6 +1280,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -1357,6 +1371,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -1613,6 +1628,10 @@ Keep one register under \`## Architect register\` in \`plan.md\`, one bullet per
 
 Every steer gets one \`steerAnswers: {steer, answer}\` entry, citing the id from the pending steers. Silence is not an answer.
 
+## Intent status
+
+Every architect outcome carries \`intentStatus\`: one entry per intent section naming \`works\`, \`not-built\` or \`friction\`, with a short note where it helps. The kernel writes it to \`iterations/<n>/intent-status.json\`; the dashboard renders that artifact and never derives intent status from task counts.
+
 ## Turn order
 
 Every turn, in this order.
@@ -1691,6 +1710,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -1837,6 +1857,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -2006,6 +2027,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -2092,6 +2114,10 @@ Keep one register under \`## Architect register\` in \`plan.md\`, one bullet per
 
 Every steer gets one \`steerAnswers: {steer, answer}\` entry, citing the id from the pending steers. Silence is not an answer.
 
+## Intent status
+
+Every architect outcome carries \`intentStatus\`: one entry per intent section naming \`works\`, \`not-built\` or \`friction\`, with a short note where it helps. The kernel writes it to \`iterations/<n>/intent-status.json\`; the dashboard renders that artifact and never derives intent status from task counts.
+
 ## Turn order
 
 Every turn, in this order.
@@ -2170,6 +2196,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -2316,6 +2343,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -2485,6 +2513,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -2571,6 +2600,10 @@ Keep one register under \`## Architect register\` in \`plan.md\`, one bullet per
 
 Every steer gets one \`steerAnswers: {steer, answer}\` entry, citing the id from the pending steers. Silence is not an answer.
 
+## Intent status
+
+Every architect outcome carries \`intentStatus\`: one entry per intent section naming \`works\`, \`not-built\` or \`friction\`, with a short note where it helps. The kernel writes it to \`iterations/<n>/intent-status.json\`; the dashboard renders that artifact and never derives intent status from task counts.
+
 ## Turn order
 
 Every turn, in this order.
@@ -2649,6 +2682,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -2795,6 +2829,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -2964,6 +2999,7 @@ Emit exactly one outcome per turn. Delivery, first available: native structured 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
 summary: one paragraph
+intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list

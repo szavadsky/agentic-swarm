@@ -105,6 +105,25 @@
       "record": "records/00002-i1-merged1-implement-r1"
     }
   ],
+  "intentStatus": {
+    "iteration": 2,
+    "sections": [
+      {
+        "section": "Status reporting <and> dashboard",
+        "status": "works",
+        "note": "Intent view reads the architect artifact"
+      },
+      {
+        "section": "Sandbox",
+        "status": "not-built"
+      },
+      {
+        "section": "Steering",
+        "status": "friction",
+        "note": "Debounce <tuning> still open"
+      }
+    ]
+  },
   "cost": {
     "harnessCostUsd": 0.6,
     "listCostUsd": 1.35,

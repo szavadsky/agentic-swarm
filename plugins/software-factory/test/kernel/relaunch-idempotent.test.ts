@@ -54,7 +54,7 @@ function snapshotTree(root: string): Tree {
 /**
  * Paths a relaunch may write: the append-only step records, and the script
  * artifacts derived from them (iteration digests, summaries and metrics, the
- * status snapshot and its dashboard, and the mailbox). Everything else is
+ * status snapshot and its dashboard, the dashboard's vendored assets, and the mailbox). Everything else is
  * authored by a turn or the operator.
  */
 function isRecordTree(rel: string): boolean {
@@ -62,6 +62,7 @@ function isRecordTree(rel: string): boolean {
     rel.startsWith("records/") ||
     rel.startsWith("iterations/") ||
     rel.startsWith("mailbox/") ||
+    rel.startsWith("vendor/") ||
     rel === "metrics.yaml" ||
     rel === "status.json" ||
     rel === "dashboard.html"

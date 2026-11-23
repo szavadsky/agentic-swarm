@@ -38,8 +38,8 @@ the run before any goal write, and `--pin-gate-override <reason>` launches it
 anyway and records the reason in the run's records. `status` prints
 derived state and parked causes; `--json` prints `status.json`, the snapshot
 the kernel rewrites after each agent launch and finish, together with the
-static `dashboard.html` rendered beside it; `benchmark` prints one
-goal's benchmark rows;
+static `dashboard.html` rendered beside it and the page's vendored `vendor/`
+assets; `benchmark` prints one goal's benchmark rows;
 `steer` drops a file into the inbox atomically. `validate` checks one
 schema-enforced file with the gate's validators (tasks/*.md with its
 directory's dependency graph and flow existence against the merged process
@@ -437,10 +437,11 @@ Gates run once on the base; a red base is recorded and warned once, not fatal.
   epics/<epic>.md           # one plan per architect scope; the goal plan's register names them
   records/                  # one directory per settled step and round: started/end/outcome
   mailbox/{inbox,processed,outbox}/
-  iterations/<n>/{context-pack.md,summary.md,metrics.yaml}
+  iterations/<n>/{context-pack.md,summary.md,metrics.yaml,intent-status.json}
+  vendor/{pico.min.css,chart.umd.min.js} # local dashboard assets
   metrics.yaml
   status.json              # machine-readable snapshot for the CLI and dashboard
-  dashboard.html           # static page rendered from status.json; no server
+  dashboard.html           # static page rendered from status.json and intent-status.json; no server
 ```
 
 ## Steering

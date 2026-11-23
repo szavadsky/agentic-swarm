@@ -177,6 +177,17 @@ export const planReviewOutcomeSchema = z.object({
 });
 export type PlanReviewOutcome = z.infer<typeof planReviewOutcomeSchema>;
 
+/**
+ * One intent section's status in the architect's summary: what works, what
+ * is not built yet, or where the owner meets friction.
+ */
+export const intentStatusEntrySchema = z.object({
+  section: z.string().min(1).describe("intent section heading"),
+  status: z.enum(["works", "not-built", "friction"]),
+  note: z.string().optional().describe("short evidence or friction detail"),
+});
+export type IntentStatusEntry = z.infer<typeof intentStatusEntrySchema>;
+
 /** The only agent ↔ script surface; one schema for every step. Field
  * descriptions render into the outcome prompt skeleton, so they are the
  * prompt-facing wording; comments below keep kernel-only behavior. */
@@ -185,6 +196,12 @@ export const outcomeSchema = z.object({
     .enum(["done", "blocked", "failed", "upscope"])
     .describe("upscope on task steps only"),
   summary: z.string().describe("one paragraph"),
+  intentStatus: z
+    .array(intentStatusEntrySchema)
+    .optional()
+    .describe(
+      "architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status",
+    ),
   concerns: z.array(concernSchema).default([]),
   // Parse-only: old records close debts and answer steers here, and no prompt
   // asks for a line; `debtClosed` and `steerAnswers` are the protocol. Kept

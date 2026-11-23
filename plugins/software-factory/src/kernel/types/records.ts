@@ -293,6 +293,7 @@ export type IterationFile =
   | "context-data.json"
   | "summary.md"
   | "digest.md"
+  | "intent-status.json"
   | "metrics.yaml"
   | "plan-bullets.json";
 

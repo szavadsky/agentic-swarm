@@ -247,7 +247,7 @@ const BASE_OUTCOME_FIELDS = [
  * the upscope ask.
  */
 const PROMPT_OUTCOME_FIELDS: Record<string, string[]> = {
-  architect: ["planReviewMarks"],
+  architect: ["planReviewMarks", "intentStatus"],
   "architect-review-return": ["planReviewMarks"],
   implementer: ["replies"],
   pm: ["steerRoutes", "stallRoutes", "planCheckRoutes"],
