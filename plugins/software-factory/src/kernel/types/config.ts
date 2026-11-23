@@ -52,7 +52,8 @@ export interface GateConfig {
  *
  * - `folder`: a plain directory, gitignored when it lives inside the repo.
  * - `same-repo`: a directory inside the repo, committed after every kernel
- *   write so orchestration artifacts are never left unmerged on a branch.
+ *   write and replayed onto the goal branch, so orchestration artifacts are
+ *   never left unmerged on a task branch.
  * - `git-repo`: a separate git repository, committed and pushed after every
  *   write.
  */
