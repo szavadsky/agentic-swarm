@@ -5,14 +5,15 @@
  * and a red pin is still recorded (and kept off `current`) so `pinRefusal`
  * bars a launch from it.
  *
- * Runtime imports are node builtins only: a promotion whose install failed
- * must still record its red gate, before zod or yaml exist in the pin.
+ * Runtime imports are node builtins plus the dependency-free pins-root
+ * module: a promotion whose install failed must still record its red gate, before
+ * zod or yaml exist in the pin.
  */
 
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
-import os from "node:os";
 import path from "node:path";
+import { pinsRoot } from "../../kernel/preflight/pins-root.js";
 import type { PinGate } from "../../kernel/preflight/pin.js";
 
 /** Tree paths the suite reads: the rev's copy, never the operator's. */
@@ -86,14 +87,6 @@ function mustRun(
     throw new PromoteError(`${cmd} failed with exit ${res.code}`, res.code);
   }
   return res;
-}
-
-/** The pins root promote writes under; FACTORY_PIN_ROOT relocates it. */
-function pinsRoot(env: NodeJS.ProcessEnv): string {
-  return path.resolve(
-    env.FACTORY_PIN_ROOT ??
-      path.join(os.homedir(), ".local/share/factory/pins"),
-  );
 }
 
 /** Builds kept: FACTORY_PINS_KEPT, default 5. */

@@ -6,10 +6,10 @@
  */
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import yaml from "yaml";
 import { z } from "zod";
+import { pinsRoot } from "./pins-root.js";
 
 /** The record promote writes at the pin build's root. */
 export const PIN_GATE_FILE = "gate.yaml";
@@ -30,14 +30,6 @@ export const pinGateSchema = z
   .strict();
 
 export type PinGate = z.infer<typeof pinGateSchema>;
-
-/** The pins root promote writes under; a relocated root names it in FACTORY_PIN_ROOT. */
-export function pinsRoot(env: NodeJS.ProcessEnv = process.env): string {
-  return path.resolve(
-    env.FACTORY_PIN_ROOT ??
-      path.join(os.homedir(), ".local/share/factory/pins"),
-  );
-}
 
 /**
  * The pin build a package directory is, or undefined when it is no pin. A

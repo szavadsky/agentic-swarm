@@ -58,12 +58,20 @@ function seedRepo(): TmpRepo {
     "plugins/software-factory/src/cli/commands/bootstrap-dispatch.ts",
     fs.readFileSync(DISPATCH_LOGIC, "utf8"),
   );
-  // The dispatch logic shares promote.ts's runSync; a bare fake repo has to
-  // carry that module too.
+  // The dispatch logic shares promote.ts's runSync; its runtime closure now
+  // includes the dependency-free pins-root module, so a bare fake repo has to
+  // carry both modules too.
   repo.writeFile(
     "plugins/software-factory/src/cli/commands/promote.ts",
     fs.readFileSync(
       path.join(PACKAGE_ROOT, "src/cli/commands/promote.ts"),
+      "utf8",
+    ),
+  );
+  repo.writeFile(
+    "plugins/software-factory/src/kernel/preflight/pins-root.ts",
+    fs.readFileSync(
+      path.join(PACKAGE_ROOT, "src/kernel/preflight/pins-root.ts"),
       "utf8",
     ),
   );

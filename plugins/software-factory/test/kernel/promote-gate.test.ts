@@ -17,6 +17,11 @@ const PACKAGE_ROOT = path.resolve(import.meta.dir, "../..");
 /** The promote entry and logic the fake repo's promote.sh invokes. */
 const PROMOTE_ENTRY = path.join(PACKAGE_ROOT, "scripts/promote.ts");
 const PROMOTE_LOGIC = path.join(PACKAGE_ROOT, "src/cli/commands/promote.ts");
+/** The dependency-free pins-root module the promote logic loads. */
+const PINS_ROOT_LOGIC = path.join(
+  PACKAGE_ROOT,
+  "src/kernel/preflight/pins-root.ts",
+);
 const OK_TEST =
   'import { expect, it } from "bun:test";\nit("ok", () => { expect(1).toBe(1); });\n';
 const RED_TEST =
@@ -55,8 +60,8 @@ function fakeRepo(): TmpRepo {
       2,
     )}\n`,
   );
-  // The entry and logic are the same files the real script invokes; the
-  // module is node-builtins only, so the fake package needs no install.
+  // The entry, logic and dependency-free pins-root are the module's runtime
+  // closure, so the fake package needs no install.
   repo.writeFile(
     "plugins/software-factory/scripts/promote.ts",
     fs.readFileSync(PROMOTE_ENTRY, "utf8"),
@@ -64,6 +69,10 @@ function fakeRepo(): TmpRepo {
   repo.writeFile(
     "plugins/software-factory/src/cli/commands/promote.ts",
     fs.readFileSync(PROMOTE_LOGIC, "utf8"),
+  );
+  repo.writeFile(
+    "plugins/software-factory/src/kernel/preflight/pins-root.ts",
+    fs.readFileSync(PINS_ROOT_LOGIC, "utf8"),
   );
   repo.writeFile("plugins/software-factory/test/ok.test.ts", OK_TEST);
   repo.writeFile("plugins/software-factory/test/tree.test.ts", TREE_TEST);
