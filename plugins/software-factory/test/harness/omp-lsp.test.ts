@@ -2,9 +2,11 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { createRealHarnesses } from "../../src/cli/harnesses.js";
 import { OmpHarness } from "../../src/harness/omp/harness.js";
 import { turnLspConfigPath } from "../../src/harness/omp/lsp.js";
+import { writeArtifactLsp } from "../../src/kernel/artifact-lsp.js";
 import { loadRunConfig } from "../../src/kernel/config.js";
 import { shippedRunConfigsDir } from "../helpers/run-configs.js";
 
@@ -93,7 +95,247 @@ function argv(file: string): string[] {
 describe("omp artifact LSP", () => {
   ompArtifactLSPPart1();
   ompArtifactLSPPart2();
+  ompArtifactLSPSession();
 });
+
+/** One JSON-RPC frame from the YAML language server. */
+interface LspFrame {
+  id?: number | string;
+  method?: string;
+  params?: {
+    items?: { section?: string; scopeUri?: string }[];
+    uri?: string;
+    diagnostics?: { message?: string }[];
+  };
+  result?: unknown;
+}
+
+/** Minimal LSP client speaking Content-Length frames to the YAML server. */
+class YamlLspClient {
+  private buffer = Buffer.alloc(0);
+  private readonly reader: ReadableStreamDefaultReader<Uint8Array>;
+  private readonly proc: Bun.Subprocess<"pipe", "pipe", "pipe">;
+  private readonly settings: Record<string, unknown>;
+  private readonly fileUri: string;
+  private readonly goalUri: string;
+
+  constructor(
+    command: string,
+    args: string[],
+    settings: Record<string, unknown>,
+    fileUri: string,
+    goalUri: string,
+  ) {
+    this.settings = settings;
+    this.fileUri = fileUri;
+    this.goalUri = goalUri;
+    this.proc = Bun.spawn([command, ...args], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    this.reader =
+      this.proc.stdout.getReader() as unknown as ReadableStreamDefaultReader<Uint8Array>;
+  }
+
+  private send(message: Record<string, unknown>): void {
+    const body = JSON.stringify({ jsonrpc: "2.0", ...message });
+    this.proc.stdin.write(
+      `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`,
+    );
+    this.proc.stdin.flush();
+  }
+
+  private async nextFrame(): Promise<LspFrame | undefined> {
+    for (;;) {
+      const headerEnd = this.buffer.indexOf("\r\n\r\n");
+      if (headerEnd >= 0) {
+        const header = this.buffer.subarray(0, headerEnd).toString("ascii");
+        const length = Number(/Content-Length:\s*(\d+)/i.exec(header)?.[1]);
+        const bodyStart = headerEnd + 4;
+        if (this.buffer.length >= bodyStart + length) {
+          const body = this.buffer
+            .subarray(bodyStart, bodyStart + length)
+            .toString("utf8");
+          this.buffer = this.buffer.subarray(bodyStart + length);
+          return JSON.parse(body) as LspFrame;
+        }
+      }
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const read = this.reader.read();
+      const timeout = new Promise<undefined>((resolve) => {
+        timer = setTimeout(() => resolve(undefined), 5_000);
+      });
+      let result: Awaited<typeof read> | undefined;
+      try {
+        result = await Promise.race([read, timeout]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+      if (!result) return undefined;
+      if (result.done) return undefined;
+      this.buffer = Buffer.concat([this.buffer, Buffer.from(result.value)]);
+    }
+  }
+
+  /**
+   * Reads frames, answering config requests, until the server publishes
+   * diagnostics for the file: a non-empty report returns at once; otherwise
+   * the latest (empty) report arrives once the schema lookup settles and the
+   * capped sweep returns it.
+   */
+  async diagnostics(): Promise<{ message?: string }[]> {
+    let latest: { message?: string }[] = [];
+    for (let count = 0; count < 30; count++) {
+      const frame = await this.nextFrame();
+      if (!frame) return latest;
+      if (frame.method === "workspace/configuration") {
+        const items = frame.params?.items ?? [];
+        const result = items.map((item) => {
+          if (item.section === "yaml" || item.section === "[yaml]")
+            return this.settings["yaml"];
+          return {};
+        });
+        this.send({ id: frame.id, result });
+        continue;
+      }
+      if (
+        frame.method === "textDocument/publishDiagnostics" &&
+        frame.params?.uri === this.fileUri
+      ) {
+        latest = frame.params.diagnostics ?? [];
+        if (latest.length > 0) return latest;
+      }
+    }
+    return latest;
+  }
+
+  /** Opens the file with `text`, awaiting the server's diagnostics. */
+  async open(text: string): Promise<{ message?: string }[]> {
+    this.send({
+      method: "textDocument/didOpen",
+      params: {
+        textDocument: {
+          uri: this.fileUri,
+          languageId: "yaml",
+          version: 1,
+          text,
+        },
+      },
+    });
+    return this.diagnostics();
+  }
+
+  /** Replaces the open document with `text`, awaiting re-validated diagnostics. */
+  async change(text: string): Promise<{ message?: string }[]> {
+    this.send({
+      method: "textDocument/didChange",
+      params: {
+        textDocument: { uri: this.fileUri, version: 2 },
+        contentChanges: [{ text }],
+      },
+    });
+    return this.diagnostics();
+  }
+
+  async close(): Promise<void> {
+    this.send({ method: "exit" });
+    this.proc.kill();
+    await this.proc.exited;
+  }
+
+  async start(): Promise<void> {
+    this.send({
+      id: 1,
+      method: "initialize",
+      params: {
+        processId: null,
+        rootUri: this.goalUri,
+        capabilities: { workspace: { configuration: true } },
+        workspaceFolders: [{ uri: this.goalUri, name: "goal" }],
+      },
+    });
+    await this.nextFrame();
+    this.send({ method: "initialized", params: {} });
+    this.send({
+      method: "workspace/didChangeConfiguration",
+      params: { settings: this.settings },
+    });
+  }
+}
+
+interface LspServerConfig {
+  command: string;
+  args: string[];
+  settings: Record<string, unknown>;
+}
+
+function lspServer(installed: string): LspServerConfig {
+  const parsed = JSON.parse(fs.readFileSync(installed, "utf8")) as {
+    servers: Record<string, LspServerConfig>;
+  };
+  return parsed.servers["factory-artifacts"]!;
+}
+
+async function runOmpTurnWithLsp(
+  f: ReturnType<typeof fixture>,
+  config: string,
+): Promise<string> {
+  const result = await f.harness.turn({
+    model: { id: "provider/model" },
+    cwd: f.cwd,
+    prompt: "quick",
+    timeouts: { idleMs: 5_000, wallMs: 20_000 },
+  });
+  expect(result.stop.kind).toBe("done");
+  expect(argv(f.argvFile)).not.toContain("--no-lsp");
+  const installed = turnLspConfigPath(f.cwd);
+  expect(fs.readFileSync(installed, "utf8")).toBe(
+    fs.readFileSync(config, "utf8"),
+  );
+  return installed;
+}
+
+function ompArtifactLSPSession() {
+  it.skipIf(!Bun.which("yaml-language-server"))(
+    "validates a broken outcome.yaml with the generated artifact LSP config through an omp session",
+    async () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "omp-lsp-session-"));
+      const goalDir = path.join(root, "goal");
+      const recordDir = path.join(goalDir, "records", "r1");
+      fs.mkdirSync(recordDir, { recursive: true });
+      fs.writeFileSync(path.join(goalDir, "class.yaml"), "class: bigger\n");
+      const outcomePath = path.join(recordDir, "outcome.yaml");
+      fs.writeFileSync(outcomePath, "status: banana\nsummary: hi\n");
+      const { config } = await writeArtifactLsp(goalDir);
+      const f = fixture(config);
+      let client: YamlLspClient | undefined;
+      try {
+        const installed = await runOmpTurnWithLsp(f, config);
+        const server = lspServer(installed);
+        client = new YamlLspClient(
+          server.command,
+          server.args,
+          server.settings,
+          pathToFileURL(outcomePath).href,
+          pathToFileURL(goalDir).href,
+        );
+        await client.start();
+        const broken = await client.open("status: banana\nsummary: hi\n");
+        expect(broken.length).toBeGreaterThan(0);
+        expect(broken[0]?.message).toContain("done");
+        expect(broken[0]?.message).toContain("upscope");
+        const valid = await client.change("status: done\nsummary: ok\n");
+        expect(valid).toEqual([]);
+      } finally {
+        await client?.close();
+        f.cleanup();
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    },
+    30_000,
+  );
+}
 
 function ompArtifactLSPPart1() {
   it("installs the config into the turn cwd and drops --no-lsp", async () => {
