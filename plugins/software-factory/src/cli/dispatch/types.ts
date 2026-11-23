@@ -12,6 +12,7 @@ export interface ParsedArgs {
   goal?: string;
   iterations?: number;
   runConfig?: string;
+  pinGateOverride?: string;
   intent?: string;
   file?: string;
   step?: string;

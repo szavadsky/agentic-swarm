@@ -68,6 +68,7 @@ async function runCommand(parsed: ParsedArgs, deps: CliDeps): Promise<number> {
     goal: parsed.goal,
     iterations: parsed.iterations,
     runConfigPath: parsed.runConfig,
+    pinGateOverride: parsed.pinGateOverride,
     harnesses: deps.harnesses,
     harnessFactory:
       deps.harnessFactory ?? (injected ? undefined : createRealHarnesses),

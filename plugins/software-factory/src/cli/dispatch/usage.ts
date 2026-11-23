@@ -31,10 +31,14 @@ written. An existing intent is never overwritten.
 
 const RUN_USAGE = `
 factory run --repo <path> --goal <name> [--iterations N] [--run-config <path>]
+            [--pin-gate-override <reason>]
 
 Loads the three config layers, runs pre-flight (models, effort, fallbacks,
 binaries, roots, base gates), takes the goal lock, recovers interrupted records
 and stale worktrees, then alternates one architect boundary with task dispatch.
+Launching from a pin requires its gate.yaml to record an all-pass gate;
+--pin-gate-override <reason> launches a missing or red pin and records the
+reason in the run's records.
 State is derived from <artifactRoot>/<goal>/{tasks,records}; there is no state
 file. Exit: 0 done, 1 failure, 2 blocked, 3 iteration limit, 130/143 signal.
 `;
@@ -89,7 +93,7 @@ const SCHEMAS_USAGE = `
 factory schemas --out <dir>
 
 Writes every kernel file schema as JSON Schema, one <name>.schema.json per
-artifact: task, outcome, hold, class, repo, run and process. Creates the
+artifact: task, outcome, hold, class, repo, run, process and gate. Creates the
 directory. Editors and the artifact LSP consume these files. Exit: 0 written,
 1 error.
 `;

@@ -88,6 +88,13 @@ function expectKernelSchemaContent(out: string) {
     fs.readFileSync(path.join(out, "hold.schema.json"), "utf8"),
   ) as JsonSchema;
   expect(hold.required).toEqual(expect.arrayContaining(["slugs", "goal"]));
+
+  const gate = JSON.parse(
+    fs.readFileSync(path.join(out, "gate.schema.json"), "utf8"),
+  ) as JsonSchema;
+  expect(gate.required).toEqual(["rev", "typecheck", "tests", "at"]);
+  expect(gate.properties?.typecheck?.enum).toEqual(["pass", "fail"]);
+  expect(gate.additionalProperties).toBe(false);
 }
 
 function factorySchemasPart1() {
