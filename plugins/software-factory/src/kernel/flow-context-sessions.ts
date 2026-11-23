@@ -13,6 +13,7 @@ import { frontTarget, lastFrontRecord } from "./flow-context-front.js";
 import { bySeq } from "./flow-context-history.js";
 import { findStep, flowOf } from "./flow-context-step.js";
 import type { TurnTarget } from "./flow-context-targets.js";
+import { scriptMeta } from "./record.js";
 import { sessionCacheHot } from "./sessions.js";
 import type {
   Cause,
@@ -28,6 +29,9 @@ export interface CompactionReview {
   review: boolean;
   round: number;
 }
+
+/** Script record: a follow-up session could not resume, so the turn started de novo. */
+export const RESUME_FALLBACK_STEP = "resume-fallback";
 
 /**
  * Compaction is cache hygiene, not a gate; a failure keeps the uncompacted ref.
@@ -72,11 +76,12 @@ function followUpOf(step: FlowStep): FollowUp {
  * keeps the session across the switch only with `keepSession`, and only when
  * the portability graph admits the prior harness's session. Keyed on the step,
  * so an implementer and a reviewer sharing one alias never resume each other's
- * session. A first turn has no prior and starts de novo silently; a prior that
- * cannot be resumed (alias changed, cwd mismatch, a harness that cannot resume,
- * a non-portable crossing) starts de novo with the reason logged. Compaction
- * belongs to the turn that ended the session, so a resumed ref arrives
- * compacted unless that compaction failed.
+ * session. A first turn has no prior and starts de novo silently. A prior that
+ * cannot be resumed (alias changed, cwd mismatch, a harness that cannot
+ * resume, a non-portable crossing) is a logged kernel error record naming
+ * the harness pair, then the turn starts de novo with the rendered prompt and
+ * its links. Compaction belongs to the turn that ended the session, so a
+ * resumed ref arrives compacted unless that compaction failed.
  */
 export async function followUpSession(
   runtime: KernelRuntime,
@@ -98,22 +103,42 @@ export async function followUpSession(
   const prior = (
     keepsAcrossSwitch ? priors : priors.filter((r) => r.alias === target.alias)
   ).at(-1);
+  let fallback: string | undefined;
   if (!prior?.session) {
     const priorAlias = priors.at(-1)?.alias ?? "unknown";
+    fallback = `alias changed from "${priorAlias}" to "${target.alias}"`;
+  } else {
+    const blocker = await resumeBlocker(
+      runtime,
+      target,
+      prior.session,
+      worktree,
+    );
+    if (blocker) fallback = blocker;
+  }
+  if (fallback !== undefined) {
     console.warn(
       `[factory] follow-up "${task.slug}" step "${stepId}" starts de novo: ` +
-        `alias changed from "${priorAlias}" to "${target.alias}"`,
+        fallback,
+    );
+    const last = priors.at(-1)!;
+    await runtime.store.appendRecord(
+      scriptMeta(last.iteration, RESUME_FALLBACK_STEP, {
+        slug: task.slug,
+        round: last.round,
+        revision: task.revision,
+      }),
+      {
+        ok: false,
+        cause: makeCause(
+          "resume",
+          `${fallback}; the "${stepId}" turn of "${task.slug}" starts de novo`,
+        ),
+      },
     );
     return undefined;
   }
-  const blocker = await resumeBlocker(runtime, target, prior.session, worktree);
-  if (blocker) {
-    console.warn(
-      `[factory] follow-up "${task.slug}" step "${stepId}" starts de novo: ${blocker}`,
-    );
-    return undefined;
-  }
-  return prior.session;
+  return prior!.session;
 }
 
 /** The step's ended agent sessions for this task, oldest first. */
