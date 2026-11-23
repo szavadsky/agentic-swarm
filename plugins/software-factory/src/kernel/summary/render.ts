@@ -14,6 +14,7 @@ import {
   orNone,
   parkedCauseLines,
   perMergedCost,
+  qaCatchLine,
   spendTable,
 } from "./tables.js";
 
@@ -78,6 +79,7 @@ export function summaryMetricsLines(render: SummaryRender): string[] {
     costByRoleLine(render.named.roleNames),
     `- cost per merged task: ${perMergedCost(computed.costPerMergedTask, unpricedTurns)}; list ${perMergedCost(computed.listCostPerMergedTask, unpricedTurns)}`,
     `- work: ${computed.edits} files (+${computed.addedLines}/-${computed.removedLines}), ${computed.testRuns} test runs in ${computed.gateRuns} gate runs`,
+    qaCatchLine(computed.qaOnlyCatches),
     `- gate wall: ${(computed.gateWallMs / 1000).toFixed(1)}s gates, ${(computed.commitWallMs / 1000).toFixed(1)}s commits`,
     `- operator acts: ${computed.operatorActs} (${computed.humanInterventions} steers)`,
     ...budgetLines(render.budgetStop, unpricedTurns),

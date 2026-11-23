@@ -2,6 +2,7 @@
 
 import type { Usage } from "../../harness/types.js";
 import { addUsage, zeroUsage } from "../../harness/usage.js";
+import { MAX_QA_CATCH_SAMPLES, type QaOnlyCatches } from "../qa.js";
 import { emptyWasteAccounting } from "../waste.js";
 import type { WasteAccounting } from "../waste.js";
 import type {
@@ -48,6 +49,7 @@ interface TotalsAccumulator {
   architect: ArchitectMetrics;
   planReviewMarks: PlanReviewMarkCounts;
   waste: WasteAccounting;
+  qaOnlyCatches: QaOnlyCatches;
 }
 
 /** The empty accumulator a totals run starts from. */
@@ -76,6 +78,7 @@ function emptyTotals(): TotalsAccumulator {
     architect: emptyArchitect(),
     planReviewMarks: { helpful: 0, unhelpful: 0 },
     waste: emptyWasteAccounting(),
+    qaOnlyCatches: { count: 0, byTask: {}, sample: [] },
   };
 }
 
@@ -108,6 +111,14 @@ function sumIterations(
     totals.planReviewMarks.unhelpful +=
       iteration.planReviewMarks?.unhelpful ?? 0;
     sumWaste(totals.waste, iteration.waste);
+    totals.qaOnlyCatches.count += iteration.qaOnlyCatches.count;
+    for (const [task, count] of Object.entries(
+      iteration.qaOnlyCatches.byTask,
+    )) {
+      totals.qaOnlyCatches.byTask[task] =
+        (totals.qaOnlyCatches.byTask[task] ?? 0) + count;
+    }
+    totals.qaOnlyCatches.sample.push(...iteration.qaOnlyCatches.sample);
   }
 }
 
@@ -139,6 +150,15 @@ function totalsResult(
     planReviewMarks: totals.planReviewMarks,
     unpricedTurns: totals.unpricedTurns,
     waste: totals.waste,
+    qaOnlyCatches: {
+      count: totals.qaOnlyCatches.count,
+      byTask: Object.fromEntries(
+        Object.entries(totals.qaOnlyCatches.byTask).sort(([a], [b]) =>
+          a.localeCompare(b),
+        ),
+      ),
+      sample: totals.qaOnlyCatches.sample.slice(0, MAX_QA_CATCH_SAMPLES),
+    },
     incidents: totals.incidents,
     loopIncidents: totals.loopIncidents,
     humanInterventions: totals.humanInterventions,

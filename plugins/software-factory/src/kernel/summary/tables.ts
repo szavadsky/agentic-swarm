@@ -6,6 +6,7 @@ import { recordedBaseGates } from "../baseline.js";
 import { formatCause } from "../cause.js";
 import { materialOpenDebts } from "../derive.js";
 import { costText } from "../metrics.js";
+import type { QaOnlyCatches } from "../qa.js";
 import type {
   GroupMetrics,
   IncidentCounts,
@@ -241,6 +242,15 @@ export function costByRoleLine(
     )
     .join("; ");
   return `- cost by role: ${rows}`;
+}
+
+export function qaCatchLine(catches: QaOnlyCatches): string {
+  const perTask = Object.entries(catches.byTask).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
+  if (perTask.length === 0) return `- QA-only catches: ${catches.count}`;
+  const detail = perTask.map(([task, count]) => `${task}: ${count}`).join(", ");
+  return `- QA-only catches: ${catches.count} (${detail})`;
 }
 
 export function perMergedCost(
