@@ -1,10 +1,21 @@
 /** The command table and the process exit codes each command returns. */
 
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { loadConfigs } from "../../kernel/config.js";
+import {
+  type CanaryVerdict,
+  loadCanaryProven,
+  runCanary,
+} from "../../kernel/canary.js";
 import { formatCause } from "../../kernel/cause.js";
-import { runGoal } from "../../kernel/launch.js";
+import { loadConfigs, resolveGoalPaths } from "../../kernel/config.js";
 import type { LaunchResult } from "../../kernel/launch.js";
+import { runGoal } from "../../kernel/launch.js";
+import {
+  dryRunPrompts,
+  writePromptRenders,
+} from "../../kernel/prompt-dry-run.js";
 import { writePromptVariables } from "../../kernel/prompt-vars.js";
 import { writeKernelSchemas } from "../../kernel/schemas.js";
 import { benchmarkGoal, formatBenchmark } from "../benchmark.js";
@@ -20,8 +31,8 @@ import {
   createRealModelCatalog,
   resolveHarnessBinaries,
 } from "../harnesses.js";
-import type { CliDeps, CommandHandler, ParsedArgs } from "./types.js";
 import { parseCliArgs } from "./args.js";
+import type { CliDeps, CommandHandler, ParsedArgs } from "./types.js";
 import { ROOT_USAGE, usageFor } from "./usage.js";
 
 function exitCode(result: LaunchResult): number {
@@ -38,7 +49,8 @@ function printStatus(out: Awaited<ReturnType<typeof statusGoal>>): void {
     `goal ${out.goal}: ${out.state.goal} (iteration ${out.state.iteration})`,
   );
   for (const slug of Object.keys(out.state.tasks).sort()) {
-    const task = out.state.tasks[slug]!;
+    const task = out.state.tasks[slug];
+    if (task === undefined) continue;
     const commit = task.commit ? ` (commit ${task.commit.slice(0, 8)})` : "";
     const cause = task.cause ? ` — ${formatCause(task.cause)}` : "";
     console.log(`  ${slug}: ${task.status}${commit}${cause}`);
@@ -68,6 +80,7 @@ async function runCommand(parsed: ParsedArgs, deps: CliDeps): Promise<number> {
     goal: parsed.goal,
     iterations: parsed.iterations,
     runConfigPath: parsed.runConfig,
+    pinGateOverride: parsed.pinGateOverride,
     harnesses: deps.harnesses,
     harnessFactory:
       deps.harnessFactory ?? (injected ? undefined : createRealHarnesses),
@@ -134,6 +147,105 @@ async function benchmarkCommand(parsed: ParsedArgs): Promise<number> {
   return 0;
 }
 
+/** The fake-harness canary turn: a minimal trivial/task/bigger turn on the target. */
+function fakeCanaryTurn(deps: CliDeps, harnessId: string) {
+  return async (opts: {
+    harnessId: string;
+    modelId: string;
+    effort?: string;
+    kind: "trivial" | "task" | "bigger";
+    cwd: string;
+  }): Promise<CanaryVerdict> => {
+    const harness = deps.harnesses?.[harnessId];
+    if (!harness) throw new Error(`harness "${harnessId}" is not registered`);
+    const result = await harness.turn({
+      model: { id: opts.modelId, effort: opts.effort },
+      cwd: opts.cwd,
+      prompt: `canary ${opts.kind}`,
+      timeouts: { idleMs: 60_000, wallMs: 300_000 },
+    });
+    if (result.stop.kind !== "done")
+      return { pass: false, reason: `turn stopped with ${result.stop.kind}` };
+    return { pass: true };
+  };
+}
+
+/**
+ * `canary`: run the canary turns for one harness/model combination and record
+ * a pass where rotation reads it. The combination is named as
+ * `<harness/model>` or through `--alias`; architect legs add `--bigger`.
+ * The turns run in an isolated temp directory, never in a goal checkout, so
+ * the canary never merges into the goal branch.
+ */
+/** The combination a `canary` command names: an alias or `<harness/model>`. */
+function canaryCombination(parsed: ParsedArgs): {
+  harnessId: string;
+  modelId: string;
+  effort?: string;
+} {
+  const aliasName =
+    parsed.alias ??
+    (parsed.file?.includes("/") ? undefined : parsed.file);
+  const configs = loadConfigs(path.resolve(parsed.repo), {
+    runConfigPath: parsed.runConfig,
+  });
+  if (aliasName) {
+    const alias = configs.run.aliases[aliasName];
+    if (!alias)
+      throw new Error(
+        `alias "${aliasName}" not found in run config "${parsed.runConfig ?? ".factory/run.yaml"}"`,
+      );
+    return {
+      harnessId: alias.harness,
+      modelId: alias.model,
+      effort: alias.effort,
+    };
+  }
+  if (parsed.file?.includes("/")) {
+    const [harnessId, modelId] = parsed.file.split("/");
+    if (!harnessId || !modelId)
+      throw new Error("canary requires a <harness/model> combination");
+    return { harnessId, modelId };
+  }
+  throw new Error(
+    "canary requires a <harness/model> combination or --alias <name>",
+  );
+}
+
+async function canaryCommand(
+  parsed: ParsedArgs,
+  deps: CliDeps,
+): Promise<number> {
+  const repoRoot = path.resolve(parsed.repo);
+  const configs = loadConfigs(repoRoot, { runConfigPath: parsed.runConfig });
+  const paths = resolveGoalPaths(configs, repoRoot, parsed.goal ?? "canary");
+  const { harnessId, modelId, effort } = canaryCombination(parsed);
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "factory-canary-"));
+  try {
+    const proven = await loadCanaryProven(paths);
+    const verdict = await runCanary(
+      {
+        harnessId,
+        modelId,
+        effort,
+        bigger: parsed.file?.includes("bigger") ?? false,
+        cwd,
+      },
+      fakeCanaryTurn(deps, harnessId),
+      proven,
+      paths,
+    );
+    if (!verdict.pass) {
+      console.error(`canary ${harnessId}/${modelId}: fail`);
+      return 1;
+    }
+    console.log(`canary ${harnessId}/${modelId}: pass`);
+    return 0;
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 async function steerCommand(parsed: ParsedArgs): Promise<number> {
   if (!parsed.goal) throw new Error("steer requires --goal <name>");
   if (!parsed.file)
@@ -148,18 +260,20 @@ async function steerCommand(parsed: ParsedArgs): Promise<number> {
 }
 
 async function validateCommand(parsed: ParsedArgs): Promise<number> {
-  if (!parsed.file) throw new Error("validate requires a file path");
-  const result = await validateFile(parsed.file, {
+  const file = parsed.file ?? parsed.runConfig;
+  if (!file) throw new Error("validate requires a file path or --run-config");
+  const result = await validateFile(file, {
     step: parsed.step,
     repo: parsed.repo,
+    runConfig: parsed.runConfig,
   });
   for (const finding of result.findings) console.error(finding);
   if (result.findings.length > 0) return 1;
   if (result.stepIndependent)
     console.log(
-      `${parsed.file}: no --step and no started.yaml: step-independent checks only`,
+      `${file}: no --step and no started.yaml: step-independent checks only`,
     );
-  console.log(`${parsed.file}: valid`);
+  console.log(`${file}: valid`);
   return 0;
 }
 
@@ -180,15 +294,40 @@ function schemasCommand(parsed: ParsedArgs): number {
   return 0;
 }
 
+/** `prompts`: render every prompt for the loaded config, printing or writing them to a dir. */
+function promptsCommand(parsed: ParsedArgs): number {
+  if (!parsed.dryRun) throw new Error("prompts requires --dry-run");
+  const repoRoot = path.resolve(parsed.repo);
+  const config = loadConfigs(repoRoot, {
+    runConfigPath: parsed.runConfig,
+  });
+  const renders = dryRunPrompts(config, repoRoot);
+  if (parsed.out) {
+    const written = writePromptRenders(renders, parsed.out);
+    for (const file of written) console.log(file);
+    console.log(
+      `prompts: ${written.length} render(s) written to ${path.resolve(parsed.out)}`,
+    );
+  } else {
+    for (const render of renders) {
+      console.log(`===== ${render.name} =====`);
+      console.log(render.text);
+    }
+  }
+  return 0;
+}
+
 const COMMANDS: Record<string, CommandHandler> = {
   run: runCommand,
   init: initCommand,
   status: statusCommand,
+  canary: canaryCommand,
   benchmark: benchmarkCommand,
   steer: steerCommand,
   validate: validateCommand,
   variables: variablesCommand,
   schemas: schemasCommand,
+  prompts: promptsCommand,
 };
 
 /** Main dispatch entrypoint; each command maps to one kernel or mailbox call. */
@@ -208,12 +347,14 @@ export async function dispatch(
     const known = [
       "init",
       "run",
+      "canary",
       "status",
       "benchmark",
       "steer",
       "validate",
       "schemas",
       "variables",
+      "prompts",
     ];
     if (!parsed.command || known.includes(parsed.command)) {
       console.log(usageFor(parsed.command));

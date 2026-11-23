@@ -10,12 +10,15 @@ import {
   BACKENDS,
   type BackendGoal,
   bareFiles,
+  branchFiles,
   bareGit,
   gitIn,
   historyFiles,
   makeBackendGoal,
   privateHits,
   removeGoal,
+  runClosingLaunch,
+  runFirstLaunch,
   runKernelScenario,
   tempGoalPaths,
   tracked,
@@ -79,7 +82,7 @@ async function expectFolderLayout(goal: BackendGoal): Promise<void> {
   expect(fs.existsSync(store.records.checksLog(checks!))).toBe(true);
 }
 
-/** The same-repo backend commits its artifacts on the goal branch. */
+/** The same-repo backend commits its artifacts in the hosting checkout and lands them on the goal branch. */
 function expectSameRepoLayout(goal: BackendGoal): void {
   const files = tracked(goal.repo);
   expect(files).toContain(".factory/artifacts/demo/tasks/alpha.md");
@@ -90,6 +93,26 @@ function expectSameRepoLayout(goal: BackendGoal): void {
   expect(files).toContain(".factory/artifacts/demo/iterations/1/summary.md");
   expect(files).toContain(".factory/artifacts/demo/iterations/2/summary.md");
   expect(privateHits(files)).toEqual([]);
+  // The goal branch carries the same writes, so a merge of the goal has them.
+  const branch = branchFiles(goal.repo, "factory/demo");
+  for (const file of [
+    ".factory/artifacts/demo/tasks/alpha.md",
+    ".factory/artifacts/demo/plan.md",
+    ".factory/artifacts/demo/iterations/1/summary.md",
+    ".factory/artifacts/demo/iterations/2/summary.md",
+  ]) {
+    expect(branch).toContain(file);
+  }
+  expect(branch.some((file) => /records\/[^/]+\/end\.yaml$/.test(file))).toBe(
+    true,
+  );
+  expect(privateHits(branch)).toEqual([]);
+  expect(
+    goal.repo.git([
+      "show",
+      "factory/demo:.factory/artifacts/demo/tasks/alpha.md",
+    ]).stdout,
+  ).toContain("slug: alpha");
   expect(privateHits(historyFiles(goal.repo))).toEqual([]);
   expect(goal.repo.git(["status", "--porcelain"]).stdout).toBe("");
   expect(goal.repo.git(["log", "-1", "--format=%s"]).stdout).toBe(
@@ -182,6 +205,27 @@ async function publishSteer(backend: ArtifactBackend): Promise<void> {
   }
 }
 
+/** An operator artifact write lands before the next launch follows base. */
+async function relaunchesOverOperatorEdit(): Promise<void> {
+  const goal = await makeBackendGoal("same-repo");
+  try {
+    await runFirstLaunch(goal);
+    const store = createArtifactStore(tempGoalPaths(goal.repo), {});
+    await store.writeFile("plan.md", "Edited by an operator.\n");
+    await runClosingLaunch(goal);
+    expect(
+      goal.repo
+        .git(["show", "factory/demo:.factory/artifacts/demo/plan.md"])
+        .stdout.trim(),
+    ).toBe("Edited by an operator.");
+    expect(branchFiles(goal.repo, "factory/demo")).toContain(
+      ".factory/artifacts/demo/tasks/alpha.md",
+    );
+  } finally {
+    removeGoal(goal);
+  }
+}
+
 describe("KERNEL0 scenario over every artifact backend", () => {
   describe("merge", () => {
     for (const backend of BACKENDS) {
@@ -191,6 +235,39 @@ describe("KERNEL0 scenario over every artifact backend", () => {
         60_000,
       );
     }
+  });
+
+  describe("same-repo landing", () => {
+    it("lands the first launch's writes on the goal branch before the relaunch", async () => {
+      const goal = await makeBackendGoal("same-repo");
+      try {
+        await runFirstLaunch(goal);
+        const landed = branchFiles(goal.repo, "factory/demo");
+        for (const file of [
+          ".factory/artifacts/demo/plan.md",
+          ".factory/artifacts/demo/tasks/alpha.md",
+          ".factory/artifacts/demo/iterations/1/summary.md",
+        ]) {
+          expect(landed).toContain(file);
+        }
+        expect(
+          landed.some((file) => /records\/[^/]+\/end\.yaml$/.test(file)),
+        ).toBe(true);
+        // The relaunch reads what the first launch wrote and lands its own
+        // last writes on the same branch.
+        await runClosingLaunch(goal);
+        expect(branchFiles(goal.repo, "factory/demo")).toContain(
+          ".factory/artifacts/demo/iterations/2/summary.md",
+        );
+      } finally {
+        removeGoal(goal);
+      }
+    }, 60_000);
+    it(
+      "relaunches over an artifact changed after the first launch",
+      () => relaunchesOverOperatorEdit(),
+      60_000,
+    );
   });
 
   describe("steer", () => {

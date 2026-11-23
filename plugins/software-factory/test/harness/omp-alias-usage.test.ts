@@ -37,13 +37,13 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
   if (frame.type === "prompt") {
     prompted = true;
     const served = [
-      message("openrouter", "baidu/ernie-5.5-flash-preview:free", {
+      message("price", "tiny-preview:free", {
         input: 100, output: 10, cacheRead: 5, cacheWrite: 0,
         reasoningTokens: 2, cost: { total: 0 },
       }),
     ];
     if (model !== "@one") {
-      served.push(message("opencode-go", "deepseek-v4.1-flash", {
+      served.push(message("local-host", "mini-flash", {
         input: 200, output: 20, cacheRead: 7, cacheWrite: 3,
         reasoningTokens: 4, cost: { total: 0.02 },
       }));
@@ -57,8 +57,8 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
   } else if (frame.type === "get_last_assistant_text") {
     respond({ text: "ok" });
   } else if (frame.type === "get_state") {
-    const provider = model.startsWith("@") ? "openrouter" : "opencode-go";
-    const id = model.startsWith("@") ? "baidu/ernie-5.5-flash-preview:free" : "beam-free";
+    const provider = model.startsWith("@") ? "price" : "local-host";
+    const id = model.startsWith("@") ? "tiny-preview:free" : "lamp-mini-free";
     respond({ sessionId: "s1", sessionFile, thinkingLevel: "low", model: { provider, id } });
   } else {
     respond({});
@@ -77,7 +77,12 @@ async function turn(
   fs.writeFileSync(binary, FAKE_OMP, { mode: 0o755 });
   return {
     tmp,
-    harness: new OmpHarness({ binary, sessionDir, readyTimeoutMs: 5_000 }),
+    harness: new OmpHarness({
+      binary,
+      sessionDir,
+      retention: "short",
+      readyTimeoutMs: 5_000,
+    }),
   };
 }
 
@@ -100,7 +105,7 @@ function registerOmpAliasTurnUsagePart1(): void {
       expect(result.stop).toEqual({ kind: "done" });
       expect(result.served).toEqual([
         {
-          model: { id: "openrouter/baidu/ernie-5.5-flash-preview:free" },
+          model: { id: "price/tiny-preview:free" },
           usage: {
             in: 100,
             cacheRead: 5,
@@ -112,7 +117,7 @@ function registerOmpAliasTurnUsagePart1(): void {
           },
         },
         {
-          model: { id: "opencode-go/deepseek-v4.1-flash" },
+          model: { id: "local-host/mini-flash" },
           usage: {
             in: 200,
             cacheRead: 7,
@@ -136,7 +141,7 @@ function registerOmpAliasTurnUsagePart1(): void {
       });
       // The record keeps the configured model for routing and admission.
       expect(result.model).toEqual({
-        id: "openrouter/baidu/ernie-5.5-flash-preview:free",
+        id: "price/tiny-preview:free",
         effort: "low",
       });
       // A native hop is one harness call, never an extra kernel attempt.
@@ -161,7 +166,7 @@ function registerOmpAliasTurnUsagePart2(): void {
       expect(result.stop).toEqual({ kind: "done" });
       expect(result.served).toEqual([
         {
-          model: { id: "openrouter/baidu/ernie-5.5-flash-preview:free" },
+          model: { id: "price/tiny-preview:free" },
           usage: {
             in: 100,
             cacheRead: 5,
@@ -191,10 +196,10 @@ function registerOmpAliasTurnUsagePart2(): void {
 
 function registerOmpAliasTurnUsagePart3(): void {
   it("leaves a non-alias turn on its session-stats aggregate", async () => {
-    const { tmp, harness } = await turn("opencode-go/beam-free");
+    const { tmp, harness } = await turn("local-host/lamp-mini-free");
     try {
       const result = await harness.turn({
-        model: { id: "opencode-go/beam-free" },
+        model: { id: "local-host/lamp-mini-free" },
         cwd: tmp,
         prompt: "go",
         timeouts: { idleMs: 0, wallMs: 10_000 },
@@ -211,7 +216,7 @@ function registerOmpAliasTurnUsagePart3(): void {
         costUsd: 0.05,
       });
       expect(result.model).toEqual({
-        id: "opencode-go/beam-free",
+        id: "local-host/lamp-mini-free",
         effort: "low",
       });
     } finally {

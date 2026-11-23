@@ -5,6 +5,7 @@ import type {
   CompactResult,
   Harness,
   LiveAgents,
+  ModelProbe,
   ModelRef,
   SessionRef,
   Stop,
@@ -18,13 +19,17 @@ export const DEFAULT_FAKE_CAPS: Caps = {
   compact: "local",
   subagents: "none",
   structuredOutput: "none",
-  effort: [],
   usage: { cache: true, cost: true },
 };
 
 export interface FakeHarnessOptions {
   id?: string;
   caps?: Partial<Caps>;
+  /**
+   * When given, the fake answers `probe` with these effort levels for every
+   * model; absent keeps the fake probe-less and pre-flight's static checks.
+   */
+  probe?: { effort: readonly string[] | null };
   /**
    * The live handle the fake offers to a request that asks for `onLive`; tests
    * use it to simulate children, spawns and steers.
@@ -150,6 +155,12 @@ export class FakeHarness implements Harness {
   public readonly id: string;
   public readonly calls: TurnRequest[] = [];
   public readonly compactions: SessionRef[] = [];
+  /**
+   * The fake's live probe, answering every model with the canned answer when
+   * the constructor was given one; absent keeps the fake probe-less so
+   * pre-flight's static checks apply. Tests may reassign it.
+   */
+  public probe?: (model: ModelRef) => Promise<ModelProbe>;
   private readonly capsConfig: Caps;
   private readonly handlers: {
     handler: FakeTurnHandler;
@@ -165,6 +176,14 @@ export class FakeHarness implements Harness {
   constructor(opts: FakeHarnessOptions = {}) {
     this.id = opts.id ?? "fake";
     this.live = opts.live;
+    const probeEffort = opts.probe?.effort;
+    if (probeEffort !== undefined) {
+      this.probe = async () => ({
+        listed: true,
+        available: [],
+        effort: probeEffort,
+      });
+    }
     this.capsConfig = {
       ...DEFAULT_FAKE_CAPS,
       ...opts.caps,
@@ -238,12 +257,12 @@ export class FakeHarness implements Harness {
     // restarts the cache lifetime, as the real adapters report. Only a
     // handler-set session (a different ref than the request carried) passes
     // through untouched, so tests can stage a cold transcript.
-    const overridden =
-      outcome.session !== undefined && outcome.session !== req.session;
-    const base = overridden
-      ? outcome.session!
-      : (req.session ?? this.newSession(req));
-    const session = overridden
+    const override =
+      outcome.session !== undefined && outcome.session !== req.session
+        ? outcome.session
+        : undefined;
+    const base = override ?? req.session ?? this.newSession(req);
+    const session = override
       ? base
       : { ...base, lastRequestStartedAt: new Date().toISOString() };
     this.sessions.set(session.id, session);

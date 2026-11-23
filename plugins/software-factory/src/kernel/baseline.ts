@@ -55,7 +55,7 @@ export interface BaseGateState {
  * red record cannot be inherited into tasks that start from a newer head.
  */
 export function recordedBaseGates(
-  records: StepRecord[],
+  records: readonly StepRecord[],
 ): BaseGateState | undefined {
   const latest = records
     .filter(
@@ -73,6 +73,24 @@ export function recordedBaseGates(
     ok: latest.ok !== false,
     checks: latest.checks,
   };
+}
+
+/**
+ * The base the earliest pre-flight run recorded, the commit the goal started from.
+ * Later launches record their own heads, so only the earliest run is the goal start.
+ */
+export function recordedGoalStart(
+  records: readonly StepRecord[],
+): string | undefined {
+  return records
+    .filter(
+      (r) =>
+        (r.step === "baseline" || r.step === BASELINE_INFRA_STEP) &&
+        r.actor === "script" &&
+        r.endedAt &&
+        r.base,
+    )
+    .sort((a, b) => a.seq - b.seq)[0]?.base;
 }
 
 /** What a prompt says when pre-flight recorded no trustworthy base run. */
@@ -242,7 +260,7 @@ async function runBaseGates(
     }
     const checks: CheckResult[] = [];
     for (const gate of configs.repo.gates) {
-      const { res, check } = await runDeclaredGate(repoRoot, dir, gate);
+      const { res, check } = await runDeclaredGate(dir, gate);
       checks.push(gateCheck(gate, res, check));
     }
     return checks;

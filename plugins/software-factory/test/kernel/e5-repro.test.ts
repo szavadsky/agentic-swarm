@@ -16,6 +16,7 @@ import {
   outcome,
   setupFlowRepo,
   scriptStallLeave,
+  whenTurn,
   writeTask,
 } from "./s2-helpers.js";
 import { formatCause } from "../../src/kernel/cause.js";
@@ -464,6 +465,14 @@ async function failsMergeWhoseNewFailureHidesPart3(
   await drive({ kind: "merge", slug: "task" });
   await drive({ kind: "step", slug: "task", step: "implement", round: 1 });
   await drive({ kind: "merge", slug: "task" });
+  // The gate fix is spent, so the wave-end steward owns the red merged result.
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(outcome({ summary: "steward found no repair" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "steward" }) },
+  );
   scriptStallLeave(harness, ["task"]);
   const result = await runDispatch(runtime, { iteration: 1 });
   expect(result.reason).toBe("boundary");
@@ -484,7 +493,7 @@ async function failsMergeWhoseNewFailureHidesPart3(
   expect(merges.map((r) => r.ok)).toEqual([false, false]);
   expect(mergeChecks.map((r) => r.ok)).toEqual([false, false]);
   expect(mergeChecks[0]!.checks![0]!.output).toContain("reason Y");
-  expect(harness.calls.length).toBe(4);
+  expect(harness.calls.length).toBe(5);
   expect(
     repo.git(["show", "factory/demo:feature.txt"], { allowFail: true }).code,
   ).not.toBe(0);

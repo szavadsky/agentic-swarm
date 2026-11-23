@@ -1,7 +1,8 @@
 import { makeCause } from "../cause.js";
 import { PLAN_CHECK_STEP } from "../plan-check.js";
 import { appendCancel } from "../record.js";
-import { doneWhen, parseTaskFile } from "../tasks.js";
+import { doneWhen } from "../task-material.js";
+import { parseTaskFile } from "../tasks.js";
 import type {
   KernelRuntime,
   PlanCheckFollowUp,

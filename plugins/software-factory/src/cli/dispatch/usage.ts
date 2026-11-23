@@ -6,17 +6,20 @@ software-factory
 Commands:
   init                     Create the repo config, goal directory and intent
   run                      Run bounded iterations of one goal
+  canary                   Run the canary turns and record a pass for rotation
   status                   Show derived state, parked causes and the last summary
   benchmark                Print the benchmark rows for one goal's artifacts
   steer                    Drop a steering file into the goal inbox
   validate                 Validate one schema-enforced file with the gate's validators
   schemas                  Write every kernel schema as JSON Schema
   variables                Render prompts/VARIABLES.md from the typed descriptor
+  prompts                  Render every prompt for the loaded config (--dry-run)
 
 Options:
   --repo <path>            Repository root (defaults to the current directory)
   --goal <name>            Goal directory name under the repo's artifact root
-  --out <path>             Output directory for \`schemas\`, file for \`variables\`
+  --out <path>             Output directory for \`schemas\` and \`prompts\`, file for \`variables\`
+  --dry-run                Render without launching a turn (for \`prompts\`)
   --help, -h               Show this help message
   --version, -v            Show version
 `;
@@ -31,12 +34,26 @@ written. An existing intent is never overwritten.
 
 const RUN_USAGE = `
 factory run --repo <path> --goal <name> [--iterations N] [--run-config <path>]
+            [--pin-gate-override <reason>]
 
 Loads the three config layers, runs pre-flight (models, effort, fallbacks,
 binaries, roots, base gates), takes the goal lock, recovers interrupted records
 and stale worktrees, then alternates one architect boundary with task dispatch.
+Launching from a pin requires its gate.yaml to record an all-pass gate;
+--pin-gate-override <reason> launches a missing or red pin and records the
+reason in the run's records.
 State is derived from <artifactRoot>/<goal>/{tasks,records}; there is no state
 file. Exit: 0 done, 1 failure, 2 blocked, 3 iteration limit, 130/143 signal.
+`;
+
+const CANARY_USAGE = `
+factory canary <harness/model> | --alias <name> [bigger]
+
+Runs a trivial goal and a standalone task against the named combination and
+records a pass where rotation reads it; --alias resolves the combination from
+the run config; bigger adds the small bigger goal architect legs need. The
+turns run in an isolated temp directory and never merge into the goal branch.
+Exit: 0 pass, 1 fail.
 `;
 
 const STATUS_USAGE = `
@@ -65,12 +82,17 @@ at the next iteration boundary and answers in mailbox/outbox. A leading
 `;
 
 const VALIDATE_USAGE = `
-factory validate [--step <id>] <file>
+factory validate [--step <id>] [--run-config <file>] [<file>]
 
 Validates one schema-enforced file with the same validators as the
 schema-validation gate: tasks/*.md (with its directory's dependency graph and
 flow existence against the merged process config), class.yaml, outcome.yaml,
-mailbox/holds/*.yaml, repo.yaml, run.yaml and process.yaml. --step names the
+mailbox/holds/*.yaml, repo.yaml, run.yaml and process.yaml. A repo, process
+or run file also gets the cross-layer checks — required aliases present,
+task-type flow/schema names known, quota pools defined — without launching
+a harness. --run-config <file> names a run config explicitly, including a file
+not named run.yaml, and is the validated file when no positional file is given.
+--step names the
 flow step an outcome is given for and overrides the step in the sibling
 started.yaml; a standalone outcome without either gets step-independent checks
 only. Exit: 0 valid, 1 invalid or unknown kind.
@@ -85,11 +107,19 @@ compare the written file with the render and fail when they differ, so a
 variable change is one descriptor line plus this render. Exit: 0 written.
 `;
 
+const PROMPTS_USAGE = `
+factory prompts --dry-run [--repo <path>] [--run-config <path>] [--out <dir>]
+
+Renders every prompt the loaded config names, one \`<name>.md\` file per
+render under --out; without --out the renders go to stdout. Exit: 0 written,
+1 error.
+`;
+
 const SCHEMAS_USAGE = `
 factory schemas --out <dir>
 
 Writes every kernel file schema as JSON Schema, one <name>.schema.json per
-artifact: task, outcome, hold, class, repo, run and process. Creates the
+artifact: task, outcome, hold, class, repo, run, process and gate. Creates the
 directory. Editors and the artifact LSP consume these files. Exit: 0 written,
 1 error.
 `;
@@ -97,11 +127,13 @@ directory. Editors and the artifact LSP consume these files. Exit: 0 written,
 export function usageFor(command: string | undefined): string {
   if (command === "init") return INIT_USAGE;
   if (command === "run") return RUN_USAGE;
+  if (command === "canary") return CANARY_USAGE;
   if (command === "status") return STATUS_USAGE;
   if (command === "benchmark") return BENCHMARK_USAGE;
   if (command === "steer") return STEER_USAGE;
   if (command === "validate") return VALIDATE_USAGE;
   if (command === "schemas") return SCHEMAS_USAGE;
   if (command === "variables") return VARIABLES_USAGE;
+  if (command === "prompts") return PROMPTS_USAGE;
   return ROOT_USAGE;
 }

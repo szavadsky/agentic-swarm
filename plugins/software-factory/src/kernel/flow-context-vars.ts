@@ -94,6 +94,11 @@ function priorFindings(
   return review?.outcome ? formatReviewFindings(review.outcome) : "";
 }
 
+/** The task's environment notes as prompt bullet lines; empty when it has none. */
+function formatEnvNotes(notes: string[] | undefined): string {
+  return (notes ?? []).map((note) => `- ${note}`).join("\n");
+}
+
 /** The task and worktree facts every turn renders. */
 function commonVars(
   runtime: KernelRuntime,
@@ -110,6 +115,7 @@ function commonVars(
     worktree,
     // Where a spike commits its finding; empty for every other task.
     report_path: task.kind === "spike" ? spikeReportPath(task.slug) : "",
+    env_notes: formatEnvNotes(task.envNotes),
     setup_command: runtime.configs.repo.setup.join(" && ") || "none",
     gate_commands:
       runtime.configs.repo.gates
@@ -150,8 +156,8 @@ export function promptVars(
     // The standalone escalation ask for the reviewer; empty when this task is
     // part of an architect plan. The implementer template ignores it.
     upscope_ask: standaloneUpscopeAsk(runtime, task),
-    // A de-novo turn carries no follow-up notice; the trivial path overrides
-    // this with `trivialResumeNote` before rendering the implement prompt.
+    // A relaunched or trivial turn overrides it with `resumeNote` before
+    // rendering the implement prompt.
     resume_note: "",
     // QA carries its own kernel schema; every other step delivers the task
     // type's schema (a spike and a development task may differ even when the

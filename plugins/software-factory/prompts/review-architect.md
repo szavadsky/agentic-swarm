@@ -1,14 +1,12 @@
 {% include 'architect-assignment' %}
 
-{% include 'plan-standard' %}
-
-{% include 'plan-rules' %}
+{% include 'architect-body' %}
 
 ## Review
 
 You review the architect's plan against the goal's intent and the iteration's context pack. The plan is the product.
 
-The assignment, bounds, plan standard and rules above are what the plan must meet; you judge, never edit.
+The architect's assignment and whole body above are what the plan must meet; you judge, never edit.
 
 ### Focus, in order
 
@@ -32,8 +30,6 @@ One finding per entry, each naming the plan line or bullet and what would satisf
 Report only findings you can evidence from the plan, the intent, the pack or the repo; a wrong or noisy finding costs more than it saves.
 
 The kernel numbers the findings technical first, then plan notes, for the architect's marks.
-
-{% include 'outcome' %}
 
 ## This turn
 

@@ -12,16 +12,17 @@ Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable
 - `implementer` — `cleanliness-revision`, `implementer-body`, `clean-code`, `scope` (`plan-read-only`), `calibration`, `outcome`
 - `qa` — `implementer-body`, `finding-standards`, `outcome`
 - `reviewer` — `<author>-body` (`implementer-body` by default), `review-<author>` duties, `review-<author>-turn` inputs, `verdict`
-- `review-architect` — `architect-assignment`, `plan-standard` (`task-size`), `plan-rules`, `finding-standards`, `outcome`
+- `review-architect` — `architect-assignment` (`architect-bounds`), `architect-body` (`architect-turn`, `plan-standard` (`task-size`), `architect-scope` (`plan-rules`, `calibration`)), `finding-standards`, `outcome`
 - `architect-review-return` — `architect-assignment`, `plan-review-marks`, `calibration`, `outcome`
 - `digest` — `calibration`, `outcome`
 - `steward` — `clean-code`, `calibration`, `outcome`
 - `plan-checker` — `calibration`, `outcome`
 - `pack-preparer` — `calibration`, `outcome`
+- `scout` — `plan-read-only`, `calibration`, `outcome`
 
-The shared definitions exist once as partials: `scope` (the predicted-area rule: out-of-area judgement, upscope condition; includes `plan-read-only`), `plan-read-only` (the plan, intent, other task files and records are read-only), `task-size` (what one task is: one implementer session, one seam, one reviewable diff, one done-when, and the split/merge criteria; included by `front`, `plan-standard` and `pm`), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract, shape rendered from the kernel outcome schema), `task-frontmatter` (the task-file frontmatter shape rendered from the kernel task schema, plus the configured task types and tiers; included by the authoring roles), `clean-code` (the code standard), `remarkable` (the remarkable definition), `finding-standards` (the no-praise, no-restating, no-taste rule shared by both reviews), `plan-review-marks` (the plan-review mark meaning, shared by the architect's turn and return), `spike-report-general` (what a spike's done-when says; included by `pm` and `architect-body`), `verdict` (which step each of `verdict` and `decision` belongs to, for review and architect steps) and the role bodies `implementer-body` and `architect-body` (everything before the role's turn block; a reviewer includes its author's body by role name, so the plan review reuses the reviewer template over `architect-body`).
+The shared definitions exist once as partials: `scope` (the predicted-area rule: out-of-area judgement, upscope condition; includes `plan-read-only`), `plan-read-only` (the plan, intent, other task files and records are read-only), `task-size` (what one task is: one implementer session, one seam, one reviewable diff, one done-when, and the split/merge criteria; included by `front`, `plan-standard` and `pm`), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract, shape rendered from the kernel outcome schema), `task-frontmatter` (the task-file frontmatter shape rendered from the kernel task schema, plus the configured task types and tiers; included by the authoring roles), `clean-code` (the code standard; the repo layer's `codingRules` file replaces its content per repo while the fragment name stays fixed, so implementer, QA, steward and adjudicator prompts render the same rule text through their shared bodies), `remarkable` (the remarkable definition), `finding-standards` (the no-praise, no-restating, no-taste rule shared by both reviews), `plan-review-marks` (the plan-review mark meaning, shared by the architect's turn and return), `spike-report-general` (what a spike's done-when says; included by `pm` and `architect-body`), `verdict` (which step each of `verdict` and `decision` belongs to, for review and architect steps) and the role bodies `implementer-body` and `architect-body` (everything before the role's turn block; a reviewer includes its author's body by role name, so the plan review reuses the reviewer template over `architect-body`).
 
-The architect's body is assembled from fragments so a reviewer can share only the assignment and a subarchitect can share the whole body: `architect-bounds` (the bounds), `architect-turn` (the consult's turn order, completeness check, stop decision and plan edit), `plan-standard` (what the plan carries and its granularity, with `task-size`), `plan-rules` (debt, parked work and ADRs) and `architect-scope` (tiers and calibration, with `plan-rules` inside). `architect-body` is that shared body plus `outcome`; `architect-assignment` adds the top architect's role line before the bounds. `architect-goal` adds the top's scope (the whole goal, the register at depth 2, steers), and `architect-epic` adds the subarchitect's epic scope and upward brief. The plan reviewer includes `architect-assignment`, `plan-standard` and `plan-rules`; the architect's return includes `architect-assignment`.
+The architect's body is assembled from fragments so a reviewer and a subarchitect share the whole body: `architect-bounds` (the bounds), `architect-turn` (the consult's turn order, completeness check, stop decision and plan edit), `plan-standard` (what the plan carries and its granularity, with `task-size`), `plan-rules` (debt, parked work and ADRs) and `architect-scope` (tiers and calibration, with `plan-rules` inside). `architect-body` is that shared body plus `outcome`; `architect-assignment` adds the top architect's role line before the bounds. `architect-goal` adds the top's scope (the whole goal, the register at depth 2, steers), and `architect-epic` adds the subarchitect's epic scope and upward brief. The plan reviewer includes `architect-assignment` and the whole `architect-body`; the architect's return includes `architect-assignment`.
 
 `calibration` is the default calibration partial. The process config may replace its content per repo; the prompt template does not change.
 
@@ -94,6 +95,7 @@ One epic's architect, below the top architect: the same bounds, turn order, plan
 - `task_types` — configured task types with their flow, kind and schema; renderer default
 - `tiers` — run-config alias names; renderer default
 - `class_types` — class-to-task-type mapping, rendered by the front turn
+- `code_map_path` — path of the code map a `when: [bigger]` scout step wrote; `none` when no scout ran
 
 ## intent.md
 
@@ -131,8 +133,9 @@ The turn's record carries the unified diff of the edit; the next architect pack 
 - `cleanliness_revision` — `true` when this turn is a cleanliness revision turn; selects `cleanliness-revision`
 - `front_pack` — path to the front's context pack for a front-classified trivial or task goal; empty string when no front classified this task
 - `worktree` — path to the task worktree to edit
-- `resume_note` — follow-up notice for a turn resumed in the front's session: the task branch plus the absolute-path rules; empty string on a de-novo turn
+- `resume_note` — follow-up notice for a relaunched or trivial turn: the task branch and the resume fragment; empty string on a de-novo turn
 - `report_path` — repo-relative path a spike commits its finding to (`.factory/spikes/<slug>.md`); empty string on a development task; when set, it also opens the prompt with the commit-first sentence
+- `env_notes` — the task file's environment notes as `- ` bullet lines (infra facts, known flakes, workarounds); empty string when the task has none
 - `setup_command` — worktree bootstrap command (dependencies etc.); `none` when not needed
 - `gate_commands` — configured compile/lint/test commands as `- id: command` lines; `none` when empty
 - `base_gates` — the base tree's recorded gate result: commit plus `green`, or the pre-existing failing checks; `not recorded` when pre-flight has no trustworthy base run
@@ -222,7 +225,7 @@ The review-adjudication prompt: a step after a review re-judges that review's `c
 
 ## review-architect.md
 
-The plan-review prompt the architecture flow renders on each reviewer alias. It composes the architect's assignment and plan standard from fragments, adds the review focus, and delivers `planReview` findings (`technical`, `planNotes`) with no verdict. It never edits the plan.
+The plan-review prompt the architecture flow renders on each reviewer alias. It composes the architect's assignment and whole body from fragments, adds the review focus, and delivers `planReview` findings (`technical`, `planNotes`) with no verdict. It never edits the plan.
 
 - `iteration` — 1-based iteration number of this launch
 - `intent_path` — path to the goal's `intent.md`
@@ -233,7 +236,7 @@ The plan-review prompt the architecture flow renders on each reviewer alias. It 
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome YAML skeleton narrowed to `status`, `summary`, `concerns`, `steerAnswers`, `debtClosed` and `planReview`; supplied by the turn
 - `task_types` — configured task types with their flow, kind and schema, read by the included plan standard; renderer default
-- `tiers` — run-config alias names, read by the included plan standard; renderer default
+- `tiers` — run-config alias names, read by the included architect scope; renderer default
 
 ## architect-review-return.md
 
@@ -270,6 +273,7 @@ The digest scout appends loops, failures and interventions; it does not restate 
 - `branch` — task branch the integration head merges into
 - `integration_head` — integration head sha the branch must absorb
 - `conflicts` — conflicted files, comma-separated; `none` when the merge needs no resolution
+- `gate_log_path` — path to the red merged result's gate log when this branch is a red-after-merge candidate; `none` when the merge needs no gate repair
 - `gate_commands` — configured gate commands as `- id: command` lines; `none` when empty
 - `base_gates` — the base tree's recorded gate result: commit plus `green`, the pre-existing failing checks, or `not recorded`
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
@@ -303,6 +307,16 @@ The flow's `resolve` step renders this same prompt with the same variables: the 
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default
 
+## scout.md
+
+- `iteration` — 1-based iteration number of this launch
+- `intent_path` — path to the goal's `intent.md`; the map's subject
+- `checkout` — path to the stable goal checkout (integration worktree) being mapped
+- `code_map_path` — path of the code map to write, with one entry per directory; the one artifact the turn authors (the outcome file is the other)
+- `outcome_path` — path where the outcome file must be written when the harness asks for a file
+- `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
+- `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default
+
 ## delivery-repair.md
 
 The default in-session repair ask, rendered by the kernel when a turn delivers no outcome, no verdict or decision, or (architect) no plan. Process config names the template per step (`repairPrompt`); a step that names none renders this one. A repo may shadow it like any template. It is not a role prompt: it is rendered directly, never included by another prompt, and it includes `repair-ask` for the header, findings and outcome contract, then adds its closing instruction. It includes `outcome` for the contract and, unless a bare done delivers, `verdict` for the verdict/decision usage line. Its `outcome_schema` is narrowed to the fields that turn delivers — the base shape, the prompt's reporting fields, and the one field its expectation gates — so a bare done is never asked for a verdict.
@@ -326,3 +340,10 @@ The architect's repair ask, named by the architect boundary step's `repairPrompt
 - `outcome_path` — path where the corrected outcome must be written
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome YAML skeleton from the kernel schema, narrowed to the fields this turn delivers; supplied by the repair ask
+
+## resume.md
+
+- `branch` — task branch the relaunch continues; empty when none
+- `reason` — `relaunch` after an interruption, `trivial` in the front's session
+- `session_cwd` — directory the resumed session's tools run in; trivial turns only
+- `worktree` — absolute worktree a trivial turn must use; trivial turns only

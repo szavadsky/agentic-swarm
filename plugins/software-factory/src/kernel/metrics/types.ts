@@ -2,6 +2,7 @@
 
 import type { Usage } from "../../harness/types.js";
 import type { PriceTable } from "../pricing.js";
+import type { QaOnlyCatches } from "../qa.js";
 import type { SummaryStatus } from "../summary.js";
 import type { State, StepRecord } from "../types.js";
 import type { WasteAccounting, WasteCounts } from "../waste.js";
@@ -111,12 +112,16 @@ export interface IterationMetrics {
   costPerMergedTask: number | null;
   /** List-price equivalent per merged task; same partial rule as the priced one. */
   listCostPerMergedTask: number | null;
+  /** Sum of only the figures the harnesses reported; null when none did. */
+  harnessCostPerMergedTask: number | null;
   roles: Record<string, RoleMetrics>;
   aliases: Record<string, AliasMetrics>;
   models: Record<string, ModelMetrics>;
   architect: ArchitectMetrics;
   /** Architect marks on plan-review findings in this iteration. */
   planReviewMarks: PlanReviewMarkCounts;
+  /** QA findings no earlier gate or reviewer finding matched, counted per task. */
+  qaOnlyCatches: QaOnlyCatches;
   unpricedTurns: number;
   /** Wasted turns, each naming its record; rebutted reviews counted apart. */
   waste: WasteAccounting;

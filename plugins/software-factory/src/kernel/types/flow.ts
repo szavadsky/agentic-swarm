@@ -1,5 +1,21 @@
 /** Flow, architecture and step definitions. */
 
+/** Built-in ingestion step ids that bind to kernel execution. */
+export const BUILTIN_INGESTION_IDS = ["branch", "front"] as const;
+export type BuiltinIngestionId = (typeof BUILTIN_INGESTION_IDS)[number];
+
+export type IngestionWhenClass = "trivial" | "task" | "bigger";
+
+/** One ingestion step from process config. */
+export interface IngestionStepConfig {
+  id: string;
+  prompt?: string;
+  alias?: string;
+  deliverable?: string;
+  /** Goal classes this step runs for; absent runs for every class. */
+  when?: IngestionWhenClass[];
+}
+
 /** What a turn's missing-outcome repair ask renders from. */
 export interface RepairSpec {
   /**
@@ -118,6 +134,13 @@ export interface FlowStep extends RepairSpec {
   alternates?: string[];
   /** How this step's later turn follows the one it repairs; default same-session. */
   followUp?: FollowUp;
+  /**
+   * Steps that must complete before this one becomes ready. Absent on a plain
+   * linear flow: the list order is the dependency. Steps keep their list slot
+   * as the topological tiebreak, so ready steps keep sequential execution in
+   * list order; checks and the merge stay at the flow's end.
+   */
+  after?: string[];
 }
 
 /**
@@ -141,6 +164,12 @@ export interface FollowUp {
 
 export interface FlowDefinition {
   steps: FlowStep[];
+  /**
+   * Flow-shape flag the loader sets: a config that names any `after` edge.
+   * Derive and gate dispatch only branch on it; a plain listing keeps the
+   * linear machine byte for byte.
+   */
+  dag?: boolean;
 }
 
 /** Limits the pure `next` needs; resolved from the three config layers. */

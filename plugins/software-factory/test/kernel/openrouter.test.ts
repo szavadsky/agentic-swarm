@@ -20,8 +20,8 @@ function tmpCache(): string {
   return path.join(dir, "openrouter-models.json");
 }
 
-const DEEPSEEK = {
-  id: "deepseek/deepseek-v4.1-flash",
+const MINI = {
+  id: "vendor/mini-flash",
   pricing: {
     prompt: "0.0000000507",
     completion: "0.0000002028",
@@ -33,7 +33,7 @@ describe("OpenRouter model-list parsing", () => {
   it("converts per-token strings to per-Mtok rates with cache fallbacks", () => {
     const table = parseOpenRouterModels(
       payload([
-        DEEPSEEK,
+        MINI,
         {
           id: "paid/no-cache-rates",
           pricing: { prompt: "0.000004", completion: "0.00002" },
@@ -47,12 +47,12 @@ describe("OpenRouter model-list parsing", () => {
         { pricing: { prompt: "1", completion: "1" } },
       ]),
     );
-    const deepseek = table["deepseek/deepseek-v4.1-flash"]!;
-    expect(deepseek.input).toBeCloseTo(0.0507, 10);
-    expect(deepseek.cachedInput).toBeCloseTo(0.001014, 10);
-    expect(deepseek.output).toBeCloseTo(0.2028, 10);
+    const mini = table["vendor/mini-flash"]!;
+    expect(mini.input).toBeCloseTo(0.0507, 10);
+    expect(mini.cachedInput).toBeCloseTo(0.001014, 10);
+    expect(mini.output).toBeCloseTo(0.2028, 10);
     // No reasoning rate: the completion rate covers reasoning tokens.
-    expect(deepseek.reasoning).toBeCloseTo(0.2028, 10);
+    expect(mini.reasoning).toBeCloseTo(0.2028, 10);
     expect(table["paid/no-cache-rates"]).toEqual({
       input: 4,
       // No cache-read rate: no discount is assumed.
@@ -86,9 +86,10 @@ function registerPriceCacheLoadingPart1(): void {
     try {
       const table = await loadPriceTable({
         cachePath,
-        fetchModels: async () => payload([DEEPSEEK]),
+        fetchModels: async () => payload([MINI]),
       });
-      // The harness id carries a provider OpenRouter never lists.
+      // The harness id carries a provider the price source never lists;
+      // the run config maps it to this table's price id.
       const cost = priceUsage(
         {
           in: 1_000_000,
@@ -98,17 +99,15 @@ function registerPriceCacheLoadingPart1(): void {
           out: 0,
           reasoningOut: 0,
         },
-        "opencode-go/deepseek-v4.1-flash",
+        "local-host/mini-flash",
         table,
+        { priceIds: { "local-host/mini-flash": "vendor/mini-flash" } },
       );
       expect(cost).toBeCloseTo(0.0507, 10);
       // The fetch landed in the cache with its fetch date.
       const cached = readPriceCache(cachePath)!;
       expect(Date.parse(cached.fetchedAt)).toBeLessThanOrEqual(Date.now());
-      expect(cached.prices["deepseek/deepseek-v4.1-flash"]?.input).toBeCloseTo(
-        0.0507,
-        10,
-      );
+      expect(cached.prices["vendor/mini-flash"]?.input).toBeCloseTo(0.0507, 10);
     } finally {
       fs.rmSync(path.dirname(cachePath), { recursive: true, force: true });
     }
@@ -120,7 +119,7 @@ function registerPriceCacheLoadingPart2(): void {
     const cachePath = tmpCache();
     try {
       writePriceCache(cachePath, {
-        "deepseek/deepseek-v4.1-flash": {
+        "vendor/mini-flash": {
           input: 0.0507,
           cachedInput: 0.001,
           output: 0.2028,
@@ -133,10 +132,7 @@ function registerPriceCacheLoadingPart2(): void {
           throw new Error("network disabled");
         },
       });
-      expect(table["deepseek/deepseek-v4.1-flash"]?.input).toBeCloseTo(
-        0.0507,
-        10,
-      );
+      expect(table["vendor/mini-flash"]?.input).toBeCloseTo(0.0507, 10);
     } finally {
       fs.rmSync(path.dirname(cachePath), { recursive: true, force: true });
     }
@@ -164,7 +160,7 @@ function registerPriceCacheLoadingPart3(): void {
     try {
       writePriceCache(
         refreshedPath,
-        { "deepseek/deepseek-v4.1-flash": stale },
+        { "vendor/mini-flash": stale },
         staleAt.toISOString(),
       );
       const table = await loadPriceTable({
@@ -172,12 +168,12 @@ function registerPriceCacheLoadingPart3(): void {
         fetchModels: async () =>
           payload([
             {
-              id: "deepseek/deepseek-v4.1-flash",
+              id: "vendor/mini-flash",
               pricing: { prompt: "0.00000006", completion: "0.00000021" },
             },
           ]),
       });
-      expect(table["deepseek/deepseek-v4.1-flash"]).toEqual(fresh);
+      expect(table["vendor/mini-flash"]).toEqual(fresh);
       expect(
         Date.parse(readPriceCache(refreshedPath)!.fetchedAt),
       ).toBeGreaterThan(Date.parse(staleAt.toISOString()));
@@ -185,7 +181,7 @@ function registerPriceCacheLoadingPart3(): void {
       // No network: the last cache is used, stale or not.
       writePriceCache(
         offlinePath,
-        { "deepseek/deepseek-v4.1-flash": stale },
+        { "vendor/mini-flash": stale },
         staleAt.toISOString(),
       );
       const offline = await loadPriceTable({
@@ -194,7 +190,7 @@ function registerPriceCacheLoadingPart3(): void {
           throw new Error("network disabled");
         },
       });
-      expect(offline["deepseek/deepseek-v4.1-flash"]).toEqual(stale);
+      expect(offline["vendor/mini-flash"]).toEqual(stale);
     } finally {
       for (const cachePath of [refreshedPath, offlinePath]) {
         fs.rmSync(path.dirname(cachePath), { recursive: true, force: true });
@@ -234,12 +230,9 @@ function registerPriceCacheLoadingPart4(): void {
       expect(offline).toEqual({});
       const fetched = await loadPriceTable({
         cachePath,
-        fetchModels: async () => payload([DEEPSEEK]),
+        fetchModels: async () => payload([MINI]),
       });
-      expect(fetched["deepseek/deepseek-v4.1-flash"]?.input).toBeCloseTo(
-        0.0507,
-        10,
-      );
+      expect(fetched["vendor/mini-flash"]?.input).toBeCloseTo(0.0507, 10);
     } finally {
       fs.rmSync(path.dirname(cachePath), { recursive: true, force: true });
     }

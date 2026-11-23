@@ -213,5 +213,6 @@ export async function runWithFallbacks<T>(opts: {
   }
 
   // `chain` is never empty (primary is always present).
-  return { outcome: last!.outcome, attempts };
+  if (!last) throw new Error("model chain is empty");
+  return { outcome: last.outcome, attempts };
 }

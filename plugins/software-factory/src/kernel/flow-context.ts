@@ -10,7 +10,6 @@ export {
   escalateFrontClassToBigger,
   FrontClassError,
   frontTarget,
-  isStandaloneTask,
   readFrontClass,
 } from "./flow-context-front.js";
 export {
@@ -21,7 +20,7 @@ export {
   compactSession,
   followUpSession,
   priorStepCommit,
-  trivialResumeNote,
+  resumeNote,
   trivialResumeSession,
 } from "./flow-context-sessions.js";
 export {
@@ -30,6 +29,7 @@ export {
   findStep,
   flowOf,
   isFixTurn,
+  isRelaunchStep,
   isTrivialImplementTurn,
   stepTarget,
 } from "./flow-context-step.js";

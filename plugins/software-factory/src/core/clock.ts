@@ -52,7 +52,7 @@ export function createActiveTimer(
   clock: Clock = getClock(),
 ): { cancel: () => void } {
   const startMono = clock.monotonic();
-  let timer: any;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   let cancelled = false;
 
   const schedule = (remainingMs: number) => {

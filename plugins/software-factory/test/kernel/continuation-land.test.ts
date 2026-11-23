@@ -193,6 +193,17 @@ async function landsJustImplementBranchGreenPart2(
   );
 }
 
+/**
+ * The gate fix is spent, so the wave-end steward owns the red merged result;
+ * the turn leaves it untouched and holds with a pointer.
+ */
+function scriptStewardNoRepair(harness: FakeHarness): void {
+  harness.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "steward found no repair" }));
+    return fakeTurnResult(req);
+  });
+}
+
 function registerKeptLandPart1(): void {
   it("never lands when a later commit voids the approve", async () => {
     const counter = freshCounter();
@@ -213,6 +224,7 @@ function registerKeptLandPart1(): void {
         ctx.writeOutcome(outcome({ summary: "gate fix attempt" }));
         return fakeTurnResult(req);
       });
+      scriptStewardNoRepair(harness);
       scriptStallLeave(harness, ["kept-void"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const file = task("kept-void", { scope: ["feature.txt"] });
@@ -242,7 +254,7 @@ function registerKeptLandPart1(): void {
             r.slug === "kept-void" && r.step === "merge" && r.iteration === 2,
         ),
       ).toHaveLength(0);
-      expect(workCalls(harness)).toHaveLength(6);
+      expect(workCalls(harness)).toHaveLength(7);
     } finally {
       rmCounter(counter);
       cleanupFlowRepo(repo);

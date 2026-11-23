@@ -80,7 +80,7 @@ export function setupRepo(): {
       "  pack-preparer: { harness: fake, model: fake-pack-prep }",
       "limits: { iterations: 3, concurrency: { overall: 1 } }",
       `worktreeRoot: ../${base}-wt`,
-      `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
+      `sessions: { dir: ../${base}-sessions, keepRuns: 2, retention: short }`,
       "",
     ].join("\n"),
   );
@@ -103,6 +103,41 @@ export function silenceWarn(): () => void {
     console.warn = orig;
   };
 }
+
+/** Scripts the first launch up to a clean SIGINT during alpha's review. */
+export function scriptInterruptedFirstLaunch(
+  first: FakeHarness,
+  goalDir: string,
+  taskDir: string,
+  controller: ReturnType<typeof createDrainController>,
+): void {
+  first.script((req, ctx) => {
+    fs.writeFileSync(path.join(goalDir, "plan.md"), PLAN, "utf8");
+    ctx.writeOutcome(outcome({ summary: "planned", decision: "continue" }));
+    return fakeTurnResult(req);
+  });
+  first.script((req, ctx) => {
+    fs.writeFileSync(path.join(taskDir, "alpha.md"), ALPHA, "utf8");
+    fs.writeFileSync(path.join(taskDir, "beta.md"), BETA, "utf8");
+    ctx.writeOutcome(outcome({ summary: "filed" }));
+    return fakeTurnResult(req);
+  });
+  first.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "alpha added" }));
+    return fakeTurnResult(req);
+  });
+  first.script((req, ctx) => {
+    controller.handleSignal("SIGINT");
+    ctx.writeOutcome(
+      outcome({ summary: "alpha approved", verdict: "approve" }),
+    );
+    return fakeTurnResult(req);
+  });
+}
+
+/** The builtin resume fragment's ask; a repo override replaces the fragment. */
+export const RESUME_ASK = "assess status first, keep going";
 
 /** First line of the steer a resumed launch posts for its digest. */
 export const DIGEST_STEER_HEADER = "# Launch digest before iteration";

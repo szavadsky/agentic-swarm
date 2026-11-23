@@ -234,13 +234,13 @@ function registerEndOfTurnCompactionPart5(): void {
 function registerSessionPortabilityPart1(): void {
   it("admits only same-harness resume edges when none are declared", () => {
     expect(portable("omp", "omp")).toBe(true);
-    expect(portable("omp", "opencode")).toBe(false);
+    expect(portable("omp", "agent-c")).toBe(false);
   });
 
   it("admits a declared edge in its direction only", () => {
-    const edges = [{ from: "opencode", to: "omp" }];
-    expect(portable("opencode", "omp", edges)).toBe(true);
-    expect(portable("omp", "opencode", edges)).toBe(false);
+    const edges = [{ from: "agent-c", to: "omp" }];
+    expect(portable("agent-c", "omp", edges)).toBe(true);
+    expect(portable("omp", "agent-c", edges)).toBe(false);
     expect(portable("omp", "omp", edges)).toBe(true);
   });
 }

@@ -12,14 +12,14 @@ const TIMEOUTS = { idleMs: 10_000, wallMs: 30_000 };
 // keep the retries (same attempts) but not the wait.
 const FAST_RETRY = { baseDelayMs: 1, maxDelayMs: 1 };
 
-const CODEX_ACPX: AcpxConfig = {
-  agent: "codex",
+const AGENT_B_ACPX: AcpxConfig = {
+  agent: "agent-b",
   effort: { configId: "reasoning_effort" },
   usage: { cache: true },
 };
 
-const PI_ACPX: AcpxConfig = {
-  agent: "pi",
+const AGENT_A_ACPX: AcpxConfig = {
+  agent: "agent-a",
   effort: { configId: "thought_level" },
   usage: { cache: true, command: "/session" },
 };
@@ -30,7 +30,7 @@ function request(
   extra: Record<string, unknown> = {},
 ) {
   return {
-    model: { id: "opencode-go/primary" },
+    model: { id: "fake-host/primary" },
     cwd,
     prompt,
     timeouts: TIMEOUTS,
@@ -76,10 +76,11 @@ async function edgeCaseFirstRepairTurnMeasuresPart1(
   fs.copyFileSync(initialSessionFile, repairSessionFile);
 
   const harness2 = new AcpxHarness({
-    id: "codex",
+    retention: "short",
+    id: "fake-agent",
     binary: repairStub.binary,
     sessionDir: path.dirname(repairStub.binary),
-    acpx: CODEX_ACPX,
+    acpx: AGENT_B_ACPX,
     retry: { retries: 0 },
   });
 
@@ -114,7 +115,7 @@ async function edgeCaseFirstRepairTurnMeasuresPart2(
   }
 }
 
-async function edgeCasePiFirstRepairTurnMeasuresPart1(
+async function edgeCaseAgentAFirstRepairTurnMeasuresPart1(
   initialStub: ReturnType<typeof createAcpxStub>,
   harness1: AcpxHarness,
 ) {
@@ -130,7 +131,7 @@ async function edgeCasePiFirstRepairTurnMeasuresPart1(
   // Subsequent repair turn on same session adds no tokens (unchanged cumulative)
   const repairStub = createAcpxStub({
     modelBehaviors: {
-      "opencode-go/primary": {
+      "fake-host/primary": {
         reply: "",
       },
     },
@@ -167,15 +168,16 @@ async function edgeCasePiFirstRepairTurnMeasuresPart1(
   return { cwd, initial, repairStub };
 }
 
-async function edgeCasePiFirstRepairTurnMeasuresPart2(
-  scope: Awaited<ReturnType<typeof edgeCasePiFirstRepairTurnMeasuresPart1>>,
+async function edgeCaseAgentAFirstRepairTurnMeasuresPart2(
+  scope: Awaited<ReturnType<typeof edgeCaseAgentAFirstRepairTurnMeasuresPart1>>,
 ) {
   const { repairStub, cwd, initial } = scope;
   const harness2 = new AcpxHarness({
-    id: "pi",
+    retention: "short",
+    id: "fake-agent",
     binary: repairStub.binary,
     sessionDir: path.dirname(repairStub.binary),
-    acpx: PI_ACPX,
+    acpx: AGENT_A_ACPX,
     retry: { retries: 0 },
   });
   try {
@@ -205,16 +207,17 @@ function acpxZeroUsageClassificationPart8() {
         willRetry: true,
       },
       modelBehaviors: {
-        "opencode-go/primary": {
+        "fake-host/primary": {
           reply: "",
         },
       },
     });
     const harness = new AcpxHarness({
-      id: "codex",
+      retention: "short" as const,
+      id: "fake-agent",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: CODEX_ACPX,
+      acpx: AGENT_B_ACPX,
       retry: FAST_RETRY,
     });
     try {
@@ -240,16 +243,17 @@ function acpxZeroUsageClassificationPart9() {
         willRetry: true,
       },
       modelBehaviors: {
-        "opencode-go/primary": {
+        "fake-host/primary": {
           reply: "",
         },
       },
     });
     const harness = new AcpxHarness({
-      id: "codex",
+      retention: "short" as const,
+      id: "fake-agent",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: CODEX_ACPX,
+      acpx: AGENT_B_ACPX,
       retry: FAST_RETRY,
     });
     try {
@@ -272,16 +276,17 @@ function acpxZeroUsageClassificationPart10() {
   it("falls back to zero-usage rate stop when text matches no pattern and no usage frame is sent", async () => {
     const stub = createAcpxStub({
       modelBehaviors: {
-        "opencode-go/primary": {
+        "fake-host/primary": {
           reply: "Internal server error",
         },
       },
     });
     const harness = new AcpxHarness({
-      id: "codex",
+      retention: "short" as const,
+      id: "fake-agent",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: CODEX_ACPX,
+      acpx: AGENT_B_ACPX,
       retry: FAST_RETRY,
     });
     try {
@@ -307,10 +312,11 @@ function acpxZeroUsageClassificationPart11() {
       usage: { totalTokens: 100, inputTokens: 90, outputTokens: 10 },
     });
     const harness1 = new AcpxHarness({
-      id: "codex",
+      retention: "short" as const,
+      id: "fake-agent",
       binary: initialStub.binary,
       sessionDir: path.dirname(initialStub.binary),
-      acpx: CODEX_ACPX,
+      acpx: AGENT_B_ACPX,
       retry: FAST_RETRY,
     });
     try {
@@ -324,23 +330,24 @@ function acpxZeroUsageClassificationPart11() {
     }
   });
 
-  it("edge case: pi first repair turn measures zero usage on unchanged session total and stops as infra: rate", async () => {
+  it("edge case: agent-a first repair turn measures zero usage on unchanged session total and stops as infra: rate", async () => {
     const initialStub = createAcpxStub({
       sessionUsage: { input: 100, output: 20 },
     });
     const harness1 = new AcpxHarness({
-      id: "pi",
+      retention: "short" as const,
+      id: "fake-agent",
       binary: initialStub.binary,
       sessionDir: path.dirname(initialStub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
       retry: FAST_RETRY,
     });
     try {
-      const scope1 = await edgeCasePiFirstRepairTurnMeasuresPart1(
+      const scope1 = await edgeCaseAgentAFirstRepairTurnMeasuresPart1(
         initialStub,
         harness1,
       );
-      await edgeCasePiFirstRepairTurnMeasuresPart2(scope1);
+      await edgeCaseAgentAFirstRepairTurnMeasuresPart2(scope1);
     } finally {
       initialStub.cleanup();
     }
@@ -353,16 +360,17 @@ function acpxZeroUsageClassificationPart12() {
       "failed: api_key=sk-ABCDEFGHIJKLMNOP1234 and token: ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
     const stub = createAcpxStub({
       modelBehaviors: {
-        "opencode-go/primary": {
+        "fake-host/primary": {
           reply: rawReply,
         },
       },
     });
     const harness = new AcpxHarness({
-      id: "codex",
+      retention: "short" as const,
+      id: "fake-agent",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: CODEX_ACPX,
+      acpx: AGENT_B_ACPX,
       retry: FAST_RETRY,
     });
     try {
@@ -389,16 +397,17 @@ function acpxZeroUsageClassificationPart13() {
     const longReply = `failure: ${"x".repeat(600)}`;
     const stub = createAcpxStub({
       modelBehaviors: {
-        "opencode-go/primary": {
+        "fake-host/primary": {
           reply: longReply,
         },
       },
     });
     const harness = new AcpxHarness({
-      id: "codex",
+      retention: "short" as const,
+      id: "fake-agent",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: CODEX_ACPX,
+      acpx: AGENT_B_ACPX,
       retry: FAST_RETRY,
     });
     try {

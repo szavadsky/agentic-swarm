@@ -81,8 +81,8 @@ function splitsTurnSAssistantUsageByModelPart2(
     parent,
     [
       assistant({
-        provider: "openrouter",
-        model: "baidu/ernie-5.5-flash-preview:free",
+        provider: "price",
+        model: "tiny-preview:free",
         usage: {
           input: 100,
           output: 10,
@@ -94,8 +94,8 @@ function splitsTurnSAssistantUsageByModelPart2(
         timestamp: 1_000,
       }),
       assistant({
-        provider: "opencode-go",
-        model: "deepseek-v4.1-flash",
+        provider: "local-host",
+        model: "mini-flash",
         usage: {
           input: 200,
           output: 20,
@@ -108,8 +108,8 @@ function splitsTurnSAssistantUsageByModelPart2(
       }),
       // Before the prompt: another turn's message, never part of the split.
       assistant({
-        provider: "openrouter",
-        model: "baidu/ernie-5.5-flash-preview:free",
+        provider: "price",
+        model: "tiny-preview:free",
         usage: { input: 999, output: 1, timestamp: 10 },
         timestamp: 10,
       }),
@@ -127,7 +127,7 @@ function splitsTurnSAssistantUsageByModelPart3(
   const { parent } = scope;
   expect(servedUsage(parent, 1_000)).toEqual([
     {
-      model: { id: "openrouter/baidu/ernie-5.5-flash-preview:free" },
+      model: { id: "price/tiny-preview:free" },
       usage: {
         in: 100,
         cacheRead: 5,
@@ -139,7 +139,7 @@ function splitsTurnSAssistantUsageByModelPart3(
       },
     },
     {
-      model: { id: "opencode-go/deepseek-v4.1-flash" },
+      model: { id: "local-host/mini-flash" },
       usage: {
         in: 200,
         cacheRead: 7,
@@ -374,8 +374,8 @@ function registerOmpUsagePart7(): void {
       fs.writeFileSync(
         parent,
         assistant({
-          provider: "opencode-go",
-          model: "beam-free",
+          provider: "local-host",
+          model: "lamp-mini-free",
           usage: { input: 10, output: 2 },
           timestamp: 1_000,
         }),
@@ -383,7 +383,7 @@ function registerOmpUsagePart7(): void {
       // One served model still names the model whose row prices the turn.
       expect(servedUsage(parent, 0)).toEqual([
         {
-          model: { id: "opencode-go/beam-free" },
+          model: { id: "local-host/lamp-mini-free" },
           usage: {
             in: 10,
             cacheRead: 0,
@@ -400,8 +400,8 @@ function registerOmpUsagePart7(): void {
         parent,
         [
           assistant({
-            provider: "opencode-go",
-            model: "beam-free",
+            provider: "local-host",
+            model: "lamp-mini-free",
             usage: { input: 10, output: 2 },
             timestamp: 1_000,
           }),
@@ -427,15 +427,15 @@ function registerOmpUsagePart8(): void {
       fs.writeFileSync(
         sessionFile,
         assistant({
-          provider: "opencode-go",
-          model: "beam-free",
+          provider: "local-host",
+          model: "lamp-mini-free",
           usage: { input: 10, output: 2, timestamp: 2_100 },
           timestamp: 2_100,
         }),
       );
       const split = servedUsage(sessionFile, 2_000);
       expect(split?.map((entry) => entry.model.id)).toEqual([
-        "opencode-go/beam-free",
+        "local-host/lamp-mini-free",
         "cheap/model",
       ]);
       expect(split?.[1]?.usage.in).toBe(4790);

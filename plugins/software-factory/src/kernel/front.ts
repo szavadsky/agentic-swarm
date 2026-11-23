@@ -1,10 +1,17 @@
 import { runAgentTurn } from "./agent.js";
+import { formatStop } from "./cause.js";
 import {
   type FrontClass,
   FrontClassError,
   frontTarget,
   readFrontClass,
 } from "./flow-context.js";
+import {
+  CODE_MAP_FILE,
+  type IngestionResult,
+  runIngestionSteps,
+} from "./ingestion.js";
+import { runBoundaryTurn } from "./integration-lock.js";
 import { scanInbox } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import {
@@ -30,6 +37,8 @@ export interface FrontResult {
   packPath?: string;
   /** Why the front ended the launch as blocked or infra. */
   cause?: string;
+  /** Which ingestion step the stop came from: a step, or the classifier, or a runner error. */
+  step?: string;
 }
 
 interface FrontRunOptions {
@@ -71,11 +80,6 @@ class FrontError extends Error {
     super(message);
     this.name = "FrontError";
   }
-}
-
-function stopText(stop: StepRecord["stop"]): string {
-  if (!stop) return "no stop";
-  return "cause" in stop ? `${stop.kind}: ${stop.cause}` : stop.kind;
 }
 
 async function readTasks(runtime: KernelRuntime): Promise<TaskFile[]> {
@@ -147,7 +151,7 @@ async function validateFrontTasks(
   }
 }
 
-function gateCommands(runtime: KernelRuntime): string {
+export function gateCommands(runtime: KernelRuntime): string {
   return (
     runtime.configs.repo.gates
       .map((gate) => `- ${gate.id}: ${gate.command}`)
@@ -192,6 +196,7 @@ function frontTurnVars(
   runtime: KernelRuntime,
   opts: FrontRunOptions,
   packPath: string,
+  codeMapPath: string,
 ): Record<string, string> {
   return {
     iteration: String(opts.iteration),
@@ -204,6 +209,7 @@ function frontTurnVars(
     setup_command: runtime.configs.repo.setup.join(" && ") || "none",
     gate_commands: gateCommands(runtime),
     class_types: frontClassTypesVar(runtime.configs.process.taskTypes),
+    code_map_path: codeMapPath,
   };
 }
 
@@ -213,14 +219,20 @@ async function runFrontTurn(
   opts: FrontRunOptions,
   target: ReturnType<typeof frontTarget>,
   packPath: string,
+  codeMapPath: string,
 ): Promise<Awaited<ReturnType<typeof runAgentTurn>>> {
-  return await runAgentTurn(runtime, {
-    target,
-    cwd: runtime.paths.goalCheckout,
-    meta: { iteration: opts.iteration, step: "front", round: 1 },
-    vars: frontTurnVars(runtime, opts, packPath),
-    expectation: KERNEL_TURN_STEPS.front,
-  });
+  return await runBoundaryTurn(
+    runtime,
+    { iteration: opts.iteration, step: "front" },
+    () =>
+      runAgentTurn(runtime, {
+        target,
+        cwd: runtime.paths.goalCheckout,
+        meta: { iteration: opts.iteration, step: "front", round: 1 },
+        vars: frontTurnVars(runtime, opts, packPath, codeMapPath),
+        expectation: KERNEL_TURN_STEPS.front,
+      }),
+  );
 }
 
 /** The infra/blocked result for a front turn that did not finish cleanly. */
@@ -230,7 +242,7 @@ function frontTurnFailure(
   if (!result.outcome) {
     return {
       action: "infra",
-      cause: `front turn produced no outcome (${stopText(result.record.stop)})`,
+      cause: `front turn produced no outcome (${formatStop(result.record.stop)})`,
     };
   }
   if (result.outcome.status === "blocked") {
@@ -243,6 +255,74 @@ function frontTurnFailure(
     };
   }
   return undefined;
+}
+
+/** A step's stop: a blocked step needs the user; anything else is infra. */
+function ingestionStop(failed: IngestionResult): FrontResult {
+  return {
+    action: failed.blocked ? "blocked" : "infra",
+    cause: failed.cause,
+    step: failed.step,
+  };
+}
+
+/** Resumes a goal whose class the front already wrote: only the steps run. */
+async function resumeClassified(
+  runtime: KernelRuntime,
+  opts: FrontRunOptions,
+  existing: FrontClass,
+): Promise<FrontResult> {
+  const resumed = await runIngestionSteps(runtime, opts.iteration, true);
+  if (resumed.cause) return ingestionStop(resumed);
+  return await resultFor(runtime, existing, {
+    ran: false,
+    iteration: opts.iteration,
+    state: opts.state,
+  });
+}
+
+/** Runs the classifier turn and the configured steps on either side of it. */
+async function classifyFront(
+  runtime: KernelRuntime,
+  opts: FrontRunOptions,
+): Promise<FrontResult> {
+  const target = frontTarget(runtime, opts.iteration);
+  // The front writes its pack; the script owns the directory so the agent
+  // never has to create a path outside the goal artifacts.
+  const packPath = await runtime.store.localPath({
+    area: "iterations",
+    rel: `${opts.iteration}/context-pack.md`,
+  });
+  const codeMapPath = await runtime.store.localPath({
+    area: "goal",
+    rel: CODE_MAP_FILE,
+  });
+  const before = await runIngestionSteps(runtime, opts.iteration);
+  if (before.cause) return ingestionStop(before);
+  const result = await runFrontTurn(
+    runtime,
+    opts,
+    target,
+    packPath,
+    codeMapPath,
+  );
+  const failure = frontTurnFailure(result);
+  if (failure) return failure;
+  const cls = readFrontClass(runtime);
+  if (!cls) {
+    return {
+      action: "infra",
+      cause: `front turn wrote no ${CLASS_FILE} at ${runtime.store.pathOf({ area: "goal", rel: CLASS_FILE })}`,
+      step: "front",
+    };
+  }
+  const after = await runIngestionSteps(runtime, opts.iteration, true);
+  if (after.cause) return ingestionStop(after);
+  return await resultFor(runtime, cls, {
+    ran: true,
+    iteration: opts.iteration,
+    state: opts.state,
+  });
 }
 
 /**
@@ -265,35 +345,9 @@ export async function runFront(
     if ((await scanInbox(runtime.store)).length > 0)
       return { action: "boundary" };
     const existing = readFrontClass(runtime);
-    if (existing)
-      return await resultFor(runtime, existing, {
-        ran: false,
-        iteration: opts.iteration,
-        state: opts.state,
-      });
-
-    const target = frontTarget(runtime, opts.iteration);
-    // The front writes its pack; the script owns the directory so the agent
-    // never has to create a path outside the goal artifacts.
-    const packPath = await runtime.store.localPath({
-      area: "iterations",
-      rel: `${opts.iteration}/context-pack.md`,
-    });
-    const result = await runFrontTurn(runtime, opts, target, packPath);
-    const failure = frontTurnFailure(result);
-    if (failure) return failure;
-    const cls = readFrontClass(runtime);
-    if (!cls) {
-      return {
-        action: "infra",
-        cause: `front turn wrote no ${CLASS_FILE} at ${runtime.store.pathOf({ area: "goal", rel: CLASS_FILE })}`,
-      };
-    }
-    return await resultFor(runtime, cls, {
-      ran: true,
-      iteration: opts.iteration,
-      state: opts.state,
-    });
+    return existing
+      ? await resumeClassified(runtime, opts, existing)
+      : await classifyFront(runtime, opts);
   } catch (err) {
     if (err instanceof FrontError || err instanceof FrontClassError) {
       return { action: "infra", cause: err.message };

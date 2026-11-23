@@ -42,7 +42,7 @@ interface Fixture {
 /** Architect and implementer on different harnesses; omp is the scouts consumer. */
 const SPLIT_HARNESSES = RUN_HEAD_NO_HIGHEST.replace(
   "architect: { harness: fake, model: arch, effort: max }",
-  "architect: { harness: claude-code, model: arch }",
+  "architect: { harness: agent-x, model: arch }",
 ).replace(
   "implementer: { harness: fake, model: impl }",
   "implementer: { harness: omp, model: impl }",
@@ -50,12 +50,12 @@ const SPLIT_HARNESSES = RUN_HEAD_NO_HIGHEST.replace(
 
 function splitHarnesses(f: Fixture): Map<string, Harness> {
   const harnesses = new Map(f.input.harnesses);
-  harnesses.set("claude-code", new FakeHarness({ id: "claude-code" }));
+  harnesses.set("agent-x", new FakeHarness({ id: "agent-x" }));
   harnesses.set(
     "omp",
     new FakeHarness({
       id: "omp",
-      caps: { effort: ["low", "medium", "high", "max"] },
+      probe: { effort: ["low", "medium", "high", "max"] },
     }),
   );
   return harnesses;
@@ -92,7 +92,7 @@ async function fixture(
   await store.ensureLayout();
   const harness = new FakeHarness({
     id: "fake",
-    caps: { effort: ["low", "high", "max"] },
+    probe: { effort: ["low", "high", "max"] },
   });
   const harnesses = new Map<string, Harness>([["fake", harness]]);
   return { repo, configs, paths, input: { configs, paths, store, harnesses } };
@@ -162,7 +162,7 @@ function registerPreFlightPart29(): void {
         harnesses: splitHarnesses(f),
         binaries: {
           ...resolveHarnessBinaries(f.configs.run.harnesses),
-          "claude-code": process.execPath,
+          "agent-x": process.execPath,
         },
       });
       const finding = err.findings.find(
@@ -181,20 +181,25 @@ function registerPreFlightPart30(): void {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace(
         "implementer: { harness: fake, model: impl }",
-        "implementer: { harness: pi, model: impl }",
+        "implementer: { harness: agent-a, model: impl }",
       ),
     );
     try {
       const harnesses = new Map(f.input.harnesses);
-      harnesses.set("pi", new FakeHarness({ id: "pi" }));
+      harnesses.set("agent-a", new FakeHarness({ id: "agent-a" }));
       // resolveAcpxCommand falls back to a bunx executable when acpx is absent;
       // a missing bunx is the host state where that on-demand route cannot run.
       const err = await refusal({
         ...f.input,
         harnesses,
-        binaries: { fake: process.execPath, pi: "/nonexistent/bin/bunx" },
+        binaries: {
+          fake: process.execPath,
+          "agent-a": "/nonexistent/bin/bunx",
+        },
       });
-      const finding = err.findings.find((x) => x.key === "harnesses.pi.binary");
+      const finding = err.findings.find(
+        (x) => x.key === "harnesses.agent-a.binary",
+      );
       expect(finding?.message).toContain("acpx");
       expect(finding?.message).toContain("bunx acpx");
       expect(err.report).toContain("bunx acpx");
@@ -211,22 +216,22 @@ function registerPreFlightPart31(): void {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace(
         "implementer: { harness: fake, model: impl }",
-        "implementer: { harness: opencode, model: impl }",
+        "implementer: { harness: agent-c, model: impl }",
       ).replace(
         "limits:",
-        `harnesses:\n  opencode:\n    binary: ${configured}\n    acpx: { agent: opencode acp, raw: true }\nlimits:`,
+        `harnesses:\n  agent-c:\n    binary: ${configured}\n    acpx: { agent: "agent-c acp", raw: true }\nlimits:`,
       ),
     );
     try {
       const harnesses = new Map(f.input.harnesses);
-      harnesses.set("opencode", new FakeHarness({ id: "opencode" }));
+      harnesses.set("agent-c", new FakeHarness({ id: "agent-c" }));
       const err = await refusal({
         ...f.input,
         harnesses,
-        binaries: { fake: process.execPath, opencode: process.execPath },
+        binaries: { fake: process.execPath, "agent-c": process.execPath },
       });
       const finding = err.findings.find(
-        (x) => x.key === "harnesses.opencode.binary",
+        (x) => x.key === "harnesses.agent-c.binary",
       );
       expect(finding?.message).toContain(configured);
       expect(err.findings.some((x) => x.key.endsWith(".acpx.agent"))).toBe(
@@ -245,26 +250,26 @@ function registerPreFlightPart32(): void {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace(
         "implementer: { harness: fake, model: impl }",
-        "implementer: { harness: opencode, model: impl }",
+        "implementer: { harness: agent-c, model: impl }",
       ).replace(
         "limits:",
-        `harnesses:\n  opencode:\n    binary: ${process.execPath}\n    acpx: { agent: opencode acp, raw: true }\nlimits:`,
+        `harnesses:\n  agent-c:\n    binary: ${process.execPath}\n    acpx: { agent: "agent-c acp", raw: true }\nlimits:`,
       ),
     );
     try {
       const harnesses = new Map(f.input.harnesses);
-      harnesses.set("opencode", new FakeHarness({ id: "opencode" }));
+      harnesses.set("agent-c", new FakeHarness({ id: "agent-c" }));
       const err = await refusal({
         ...f.input,
         harnesses,
-        binaries: { fake: process.execPath, opencode: missing },
+        binaries: { fake: process.execPath, "agent-c": missing },
       });
       const finding = err.findings.find(
-        (x) => x.key === "harnesses.opencode.acpx.agent",
+        (x) => x.key === "harnesses.agent-c.acpx.agent",
       );
       expect(finding?.message).toContain(missing);
       expect(
-        err.findings.some((x) => x.key === "harnesses.opencode.binary"),
+        err.findings.some((x) => x.key === "harnesses.agent-c.binary"),
       ).toBe(false);
     } finally {
       f.repo.cleanup();
@@ -306,8 +311,8 @@ function registerPreFlightPart33(): void {
     );
     try {
       await f.input.store.writeTask(task("escalated", { tier: "escalation" }));
-      const result = await preflight(f.input);
-      expect(result.aliases.architect).toBe("max");
+      await preflight(f.input);
+      expect(f.configs.run.aliases.architect!.effort).toBe("max");
     } finally {
       f.repo.cleanup();
     }

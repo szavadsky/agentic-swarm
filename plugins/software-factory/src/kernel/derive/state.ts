@@ -1,6 +1,7 @@
 /** Reducing records and tasks into the goal's task, epic and status state. */
 
 import { DEFAULT_FLOWS, reduceTask } from "../derive-task.js";
+import { isRecoveryCrash } from "../recovery-seal.js";
 import type {
   EpicState,
   FlowDefinition,
@@ -16,7 +17,8 @@ import {
   OPEN_TASK_STATUSES,
   baseContinuations,
   depsSatisfied,
-  isRecoveryCrash,
+  landingFacts,
+  supersedingContinuation,
 } from "./shared.js";
 import type { OrphanReductions, TaskReduction } from "./types.js";
 import { hasOpenDebt } from "./debt.js";
@@ -153,6 +155,7 @@ function taskStateFor(
   task: TaskFile,
   reduction: TaskReduction,
   status: TaskStatus,
+  supersededBy: string | undefined,
 ): TaskState {
   const terminal = reduction.terminal;
   return {
@@ -163,6 +166,7 @@ function taskStateFor(
     round: reduction.round,
     kind: task.kind,
     flow: task.flow,
+    ...(supersededBy !== undefined ? { supersededBy } : {}),
     phase: terminal ? "done" : reduction.phase,
     commit: terminal?.commit ?? reduction.commit,
     verdict: reduction.verdict,
@@ -178,19 +182,26 @@ function taskStateFor(
 /** Resolves each task's status and state, and groups tasks under their epic. */
 export function buildTaskStates(
   tasks: TaskFile[],
+  sorted: readonly StepRecord[],
   statuses: Map<string, TaskStatus>,
   reductions: ReadonlyMap<string, TaskReduction>,
   taskStates: Record<string, TaskState>,
   epics: Record<string, EpicState>,
 ): void {
   const continuations = baseContinuations(tasks);
+  const landings = landingFacts(sorted);
   for (const task of tasks) {
     const reduction = reductions.get(task.slug)!;
     const status: TaskStatus =
       statuses.get(task.slug) ??
       (depsSatisfied(task, statuses, continuations) ? "ready" : "pending");
     statuses.set(task.slug, status);
-    taskStates[task.slug] = taskStateFor(task, reduction, status);
+    taskStates[task.slug] = taskStateFor(
+      task,
+      reduction,
+      status,
+      supersedingContinuation(task.slug, landings, statuses, continuations),
+    );
     if (task.epic !== undefined) {
       const group = epics[task.epic] ?? { tasks: [], done: false };
       group.tasks.push(task.slug);

@@ -31,7 +31,7 @@ rl.on("line", (line) => {
   } else if (frame.type === "get_last_assistant_text") {
     respond({ text: "ok" });
   } else if (frame.type === "get_state") {
-    respond({ sessionId: "s1", sessionFile, thinkingLevel: "low", model: { provider: "opencode-go", id: "beam-free" } });
+    respond({ sessionId: "s1", sessionFile, thinkingLevel: "low", model: { provider: "local-host", id: "lamp-mini-free" } });
   } else {
     respond({});
   }
@@ -57,12 +57,13 @@ describe("omp subagent usage", () => {
     fs.writeFileSync(binary, FAKE_OMP, { mode: 0o755 });
     try {
       const harness = new OmpHarness({
+        retention: "short",
         binary,
         sessionDir,
         readyTimeoutMs: 5_000,
       });
       const result = await harness.turn({
-        model: { id: "opencode-go/beam-free" },
+        model: { id: "local-host/lamp-mini-free" },
         cwd: tmp,
         prompt: "go",
         timeouts: { idleMs: 0, wallMs: 10_000 },

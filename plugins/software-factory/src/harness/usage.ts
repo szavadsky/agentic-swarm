@@ -11,6 +11,17 @@ export function zeroUsage(): Usage {
   };
 }
 
+export function tokenTotal(usage: Usage): number {
+  return (
+    usage.in +
+    usage.cacheRead +
+    usage.cacheWrite5m +
+    usage.cacheWrite1h +
+    usage.out +
+    usage.reasoningOut
+  );
+}
+
 /**
  * Field-wise sum; the token counters stay disjoint. Each cost column stays
  * known when either side knows it, so an explicit $0 never degrades to
@@ -40,8 +51,8 @@ export function addUsage(a: Usage, b: Usage): Usage {
 
 /**
  * Whether a call reported usage at all. All-zero counters are not a report: a
- * real turn consumes input, so a harness that leaves them at zero (pi via acpx)
- * is silent, and a literal harness `0` cost is its unreported marker too.
+ * real turn consumes input, so a harness that leaves them at zero is silent,
+ * and a literal harness `0` cost is its unreported marker too.
  */
 export function reportsUsage(usage: Usage): boolean {
   return (
@@ -67,7 +78,8 @@ export function countOutcomeRepairs(
   if (!attempts) return 0;
   let repairs = 0;
   for (let i = 1; i < attempts.length; i += 1) {
-    if (attempts[i - 1]!.stop.kind !== "infra") repairs += 1;
+    const previous = attempts[i - 1];
+    if (previous !== undefined && previous.stop.kind !== "infra") repairs += 1;
   }
   return repairs;
 }

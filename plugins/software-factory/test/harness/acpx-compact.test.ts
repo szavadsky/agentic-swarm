@@ -18,16 +18,16 @@ const TIMEOUTS = { idleMs: 10_000, wallMs: 30_000 };
 // diagnostic instead of racing bun's 5s default under parallel load.
 setDefaultTimeout(60_000);
 
-const PI_ACPX: AcpxConfig = {
-  agent: "pi",
+const AGENT_A_ACPX: AcpxConfig = {
+  agent: "agent-a",
   compact: true,
   effort: {
     configId: "thought_level",
   },
 };
 
-const AGY_ACPX: AcpxConfig = {
-  agent: "agy acp",
+const AGENT_C_ACPX: AcpxConfig = {
+  agent: "agent-c acp",
   raw: true,
   usage: { cache: true },
 };
@@ -47,7 +47,7 @@ function request(
   extra: Record<string, unknown> = {},
 ) {
   return {
-    model: { id: "opencode-go/beam-free" },
+    model: { id: "fake-host/lamp-mini-free" },
     cwd,
     prompt,
     timeouts: TIMEOUTS,
@@ -61,6 +61,7 @@ function runtimeFor(stub: AcpxStub, config: AcpxConfig): AcpxRuntime {
     command: { binary: stub.binary, prefix: [] },
     sessionDir: path.dirname(stub.binary),
     acpx: config,
+    retention: "short",
   };
 }
 
@@ -85,17 +86,18 @@ function registerAcpxHarnessSessionCompactionPart1(): void {
   it("runs /compact as the whole prompt on the named session and parses the summary", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
-      id: "pi",
+      retention: "short" as const,
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     });
     try {
       const cwd = path.dirname(stub.binary);
       const first = await harness.turn(request(cwd, "first"));
       const command = await runAcpxCommand(
-        runtimeFor(stub, PI_ACPX),
-        PI_ACPX,
+        runtimeFor(stub, AGENT_A_ACPX),
+        AGENT_A_ACPX,
         first.session!,
         "/compact",
       );
@@ -124,19 +126,20 @@ function registerAcpxHarnessSessionCompactionPart2(): void {
   it("returns a compacted ref and the next turn resumes the same session", async () => {
     const stub = createAcpxStub();
     const options = {
-      id: "pi",
+      retention: "short" as const,
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     };
     const harness = new AcpxHarness(options);
     try {
       const cwd = path.dirname(stub.binary);
       const first = await harness.turn(request(cwd, "first"));
 
-      expect(await harness.caps({ id: "opencode-go/beam-free" })).toMatchObject(
-        { compact: "server" },
-      );
+      expect(
+        await harness.caps({ id: "fake-host/lamp-mini-free" }),
+      ).toMatchObject({ compact: "server" });
       const compacted = await compactSession(
         compactRuntime(harness),
         first.session!,
@@ -177,7 +180,7 @@ function registerAcpxHarnessSessionCompactionPart3(): void {
   it("runs /compact on the raw route's named session after the prompt verb", async () => {
     const stub = createAcpxStub({ usage: AGENT_USAGE });
     const acpx: AcpxConfig = {
-      agent: "opencode acp",
+      agent: "agent-c acp",
       raw: true,
       compact: true,
       effort: {
@@ -186,7 +189,8 @@ function registerAcpxHarnessSessionCompactionPart3(): void {
       usage: { cache: true },
     };
     const harness = new AcpxHarness({
-      id: "opencode",
+      retention: "short" as const,
+      id: "agent-c",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
       acpx,
@@ -216,21 +220,22 @@ function registerAcpxHarnessSessionCompactionPart3(): void {
 }
 
 function registerAcpxHarnessSessionCompactionPart4(): void {
-  it("treats pi's Nothing to compact as a usable session, not a failure", async () => {
+  it("treats agent-a's Nothing to compact as a usable session, not a failure", async () => {
     const stub = createAcpxStub({ compact: "nothing" });
     const harness = new AcpxHarness({
-      id: "pi",
+      retention: "short" as const,
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     });
     try {
       const cwd = path.dirname(stub.binary);
       const first = await harness.turn(request(cwd, "first"));
 
       const command = await runAcpxCommand(
-        runtimeFor(stub, PI_ACPX),
-        PI_ACPX,
+        runtimeFor(stub, AGENT_A_ACPX),
+        AGENT_A_ACPX,
         first.session!,
         "/compact",
       );
@@ -262,10 +267,11 @@ function registerAcpxHarnessSessionCompactionPart5(): void {
   it("contains a failed compaction and keeps the session resumable", async () => {
     const stub = createAcpxStub({ compact: "fail" });
     const harness = new AcpxHarness({
-      id: "pi",
+      retention: "short" as const,
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -291,19 +297,20 @@ function registerAcpxHarnessSessionCompactionPart6(): void {
   it("never sends /compact to an agent without declared support", async () => {
     const stub = createAcpxStub({ usage: AGENT_USAGE });
     const harness = new AcpxHarness({
-      id: "agy",
+      retention: "short" as const,
+      id: "agent-c",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: AGY_ACPX,
+      acpx: AGENT_C_ACPX,
       options: { args: ["--approve-all"] },
     });
     try {
       const cwd = path.dirname(stub.binary);
       const first = await harness.turn(
-        request(cwd, "first", { model: { id: "gemini-3.8-flash" } }),
+        request(cwd, "first", { model: { id: "vendor/flash-3.8" } }),
       );
 
-      expect(await harness.caps({ id: "gemini-3.8-flash" })).toMatchObject({
+      expect(await harness.caps({ id: "vendor/flash-3.8" })).toMatchObject({
         compact: "none",
       });
       await expect(harness.compact(first.session!)).rejects.toThrow(
@@ -322,10 +329,11 @@ function registerAcpxHarnessSessionCompactionPart7(): void {
   it("keeps a long turn's cache hot through its last model event and skips once idle", async () => {
     const stub = createAcpxStub({ promptDelayMs: 100 });
     const harness = new AcpxHarness({
-      id: "pi",
+      retention: "short" as const,
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     });
     const clock = installFakeClock(Date.parse("2026-11-16T12:00:00.000Z"));
     try {

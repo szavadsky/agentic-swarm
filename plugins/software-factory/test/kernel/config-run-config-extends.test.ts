@@ -28,7 +28,7 @@ function mergesBaseChainLetsOverlayChangePart1(
       "  fake: { binary: fake }",
       "priceIds: { base/model: catalog/model }",
       "limits: { iterations: 4, concurrency: { overall: 5 } }",
-      "sessions: { dir: ~/sessions, keepRuns: 7 }",
+      "sessions: { dir: ~/sessions, keepRuns: 7, retention: long }",
       "worktreeRoot: ../wt",
       "",
     ].join("\n"),
@@ -72,7 +72,7 @@ function mergesBaseChainLetsOverlayChangePart2(
   expect(configs.run.sessions).toEqual({
     dir: "~/sessions",
     keepRuns: 7,
-    retention: "short",
+    retention: "long",
   });
   expect(configs.run.worktreeRoot).toBe("../wt");
   expect(resolveGoalPaths(configs, root, "demo").worktreeRoot).toContain(

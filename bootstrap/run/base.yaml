@@ -94,6 +94,7 @@ aliases:
 harnesses:
   # omp is native; the unattended policy is opaque overlay keys here, not code.
   omp:
+    compaction: { enabled: true }
     options:
       defaultThinkingLevel: low
       memory: { backend: off }
@@ -105,6 +106,7 @@ harnesses:
       disabledProviders: [native, claude, codex, gemini, opencode, cursor, agents-md]
       retry: { enabled: false, modelFallback: false }
   opencode:
+    compaction: { enabled: true }
     acpx:
       agent: opencode acp
       compact: true
@@ -129,6 +131,7 @@ limits:
 sessions:
   dir: ~/.local/share/factory/sessions
   keepRuns: 5
+  retention: short
 
 worktreeRoot: ~/.local/share/factory/worktrees
 

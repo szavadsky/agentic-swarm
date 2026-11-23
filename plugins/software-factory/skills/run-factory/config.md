@@ -2,8 +2,10 @@
 
 Merged in order: package defaults, then the repo layer, then the run layer.
 Every layer is validated on load and one report names the file and key that
-failed. `factory validate <.factory/repo.yaml|run.yaml|process.yaml>` checks a
-layer with the gate's validators.
+failed. `factory validate <.factory/repo.yaml|run.yaml|process.yaml>` checks
+one file with the gate's validators; for a repo, process or run file it also
+checks the three layers together (see
+[Validating a run config](#validating-a-run-config)).
 
 ## Repo layer — `.factory/repo.yaml`
 
@@ -27,6 +29,7 @@ gates:
 cleanliness:                                   # optional
   maxFileSizeBytes: 1048576
   allowedExtensions: [ts, json, md]
+codingRules: .factory/prompts/coding-rules.md  # optional; replaces the factory default clean-code partial
 ```
 
 - Gate `env` values are worktree-relative directories; the kernel creates them
@@ -110,8 +113,10 @@ aliases:
 harnesses:
   opencode:
     acpx: { agent: opencode acp, raw: true, compact: true, usage: { cache: true } }
+    compaction: { enabled: true }
   omp:
     options: { defaultThinkingLevel: low, memory: { backend: off } }
+    compaction: { enabled: true }
 limits:
   iterations: 1
   concurrency: { overall: 3, perSubscription: { opencode-go: 2 }, perModel: {} }
@@ -131,7 +136,13 @@ envAllowlist: [ANTHROPIC_API_KEY]
   crash), `rotate` (per-iteration primary), `escalateTo` (PM ladder) and
   `timeouts`; a fallback may name another alias.
 - `harnesses.<id>` binds an `acpx:` adapter or an executable and passes
-  `options` untouched. The factory repository's `bootstrap/run/base.yaml` and
+  `options` untouched. `compaction.enabled` turns session compaction on or off
+  for that harness; disabling it requires a `reason`, an acpx harness that
+  enables it needs `acpx.compact: true`, and `reviewIterations: [1, 2]` limits
+  review compaction to those 1-based rounds. `sessions.retention` is the
+  provider cache TTL (`auto|short|long|none`, required in a declared `sessions`
+  block); only `short`/`long` give a hot window, so `auto` and `none` do not
+  compact. The factory repository's `bootstrap/run/base.yaml` and
   `bootstrap/run/self.yaml` are complete examples.
 - `limits`: `iterations` (default 1), `concurrency`, `planCheckRounds`,
   `resumeAttempts`, `parkAmends`, `turns`, `wallMinutes`, `iterationUsd`,
@@ -154,3 +165,32 @@ written.
 
 See [SKILL.md](SKILL.md) for the run walkthrough and [kernel.md](kernel.md) for
 what the commands do.
+
+## Validating a run config
+
+`factory validate --run-config <file>` is the operator's check for a real run
+config (and for the repo and process files beside it). A run file named
+`run.yaml` also validates positionally; any other name needs the flag, as in
+`factory validate --run-config ../../bootstrap/run/self.yaml`. That flag
+also selects the run layer when a repo or process file is the positional
+file. It never launches a harness:
+no process is spawned, no model list is probed, no pool is called. It loads
+the three layers exactly as a launch would and reports, naming the owning
+file and key:
+
+- every alias the process layer requires (boundary steps, architecture
+  reviewers, flow steps, alternates, different-model follow-ups) that the run
+  layer does not define;
+- every task type that names a flow or a kernel outcome schema the process
+  layer does not define;
+- every quota pool named by `aliases.<name>.subscription` that
+  `limits.concurrency.perSubscription` does not define;
+- `aliases.<name>.escalateTo` and `aliases.<name>.fallbacks[<n>].alias` that
+  name a run-config alias that does not exist, and escalation and fallback
+  chains that cycle.
+
+A scratch run file outside a repo is checked against the process defaults and
+an optional `--repo` fallback; a file inside a repo is checked against that
+repo's process override. The pre-flight that runs at launch still does the
+live checks (model lists, effort probe, binaries, writable roots, base
+gates); this command is the offline subset that shares its static checks.

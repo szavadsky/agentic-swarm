@@ -133,9 +133,8 @@ aliases:
         subscription: opencode-go
 
 harnesses:
-  # No `compact`: agy submits `/compact` to the model as a prompt, compacts
-  # nothing and still answers end_turn (compaction-probe.md §2).
   agy:
+    compaction: { enabled: false, reason: "/compact is sent to the model as a prompt and compacts nothing" }
     acpx:
       agent: agy acp
       raw: true
@@ -145,12 +144,14 @@ harnesses:
       usage: { cache: true }
     options: { args: [--approve-all] }
   pi:
+    compaction: { enabled: true }
     acpx:
       agent: pi
       compact: true
       effort: { configId: thought_level }
       usage: { cache: true, command: "/session" }
   codex:
+    compaction: { enabled: true }
     acpx:
       agent: codex
       compact: true
@@ -160,6 +161,7 @@ harnesses:
   # conversation` tool call, 16512 -> 3492 tokens at $0.00 reported
   # (compaction-probe.md §1).
   claude-code:
+    compaction: { enabled: true }
     acpx:
       agent: claude
       compact: true

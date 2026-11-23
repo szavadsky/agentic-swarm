@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
+import { duplicateHelperProblems } from "./duplicate-helpers.js";
+import { promptProblems } from "./prompt-lint.js";
 
 /**
  * The lint gate. A red record keeps only the tail of the gate output
@@ -10,6 +12,8 @@ import path from "node:path";
  */
 const ROOT = path.resolve(process.argv[2] ?? path.join(import.meta.dir, ".."));
 const BIN = path.join(ROOT, "node_modules", ".bin");
+const problems = [...promptProblems(ROOT), ...duplicateHelperProblems(ROOT)];
+for (const problem of problems) console.error(problem);
 
 function run(command: string, args: readonly string[]): number {
   const result = spawnSync(command, [...args], {
@@ -29,4 +33,5 @@ const errors = run(path.join(BIN, "biome"), [
 ]);
 if (report !== 0 || errors !== 0) process.exit(report || errors);
 
-process.exit(run(path.join(BIN, "knip"), []));
+const knip = run(path.join(BIN, "knip"), []);
+if (knip !== 0 || problems.length > 0) process.exit(1);

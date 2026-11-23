@@ -14,12 +14,12 @@ import {
 } from "./architect-session.js";
 import { recordedBaseGates } from "./baseline.js";
 import {
-  codeMap,
   discardForeignPlanWrites,
   epicPlan,
   infraCause,
   openRecords,
   previousEpicSummary,
+  recordedPackHashes,
   snapshotDiff,
   spikeFindings,
   taskSnapshot,
@@ -35,6 +35,7 @@ import {
 } from "./context-pack.js";
 import { openDebts } from "./derive.js";
 import { compactSession, subarchitectTarget } from "./flow-context.js";
+import { contextCodeMap } from "./ingestion.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import type { PlanFile } from "./plan-file.js";
@@ -89,6 +90,7 @@ async function epicPackInput(
     checkout: runtime.paths.goalCheckout,
     integrationBranch: runtime.paths.integrationBranch,
     headHash: await integrationHead(runtime),
+    ...(await recordedPackHashes(runtime.store, opts.records, opts.iteration)),
     recordsDir: runtime.store.pathOf({ area: "records" }),
     tasksDir: runtime.store.tasks.dir,
     previousSummary: await previousEpicSummary(
@@ -103,7 +105,7 @@ async function epicPackInput(
       [...opts.records],
       [...epicTasks],
     ),
-    codeMap: await codeMap(runtime.paths.goalCheckout),
+    codeMap: await contextCodeMap(runtime),
     steers: [],
     setup: runtime.configs.repo.setup,
     gates: runtime.configs.repo.gates,

@@ -8,15 +8,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { recordedBaseGates } from "./baseline.js";
 import {
-  codeMap,
   expireSelfHolds,
   openRecords,
   ownedPlanText,
   previousSummary,
   previousWaste,
+  recordedPackHashes,
   spikeFindings,
   unavailableAliases,
 } from "./boundary-context.js";
+import { contextCodeMap } from "./ingestion.js";
 import { runSpikeSteer } from "./boundary-spike.js";
 import type { BoundaryOptions } from "./boundary-state.js";
 import { boundaryResult, type ConsultContext } from "./boundary-state.js";
@@ -30,6 +31,7 @@ import {
   renderContextData,
   renderContextPack,
 } from "./context-pack.js";
+import { withSpikeProposals } from "./context-pack/append.js";
 import { derive, openDebts } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
 import { runKeptLand } from "./integrate.js";
@@ -46,6 +48,11 @@ import {
   scanInbox,
   writeOutbox,
 } from "./mailbox.js";
+import {
+  DEFAULT_WASTE_SPIKE_THRESHOLD,
+  readWasteMetrics,
+  wasteSpikeProposals,
+} from "./metrics/recurring.js";
 import { PACK_PREP_STEP, runPackPreparer } from "./pack-prep.js";
 import {
   consultGate,
@@ -305,6 +312,11 @@ async function packInput(context: ConsultContext): Promise<ContextPackInput> {
   const aged = agedReady(context, holds);
   // A debt any active plan owns leaves the register, whichever architect wrote it.
   const planText = await ownedPlanText(runtime);
+  const hashes = await recordedPackHashes(
+    runtime.store,
+    context.records,
+    context.iteration,
+  );
   return {
     goal: path.basename(runtime.paths.goalDir),
     iteration: context.iteration,
@@ -313,6 +325,7 @@ async function packInput(context: ConsultContext): Promise<ContextPackInput> {
     checkout: runtime.paths.goalCheckout,
     integrationBranch: runtime.paths.integrationBranch,
     headHash: await integrationHead(runtime),
+    ...hashes,
     recordsDir: runtime.store.pathOf({ area: "records" }),
     tasksDir: runtime.store.tasks.dir,
     previousSummary: await previousSummary(
@@ -320,6 +333,11 @@ async function packInput(context: ConsultContext): Promise<ContextPackInput> {
       context.iteration - 1,
     ),
     previousWaste: await previousWaste(runtime.store, context.iteration - 1),
+    spikeProposals: wasteSpikeProposals(
+      await readWasteMetrics(runtime.store),
+      runtime.configs.process.wasteSpikeThreshold ??
+        DEFAULT_WASTE_SPIKE_THRESHOLD,
+    ),
     digestPath: context.digestPath,
     tasks: context.tasks,
     state: context.state,
@@ -328,7 +346,7 @@ async function packInput(context: ConsultContext): Promise<ContextPackInput> {
       context.records,
       context.tasks,
     ),
-    codeMap: await codeMap(runtime.paths.goalCheckout),
+    codeMap: await contextCodeMap(runtime),
     steers: context.forArchitect,
     holds,
     pmAnswers: context.pmAnswers,
@@ -456,6 +474,12 @@ export async function writePack(context: ConsultContext): Promise<void> {
     await runtime.store.writeFile(packRel, renderContextPack(input));
     if (prepFailure !== undefined)
       await recordPackFallback(context, prepFailure);
+  } else {
+    const pack = await runtime.store.readFile(packRel);
+    if (pack !== null) {
+      const updated = withSpikeProposals(pack, input);
+      if (updated !== pack) await runtime.store.writeFile(packRel, updated);
+    }
   }
 }
 

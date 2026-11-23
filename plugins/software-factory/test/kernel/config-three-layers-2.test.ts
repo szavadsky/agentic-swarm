@@ -126,9 +126,9 @@ function threeConfigLayersPart26() {
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
     fs.writeFileSync(
       path.join(root, ".factory/run.yaml"),
-      ["envAllowlist:", "  - ANTHROPIC_API_KEY", ""].join("\n"),
+      ["envAllowlist:", "  - FAKE_API_KEY", ""].join("\n"),
     );
-    expect(loadConfigs(root).run.envAllowlist).toEqual(["ANTHROPIC_API_KEY"]);
+    expect(loadConfigs(root).run.envAllowlist).toEqual(["FAKE_API_KEY"]);
     fs.rmSync(root, { recursive: true, force: true });
   });
 
@@ -204,9 +204,9 @@ function threeConfigLayersPart28() {
     const run = (command: string) =>
       [
         "harnesses:",
-        "  pi:",
+        "  agent-a:",
         "    acpx:",
-        "      agent: pi",
+        "      agent: agent-a",
         `      usage: { command: "${command}" }`,
         "",
       ].join("\n");
@@ -221,15 +221,15 @@ function threeConfigLayersPart28() {
     expect(error).toBeInstanceOf(ConfigError);
     expect((error as ConfigError).findings).toContainEqual(
       expect.objectContaining({
-        key: "harnesses.pi.acpx.usage.command",
+        key: "harnesses.agent-a.acpx.usage.command",
         message: expect.stringMatching(/leading \//),
       }),
     );
 
     fs.writeFileSync(runYaml, run("/session"));
-    expect(loadConfigs(root).run.harnesses!.pi!.acpx!.usage!.command).toBe(
-      "/session",
-    );
+    expect(
+      loadConfigs(root).run.harnesses!["agent-a"]!.acpx!.usage!.command,
+    ).toBe("/session");
     fs.rmSync(root, { recursive: true, force: true });
   });
 }

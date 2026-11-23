@@ -9,11 +9,13 @@ import {
   classifyZeroUsageTurn,
   isNoSessionError,
 } from "../classify.js";
+import type { AcpxRunConfig } from "../config.js";
 import { acpxModel } from "../model.js";
 import { AcpxTranscriptParser, acpxTranscriptPath } from "../transcript.js";
-import { turnUsageFromTotals } from "../usage.js";
-import type { AcpxRunConfig } from "../config.js";
 import type { AcpxTurnSummary } from "../types.js";
+import { turnUsageFromTotals } from "../usage.js";
+import { runPromptProcess } from "./process.js";
+import { runSetup } from "./setup.js";
 import type {
   AcpxRuntime,
   AcpxTurnContext,
@@ -23,9 +25,7 @@ import type {
   SetupFailure,
   UsageMeasurement,
 } from "./types.js";
-import { runSetup } from "./setup.js";
 import { isZeroUsage, readAcpxSessionUsage } from "./usage.js";
-import { runPromptProcess } from "./process.js";
 
 export function freshName(runtime: AcpxRuntime): string {
   return `${runtime.id}-${randomUUID()}`;
@@ -180,7 +180,7 @@ export function turnSession(
     // turn's cache is refreshed while its final response streams. ACP
     // carries no request timestamp, so local receipt time is the evidence.
     lastRequestStartedAt: processResult.lastEventAt ?? new Date().toISOString(),
-    retentionTier: "short" as const,
+    retentionTier: context.runtime.retention,
     compacted: context.req.session?.compacted ?? false,
     // A failed usage command must not drop the delta baseline.
     ...(resumed && context.req.session?.cumulativeUsage
@@ -190,8 +190,8 @@ export function turnSession(
 }
 
 /**
- * The turn's usage and the session baseline to return. pi's prompt result
- * carries no usage, so its configured command is the only source. The command
+ * The turn's usage and the session baseline to return. A prompt result with
+ * no usage leaves its configured command as the only source. The command
  * reuses the session and never spends a model turn; a failure leaves the stop
  * and the prompt's usage exactly as they were.
  */
@@ -225,7 +225,7 @@ export async function measureUsage(
   return {
     usage: measured,
     storedSession: { ...session, cumulativeUsage: cumulative },
-    usageMeasured: resumed && !previous ? false : true,
+    usageMeasured: !(resumed && !previous),
   };
 }
 

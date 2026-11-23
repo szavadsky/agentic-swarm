@@ -6,6 +6,7 @@ import { recordedBaseGates } from "../baseline.js";
 import { formatCause } from "../cause.js";
 import { materialOpenDebts } from "../derive.js";
 import { costText } from "../metrics.js";
+import type { QaOnlyCatches } from "../qa.js";
 import type {
   GroupMetrics,
   IncidentCounts,
@@ -37,11 +38,11 @@ export function spendTable(
 ): string[] {
   if (rows.length === 0) return ["- none"];
   return [
-    `| ${label} | turns | tokens | cost | prompt bytes |`,
-    "| --- | --- | --- | --- | --- |",
+    `| ${label} | turns | tokens | harness-reported | list-price estimate | prompt bytes |`,
+    "| --- | --- | --- | --- | --- | --- |",
     ...rows.map(
       (row) =>
-        `| ${row.name} | ${row.turns} | ${row.tokens} | ${costText(row.usage.costUsd, row.unpricedTurns)} | ${row.promptBytes} |`,
+        `| ${row.name} | ${row.turns} | ${row.tokens} | ${sourceCostText(row.usage.harnessCostUsd, row.unpricedTurns)} | ${sourceCostText(row.usage.listCostUsd, row.unpricedTurns)} | ${row.promptBytes} |`,
     ),
   ];
 }
@@ -118,7 +119,7 @@ export function summaryTaskLists(
   const cancelled: string[] = [];
   for (const slug of Object.keys(state.tasks).sort()) {
     const status = state.tasks[slug]!.status;
-    if (status === "parked") {
+    if (status === "parked" && state.tasks[slug]!.supersededBy === undefined) {
       parked.push(slug);
     } else if (status === "pending" || status === "ready") {
       pending.push(slug);
@@ -230,17 +231,43 @@ export function parkedCauseLines(
     ]);
 }
 
-export function costByRoleLine(
-  roleNames: readonly { name: string; usage: Usage; unpricedTurns: number }[],
+/** A source's own figure; absent stays absent, never a false $0. */
+export function sourceCostText(
+  costUsd: number | undefined,
+  unpricedTurns: number,
 ): string {
-  if (roleNames.length === 0) return "- cost by role: none";
-  const rows = roleNames
-    .map(
-      (entry) =>
-        `${entry.name} ${costText(entry.usage.costUsd, entry.unpricedTurns)}`,
-    )
-    .join("; ");
-  return `- cost by role: ${rows}`;
+  if (costUsd === undefined && unpricedTurns === 0) return "n/a";
+  return costText(costUsd, unpricedTurns);
+}
+
+export function costByRoleLines(
+  roleNames: readonly { name: string; usage: Usage; unpricedTurns: number }[],
+): string[] {
+  if (roleNames.length === 0)
+    return [
+      "- harness-reported cost by role: none",
+      "- list-price estimate by role: none",
+    ];
+  const rows = (pick: (usage: Usage) => number | undefined): string =>
+    roleNames
+      .map(
+        (entry) =>
+          `${entry.name} ${sourceCostText(pick(entry.usage), entry.unpricedTurns)}`,
+      )
+      .join("; ");
+  return [
+    `- harness-reported cost by role: ${rows((usage) => usage.harnessCostUsd)}`,
+    `- list-price estimate by role: ${rows((usage) => usage.listCostUsd)}`,
+  ];
+}
+
+export function qaCatchLine(catches: QaOnlyCatches): string {
+  const perTask = Object.entries(catches.byTask).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
+  if (perTask.length === 0) return `- QA-only catches: ${catches.count}`;
+  const detail = perTask.map(([task, count]) => `${task}: ${count}`).join(", ");
+  return `- QA-only catches: ${catches.count} (${detail})`;
 }
 
 export function perMergedCost(

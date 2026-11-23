@@ -1,6 +1,11 @@
+import path from "node:path";
 import { backfillSummaries } from "./summary.js";
 import type { ArtifactStore, KernelRuntime } from "./types.js";
 import { prepareIntegrationCheckout } from "./worktree.js";
+
+interface SettledRecords {
+  closed: number;
+}
 
 /**
  * A record directory with `started.yaml` and no `end.yaml` is a turn cut off by
@@ -13,9 +18,11 @@ import { prepareIntegrationCheckout } from "./worktree.js";
  * usage or commit. Still free: quota/rate/network/auth/overflow/glitch stops
  * and drain (tasks never started). Every record that already has `end.yaml`
  * is sealed too, so history written before records were read-only becomes
- * sealed as well.
+ * sealed as well. An interrupted agent turn's worktree is kept: the sweep
+ * removes terminal tasks only, so the relaunch continues that turn in the
+ * tree it was already working in.
  */
-async function settleRecords(store: ArtifactStore): Promise<number> {
+async function settleRecords(store: ArtifactStore): Promise<SettledRecords> {
   let closed = 0;
   for (const dir of await store.records.dirs()) {
     if (!dir.started) continue;
@@ -29,21 +36,22 @@ async function settleRecords(store: ArtifactStore): Promise<number> {
     });
     closed += 1;
   }
-  return closed;
+  return { closed };
 }
 
 /**
  * Startup recovery under the goal lock: orphan records first, then the stable
- * checkout (removes stale task worktrees, resets a half-finished merge) and the
- * summaries missing from iterations that were killed.
+ * checkout (removes stale task worktrees, keeps an interrupted agent turn's
+ * tree, resets a half-finished merge) and the summaries missing from
+ * iterations that were killed.
  */
 export async function recoverLaunch(runtime: KernelRuntime): Promise<number> {
-  const closed = await settleRecords(runtime.store);
+  const settled = await settleRecords(runtime.store);
   await prepareIntegrationCheckout(runtime);
   await backfillSummaries(runtime);
-  if (closed > 0)
+  if (settled.closed > 0)
     console.warn(
-      `[factory] recovery closed ${closed} interrupted record(s) as infra: crash`,
+      `[factory] recovery closed ${settled.closed} interrupted record(s) as infra: crash`,
     );
-  return closed;
+  return settled.closed;
 }

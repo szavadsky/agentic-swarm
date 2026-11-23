@@ -52,6 +52,14 @@ const VALUE_FLAGS: readonly ValueFlag[] = [
     },
   },
   {
+    name: "--pin-gate-override",
+    apply: (result, value) => {
+      if (!value.trim())
+        throw new Error("--pin-gate-override requires a reason");
+      result.pinGateOverride = value.trim();
+    },
+  },
+  {
     name: "--intent",
     apply: (result, value) => {
       if (!value) throw new Error("--intent requires a file");
@@ -63,6 +71,13 @@ const VALUE_FLAGS: readonly ValueFlag[] = [
     apply: (result, value) => {
       if (!value) throw new Error("--step requires a step id");
       result.step = value;
+    },
+  },
+  {
+    name: "--alias",
+    apply: (result, value) => {
+      if (!value) throw new Error("--alias requires an alias name");
+      result.alias = value;
     },
   },
   {
@@ -90,6 +105,26 @@ function applyValueFlag(
   return parsed.next;
 }
 
+function applyBooleanFlag(result: ParsedArgs, arg: string): boolean {
+  if (arg === "--help" || arg === "-h") {
+    result.help = true;
+    return true;
+  }
+  if (arg === "--version" || arg === "-v") {
+    result.version = true;
+    return true;
+  }
+  if (arg === "--json") {
+    result.json = true;
+    return true;
+  }
+  if (arg === "--dry-run") {
+    result.dryRun = true;
+    return true;
+  }
+  return false;
+}
+
 export function parseCliArgs(args: string[]): ParsedArgs {
   const result: ParsedArgs = {
     repo: process.cwd(),
@@ -100,13 +135,8 @@ export function parseCliArgs(args: string[]): ParsedArgs {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (!arg) continue;
-    if (arg === "--help" || arg === "-h") {
-      result.help = true;
-    } else if (arg === "--version" || arg === "-v") {
-      result.version = true;
-    } else if (arg === "--json") {
-      result.json = true;
-    } else if (arg === "-" || !arg.startsWith("-")) {
+    if (applyBooleanFlag(result, arg)) continue;
+    if (arg === "-" || !arg.startsWith("-")) {
       positional.push(arg);
     } else {
       i = applyValueFlag(result, arg, args, i);

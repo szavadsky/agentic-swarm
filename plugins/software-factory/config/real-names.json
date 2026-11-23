@@ -1,0 +1,24 @@
+{
+  "harnesses": ["opencode", "opencode-go", "codex", "agy", "cmdc", "pi", "claude", "claude-code"],
+  "models": [
+    "opus",
+    "sonnet",
+    "haiku",
+    "fable",
+    "astra",
+    "deepseek",
+    "qwen",
+    "luna",
+    "sol",
+    "grok",
+    "gemini",
+    "ernie",
+    "minimax",
+    "beam",
+    "longcat",
+    "hy4",
+    "mimo"
+  ],
+  "providers": ["anthropic", "baidu", "reflection", "xai"],
+  "subscriptions": ["antigravity", "command code", "open code", "open code go", "open router"]
+}

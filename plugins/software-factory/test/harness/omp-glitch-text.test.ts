@@ -75,6 +75,7 @@ function fixture(): {
       : [];
   return {
     harness: new OmpHarness({
+      retention: "short",
       binary,
       sessionDir: path.join(tmp, "sessions"),
       readyTimeoutMs: 5_000,

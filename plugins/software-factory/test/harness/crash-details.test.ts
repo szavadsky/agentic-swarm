@@ -19,7 +19,7 @@ import type { Stop } from "../../src/harness/types.js";
 const SECRET = "sk-live-TOPSECRETTOKEN1234567890";
 const TIMEOUTS = { idleMs: 0, wallMs: 5_000 };
 const ACPX_BANNER =
-  "[acpx] session claude-code-test (00000000-0000-0000-0000-000000000000) · /tmp · agent connected";
+  "[acpx] session agent-test (00000000-0000-0000-0000-000000000000) · /tmp · agent connected";
 
 function tempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -46,21 +46,22 @@ function detailsOf(stop: Stop): string {
 
 async function ompTurn(binary: string, dir: string) {
   const harness = new OmpHarness({
+    retention: "short",
     binary,
     sessionDir: path.join(dir, "sessions"),
     readyTimeoutMs: 2_000,
   });
   return harness.turn({
-    model: { id: "opencode-go/beam-free" },
+    model: { id: "fake-host/lamp-mini-free" },
     cwd: dir,
     prompt: "x",
     timeouts: TIMEOUTS,
   });
 }
 
-async function opencodeTurn(binary: string, dir: string) {
+async function agentTurn(binary: string, dir: string) {
   const acpx: AcpxConfig = {
-    agent: "opencode acp",
+    agent: "agent-c acp",
     raw: true,
     effort: {
       configId: "effort",
@@ -68,13 +69,14 @@ async function opencodeTurn(binary: string, dir: string) {
     usage: { cache: true },
   };
   const harness = new AcpxHarness({
-    id: "opencode",
+    retention: "short",
+    id: "agent-c",
     binary,
     sessionDir: path.join(dir, "sessions"),
     acpx,
   });
   return harness.turn({
-    model: { id: "opencode/fake-model" },
+    model: { id: "agent-c/fake-model" },
     cwd: dir,
     prompt: "x",
     timeouts: TIMEOUTS,
@@ -227,23 +229,20 @@ describe("OmpHarness crash details", () => {
   }, 20_000);
 });
 
-describe("AcpxHarness opencode raw route crash details", () => {
-  acpxHarnessOpencodeRawRouteCrashPart1();
-  acpxHarnessOpencodeRawRouteCrashPart2();
-  acpxHarnessOpencodeRawRouteCrashPart3();
+describe("AcpxHarness raw route crash details", () => {
+  acpxHarnessRawRouteCrashPart1();
+  acpxHarnessRawRouteCrashPart2();
+  acpxHarnessRawRouteCrashPart3();
 });
 
-function acpxHarnessOpencodeRawRouteCrashPart1() {
+function acpxHarnessRawRouteCrashPart1() {
   it("carries the errno when the binary is missing", async () => {
     const dir = tempDir("oc-missing-");
     try {
-      const result = await opencodeTurn(
-        path.join(dir, "missing-opencode"),
-        dir,
-      );
+      const result = await agentTurn(path.join(dir, "missing-agent"), dir);
       const details = detailsOf(result.stop);
       expect(details).toContain("ENOENT");
-      expect(details).toContain("missing-opencode");
+      expect(details).toContain("missing-agent");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -254,10 +253,10 @@ function acpxHarnessOpencodeRawRouteCrashPart1() {
     try {
       const binary = stubBinary(
         dir,
-        "boom-opencode.js",
+        "boom-agent.js",
         `fs.writeSync(2, "fatal: worker crashed with key ${SECRET}");\nprocess.exit(3);`,
       );
-      const result = await opencodeTurn(binary, dir);
+      const result = await agentTurn(binary, dir);
       const details = detailsOf(result.stop);
       expect(details).toContain("exit 3");
       expect(details).toContain("worker crashed");
@@ -271,8 +270,8 @@ function acpxHarnessOpencodeRawRouteCrashPart1() {
   it("describes the exit code and signal when stderr is empty", async () => {
     const dir = tempDir("oc-silent-");
     try {
-      const binary = stubBinary(dir, "silent-opencode.js", "process.exit(7);");
-      const result = await opencodeTurn(binary, dir);
+      const binary = stubBinary(dir, "silent-agent.js", "process.exit(7);");
+      const result = await agentTurn(binary, dir);
       expect(detailsOf(result.stop)).toBe("exit 7, signal none");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -280,16 +279,16 @@ function acpxHarnessOpencodeRawRouteCrashPart1() {
   }, 20_000);
 }
 
-function acpxHarnessOpencodeRawRouteCrashPart2() {
+function acpxHarnessRawRouteCrashPart2() {
   it("records the exit code when the prompt writes only the banner", async () => {
     const dir = tempDir("oc-banner-");
     try {
       const binary = stubBinary(
         dir,
-        "banner-opencode.js",
+        "banner-agent.js",
         `const args = process.argv.slice(2);\nif (args.includes("sessions") && args.includes("new")) process.exit(0);\nfs.writeSync(2, ${JSON.stringify(`${ACPX_BANNER}\n`)});\nprocess.exit(1);`,
       );
-      const result = await opencodeTurn(binary, dir);
+      const result = await agentTurn(binary, dir);
       const details = detailsOf(result.stop);
       expect(details).toBe("exit 1, signal none");
       expect(details).not.toContain("agent connected");
@@ -308,10 +307,10 @@ function acpxHarnessOpencodeRawRouteCrashPart2() {
       });
       const binary = stubBinary(
         dir,
-        "setup-error-opencode.js",
+        "setup-error-agent.js",
         `fs.writeSync(2, ${JSON.stringify(`${ACPX_BANNER}\n`)});\nfs.writeSync(1, ${JSON.stringify(`${frame}\n`)});\nprocess.exit(1);`,
       );
-      const result = await opencodeTurn(binary, dir);
+      const result = await agentTurn(binary, dir);
       const details = detailsOf(result.stop);
       expect(details).toContain("exit 1");
       expect(details).toContain("setup agent crashed");
@@ -322,16 +321,16 @@ function acpxHarnessOpencodeRawRouteCrashPart2() {
   }, 20_000);
 }
 
-function acpxHarnessOpencodeRawRouteCrashPart3() {
+function acpxHarnessRawRouteCrashPart3() {
   it("keeps the tail of very long stderr", async () => {
     const dir = tempDir("oc-long-");
     try {
       const binary = stubBinary(
         dir,
-        "long-opencode.js",
+        "long-agent.js",
         `fs.writeSync(2, "x".repeat(2000) + " end of the real error: token=${SECRET}");\nprocess.exit(1);`,
       );
-      const result = await opencodeTurn(binary, dir);
+      const result = await agentTurn(binary, dir);
       const details = detailsOf(result.stop);
       expect(details.startsWith("exit 1, signal none: …")).toBe(true);
       expect(details.endsWith("end of the real error: token=[redacted]")).toBe(

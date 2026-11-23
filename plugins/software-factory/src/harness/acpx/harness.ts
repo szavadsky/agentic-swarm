@@ -47,8 +47,6 @@ export class AcpxHarness implements Harness {
       compact: this.runtime.acpx.compact === true ? "server" : "none",
       subagents: "none",
       structuredOutput: "none",
-      // Live levels exist only inside a session; pre-flight probes them.
-      effort: [],
       // ACP carries cost on `usage_update`; a silent agent leaves it unknown.
       usage: { cache: this.runtime.acpx.usage?.cache ?? false, cost: true },
     };
@@ -84,8 +82,8 @@ export class AcpxHarness implements Harness {
   /**
    * Session-end compaction over acpx's `/compact` adapter command. ACP has no
    * compaction method, so the command must be the whole prompt; the config flag
-   * only marks agents verified to accept it. pi answers "Nothing to compact"
-   * as ACP -32603 for a small session: that session stays as it was, usable.
+   * only marks agents verified to accept it (config/acpx-verify.md). A small
+   * session answers ACP -32603 "Nothing to compact" and stays usable.
    * Every other failure throws, and the kernel's `compactSession` contains it
    * so the turn that ended still settles with the uncompacted ref.
    */
@@ -151,6 +149,7 @@ function runtimeOf(opts: AcpxHarnessOptions): AcpxRuntime {
     command: resolveAcpxCommand(opts.binary),
     sessionDir: path.resolve(opts.sessionDir),
     envAllowlist: opts.envAllowlist,
+    retention: opts.retention,
     // The entry's opaque options win over the structured block; the adapter
     // reads only `args` and `env` from the result.
     acpx: {

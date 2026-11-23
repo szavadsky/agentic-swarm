@@ -7,10 +7,13 @@ import {
   unregisterChildGroup,
 } from "../../../core/shutdown.js";
 import type { TurnRequest } from "../../types.js";
-import { AcpxTranscriptFile, AcpxTranscriptParser } from "../transcript.js";
 import type { AcpxRunConfig } from "../config.js";
-import type { AcpxRuntime, PromptProcessResult } from "./types.js";
+import {
+  AcpxTranscriptFile,
+  type AcpxTranscriptParser,
+} from "../transcript.js";
 import { MAX_STDERR_BYTES } from "./setup.js";
+import type { AcpxRuntime, PromptProcessResult } from "./types.js";
 
 /** Opens the transcript file, or reports why it could not be opened. */
 function openTranscript(path: string | undefined): {

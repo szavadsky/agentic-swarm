@@ -344,7 +344,7 @@ function threeConfigLayersPart21() {
       [
         "aliases:",
         "  implementer: { harness: omp, model: m, subscription: go,",
-        "    fallbacks: [{ harness: agy, model: g, effort: high, subscription: ag }] }",
+        "    fallbacks: [{ harness: agent-c, model: g, effort: high, subscription: ag }] }",
         "limits: { iterations: 1 }",
         "",
       ].join("\n"),
@@ -352,7 +352,7 @@ function threeConfigLayersPart21() {
     const alias = loadConfigs(root).run.aliases.implementer!;
     expect(alias.subscription).toBe("go");
     expect(alias.fallbacks).toEqual([
-      { harness: "agy", model: "g", effort: "high", subscription: "ag" },
+      { harness: "agent-c", model: "g", effort: "high", subscription: "ag" },
     ]);
     fs.rmSync(root, { recursive: true, force: true });
   });

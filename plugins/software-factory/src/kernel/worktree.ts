@@ -10,9 +10,10 @@ export {
   removeMergeScratch,
   resetMergeScratch,
   resetWorktreeToCommit,
-  taskBranchName,
   treeSha,
 } from "./worktree/checkout.js";
+export { taskBranchName } from "./worktree/names.js";
+export { sweepWorktrees } from "./worktree/sweep.js";
 export { ensureTaskWorktree, headSha } from "./worktree/task.js";
 export {
   containmentSnapshot,

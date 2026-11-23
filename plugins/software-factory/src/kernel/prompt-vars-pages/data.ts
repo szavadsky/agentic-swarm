@@ -1,6 +1,7 @@
 /** The prompt-variable descriptors, one entry per template variable. */
 
 import type { PromptVariablesPage } from "./types.js";
+import { REPAIR_PROMPT_VARIABLES } from "./data-repair.js";
 
 /** One page per prompt template; the renderer emits them in this order. */
 export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
@@ -109,6 +110,8 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
         "configured task types with their flow, kind and schema; renderer default",
       tiers: "run-config alias names; renderer default",
       class_types: "class-to-task-type mapping, rendered by the front turn",
+      code_map_path:
+        "path of the code map a `when: [bigger]` scout step wrote; `none` when no scout ran",
     },
   },
   {
@@ -176,9 +179,11 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
         "path to the front's context pack for a front-classified trivial or task goal; empty string when no front classified this task",
       worktree: "path to the task worktree to edit",
       resume_note:
-        "follow-up notice for a turn resumed in the front's session: the task branch plus the absolute-path rules; empty string on a de-novo turn",
+        "follow-up notice for a relaunched or trivial turn: the task branch and the resume fragment; empty string on a de-novo turn",
       report_path:
         "repo-relative path a spike commits its finding to (`.factory/spikes/<slug>.md`); empty string on a development task; when set, it also opens the prompt with the commit-first sentence",
+      env_notes:
+        "the task file's environment notes as `- ` bullet lines (infra facts, known flakes, workarounds); empty string when the task has none",
       setup_command:
         "worktree bootstrap command (dependencies etc.); `none` when not needed",
       gate_commands:
@@ -329,7 +334,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     file: "review-architect.md",
     prompt: "review-architect",
     intro:
-      "The plan-review prompt the architecture flow renders on each reviewer alias. It composes the architect's assignment and plan standard from fragments, adds the review focus, and delivers `planReview` findings (`technical`, `planNotes`) with no verdict. It never edits the plan.",
+      "The plan-review prompt the architecture flow renders on each reviewer alias. It composes the architect's assignment and whole body from fragments, adds the review focus, and delivers `planReview` findings (`technical`, `planNotes`) with no verdict. It never edits the plan.",
     variables: {
       iteration: "1-based iteration number of this launch",
       intent_path: "path to the goal's `intent.md`",
@@ -347,7 +352,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       task_types:
         "configured task types with their flow, kind and schema, read by the included plan standard; renderer default",
       tiers:
-        "run-config alias names, read by the included plan standard; renderer default",
+        "run-config alias names, read by the included architect scope; renderer default",
     },
   },
   {
@@ -403,6 +408,8 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       integration_head: "integration head sha the branch must absorb",
       conflicts:
         "conflicted files, comma-separated; `none` when the merge needs no resolution",
+      gate_log_path:
+        "path to the red merged result's gate log when this branch is a red-after-merge candidate; `none` when the merge needs no gate repair",
       gate_commands:
         "configured gate commands as `- id: command` lines; `none` when empty",
       base_gates:
@@ -459,29 +466,34 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     },
   },
   {
-    file: "delivery-repair.md",
-    prompt: "delivery-repair",
-    intro:
-      "The default in-session repair ask, rendered by the kernel when a turn delivers no outcome, no verdict or decision, or (architect) no plan. Process config names the template per step (`repairPrompt`); a step that names none renders this one. A repo may shadow it like any template. It is not a role prompt: it is rendered directly, never included by another prompt, and it includes `repair-ask` for the header, findings and outcome contract, then adds its closing instruction. It includes `outcome` for the contract and, unless a bare done delivers, `verdict` for the verdict/decision usage line. Its `outcome_schema` is narrowed to the fields that turn delivers — the base shape, the prompt's reporting fields, and the one field its expectation gates — so a bare done is never asked for a verdict.",
+    file: "scout.md",
+    prompt: "scout",
     variables: {
-      role: "the prompt (the role) whose turn missed its deliverable",
-      deliverable:
-        "the product the turn must deliver; process config names it, else a review turn's verdict, else the outcome",
-      done_allowed:
-        "`true` when a bare `status: done` delivers (no verdict or decision required), else `false`",
-      findings: "the missing or invalid findings as `- ` bullet lines",
-      outcome_path: "path where the corrected outcome must be written",
+      iteration: "1-based iteration number of this launch",
+      intent_path: "path to the goal's `intent.md`; the map's subject",
+      checkout:
+        "path to the stable goal checkout (integration worktree) being mapped",
+      code_map_path:
+        "path of the code map to write, with one entry per directory; the one artifact the turn authors (the outcome file is the other)",
+      outcome_path:
+        "path where the outcome file must be written when the harness asks for a file",
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema, narrowed to the fields this turn delivers; supplied by the repair ask",
+        "outcome YAML skeleton from the kernel schema; renderer default",
     },
   },
+  ...REPAIR_PROMPT_VARIABLES,
   {
-    file: "architect-repair.md",
-    prompt: "architect-repair",
-    intro:
-      "The architect's repair ask, named by the architect boundary step's `repairPrompt`. Same variables as `delivery-repair.md`; it adds that a continued turn must have its plan edit on disk, so the generic template stays free of role branches.",
-    shares: "delivery-repair.md",
+    file: "resume.md",
+    prompt: "resume",
+    variables: {
+      branch: "task branch the relaunch continues; empty when none",
+      reason:
+        "`relaunch` after an interruption, `trivial` in the front's session",
+      session_cwd:
+        "directory the resumed session's tools run in; trivial turns only",
+      worktree: "absolute worktree a trivial turn must use; trivial turns only",
+    },
   },
 ];

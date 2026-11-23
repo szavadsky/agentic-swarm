@@ -21,21 +21,26 @@ script renders a bounded index pack and the fallback is recorded as a glitch.
 cd plugins/software-factory
 bun bin/factory.ts init   --repo <path> --goal <name> [--intent <file>]
 bun bin/factory.ts run    --repo <path> --goal <name> --run-config <file> [--iterations N]
+                          [--pin-gate-override <reason>]
 bun bin/factory.ts status --repo <path> --goal <name> [--json]
 bun bin/factory.ts benchmark --repo <path> --goal <name>
 bun bin/factory.ts steer  --repo <path> --goal <name> <file | ->
-bun bin/factory.ts validate [--step <id>] <file>
+bun bin/factory.ts validate [--step <id>] [--run-config <file>] [<file>]
 bun bin/factory.ts schemas --out <dir>
 bun bin/factory.ts variables --out <file>
+bun bin/factory.ts prompts --dry-run --repo <path> [--out <dir>]
 ```
 
 `init` writes `.factory/repo.yaml` if missing, creates the goal directory and
 copies the intent (or writes a template). `run` pre-flights, takes the goal
-lock, recovers interrupted work and runs the iteration loop. `status` prints
+lock, recovers interrupted work and runs the iteration loop. A launch from a
+pin also reads that pin's `gate.yaml`: an absent, invalid or red record refuses
+the run before any goal write, and `--pin-gate-override <reason>` launches it
+anyway and records the reason in the run's records. `status` prints
 derived state and parked causes; `--json` prints `status.json`, the snapshot
 the kernel rewrites after each agent launch and finish, together with the
-static `dashboard.html` rendered beside it; `benchmark` prints one
-goal's benchmark rows;
+static `dashboard.html` rendered beside it and the page's vendored `vendor/`
+assets; `benchmark` prints one goal's benchmark rows;
 `steer` drops a file into the inbox atomically. `validate` checks one
 schema-enforced file with the gate's validators (tasks/*.md with its
 directory's dependency graph and flow existence against the merged process
@@ -43,14 +48,26 @@ config, class.yaml, outcome.yaml keyed by the step in the sibling
 started.yaml or `--step`, mailbox/holds/*.yaml, repo.yaml, run.yaml,
 process.yaml); exit 0 valid, 1 invalid or unknown kind. `schemas` writes every
 kernel file schema as JSON Schema (`task`, `outcome`, `qa`, `hold`, `class`, `repo`,
-`run`, `process`) into `--out` for editors and the artifact LSP. `variables`
+`run`, `process`, `gate`) into `--out` for editors and the artifact LSP. `variables`
 renders `prompts/VARIABLES.md` from the typed prompt-variable descriptor; the
 prompt tests fail when the committed file differs from that render.
+
+`prompts --dry-run` renders every prompt the loaded config names (stdout, or
+one `<name>.md` per render under `--out`), so shadows and config edits are
+visible before a run.
 
 Exit codes for `run`: `0` goal done, `1` failure, `2` blocked, `3` iteration
 limit, `130`/`143` interrupted by SIGINT/SIGTERM. The first signal drains (no
 new dispatch, in-flight turns finish), the second aborts in-flight turns and
 records their partial usage.
+
+## Prompt templates
+
+Prompts live in `prompts/`;
+see [docs/prompt-templates.md#example](docs/prompt-templates.md#example).
+Rendering uses strict LiquidJS with shared partials, and repo-local prompts
+shadow the factory defaults. Lint checks flag an unreferenced fragment and a
+paragraph duplicated across fragments.
 
 ## Skill
 
@@ -84,15 +101,28 @@ gates:
   - id: integration
     command: jest --ci
     format: { pattern: jest }                    # runner whose output it parses
-    serial: [database]                          # gates naming a mutex never overlap
+    serial: [database]                          # same-named gates in one worktree never overlap
     env: { TMPDIR: .cache/gate }                # per-worktree scratch directory
 cleanliness:                                    # optional; default rules active without it
   maxFileSizeBytes: 1048576                     # default: 1048576 (1 MB)
   allowedExtensions: [ts, json, md]             # default: extensions present in base tree
-  maxOutOfScopeFiles: 3                         # default: 3
+  allowedFiles: [data/benchmark.csv]            # optional; explicit files exempt from the heuristic
+codingRules: .factory/prompts/coding-rules.md   # optional; replaces the factory default clean-code partial
 ```
 
-Cleanliness checks run by default without repo config to detect large files, disallowed/new extensions, temp/weights/huge outputs, and excessive files out of task scope. A cleanliness hit sends the author one revision follow-up turn (fix or justify) before review; if justified, the task advances to review without re-looping and the reviewer evaluates the justification. Tightened thresholds may be configured under `cleanliness` in `.factory/repo.yaml`.
+Cleanliness checks run by default without repo config to detect large files, disallowed/new extensions, and temp/weights/huge outputs. A cleanliness hit sends the author one revision follow-up turn with three exits: clean up the files, add them to `.gitignore`, or list them under `cleanliness.allowedFiles` in `.factory/repo.yaml`. The follow-up is never repeated; an author who keeps a file explains it, and the reviewer evaluates the reason. Tightened thresholds may be configured under `cleanliness` in `.factory/repo.yaml`.
+
+No real harness, model or subscription names appear in `src/` or `test/`
+(`scripts/real-names-gate.ts`, driven by `config/real-names.json`, is a
+lint-gate check): the names are checked against that JSON list, the omp
+adapter is the only exempt directory, and the name list itself is excluded.
+The price-source API endpoint is not a name and is never listed. Pricing
+matches a harness id against the price table exactly, or through a run-config
+`priceIds` entry; a turn the harness does not price and the config does not
+name stays unpriced. Verified adapter behaviours live in
+`config/acpx-verify.md` so the acpx code carries no names.
+
+`codingRules` names a repo-relative markdown file whose text replaces the factory default `clean-code` partial in the implementer, QA, reviewer, steward and adjudicator prompts. When `codingRules` is absent the factory default renders; when present the file replaces it rather than appending, and a missing file is a config error. The path must stay worktree-relative and cannot escape the repo.
 
 The tracked repo layer names no worktree root: checkouts, sessions and harness
 policy belong to the run layer, so one checkout never silently shadows another.
@@ -112,10 +142,11 @@ absorbs the other's history; the same-repo root must also not be ignored by the
 repository (the store replaces only its own folder `.gitignore`).
 
 Gate runs in different worktrees run in parallel. A gate waits only for the
-mutexes it names in `serial`: within one factory process, gates naming the same
-mutex are serialized, and a gate that names none never waits. `env` maps
-variable names to worktree-relative directories; the kernel creates them and
-exports absolute paths, so two worktrees get two directories.
+mutexes it names in `serial`, and same-named gates serialize within one worktree
+only: two worktrees never wait on each other's mutex, and a gate that names none
+never waits. `env` maps variable names to worktree-relative directories; the
+kernel creates them and exports absolute paths, so two worktrees get two
+directories.
 
 A gate's `format` gives its failures identities that survive assertion values
 and timings, so a red inherited from the base is not blamed on the task:
@@ -142,9 +173,13 @@ flows:
       - { id: implement, prompt: implementer, alias: implementer }
       - { id: qa, prompt: qa, alias: qa, qa: true, changeRequests: 2, deliverable: verdict }
       - { id: review, prompt: reviewer, alias: reviewer, review: true, changeRequests: 2 }
-      - { id: resolve, prompt: steward, alias: steward }   # merge-conflict turn only
+      - { id: resolve, prompt: steward, alias: steward }   # merge-conflict turn only; the wave-end steward also owns red-after-merge candidates
 taskTypes:
   development: { flow: implement-review, kind: development, schema: outcome }
+ingestion:                      # the goal-start step sequence, in list order
+  - { id: branch }              # records the goal branch the launch created
+  - { id: front }               # the classifier; exactly one, prompt/alias from boundary.front
+  - { id: scout, prompt: scout, alias: pm, deliverable: code map, when: [bigger] }
 boundary:                       # the kernel turns outside any task flow
   architect: { prompt: architect, alias: architect, repairPrompt: architect-repair, deliverable: "plan edit or stop decision" }
   digest: { prompt: digest, alias: digest }
@@ -164,6 +199,16 @@ hierarchy:                      # 1 architect (the norm), or 2 with one subarchi
   subarchitect: { prompt: subarchitect, repairPrompt: architect-repair, deliverable: "epic plan edit or stop decision" }
 ```
 
+`ingestion` is the goal-start sequence, run in list order: `branch` must be
+first and exactly one `front` classifies the goal. Any other id runs one agent
+turn with its `prompt` on its `alias` (default `pm`) and must name a `prompt`;
+`deliverable` names what the turn produces. `when` gates a step to one or more
+goal classes (`trivial`, `task`, `bigger`) and cannot be named ahead of `front`,
+where the class is not known yet. The shipped `scout` step runs for bigger goals
+and writes the code map the context packs carry; without a scout step the packs
+keep the shallow directory index. Adding an ingestion agent (e.g. a
+requirements step) is a config edit, and its turn is recorded like any flow step.
+
 A step may name `repairPrompt` (the template its in-session repair ask
 renders) and `deliverable` (the product the ask and the missing-outcome finding
 name; default `outcome`, or `verdict` on an acceptance step). A `qa: true` step
@@ -175,7 +220,13 @@ outside the normal agent sequence: a squash merge that conflicts runs one turn
 that merges the head into the task branch and resolves it, then the task checks
 and the merge retries. A second conflict parks, the wave-end steward remains the
 fallback, and a resolution that changed files outside the conflict set goes
-through QA and review before it lands. A step that names no
+through QA and review before it lands. The wave-end steward runs when a merge
+conflicts or when the goal branch is red: a parked branch whose last merged
+result ran red is a red-after-merge candidate — its turn receives the red gate
+log and repairs the merged result on that branch, then the merge queue re-runs
+its gates. A branch the boundary's kept-land pass can still land (its approve
+covers the tip, or its review-less flow's checks are green) stays with
+kept-land. A step that names no
 template renders the process-level `repairPrompt` (default `delivery-repair`).
 The architect names `architect-repair` because its ask also requires the plan
 edit on disk; the default template then carries no role branch.
@@ -249,6 +300,13 @@ limits:
   iterations: 1
   iterationUsd: 5
 sessions: { dir: ~/.local/share/factory/sessions, keepRuns: 5, retention: short }
+harnesses:
+  opencode:
+    acpx: { agent: opencode acp, raw: true, compact: true }
+    compaction: { enabled: true }                     # the adapter has a real /compact command
+  agy:                                                # acpx adapter with no compaction command
+    acpx: { agent: agy acp, raw: true }
+    compaction: { enabled: false, reason: "/compact is sent to the model as a prompt and compacts nothing" }
 quota: { resetMinutes: 300 }                         # fallback cooldown; a stated reset wins; maxResetMinutes caps it
 worktreeRoot: ~/.local/share/factory/worktrees
 lsp: true                                             # artifact LSP on omp
@@ -265,6 +323,17 @@ inherited key (`scouts: null`, `fallbacks: null`). A missing base and an
 `bootstrap/run/base.yaml` carries the shared self-run aliases, the unattended
 omp policy, the price-id rows and the roots; every other shipped file is a thin
 overlay.
+
+`sessions.retention` is the provider cache TTL, omp's `providers.cacheRetention`
+enum (`auto|short|long|none`) and is required in a declared `sessions` block.
+`short` and `long` bound a compaction to the hot window (5 minutes and one hour);
+`none` disables caching and `auto` leaves the window to the provider, so neither
+compacts — set `short` to compact. A harness entry's `compaction.enabled` decides
+whether its sessions compact at all; disabling it requires a `reason`, and an
+`acpx` harness that enables it must also declare `acpx.compact: true`. A review
+step's harness may add `reviewIterations: [1, 2]`: only those 1-based review
+rounds compact, while every other step ignores the rule. Absent means every
+review round compacts.
 
 A task session resumes on the harness that recorded it. `portability: [{from, to}]`
 declares further directional edges: a session recorded on `from` may resume on
@@ -378,20 +447,22 @@ same launch.
 
 Pre-flight resolves every alias (and fallback) through the harness, checks the
 model list, the effort level, binaries, the base branch, and that
-session/worktree roots are writable and outside the repo. `effort` names a
-literal level the model accepts, `auto`, or `harness-default` (omit the level);
-`effort: highest` is refused. An omp `@` alias is the exception: omp resolves
-it inside its own chain, so there is no catalog entry and no per-model effort
-list; its effort must be one omp's `--thinking` flag parses (`off`, `minimal`,
-`low`, `medium`, `high`, `xhigh`, `max`, `auto`) — or absent.
+session/worktree roots are writable and outside the repo. `effort` must be a
+level the harness probe reports for that model; a model that reports no effort
+negotiates none, so any configured level is refused and an absent one leaves
+the model default. An omp `@` alias answers with the union of catalogued
+levels plus `auto`.
 
 `harnesses.<id>` binds an adapter (`acpx:`) or executable and carries
 `options` passed untouched: acpx reads `args`/`env` (pre-flight refuses an
 `args` that is not a string array or an `env` that is not a string-to-string
-map), omp merges the keys into its launch overlay (`sessions.retention` still
-owns `providers.cacheRetention`). The shipped `bootstrap/run/base.yaml` keeps the
-unattended omp policy there — memory/auto-learn/skills off, approval, disabled
-providers, retry — so no policy is compiled in.
+map), omp merges the keys into its launch overlay (`sessions.retention` owns
+`providers.cacheRetention`). Each entry's `compaction` block records whether its
+sessions compact and, when disabled, why (the `agy` entry: `/compact` reaches
+the model as a prompt and compacts nothing). The shipped
+`bootstrap/run/base.yaml` keeps the unattended omp policy there —
+memory/auto-learn/skills off, approval, disabled providers, retry — so no policy
+is compiled in.
 
 Every child a launch spawns runs on a fixed base environment (`PATH`, `HOME`,
 temp dirs, bun/node caches, git's optional locks, locale) instead of the
@@ -410,10 +481,11 @@ Gates run once on the base; a red base is recorded and warned once, not fatal.
   epics/<epic>.md           # one plan per architect scope; the goal plan's register names them
   records/                  # one directory per settled step and round: started/end/outcome
   mailbox/{inbox,processed,outbox}/
-  iterations/<n>/{context-pack.md,summary.md,metrics.yaml}
+  iterations/<n>/{context-pack.md,summary.md,metrics.yaml,intent-status.json}
+  vendor/{pico.min.css,chart.umd.min.js} # local dashboard assets
   metrics.yaml
   status.json              # machine-readable snapshot for the CLI and dashboard
-  dashboard.html           # static page rendered from status.json; no server
+  dashboard.html           # static page rendered from status.json and intent-status.json; no server
 ```
 
 ## Steering
@@ -455,7 +527,8 @@ parks), loop incidents (no-progress and empty-diff parks; a spike's empty
 finish and overflow parks are not loop incidents), wasted turns by reason and
 by role and alias (complete implementer failure; structure: protocol,
 containment, outcome channel, infra; flaky-test rejection), rebutted review
-turns counted apart as accepted tax, human interventions
+turns counted apart as accepted tax, QA-only catches per task (findings no
+earlier gate failure or reviewer finding matched), human interventions
 (processed steers) and the observable
 operator-act counter (steers plus containment outside-changes and
 integration-moved merges), gate and commit wall time, and turns, tokens, cost

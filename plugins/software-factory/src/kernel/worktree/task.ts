@@ -14,9 +14,8 @@ import {
   integrationHead,
   mergeRef,
   registeredWorktrees,
-  taskBranchName,
-  taskWorktreePath,
 } from "./checkout.js";
+import { taskBranchName, taskWorktreePath } from "./names.js";
 
 /**
  * Setup runs once per worktree, recorded in the worktree's git dir (outside the

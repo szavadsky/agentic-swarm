@@ -1,1 +1,3 @@
-{}
+{
+  "src/kernel/boundary-stage.ts": "split-rest"
+}

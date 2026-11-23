@@ -6,7 +6,7 @@ import {
 } from "../flow-context-targets.js";
 import type { AliasConfig, FallbackModelConfig } from "../types.js";
 import type { AliasContext } from "./types.js";
-import { add, checkedModel, registryMessage, resolveEffort } from "./models.js";
+import { add, checkEffort, checkedModel, registryMessage } from "./models.js";
 
 /** A fallback without a harness runs on the rotated primary. */
 function fallbackHarnesses(
@@ -21,14 +21,12 @@ function fallbackHarnesses(
   return [alias.harness];
 }
 
-/** Checks one fallback model on one harness, stamping effort for single tiers. */
+/** Checks one fallback model's own effort; it never inherits the alias's. */
 async function checkTierModel(
   ctx: AliasContext,
   tierKey: string,
   fallback: FallbackModelConfig,
-  alias: AliasConfig,
   tierHarness: string,
-  singleTier: boolean,
 ): Promise<void> {
   if (ctx.unavailable.has(tierHarness)) return;
   const tier = await checkedModel(
@@ -39,32 +37,14 @@ async function checkTierModel(
     "fallback",
   );
   if (!tier) return;
-  // Each tier carries its own effort: explicit, else the alias's, else a
-  // suffix declared on that model, resolved against the tier's live values. A
-  // rotating fallback without a fixed effort inherits the rotated entry's
-  // effort at resolution, so nothing is stamped here.
-  if (fallback.effort === undefined) {
-    if (singleTier) {
-      fallback.effort = await resolveEffort(
-        ctx,
-        tierKey,
-        tierHarness,
-        { id: fallback.model },
-        alias.effort ?? tier.modelEffort,
-        tier.effort,
-      );
-    }
-    return;
-  }
-  const resolved = await resolveEffort(
+  checkEffort(
     ctx,
     tierKey,
     tierHarness,
-    { id: fallback.model },
-    fallback.effort,
+    fallback.model,
+    fallback.effort ?? tier.modelEffort,
     tier.effort,
   );
-  if (singleTier) fallback.effort = resolved;
 }
 
 /**
@@ -122,16 +102,8 @@ async function checkFallbackTier(
     );
   }
   const tierHarnesses = fallbackHarnesses(fallback, rotation, alias);
-  const singleTier = tierHarnesses.length === 1;
   for (const tierHarness of tierHarnesses) {
-    await checkTierModel(
-      ctx,
-      tierKey,
-      fallback,
-      alias,
-      tierHarness,
-      singleTier,
-    );
+    await checkTierModel(ctx, tierKey, fallback, tierHarness);
   }
 }
 

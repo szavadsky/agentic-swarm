@@ -22,6 +22,7 @@ import {
   whenTurn,
 } from "./s2-helpers.js";
 import { formatCause } from "../../src/kernel/cause.js";
+import { workCalls } from "./fake-defaults.js";
 import { causeText } from "./helpers.js";
 
 const PLAN = `# Milestone 1
@@ -227,8 +228,9 @@ function deliveryGuardPart1() {
       });
 
       await expectLaunch(3, goal.repo, harness);
-      expect(harness.calls).toHaveLength(2);
-      expect(harness.calls[1]!.prompt).toContain("plan edit or stop decision");
+      const calls = workCalls(harness);
+      expect(calls).toHaveLength(2);
+      expect(calls[1]!.prompt).toContain("plan edit or stop decision");
       const summary = fs.readFileSync(
         path.join(goal.goalDir, "iterations/1/summary.md"),
         "utf8",

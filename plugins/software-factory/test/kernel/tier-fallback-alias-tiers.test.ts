@@ -229,7 +229,7 @@ function registerAliasFallbackTiersPart11(): void {
 }
 
 function registerAliasFallbackTiersPart12(): void {
-  it("expands a fallback that names another alias and keeps its pools and effort", async () => {
+  it("expands a fallback that names another alias and keeps its pools", async () => {
     const t = await tierRuntime(
       {
         harness: "a",
@@ -259,7 +259,9 @@ function registerAliasFallbackTiersPart12(): void {
       ).toEqual([
         ["a", "ma", undefined, "outer"],
         ["b", "mb", "high", "inner"],
-        ["b", "mb2", "high", "inner"],
+        // The literal tier names no effort of its own: the harness default,
+        // never an inherited level.
+        ["b", "mb2", undefined, "inner"],
       ]);
 
       // One pool covers the named alias's whole ladder: both its tiers drop.
@@ -334,7 +336,7 @@ function registerAliasFallbackTiersPart14(): void {
     const t = await tierRuntime({
       harness: "a",
       model: "ma",
-      subscription: "claude",
+      subscription: "pool-a",
       fallbacks: [
         { harness: "b", model: "mb" },
         { harness: "b", model: "mb-own", subscription: "go" },
@@ -344,18 +346,18 @@ function registerAliasFallbackTiersPart14(): void {
     });
     try {
       const target = resolveTurn(t.runtime, "implementer", "implementer");
-      // The unchanged tier keeps the Claude pool; a changed tier with neither
+      // The unchanged tier keeps the Pool-A pool; a changed tier with neither
       // declaration is keyed harness+model, never the alias's subscription.
       expect(target.tiers.map(tierPoolKey)).toEqual([
-        "claude",
+        "pool-a",
         "b+mb",
         "go",
-        "claude",
-        "claude",
+        "pool-a",
+        "pool-a",
       ]);
       expect(target.tiers[1]!.subscription).toBeUndefined();
       expect(target.tiers[2]!.subscription).toBe("go");
-      expect(target.tiers[3]!.subscription).toBe("claude");
+      expect(target.tiers[3]!.subscription).toBe("pool-a");
     } finally {
       cleanupFlowRepo(t.repo);
     }
@@ -367,13 +369,13 @@ function registerAliasFallbackTiersPart15(): void {
     const t = await tierRuntime({
       harness: "a",
       model: "ma",
-      subscription: "claude",
+      subscription: "pool-a",
       fallbacks: [{ harness: "b", model: "mb" }],
     });
     try {
       // The primary's pool is dead: the fallback is the only live tier and must
-      // not be dropped with the Claude pool it no longer draws on.
-      latchPool(t.runtime, "claude");
+      // not be dropped with the Pool-A pool it no longer draws on.
+      latchPool(t.runtime, "pool-a");
       const target = resolveTurn(t.runtime, "implementer", "implementer");
       expect(target.tiers.map((tier) => tier.model.id)).toEqual(["mb"]);
       expect(target.subscription).toBeUndefined();
@@ -392,7 +394,7 @@ function registerAliasFallbackTiersPart15(): void {
 
       const after = resolveTurn(t.runtime, "implementer", "implementer");
       expect(after.tiers).toEqual([]);
-      expect(after.unavailable).toContain("claude resets at");
+      expect(after.unavailable).toContain("pool-a resets at");
       expect(after.unavailable).toContain("b+mb resets at");
     } finally {
       cleanupFlowRepo(t.repo);
@@ -405,14 +407,14 @@ function registerAliasFallbackTiersPart17(): void {
     const t = await tierRuntime({
       harness: "a",
       model: "ma",
-      subscription: "claude",
+      subscription: "pool-a",
       fallbacks: [{ harness: "b", model: "mb" }],
     });
     try {
       const target = resolveTurn(t.runtime, "implementer", "implementer");
       expect(target.tiers).toHaveLength(2);
       // Another leg latches both pools between resolution and the first call.
-      latchPool(t.runtime, "claude");
+      latchPool(t.runtime, "pool-a");
       latchPool(t.runtime, "b+mb");
 
       const result = await runAgentTurn(t.runtime, {
@@ -429,7 +431,7 @@ function registerAliasFallbackTiersPart17(): void {
       if (stop.kind !== "infra") throw new Error("expected an infra stop");
       expect(stop.cause).toBe("unavailable");
       expect(stop.details).toContain('alias "implementer" has no live tier');
-      expect(stop.details).toContain("claude resets at");
+      expect(stop.details).toContain("pool-a resets at");
       expect(stop.details).toContain("b+mb resets at");
       expect(t.a.calls).toHaveLength(0);
       expect(t.b.calls).toHaveLength(0);

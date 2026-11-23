@@ -11,6 +11,7 @@ import {
   type OmpTurnOpaque,
   selectorOf,
 } from "./types.js";
+import type { CacheTtl } from "../types.js";
 
 export interface OmpDirs {
   base: string;
@@ -26,7 +27,7 @@ export class OmpRuntime {
   readonly options?: Record<string, unknown>;
   readonly envAllowlist: readonly string[];
   readonly readyTimeoutMs: number;
-  readonly retention: "short" | "long";
+  readonly retention: CacheTtl;
   /** Canonical artifact LSP config; when set, every turn cwd gets it and `--no-lsp` is dropped. */
   readonly lspConfig?: string;
   private modelsCache?: Promise<any[]>;
@@ -39,7 +40,7 @@ export class OmpRuntime {
     this.options = opts.options;
     this.envAllowlist = opts.envAllowlist ?? [];
     this.readyTimeoutMs = opts.readyTimeoutMs ?? 30_000;
-    this.retention = opts.retention ?? "short";
+    this.retention = opts.retention;
     this.lspConfig = opts.lspConfig;
   }
 

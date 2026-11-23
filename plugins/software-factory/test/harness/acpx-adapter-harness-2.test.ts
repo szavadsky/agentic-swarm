@@ -7,31 +7,31 @@ import { createAcpxStub } from "./acpx-stub.js";
 
 const TIMEOUTS = { idleMs: 10_000, wallMs: 30_000 };
 
-const AGY_BIN = "/opt/agy-test/bin/agy";
+const AGENT_C_BIN = "/opt/agent-c-test/bin/agent-c";
 
-const PI_ACPX: AcpxConfig = {
-  agent: "pi",
+const AGENT_A_ACPX: AcpxConfig = {
+  agent: "agent-a",
   effort: {
     configId: "thought_level",
   },
 };
 
-const CODEX_ACPX: AcpxConfig = {
-  agent: "codex",
+const AGENT_B_ACPX: AcpxConfig = {
+  agent: "agent-b",
   effort: {
     configId: "reasoning_effort",
   },
   usage: { cache: true },
 };
 
-const AGY_OPTIONS = { args: ["--approve-all"] };
+const AGENT_C_OPTIONS = { args: ["--approve-all"] };
 
-const agyAcpx = (agent: string): AcpxConfig => ({
+const agentCAcpx = (agent: string): AcpxConfig => ({
   agent,
   raw: true,
   effort: {
     configId: "thought_level",
-    modelBases: { "gemini-3.8-flash": ["low", "medium", "high"] },
+    modelBases: { "vendor/flash-3.8": ["low", "medium", "high"] },
   },
   usage: { cache: true },
 });
@@ -42,7 +42,7 @@ function request(
   extra: Record<string, unknown> = {},
 ) {
   return {
-    model: { id: "opencode-go/beam-free" },
+    model: { id: "fake-host/lamp-mini-free" },
     cwd,
     prompt,
     timeouts: TIMEOUTS,
@@ -50,14 +50,14 @@ function request(
   };
 }
 
-async function runsAgyThroughAcpxSRawAgentRoutePart1(
+async function runsAgentCThroughAcpxSRawAgentRoutePart1(
   stub: ReturnType<typeof createAcpxStub>,
   harness: AcpxHarness,
 ) {
   const cwd = path.dirname(stub.binary);
   const result = await harness.turn(
     request(cwd, "Say [[text:PONG]]", {
-      model: { id: "gemini-3.8-flash-high" },
+      model: { id: "vendor/flash-3.8-high" },
     }),
   );
 
@@ -65,7 +65,7 @@ async function runsAgyThroughAcpxSRawAgentRoutePart1(
   expect(result.text).toBe("PONG");
   // The alias's model id is recorded; only acpx's --model gets the base id.
   expect(result.model).toEqual({
-    id: "gemini-3.8-flash-high",
+    id: "vendor/flash-3.8-high",
     effort: "high",
   });
   expect(result.usage).toEqual({
@@ -88,7 +88,7 @@ async function runsAgyThroughAcpxSRawAgentRoutePart1(
   // The raw ACP agent is the resolved executable; it needs approve-all or
   // every shell command is denied.
   for (const args of [create, set, prompt]) {
-    expect(args[args.indexOf("--agent") + 1]).toBe(`${AGY_BIN} acp`);
+    expect(args[args.indexOf("--agent") + 1]).toBe(`${AGENT_C_BIN} acp`);
   }
   expect(create.indexOf("--approve-all")).toBeLessThan(
     create.indexOf("sessions"),
@@ -104,8 +104,8 @@ async function runsAgyThroughAcpxSRawAgentRoutePart1(
   return { result, set, prompt };
 }
 
-async function runsAgyThroughAcpxSRawAgentRoutePart2(
-  scope: Awaited<ReturnType<typeof runsAgyThroughAcpxSRawAgentRoutePart1>>,
+async function runsAgentCThroughAcpxSRawAgentRoutePart2(
+  scope: Awaited<ReturnType<typeof runsAgentCThroughAcpxSRawAgentRoutePart1>>,
 ) {
   const { set, result, prompt } = scope;
   expect(set.slice(set.indexOf("set"))).toEqual([
@@ -115,7 +115,7 @@ async function runsAgyThroughAcpxSRawAgentRoutePart2(
     "thought_level",
     "high",
   ]);
-  expect(prompt[prompt.indexOf("--model") + 1]).toBe("gemini-3.8-flash");
+  expect(prompt[prompt.indexOf("--model") + 1]).toBe("vendor/flash-3.8");
   // The raw route has no positional agent, so --model and --agent are
   // global flags; both must precede the prompt verb.
   expect(prompt.indexOf("--model")).toBeLessThan(prompt.indexOf("prompt"));
@@ -129,7 +129,7 @@ async function runsAgyThroughAcpxSRawAgentRoutePart2(
 }
 
 function registerAcpxHarnessPart15(): void {
-  it("runs agy through acpx's raw agent route and splits the effort suffix", async () => {
+  it("runs agent-c through acpx's raw agent route and splits the effort suffix", async () => {
     const stub = createAcpxStub({
       usage: {
         totalTokens: 8883,
@@ -141,15 +141,19 @@ function registerAcpxHarnessPart15(): void {
       },
     });
     const harness = new AcpxHarness({
-      id: "agy",
+      retention: "short" as const,
+      id: "agent-c",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: agyAcpx(`${AGY_BIN} acp`),
-      options: AGY_OPTIONS,
+      acpx: agentCAcpx(`${AGENT_C_BIN} acp`),
+      options: AGENT_C_OPTIONS,
     });
     try {
-      const scope1 = await runsAgyThroughAcpxSRawAgentRoutePart1(stub, harness);
-      await runsAgyThroughAcpxSRawAgentRoutePart2(scope1);
+      const scope1 = await runsAgentCThroughAcpxSRawAgentRoutePart1(
+        stub,
+        harness,
+      );
+      await runsAgentCThroughAcpxSRawAgentRoutePart2(scope1);
     } finally {
       stub.cleanup();
     }
@@ -157,25 +161,26 @@ function registerAcpxHarnessPart15(): void {
 }
 
 function registerAcpxHarnessPart16(): void {
-  it("resumes an agy session from a second process without creating a new one", async () => {
+  it("resumes an agent-c session from a second process without creating a new one", async () => {
     const stub = createAcpxStub({
       usage: { totalTokens: 10, inputTokens: 5, outputTokens: 5 },
     });
     const options = {
-      id: "agy",
+      retention: "short" as const,
+      id: "agent-c",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: agyAcpx(`${AGY_BIN} acp`),
-      options: AGY_OPTIONS,
+      acpx: agentCAcpx(`${AGENT_C_BIN} acp`),
+      options: AGENT_C_OPTIONS,
     };
     try {
       const cwd = path.dirname(stub.binary);
       const first = await new AcpxHarness(options).turn(
-        request(cwd, "first", { model: { id: "gemini-3.8-flash-high" } }),
+        request(cwd, "first", { model: { id: "vendor/flash-3.8-high" } }),
       );
       const second = await new AcpxHarness(options).turn(
         request(cwd, "second [[text:ALPHA]]", {
-          model: { id: "gemini-3.8-flash-high" },
+          model: { id: "vendor/flash-3.8-high" },
           session: first.session,
         }),
       );
@@ -184,7 +189,7 @@ function registerAcpxHarnessPart16(): void {
       expect(second.text).toBe("ALPHA");
       expect(second.session?.id).toBe(first.session!.id);
       expect(second.model).toEqual({
-        id: "gemini-3.8-flash-high",
+        id: "vendor/flash-3.8-high",
         effort: "high",
       });
 
@@ -210,16 +215,17 @@ function registerAcpxHarnessPart16(): void {
 }
 
 function registerAcpxHarnessPart17(): void {
-  it("keeps an agy model id whose effort word is part of the name", async () => {
+  it("keeps an agent-c model id whose effort word is part of the name", async () => {
     const stub = createAcpxStub({
       usage: { totalTokens: 10, inputTokens: 5, outputTokens: 5 },
     });
     const harness = new AcpxHarness({
-      id: "agy",
+      retention: "short" as const,
+      id: "agent-c",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: agyAcpx(`${AGY_BIN} acp`),
-      options: AGY_OPTIONS,
+      acpx: agentCAcpx(`${AGENT_C_BIN} acp`),
+      options: AGENT_C_OPTIONS,
     });
     try {
       const result = await harness.turn(
@@ -241,20 +247,20 @@ function registerAcpxHarnessPart17(): void {
 }
 
 function registerAcpxHarnessPart18(): void {
-  it("advertises agy's static caps without inventing live effort levels", async () => {
+  it("advertises agent-c's static caps without inventing live effort levels", async () => {
     const harness = new AcpxHarness({
-      id: "agy",
-      binary: "/nonexistent/agy",
-      sessionDir: path.dirname("/nonexistent/agy"),
-      acpx: agyAcpx("/nonexistent/agy acp"),
-      options: AGY_OPTIONS,
+      retention: "short" as const,
+      id: "agent-c",
+      binary: "/nonexistent/agent-c",
+      sessionDir: path.dirname("/nonexistent/agent-c"),
+      acpx: agentCAcpx("/nonexistent/agent-c acp"),
+      options: AGENT_C_OPTIONS,
     });
-    expect(await harness.caps({ id: "gemini-3.8-flash-high" })).toEqual({
+    expect(await harness.caps({ id: "vendor/flash-3.8-high" })).toEqual({
       resume: true,
       compact: "none",
       subagents: "none",
       structuredOutput: "none",
-      effort: [],
       usage: { cache: true, cost: true },
     });
   });
@@ -266,10 +272,11 @@ function registerAcpxHarnessPart19(): void {
       usage: { totalTokens: 10, inputTokens: 5, outputTokens: 5 },
     });
     const harness = new AcpxHarness({
-      id: "pi",
+      retention: "short" as const,
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -277,18 +284,18 @@ function registerAcpxHarnessPart19(): void {
         request(cwd, "Say [[text:PONG]]", {
           effort: "high",
           opaque: {
-            ...CODEX_ACPX,
+            ...AGENT_B_ACPX,
             effort: { configId: "reasoning_effort" },
           } satisfies AcpxConfig,
         }),
       );
       expect(result.stop).toEqual({ kind: "done" });
-      // The opaque wins over the instance config: the codex agent ran.
+      // The opaque wins over the instance config: agent-b ran.
       const prompt = stub
         .invocations()
         .find((args) => args.at(-1)?.includes("[[text:PONG]]"))!;
-      expect(prompt).toContain("codex");
-      expect(prompt).not.toContain("pi");
+      expect(prompt).toContain("agent-b");
+      expect(prompt).not.toContain("agent-a");
       const set = stub.invocations().find((args) => args.includes("set"))!;
       expect(set.slice(set.indexOf("set"))).toEqual([
         "set",
@@ -307,6 +314,7 @@ function registerAcpxHarnessPart20(): void {
       usage: { totalTokens: 10, inputTokens: 5, outputTokens: 5 },
     });
     const harness = new AcpxHarness({
+      retention: "short" as const,
       id: "nova",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
@@ -329,7 +337,7 @@ function registerAcpxHarnessPart20(): void {
         .invocations()
         .find((args) => args.at(-1)?.includes("[[text:PONG]]"))!;
       expect(prompt[prompt.indexOf("--model") + 1]).toBe(
-        "opencode-go/beam-free",
+        "fake-host/lamp-mini-free",
       );
       expect(prompt.indexOf("--model")).toBeLessThan(prompt.indexOf("nova"));
       const set = stub.invocations().find((args) => args.includes("set"))!;
@@ -339,7 +347,6 @@ function registerAcpxHarnessPart20(): void {
         "high",
       ]);
       expect(await harness.caps({ id: "nova-model" })).toMatchObject({
-        effort: [],
         usage: { cache: false, cost: true },
       });
     } finally {
@@ -385,10 +392,11 @@ function registerAcpxHarnessPart21(): void {
     for (const testCase of cases) {
       const stub = createAcpxStub();
       const harness = new AcpxHarness({
-        id: "pi",
+        retention: "short",
+        id: "agent-a",
         binary: stub.binary,
         sessionDir: path.dirname(stub.binary),
-        acpx: PI_ACPX,
+        acpx: AGENT_A_ACPX,
         // A quota stop is final; backoff never sleeps.
         retry: { baseDelayMs: 1, maxDelayMs: 1 },
       });

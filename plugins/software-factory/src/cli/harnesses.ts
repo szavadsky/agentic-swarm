@@ -50,6 +50,7 @@ export function createRealHarnesses(
       id,
       binary: entry.binary,
       sessionDir: context.sessionDir,
+      retention: context.retention,
       acpx: entry.acpx,
       options: entry.options,
       envAllowlist: context.envAllowlist,

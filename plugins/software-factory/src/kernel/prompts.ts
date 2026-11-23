@@ -9,7 +9,7 @@ import {
   taskTypesVar,
   tierNamesVar,
 } from "./prompt-schema.js";
-import type { ProcessConfig, RunConfig } from "./types.js";
+import type { ProcessConfig, RepoConfig, RunConfig } from "./types.js";
 
 /**
  * Prompt templates render through LiquidJS in strict mode: an unknown variable
@@ -20,6 +20,8 @@ import type { ProcessConfig, RunConfig } from "./types.js";
 
 export interface PromptLibrary {
   render(fragment: string, vars: Record<string, string>): string;
+  /** Variables the library supplies to every render; a caller never passes them. */
+  readonly defaults: Readonly<Record<string, string>>;
   /**
    * Variables a render needs; `vars` resolves a template's dynamic include
    * (the reviewer's author body) that static analysis cannot name.
@@ -120,7 +122,7 @@ function checkOverrides(overrides: Record<string, string>): void {
  * statically, so the fragments they name are analyzed by the caller (a missing
  * one fails by name).
  */
-function dynamicIncludes(
+export function dynamicPromptIncludes(
   locals: Record<string, unknown>,
   author: string | undefined,
 ): string[] {
@@ -151,7 +153,7 @@ function promptAnalyzer(
     const { text, filepath } = loadFragment(layers, roots, fragment);
     const analysis = engine.parseAndAnalyzeSync(text, filepath);
     const names = new Set(Object.keys(analysis.globals));
-    const dynamic = dynamicIncludes(analysis.locals, vars.author);
+    const dynamic = dynamicPromptIncludes(analysis.locals, vars.author);
     for (const included of dynamic) {
       for (const name of requiredVariables(included, vars)) names.add(name);
     }
@@ -191,6 +193,7 @@ export function loadPromptLibrary(opts: {
   );
 
   return {
+    defaults,
     placeholders(
       fragment: string,
       vars: Record<string, string> = {},
@@ -247,6 +250,8 @@ export const CHECK_HANDOFF_DEFAULTS = {
   checks_log: "unknown",
 } as const;
 
+/** Default author used by prompt renders. */
+export const DEFAULT_PROMPT_AUTHOR = "implementer";
 /**
  * Templates live in the package `prompts/` dir; a repo may shadow any
  * template under `.factory/prompts/` and replace the calibration partial with
@@ -259,9 +264,13 @@ export const CHECK_HANDOFF_DEFAULTS = {
 export function loadPrompts(
   process: ProcessConfig,
   repoRoot: string,
-  options?: { aliases?: Record<string, unknown>; run?: RunConfig },
+  options?: {
+    aliases?: Record<string, unknown>;
+    run?: RunConfig;
+    repo?: RepoConfig;
+  },
 ): PromptLibrary {
-  const { aliases, run } = options ?? {};
+  const { aliases, run, repo } = options ?? {};
   const overrideDirs: string[] = [];
   if (process.promptsDir)
     overrideDirs.push(path.resolve(repoRoot, process.promptsDir));
@@ -275,6 +284,15 @@ export function loadPrompts(
   }
 
   if (calibration !== undefined) overrides.calibration = calibration;
+  if (repo?.codingRules !== undefined) {
+    const codingRulesPath = path.resolve(repoRoot, repo.codingRules);
+    if (!fs.existsSync(codingRulesPath)) {
+      throw new Error(
+        `coding rules file not found: ${repo.codingRules} (resolved to ${codingRulesPath})`,
+      );
+    }
+    overrides["clean-code"] = fs.readFileSync(codingRulesPath, "utf8");
+  }
   return loadPromptLibrary({
     builtinDir: path.join(packageRoot, "prompts"),
     overrideDirs,
@@ -285,8 +303,10 @@ export function loadPrompts(
     // reviewer's author is the implementer unless the turn names another.
     defaults: {
       validate_cmd: validateCmd(),
-      author: "implementer",
+      author: DEFAULT_PROMPT_AUTHOR,
       cleanliness_revision: "false",
+      // A task with no environment notes renders none; promptVars supplies them per task.
+      env_notes: "",
       fix_dispositions: "",
       outcome_schema: outcomeSchemaVar(),
       task_frontmatter: taskFrontmatterVar(),

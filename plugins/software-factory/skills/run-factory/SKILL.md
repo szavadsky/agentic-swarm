@@ -10,7 +10,7 @@ CLI: `bun bin/factory.ts` from `plugins/software-factory`. Goal commands take
 task files and append-only records in the configured artifact store (a plain
 folder by default); there is no daemon and no state file to repair.
 
-## 1. Put the intent
+## 1. Intent placement
 
 - Write the WHAT, acceptance criteria and constraints in one Markdown file.
 - `init --intent <file>` copies it to `<goal>/intent.md` in the artifact store; without
@@ -20,7 +20,7 @@ folder by default); there is no daemon and no state file to repair.
   `steer`.
 - `run` refuses a goal whose `intent.md` is missing.
 
-## 2. Configure
+## 2. Config
 
 Three layers, merged and validated with one report naming file and key:
 [config.md](config.md).
@@ -61,22 +61,24 @@ bun bin/factory.ts benchmark --repo "$REPO" --goal demo
   launch: relaunch the same command to continue.
 - One launch can run minutes to hours; redirect its output to a file.
 
-## 4. Watch
+## 4. Dashboard location
 
 - `status` — derived goal state, one line per task, every parked cause and the
   last summary path. It launches nothing.
 - `status --json` — prints `status.json`, the snapshot the kernel rewrites
   after each agent launch and finish.
 - Dashboard — `<artifact root>/<goal>/dashboard.html`, a static page rendered
-  beside `status.json`: no server, no external assets. Open it in a browser and
-  refresh it; it updates only when the kernel writes a snapshot.
+  beside `status.json`. Pico CSS and Chart.js are vendored under `vendor/` and
+  loaded locally; the intent section reads the architect's
+  `iterations/<n>/intent-status.json`. Open it in a browser and refresh it; it
+  updates only when the kernel writes a snapshot.
 - `benchmark` — cost, tokens, architect share, cost per merged task, work,
   incidents and wall time.
 - Iteration record — `<artifact root>/<goal>/iterations/<n>/summary.md` and
   `metrics.yaml`.
 - [kernel.md](kernel.md) — command surface, goal layout, records, exit codes.
 
-## 5. Steer and inspect
+## 5. Steers
 
 - `steer --repo … --goal … <file|->` drops a file into `mailbox/inbox/`
   atomically. The architect reads it at the next boundary and answers in
@@ -86,6 +88,25 @@ bun bin/factory.ts benchmark --repo "$REPO" --goal demo
   consult reads it as `[urgent]`.
 - Failed turn: open its `records/<n>-…/` directory (`started.yaml`, `end.yaml`,
   `outcome.yaml`, logs) before relaunching.
-- `factory validate <file>` checks one schema-enforced file with the gate's
-  validators; `factory schemas --out <dir>` writes JSON Schemas for editors and
-  the artifact LSP.
+- `factory validate [--run-config <file>] [<file>]` checks one
+  schema-enforced file with the gate's validators; `factory schemas --out <dir>`
+  writes JSON Schemas for editors and the artifact LSP.
+
+## 6. Prompt templating
+
+Role prompts are LiquidJS templates rendered from `prompts/*.md` fragments.
+`{{ name }}` interpolates one value; `{% include 'partial-name' %}` inlines
+`prompts/partial-name.md`. Strict mode: an unknown variable or filter is a
+render error. Turn variables live in the final `## This turn` block so the
+stable prefix stays cacheable; renderer defaults (schemas, task types, tiers)
+are supplied by the library, never passed by turn code.
+
+- `factory variables --out <file>` regenerates `prompts/VARIABLES.md`, the
+  per-prompt variable reference.
+- The process config's `promptsDir` shadows prompt files from a repo
+  directory.
+- `calibration` is the default calibration partial; the process config may
+  replace its content per repo without changing the template.
+- Shared fragments (`scope`, `plan-read-only`, `task-size`, `outcome`,
+  `task-frontmatter`, `clean-code`, `finding-standards`) exist once and are
+  included by every prompt that needs them.

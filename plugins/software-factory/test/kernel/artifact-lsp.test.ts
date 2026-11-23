@@ -105,7 +105,7 @@ describe("launch provisioning", () => {
       const config = artifactLspConfigPath(goal.goalDir);
       expect(fs.existsSync(config)).toBe(true);
       expect(fs.readdirSync(path.join(goal.goalDir, "schemas"))).toHaveLength(
-        8,
+        kernelSchemaFiles().length,
       );
       const parsed = JSON.parse(fs.readFileSync(config, "utf8")) as {
         servers: Record<string, { fileTypes?: string[] }>;

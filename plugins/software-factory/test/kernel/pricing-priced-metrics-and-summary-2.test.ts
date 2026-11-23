@@ -60,9 +60,15 @@ async function wiresPriceCacheIntoSummaryMetricsPart1(
       "  pack-preparer: { harness: fake, model: fake-pack-prep }",
       "limits: { iterations: 1, concurrency: { overall: 1 } }",
       `worktreeRoot: ../${base}-wt`,
-      `sessions: { dir: ../${base}-sessions, keepRuns: 2 }`,
+      `sessions: { dir: ../${base}-sessions, keepRuns: 2, retention: short }`,
       "",
     ].join("\n"),
+  );
+  // This fixture isolates the architect's harness-silent turn; the shipped
+  // scout would add a zero-usage turn that is unpriced by design.
+  repo.writeFile(
+    ".factory/process.yaml",
+    "ingestion: [{ id: branch }, { id: front }]\n",
   );
   repo.commit("factory config");
   // The model is absent from config; only the seeded cache prices it.
@@ -102,7 +108,7 @@ async function wiresPriceCacheIntoSummaryMetricsPart2(
       forward: [],
       decision: "done",
     });
-    // Mirror opencode: the harness reports a literal 0 it cannot price.
+    // The harness reports a literal 0 it cannot price.
     return fakeTurnResult(req, {
       usage: usage({ in: 1_000_000, out: 1_000_000, costUsd: 0 }),
     });
@@ -142,8 +148,14 @@ async function wiresPriceCacheIntoSummaryMetricsPart3(
   expect(metrics.iterations[0]!.unpricedTurns).toBe(0);
 
   const summary = (await store.readFile("iterations/1/summary.md"))!;
-  expect(summary).toContain("- cost: $24.0000");
-  expect(summary).toContain("- cost by role: architect $24.0000");
+  expect(summary).toContain("- harness-reported cost: $0.0000");
+  expect(summary).toContain("- list-price estimate: $24.0000");
+  expect(summary).toContain(
+    "- harness-reported cost by role: architect $0.0000",
+  );
+  expect(summary).toContain(
+    "- list-price estimate by role: architect $24.0000",
+  );
 }
 
 function registerPricedMetricsAndSummaryPart5(): void {
@@ -187,54 +199,72 @@ function registerPricedMetricsAndSummaryPart5(): void {
   });
 }
 
+async function pricesAllZeroUsagePart1(
+  store: ReturnType<typeof createFolderStore>,
+) {
+  await store.ensureLayout();
+  const records = [
+    rec(1, {
+      step: "architect",
+      slug: undefined,
+      model: { id: "paid/one" },
+      usage: usage(),
+    }),
+    rec(2, { slug: "a", model: { id: "paid/one" }, usage: usage() }),
+  ];
+
+  await writeMetrics(store, {
+    iteration: 1,
+    status: "in-progress",
+    records,
+    prices: TABLE,
+  });
+  const metrics = yaml.parse(
+    (await store.readFile("metrics.yaml"))!,
+  ) as GoalMetrics;
+  return { records, metrics };
+}
+
+async function pricesAllZeroUsagePart2(
+  store: ReturnType<typeof createFolderStore>,
+  records: ReturnType<typeof rec>[],
+) {
+  const state = derive([task("a")], records);
+  const rel = await writeIterationSummary(store, {
+    iteration: 1,
+    state,
+    records,
+    status: "in-progress",
+    prices: TABLE,
+  });
+  const text = fs.readFileSync(path.join(store.goalDir, rel), "utf8");
+  expect(text).toContain("- harness-reported cost: unknown (2 unpriced turns)");
+  expect(text).toContain("- list-price estimate: unknown (2 unpriced turns)");
+  expect(text).toContain(
+    "- harness-reported cost by role: architect unknown (1 unpriced turn); implementer unknown (1 unpriced turn)",
+  );
+  expect(text).toContain(
+    "- list-price estimate by role: architect unknown (1 unpriced turn); implementer unknown (1 unpriced turn)",
+  );
+  expect(text).not.toContain("- harness-reported cost: $0.0000");
+}
+
 function registerPricedMetricsAndSummaryPart6(): void {
   it("prices all-zero usage as an unpriced turn in metrics and summary", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-pricing-"));
     const store = createFolderStore(path.join(root, "goal"), undefined, {});
     try {
-      await store.ensureLayout();
-      const records = [
-        rec(1, {
-          step: "architect",
-          slug: undefined,
-          model: { id: "paid/one" },
-          usage: usage(),
-        }),
-        rec(2, { slug: "a", model: { id: "paid/one" }, usage: usage() }),
-      ];
-
-      await writeMetrics(store, {
-        iteration: 1,
-        status: "in-progress",
-        records,
-        prices: TABLE,
-      });
-      const metrics = yaml.parse(
-        (await store.readFile("metrics.yaml"))!,
-      ) as GoalMetrics;
+      const { records, metrics } = await pricesAllZeroUsagePart1(store);
       const one = metrics.iterations[0]!;
       expect(one.usage.costUsd).toBeUndefined();
       expect(one.unpricedTurns).toBe(2);
       expect(one.costPerMergedTask).toBeNull();
+      expect(one.harnessCostPerMergedTask).toBeNull();
       expect(one.roles.architect!.usage.costUsd).toBeUndefined();
       expect(one.roles.architect!.unpricedTurns).toBe(1);
       expect(one.roles.implementer!.unpricedTurns).toBe(1);
       expect(metrics.totals.unpricedTurns).toBe(2);
-
-      const state = derive([task("a")], records);
-      const rel = await writeIterationSummary(store, {
-        iteration: 1,
-        state,
-        records,
-        status: "in-progress",
-        prices: TABLE,
-      });
-      const text = fs.readFileSync(path.join(store.goalDir, rel), "utf8");
-      expect(text).toContain("- cost: unknown (2 unpriced turns)");
-      expect(text).toContain(
-        "- cost by role: architect unknown (1 unpriced turn); implementer unknown (1 unpriced turn)",
-      );
-      expect(text).not.toContain("- cost: $0.0000");
+      await pricesAllZeroUsagePart2(store, records);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -271,33 +301,35 @@ describe("run-config price ids", () => {
     const run = runConfigSchema.parse(
       yaml.parse(`
 aliases:
-  architect: { harness: omp, model: anthropic/claude-opus-5-5, fallbacks: [{ model: opencode-go/deepseek-v4.1-flash }] }
-  implementer: { harness: opencode, model: opencode/deepseek-v4.1-flash-free }
+  architect: { harness: omp, model: vendor/flagship-5, fallbacks: [{ model: local-host/mini-flash }] }
+  implementer: { harness: fake, model: local-host/mini-flash-free }
 priceIds:
-  opencode/beam-free: reflection/beam-1.0-501b-a23b
+  local-host/mini-flash: vendor/mini-flash
+  local-host/mini-flash-free: vendor/mini-flash
+  local/lamp-mini-free: vendor/lamp-1
 `),
     );
     const catalog: PriceTable = {
-      "anthropic/claude-opus-5-5": {
+      "vendor/flagship-5": {
         input: 4,
         cachedInput: 0.2,
         output: 20,
         reasoning: 20,
       },
-      "deepseek/deepseek-v4.1-flash": {
+      "vendor/mini-flash": {
         input: 0.0507,
         cachedInput: 0.001,
         output: 0.2028,
         reasoning: 0.2028,
       },
-      "reflection/beam-1.0-501b-a23b": {
+      "vendor/lamp-1": {
         input: 0.3,
         cachedInput: 0.04,
         output: 1,
         reasoning: 1,
       },
     };
-    expect(run.aliases.architect!.model).toBe("anthropic/claude-opus-5-5");
+    expect(run.aliases.architect!.model).toBe("vendor/flagship-5");
     for (const alias of Object.values(run.aliases)) {
       expect(matchPrice(catalog, alias.model, run.priceIds)).toBeDefined();
       for (const fb of alias.fallbacks) {
@@ -306,7 +338,7 @@ priceIds:
       }
     }
     expect(
-      matchPrice(catalog, "opencode/beam-free", run.priceIds),
+      matchPrice(catalog, "local/lamp-mini-free", run.priceIds),
     ).toBeDefined();
   });
 });

@@ -182,8 +182,9 @@ async function parksReviewUpscopeYesRewritesClassPart2(
   expect((await stateOf(goal.goalDir)).goal).toBe("done");
   expect(first.calls).toHaveLength(4);
   // digest, the pack preparer and the architect: iteration 2 prepares its
-  // index from the script data before the consult.
-  expect(second.calls).toHaveLength(3);
+  // index from the script data before the consult; the bigger relaunch also
+  // scouted the plan-less goal first.
+  expect(second.calls).toHaveLength(4);
 }
 
 function registerStandaloneUpscopePart1(): void {

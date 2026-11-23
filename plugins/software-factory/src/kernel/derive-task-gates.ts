@@ -9,7 +9,6 @@ import { formatCause, makeCause } from "./cause.js";
 import {
   failingChecksText,
   failingNames,
-  isBareRecoverySeal,
   mergeGateNames,
   parkedGateNames,
   type PendingChecks,
@@ -19,6 +18,7 @@ import {
 } from "./derive-task-facts.js";
 import type { ReduceContext, ReduceState } from "./derive-task-state.js";
 import { isInfraCheck } from "./gates.js";
+import { isRecoveryCrash } from "./recovery-seal.js";
 import { checksFixLimit, isLastChecksFixCall } from "./review.js";
 import type { Cause, StepRecord } from "./types.js";
 
@@ -256,7 +256,7 @@ export function applyScriptFailure(
     !timeoutOrCrash ||
     rec.outcome?.status ||
     !context.flowIndex.has(rec.step) ||
-    isBareRecoverySeal(rec)
+    isRecoveryCrash(rec)
   )
     return;
   recordInfraRepeat(state, rec.step, stop);

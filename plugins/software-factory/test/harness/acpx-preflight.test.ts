@@ -38,22 +38,22 @@ function runConfig(spec: RunSpec = {}): string {
   const pmModel = spec.pmModel ?? "model-a";
   return `aliases:
   architect: { harness: omp, model: arch, effort: high }
-  pm: { harness: opencode, model: ${pmModel}${spec.pmEffort ? `, effort: ${spec.pmEffort}` : ""} }
-  digest: { harness: opencode, model: model-a }
-  implementer: { harness: opencode, model: model-a }
-  implementer-b: { harness: opencode, model: model-a }
-  researcher: { harness: opencode, model: model-a }
-  reviewer: { harness: opencode, model: model-a${spec.reviewerEffort ? `, effort: ${spec.reviewerEffort}` : ""} }
-  qa: { harness: opencode, model: model-a }
-  steward: { harness: opencode, model: model-a }
-  plan-checker: { harness: opencode, model: model-a }
-  intent: { harness: opencode, model: model-a }
-  plan-reviewer: { harness: opencode, model: model-a }
-  pack-preparer: { harness: opencode, model: model-a }
+  pm: { harness: fake-harness, model: ${pmModel}${spec.pmEffort ? `, effort: ${spec.pmEffort}` : ""} }
+  digest: { harness: fake-harness, model: model-a }
+  implementer: { harness: fake-harness, model: model-a }
+  implementer-b: { harness: fake-harness, model: model-a }
+  researcher: { harness: fake-harness, model: model-a }
+  reviewer: { harness: fake-harness, model: model-a${spec.reviewerEffort ? `, effort: ${spec.reviewerEffort}` : ""} }
+  qa: { harness: fake-harness, model: model-a }
+  steward: { harness: fake-harness, model: model-a }
+  plan-checker: { harness: fake-harness, model: model-a }
+  intent: { harness: fake-harness, model: model-a }
+  plan-reviewer: { harness: fake-harness, model: model-a }
+  pack-preparer: { harness: fake-harness, model: model-a }
 harnesses:
-  opencode:
+  fake-harness:
     acpx:
-      agent: opencode
+      agent: fake-harness
       effort:
         configId: effort
         modelBases: { model-a: [none, high, default] }
@@ -93,14 +93,15 @@ async function fixture(
   const store = createFolderStore(paths.goalDir, undefined, {});
   await store.ensureLayout();
   const harnesses = new Map<string, Harness>([
-    ["omp", new FakeHarness({ id: "omp", caps: { effort: ["low", "high"] } })],
+    ["omp", new FakeHarness({ id: "omp", probe: { effort: ["low", "high"] } })],
     [
-      "opencode",
+      "fake-harness",
       new AcpxHarness({
-        id: "opencode",
+        retention: "short",
+        id: "fake-harness",
         binary: stub.binary,
         sessionDir: path.dirname(stub.binary),
-        acpx: configs.run.harnesses!.opencode!.acpx!,
+        acpx: configs.run.harnesses!["fake-harness"]!.acpx!,
       }),
     ],
   ]);
@@ -112,7 +113,7 @@ async function fixture(
       paths,
       store,
       harnesses,
-      binaries: { omp: process.execPath, opencode: stub.binary },
+      binaries: { omp: process.execPath, "fake-harness": stub.binary },
       baseGates: false,
     },
   };
@@ -145,6 +146,7 @@ describe("acpx live pre-flight", () => {
 describe("acpx harness registry", () => {
   it("binds harness ids from run config with no code", () => {
     const harnesses = createRealHarnesses({
+      retention: "short",
       sessionDir: "/tmp/sessions",
       harnesses: {
         nova: {
@@ -152,29 +154,37 @@ describe("acpx harness registry", () => {
             agent: "nova",
             effort: { configId: "nova_level" },
           },
+          compaction: { enabled: true },
         },
-        opencode: {
-          acpx: { agent: "opencode acp", raw: true },
+        "fake-harness": {
+          acpx: { agent: "fake-harness acp", raw: true },
+          compaction: { enabled: true },
         },
       },
     });
     expect(harnesses.nova).toBeInstanceOf(AcpxHarness);
     expect(harnesses.nova!.id).toBe("nova");
-    expect(harnesses.opencode).toBeInstanceOf(AcpxHarness);
-    expect(harnesses.opencode!.id).toBe("opencode");
+    expect(harnesses["fake-harness"]).toBeInstanceOf(AcpxHarness);
+    expect(harnesses["fake-harness"]!.id).toBe("fake-harness");
     expect(harnesses.omp).toBeDefined();
   });
 
-  it("registers no native opencode adapter", () => {
-    const harnesses = createRealHarnesses({ sessionDir: "/tmp/sessions" });
-    expect(harnesses.opencode).toBeUndefined();
+  it("registers no native fake-harness adapter", () => {
+    const harnesses = createRealHarnesses({
+      retention: "short",
+      sessionDir: "/tmp/sessions",
+    });
+    expect(harnesses["fake-harness"]).toBeUndefined();
     expect(harnesses.omp).toBeDefined();
   });
 
   it("resolves a raw harness binary from its configured command", () => {
     const binaries = resolveHarnessBinaries({
-      nova: { acpx: { agent: "/opt/nova-test/bin/nova acp", raw: true } },
-      plain: { acpx: { agent: "plain" } },
+      nova: {
+        acpx: { agent: "/opt/nova-test/bin/nova acp", raw: true },
+        compaction: { enabled: true },
+      },
+      plain: { acpx: { agent: "plain" }, compaction: { enabled: true } },
     });
     expect(binaries.nova).toBe("/opt/nova-test/bin/nova");
     // A positional agent is served by the acpx dispatcher, whatever it is here.
@@ -209,7 +219,7 @@ function acpxLivePreFlightPart1() {
 }
 
 function acpxLivePreFlightPart2() {
-  it("refuses highest effort", async () => {
+  it("refuses an effort the live probe does not list", async () => {
     const stub = createAcpxStub({
       models: LIVE_MODELS,
       effortConfigId: "effort",
@@ -226,7 +236,9 @@ function acpxLivePreFlightPart2() {
           file: expect.stringContaining(".factory/run-acpx.yaml"),
         }),
       );
-      expect(err.report).toContain('effort "highest" is forbidden');
+      expect(err.report).toContain(
+        'effort "highest" is not supported; model accepts: none, high, default',
+      );
     } finally {
       failed.repo.cleanup();
     }
@@ -246,7 +258,7 @@ function acpxLivePreFlightPart3() {
         expect.objectContaining({
           key: "aliases.pm.model",
           message:
-            'model "ghost-model" is not listed by harness "opencode"; available models: model-a, model-b',
+            'model "ghost-model" is not listed by harness "fake-harness"; available models: model-a, model-b',
         }),
       );
       expect(err.report).toContain("available models: model-a, model-b");
@@ -258,35 +270,37 @@ function acpxLivePreFlightPart3() {
 }
 
 function acpxLivePreFlightPart4() {
-  it("refuses highest in fallbacks", async () => {
+  it("refuses an unlisted effort in fallbacks", async () => {
     const stub = createAcpxStub({
       models: LIVE_MODELS,
       effortConfigId: "effort",
     });
     const text = `aliases:
-  pm: { harness: opencode, model: model-a, fallbacks: [{ model: model-b, effort: highest }] }
-  digest: { harness: opencode, model: model-a }
-  implementer: { harness: opencode, model: model-a }
-  implementer-b: { harness: opencode, model: model-b }
-  researcher: { harness: opencode, model: model-a }
-  reviewer: { harness: opencode, model: model-a }
-  qa: { harness: opencode, model: model-a }
-  steward: { harness: opencode, model: model-a }
-  plan-checker: { harness: opencode, model: model-a }
-  intent: { harness: opencode, model: model-a }
-  plan-reviewer: { harness: opencode, model: model-a }
-  pack-preparer: { harness: opencode, model: model-a }
+  pm: { harness: fake-harness, model: model-a, fallbacks: [{ model: model-b, effort: highest }] }
+  digest: { harness: fake-harness, model: model-a }
+  implementer: { harness: fake-harness, model: model-a }
+  implementer-b: { harness: fake-harness, model: model-b }
+  researcher: { harness: fake-harness, model: model-a }
+  reviewer: { harness: fake-harness, model: model-a }
+  qa: { harness: fake-harness, model: model-a }
+  steward: { harness: fake-harness, model: model-a }
+  plan-checker: { harness: fake-harness, model: model-a }
+  intent: { harness: fake-harness, model: model-a }
+  plan-reviewer: { harness: fake-harness, model: model-a }
+  pack-preparer: { harness: fake-harness, model: model-a }
 harnesses:
-  opencode:
+  fake-harness:
     acpx:
-      agent: opencode
+      agent: fake-harness
       effort: { configId: effort }
 limits: { concurrency: { overall: 2 }, iterations: 1 }
 `;
     const f = await fixture(text, stub);
     try {
       const err = await refusal(f.input);
-      expect(err.report).toContain('effort "highest" is forbidden');
+      expect(err.report).toContain(
+        'effort "highest" is not supported; model accepts: low, medium',
+      );
     } finally {
       f.repo.cleanup();
     }
@@ -301,8 +315,7 @@ function acpxLivePreFlightPart5() {
     });
     const f = await fixture(runConfig({ pmModel: "model-a-high" }), stub);
     try {
-      const result = await preflight(f.input);
-      expect(result.aliases.pm).toBe("high");
+      await preflight(f.input);
       const create = sessionCalls(stub, "new")[0]!;
       expect(create[create.indexOf("--model") + 1]).toBe("model-a");
     } finally {

@@ -2,6 +2,7 @@
 
 import type {
   AdapterTurnResult,
+  CacheTtl,
   ModelRef,
   SessionRef,
   Stop,
@@ -16,6 +17,7 @@ export interface AcpxRuntime {
   id: string;
   command: AcpxCommand;
   acpx: AcpxRunConfig;
+  retention: CacheTtl;
   /** Caller-given session store; turn transcripts live here, never in a worktree. */
   sessionDir: string;
   /** Run-config names this runtime's children may inherit on top of the base set. */

@@ -90,7 +90,10 @@ function registerAliasFallbackTiersPart1(): void {
         return fakeTurnResult(req);
       });
       t.runtime.configs.run.harnesses = {
-        b: { acpx: { agent: "b-agent", raw: true } },
+        b: {
+          acpx: { agent: "b-agent", raw: true },
+          compaction: { enabled: true },
+        },
       };
 
       const result = await runAgentTurn(t.runtime, {
@@ -403,17 +406,17 @@ function registerAliasFallbackTiersPart8(): void {
 }
 
 function registerAliasFallbackTiersPart16(): void {
-  it("stops an architect ladder on the first Claude quota stop and keeps that result", async () => {
+  it("stops an architect ladder on the first Pool-A quota stop and keeps that result", async () => {
     const t = await tierRuntime(
       { harness: "a", model: "ma-impl" },
       {
         architect: {
           harness: "a",
-          model: "ma-opus",
-          subscription: "claude",
+          model: "ma-flagship",
+          subscription: "pool-a",
           fallbacks: [
-            { model: "ma-sonnet", sharesPool: true },
-            { harness: "b", model: "mb-opus", sharesPool: true },
+            { model: "ma-lite", sharesPool: true },
+            { harness: "b", model: "mb-flagship", sharesPool: true },
           ],
         },
       },
@@ -430,15 +433,15 @@ function registerAliasFallbackTiersPart16(): void {
         expectation: "any",
       });
 
-      // The first tier's quota stop decides for the pool: Sonnet and the
-      // second harness' Opus tier make no call, and the quota result survives.
+      // The first tier's quota stop decides for the pool: Lite and the
+      // second harness' flagship tier make no call, and the quota result survives.
       expect(result.record.stop).toEqual({ kind: "infra", cause: "quota" });
       expect(
         result.record.attempts?.map((attempt) => attempt.model.id),
-      ).toEqual(["ma-opus"]);
-      expect(t.a.calls.map((call) => call.model.id)).toEqual(["ma-opus"]);
+      ).toEqual(["ma-flagship"]);
+      expect(t.a.calls.map((call) => call.model.id)).toEqual(["ma-flagship"]);
       expect(t.b.calls).toHaveLength(0);
-      expect(t.runtime.exhaustedPools.has("claude")).toBe(true);
+      expect(t.runtime.exhaustedPools.has("pool-a")).toBe(true);
     } finally {
       cleanupFlowRepo(t.repo);
     }

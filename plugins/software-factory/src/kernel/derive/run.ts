@@ -57,7 +57,7 @@ export function derive(
 
   const taskStates: Record<string, TaskState> = {};
   const epics: Record<string, EpicState> = {};
-  buildTaskStates(tasks, statuses, reductions, taskStates, epics);
+  buildTaskStates(tasks, sorted, statuses, reductions, taskStates, epics);
   addOrphanTaskStates(orphans, taskStates);
 
   applySubarchitectDecisions(sorted, epics);

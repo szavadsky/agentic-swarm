@@ -14,10 +14,15 @@ Goal `self` in `/home/slava/aiexp/agentic-swarm.wt/v3` (branch `factory-v3`). Pr
 
 ```bash
 cd /home/slava/aiexp/agentic-swarm.wt/v3
-./bootstrap/promote.sh > /tmp/promote.log 2>&1   # typecheck + tests, pin HEAD
+./bootstrap/promote.sh > /tmp/promote.log 2>&1   # typecheck + tests, records <pin>/gate.yaml, links HEAD
 PIN=$HOME/.local/share/factory/pins/current
 bun run $PIN/bin/factory.ts run --repo /home/slava/aiexp/agentic-swarm.wt/v3 --goal self --run-config /home/slava/aiexp/agentic-swarm.wt/v3/bootstrap/run/self.yaml --iterations 1 > /tmp/self-iN.log 2>&1
 ```
+
+The launch refuses a pin whose `gate.yaml` is missing or red. A red promote
+leaves `current` on the previous pin, so there is nothing to fix; if the owner
+rules to launch a recorded-red pin anyway, add `--pin-gate-override <reason>`
+and the reason lands in the run's records.
 
 Takes ~2–6 h, ~$2. Exit 3 (`iteration-limit`) is the normal ending. Use absolute paths and redirect output; `cd` does not survive across commands.
 

@@ -5,8 +5,8 @@ import path from "node:path";
 import { OmpHarness } from "../../../src/harness/omp/harness.js";
 
 const live = process.env.FACTORY_LIVE === "1" ? describe : describe.skip;
-const PARENT = { id: "opencode-go/beam-free" };
-const SUBAGENT = "opencode-go/longcat-2.5-free";
+const PARENT = { id: "local-host/lamp-mini-free" };
+const SUBAGENT = "local-host/mini-2.5-free";
 const TIMEOUTS = { idleMs: 120_000, wallMs: 240_000 };
 
 function jsonlFiles(dir: string): string[] {
@@ -28,6 +28,7 @@ live("omp harness live smoke", () => {
     fs.mkdirSync(outbox);
     const outcomePath = path.join(outbox, "outcome.txt");
     const harness = new OmpHarness({
+      retention: "short",
       sessionDir: path.join(root, "sessions"),
       subagentModel: SUBAGENT,
       options: {
@@ -62,9 +63,11 @@ async function twoTurnResumeOutcomeOutsideCwdPart1(
   root: string,
 ) {
   const caps = await harness.caps(PARENT);
-  expect(caps.effort).toContain("low");
   expect(caps.compact).toBe("server");
   expect(caps.usage).toEqual({ cache: true, cost: true });
+  const probe = await harness.probe!(PARENT);
+  expect(probe.listed).toBe(true);
+  expect(probe.effort).toContain("low");
 
   const first = await harness.turn({
     model: PARENT,
@@ -107,14 +110,14 @@ async function twoTurnResumeOutcomeOutsideCwdPart1(
 
   const sessionsDir = path.join(root, "sessions", "omp", "sessions");
 
-  return { caps, first, second, spawned, sessionsDir };
+  return { first, second, spawned, sessionsDir };
 }
 
 async function twoTurnResumeOutcomeOutsideCwdPart2(
   started: number,
   scope: Awaited<ReturnType<typeof twoTurnResumeOutcomeOutsideCwdPart1>>,
 ) {
-  const { sessionsDir, caps, first, second, spawned } = scope;
+  const { sessionsDir, first, second, spawned } = scope;
   const changes = jsonlFiles(sessionsDir)
     .flatMap((file) =>
       fs
@@ -126,13 +129,13 @@ async function twoTurnResumeOutcomeOutsideCwdPart2(
     .filter((entry) => String(entry.role ?? "").startsWith("subagent:"));
   expect(changes.length).toBeGreaterThan(0);
   expect(
-    changes.some((entry) => String(entry.model).includes("longcat-2.5-free")),
+    changes.some((entry) => String(entry.model).includes("mini-2.5-free")),
   ).toBe(true);
   console.log(
     "omp live",
     JSON.stringify({
       wallMs: Date.now() - started,
-      caps: caps.effort,
+      model: first.model.id,
       turn1: {
         model: first.model,
         usage: first.usage,

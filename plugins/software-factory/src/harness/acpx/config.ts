@@ -26,8 +26,8 @@ export const acpxUsageSchema = z
     fields: acpxUsageFieldsSchema.optional(),
     /**
      * Adapter slash command whose reply carries the session's cumulative token
-     * totals. pi is the only probed agent whose prompt result has no usage, so
-     * only it needs `/session` (acpx probe §4).
+     * totals. Agents whose prompt result has no usage need `/session` here
+     * (acpx-verify.md §1).
      */
     command: z
       .string()
@@ -52,9 +52,8 @@ export const acpxConfigSchema = z
     raw: z.boolean().optional(),
     /**
      * The agent accepts `/compact` as an adapter slash command. Declared per
-     * harness because ACP has no compaction method; pi, codex, opencode and
-     * claude-code are verified to handle it, agy is not — it forwards the text
-     * to the model (acpx probe §5, compaction-probe.md §0).
+     * harness because ACP has no compaction method; the verified set and the
+     * forwarding refusal are recorded in config/acpx-verify.md.
      */
     compact: z.boolean().optional(),
     effort: acpxEffortSchema.optional(),

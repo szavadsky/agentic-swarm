@@ -20,7 +20,7 @@ import { TEST_ARCHITECTURE, TEST_BOUNDARY } from "./helpers.js";
 
 const PRICES: PriceTable = {
   "paid/one": { input: 4, cachedInput: 0.2, output: 20, reasoning: 20 },
-  "baidu/ernie-5.5-flash-preview:free": {
+  "vendor/tiny-preview:free": {
     input: 0,
     cachedInput: 0,
     output: 0,

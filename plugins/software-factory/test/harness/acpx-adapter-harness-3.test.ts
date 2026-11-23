@@ -7,15 +7,15 @@ import { createAcpxStub } from "./acpx-stub.js";
 
 const TIMEOUTS = { idleMs: 10_000, wallMs: 30_000 };
 
-const PI_ACPX: AcpxConfig = {
-  agent: "pi",
+const AGENT_A_ACPX: AcpxConfig = {
+  agent: "agent-a",
   effort: {
     configId: "thought_level",
   },
 };
 
-const CODEX_ACPX: AcpxConfig = {
-  agent: "codex",
+const AGENT_B_ACPX: AcpxConfig = {
+  agent: "agent-b",
   effort: {
     configId: "reasoning_effort",
   },
@@ -28,7 +28,7 @@ function request(
   extra: Record<string, unknown> = {},
 ) {
   return {
-    model: { id: "opencode-go/beam-free" },
+    model: { id: "fake-host/lamp-mini-free" },
     cwd,
     prompt,
     timeouts: TIMEOUTS,
@@ -60,10 +60,11 @@ function acpxHarnessPromptResultPrecedencePart1() {
     extra: Record<string, unknown> = {},
   ) {
     const harness = new AcpxHarness({
-      id: "pi",
+      retention: "short" as const,
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     });
     return harness.turn(request(path.dirname(stub.binary), prompt, extra));
   }
@@ -88,7 +89,7 @@ function acpxHarnessPromptResultPrecedencePart1() {
         cacheRead: 3,
         cacheWrite5m: 2,
       });
-      expect(result.session?.id).toMatch(/^pi-/);
+      expect(result.session?.id).toMatch(/^agent-a-/);
     } finally {
       stub.cleanup();
     }
@@ -222,10 +223,11 @@ function registerAcpxHarnessPart22(): void {
   it("maps a cancelled stop reason to cancelled even though acpx exits 0", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
-      id: "codex",
+      retention: "short" as const,
+      id: "agent-b",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: CODEX_ACPX,
+      acpx: AGENT_B_ACPX,
     });
     try {
       const result = await harness.turn(
@@ -242,10 +244,11 @@ function registerAcpxHarnessPart23(): void {
   it("starts de novo instead of reusing a session bound to another cwd", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
-      id: "pi",
+      retention: "short" as const,
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     });
     try {
       const cwd = path.dirname(stub.binary);
@@ -273,10 +276,11 @@ function registerAcpxHarnessPart24(): void {
     const cwd = path.dirname(stub.binary);
     const pidFile = path.join(cwd, "child.pid");
     const harness = new AcpxHarness({
-      id: "pi",
+      retention: "short" as const,
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
       // The stub reports its pid through this entry env; no parent variable
       // reaches a child unless the harness entry names it.
       options: { env: { ACPX_STUB_PID_FILE: pidFile } },
@@ -307,10 +311,11 @@ function registerAcpxHarnessPart25(): void {
     const cwd = path.dirname(stub.binary);
     const pidFile = path.join(cwd, "child.pid");
     const harness = new AcpxHarness({
-      id: "pi",
+      retention: "short" as const,
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
       options: { env: { ACPX_STUB_PID_FILE: pidFile } },
     });
     try {
@@ -337,10 +342,11 @@ function registerAcpxHarnessPart26(): void {
   it("a pre-aborted signal reports cancelled without spawning", async () => {
     const stub = createAcpxStub();
     const harness = new AcpxHarness({
-      id: "pi",
+      retention: "short" as const,
+      id: "agent-a",
       binary: stub.binary,
       sessionDir: path.dirname(stub.binary),
-      acpx: PI_ACPX,
+      acpx: AGENT_A_ACPX,
     });
     try {
       const controller = new AbortController();

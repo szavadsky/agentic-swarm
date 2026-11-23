@@ -63,8 +63,9 @@ export function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
-  } catch (err: any) {
-    return err.code === "EPERM"; // EPERM means process exists but we lack permission to signal
+  } catch (err) {
+    // EPERM means process exists but we lack permission to signal
+    return (err as NodeJS.ErrnoException).code === "EPERM";
   }
 }
 
@@ -117,13 +118,13 @@ function createLockFile(
     fs.closeSync(fd);
     fd = undefined;
     return createRunLockHandle(lockPath);
-  } catch (err: any) {
+  } catch (err) {
     if (fd !== undefined) {
       try {
         fs.closeSync(fd);
       } catch {}
     }
-    if (err.code !== "EEXIST") throw err;
+    if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
     return undefined;
   }
 }
@@ -216,16 +217,15 @@ function appendTakeoverJournal(
 ): void {
   try {
     const journalPath = path.join(taskDir, "journal.ndjson");
-    const entry =
-      JSON.stringify({
-        ts: new Date().toISOString(),
-        type: "lock_takeover",
-        task,
-        previousPid: previousLock?.pid,
-        previousHost: previousLock?.host,
-        newPid: process.pid,
-        newHost: os.hostname(),
-      }) + "\n";
+    const entry = `${JSON.stringify({
+      ts: new Date().toISOString(),
+      type: "lock_takeover",
+      task,
+      previousPid: previousLock?.pid,
+      previousHost: previousLock?.host,
+      newPid: process.pid,
+      newHost: os.hostname(),
+    })}\n`;
     fs.mkdirSync(taskDir, { recursive: true });
     fs.appendFileSync(journalPath, entry, "utf8");
   } catch {

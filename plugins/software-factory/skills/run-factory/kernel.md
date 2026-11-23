@@ -15,7 +15,7 @@ bun bin/factory.ts run     --repo <path> --goal <name> [--run-config <file>] [--
 bun bin/factory.ts status  --repo <path> --goal <name> [--json]
 bun bin/factory.ts benchmark --repo <path> --goal <name>
 bun bin/factory.ts steer   --repo <path> --goal <name> <file | ->
-bun bin/factory.ts validate [--step <id>] <file>
+bun bin/factory.ts validate [--step <id>] [--run-config <file>] [<file>]
 bun bin/factory.ts schemas --out <dir>
 bun bin/factory.ts variables --out <file>
 ```
@@ -28,7 +28,7 @@ bun bin/factory.ts variables --out <file>
 | `status --json` | Prints `status.json`, the snapshot written after each agent launch and finish. Before the first launch it derives the same document. |
 | `benchmark` | Prints one goal's benchmark rows from `metrics.yaml` and its records. |
 | `steer` | Writes a steer file into the mailbox inbox atomically. |
-| `validate` | Checks one schema-enforced file with the gate's validators: `tasks/*.md`, `class.yaml`, `outcome.yaml`, `mailbox/holds/*.yaml`, `repo.yaml`, `run.yaml`, `process.yaml`. Exit 0 valid, 1 invalid or unknown kind. |
+| `validate` | Checks one schema-enforced file with the gate's validators: `tasks/*.md`, `class.yaml`, `outcome.yaml`, `mailbox/holds/*.yaml`, `repo.yaml`, `run.yaml`, `process.yaml`. `--run-config` names the run config explicitly, including one not named `run.yaml`. A repo, process or run file also gets the cross-layer checks (required aliases, task-type flows/schemas, quota pools) — launches nothing. Exit 0 valid, 1 invalid or unknown kind. |
 | `schemas` | Writes every kernel schema as JSON Schema (`task`, `outcome`, `hold`, `class`, `repo`, `run`, `process`). |
 | `variables` | Renders `prompts/VARIABLES.md` from the typed prompt-variable descriptor. |
 
@@ -45,10 +45,11 @@ it into the repository or a separate one). The goal name must be kebab-case.
   class.yaml                  # the front's classification
   records/                    # one directory per settled step and round
   mailbox/{inbox,processed,outbox}/
-  iterations/<n>/{context-pack.md,summary.md,metrics.yaml}
+  iterations/<n>/{context-pack.md,summary.md,metrics.yaml,intent-status.json}
+  vendor/{pico.min.css,chart.umd.min.js}
   metrics.yaml
   status.json                 # machine-readable snapshot
-  dashboard.html              # static page rendered from status.json
+  dashboard.html              # static page rendered from status.json + intent-status.json
 ```
 
 ## Iteration lifecycle
@@ -77,8 +78,12 @@ decision parks the goal until a steer arrives.
 - `status.json` and `dashboard.html` sit beside the goal's task files. The
   kernel rewrites both after each agent launch and finish; `status --json`
   prints the stored snapshot.
-- `dashboard.html` is fully static: no server, no external assets, every value
-  escaped. Open the file directly in a browser and refresh after a launch.
+- `dashboard.html` is fully static: the kernel vendors Pico CSS and Chart.js
+  under `vendor/` and links them locally; no request leaves disk and every
+  value is escaped. Its intent section reads the newest
+  `iterations/<n>/intent-status.json` the architect's summary wrote, and says
+  `unknown` when none exists instead of deriving intent status from tasks.
+  Open the file directly in a browser and refresh after a launch.
 - `status` text is the quick read; `--json` is for editors, scripts and the
   dashboard's data source. Both derive from the same records.
 - `benchmark` adds cost, token, architect-share, work, incident and wall rows.

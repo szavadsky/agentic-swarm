@@ -20,6 +20,7 @@ import {
   outcome,
   setupFlowRepo,
   scriptStallLeave,
+  whenTurn,
   writeTask,
 } from "./s2-helpers.js";
 import { formatCause } from "../../src/kernel/cause.js";
@@ -150,6 +151,20 @@ function registerKERNEL0Scenario5RedGatesOnTheMergedResultPart1(): void {
   }, 60_000);
 }
 
+/**
+ * The gate fix is spent, so the wave-end steward owns the red merged result;
+ * the turn leaves it untouched and holds with a pointer.
+ */
+function scriptStewardNoRepair(harness: FakeHarness): void {
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(outcome({ summary: "steward found no repair" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "steward" }) },
+  );
+}
+
 /** Scripts the implement, approve, and poison-gate fix turns, then stalls. */
 function scriptRedMergedResultHarness(): FakeHarness {
   const harness = new FakeHarness({ id: "fake" });
@@ -170,6 +185,7 @@ function scriptRedMergedResultHarness(): FakeHarness {
     ctx.writeOutcome(outcome({ summary: "gate fix attempt" }));
     return fakeTurnResult(req);
   });
+  scriptStewardNoRepair(harness);
   scriptStallLeave(harness, ["task"]);
   return harness;
 }
@@ -261,7 +277,7 @@ async function expectParkedAfterRedMergedResult(
   expect(
     repo.git(["show", "factory/demo:feature.txt"], { allowFail: true }).code,
   ).not.toBe(0);
-  expect(harness.calls.length).toBe(4);
+  expect(harness.calls.length).toBe(5);
 }
 
 function registerKERNEL0Scenario5RedGatesOnTheMergedResultPart2(): void {

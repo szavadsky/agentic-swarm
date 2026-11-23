@@ -1,5 +1,9 @@
 import path from "node:path";
-import { DASHBOARD_REL_PATH, renderDashboard } from "./dashboard.js";
+import {
+  DASHBOARD_REL_PATH,
+  renderDashboard,
+  writeDashboardAssets,
+} from "./dashboard.js";
 import { derive, materialOpenDebts, type OpenDebt } from "./derive.js";
 import {
   DEFAULT_ROLE_BY_STEP,
@@ -12,6 +16,10 @@ import {
 import { loadPriceTable, type PriceSource } from "./openrouter.js";
 import type { PriceTable } from "./pricing.js";
 import { recordDirName } from "./store.js";
+import {
+  type IntentStatusArtifact,
+  readLatestIntentStatus,
+} from "./summary/intent-status.js";
 import type {
   ArtifactStore,
   Cause,
@@ -42,6 +50,11 @@ export interface StatusTask {
   turns: number;
   commit?: string;
   cause?: Cause;
+  /**
+   * A parked task whose work landed through a base continuation; not counted
+   * as live work.
+   */
+  supersededBy?: string;
   /** `records/<dir>` of the slug's latest record. */
   record?: string;
 }
@@ -75,7 +88,10 @@ export interface StatusConcern {
 export interface StatusCost {
   turns: number;
   tokens: number;
-  costUsd: number | null;
+  /** Sum of the figures the harnesses reported; null when none reported one. */
+  harnessCostUsd: number | null;
+  /** OpenRouter list-price equivalent; null when no model is priced. */
+  listCostUsd: number | null;
   unpricedTurns: number;
 }
 
@@ -101,6 +117,11 @@ export interface StatusDocument {
     merged: StatusTask[];
     finished: StatusTask[];
     parked: StatusTask[];
+    /**
+     * Parks whose kept work landed through a `base` continuation; counted
+     * apart from live parks.
+     */
+    superseded: StatusTask[];
     cancelled: StatusTask[];
   };
   distance: {
@@ -109,10 +130,14 @@ export interface StatusDocument {
     openDebt: StatusDebt[];
   };
   concerns: StatusConcern[];
+  /** Latest intent-wise status an architect summary wrote; absent until one does. */
+  intentStatus?: IntentStatusArtifact;
   cost: {
-    totalUsd: number | null;
+    harnessCostUsd: number | null;
+    listCostUsd: number | null;
+    harnessCostPerMergedTask: number | null;
+    listCostPerMergedTask: number | null;
     unpricedTurns: number;
-    perMergedTask: number | null;
     byRole: Record<string, StatusCost>;
     byModel: Record<string, StatusCost>;
   };
@@ -133,6 +158,8 @@ export interface StatusInput {
   goal: string;
   state: State;
   tasks: readonly TaskFile[];
+  /** Latest intent status artifact; absent before an architect summary writes one. */
+  intentStatus?: IntentStatusArtifact;
   records: readonly StepRecord[];
   /** Step id -> role; the process flows supply it at write time. */
   roleByStep?: Record<string, string>;
@@ -184,16 +211,19 @@ function statusTask(
     turns: state.turns,
     ...(state.commit ? { commit: state.commit } : {}),
     ...(state.cause ? { cause: state.cause } : {}),
+    ...(state.supersededBy ? { supersededBy: state.supersededBy } : {}),
     ...(record ? { record: recordPath(record) } : {}),
   };
 }
 
 function groupTasks(tasks: StatusTask[]): StatusDocument["tasks"] {
+  const parked = tasks.filter((task) => task.status === "parked");
   return {
     open: tasks.filter((task) => OPEN.has(task.status)),
     merged: tasks.filter((task) => task.status === "merged"),
     finished: tasks.filter((task) => task.status === "finished"),
-    parked: tasks.filter((task) => task.status === "parked"),
+    parked: parked.filter((task) => !task.supersededBy),
+    superseded: parked.filter((task) => task.supersededBy),
     cancelled: tasks.filter((task) => task.status === "cancelled"),
   };
 }
@@ -267,7 +297,8 @@ function costOf(
     out[name] = {
       turns: entry.turns,
       tokens: entry.tokens,
-      costUsd: entry.usage.costUsd ?? null,
+      harnessCostUsd: entry.usage.harnessCostUsd ?? null,
+      listCostUsd: entry.usage.listCostUsd ?? null,
       unpricedTurns: entry.unpricedTurns,
     };
   }
@@ -305,9 +336,11 @@ function workView(totals: MetricsTotals): StatusDocument["work"] {
 
 function costView(totals: MetricsTotals): StatusDocument["cost"] {
   return {
-    totalUsd: totals.usage.costUsd ?? null,
+    harnessCostUsd: totals.usage.harnessCostUsd ?? null,
+    listCostUsd: totals.usage.listCostUsd ?? null,
     unpricedTurns: totals.unpricedTurns,
-    perMergedTask: totals.costPerMergedTask,
+    harnessCostPerMergedTask: totals.harnessCostPerMergedTask,
+    listCostPerMergedTask: totals.listCostPerMergedTask,
     byRole: costOf(totals.roles),
     byModel: costOf(totals.models),
   };
@@ -351,6 +384,7 @@ export function buildStatus(input: StatusInput): StatusDocument {
     cost: costView(totals),
     work: workView(totals),
     ...(epics ? { epics } : {}),
+    ...(input.intentStatus ? { intentStatus: input.intentStatus } : {}),
   };
 }
 
@@ -372,11 +406,13 @@ export async function collectStatus(
 ): Promise<StatusDocument> {
   const tasks = await source.store.listTasks();
   const records = await source.store.listRecords();
+  const state = derive(tasks, records, source.flows);
   return buildStatus({
     goal: path.basename(source.store.goalDir),
-    state: derive(tasks, records, source.flows),
+    state,
     tasks,
     records,
+    intentStatus: await readLatestIntentStatus(source.store, state.iteration),
     roleByStep: rolesByStep(source.flows),
     prices: await loadPriceTable(source.priceSource),
     priceIds: source.priceIds,
@@ -389,6 +425,7 @@ export async function writeStatus(source: StatusSource): Promise<string> {
   // Render before either write: a template failure never leaves a fresh
   // status.json beside a dashboard describing the previous snapshot.
   const dashboard = renderDashboard(status);
+  await writeDashboardAssets(source.store);
   await source.store.writeFile(STATUS_REL_PATH, renderStatus(status));
   await source.store.writeFile(DASHBOARD_REL_PATH, dashboard);
   return STATUS_REL_PATH;

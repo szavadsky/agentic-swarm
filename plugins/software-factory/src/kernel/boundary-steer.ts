@@ -321,7 +321,8 @@ async function childSession(
     cwd: runtime.paths.goalCheckout,
     model: opts.parent?.model ?? target.model,
     lastRequestStartedAt: new Date().toISOString(),
-    retentionTier: opts.parent?.retentionTier ?? "short",
+    retentionTier:
+      opts.parent?.retentionTier ?? runtime.configs.run.sessions.retention,
     dir: path.dirname(childFile),
     compacted: false,
   };

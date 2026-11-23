@@ -39,6 +39,11 @@ export interface TaskFile {
   base?: string;
   /** Plan heading this task derives from. */
   source: string;
+  /**
+   * Environment facts this task's implementer turns render: infra facts, known
+   * flakes and workarounds. Per task; absent or empty renders nothing.
+   */
+  envNotes?: string[];
   body: string;
   /** Outcome reminders for this task's turns; defaults to process `reminders`. */
   repairTurns?: number;

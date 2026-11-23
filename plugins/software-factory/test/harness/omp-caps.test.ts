@@ -34,17 +34,19 @@ describe("omp caps", () => {
     const sessionDir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-omp-"));
     try {
       const modern = new OmpHarness({
+        retention: "short",
         binary: ompBinary(sessionDir, "18.22.2"),
         sessionDir,
       });
-      expect((await modern.caps({ id: "opencode-go/test" })).subagents).toBe(
+      expect((await modern.caps({ id: "fake-host/test" })).subagents).toBe(
         "steer",
       );
       const older = new OmpHarness({
+        retention: "short",
         binary: ompBinary(sessionDir, "18.20.0"),
         sessionDir,
       });
-      expect((await older.caps({ id: "opencode-go/test" })).subagents).toBe(
+      expect((await older.caps({ id: "fake-host/test" })).subagents).toBe(
         "spawn",
       );
     } finally {

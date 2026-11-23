@@ -1,29 +1,53 @@
+# The repo layer: tracked config shared by every run of this checkout. The file
+# is also the layer's commented example — each key says why this repo sets it,
+# so a new repo can copy the shape and change the reasons.
+
+# tasks fork from and merge back into this branch; this repo integrates on its
+# own long-lived branch, not upstream main
 baseBranch: factory-v3
+# goal directories live here, inside the repo but gitignored by the backend
 artifactRoot: .factory/artifacts
-artifacts: { backend: folder }
+# the artifact store, selected by backend name rather than by where a path points
+artifacts:
+  backend: folder  # a plain gitignored directory: artifacts stay local and out of task branches
+# commands that make a fresh checkout runnable before any gate runs
 setup:
+  # install from the lockfile so every task branch gates on the same dependencies
   - bun install --cwd plugins/software-factory --frozen-lockfile --silent
+# the checks every task branch and the base run in this order; a base red is warned once, not fatal
 gates:
-  # Each gate export and its test temps live under its own worktree, so gate
-  # runs in two worktrees never share a scratch root.
-  - id: typecheck
+  - id: typecheck  # the compiler gate's name in reds and reruns; a type error anywhere fails the task
+    # the exact command a gate run executes, from the worktree root
     command: plugins/software-factory/scripts/gates.sh plugins/software-factory typecheck
-    env: { TMPDIR: .cache/gate }
-  - id: tests
+    # environment exported to the command, with each directory created per worktree
+    env:
+      TMPDIR: .cache/gate  # this gate's scratch root, off shared /tmp so concurrent runs never collide
+  - id: tests  # the suite gate's name in reds and reruns, and the owner of the junit report
+    # the same entry point, with the gate id as its argument
     command: plugins/software-factory/scripts/gates.sh plugins/software-factory tests
-    env: { TMPDIR: .cache/gate }
-    # The suite's wall is the test-suite-optimize cut, not this ceiling; 1800
-    # keeps a slow but healthy run from parking as infra at the shared 900.
-    timeoutSec: 1800
-    # run-tests.ts writes the gate's JUnit report here (FACTORY_JUNIT_PATH); the
-    # kernel reads the same file, so a red names the failed cases on base too.
-    format: { junit: .cache/gate/junit.xml }
-  - id: format
+    # environment exported to the command, with each directory created per worktree
+    env:
+      TMPDIR: .cache/gate  # this gate's own scratch root, never shared with another worktree
+    # the suite's wall is the test-suite-optimize cut, not this ceiling; 300 is the 5-minute goal the parallel runner now meets
+    timeoutSec: 300
+    # the machine report the kernel reads to name failed cases on base too
+    format:
+      junit: .cache/gate/junit.xml  # run-tests.ts writes it here (FACTORY_JUNIT_PATH); missing or empty is red
+  - id: format  # the formatter gate's name in reds and reruns; any reformat diff is a red
+    # the same entry point, with the gate id as its argument
     command: plugins/software-factory/scripts/gates.sh plugins/software-factory format
-    env: { TMPDIR: .cache/gate }
-  - id: lint
+    # environment exported to the command, with each directory created per worktree
+    env:
+      TMPDIR: .cache/gate  # this gate's own scratch root, never shared with another worktree
+  - id: lint  # the lint gate's name in reds and reruns; its own script decides what is an error
+    # the same entry point, with the gate id as its argument
     command: plugins/software-factory/scripts/gates.sh plugins/software-factory lint
-    env: { TMPDIR: .cache/gate }
-  - id: schema-validation
+    # environment exported to the command, with each directory created per worktree
+    env:
+      TMPDIR: .cache/gate  # this gate's own scratch root, never shared with another worktree
+  - id: schema-validation  # the schema gate's name in reds and reruns; it validates this file too
+    # the same entry point, with the gate id as its argument
     command: plugins/software-factory/scripts/gates.sh plugins/software-factory schema-validation
-    env: { TMPDIR: .cache/gate }
+    # environment exported to the command, with each directory created per worktree
+    env:
+      TMPDIR: .cache/gate  # this gate's own scratch root, never shared with another worktree

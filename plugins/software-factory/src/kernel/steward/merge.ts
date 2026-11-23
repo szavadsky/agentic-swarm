@@ -9,7 +9,7 @@ import { formatCause, makeCause } from "../cause.js";
 import { boundaryTarget, compactSession } from "../flow-context.js";
 import { abortMerge, resolveVars, settleMergeTurn } from "../merge-conflict.js";
 import { KERNEL_TURN_STEPS } from "../outcome.js";
-import { materialHash } from "../tasks.js";
+import { materialHash } from "../task-material.js";
 import type {
   Cause,
   KernelRuntime,
@@ -26,7 +26,11 @@ import {
   integrationHead,
 } from "../worktree.js";
 import type { EnsuredWorktree } from "../worktree.js";
-import type { MergeAttempt, StewardAttempt } from "./types.js";
+import type {
+  MergeAttempt,
+  StewardAttempt,
+  StewardCandidate,
+} from "./types.js";
 
 export function pointerConcern(
   slug: string,
@@ -117,13 +121,20 @@ async function stewardWorktree(
   return { ensured };
 }
 
-/** A conflict-free merge commits itself; a conflict hands over to the steward. */
+/**
+ * A conflict-free merge commits itself; a conflict hands over to the steward.
+ * A red-after-merge branch commits the merge, then hands over too: the steward
+ * is the agent that repairs the red merged result, and a turn that leaves the
+ * merge commit untouched settles no repair, so the attempt holds instead of
+ * re-queueing the same red.
+ */
 async function prepareMerge(
   runtime: KernelRuntime,
   task: TaskFile,
   wtPath: string,
   head: string,
   session: SessionRef | undefined,
+  candidate: StewardCandidate,
 ): Promise<MergeAttempt> {
   const before = await headSha(wtPath);
   const merge = await git(wtPath, ["merge", "--no-ff", "--no-commit", head], {
@@ -131,14 +142,20 @@ async function prepareMerge(
   });
   if (merge.code === 0) {
     const committed = await commitMerge(runtime, task, wtPath);
-    if (committed.ok) {
-      return { before, result: { ok: true, agentTurn: false, session } };
+    if (!committed.ok) {
+      await abortMerge(wtPath);
+      return {
+        before,
+        result: { ok: false, cause: committed.cause, agentTurn: false },
+      };
     }
-    await abortMerge(wtPath);
-    return {
-      before,
-      result: { ok: false, cause: committed.cause, agentTurn: false },
-    };
+    // The head merged cleanly. A red-after-merge candidate still hands over:
+    // its turn repairs the merged result the commit carries, and the merge
+    // commit is the baseline a repair must move.
+    if (candidate.kind === "red-after-merge") {
+      return { before: await headSha(wtPath), conflicts: [] };
+    }
+    return { before, result: { ok: true, agentTurn: false, session } };
   }
   const conflicts = await unmergedFiles(wtPath);
   if (conflicts.length === 0) {
@@ -277,27 +294,25 @@ function stewardSettle(
   };
 }
 
-export async function attemptStewardMerge(
+async function runStewardTurn(
   runtime: KernelRuntime,
   task: TaskFile,
   records: StepRecord[],
   iteration: number,
   state: TaskState,
+  ensured: EnsuredWorktree,
+  head: string,
+  conflicts: string[],
   session: SessionRef | undefined,
-): Promise<StewardAttempt> {
-  const prepared = await stewardWorktree(runtime, task);
-  if ("attempt" in prepared) return prepared.attempt;
-  const { ensured } = prepared;
-
-  const head = await integrationHead(runtime);
-  const merge = await prepareMerge(runtime, task, ensured.path, head, session);
-  if ("result" in merge) return merge.result;
-  const { before, conflicts } = merge;
-
+  candidate: StewardCandidate,
+): Promise<{
+  result: Awaited<ReturnType<typeof runAgentTurn>>;
+  breach: string | undefined;
+}> {
   const target = boundaryTarget(runtime, "steward", iteration);
   const base = records
     .filter((r) => r.slug === task.slug && r.actor === "agent" && r.base)
-    .sort((a, b) => a.seq - b.seq)[0]?.base;
+    .sort((a, b) => b.seq - a.seq)[0]?.base;
   const vars = resolveVars(
     runtime,
     ensured.path,
@@ -305,6 +320,7 @@ export async function attemptStewardMerge(
     head,
     conflicts,
     records,
+    candidate.gateLogPath,
   );
   const contained = await containmentSnapshot(runtime, ensured.path);
   let breach: string | undefined;
@@ -334,6 +350,45 @@ export async function attemptStewardMerge(
       },
     ),
   });
+  return { result, breach };
+}
 
+export async function attemptStewardMerge(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  records: StepRecord[],
+  iteration: number,
+  state: TaskState,
+  session: SessionRef | undefined,
+  candidate: StewardCandidate,
+): Promise<StewardAttempt> {
+  const prepared = await stewardWorktree(runtime, task);
+  if ("attempt" in prepared) return prepared.attempt;
+  const { ensured } = prepared;
+
+  const head = await integrationHead(runtime);
+  const merge = await prepareMerge(
+    runtime,
+    task,
+    ensured.path,
+    head,
+    session,
+    candidate,
+  );
+  if ("result" in merge) return merge.result;
+  const { before, conflicts } = merge;
+
+  const { result, breach } = await runStewardTurn(
+    runtime,
+    task,
+    records,
+    iteration,
+    state,
+    ensured,
+    head,
+    conflicts,
+    session,
+    candidate,
+  );
   return finishStewardAttempt(runtime, ensured.path, before, breach, result);
 }
