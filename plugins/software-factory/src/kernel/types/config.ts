@@ -9,6 +9,7 @@ import type {
   BoundaryStep,
   FlowDefinition,
   HierarchyConfig,
+  IngestionStepConfig,
   Limits,
   Timeouts,
   TurnSpec,
@@ -110,6 +111,8 @@ export interface ProcessConfig {
   taskTypes: Record<string, TaskTypeDefinition>;
   /** Each kernel boundary step's prompt and alias; pre-flight requires these aliases. */
   boundary: Record<BoundaryStep, TurnSpec>;
+  /** The goal-start step sequence: the branch first, the classifier, then extra steps. */
+  ingestion?: IngestionStepConfig[];
   /** The plan review flow that completes before the PM derives tasks. */
   architecture: ArchitectureConfig;
   /** Hierarchy depth and the epic architect's prompt; absent reads as depth 1. */

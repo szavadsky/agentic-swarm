@@ -64,6 +64,12 @@ async function wiresPriceCacheIntoSummaryMetricsPart1(
       "",
     ].join("\n"),
   );
+  // This fixture isolates the architect's harness-silent turn; the shipped
+  // scout would add a zero-usage turn that is unpriced by design.
+  repo.writeFile(
+    ".factory/process.yaml",
+    "ingestion: [{ id: branch }, { id: front }]\n",
+  );
   repo.commit("factory config");
   // The model is absent from config; only the seeded cache prices it.
   const cachePath = path.join(repo.dir, ".factory", "price-cache.json");

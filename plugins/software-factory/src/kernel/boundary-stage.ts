@@ -8,7 +8,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { recordedBaseGates } from "./baseline.js";
 import {
-  codeMap,
   expireSelfHolds,
   openRecords,
   ownedPlanText,
@@ -17,6 +16,7 @@ import {
   spikeFindings,
   unavailableAliases,
 } from "./boundary-context.js";
+import { contextCodeMap } from "./ingestion.js";
 import { runSpikeSteer } from "./boundary-spike.js";
 import type { BoundaryOptions } from "./boundary-state.js";
 import { boundaryResult, type ConsultContext } from "./boundary-state.js";
@@ -339,7 +339,7 @@ async function packInput(context: ConsultContext): Promise<ContextPackInput> {
       context.records,
       context.tasks,
     ),
-    codeMap: await codeMap(runtime.paths.goalCheckout),
+    codeMap: await contextCodeMap(runtime),
     steers: context.forArchitect,
     holds,
     pmAnswers: context.pmAnswers,

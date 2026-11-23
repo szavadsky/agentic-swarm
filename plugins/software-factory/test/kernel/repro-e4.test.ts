@@ -5,6 +5,7 @@ import { dispatch } from "../../src/cli/dispatch.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { createDrainController } from "../../src/kernel/signals.js";
 import { createFolderStore } from "../../src/kernel/store.js";
+import { scriptKernelRoleFallbacks } from "./fake-defaults.js";
 import { whenTurn } from "./s2-helpers.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { testPriceSource } from "../helpers/price-source.js";
@@ -96,6 +97,9 @@ async function drainsAfterFirstSignalRaisedInsidePart1(s: {
   taskDir: string;
 }) {
   const harness = new FakeHarness({ id: "fake" });
+  // The default flow and the shipped ingestion sequence run turns this test
+  // does not assert on: QA and the bigger-goal scout.
+  scriptKernelRoleFallbacks(harness);
   harness.script(
     (req, ctx) => {
       fs.writeFileSync(path.join(s.goalDir, "plan.md"), PLAN, "utf8");
@@ -123,18 +127,6 @@ async function drainsAfterFirstSignalRaisedInsidePart1(s: {
       return fakeTurnResult(req);
     },
     { when: whenTurn({ step: "pm" }) },
-  );
-
-  // The default flow's QA acceptance needs a neutral handler; the test
-  // scripts the implementer and reviewer it asserts on.
-  harness.script(
-    (_req, ctx) => {
-      ctx.writeOutcome(
-        outcome({ summary: "qa accepted", qa: { verdict: "accept" } }),
-      );
-      return fakeTurnResult(_req);
-    },
-    { when: whenTurn({ step: "qa" }), fallback: true },
   );
 
   const implemented: string[] = [];

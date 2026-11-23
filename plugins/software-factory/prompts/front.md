@@ -49,6 +49,7 @@ Write only `class.yaml`, the one task file, the pack and the outcome. Never chan
 - tasks directory: `{{tasks_dir}}`
 - class file: `{{class_path}}`
 - context pack: `{{pack_path}}`
+- code map (when a bigger-goal scout step wrote one): `{{code_map_path}}`
 - goal checkout: `{{checkout}}`
 - setup: `{{setup_command}}`
 - gates:

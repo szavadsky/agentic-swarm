@@ -5,13 +5,8 @@
  * reconciliation.
  */
 import fs from "node:fs";
-import { git } from "../core/git/exec.js";
 import { formatCause, makeCause } from "./cause.js";
-import {
-  epicSummaryRelPath,
-  type SpikeFinding,
-  shallowCodeMap,
-} from "./context-pack.js";
+import { epicSummaryRelPath, type SpikeFinding } from "./context-pack.js";
 import { OPEN_TASK_STATUSES } from "./derive.js";
 import { stepTarget } from "./flow-context.js";
 import {
@@ -108,16 +103,6 @@ export function snapshotDiff(
     if (before.get(name) !== after.get(name)) return name;
   }
   return null;
-}
-
-export async function codeMap(checkout: string): Promise<string[]> {
-  try {
-    const listed = await git(checkout, ["ls-files"], { allowFail: true });
-    if (listed.code !== 0) return [];
-    return shallowCodeMap(listed.stdout.split("\n").filter(Boolean));
-  } catch {
-    return [];
-  }
 }
 
 /**

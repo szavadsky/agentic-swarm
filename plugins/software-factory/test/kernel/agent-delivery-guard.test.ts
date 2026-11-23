@@ -40,6 +40,7 @@ const frontVars = {
   tasks_dir: "/g/tasks",
   class_path: "/g/class.yaml",
   pack_path: "/g/iterations/1/context-pack.md",
+  code_map_path: "/g/code-map.md",
   checkout: "/wt",
   setup_command: "none",
   gate_commands: "none",

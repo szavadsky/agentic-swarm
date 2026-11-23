@@ -1,5 +1,21 @@
 /** Flow, architecture and step definitions. */
 
+/** Built-in ingestion step ids that bind to kernel execution. */
+export const BUILTIN_INGESTION_IDS = ["branch", "front"] as const;
+export type BuiltinIngestionId = (typeof BUILTIN_INGESTION_IDS)[number];
+
+export type IngestionWhenClass = "trivial" | "task" | "bigger";
+
+/** One ingestion step from process config. */
+export interface IngestionStepConfig {
+  id: string;
+  prompt?: string;
+  alias?: string;
+  deliverable?: string;
+  /** Goal classes this step runs for; absent runs for every class. */
+  when?: IngestionWhenClass[];
+}
+
 /** What a turn's missing-outcome repair ask renders from. */
 export interface RepairSpec {
   /**

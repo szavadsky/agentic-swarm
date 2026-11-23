@@ -87,6 +87,7 @@ const ROLES: Record<string, Record<string, string>> = {
     tasks_dir: "/goal/tasks",
     class_path: "/goal/class.yaml",
     pack_path: "/goal/iterations/3/context-pack.md",
+    code_map_path: "/goal/code-map.md",
     checkout: "/worktrees/demo",
     setup_command: "bun install",
     gate_commands: "- test: bun test",

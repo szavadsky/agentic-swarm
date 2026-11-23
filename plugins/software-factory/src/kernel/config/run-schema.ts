@@ -10,9 +10,11 @@ import {
   architectureSchema,
   boundaryOverrideSchema,
   boundarySchema,
+  DEFAULT_INGESTION_STEPS,
   flowSchema,
   hierarchyOverrideSchema,
   hierarchySchema,
+  ingestionSchema,
   taskTypeSchema,
 } from "./flow-schema.js";
 
@@ -22,6 +24,8 @@ export const processConfigSchema = z
     flows: z.record(z.string(), flowSchema).default({}),
     taskTypes: z.record(z.string(), taskTypeSchema).default({}),
     boundary: boundarySchema,
+    /** The goal-start step sequence: the branch first, the classifier, then extra steps. */
+    ingestion: ingestionSchema.default(DEFAULT_INGESTION_STEPS),
     /** The plan review flow that completes before the PM derives tasks. */
     architecture: architectureSchema,
     /** Depth and the epic architect's prompt; depth 1 is one architect. */
@@ -63,6 +67,7 @@ export const processOverrideSchema = processConfigSchema.extend({
   boundary: boundaryOverrideSchema.optional(),
   architecture: architectureOverrideSchema.optional(),
   hierarchy: hierarchyOverrideSchema.optional(),
+  ingestion: ingestionSchema.optional(),
 });
 
 /** Run layer: not tracked; aliases, price ids, limits, session store, scout pin. */

@@ -65,15 +65,19 @@ export type {
 export {
   ARCHITECTURE_STEPS,
   BOUNDARY_STEPS,
+  BUILTIN_INGESTION_IDS,
   DEFAULT_TIMEOUTS,
   KERNEL_STEPS,
 } from "./types/flow.js";
 export type {
   ArchitectureConfig,
   BoundaryStep,
+  BuiltinIngestionId,
   FlowDefinition,
   FlowStep,
   FollowUp,
+  IngestionStepConfig,
+  IngestionWhenClass,
   KernelStep,
   LaunchKind,
   Limits,

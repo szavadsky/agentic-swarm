@@ -4,8 +4,13 @@ import fs from "node:fs";
 import { formatFindings } from "../findings.js";
 import type { Finding } from "../findings.js";
 import { FRONT_CLASS_FLOWS } from "../front.js";
-import { BOUNDARY_STEPS } from "../types.js";
-import type { AliasConfig, FlowDefinition, ProcessConfig } from "../types.js";
+import { BOUNDARY_STEPS, BUILTIN_INGESTION_IDS } from "../types.js";
+import type {
+  AliasConfig,
+  BuiltinIngestionId,
+  FlowDefinition,
+  ProcessConfig,
+} from "../types.js";
 
 /** Free bytes the temp filesystem must hold when `limits.minTmpFreeBytes` is unset. */
 export const DEFAULT_MIN_TMP_FREE_BYTES = 2 * 1024 * 1024 * 1024;
@@ -180,6 +185,11 @@ export function requiredAliases(process: ProcessConfig): Map<string, string> {
   }
   for (const [name, flow] of Object.entries(process.flows)) {
     noteFlowAliases(note, name, flow);
+  }
+  for (const step of process.ingestion ?? []) {
+    if (!BUILTIN_INGESTION_IDS.includes(step.id as BuiltinIngestionId)) {
+      note(step.alias ?? "pm", `ingestion step "${step.id}"`);
+    }
   }
   return refs;
 }
