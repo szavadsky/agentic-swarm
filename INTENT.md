@@ -107,7 +107,7 @@ flowchart TD
     arch -- "goal done / blocked on user" --> stop(["stop"])
 ```
    - stop: goal done | blocked on user | launch bound hit — architect iterations, plan checker rounds, time or budget (drain: no new dispatch, in-flight work finishes) | infra, unless launched to wait and retry
-   - During dispatch, started tasks/epics are prioritized to completion before others start: the rest start from the already integrated branch, avoiding unnecessary conflicts and too many trees.
+   - During dispatch, started tasks/epics are prioritized to completion before others start, notwithstanding parallel execution when the DAG allows: the rest start from the already integrated branch, avoiding unnecessary conflicts and too many trees.
 
 #### Concerns funnel
 
