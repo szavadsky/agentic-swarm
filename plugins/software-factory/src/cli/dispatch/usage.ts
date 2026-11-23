@@ -70,7 +70,10 @@ factory validate [--step <id>] <file>
 Validates one schema-enforced file with the same validators as the
 schema-validation gate: tasks/*.md (with its directory's dependency graph and
 flow existence against the merged process config), class.yaml, outcome.yaml,
-mailbox/holds/*.yaml, repo.yaml, run.yaml and process.yaml. --step names the
+mailbox/holds/*.yaml, repo.yaml, run.yaml and process.yaml. A repo, process
+or run file also gets the cross-layer checks — required aliases present,
+task-type flow/schema names known, quota pools defined — without launching
+a harness. --step names the
 flow step an outcome is given for and overrides the step in the sibling
 started.yaml; a standalone outcome without either gets step-independent checks
 only. Exit: 0 valid, 1 invalid or unknown kind.

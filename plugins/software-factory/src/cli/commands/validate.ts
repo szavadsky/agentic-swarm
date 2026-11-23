@@ -6,11 +6,21 @@ import yaml from "yaml";
 import type { ZodType } from "zod";
 import {
   ConfigError,
+  configFilePaths,
   loadConfigs,
   loadRunConfig,
   processOverrideSchema,
   repoConfigSchema,
 } from "../../kernel/config.js";
+import {
+  outcomeSchemaFor,
+  outcomeSchemaNames,
+} from "../../kernel/outcome-schemas.js";
+import {
+  escalationFindings,
+  fallbackAliasFindings,
+  requiredAliases,
+} from "../../kernel/preflight.js";
 import { classSchema } from "../../kernel/flow-context.js";
 import { holdFileSchema } from "../../kernel/mailbox.js";
 import {
@@ -299,6 +309,127 @@ async function taskFindings(
 }
 
 /**
+ * Cross-layer consistency for a repo/process/run file: aliases required by
+ * process config exist in run config, task types name a configured flow and a
+ * kernel outcome schema, and quota pools named on aliases exist in
+ * `limits.concurrency.perSubscription`. Static only: no harness, model or pool
+ * call. Findings name the owning file and key.
+ */
+interface CrossLayerBundle {
+  process: ProcessConfig;
+  runAliases: Record<string, { subscription?: string }>;
+  perSubscription: Record<string, number>;
+  escalation: { file: string; key: string; message: string }[];
+  fallback: { file: string; key: string; message: string }[];
+  runFile: string;
+  processFile: string;
+}
+
+function crossLayerBundle(
+  abs: string,
+  kind: ValidateKind,
+  opts: ValidateFileOptions,
+): CrossLayerBundle | string[] {
+  const dir = path.dirname(abs);
+  const root =
+    findRepoRoot(dir) ??
+    (path.basename(dir) === ".factory"
+      ? path.dirname(dir)
+      : opts.repo
+        ? path.resolve(opts.repo)
+        : process.cwd());
+  const files = configFilePaths(root);
+  let bundle: ReturnType<typeof loadConfigs>;
+  try {
+    bundle = loadConfigs(root, {
+      runConfigPath: kind === "run" ? abs : undefined,
+    });
+  } catch (err) {
+    return [`${abs}: ${(err as Error).message}`];
+  }
+  const bundleFiles = bundle.files as ReturnType<typeof configFilePaths>;
+  const runFile = bundleFiles.run ?? files.run;
+  const processFile = fs.existsSync(bundleFiles.processOverride)
+    ? bundleFiles.processOverride
+    : bundleFiles.processDefault;
+  return {
+    process: bundle.process,
+    runAliases: bundle.run.aliases,
+    perSubscription: bundle.run.limits.concurrency.perSubscription,
+    escalation: escalationFindings(bundle.run.aliases, runFile),
+    fallback: fallbackAliasFindings(bundle.run.aliases, runFile),
+    runFile,
+    processFile,
+  };
+}
+
+function crossLayerFindings(
+  abs: string,
+  kind: ValidateKind,
+  opts: ValidateFileOptions = {},
+): string[] {
+  if (kind !== "repo" && kind !== "process" && kind !== "run") return [];
+  const bundleOrError = crossLayerBundle(abs, kind, opts);
+  if (Array.isArray(bundleOrError)) return bundleOrError;
+  return [
+    ...crossLayerAliasFindings(bundleOrError),
+    ...crossLayerTaskTypeFindings(bundleOrError),
+    ...crossLayerPoolFindings(bundleOrError),
+    ...crossLayerChainFindings(bundleOrError),
+  ];
+}
+
+function crossLayerAliasFindings(bundle: CrossLayerBundle): string[] {
+  const findings: string[] = [];
+  for (const [alias, ref] of requiredAliases(bundle.process)) {
+    if (!bundle.runAliases[alias]) {
+      findings.push(
+        `${bundle.runFile}: aliases.${alias}: required by ${ref} but missing`,
+      );
+    }
+  }
+  return findings;
+}
+
+function crossLayerTaskTypeFindings(bundle: CrossLayerBundle): string[] {
+  const findings: string[] = [];
+  for (const [name, definition] of Object.entries(bundle.process.taskTypes)) {
+    if (!Object.hasOwn(bundle.process.flows, definition.flow)) {
+      findings.push(
+        `${bundle.processFile}: taskTypes.${name}.flow: flow "${definition.flow}" is not configured`,
+      );
+    }
+    if (!outcomeSchemaFor(definition.schema)) {
+      findings.push(
+        `${bundle.processFile}: taskTypes.${name}.schema: schema "${definition.schema}" is not a kernel outcome schema (${outcomeSchemaNames()})`,
+      );
+    }
+  }
+  return findings;
+}
+
+function crossLayerPoolFindings(bundle: CrossLayerBundle): string[] {
+  const findings: string[] = [];
+  for (const [name, alias] of Object.entries(bundle.runAliases)) {
+    if (
+      alias.subscription !== undefined &&
+      !Object.hasOwn(bundle.perSubscription, alias.subscription)
+    ) {
+      findings.push(
+        `${bundle.runFile}: aliases.${name}.subscription: subscription "${alias.subscription}" names no limits.concurrency.perSubscription pool`,
+      );
+    }
+  }
+  return findings;
+}
+
+function crossLayerChainFindings(bundle: CrossLayerBundle): string[] {
+  return [...bundle.escalation, ...bundle.fallback].map(
+    (finding) => `${finding.file}: ${finding.key}: ${finding.message}`,
+  );
+}
+
+/**
  * Validates one schema-enforced file with the same validators as the
  * schema-validation gate. Findings, empty when valid; unknown kinds and
  * missing files throw.
@@ -318,20 +449,29 @@ export async function validateFile(
     );
   }
   const text = await fs.promises.readFile(abs, "utf8");
+  let findings: string[] = [];
   switch (kind) {
     case "task":
-      return { findings: await taskFindings(abs, opts) };
+      findings = await taskFindings(abs, opts);
+      break;
     case "class":
-      return { findings: zodFindings(text, abs, classSchema) };
+      findings = zodFindings(text, abs, classSchema);
+      break;
     case "outcome":
       return await outcomeResult(abs, text, opts);
     case "hold":
-      return { findings: holdFindings(text, abs) };
+      findings = holdFindings(text, abs);
+      break;
     case "repo":
-      return { findings: zodFindings(text, abs, repoConfigSchema) };
+      findings = zodFindings(text, abs, repoConfigSchema);
+      break;
     case "run":
-      return { findings: runFindings(abs) };
+      findings = runFindings(abs);
+      break;
     case "process":
-      return { findings: zodFindings(text, abs, processOverrideSchema) };
+      findings = zodFindings(text, abs, processOverrideSchema);
+      break;
   }
+  findings.push(...crossLayerFindings(abs, kind, opts));
+  return { findings };
 }

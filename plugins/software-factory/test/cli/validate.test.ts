@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { dispatch } from "../../src/cli/dispatch.js";
+import { BOUNDARY_STEPS } from "../../src/kernel/types.js";
 
 function taskFile(slug: string, deps: string[]): string {
   return `---\nslug: ${slug}\ntitle: ${slug}\nkind: task\nflow: implement-review\ndeps: [${deps.join(", ")}]\nscope:\n  - "src/**"\n---\n\nDone when: ${slug} works\n`;
@@ -13,6 +14,29 @@ function writeFile(root: string, rel: string, content: string): string {
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   fs.writeFileSync(abs, content, "utf8");
   return abs;
+}
+
+/**
+ * The minimal run config that satisfies `process.yaml`'s defaults: every
+ * boundary alias, reviewer and flow alias, no subscription pool needed.
+ */
+function validRunConfig(): string {
+  const names = new Set<string>([
+    ...BOUNDARY_STEPS,
+    "plan-reviewer",
+    "pack-preparer",
+    "plan-checker",
+    "implementer",
+    "implementer-b",
+    "researcher",
+    "reviewer",
+    "qa",
+    "steward",
+  ]);
+  const lines = [...names].map(
+    (name) => `  ${name}: { harness: fake, model: ${name}-model }`,
+  );
+  return `aliases:\n${lines.join("\n")}\n`;
 }
 
 async function runValidate(
@@ -180,7 +204,8 @@ function registerFactoryValidatePart4(): void {
   it(
     "accepts a valid repo file",
     withTmp(async (root) => {
-      const file = writeFile(root, "repo.yaml", "baseBranch: main\n");
+      writeFile(root, ".factory/run.yaml", validRunConfig());
+      const file = writeFile(root, ".factory/repo.yaml", "baseBranch: main\n");
       const result = await runValidate(file);
       expect(result.code).toBe(0);
       expect(result.out).toContain(": valid");
@@ -202,7 +227,7 @@ function registerFactoryValidatePart5(): void {
   it(
     "accepts a valid run file",
     withTmp(async (root) => {
-      const file = writeFile(root, "run.yaml", "aliases: {}\n");
+      const file = writeFile(root, "run.yaml", validRunConfig());
       const result = await runValidate(file);
       expect(result.code).toBe(0);
       expect(result.out).toContain(": valid");
@@ -222,11 +247,7 @@ function registerFactoryValidatePart5(): void {
   it(
     "accepts a run file through its base",
     withTmp(async (root) => {
-      writeFile(
-        root,
-        "base.yaml",
-        "aliases:\n  architect: { harness: fake, model: base-model }\n",
-      );
+      writeFile(root, "base.yaml", validRunConfig());
       const file = writeFile(
         root,
         "run.yaml",
@@ -253,7 +274,8 @@ function registerFactoryValidatePart6(): void {
   it(
     "accepts a valid process file",
     withTmp(async (root) => {
-      const file = writeFile(root, "process.yaml", "reminders: 2\n");
+      writeFile(root, ".factory/run.yaml", validRunConfig());
+      const file = writeFile(root, ".factory/process.yaml", "reminders: 2\n");
       const result = await runValidate(file);
       expect(result.code).toBe(0);
       expect(result.out).toContain(": valid");
@@ -384,6 +406,109 @@ function registerFactoryValidatePart9(): void {
   );
 }
 
+function registerFactoryValidateCrossLayer(): void {
+  it(
+    "reports the missing alias class to the run config",
+    withTmp(async (root) => {
+      const file = writeFile(
+        root,
+        "run.yaml",
+        "aliases:\n  implementer: { harness: fake, model: m }\n",
+      );
+      const result = await runValidate(file);
+      expect(result.code).toBe(1);
+      expect(result.err).toContain(
+        `aliases.architect: required by boundary step "architect" but missing`,
+      );
+      expect(result.err).toContain(
+        `aliases.implementer-b: required by flow "implement-review" step "implement" alternates but missing`,
+      );
+      expect(result.err).toContain(file);
+    }),
+  );
+
+  it(
+    "reports an unknown flow and schema on a task type",
+    withTmp(async (root) => {
+      writeFile(root, ".factory/run.yaml", validRunConfig());
+      writeFile(
+        root,
+        ".factory/process.yaml",
+        "taskTypes:\n  broken: { flow: ghost-flow, kind: development, schema: ghost-schema }\n",
+      );
+      writeFile(root, ".factory/repo.yaml", "baseBranch: main\n");
+      const file = writeFile(root, ".factory/repo.yaml", "baseBranch: main\n");
+      const result = await runValidate(file);
+      expect(result.code).toBe(1);
+      expect(result.err).toContain(
+        `taskTypes.broken.flow: flow "ghost-flow" is not configured`,
+      );
+      expect(result.err).toContain(
+        `taskTypes.broken.schema: schema "ghost-schema" is not a kernel outcome schema (outcome, qa)`,
+      );
+    }),
+  );
+
+  it(
+    "reports a missing quota pool class",
+    withTmp(async (root) => {
+      const config = validRunConfig().replace(
+        "implementer: { harness: fake, model: implementer-model }",
+        "implementer: { harness: fake, model: implementer-model, subscription: ghost-pool }",
+      );
+      const file = writeFile(root, "run.yaml", config);
+      const result = await runValidate(file);
+      expect(result.code).toBe(1);
+      expect(result.err).toContain(
+        `aliases.implementer.subscription: subscription "ghost-pool" names no limits.concurrency.perSubscription pool`,
+      );
+      expect(result.err).toContain(file);
+    }),
+  );
+
+  it(
+    "reports a missing fallback alias class",
+    withTmp(async (root) => {
+      const config = validRunConfig().replace(
+        "implementer: { harness: fake, model: implementer-model }",
+        "implementer: { harness: fake, model: implementer-model, fallbacks: [{ alias: ghost-alias }] }",
+      );
+      const file = writeFile(root, "run.yaml", config);
+      const result = await runValidate(file);
+      expect(result.code).toBe(1);
+      expect(result.err).toContain('fallback alias "ghost-alias"');
+      expect(result.err).toContain("aliases.implementer.fallbacks.0.alias");
+    }),
+  );
+
+  it(
+    "reports a missing escalation alias class",
+    withTmp(async (root) => {
+      const config = validRunConfig().replace(
+        "implementer: { harness: fake, model: implementer-model }",
+        "implementer: { harness: fake, model: implementer-model, escalateTo: ghost-escalation }",
+      );
+      const file = writeFile(root, "run.yaml", config);
+      const result = await runValidate(file);
+      expect(result.code).toBe(1);
+      expect(result.err).toContain(
+        'escalateTo "ghost-escalation" names no run-config alias',
+      );
+    }),
+  );
+
+  it(
+    "passes a valid fake config with no harness probe",
+    withTmp(async (root) => {
+      const file = writeFile(root, "run.yaml", validRunConfig());
+      const result = await runValidate(file);
+      expect(result.code).toBe(0);
+      expect(result.err).toBe("");
+      expect(result.out).toContain(": valid");
+    }),
+  );
+}
+
 describe("factory validate", () => {
   registerFactoryValidatePart1();
 
@@ -402,4 +527,6 @@ describe("factory validate", () => {
   registerFactoryValidatePart8();
 
   registerFactoryValidatePart9();
+
+  registerFactoryValidateCrossLayer();
 });
