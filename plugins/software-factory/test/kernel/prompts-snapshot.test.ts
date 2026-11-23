@@ -183,6 +183,7 @@ const ROLES: Record<string, Record<string, string>> = {
     integration_head: "abc1234def5678",
     conflicts: "conflict.txt",
     gate_commands: "- test: bun test",
+    gate_log_path: "none",
     base_gates: "base abc1234def: green",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",

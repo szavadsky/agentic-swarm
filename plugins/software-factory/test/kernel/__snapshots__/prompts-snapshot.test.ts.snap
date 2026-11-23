@@ -1142,6 +1142,7 @@ planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark pe
 - branch: \`factory-task/demo/alpha\`
 - integration head: \`abc1234def5678\`
 - conflicts: \`conflict.txt\`
+- gate log: \`none\` — when it names the red merged result's log, repair that red on this branch
 - gate commands: \`- test: bun test\`
 - base gates: base abc1234def: green
 - outcome path: \`/worktrees/demo-tasks/alpha/outcome.yaml\`

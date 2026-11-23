@@ -271,6 +271,7 @@ The digest scout appends loops, failures and interventions; it does not restate 
 - `branch` — task branch the integration head merges into
 - `integration_head` — integration head sha the branch must absorb
 - `conflicts` — conflicted files, comma-separated; `none` when the merge needs no resolution
+- `gate_log_path` — path to the red merged result's gate log when this branch is a red-after-merge candidate; `none` when the merge needs no gate repair
 - `gate_commands` — configured gate commands as `- id: command` lines; `none` when empty
 - `base_gates` — the base tree's recorded gate result: commit plus `green`, the pre-existing failing checks, or `not recorded`
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file

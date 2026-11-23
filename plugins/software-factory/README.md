@@ -149,7 +149,7 @@ flows:
       - { id: implement, prompt: implementer, alias: implementer }
       - { id: qa, prompt: qa, alias: qa, qa: true, changeRequests: 2, deliverable: verdict }
       - { id: review, prompt: reviewer, alias: reviewer, review: true, changeRequests: 2 }
-      - { id: resolve, prompt: steward, alias: steward }   # merge-conflict turn only
+      - { id: resolve, prompt: steward, alias: steward }   # merge-conflict turn only; the wave-end steward also owns red-after-merge candidates
 taskTypes:
   development: { flow: implement-review, kind: development, schema: outcome }
 boundary:                       # the kernel turns outside any task flow
@@ -182,7 +182,13 @@ outside the normal agent sequence: a squash merge that conflicts runs one turn
 that merges the head into the task branch and resolves it, then the task checks
 and the merge retries. A second conflict parks, the wave-end steward remains the
 fallback, and a resolution that changed files outside the conflict set goes
-through QA and review before it lands. A step that names no
+through QA and review before it lands. The wave-end steward runs when a merge
+conflicts or when the goal branch is red: a parked branch whose last merged
+result ran red is a red-after-merge candidate — its turn receives the red gate
+log and repairs the merged result on that branch, then the merge queue re-runs
+its gates. A branch the boundary's kept-land pass can still land (its approve
+covers the tip, or its review-less flow's checks are green) stays with
+kept-land. A step that names no
 template renders the process-level `repairPrompt` (default `delivery-repair`).
 The architect names `architect-repair` because its ask also requires the plan
 edit on disk; the default template then carries no role branch.

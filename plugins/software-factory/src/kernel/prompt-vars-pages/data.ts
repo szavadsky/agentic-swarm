@@ -405,6 +405,8 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       integration_head: "integration head sha the branch must absorb",
       conflicts:
         "conflicted files, comma-separated; `none` when the merge needs no resolution",
+      gate_log_path:
+        "path to the red merged result's gate log when this branch is a red-after-merge candidate; `none` when the merge needs no gate repair",
       gate_commands:
         "configured gate commands as `- id: command` lines; `none` when empty",
       base_gates:
