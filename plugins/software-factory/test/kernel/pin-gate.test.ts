@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import yaml from "yaml";
 import { parseCliArgs } from "../../src/cli/dispatch.js";
+import { writePinGate } from "../../src/cli/commands/promote.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { runGoal } from "../../src/kernel/launch.js";
 import {
@@ -27,7 +28,6 @@ import {
 import { scriptKernelRoleFallbacks } from "./fake-defaults.js";
 
 const PACKAGE_ROOT = path.resolve(import.meta.dir, "../..");
-const WRITER = path.join(PACKAGE_ROOT, "scripts/pin-gate.ts");
 const GREEN_AT = "2026-11-23T00:00:00.000Z";
 const REV = "0123456789ab";
 
@@ -98,21 +98,10 @@ function fakePin(pins: string, rev: string): string {
 
 function writePin(
   build: string,
-  typecheck: string,
-  tests: string,
-): ReturnType<typeof spawnSync> {
-  return spawnSync(process.execPath, [
-    WRITER,
-    "write",
-    "--dir",
-    build,
-    "--rev",
-    REV,
-    "--typecheck",
-    typecheck,
-    "--tests",
-    tests,
-  ]);
+  typecheck: PinGate["typecheck"],
+  tests: PinGate["tests"],
+): void {
+  writePinGate(build, REV, typecheck, tests);
 }
 
 function runPin(
@@ -220,7 +209,7 @@ describe("pin gate record validation", () => {
     const build = path.join(root, REV);
     try {
       fs.mkdirSync(build, { recursive: true });
-      expect(writePin(build, "pass", "fail").status).toBe(0);
+      writePin(build, "pass", "fail");
       const gate = pinGateSchema.parse(
         yaml.parse(fs.readFileSync(path.join(build, PIN_GATE_FILE), "utf8")),
       );
@@ -232,11 +221,9 @@ describe("pin gate record validation", () => {
       expect(Date.parse(gate.at)).toBeGreaterThan(Date.now() - 60_000);
       expect(pinRefusal(build)).toContain("gate red: tests fail");
 
-      const rejected = writePin(build, "maybe", "pass");
-      expect(rejected.status).toBe(2);
-      expect(rejected.stderr.toString()).toContain(
-        "--typecheck must be pass or fail",
-      );
+      expect(() =>
+        writePin(build, "maybe" as PinGate["typecheck"], "pass"),
+      ).toThrow("--typecheck must be pass or fail");
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

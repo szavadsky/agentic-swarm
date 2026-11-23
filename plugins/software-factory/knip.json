@@ -3,5 +3,5 @@
   "ignoreExportsUsedInFile": true,
   "ignore": ["vendor/**"],
   "ignoreBinaries": ["agy", "codex", "pi"],
-  "entry": ["scripts/pin-gate.ts"]
+  "entry": ["scripts/promote.ts", "scripts/bootstrap-dispatch.ts"]
 }

@@ -14,7 +14,9 @@ import { treeFile } from "../helpers/run-configs.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 
 const PACKAGE_ROOT = path.resolve(import.meta.dir, "../..");
-const WRITER = path.join(PACKAGE_ROOT, "scripts/pin-gate.ts");
+/** The promote entry and logic the fake repo's promote.sh invokes. */
+const PROMOTE_ENTRY = path.join(PACKAGE_ROOT, "scripts/promote.ts");
+const PROMOTE_LOGIC = path.join(PACKAGE_ROOT, "src/cli/commands/promote.ts");
 const OK_TEST =
   'import { expect, it } from "bun:test";\nit("ok", () => { expect(1).toBe(1); });\n';
 const RED_TEST =
@@ -31,8 +33,9 @@ const TREE_TEST = [
 ].join("\n");
 
 /**
- * The real promote.sh this test promotes with, copied into a fake repo. A
- * package-only export with no tree named carries no script to exercise.
+ * The real promote.sh this test promotes with, copied into a fake repo with
+ * its entry and logic beside it. A package-only export with no tree named
+ * carries no script to exercise.
  */
 const PROMOTE = treeFile("bootstrap/promote.sh");
 
@@ -52,10 +55,15 @@ function fakeRepo(): TmpRepo {
       2,
     )}\n`,
   );
-  // The writer is the same script promote invokes; type imports stay erased.
+  // The entry and logic are the same files the real script invokes; the
+  // module is node-builtins only, so the fake package needs no install.
   repo.writeFile(
-    "plugins/software-factory/scripts/pin-gate.ts",
-    fs.readFileSync(WRITER, "utf8"),
+    "plugins/software-factory/scripts/promote.ts",
+    fs.readFileSync(PROMOTE_ENTRY, "utf8"),
+  );
+  repo.writeFile(
+    "plugins/software-factory/src/cli/commands/promote.ts",
+    fs.readFileSync(PROMOTE_LOGIC, "utf8"),
   );
   repo.writeFile("plugins/software-factory/test/ok.test.ts", OK_TEST);
   repo.writeFile("plugins/software-factory/test/tree.test.ts", TREE_TEST);
@@ -67,10 +75,11 @@ function fakeRepo(): TmpRepo {
 function promote(
   repo: TmpRepo,
   pins: string,
+  rev?: string,
 ): { code: number | null; stdout: string; stderr: string } {
   const result = spawnSync(
     "bash",
-    [path.join(repo.dir, "bootstrap", "promote.sh")],
+    [path.join(repo.dir, "bootstrap", "promote.sh"), ...(rev ? [rev] : [])],
     {
       cwd: repo.dir,
       env: {
@@ -198,3 +207,25 @@ describe.skipIf(PROMOTE === undefined)(
     }, 120_000);
   },
 );
+
+describe.skipIf(PROMOTE === undefined)("promote names a revision", () => {
+  it("promotes the rev it is given, not HEAD", () => {
+    const repo = fakeRepo();
+    const pins = fs.mkdtempSync(path.join(os.tmpdir(), "factory-promote-"));
+    try {
+      const old = repo.git(["rev-parse", "--short=12", "HEAD"]).stdout.trim();
+      repo.writeFile("plugins/software-factory/test/ok2.test.ts", OK_TEST);
+      repo.commit("a newer commit");
+      const run = promote(repo, pins, old);
+      expect(run.code).toBe(0);
+      const build = path.join(pins, old);
+      expect(gateAt(build).rev).toBe(old);
+      expect(fs.realpathSync(path.join(pins, "current"))).toBe(
+        fs.realpathSync(build),
+      );
+    } finally {
+      repo.cleanup();
+      fs.rmSync(pins, { recursive: true, force: true });
+    }
+  }, 120_000);
+});
