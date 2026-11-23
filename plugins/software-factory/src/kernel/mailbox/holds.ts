@@ -4,8 +4,10 @@ import path from "node:path";
 import yaml from "yaml";
 import { makeCause } from "../cause.js";
 import { scriptMeta } from "../record.js";
-import type { ArtifactStore } from "../types.js";
-import type { Hold, HoldFinding, ReadHoldsOptions } from "./types.js";
+import type { ArtifactStore, StepRecord } from "../types.js";
+import { collectSteerRoutes } from "./routes.js";
+import { scanInbox } from "./steer.js";
+import type { Hold, HoldFinding, ReadHoldsOptions, Steer } from "./types.js";
 import {
   YAML_HOLD,
   archiveName,
