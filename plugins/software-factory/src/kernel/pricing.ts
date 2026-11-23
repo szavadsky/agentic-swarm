@@ -277,8 +277,9 @@ export function pricedServed(
  * non-zero harness figure wins, otherwise the table), `listCostUsd` is the
  * table-only list-price equivalent for subscriptions that under-report, and
  * `harnessCostUsd` preserves the harness figure when pricing filled the cost
- * from the table. Idempotent: repricing an already-priced usage keeps the
- * original harness figure and recomputes both prices from the same tokens. A
+ * from the table. Idempotent: repricing keeps the original harness figure and
+ * recomputes both prices from the same tokens; a usage carrying only the list
+ * column was priced from the table and stays list-sourced on reprice. A
  * crash-sealed record has no usage at all; nothing priced it, so it stays
  * unknown instead of becoming a false $0 from empty counters.
  */
@@ -289,7 +290,9 @@ export function pricedUsage(
   opts: { cachedPrefix?: boolean; priceIds?: Record<string, string> } = {},
 ): PricedUsage {
   if (!usage) return { usage: zeroUsage(), costKnown: false };
-  const harness = usage.harnessCostUsd ?? usage.costUsd;
+  const harness =
+    usage.harnessCostUsd ??
+    (usage.listCostUsd === undefined ? usage.costUsd : undefined);
   const costUsd = priceUsage(usage, model ?? "", table, opts);
   const listCostUsd = priceTableOnly(usage, model ?? "", table, opts);
   if (costUsd === undefined) {

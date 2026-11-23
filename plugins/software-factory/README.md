@@ -89,10 +89,10 @@ gates:
 cleanliness:                                    # optional; default rules active without it
   maxFileSizeBytes: 1048576                     # default: 1048576 (1 MB)
   allowedExtensions: [ts, json, md]             # default: extensions present in base tree
-  maxOutOfScopeFiles: 3                         # default: 3
+  allowedFiles: [data/benchmark.csv]            # optional; explicit files exempt from the heuristic
 ```
 
-Cleanliness checks run by default without repo config to detect large files, disallowed/new extensions, temp/weights/huge outputs, and excessive files out of task scope. A cleanliness hit sends the author one revision follow-up turn (fix or justify) before review; if justified, the task advances to review without re-looping and the reviewer evaluates the justification. Tightened thresholds may be configured under `cleanliness` in `.factory/repo.yaml`.
+Cleanliness checks run by default without repo config to detect large files, disallowed/new extensions, and temp/weights/huge outputs. A cleanliness hit sends the author one revision follow-up turn with three exits: clean up the files, add them to `.gitignore`, or list them under `cleanliness.allowedFiles` in `.factory/repo.yaml`. The follow-up is never repeated; an author who keeps a file explains it, and the reviewer evaluates the reason. Tightened thresholds may be configured under `cleanliness` in `.factory/repo.yaml`.
 
 The tracked repo layer names no worktree root: checkouts, sessions and harness
 policy belong to the run layer, so one checkout never silently shadows another.

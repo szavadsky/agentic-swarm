@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import yaml from "yaml";
 import { FakeHarness } from "../../src/harness/fake/index.js";
+import { git } from "../../src/core/git/exec.js";
+import { landStoreCommits } from "../../src/kernel/store-backend.js";
 import {
   containmentSnapshot,
   containmentViolation,
@@ -67,6 +69,43 @@ function registerAgentContainmentPart22(): void {
   }, 60_000);
 }
 
+function registerGoalBranchLanding(): void {
+  it("exempts a goal branch move made only of store landings", async () => {
+    const { repo, goal } = sameRepoFlow();
+    try {
+      const { runtime, ensured, snapshot } = await sameRepoSnapshot(repo, goal);
+      const replay = await landStoreCommits(runtime.paths);
+      expect(replay.length).toBeGreaterThan(0);
+      const landed = (
+        await git(runtime.paths.goalCheckout, [
+          "ls-tree",
+          "-r",
+          "--name-only",
+          "HEAD",
+        ])
+      ).stdout;
+      expect(
+        landed.split("\n").some((file) => file.endsWith("tasks/task.md")),
+      ).toBe(true);
+      expect(
+        await containmentViolation(
+          runtime,
+          ensured.path,
+          ensured.branch,
+          snapshot,
+        ),
+      ).toBeUndefined();
+      const incidents = (await runtime.store.listRecords()).filter(
+        (r) => r.step === "containment",
+      );
+      expect(incidents).toHaveLength(0);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
 describe("agent containment", () => {
   registerAgentContainmentPart22();
+  registerGoalBranchLanding();
 });

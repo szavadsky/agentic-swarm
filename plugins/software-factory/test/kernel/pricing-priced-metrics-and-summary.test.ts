@@ -188,9 +188,17 @@ async function pricesEveryReportedAttemptOncePart2(
     prices: TABLE,
   });
   const text = fs.readFileSync(path.join(store.goalDir, rel), "utf8");
-  expect(text).toContain("- cost: $8.2500 (partial; 1 unpriced turn)");
   expect(text).toContain(
-    "architect $8.0000; implementer $0.2500 (partial; 1 unpriced turn)",
+    "- harness-reported cost: $0.2500 (partial; 1 unpriced turn)",
+  );
+  expect(text).toContain(
+    "- list-price estimate: $8.0000 (partial; 1 unpriced turn)",
+  );
+  expect(text).toContain(
+    "- harness-reported cost by role: architect n/a; implementer $0.2500 (partial; 1 unpriced turn)",
+  );
+  expect(text).toContain(
+    "- list-price estimate by role: architect $8.0000; implementer unknown (1 unpriced turn)",
   );
 }
 
@@ -276,9 +284,17 @@ async function countsHarnessZeroAbsentModelUsagePart2(
     prices: TABLE,
   });
   const text = fs.readFileSync(path.join(store.goalDir, rel), "utf8");
-  expect(text).toContain("- cost: $4.0500 (partial; 2 unpriced turns)");
   expect(text).toContain(
-    "- cost by role: architect $4.0000; digest $0.0500; implementer unknown (1 unpriced turn); pm unknown (1 unpriced turn); reviewer $0.0000",
+    "- harness-reported cost: $0.0500 (partial; 2 unpriced turns)",
+  );
+  expect(text).toContain(
+    "- list-price estimate: $4.0000 (partial; 2 unpriced turns)",
+  );
+  expect(text).toContain(
+    "- harness-reported cost by role: architect n/a; digest $0.0500; implementer $0.0000 (partial; 1 unpriced turn); pm unknown (1 unpriced turn); reviewer $0.0000",
+  );
+  expect(text).toContain(
+    "- list-price estimate by role: architect $4.0000; digest n/a; implementer unknown (1 unpriced turn); pm unknown (1 unpriced turn); reviewer $0.0000",
   );
 }
 
@@ -343,9 +359,17 @@ function registerPricedMetricsAndSummaryPart2(): void {
       });
       const text = fs.readFileSync(path.join(store.goalDir, rel), "utf8");
 
-      expect(text).toContain("- cost: $4.0000 (partial; 1 unpriced turn)");
       expect(text).toContain(
-        "- cost by role: architect $4.0000; implementer $0.0000; reviewer unknown (1 unpriced turn)",
+        "- harness-reported cost: unknown (1 unpriced turn)",
+      );
+      expect(text).toContain(
+        "- list-price estimate: $4.0000 (partial; 1 unpriced turn)",
+      );
+      expect(text).toContain(
+        "- harness-reported cost by role: architect n/a; implementer n/a; reviewer unknown (1 unpriced turn)",
+      );
+      expect(text).toContain(
+        "- list-price estimate by role: architect $4.0000; implementer $0.0000; reviewer unknown (1 unpriced turn)",
       );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
@@ -393,11 +417,19 @@ function registerPricedMetricsAndSummaryPart3(): void {
         status: "in-progress",
       });
       const text = fs.readFileSync(path.join(store.goalDir, rel), "utf8");
-      expect(text).toContain("- cost: unknown (2 unpriced turns)");
       expect(text).toContain(
-        "- cost by role: architect unknown (1 unpriced turn); implementer unknown (1 unpriced turn)",
+        "- harness-reported cost: unknown (2 unpriced turns)",
       );
-      expect(text).not.toContain("- cost: $0.0000");
+      expect(text).toContain(
+        "- list-price estimate: unknown (2 unpriced turns)",
+      );
+      expect(text).toContain(
+        "- harness-reported cost by role: architect unknown (1 unpriced turn); implementer unknown (1 unpriced turn)",
+      );
+      expect(text).toContain(
+        "- list-price estimate by role: architect unknown (1 unpriced turn); implementer unknown (1 unpriced turn)",
+      );
+      expect(text).not.toContain("- harness-reported cost: $0.0000");
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

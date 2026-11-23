@@ -64,14 +64,18 @@ export async function containmentSnapshot(
   };
 }
 
+/** True when a head move is the store's landing or a merge already on file. */
+type MoveExplained = (commit: string) => Promise<boolean>;
+
 /** Breaches for a checkout/integration head move no merge record explains. */
-function integrationBreaches(
+async function integrationBreaches(
   snapshot: ContainmentSnapshot,
   checkout: WorktreeState,
   integration: string,
   mergeExplains: (commit: string) => boolean,
+  explained: MoveExplained,
   goalCheckout: string,
-): string[] {
+): Promise<string[]> {
   const breaches: string[] = [];
   if (checkout.branch !== snapshot.checkout.branch) {
     breaches.push(
@@ -79,9 +83,10 @@ function integrationBreaches(
     );
     return breaches;
   }
+  const moved = (commit: string) => mergeExplains(commit) || explained(commit);
   if (checkout.head !== snapshot.checkout.head) {
     const head = checkout.head.slice(0, 10);
-    if (!mergeExplains(checkout.head)) {
+    if (!(await moved(checkout.head))) {
       if (checkout.status !== snapshot.checkout.status) {
         breaches.push(
           `integration branch moved outside the merge queue in ${goalCheckout}: HEAD is ${head}`,
@@ -91,7 +96,7 @@ function integrationBreaches(
           `commit on the integration checkout ${goalCheckout}: HEAD moved to ${head}`,
         );
       }
-    } else if (integration !== checkout.head && !mergeExplains(integration)) {
+    } else if (integration !== checkout.head && !(await moved(integration))) {
       breaches.push(
         `integration branch moved outside the merge queue: HEAD is ${integration.slice(0, 10)}`,
       );
@@ -99,7 +104,7 @@ function integrationBreaches(
     return breaches;
   }
   if (integration !== snapshot.integration) {
-    if (!mergeExplains(integration)) {
+    if (!(await moved(integration))) {
       breaches.push(
         `integration branch moved outside the merge queue: HEAD is ${integration.slice(0, 10)}`,
       );
@@ -116,6 +121,42 @@ function integrationBreaches(
 function storeAuthored(message: string): boolean {
   const marker = `${STORE_COMMIT_TRAILER}: `;
   return message.split("\n").some((line) => line.startsWith(marker));
+}
+
+/**
+ * True when every commit from the snapshot head to now is a recorded merge or
+ * the store's own landing. A same-repo store replays its writes onto the goal
+ * branch after a merge, so that head move is the store's, not the turn's.
+ */
+async function storeLandingExplains(
+  goalCheckout: string,
+  from: string,
+  to: string,
+  mergeRecords: ReadonlySet<string>,
+): Promise<boolean> {
+  if (from === "" || to === "" || from === to) return false;
+  const reachable = await git(
+    goalCheckout,
+    ["merge-base", "--is-ancestor", from, to],
+    { allowFail: true },
+  );
+  if (reachable.code !== 0) return false;
+  const log = await git(
+    goalCheckout,
+    ["log", "--format=%H%x00%B%x00", `${from}..${to}`],
+    { stripNewline: false, allowFail: true },
+  );
+  if (log.code !== 0) return false;
+  const tokens = log.stdout.split("\0");
+  let seen = 0;
+  for (let i = 0; i + 1 < tokens.length; i += 2) {
+    const sha = tokens[i]!.trim();
+    if (sha === "") continue;
+    seen += 1;
+    if (mergeRecords.has(sha) || storeAuthored(tokens[i + 1] ?? "")) continue;
+    return false;
+  }
+  return seen > 0;
 }
 
 /**
@@ -244,6 +285,36 @@ async function recordOutsideChanges(
   );
 }
 
+/** The predicates that read a checkout move as the queue's or the store's. */
+function moveExplanations(
+  runtime: KernelRuntime,
+  records: StepRecord[] | undefined,
+  snapshot: ContainmentSnapshot,
+): {
+  mergeExplains: (commit: string) => boolean;
+  explained: MoveExplained;
+} {
+  const mergeExplains = (commit: string): boolean =>
+    records?.some(
+      (r) => r.step === "merge" && r.ok !== false && r.commit === commit,
+    ) ?? false;
+  const mergeRecords = new Set(
+    records
+      ?.filter((r) => r.step === "merge" && r.ok !== false && r.commit)
+      .map((r) => r.commit as string) ?? [],
+  );
+  return {
+    mergeExplains,
+    explained: (commit) =>
+      storeLandingExplains(
+        runtime.paths.goalCheckout,
+        snapshot.checkout.head,
+        commit,
+        mergeRecords,
+      ),
+  };
+}
+
 export async function containmentViolation(
   runtime: KernelRuntime,
   taskWorktree: string,
@@ -269,10 +340,11 @@ export async function containmentViolation(
   // A boundary turn holds the merge lock, so no merge can move the checkout
   // while it runs: a move the lock did not explain is the turn's own.
   const records = boundary ? undefined : await runtime.store.listRecords();
-  const mergeExplains = (commit: string): boolean =>
-    records?.some(
-      (r) => r.step === "merge" && r.ok !== false && r.commit === commit,
-    ) ?? false;
+  const { mergeExplains, explained } = moveExplanations(
+    runtime,
+    records,
+    snapshot,
+  );
 
   breaches.push(
     ...changedArtifactBreaches(runtime, snapshot, records, artifacts),
@@ -281,13 +353,14 @@ export async function containmentViolation(
   // The merge queue moves this checkout's HEAD and resets it; a move recorded
   // as a merge is the queue's, not the turn's.
   breaches.push(
-    ...integrationBreaches(
+    ...(await integrationBreaches(
       snapshot,
       checkout,
       integration,
       mergeExplains,
+      explained,
       runtime.paths.goalCheckout,
-    ),
+    )),
   );
 
   await recordOutsideChanges(runtime, taskWorktree, records, snapshot);

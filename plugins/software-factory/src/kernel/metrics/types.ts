@@ -111,6 +111,8 @@ export interface IterationMetrics {
   costPerMergedTask: number | null;
   /** List-price equivalent per merged task; same partial rule as the priced one. */
   listCostPerMergedTask: number | null;
+  /** Sum of only the figures the harnesses reported; null when none did. */
+  harnessCostPerMergedTask: number | null;
   roles: Record<string, RoleMetrics>;
   aliases: Record<string, AliasMetrics>;
   models: Record<string, ModelMetrics>;

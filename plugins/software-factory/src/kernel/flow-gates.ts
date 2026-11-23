@@ -145,7 +145,7 @@ export async function runTaskGates(
     revisionBase(gatesRecords, meta.slug, task.revision) ??
     firstBase(gatesRecords, meta.slug) ??
     "HEAD";
-  const cleanliness = await runCleanlinessCheck(runtime, worktree, base, task);
+  const cleanliness = await runCleanlinessCheck(runtime, worktree, base);
   if (!cleanliness.ok) checks.push(cleanliness);
 
   const red = newGateFailures(checks, preexisting).filter(

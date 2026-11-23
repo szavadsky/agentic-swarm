@@ -141,8 +141,8 @@ export async function makeBackendGoal(
   };
 }
 
-/** The kernel scenario: plan → task → implement → approve → merge; relaunch closes it. */
-export async function runKernelScenario(goal: BackendGoal): Promise<void> {
+/** The first launch: plan → task → implement → approve → merge. */
+export async function runFirstLaunch(goal: BackendGoal): Promise<void> {
   const harness = new FakeHarness({ id: "fake" });
   harness.script((req, ctx) => {
     writePlan(goal.goalDir, PLAN);
@@ -168,7 +168,10 @@ export async function runKernelScenario(goal: BackendGoal): Promise<void> {
     return fakeTurnResult(req);
   });
   await expectLaunch(3, goal.repo, harness);
+}
 
+/** The relaunch: digest and close the goal from the state the first launch left. */
+export async function runClosingLaunch(goal: BackendGoal): Promise<void> {
   const second = new FakeHarness({ id: "fake" });
   second.script((req, ctx) => {
     const digest = path.join(goal.goalDir, "iterations/2/digest.md");
@@ -184,11 +187,25 @@ export async function runKernelScenario(goal: BackendGoal): Promise<void> {
   await expectLaunch(0, goal.repo, second);
 }
 
+/** The kernel scenario: plan → task → implement → approve → merge; relaunch closes it. */
+export async function runKernelScenario(goal: BackendGoal): Promise<void> {
+  await runFirstLaunch(goal);
+  await runClosingLaunch(goal);
+}
+
 export function tracked(repo: TmpRepo, pathspec?: string): string[] {
   const args = ["ls-files"];
   if (pathspec) args.push("--", pathspec);
   return repo
     .git(args)
+    .stdout.split("\n")
+    .filter((line) => line.length > 0);
+}
+
+/** Files tracked on a branch, read from the main checkout's object store. */
+export function branchFiles(repo: TmpRepo, branch: string): string[] {
+  return repo
+    .git(["ls-tree", "-r", "--name-only", branch])
     .stdout.split("\n")
     .filter((line) => line.length > 0);
 }
