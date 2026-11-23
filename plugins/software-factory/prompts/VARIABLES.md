@@ -133,7 +133,7 @@ The turn's record carries the unified diff of the edit; the next architect pack 
 - `cleanliness_revision` — `true` when this turn is a cleanliness revision turn; selects `cleanliness-revision`
 - `front_pack` — path to the front's context pack for a front-classified trivial or task goal; empty string when no front classified this task
 - `worktree` — path to the task worktree to edit
-- `resume_note` — follow-up notice for a turn resumed in the front's session: the task branch plus the absolute-path rules; empty string on a de-novo turn
+- `resume_note` — follow-up notice for a relaunched or trivial turn: the task branch and the resume fragment; empty string on a de-novo turn
 - `report_path` — repo-relative path a spike commits its finding to (`.factory/spikes/<slug>.md`); empty string on a development task; when set, it also opens the prompt with the commit-first sentence
 - `env_notes` — the task file's environment notes as `- ` bullet lines (infra facts, known flakes, workarounds); empty string when the task has none
 - `setup_command` — worktree bootstrap command (dependencies etc.); `none` when not needed
@@ -340,3 +340,10 @@ The architect's repair ask, named by the architect boundary step's `repairPrompt
 - `outcome_path` — path where the corrected outcome must be written
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome YAML skeleton from the kernel schema, narrowed to the fields this turn delivers; supplied by the repair ask
+
+## resume.md
+
+- `branch` — task branch the relaunch continues; empty when none
+- `reason` — `relaunch` after an interruption, `trivial` in the front's session
+- `session_cwd` — directory the resumed session's tools run in; trivial turns only
+- `worktree` — absolute worktree a trivial turn must use; trivial turns only

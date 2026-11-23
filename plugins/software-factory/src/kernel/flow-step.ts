@@ -6,6 +6,7 @@ import { worktreeClean } from "./flow-commit.js";
 import {
   followUpSession,
   isFixTurn,
+  isRelaunchStep,
   isTrivialImplementTurn,
   stepTarget,
   trivialResumeSession,
@@ -55,6 +56,7 @@ async function openStep(deps: StepDeps): Promise<StepRun | TaskActionResult> {
   if ("result" in opened) return opened.result;
   const fix = isFixTurn(flow, state, step.id);
   const amendedFirstTurn = task.revision > 0 && state.turns === 0 && !fix;
+  const relaunch = isRelaunchStep(records, task.slug, step.id, task.revision);
   return {
     runtime,
     task,
@@ -67,6 +69,7 @@ async function openStep(deps: StepDeps): Promise<StepRun | TaskActionResult> {
     fix,
     resolveStep: step.id === "resolve",
     amendedFirstTurn,
+    relaunch,
     /** The kept branch may trail the head: a continuation or an amended slug. */
     keptBranch: task.base !== undefined || amendedFirstTurn,
     pendingResolve: null,
@@ -292,7 +295,9 @@ async function chooseSession(
   run.trivial = isTrivialImplementTurn(runtime, task, state, step.id);
   run.turnCwd = ensured.path;
   run.session =
-    isAcceptanceStep(step) || (run.fix && !run.trivial)
+    isAcceptanceStep(step) ||
+    (run.relaunch && !run.trivial) ||
+    (run.fix && !run.trivial)
       ? await followUpSession(
           runtime,
           task,

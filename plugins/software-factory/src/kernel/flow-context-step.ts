@@ -4,7 +4,9 @@
  * repeated failure escalates to.
  */
 
+import { isRecoveryCrash } from "./derive/shared.js";
 import { frontTarget, frontTaskClass } from "./flow-context-front.js";
+import { bySeq } from "./flow-context-history.js";
 import type { TurnTarget } from "./flow-context-targets.js";
 import { repairFields, resolveTurn } from "./flow-context-targets.js";
 import { launchKindOf } from "./metrics.js";
@@ -142,6 +144,29 @@ export function isTrivialImplementTurn(
     !isVerdictStep(step) &&
     stepTurn(runtime, task, state, stepId).prompt === "implementer" &&
     frontTaskClass(runtime, task) === "trivial"
+  );
+}
+
+/**
+ * Whether the step's next turn continues a turn cut off by the process dying:
+ * the task's latest record for this step is a bare `infra: crash` seal by an
+ * agent at the task's current revision. The prompt follows that recorded
+ * interrupt, not the launch kind or any older session.
+ */
+export function isRelaunchStep(
+  records: readonly StepRecord[],
+  slug: string,
+  stepId: string,
+  revision: number,
+): boolean {
+  const latest = records
+    .filter((record) => record.slug === slug && record.step === stepId)
+    .sort(bySeq)
+    .at(-1);
+  return (
+    latest?.actor === "agent" &&
+    (latest.revision ?? 0) === revision &&
+    isRecoveryCrash(latest)
   );
 }
 

@@ -127,6 +127,8 @@ export interface RecordStart {
   /** The task revision this record belongs to; absent reads as 0. */
   revision?: number;
   base?: string;
+  /** The session this turn resumes, written before the turn runs so a hard death keeps it. */
+  session?: SessionRef;
   /** Merge steps: the planned squash commit, written before the ref moves. */
   commit?: string;
 }

@@ -12,6 +12,7 @@ import {
   readHolds,
   scanInbox,
 } from "./mailbox.js";
+import type { GoalRun } from "./launch-run.js";
 import { loadPriceTable } from "./openrouter.js";
 import { resumeVerdict } from "./resume.js";
 import type { KernelRuntime, State, StepRecord } from "./types.js";
@@ -111,6 +112,15 @@ export async function resumeGate(
   }
   const refusal = await budgetRefusal(runtime, records, before.iteration);
   return refusal === undefined ? { holds } : { holds, refusal };
+}
+
+/**
+ * Whether this launch recovered a turn the dying process left open. The
+ * relaunch continues that turn in its own worktree; it runs no digest and
+ * posts no digest steer to the PM, because the evidence is the turn itself.
+ */
+export function interruptedRelaunch(run: GoalRun): boolean {
+  return run.recoveredRecords > 0;
 }
 
 export async function processedSteers(

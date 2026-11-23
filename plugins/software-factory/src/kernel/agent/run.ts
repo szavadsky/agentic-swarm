@@ -21,6 +21,7 @@ export async function runAgentTurn(
     actor: "agent",
     alias,
     model,
+    ...(spec.session ? { session: spec.session } : {}),
   });
   await writeStatus(statusSource(runtime));
   // Every tier is exhausted: no call may run. The record names the cause so

@@ -179,7 +179,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
         "path to the front's context pack for a front-classified trivial or task goal; empty string when no front classified this task",
       worktree: "path to the task worktree to edit",
       resume_note:
-        "follow-up notice for a turn resumed in the front's session: the task branch plus the absolute-path rules; empty string on a de-novo turn",
+        "follow-up notice for a relaunched or trivial turn: the task branch and the resume fragment; empty string on a de-novo turn",
       report_path:
         "repo-relative path a spike commits its finding to (`.factory/spikes/<slug>.md`); empty string on a development task; when set, it also opens the prompt with the commit-first sentence",
       env_notes:
@@ -484,4 +484,16 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     },
   },
   ...REPAIR_PROMPT_VARIABLES,
+  {
+    file: "resume.md",
+    prompt: "resume",
+    variables: {
+      branch: "task branch the relaunch continues; empty when none",
+      reason:
+        "`relaunch` after an interruption, `trivial` in the front's session",
+      session_cwd:
+        "directory the resumed session's tools run in; trivial turns only",
+      worktree: "absolute worktree a trivial turn must use; trivial turns only",
+    },
+  },
 ];

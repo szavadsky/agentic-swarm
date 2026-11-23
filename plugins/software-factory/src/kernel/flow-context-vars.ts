@@ -156,8 +156,8 @@ export function promptVars(
     // The standalone escalation ask for the reviewer; empty when this task is
     // part of an architect plan. The implementer template ignores it.
     upscope_ask: standaloneUpscopeAsk(runtime, task),
-    // A de-novo turn carries no follow-up notice; the trivial path overrides
-    // this with `trivialResumeNote` before rendering the implement prompt.
+    // A relaunched or trivial turn overrides it with `resumeNote` before
+    // rendering the implement prompt.
     resume_note: "",
     // QA carries its own kernel schema; every other step delivers the task
     // type's schema (a spike and a development task may differ even when the

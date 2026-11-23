@@ -21,6 +21,7 @@ import {
 } from "./launch-facts.js";
 import {
   architectRouteWaiting,
+  interruptedRelaunch,
   processedSteers,
   resumeGate,
 } from "./launch-resume.js";
@@ -86,11 +87,14 @@ export async function prepareIteration(
 }
 
 /**
- * A resume skips the architect turn but not the digest: the digest is
+ * A clean resume skips the architect turn but not the digest: the digest is
  * delivered to the PM as a steer, and that one turn routes the evidence and
- * any repair it warrants before dispatch.
+ * any repair it warrants before dispatch. A relaunch that recovered an
+ * interrupted turn continues that turn instead, so it runs no digest and
+ * posts nothing to the PM.
  */
 async function runResumeEvidence(it: IterationRun): Promise<void> {
+  if (interruptedRelaunch(it.run)) return;
   const { runtime, store } = it.run;
   it.digestSteer = await runBoundaryTurn(
     runtime,
@@ -176,9 +180,10 @@ async function runBoundaryStage(it: IterationRun): Promise<void> {
   it.boundary = await runBoundary(runtime, {
     relaunch:
       it.run.relaunch && it.run.loopIndex === 0 && !it.run.resumeForcedOff,
-    // The resume path already wrote this iteration's digest and posted it as a
-    // steer; a second scout turn would duplicate that evidence.
-    ...(it.resume ? { digest: false } : {}),
+    // A clean resume already wrote this iteration's digest and posted it as a
+    // steer; an interrupt relaunch runs none at all. Either way a second
+    // scout turn would duplicate or invent evidence.
+    ...(it.resume || interruptedRelaunch(it.run) ? { digest: false } : {}),
     iteration: it.iteration,
     frontPack: it.front.packPath,
     runConfigPath: runtime.configs.files?.run,
