@@ -56,7 +56,7 @@ async function settleRecords(store: ArtifactStore): Promise<SettledRecords> {
  */
 export async function recoverLaunch(runtime: KernelRuntime): Promise<number> {
   const settled = await settleRecords(runtime.store);
-  await prepareIntegrationCheckout(runtime, settled.keepWorktrees);
+  await prepareIntegrationCheckout(runtime);
   await backfillSummaries(runtime);
   if (settled.closed > 0)
     console.warn(
