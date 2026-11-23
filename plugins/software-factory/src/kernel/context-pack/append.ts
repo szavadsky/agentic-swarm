@@ -4,6 +4,7 @@ import { formatCause } from "../cause.js";
 import { OPEN_TASK_STATUSES } from "../derive.js";
 import type { OpenDebt } from "../derive.js";
 import { spikeReportPath } from "../spike-report.js";
+import type { WasteSpikeProposal } from "../metrics/recurring.js";
 import type { Cause, TaskFile } from "../types.js";
 import type { ContextPackInput, ForwardedConcern } from "./types.js";
 import { formatPlanFinding, numberedPlanFindings } from "./plan-findings.js";
@@ -177,6 +178,60 @@ export function appendWaste(lines: string[], input: ContextPackInput): void {
     "## Waste (previous iteration summary)",
     ...input.previousWaste.split("\n"),
   );
+}
+
+/** The cause's wasted turns, named by the iteration that carried each. */
+function proposalWasteText(proposal: {
+  count: number;
+  iterations: readonly number[];
+}): string {
+  const places =
+    proposal.iterations.length === 1
+      ? `iteration ${proposal.iterations[0]}`
+      : `iterations ${proposal.iterations.join(", ")}`;
+  return `${proposal.count} wasted turn${proposal.count === 1 ? "" : "s"} in ${places}`;
+}
+
+/** The section's first line; the kernel writes it, so a pack carrying it is left alone. */
+const SPIKE_PROPOSALS_HEADING =
+  "## Spike proposals (recurring waste at the configured threshold)";
+
+/** The section naming recurring waste at the threshold; the kernel owns it, so no pack can drop it. */
+export function spikeProposalsSection(
+  proposals: readonly WasteSpikeProposal[],
+): string {
+  const lines = [
+    SPIKE_PROPOSALS_HEADING,
+    "- each line is a proposal, never a task: plan a spike into the cause, or a named fix",
+  ];
+  for (const proposal of proposals) {
+    lines.push(
+      `- ${proposal.label}: ${proposalWasteText(proposal)} (threshold ${proposal.threshold})`,
+    );
+  }
+  return lines.join("\n");
+}
+
+/** The agent's pack with the kernel-owned proposals section appended when it is missing. */
+export function withSpikeProposals(
+  pack: string,
+  input: ContextPackInput,
+): string {
+  const proposals = input.spikeProposals ?? [];
+  if (proposals.length === 0 || pack.includes(SPIKE_PROPOSALS_HEADING)) {
+    return pack;
+  }
+  return `${pack.trimEnd()}\n\n${spikeProposalsSection(proposals)}\n`;
+}
+
+/** Recurring waste: one proposal line per cause at or above the configured threshold. */
+export function appendSpikeProposals(
+  lines: string[],
+  input: ContextPackInput,
+): void {
+  const proposals = input.spikeProposals ?? [];
+  if (proposals.length === 0) return;
+  lines.push("", spikeProposalsSection(proposals));
 }
 
 export function appendForwarded(

@@ -30,6 +30,7 @@ import {
   renderContextData,
   renderContextPack,
 } from "./context-pack.js";
+import { withSpikeProposals } from "./context-pack/append.js";
 import { derive, openDebts } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
 import { runKeptLand } from "./integrate.js";
@@ -46,6 +47,11 @@ import {
   scanInbox,
   writeOutbox,
 } from "./mailbox.js";
+import {
+  DEFAULT_WASTE_SPIKE_THRESHOLD,
+  readWasteMetrics,
+  wasteSpikeProposals,
+} from "./metrics/recurring.js";
 import { PACK_PREP_STEP, runPackPreparer } from "./pack-prep.js";
 import {
   consultGate,
@@ -320,6 +326,11 @@ async function packInput(context: ConsultContext): Promise<ContextPackInput> {
       context.iteration - 1,
     ),
     previousWaste: await previousWaste(runtime.store, context.iteration - 1),
+    spikeProposals: wasteSpikeProposals(
+      await readWasteMetrics(runtime.store),
+      runtime.configs.process.wasteSpikeThreshold ??
+        DEFAULT_WASTE_SPIKE_THRESHOLD,
+    ),
     digestPath: context.digestPath,
     tasks: context.tasks,
     state: context.state,
@@ -456,6 +467,12 @@ export async function writePack(context: ConsultContext): Promise<void> {
     await runtime.store.writeFile(packRel, renderContextPack(input));
     if (prepFailure !== undefined)
       await recordPackFallback(context, prepFailure);
+  } else {
+    const pack = await runtime.store.readFile(packRel);
+    if (pack !== null) {
+      const updated = withSpikeProposals(pack, input);
+      if (updated !== pack) await runtime.store.writeFile(packRel, updated);
+    }
   }
 }
 

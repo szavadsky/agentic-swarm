@@ -116,6 +116,8 @@ export interface ProcessConfig {
   repairPrompt?: string;
   /** Outcome reminders after the first attempt; a task file's `repairTurns` overrides it for that task's turns only. */
   reminders: number;
+  /** Wasted turns of one cause across iterations at or above which the pack proposes a spike; defaults to 2. */
+  wasteSpikeThreshold?: number;
   calibration?: string;
   promptsDir?: string;
   presets?: Record<string, { calibration: string }>;

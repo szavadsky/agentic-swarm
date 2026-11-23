@@ -3,6 +3,7 @@
 import type { BaseGateState } from "../baseline.js";
 import type { OpenDebt } from "../derive.js";
 import type { Steer } from "../mailbox.js";
+import type { WasteSpikeProposal } from "../metrics/recurring.js";
 import type {
   PlanCheckEvidence,
   PlanReviewFinding,
@@ -119,6 +120,8 @@ export interface ContextPackInput {
   previousSummary?: string;
   /** The previous iteration summary's `## Waste` section, carried into the pack. */
   previousWaste?: string;
+  /** Recurring waste at or above the configured threshold; each is a proposal, never a task. */
+  spikeProposals?: WasteSpikeProposal[];
   digestPath?: string;
   tasks: TaskFile[];
   state: State;

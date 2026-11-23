@@ -16,6 +16,7 @@ import {
   appendPmAnswers,
   appendSection,
   appendSpikeFindings,
+  appendSpikeProposals,
   appendSteers,
   appendTaskFiles,
   appendTaskStatus,
@@ -90,6 +91,7 @@ export function renderContextPack(input: ContextPackInput): string {
   appendPlanCheck(lines, input);
   appendPlanReview(lines, input);
   appendWaste(lines, input);
+  appendSpikeProposals(lines, input);
   appendForwarded(lines, input);
   appendDebts(lines, input);
   appendOpenRecords(lines, input);
@@ -204,6 +206,7 @@ export function renderContextData(input: ContextPackInput): string {
     agedReady: input.agedReady ?? null,
     planCheck: input.planCheck ?? null,
     planReview: input.planReview ?? null,
+    spikeProposals: input.spikeProposals ?? [],
     forwarded: input.forwarded,
     debts: input.debts,
     openRecords: input.openRecords ?? [],
