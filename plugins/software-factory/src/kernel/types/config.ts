@@ -121,7 +121,7 @@ export interface ProcessConfig {
   presets?: Record<string, { calibration: string }>;
 }
 
-/** One fallback tier: another alias's whole ladder, or a model with its own effort. */
+/** One fallback tier: another alias's whole ladder, or a model with its own effort (never inherited). */
 export type FallbackConfig = FallbackAliasConfig | FallbackModelConfig;
 
 /** A fallback that reuses another alias's ladder, primary first. */
@@ -135,7 +135,7 @@ export interface FallbackModelConfig {
   /** Harness id; defaults to the alias's harness. */
   harness?: string;
   model: string;
-  /** Effort level; defaults to the alias's resolved effort. */
+  /** Effort level; absent means the harness default. */
   effort?: string;
   /**
    * Quota pool this tier draws on; defaults to the alias's subscription only
@@ -266,6 +266,12 @@ export interface KernelRuntime {
   harnesses: ReadonlyMap<string, Harness>;
   prompts: PromptLibrary;
   limits: Limits;
+  /**
+   * `harness+model` combinations that passed a canary run. Loaded from the
+   * session store at launch; rotation only picks proven combinations. Narrow
+   * per-test runtimes may omit it; rotation then stays ungated.
+   */
+  provenCombinations?: Set<string>;
   /**
    * Quota pool keys (subscription, or harness+model when none) latched by a
    * quota stop, mapped to the epoch ms they may serve again. Loaded from the

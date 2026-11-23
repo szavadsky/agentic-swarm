@@ -92,7 +92,7 @@ if (fs.existsSync(processFile)) {
 // so both roots arrive in the environment: FACTORY_REPO_ROOT carries the
 // artifact checkout (tasks, class, outcomes) while FACTORY_TREE_ROOT carries
 // the git toplevel of the tree under test (repo/run config, process
-// override, bootstrap/run). A branch that changes a schema and migrates the
+// override). A branch that changes a schema and migrates the
 // tree-owned files stays green; the base checkout's unmigrated copies are
 // not the tree's. A direct run from the package resolves both roots from
 // the package location.
@@ -207,23 +207,11 @@ if (fs.existsSync(artifactFactoryDir)) {
   );
 }
 
-// Run-config library shipped by the tree under test, one run layer per file.
-const runConfigDir = path.join(treeRoot, "bootstrap", "run");
-const runConfigs = walk(
-  runConfigDir,
-  (f) => f.endsWith(".yaml") || f.endsWith(".yml"),
-);
-if (runConfigs.length > 0) {
-  for (const file of runConfigs.sort()) validateRunConfigFile(file);
-}
-
 // The kernel's explicit run-config path, when the operator set one.
 const envRunConfig = process.env.FACTORY_RUN_CONFIG;
 if (envRunConfig) {
   const file = path.resolve(treeRoot, envRunConfig);
-  if (runConfigs.includes(file)) {
-    // Already validated by the bootstrap/run walk.
-  } else if (fs.existsSync(file)) {
+  if (fs.existsSync(file)) {
     validateRunConfigFile(file);
   } else {
     missing.push(`${file} (FACTORY_RUN_CONFIG)`);

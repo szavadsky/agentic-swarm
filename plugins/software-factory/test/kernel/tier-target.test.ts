@@ -103,7 +103,8 @@ async function runsProducerTierAliasLeavesReviewPart2(
   ]);
   expect(tiers.map((tier) => tier.model)).toEqual([
     { id: "fake-escalated", effort: "high" },
-    { id: "fake-fallback", effort: "high" },
+    // The fallback names no effort: the harness default, never inherited.
+    { id: "fake-fallback" },
   ]);
 }
 

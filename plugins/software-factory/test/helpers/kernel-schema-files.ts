@@ -1,6 +1,7 @@
 /** The kernel schema files every writer emits, by artifact name. */
 const FILES = [
   "class.schema.json",
+  "gate.schema.json",
   "hold.schema.json",
   "outcome.schema.json",
   "process.schema.json",

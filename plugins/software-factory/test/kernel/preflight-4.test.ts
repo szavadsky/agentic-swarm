@@ -55,7 +55,7 @@ function splitHarnesses(f: Fixture): Map<string, Harness> {
     "omp",
     new FakeHarness({
       id: "omp",
-      caps: { effort: ["low", "medium", "high", "max"] },
+      probe: { effort: ["low", "medium", "high", "max"] },
     }),
   );
   return harnesses;
@@ -92,7 +92,7 @@ async function fixture(
   await store.ensureLayout();
   const harness = new FakeHarness({
     id: "fake",
-    caps: { effort: ["low", "high", "max"] },
+    probe: { effort: ["low", "high", "max"] },
   });
   const harnesses = new Map<string, Harness>([["fake", harness]]);
   return { repo, configs, paths, input: { configs, paths, store, harnesses } };
@@ -306,8 +306,8 @@ function registerPreFlightPart33(): void {
     );
     try {
       await f.input.store.writeTask(task("escalated", { tier: "escalation" }));
-      const result = await preflight(f.input);
-      expect(result.aliases.architect).toBe("max");
+      await preflight(f.input);
+      expect(f.configs.run.aliases.architect!.effort).toBe("max");
     } finally {
       f.repo.cleanup();
     }

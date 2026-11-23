@@ -1,6 +1,6 @@
 /** The alias check's public context: the catalog probe and the shared findings state. */
 
-import type { Caps, Harness, ModelProbe } from "../../harness/types.js";
+import type { Harness, ModelProbe } from "../../harness/types.js";
 import type { Finding } from "../findings.js";
 import type { ConfigFiles } from "../types.js";
 
@@ -15,7 +15,6 @@ export interface AliasContext {
   unavailable: ReadonlySet<string>;
   /** Quota-pool names `limits.concurrency.perSubscription` caps. */
   subscriptions: ReadonlySet<string>;
-  capsCache: Map<string, Promise<Caps>>;
   modelCache: Map<string, Promise<boolean>>;
   probeCache: Map<string, Promise<ModelProbe>>;
 }

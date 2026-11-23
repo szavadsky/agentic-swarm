@@ -11,9 +11,11 @@ import { acquireRunLock, type RunLockHandle } from "../cli/lock.js";
 import { Repo } from "../core/git/repo.js";
 import type { Harness } from "../harness/types.js";
 import { artifactLspConfigPath } from "./artifact-lsp.js";
+import { makeCause } from "./cause.js";
 import {
   configFilePaths,
   loadConfigs,
+  packageRoot,
   resolveGoalPaths,
   toLimits,
 } from "./config.js";
@@ -28,10 +30,14 @@ import {
   DEFAULT_MIN_TMP_FREE_BYTES,
   PreflightError,
   preflight,
+  pinBuildOf,
+  pinRefusal,
   tmpHeadroom,
 } from "./preflight.js";
+import { loadCanaryProven } from "./canary.js";
 import { loadPrompts } from "./prompts.js";
 import { loadPoolResets } from "./quota-pools.js";
+import { scriptMeta } from "./record.js";
 import { recoverLaunch } from "./recovery.js";
 import { createLaunchSessions } from "./sessions.js";
 import { createDrainController, type DrainController } from "./signals.js";
@@ -43,6 +49,27 @@ interface LaunchSetup {
   repoRoot: string;
   configs: KernelRuntime["configs"];
   paths: KernelRuntime["paths"];
+}
+
+/** The pin gate this launch runs under: the named build, or the running package when it is a pin. */
+function pinRefusalFor(opts: RunGoalOptions): string | undefined {
+  const build = opts.pinBuild ?? pinBuildOf(packageRoot);
+  return build === undefined ? undefined : pinRefusal(build);
+}
+
+/** Audits an override in the run's records: the refusal and the operator's reason. */
+async function recordPinOverride(
+  store: KernelRuntime["store"],
+  refusal: string,
+  reason: string,
+): Promise<void> {
+  console.warn(
+    `[factory] ${refusal}; launching on the recorded override: ${reason}`,
+  );
+  await store.appendRecord(scriptMeta(0, "pin-gate-override"), {
+    ok: true,
+    cause: makeCause("note", `${refusal} Override reason: ${reason}`),
+  });
 }
 
 /** Config, goal paths and the tmp-headroom refusal; the intent refusal is in openStore. */
@@ -140,6 +167,7 @@ async function buildRuntime(
       run: configs.run,
     }),
     limits: toLimits(configs),
+    provenCombinations: await loadCanaryProven(paths),
     exhaustedPools: await loadPoolResets(paths),
     priceSource: opts.priceSource,
   };
@@ -214,7 +242,13 @@ export async function prepareLaunch(
   opts: RunGoalOptions,
 ): Promise<PreparedLaunch> {
   const setup = resolveLaunch(opts);
+  const refusal = pinRefusalFor(opts);
+  const override = opts.pinGateOverride?.trim();
+  if (refusal !== undefined && override === undefined)
+    throw new LaunchError(refusal);
   const store = await openStore(opts, setup);
+  if (refusal !== undefined && override !== undefined)
+    await recordPinOverride(store, refusal, override);
   const sessions = await createLaunchSessions(
     setup.paths.sessionsDir,
     opts.goal,

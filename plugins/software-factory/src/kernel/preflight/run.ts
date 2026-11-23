@@ -1,12 +1,12 @@
 /** The preflight entry point. */
 
 import { checkBase } from "../baseline.js";
+import { loadCanaryProven, provenRotation } from "../canary.js";
 import { configFilePaths } from "../config.js";
 import { checkPortability, checkScouts } from "../preflight-aliases.js";
 import type { PreflightInput, PreflightResult } from "./types.js";
 import {
   aliasContext,
-  applyResolvedEfforts,
   baseBranchFindings,
   configFindings,
   harnessBinaries,
@@ -23,11 +23,35 @@ import { PreflightError } from "./checks.js";
  * roots and the base branch — collecting every violation into one report. A red
  * base is recorded and warned once; it never aborts.
  */
+/** Narrow every alias's rotation to the combinations with a passing canary
+ * record. A combination with no record has never been proven, so rotation
+ * never picks it; when none are proven the alias keeps its own primary.
+ */
+export function filterUnprovenRotation(
+  aliases: Record<
+    string,
+    {
+      harness: string;
+      model: string;
+      rotate?: { harness: string; model: string }[];
+    }
+  >,
+  proven: ReadonlySet<string>,
+): void {
+  for (const alias of Object.values(aliases)) {
+    alias.rotate = provenRotation(alias.rotate, proven)?.map((entry) => ({
+      ...entry,
+    }));
+  }
+}
+
 export async function preflight(
   input: PreflightInput,
 ): Promise<PreflightResult> {
   const { configs, paths, store } = input;
   const files = configs.files ?? configFilePaths(paths.repoRoot);
+  const proven = await loadCanaryProven(input.paths);
+  filterUnprovenRotation(configs.run.aliases, proven);
   const findings = await configFindings(configs, files, store);
 
   const used = usedHarnesses(configs.run.aliases);
@@ -35,8 +59,8 @@ export async function preflight(
   findings.push(...binaries.findings);
 
   const ctx = aliasContext(input, files, findings, binaries.unavailable);
-  const resolvedAliases = await resolveAliases(ctx, configs.run.aliases);
-  await checkScouts(ctx, configs, resolvedAliases);
+  await resolveAliases(ctx, configs.run.aliases);
+  await checkScouts(ctx, configs);
   checkPortability(ctx, configs);
   findings.push(...(await rootFindings(paths, files)));
 
@@ -47,7 +71,7 @@ export async function preflight(
   all.push(...(await unconfiguredTaskFindings(store)));
   if (all.length > 0) throw new PreflightError(all);
 
-  const result: PreflightResult = { aliases: resolvedAliases };
+  const result: PreflightResult = {};
   if (base.baseCommit && input.baseGates !== false) {
     result.base = await checkBase(
       configs,
@@ -57,6 +81,5 @@ export async function preflight(
       base.baseCommit,
     );
   }
-  applyResolvedEfforts(configs, resolvedAliases);
   return result;
 }

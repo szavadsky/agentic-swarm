@@ -21,6 +21,7 @@ script renders a bounded index pack and the fallback is recorded as a glitch.
 cd plugins/software-factory
 bun bin/factory.ts init   --repo <path> --goal <name> [--intent <file>]
 bun bin/factory.ts run    --repo <path> --goal <name> --run-config <file> [--iterations N]
+                          [--pin-gate-override <reason>]
 bun bin/factory.ts status --repo <path> --goal <name> [--json]
 bun bin/factory.ts benchmark --repo <path> --goal <name>
 bun bin/factory.ts steer  --repo <path> --goal <name> <file | ->
@@ -31,7 +32,10 @@ bun bin/factory.ts variables --out <file>
 
 `init` writes `.factory/repo.yaml` if missing, creates the goal directory and
 copies the intent (or writes a template). `run` pre-flights, takes the goal
-lock, recovers interrupted work and runs the iteration loop. `status` prints
+lock, recovers interrupted work and runs the iteration loop. A launch from a
+pin also reads that pin's `gate.yaml`: an absent, invalid or red record refuses
+the run before any goal write, and `--pin-gate-override <reason>` launches it
+anyway and records the reason in the run's records. `status` prints
 derived state and parked causes; `--json` prints `status.json`, the snapshot
 the kernel rewrites after each agent launch and finish, together with the
 static `dashboard.html` rendered beside it; `benchmark` prints one
@@ -43,7 +47,7 @@ config, class.yaml, outcome.yaml keyed by the step in the sibling
 started.yaml or `--step`, mailbox/holds/*.yaml, repo.yaml, run.yaml,
 process.yaml); exit 0 valid, 1 invalid or unknown kind. `schemas` writes every
 kernel file schema as JSON Schema (`task`, `outcome`, `qa`, `hold`, `class`, `repo`,
-`run`, `process`) into `--out` for editors and the artifact LSP. `variables`
+`run`, `process`, `gate`) into `--out` for editors and the artifact LSP. `variables`
 renders `prompts/VARIABLES.md` from the typed prompt-variable descriptor; the
 prompt tests fail when the committed file differs from that render.
 
@@ -378,12 +382,11 @@ same launch.
 
 Pre-flight resolves every alias (and fallback) through the harness, checks the
 model list, the effort level, binaries, the base branch, and that
-session/worktree roots are writable and outside the repo. `effort` names a
-literal level the model accepts, `auto`, or `harness-default` (omit the level);
-`effort: highest` is refused. An omp `@` alias is the exception: omp resolves
-it inside its own chain, so there is no catalog entry and no per-model effort
-list; its effort must be one omp's `--thinking` flag parses (`off`, `minimal`,
-`low`, `medium`, `high`, `xhigh`, `max`, `auto`) — or absent.
+session/worktree roots are writable and outside the repo. `effort` must be a
+level the harness probe reports for that model; a model that reports no effort
+negotiates none, so any configured level is refused and an absent one leaves
+the model default. An omp `@` alias answers with the union of catalogued
+levels plus `auto`.
 
 `harnesses.<id>` binds an adapter (`acpx:`) or executable and carries
 `options` passed untouched: acpx reads `args`/`env` (pre-flight refuses an

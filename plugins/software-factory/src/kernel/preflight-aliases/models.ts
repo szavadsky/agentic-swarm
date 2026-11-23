@@ -1,7 +1,6 @@
 /** Model and rotation checks: registry, catalog probe, effort and quota. */
 
-import { OMP_ID, OMP_THINKING_LEVELS } from "../../harness/omp/types.js";
-import type { Caps, ModelProbe, ModelRef } from "../../harness/types.js";
+import type { ModelProbe, ModelRef } from "../../harness/types.js";
 import type { AliasConfig } from "../types.js";
 import type { AliasContext } from "./types.js";
 
@@ -12,15 +11,6 @@ export function add(
   file = ctx.files.run,
 ): void {
   ctx.findings.push({ file, key, message });
-}
-
-/**
- * omp role aliases (`@free`) resolve inside omp's own chain, so the binary
- * catalog never lists them and no model-level effort list exists; omp refuses
- * a bad id itself at runtime.
- */
-function isOmpAlias(harness: string, model: string): boolean {
-  return harness === OMP_ID && model.startsWith("@");
 }
 
 async function modelListed(
@@ -56,90 +46,17 @@ async function liveProbe(
   return pending;
 }
 
-async function capsOf(
-  ctx: AliasContext,
-  harness: string,
-  model: ModelRef,
-): Promise<Caps> {
-  const key = `${harness}\u0000${model.id}`;
-  const found = ctx.harnesses.get(harness);
-  if (!found) throw new Error(`no harness "${harness}" is registered`);
-  let pending = ctx.capsCache.get(key);
-  if (!pending) {
-    pending = found.caps({ id: model.id });
-    ctx.capsCache.set(key, pending);
-    pending.catch(() => ctx.capsCache.delete(key));
-  }
-  return pending;
-}
-
-/** Resolves `harness-default`, validates a literal level, and reports every failure. */
-export async function resolveEffort(
-  ctx: AliasContext,
-  key: string,
-  harness: string,
-  model: ModelRef,
-  effort: string | undefined,
-  liveLevels?: readonly string[],
-): Promise<string | undefined> {
-  if (!effort) return undefined;
-  // The factory's sentinel for "leave the harness default in place"; it is not
-  // a level any harness parses, so nothing is passed through.
-  if (effort === "harness-default") return undefined;
-  if (isOmpAlias(harness, model.id)) {
-    // Only omp's CLI enum is knowable for an alias: `highest` is a removed
-    // factory sentinel omp does not parse, and passing it through aborts the launch.
-    if (!OMP_THINKING_LEVELS.includes(effort)) {
-      add(
-        ctx,
-        `${key}.effort`,
-        `effort "${effort}" is not an omp thinking level; alias "${model.id}" accepts: ${OMP_THINKING_LEVELS.join(", ")}`,
-      );
-    }
-    return effort;
-  }
-  if (effort === "highest") {
-    add(ctx, `${key}.effort`, 'effort "highest" is forbidden');
-    return undefined;
-  }
-  // omp's flag parses `auto` for every model, but `models --json` lists only
-  // model-specific efforts, so the catalog cannot be the gate for it.
-  if (harness === OMP_ID && effort === "auto") return effort;
-  let levels: readonly string[];
-  if (liveLevels !== undefined) {
-    levels = liveLevels;
-  } else {
-    try {
-      levels = (await capsOf(ctx, harness, model)).effort;
-    } catch (err) {
-      add(
-        ctx,
-        `${key}.effort`,
-        `cannot probe model capabilities: ${(err as Error).message}`,
-      );
-      return undefined;
-    }
-  }
-  if (!levels.includes(effort)) {
-    add(
-      ctx,
-      `${key}.effort`,
-      `effort "${effort}" is not supported; model accepts: ${levels.join(", ") || "none"}`,
-    );
-  }
-  return effort;
-}
-
 interface CheckedModel {
-  /** Live values from the harness; absent means use `caps()`. */
-  effort?: readonly string[];
+  /** The harness-probed effort surface; absent only for a probe-less harness. */
+  effort?: readonly string[] | null;
   /** Effort named by the configured model-id suffix. */
   modelEffort?: string;
 }
 
 /**
  * Checks one model, preferring the harness's live session probe and falling
- * back to the binary catalog plus static caps for harnesses such as omp.
+ * back to the binary catalog for the model list. Effort is opaque: the kernel
+ * compares the configured string only against what the probe reports.
  */
 export async function checkedModel(
   ctx: AliasContext,
@@ -148,7 +65,6 @@ export async function checkedModel(
   model: string,
   label: "model" | "fallback" | "rotation",
 ): Promise<CheckedModel | undefined> {
-  if (isOmpAlias(harness, model)) return {};
   let live: ModelProbe | undefined;
   try {
     live = await liveProbe(ctx, harness, { id: model });
@@ -186,6 +102,47 @@ export async function checkedModel(
   return {};
 }
 
+/**
+ * Validates one configured effort against the harness's probe answer. An
+ * absent effort means the harness default and always passes; a configured one
+ * is refused before any turn starts when the model offers no effort (the probe
+ * reports `null`), when its list does not name it, or when the harness has no
+ * probe to report one.
+ */
+export function checkEffort(
+  ctx: AliasContext,
+  key: string,
+  harness: string,
+  model: string,
+  effort: string | undefined,
+  probed: readonly string[] | null | undefined,
+): void {
+  if (effort === undefined) return;
+  if (probed === undefined) {
+    add(
+      ctx,
+      `${key}.effort`,
+      `effort "${effort}" cannot be validated: harness "${harness}" does not report an effort surface for model "${model}"`,
+    );
+    return;
+  }
+  if (probed === null) {
+    add(
+      ctx,
+      `${key}.effort`,
+      `effort "${effort}" is not supported; model "${model}" on harness "${harness}" offers no effort`,
+    );
+    return;
+  }
+  if (!probed.includes(effort)) {
+    add(
+      ctx,
+      `${key}.effort`,
+      `effort "${effort}" is not supported; model accepts: ${probed.join(", ") || "none"}`,
+    );
+  }
+}
+
 /** The registered-harness finding both alias and tier rows share. */
 export function registryMessage(ctx: AliasContext, harness: string): string {
   return `harness "${harness}" is not registered (registered: ${[...ctx.harnesses.keys()].join(", ") || "none"})`;
@@ -214,13 +171,11 @@ export function checkAliasIdentity(
   return true;
 }
 
-/** Checks the alias's primary model and records its resolved effort. */
+/** Checks the alias's primary model and its configured effort. */
 export async function checkPrimaryModel(
   ctx: AliasContext,
   key: string,
-  name: string,
   alias: AliasConfig,
-  effortOut: Record<string, string | undefined>,
 ): Promise<void> {
   if (ctx.unavailable.has(alias.harness)) return;
   const primary = await checkedModel(
@@ -231,17 +186,17 @@ export async function checkPrimaryModel(
     "model",
   );
   if (!primary) return;
-  effortOut[name] = await resolveEffort(
+  checkEffort(
     ctx,
     key,
     alias.harness,
-    { id: alias.model },
+    alias.model,
     alias.effort ?? primary.modelEffort,
     primary.effort,
   );
 }
 
-/** Checks one rotation entry and stamps its own resolved effort. */
+/** Checks one rotation entry and its configured effort. */
 async function checkRotationEntry(
   ctx: AliasContext,
   entryKey: string,
@@ -261,13 +216,11 @@ async function checkRotationEntry(
     "rotation",
   );
   if (!checked) return;
-  // A rotation entry carries its own effort: explicit, else the alias's,
-  // else a suffix declared on that entry's model.
-  entry.effort = await resolveEffort(
+  checkEffort(
     ctx,
     entryKey,
     entry.harness,
-    { id: entry.model },
+    entry.model,
     entry.effort ?? alias.effort ?? checked.modelEffort,
     checked.effort,
   );

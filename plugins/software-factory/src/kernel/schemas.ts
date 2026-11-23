@@ -8,6 +8,7 @@ import {
 } from "./config.js";
 import { classSchema } from "./flow-context.js";
 import { holdFileSchema } from "./mailbox.js";
+import { pinGateSchema } from "./preflight/pin.js";
 import { qaOutcomeSchema } from "./qa.js";
 import { taskFrontmatterSchema } from "./tasks.js";
 import { outcomeSchema } from "./types.js";
@@ -82,6 +83,8 @@ function runLayerSchema(): JsonNode {
  * carries. The same set the schema-validation gate enforces, except `run`:
  * the gate validates a config's merged layer while an authored file is one
  * link of an `extends` chain.
+ * `gate` is the pin's own record, outside any repo, so it is validated only
+ * when a launch reads it.
  */
 const kernelSchemas = {
   task: () => inputSchema(taskFrontmatterSchema),
@@ -89,6 +92,7 @@ const kernelSchemas = {
   qa: () => inputSchema(qaOutcomeSchema),
   hold: () => inputSchema(holdFileSchema),
   class: () => inputSchema(classSchema),
+  gate: () => inputSchema(pinGateSchema), // the pin build's gate record; promote writes it, run reads it
   repo: () => inputSchema(repoConfigSchema),
   run: runLayerSchema,
   process: () => inputSchema(processOverrideSchema),

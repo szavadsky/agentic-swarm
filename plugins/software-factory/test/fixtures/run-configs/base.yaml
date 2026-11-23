@@ -1,0 +1,88 @@
+# Fake-name run layer for tests: no live harness, model or subscription name.
+# The acpx binding is config-only, as an operator adds one, and the model ids
+# and effort levels it reports are the test stub's, not a real catalog's.
+aliases:
+  architect:
+    harness: fake-native
+    model: fake/arch
+    effort: high
+    fallbacks:
+      - model: fake/arch-alt
+        effort: low
+  pm:
+    harness: fake-acpx
+    model: fake-route/primary
+    effort: xhigh
+    fallbacks:
+      - model: fake-route/secondary
+        effort: low
+  digest:
+    harness: fake-native
+    model: fake/cheap
+  intent:
+    harness: fake-native
+    model: fake/cheap
+  implementer:
+    harness: fake-native
+    model: fake/impl
+  implementer-b:
+    harness: fake-acpx
+    model: fake-route/secondary
+    effort: low
+    fallbacks:
+      - harness: fake-native
+        model: fake/impl-alt
+        effort: medium
+  researcher:
+    harness: fake-native
+    model: fake/impl
+  reviewer:
+    harness: fake-native
+    model: fake/review
+    fallbacks:
+      - model: fake/review-alt
+  qa:
+    harness: fake-native
+    model: fake/review
+  steward:
+    harness: fake-native
+    model: fake/impl
+  plan-reviewer:
+    harness: fake-acpx
+    model: fake-route/primary
+    effort: xhigh
+  plan-checker:
+    harness: fake-native
+    model: fake/check
+  pack-preparer:
+    harness: fake-native
+    model: fake/cheap
+  escalation:
+    harness: fake-acpx
+    model: fake-route/secondary
+    effort: low
+harnesses:
+  fake-native:
+    binary: fake-native
+  # A raw acpx route: the test names the dispatcher binary and the stub
+  # advertises the models and effort levels below.
+  fake-acpx:
+    acpx:
+      agent: fake-acpx acp
+      raw: true
+      effort:
+        configId: fake_effort
+      usage:
+        cache: true
+priceIds:
+  fake-route/primary: fake/model-a
+  fake-route/secondary: fake/model-b
+limits:
+  concurrency:
+    overall: 2
+  iterations: 2
+sessions:
+  dir: ../fake-sessions
+  keepRuns: 2
+worktreeRoot: ../fake-worktrees
+lsp: true

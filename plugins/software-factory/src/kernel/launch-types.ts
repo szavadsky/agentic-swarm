@@ -47,6 +47,10 @@ export interface RunGoalOptions {
   binaries?: Record<string, string | undefined>;
   signals?: DrainController;
   baseGates?: boolean;
+  /** The build this process executes from; absent reads the running package when it is a pin. */
+  pinBuild?: string;
+  /** The operator's audited reason for launching a pin whose recorded gate is not all-pass. */
+  pinGateOverride?: string;
   /** Price cache and fetcher; undefined means the shared cache plus network. */
   priceSource?: PriceSource;
 }

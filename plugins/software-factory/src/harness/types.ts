@@ -3,7 +3,7 @@
  * `manifesto.advice.md:96-143`; flows branch on Caps, never on harness id.
  */
 
-/** Provider-qualified model id plus the effort level to request from Caps.effort. */
+/** Provider-qualified model id plus the effort level to request. */
 export interface ModelRef {
   id: string;
   effort?: string;
@@ -14,23 +14,23 @@ export type Caps = {
   compact: "none" | "local" | "server";
   subagents: "none" | "spawn" | "steer";
   structuredOutput: "none" | "native";
-  /** Levels this model accepts on this harness. */
-  effort: string[];
   usage: { cache: boolean; cost: boolean };
 };
 
 /**
- * A harness's live answer for one model. Harnesses whose model and effort
- * values exist only inside a session implement `Harness.probe`; pre-flight uses
- * it instead of static capabilities.
+ * A harness's live answer for one model's effort surface. `null` means the
+ * model has no effort selection (it passes with no effort and fails with
+ * any); an array is the model's accepted levels, so an absent configured
+ * effort means the harness default. Pre-flight refuses a pair the harness
+ * does not report.
  */
 export interface ModelProbe {
-  /** Whether the harness offered this model in a live session. */
+  /** Whether the harness offers this model in a live session. */
   listed: boolean;
   /** Live model ids, used to explain a rejected model. */
   available: string[];
-  /** Live effort values for this model; empty means it offers none. */
-  effort: string[];
+  /** Effort levels this model accepts; null when it has no effort selection. */
+  effort: readonly string[] | null;
   /** Effort encoded in the configured model id, when its suffix names one. */
   modelEffort?: string;
 }
