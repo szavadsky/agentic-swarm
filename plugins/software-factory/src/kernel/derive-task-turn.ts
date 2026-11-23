@@ -5,7 +5,7 @@
  */
 import { countOutcomeRepairs } from "../harness/usage.js";
 import { makeCause } from "./cause.js";
-import { committedNothing, isBareRecoverySeal } from "./derive-task-facts.js";
+import { committedNothing } from "./derive-task-facts.js";
 import { recordInfraRepeat } from "./derive-task-gates.js";
 import {
   type ReduceContext,
@@ -18,6 +18,7 @@ import {
   applyReview,
   startFixRound,
 } from "./derive-task-verdict.js";
+import { isRecoveryCrash } from "./recovery-seal.js";
 import { stepFingerprint } from "./progress.js";
 import { qaReportOf } from "./qa.js";
 import { isAcceptanceStep, isLastReviewCall, isVerdictStep } from "./review.js";
@@ -53,7 +54,7 @@ export function applyAgentTurn(
   // and parks after two repeats on the same step; bare recovery seals (free
   // interruptions) and other infra stay free and resumable.
   if (isInfra && !hasOutcome) {
-    if (isTimeoutOrCrash && !isBareRecoverySeal(rec))
+    if (isTimeoutOrCrash && !isRecoveryCrash(rec))
       recordInfraRepeat(state, rec.step, stop);
     return;
   }

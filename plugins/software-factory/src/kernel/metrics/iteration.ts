@@ -1,7 +1,7 @@
 /** Accumulating one iteration's metrics. */
 
 import type { Usage } from "../../harness/types.js";
-import { addUsage, zeroUsage } from "../../harness/usage.js";
+import { addUsage, tokenTotal, zeroUsage } from "../../harness/usage.js";
 import { pricedRecord } from "../pricing.js";
 import type { PriceTable } from "../pricing.js";
 import type { SummaryStatus } from "../summary.js";
@@ -32,7 +32,6 @@ import {
   recordRebutted,
   recordWaste,
   sortedSlugs,
-  tokenTotal,
   width,
 } from "./record.js";
 import { costPerTask, scriptTotals } from "./totals.js";

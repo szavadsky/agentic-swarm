@@ -1,5 +1,5 @@
 import { type AgentTurnResult, runAgentTurn } from "../agent.js";
-import { makeCause } from "../cause.js";
+import { formatStop, makeCause } from "../cause.js";
 import { boundaryTarget, type TurnTarget } from "../flow-context.js";
 import { holdsDir } from "../mailbox.js";
 import { KERNEL_TURN_STEPS } from "../outcome.js";
@@ -65,11 +65,6 @@ export function rungSteps(runtime: KernelRuntime): PmRungStep[] {
   });
 }
 
-function stopText(stop: StepRecord["stop"]): string {
-  if (!stop) return "no stop";
-  return "cause" in stop ? `${stop.kind}: ${stop.cause}` : stop.kind;
-}
-
 /** Why a rung is not usable: its outcome status, concerns, findings or stop. */
 export function failureReasons(
   outcome: Outcome | undefined,
@@ -84,7 +79,7 @@ export function failureReasons(
     }
   }
   reasons.push(...findings);
-  if (!outcome) reasons.push(`no outcome (${stopText(record.stop)})`);
+  if (!outcome) reasons.push(`no outcome (${formatStop(record.stop)})`);
   return reasons;
 }
 

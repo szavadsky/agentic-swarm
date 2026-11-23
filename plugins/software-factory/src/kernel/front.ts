@@ -1,4 +1,5 @@
 import { runAgentTurn } from "./agent.js";
+import { formatStop } from "./cause.js";
 import {
   type FrontClass,
   FrontClassError,
@@ -71,11 +72,6 @@ class FrontError extends Error {
     super(message);
     this.name = "FrontError";
   }
-}
-
-function stopText(stop: StepRecord["stop"]): string {
-  if (!stop) return "no stop";
-  return "cause" in stop ? `${stop.kind}: ${stop.cause}` : stop.kind;
 }
 
 async function readTasks(runtime: KernelRuntime): Promise<TaskFile[]> {
@@ -230,7 +226,7 @@ function frontTurnFailure(
   if (!result.outcome) {
     return {
       action: "infra",
-      cause: `front turn produced no outcome (${stopText(result.record.stop)})`,
+      cause: `front turn produced no outcome (${formatStop(result.record.stop)})`,
     };
   }
   if (result.outcome.status === "blocked") {

@@ -1,8 +1,19 @@
-import { type Cause, type CauseKind, causeSchema } from "./types.js";
+import {
+  type Cause,
+  type CauseKind,
+  type StepRecord,
+  causeSchema,
+} from "./types.js";
 
 /** One typed cause, for producers that must name their kind explicitly. */
 export function makeCause(kind: CauseKind, detail: string): Cause {
   return { kind, detail };
+}
+
+/** A stop's diagnostic text: `no stop`, `kind: cause`, or the kind alone. */
+export function formatStop(stop: StepRecord["stop"]): string {
+  if (!stop) return "no stop";
+  return "cause" in stop ? `${stop.kind}: ${stop.cause}` : stop.kind;
 }
 
 /**

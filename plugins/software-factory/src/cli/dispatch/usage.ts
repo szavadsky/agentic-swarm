@@ -12,11 +12,13 @@ Commands:
   validate                 Validate one schema-enforced file with the gate's validators
   schemas                  Write every kernel schema as JSON Schema
   variables                Render prompts/VARIABLES.md from the typed descriptor
+  prompts                  Render every prompt for the loaded config (--dry-run)
 
 Options:
   --repo <path>            Repository root (defaults to the current directory)
   --goal <name>            Goal directory name under the repo's artifact root
-  --out <path>             Output directory for \`schemas\`, file for \`variables\`
+  --out <path>             Output directory for \`schemas\` and \`prompts\`, file for \`variables\`
+  --dry-run                Render without launching a turn (for \`prompts\`)
   --help, -h               Show this help message
   --version, -v            Show version
 `;
@@ -85,6 +87,14 @@ compare the written file with the render and fail when they differ, so a
 variable change is one descriptor line plus this render. Exit: 0 written.
 `;
 
+const PROMPTS_USAGE = `
+factory prompts --dry-run [--repo <path>] [--run-config <path>] [--out <dir>]
+
+Renders every prompt the loaded config names, one \`<name>.md\` file per
+render under --out; without --out the renders go to stdout. Exit: 0 written,
+1 error.
+`;
+
 const SCHEMAS_USAGE = `
 factory schemas --out <dir>
 
@@ -103,5 +113,6 @@ export function usageFor(command: string | undefined): string {
   if (command === "validate") return VALIDATE_USAGE;
   if (command === "schemas") return SCHEMAS_USAGE;
   if (command === "variables") return VARIABLES_USAGE;
+  if (command === "prompts") return PROMPTS_USAGE;
   return ROOT_USAGE;
 }

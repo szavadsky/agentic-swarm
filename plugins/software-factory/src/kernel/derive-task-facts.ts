@@ -278,21 +278,3 @@ export function sameFailingSet(
     names.length === prior.length && names.every((name, i) => name === prior[i])
   );
 }
-
-/**
- * A record recovery sealed after a hard death: a bare `infra: crash` with
- * nothing the turn itself reported. Mirrors `isRecoveryCrash` in derive.ts —
- * resume and the turn count share the seal. Bare seals are free
- * interruptions, redispatched; a crash the turn reported (cause, details,
- * usage or prompt bytes) counts as a turn. Recovery only seals crash, never
- * timeout.
- */
-export function isBareRecoverySeal(rec: StepRecord): boolean {
-  if (rec.stop?.kind !== "infra" || rec.stop?.cause !== "crash") return false;
-  if (rec.ok !== false) return false;
-  if (rec.cause !== undefined) return false;
-  if (rec.stop.details !== undefined) return false;
-  if (rec.usage !== undefined) return false;
-  if (rec.promptBytes !== undefined) return false;
-  return true;
-}
