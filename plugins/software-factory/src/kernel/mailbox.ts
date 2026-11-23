@@ -8,6 +8,7 @@ export {
   scanInbox,
 } from "./mailbox/steer.js";
 export {
+  drainHeldNotes,
   expireHold,
   holdsDir,
   quarantineDir,

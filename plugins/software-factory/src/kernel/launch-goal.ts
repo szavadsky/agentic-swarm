@@ -12,6 +12,7 @@ import { prepareIteration, runIteration } from "./launch-phases.js";
 import { steersWaiting } from "./launch-resume.js";
 import type { GoalRun } from "./launch-run.js";
 import { prepareLaunch, recoverOrInfra } from "./launch-setup.js";
+import { drainHeldNotes } from "./mailbox.js";
 import { landStoreCommits } from "./store-backend.js";
 import type { LaunchResult, RunGoalOptions } from "./launch-types.js";
 import type { State } from "./types.js";
@@ -91,7 +92,10 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
       (r) => !r.endedAt,
     ).length;
     const recovered = await recoverOrInfra(runtime, opts, interrupted);
-    if (recovered) return recovered;
+    if (recovered) {
+      await drainHeldNotes(store);
+      return recovered;
+    }
     // The artifact folder carries the schemas and one LSP config for editors
     // and any harness rooted there; it is written before the first turn
     // snapshots goal artifacts, so containment never sees a launch write.
@@ -110,6 +114,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
       recoveredRecords: interrupted,
     };
     await runIterations(run);
+    await drainHeldNotes(store);
     // The run's last writes settle on the goal branch too, not just the
     // checkout the next launch reads; a crash before this leaves them for
     // recovery to land.
