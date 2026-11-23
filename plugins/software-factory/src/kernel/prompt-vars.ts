@@ -129,6 +129,10 @@ export const PROMPT_COMPOSITIONS: readonly PromptComposition[] = [
     prompt: "pack-preparer",
     partials: ["`calibration`", "`outcome`"],
   },
+  {
+    prompt: "scout",
+    partials: ["`plan-read-only`", "`calibration`", "`outcome`"],
+  },
 ];
 
 /** The shared fragments every prompt composes instead of restating. */

@@ -147,7 +147,7 @@ async function matchesUsageRecordsScriptedRunPart2(
   const turns = records.filter(
     (r) => r.iteration === 1 && r.endedAt && r.actor === "agent",
   );
-  expect(turns).toHaveLength(6);
+  expect(turns).toHaveLength(7);
   const part = (u: Usage | undefined): number =>
     (u?.in ?? 0) +
     (u?.cacheRead ?? 0) +
@@ -201,6 +201,7 @@ async function matchesUsageRecordsScriptedRunPart3(
   expect(one.commitWallMs).toBeGreaterThan(0);
   expect(one.roles.architect).toMatchObject({ turns: 1, tokens: 8_510 });
   expect(one.roles.pm).toMatchObject({ turns: 1, tokens: 55 });
+  expect(one.roles.scout).toMatchObject({ turns: 1, tokens: 0 });
   expect(one.roles.implementer).toMatchObject({ turns: 1, tokens: 8_620 });
   expect(one.roles.qa).toMatchObject({ turns: 1, tokens: 8_400 });
   expect(one.roles.reviewer).toMatchObject({ turns: 1, tokens: 8_488 });
@@ -217,15 +218,15 @@ async function matchesUsageRecordsScriptedRunPart4(
   expect(one.architect.tokens).toBe(8_510);
   expect(one.architect.costShare).toBeCloseTo(0.1 / 0.43, 10);
   expect(one.architect.tokenShare).toBeCloseTo(8_510 / 34_073, 10);
-  expect(one.architect.turnShare).toBeCloseTo(1 / 6, 10);
+  expect(one.architect.turnShare).toBeCloseTo(1 / 7, 10);
 
   expect(metrics.totals.iterations).toBe(1);
-  expect(metrics.totals.turns).toBe(6);
+  expect(metrics.totals.turns).toBe(7);
   expect(metrics.totals.tokens).toBe(34_073);
   expect(metrics.totals.merged).toEqual(["alpha"]);
   expect(metrics.totals.usage.costUsd).toBeCloseTo(0.43, 10);
   expect(metrics.totals.architect.turns).toBe(1);
-  expect(metrics.totals.architect.turnShare).toBeCloseTo(1 / 6, 10);
+  expect(metrics.totals.architect.turnShare).toBeCloseTo(1 / 7, 10);
 
   const iterationFile = yaml.parse(
     (await store.readFile("iterations/1/metrics.yaml"))!,

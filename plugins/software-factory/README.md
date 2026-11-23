@@ -152,6 +152,10 @@ flows:
       - { id: resolve, prompt: steward, alias: steward }   # merge-conflict turn only; the wave-end steward also owns red-after-merge candidates
 taskTypes:
   development: { flow: implement-review, kind: development, schema: outcome }
+ingestion:                      # the goal-start step sequence, in list order
+  - { id: branch }              # records the goal branch the launch created
+  - { id: front }               # the classifier; exactly one, prompt/alias from boundary.front
+  - { id: scout, prompt: scout, alias: pm, deliverable: code map, when: [bigger] }
 boundary:                       # the kernel turns outside any task flow
   architect: { prompt: architect, alias: architect, repairPrompt: architect-repair, deliverable: "plan edit or stop decision" }
   digest: { prompt: digest, alias: digest }
@@ -170,6 +174,16 @@ hierarchy:                      # 1 architect (the norm), or 2 with one subarchi
   depth: 1
   subarchitect: { prompt: subarchitect, repairPrompt: architect-repair, deliverable: "epic plan edit or stop decision" }
 ```
+
+`ingestion` is the goal-start sequence, run in list order: `branch` must be
+first and exactly one `front` classifies the goal. Any other id runs one agent
+turn with its `prompt` on its `alias` (default `pm`) and must name a `prompt`;
+`deliverable` names what the turn produces. `when` gates a step to one or more
+goal classes (`trivial`, `task`, `bigger`) and cannot be named ahead of `front`,
+where the class is not known yet. The shipped `scout` step runs for bigger goals
+and writes the code map the context packs carry; without a scout step the packs
+keep the shallow directory index. Adding an ingestion agent (e.g. a
+requirements step) is a config edit, and its turn is recorded like any flow step.
 
 A step may name `repairPrompt` (the template its in-session repair ask
 renders) and `deliverable` (the product the ask and the missing-outcome finding

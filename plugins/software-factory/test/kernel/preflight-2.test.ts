@@ -192,6 +192,9 @@ function registerPreFlightPart11(): void {
         alias: "escalation",
       };
       f.configs.run.aliases.escalation = { harness: "fake", model: "esc" };
+      // The shipped scout names pm; this test narrows the ingestion sequence
+      // to the builtin steps so only the boundaries name aliases.
+      f.configs.process.ingestion = [{ id: "branch" }, { id: "front" }];
       delete f.configs.run.aliases.pm;
       await preflight(f.input);
       expect(f.configs.run.aliases.architect!.effort).toBe("max");

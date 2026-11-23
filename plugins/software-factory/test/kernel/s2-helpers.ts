@@ -27,6 +27,7 @@ import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { scriptKernelRoleFallbacks } from "./fake-defaults.js";
 
 export interface FlowRepoOptions {
+  classYaml?: string | null;
   gates?: {
     id: string;
     command: string;
@@ -182,6 +183,9 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
     "# Goal\n\nTest goal.\n",
     "utf8",
   );
+  if (typeof opts.classYaml === "string") {
+    fs.writeFileSync(path.join(goalDir, "class.yaml"), opts.classYaml, "utf8");
+  }
   return { repo, goalDir, goal };
 }
 

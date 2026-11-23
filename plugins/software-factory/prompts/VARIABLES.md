@@ -18,6 +18,7 @@ Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable
 - `steward` — `clean-code`, `calibration`, `outcome`
 - `plan-checker` — `calibration`, `outcome`
 - `pack-preparer` — `calibration`, `outcome`
+- `scout` — `plan-read-only`, `calibration`, `outcome`
 
 The shared definitions exist once as partials: `scope` (the predicted-area rule: out-of-area judgement, upscope condition; includes `plan-read-only`), `plan-read-only` (the plan, intent, other task files and records are read-only), `task-size` (what one task is: one implementer session, one seam, one reviewable diff, one done-when, and the split/merge criteria; included by `front`, `plan-standard` and `pm`), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract, shape rendered from the kernel outcome schema), `task-frontmatter` (the task-file frontmatter shape rendered from the kernel task schema, plus the configured task types and tiers; included by the authoring roles), `clean-code` (the code standard; the repo layer's `codingRules` file replaces its content per repo while the fragment name stays fixed, so implementer, QA, steward and adjudicator prompts render the same rule text through their shared bodies), `remarkable` (the remarkable definition), `finding-standards` (the no-praise, no-restating, no-taste rule shared by both reviews), `plan-review-marks` (the plan-review mark meaning, shared by the architect's turn and return), `spike-report-general` (what a spike's done-when says; included by `pm` and `architect-body`), `verdict` (which step each of `verdict` and `decision` belongs to, for review and architect steps) and the role bodies `implementer-body` and `architect-body` (everything before the role's turn block; a reviewer includes its author's body by role name, so the plan review reuses the reviewer template over `architect-body`).
 
@@ -94,6 +95,7 @@ One epic's architect, below the top architect: the same bounds, turn order, plan
 - `task_types` — configured task types with their flow, kind and schema; renderer default
 - `tiers` — run-config alias names; renderer default
 - `class_types` — class-to-task-type mapping, rendered by the front turn
+- `code_map_path` — path of the code map a `when: [bigger]` scout step wrote; `none` when no scout ran
 
 ## intent.md
 
@@ -301,6 +303,16 @@ The flow's `resolve` step renders this same prompt with the same variables: the 
 - `intent_path` — path to the goal's `intent.md`; a pointer, never pasted
 - `plan_path` — path to the current plan; a pointer, never pasted
 - `checkout` — path to the stable goal checkout (integration worktree)
+- `outcome_path` — path where the outcome file must be written when the harness asks for a file
+- `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
+- `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default
+
+## scout.md
+
+- `iteration` — 1-based iteration number of this launch
+- `intent_path` — path to the goal's `intent.md`; the map's subject
+- `checkout` — path to the stable goal checkout (integration worktree) being mapped
+- `code_map_path` — path of the code map to write, with one entry per directory; the one artifact the turn authors (the outcome file is the other)
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default

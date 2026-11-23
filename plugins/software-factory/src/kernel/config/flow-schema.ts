@@ -2,8 +2,92 @@
 
 import { z } from "zod";
 import { dagEdges } from "../dag.js";
-import { BOUNDARY_STEPS } from "../types.js";
-import type { BoundaryStep } from "../types.js";
+import { BOUNDARY_STEPS, BUILTIN_INGESTION_IDS } from "../types.js";
+import type {
+  BoundaryStep,
+  BuiltinIngestionId,
+  IngestionStepConfig,
+} from "../types.js";
+
+const ingestionClassSchema = z.enum(["trivial", "task", "bigger"]);
+
+/** One ingestion step: a built-in id binds to kernel code, a custom id needs a prompt. */
+export const ingestionStepSchema = z
+  .object({
+    id: z
+      .string()
+      .min(1)
+      .regex(
+        /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/,
+        "step id must be a simple name (no path separators)",
+      ),
+    prompt: z.string().min(1).optional(),
+    alias: z.string().min(1).optional(),
+    deliverable: z.string().min(1).optional(),
+    when: z
+      .union([
+        ingestionClassSchema.transform((cls) => [cls]),
+        z.array(ingestionClassSchema),
+      ])
+      .optional(),
+  })
+  .strict()
+  .superRefine((step, ctx) => {
+    if (BUILTIN_INGESTION_IDS.includes(step.id as BuiltinIngestionId)) {
+      // The classifier's prompt and alias live on boundary.front; a built-in
+      // step that names its own would be a second, ignored source.
+      if (
+        step.prompt !== undefined ||
+        step.alias !== undefined ||
+        step.deliverable !== undefined ||
+        step.when !== undefined
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `built-in ingestion step "${step.id}" takes only its id`,
+          path: ["id"],
+        });
+      }
+      return;
+    }
+    if (!step.prompt) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `unknown ingestion step "${step.id}" needs a prompt`,
+        path: ["prompt"],
+      });
+    }
+  });
+
+export const DEFAULT_INGESTION_STEPS: IngestionStepConfig[] = [
+  { id: "branch" },
+  { id: "front" },
+];
+
+/**
+ * The goal-start sequence: branch first, exactly one `front`, no repeated ids,
+ * and no `when` ahead of front.
+ */
+export const ingestionSchema = z
+  .array(ingestionStepSchema)
+  .min(1)
+  .refine(
+    (steps) => steps[0]?.id === "branch",
+    'the first ingestion step must be "branch"',
+  )
+  .refine(
+    (steps) => steps.filter((step) => step.id === "front").length === 1,
+    'the ingestion steps must declare exactly one "front" step',
+  )
+  .refine((steps) => {
+    const front = steps.findIndex((step) => step.id === "front");
+    if (front < 0) return true;
+    return steps.slice(0, front).every((step) => step.when === undefined);
+  }, 'a step before "front" cannot name `when`: the class is not known yet')
+  .refine(
+    (steps) => new Set(steps.map((step) => step.id)).size === steps.length,
+    "ingestion step ids must not repeat",
+  );
 
 /** One step's prompt template and run-config alias. */
 export const turnSchema = z

@@ -331,9 +331,9 @@ async function parksImplementerUpscopeRewritesClassPart2(
   expect((await stateOf(goal.goalDir)).goal).toBe("done");
   // One implement turn and the stall PM: the review never runs.
   expect(first.calls).toHaveLength(2);
-  // digest, the pack preparer and the architect: iteration 2 prepares its
-  // index from the script data before the consult.
-  expect(second.calls).toHaveLength(3);
+  // digest, the scout, the pack preparer and the architect: iteration 2
+  // prepares its index from the script data before the consult.
+  expect(second.calls).toHaveLength(4);
 }
 
 function registerStandaloneUpscopePart7(): void {
