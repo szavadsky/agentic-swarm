@@ -934,3 +934,9 @@ Correction: the 2026-11-23 landing journal claimed format-green from a repo-root
 Reviewer now agy gemini-3.8-flash (high, antigravity); fallbacks omp spark, codex deepseek, opencode hy4. Rest unchanged. Validated. Old goal dirs removed (delta, ops-friction), their 9 branches deleted, worktrees cleaned (9.2G reclaimed).
 
 Correction to the entry above: the 9 ops-friction branches were restored on owner order ("no need to delete branches") — only the goal artifact dirs and worktrees were removed.
+
+## 2026-11-24 — turn-delivery i1: 5/5 merged, 0 parks ($2.49 reported)
+
+Minimum goal for friction issue #2 (no-op implementer turns). Architect diagnosed four causes, rejected a blanket re-ask rule: unfinished explorations (reminder forbade work), fumbled outcomes with work on branch, kernel parks of delivered continuations despite green checks, reply-only answers to forgotten justifications. Merged: unfinished-turn-ask, outcome-rescue-turn, kept-advance-carries, justified-red-holds, zero-edit-park-rate (the bar metric; full-i1 replay 33/154 = 21%). One open debt: pre-existing zero-edit replay baseline mismatch in the friction fixture (11 turns, not caused by the diff).
+
+Legs: implementer pi/deepseek xhigh, QA opencode/hy4 high, reviewer agy/gemini high (maiden runs, clean). pi + agy turns report $0 — spend understated. Base green: typecheck + lint (664) + format (719) + 1922 tests, 0 fail.
