@@ -39,6 +39,7 @@ import { loadPrompts } from "./prompts.js";
 import { loadPoolResets } from "./quota-pools.js";
 import { scriptMeta } from "./record.js";
 import { recoverLaunch } from "./recovery.js";
+import { installRunLogTee, openRunLog } from "./run-log.js";
 import { createLaunchSessions } from "./sessions.js";
 import { createDrainController, type DrainController } from "./signals.js";
 import { createArtifactStore } from "./store-backend.js";
@@ -236,6 +237,8 @@ export interface PreparedLaunch {
   signals: DrainController;
   uninstall: (() => void) | undefined;
   lock: RunLockHandle;
+  /** Stops copying console lines into this launch's file. */
+  closeRunLog: () => void;
 }
 
 /** Everything a launch needs before its first turn, including the goal lock. */
@@ -248,25 +251,42 @@ export async function prepareLaunch(
   if (refusal !== undefined && override === undefined)
     throw new LaunchError(refusal);
   const store = await openStore(opts, setup);
-  if (refusal !== undefined && override !== undefined)
-    await recordPinOverride(store, refusal, override);
   const sessions = await createLaunchSessions(
     setup.paths.sessionsDir,
     opts.goal,
     setup.configs.run.sessions.keepRuns,
     { repo: setup.repoRoot },
   );
-  const harnesses = await buildHarnesses(opts, setup, sessions.dir);
-  await preflight({
-    configs: setup.configs,
-    paths: setup.paths,
-    store,
-    harnesses: new Map(Object.entries(harnesses)),
-    binaries: opts.binaries,
-    catalog: opts.modelCatalog,
-    baseGates: opts.baseGates,
-  });
-  const runtime = await buildRuntime(opts, setup, store, harnesses);
-  const { signals, uninstall, lock } = acquireLaunchLock(opts, setup);
-  return { setup, store, runtime, signals, uninstall, lock };
+  // The goal exists, so the launch's own file may: one log per launch, opened
+  // before any line can print. A mistyped goal still creates nothing.
+  const runLog = openRunLog(setup.paths.goalDir, sessions.launchId);
+  const closeRunLog = installRunLogTee(runLog);
+  try {
+    if (refusal !== undefined && override !== undefined)
+      await recordPinOverride(store, refusal, override);
+    const harnesses = await buildHarnesses(opts, setup, sessions.dir);
+    await preflight({
+      configs: setup.configs,
+      paths: setup.paths,
+      store,
+      harnesses: new Map(Object.entries(harnesses)),
+      binaries: opts.binaries,
+      catalog: opts.modelCatalog,
+      baseGates: opts.baseGates,
+    });
+    const runtime = await buildRuntime(opts, setup, store, harnesses);
+    const { signals, uninstall, lock } = acquireLaunchLock(opts, setup);
+    return {
+      setup,
+      store,
+      runtime,
+      signals,
+      uninstall,
+      lock,
+      closeRunLog,
+    };
+  } catch (err) {
+    closeRunLog();
+    throw err;
+  }
 }

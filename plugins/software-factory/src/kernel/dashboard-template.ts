@@ -416,6 +416,9 @@ footer { margin-top: 2rem; color: var(--pico-muted-color); font-size: .78rem; }
 
 <footer>
   <p>Rendered from <a href="status.json">status.json</a> and the latest <code>intent-status.json</code> at {{ doc.updatedAt | escape }}. Pico CSS and Chart.js are vendored in <code>vendor/</code> and loaded locally; the page needs no server and no network.</p>
+  {% if doc.runLog %}
+  <p>Latest launch log: <a href="{{ doc.runLog | escape }}"><code>{{ doc.runLog | escape }}</code></a> — every line the newest launch printed, timestamped.</p>
+  {% endif %}
 </footer>
 </main>
 {% if summary.intent.known %}
