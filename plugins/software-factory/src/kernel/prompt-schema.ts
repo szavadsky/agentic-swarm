@@ -190,7 +190,7 @@ export function taskFrontmatterVar(): string {
 
 /**
  * The `task_types` prompt variable: configured type names in config order with
- * the flow, kind and output schema each supplies.
+ * the flow, kind, output schema and use-when each supplies.
  */
 export function taskTypesVar(
   taskTypes: Record<string, TaskTypeDefinition> | undefined,
@@ -200,7 +200,7 @@ export function taskTypesVar(
   return entries
     .map(
       ([name, definition]) =>
-        `${name} (flow: ${definition.flow}, kind: ${definition.kind}, schema: ${definition.schema})`,
+        `${name} (flow: ${definition.flow}, kind: ${definition.kind}, schema: ${definition.schema}, use when: ${definition.useWhen})`,
     )
     .join(", ");
 }

@@ -217,7 +217,7 @@ function registerPreFlightPart4(): void {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST,
       undefined,
-      "taskTypes:\n  odd: { flow: no-such-flow, kind: development, schema: outcome }\n",
+      "taskTypes:\n  odd: { flow: no-such-flow, kind: development, schema: outcome, useWhen: fixture work }\n",
     );
     try {
       const err = await refusal(f.input);
@@ -257,7 +257,7 @@ function registerPreFlightPart5(): void {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST,
       undefined,
-      "taskTypes:\n  odd: { flow: toString, kind: development, schema: outcome }\n",
+      "taskTypes:\n  odd: { flow: toString, kind: development, schema: outcome, useWhen: fixture work }\n",
     );
     try {
       const err = await refusal(f.input);
@@ -279,7 +279,7 @@ function registerPreFlightPart6(): void {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST,
       undefined,
-      "taskTypes:\n  odd: { flow: implement-review, kind: development, schema: nope }\n",
+      "taskTypes:\n  odd: { flow: implement-review, kind: development, schema: nope, useWhen: fixture work }\n",
     );
     try {
       const err = await refusal(f.input);
@@ -299,7 +299,7 @@ function registerPreFlightPart6(): void {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST,
       undefined,
-      "taskTypes:\n  odd: { flow: implement-review, kind: development, schema: constructor }\n",
+      "taskTypes:\n  odd: { flow: implement-review, kind: development, schema: constructor, useWhen: fixture work }\n",
     );
     try {
       const err = await refusal(f.input);
@@ -322,7 +322,7 @@ function registerPreFlightPart7(): void {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST,
       undefined,
-      "taskTypes:\n  docs: { flow: just-implement, kind: development, schema: outcome }\n",
+      "taskTypes:\n  docs: { flow: just-implement, kind: development, schema: outcome, useWhen: fixture work }\n",
     );
     try {
       await preflight(f.input);

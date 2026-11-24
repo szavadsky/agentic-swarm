@@ -49,11 +49,13 @@ const frontVars = {
       flow: "implement-review",
       kind: "development",
       schema: "outcome",
+      useWhen: "work that lands after review",
     },
     trivial: {
       flow: "just-implement",
       kind: "development",
       schema: "outcome",
+      useWhen: "a small fully understood change",
     },
   }),
 };

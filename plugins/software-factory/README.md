@@ -184,7 +184,7 @@ flows:
       - { id: review, prompt: reviewer, alias: reviewer, review: true, changeRequests: 2 }
       - { id: resolve, prompt: steward, alias: steward }   # merge-conflict turn only; the wave-end steward also owns red-after-merge candidates
 taskTypes:
-  development: { flow: implement-review, kind: development, schema: outcome }
+  development: { flow: implement-review, kind: development, schema: outcome, useWhen: "change meant to land in the repo and merge after QA and review" }
 ingestion:                      # the goal-start step sequence, in list order
   - { id: branch }              # records the goal branch the launch created
   - { id: front }               # the classifier; exactly one, prompt/alias from boundary.front

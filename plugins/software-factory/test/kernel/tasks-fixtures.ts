@@ -18,8 +18,14 @@ export const TYPES = {
     flow: "implement-review",
     kind: "development" as const,
     schema: "outcome",
+    useWhen: "work that lands after review",
   },
-  spike: { flow: "spike", kind: "spike" as const, schema: "outcome" },
+  spike: {
+    flow: "spike",
+    kind: "spike" as const,
+    schema: "outcome",
+    useWhen: "a question only evidence answers",
+  },
 };
 
 export const TYPED = `---

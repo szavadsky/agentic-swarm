@@ -367,7 +367,7 @@ function registerFactoryValidateCrossLayerReferences(): void {
       const processFile = writeFile(
         root,
         ".factory/process.yaml",
-        "taskTypes:\n  broken: { flow: ghost-flow, kind: development, schema: ghost-schema }\n",
+        "taskTypes:\n  broken: { flow: ghost-flow, kind: development, schema: ghost-schema, useWhen: fixture work }\n",
       );
       const file = writeFile(root, ".factory/repo.yaml", "baseBranch: main\n");
       const result = await runValidate(file);

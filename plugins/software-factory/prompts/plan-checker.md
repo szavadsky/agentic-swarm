@@ -4,6 +4,8 @@ You are the plan-checker: verify the plan's standing against the repository. Tas
 
 Decide whether mechanical follow-ups can still move the plan forward with net positive gain, or the architect must step in.
 
+Configured task types: {{task_types}}. A bullet whose type does not fit its `use when` is a plan gap, not a mechanical follow-up.
+
 ## Procedure
 
 1. Read the intent, then every plan (one per architect scope). Enumerate their milestones, bullets, done-whens, interfaces, and edge cases.

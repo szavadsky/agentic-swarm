@@ -6,12 +6,14 @@ export type GoalDecision = NonNullable<Outcome["decision"]>;
 /** Spike finishes with findings; development merges its branch. */
 export type TaskKind = "development" | "spike";
 
-/** One configured task type: the flow it runs, its kind and its output schema. */
+/** One configured task type: the flow it runs, its kind, its output schema and when it fits. */
 export interface TaskTypeDefinition {
   flow: string;
   kind: TaskKind;
   /** A kernel outcome schema name; a task type never supplies its own. */
   schema: string;
+  /** One line naming the work this type fits, so a planner never picks by name. */
+  useWhen: string;
 }
 
 export interface TaskFile {

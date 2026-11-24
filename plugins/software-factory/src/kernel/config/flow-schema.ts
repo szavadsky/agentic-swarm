@@ -305,14 +305,18 @@ export const flowSchema = flowBaseSchema
 
 /**
  * One task type: the flow a task runs, whether it is a spike or development
- * work, and the kernel output schema its turns deliver. The type owns all
- * three so a task file cannot pair a spike kind with a review-only flow.
+ * work, the kernel output schema its turns deliver, and the one line that
+ * tells a planner when the type fits. The type owns all of it so a task file
+ * cannot pair a spike kind with a review-only flow, and a planner never picks a
+ * type from its name alone.
  */
 export const taskTypeSchema = z
   .object({
     flow: z.string().min(1),
     kind: z.enum(["spike", "development"]),
     schema: z.string().min(1),
+    /** One line naming the work this type fits; rendered to every planner. */
+    useWhen: z.string().min(1),
   })
   .strict();
 

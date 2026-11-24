@@ -71,8 +71,8 @@ flows:
       - { id: review, prompt: reviewer, alias: reviewer, review: true, changeRequests: 2, deliverable: verdict }
       - { id: resolve, prompt: steward, alias: steward }   # merge-conflict turn only
 taskTypes:
-  development: { flow: implement-review, kind: development, schema: outcome }
-  spike: { flow: spike, kind: spike, schema: outcome }
+  development: { flow: implement-review, kind: development, schema: outcome, useWhen: "change meant to land in the repo and merge after QA and review" }
+  spike: { flow: spike, kind: spike, schema: outcome, useWhen: "question only evidence answers — finished with findings and never merged" }
 boundary:                        # kernel turns outside any task flow
   architect: { prompt: architect, alias: architect, repairPrompt: architect-repair, deliverable: "plan edit or stop decision" }
   front: { prompt: front, alias: pm, deliverable: "class, task, and pack" }

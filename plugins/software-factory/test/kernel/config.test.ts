@@ -29,12 +29,22 @@ function threeConfigLayersPart1() {
         flow: "implement-review",
         kind: "development",
         schema: "outcome",
+        useWhen:
+          "change meant to land in the repo and merge after QA and review",
       },
-      spike: { flow: "spike", kind: "spike", schema: "outcome" },
+      spike: {
+        flow: "spike",
+        kind: "spike",
+        schema: "outcome",
+        useWhen:
+          "question only evidence answers — finished with findings and never merged",
+      },
       trivial: {
         flow: "just-implement",
         kind: "development",
         schema: "outcome",
+        useWhen:
+          "small fully understood change with one implement turn and no acceptance step",
       },
     });
     const paths = resolveGoalPaths(configs, root, "demo");
@@ -91,6 +101,17 @@ function threeConfigLayersPart3() {
       "taskTypes:\n  odd: { flow: implement-review, kind: task, schema: outcome }\n",
     );
     expect(() => loadConfigs(root)).toThrow(/taskTypes/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("refuses a task type without a use-when", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      "taskTypes:\n  vague: { flow: implement-review, kind: development, schema: outcome }\n",
+    );
+    expect(() => loadConfigs(root)).toThrow(/taskTypes\.vague\.useWhen/);
     fs.rmSync(root, { recursive: true, force: true });
   });
 

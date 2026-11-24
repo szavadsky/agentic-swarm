@@ -3,10 +3,8 @@ import path from "node:path";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import { packageRoot } from "../../src/kernel/config.js";
 import { promptVars } from "../../src/kernel/flow-context.js";
-import { frontClassTypesVar } from "../../src/kernel/front.js";
 import {
   taskFrontmatterVar,
-  taskTypesVar,
   tierNamesVar,
 } from "../../src/kernel/prompt-schema.js";
 import { outcomeExampleVar } from "../../src/kernel/outcome-example.js";
@@ -14,7 +12,7 @@ import { packPreparerOutcomeSchemaVar } from "../../src/kernel/pack-prep.js";
 import { qaOutcomeSchema } from "../../src/kernel/qa.js";
 import { loadPromptLibrary } from "../../src/kernel/prompts.js";
 import { formatReviewFindings } from "../../src/kernel/record.js";
-import { rec, task } from "./helpers.js";
+import { rec, task, TEST_CLASS_TYPES, TEST_TASK_TYPES_VAR } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -44,26 +42,7 @@ const PLAN_RETURN_SCHEMA = outcomeExampleVar("architect-review-return", "any");
 
 const TASK_FRONTMATTER = taskFrontmatterVar();
 
-const TASK_TYPES = taskTypesVar({
-  development: {
-    flow: "implement-review",
-    kind: "development",
-    schema: "outcome",
-  },
-  spike: { flow: "spike", kind: "spike", schema: "outcome" },
-  trivial: { flow: "just-implement", kind: "development", schema: "outcome" },
-});
-
 const TIERS = tierNamesVar({ implementer: {}, escalation: {} });
-
-const CLASS_TYPES = frontClassTypesVar({
-  development: {
-    flow: "implement-review",
-    kind: "development",
-    schema: "outcome",
-  },
-  trivial: { flow: "just-implement", kind: "development", schema: "outcome" },
-});
 
 const ROLES: Record<string, Record<string, string>> = {
   architect: {
@@ -78,7 +57,7 @@ const ROLES: Record<string, Record<string, string>> = {
     outcome_path: "/goal/records/00042-i3-architect-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: ARCHITECT_SCHEMA,
-    task_types: TASK_TYPES,
+    task_types: TEST_TASK_TYPES_VAR,
     tiers: TIERS,
     depth: "2",
     subarchitect_block: "",
@@ -96,7 +75,7 @@ const ROLES: Record<string, Record<string, string>> = {
     outcome_path: "/goal/records/00048-i3-subarchitect-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: SUBARCHITECT_SCHEMA,
-    task_types: TASK_TYPES,
+    task_types: TEST_TASK_TYPES_VAR,
     tiers: TIERS,
   },
   front: {
@@ -114,9 +93,9 @@ const ROLES: Record<string, Record<string, string>> = {
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: BASE_SCHEMA,
     task_frontmatter: TASK_FRONTMATTER,
-    task_types: TASK_TYPES,
+    task_types: TEST_TASK_TYPES_VAR,
     tiers: TIERS,
-    class_types: CLASS_TYPES,
+    class_types: TEST_CLASS_TYPES,
   },
   pm: {
     iteration: "3",
@@ -136,7 +115,7 @@ const ROLES: Record<string, Record<string, string>> = {
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: PM_SCHEMA,
     task_frontmatter: TASK_FRONTMATTER,
-    task_types: TASK_TYPES,
+    task_types: TEST_TASK_TYPES_VAR,
     tiers: TIERS,
   },
   implementer: {
@@ -237,6 +216,7 @@ const ROLES: Record<string, Record<string, string>> = {
     outcome_path: "/goal/records/00045-i3-plan-check-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: CHECKER_SCHEMA,
+    task_types: TEST_TASK_TYPES_VAR,
   },
   "pack-preparer": {
     iteration: "3",
@@ -257,7 +237,7 @@ const ROLES: Record<string, Record<string, string>> = {
     outcome_path: "/goal/records/00046-i3-planreview-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: PLAN_REVIEW_SCHEMA,
-    task_types: TASK_TYPES,
+    task_types: TEST_TASK_TYPES_VAR,
     tiers: TIERS,
   },
   "architect-review-return": {

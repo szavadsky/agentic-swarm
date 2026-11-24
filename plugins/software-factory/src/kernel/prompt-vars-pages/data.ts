@@ -29,7 +29,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       outcome_schema:
         "outcome examples from the kernel schema; renderer default",
       task_types:
-        "configured task types with their flow, kind and schema; renderer default",
+        "configured task types with their flow, kind, output schema and use-when; renderer default",
       tiers: "run-config alias names; renderer default",
       depth:
         "`2` renders the architect register; `1` (renderer default) leaves it out",
@@ -81,7 +81,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       outcome_schema:
         "outcome examples from the kernel schema; renderer default",
       task_types:
-        "configured task types with their flow, kind and schema; renderer default",
+        "configured task types with their flow, kind, output schema and use-when; renderer default",
       tiers: "run-config alias names; renderer default",
     },
   },
@@ -110,7 +110,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       task_frontmatter:
         "frontmatter YAML skeleton from the kernel schema; renderer default",
       task_types:
-        "configured task types with their flow, kind and schema; renderer default",
+        "configured task types with their flow, kind, output schema and use-when; renderer default",
       tiers: "run-config alias names; renderer default",
       class_types: "class-to-task-type mapping, rendered by the front turn",
       code_map_path:
@@ -167,7 +167,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       task_frontmatter:
         "frontmatter YAML skeleton from the kernel schema; renderer default",
       task_types:
-        "configured task types with their flow, kind and schema; renderer default",
+        "configured task types with their flow, kind, output schema and use-when; renderer default",
       tiers: "run-config alias names; renderer default",
     },
   },
@@ -354,7 +354,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       outcome_schema:
         "outcome examples narrowed to `status`, `summary`, `concerns`, `steerAnswers`, `debtClosed` and `planReview`; supplied by the turn",
       task_types:
-        "configured task types with their flow, kind and schema, read by the included plan standard; renderer default",
+        "configured task types with their flow, kind, output schema and use-when, read by the included plan standard; renderer default",
       tiers:
         "run-config alias names, read by the included architect scope; renderer default",
     },

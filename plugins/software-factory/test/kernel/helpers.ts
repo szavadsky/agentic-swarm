@@ -1,4 +1,6 @@
 import { formatCause, readCause } from "../../src/kernel/cause.js";
+import { frontClassTypesVar } from "../../src/kernel/front.js";
+import { taskTypesVar } from "../../src/kernel/prompt-schema.js";
 import type {
   ArchitectureConfig,
   BoundaryStep,
@@ -6,6 +8,7 @@ import type {
   RecordStart,
   StepRecord,
   TaskFile,
+  TaskTypeDefinition,
   TurnSpec,
 } from "../../src/kernel/types.js";
 
@@ -65,6 +68,34 @@ export const TEST_ARCHITECTURE: ArchitectureConfig = {
   architectReturn: "on-technical-concerns",
   planReturn: { prompt: "architect-review-return" },
 };
+
+/** The task types the prompt snapshots configure and render. */
+export const TEST_TASK_TYPES: Record<string, TaskTypeDefinition> = {
+  development: {
+    flow: "implement-review",
+    kind: "development",
+    schema: "outcome",
+    useWhen: "work that lands after review",
+  },
+  spike: {
+    flow: "spike",
+    kind: "spike",
+    schema: "outcome",
+    useWhen: "a question only evidence answers",
+  },
+  trivial: {
+    flow: "just-implement",
+    kind: "development",
+    schema: "outcome",
+    useWhen: "a small fully understood change",
+  },
+};
+
+/** `task_types` as every prompt snapshot renders it. */
+export const TEST_TASK_TYPES_VAR = taskTypesVar(TEST_TASK_TYPES);
+
+/** The front's class-to-type line, rendered from the same configured types. */
+export const TEST_CLASS_TYPES = frontClassTypesVar(TEST_TASK_TYPES);
 
 /** A test task; a legacy `scope` patch is accepted and dropped, as the parser does. */
 export function task(

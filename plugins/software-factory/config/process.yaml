@@ -111,13 +111,26 @@ architecture:
 hierarchy:
   depth: 1
   subarchitect: { prompt: subarchitect, repairPrompt: architect-repair, deliverable: "epic plan edit or stop decision" }
-# A task file names one type; the type owns its flow, kind and output schema.
-# `development` merges, `spike` finishes with findings, `trivial` runs the
-# front's single-step path.
+# A task file names one type; the type owns its flow, kind, output schema and
+# the `useWhen` line that tells a planner which work fits it. `development`
+# merges, `spike` finishes with findings, `trivial` runs the front's
+# single-step path.
 taskTypes:
-  development: { flow: implement-review, kind: development, schema: outcome }
-  spike: { flow: spike, kind: spike, schema: outcome }
-  trivial: { flow: just-implement, kind: development, schema: outcome }
+  development:
+    flow: implement-review
+    kind: development
+    schema: outcome
+    useWhen: change meant to land in the repo and merge after QA and review
+  spike:
+    flow: spike
+    kind: spike
+    schema: outcome
+    useWhen: question only evidence answers — finished with findings and never merged
+  trivial:
+    flow: just-implement
+    kind: development
+    schema: outcome
+    useWhen: small fully understood change with one implement turn and no acceptance step
 reminders: 1
 # The repair ask a step renders unless it names another template.
 repairPrompt: delivery-repair

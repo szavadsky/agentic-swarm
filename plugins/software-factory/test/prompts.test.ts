@@ -366,6 +366,7 @@ function promptsSchemaSkeletonsPart6() {
           flow: "implement-review",
           kind: "development",
           schema: "outcome",
+          useWhen: "work that lands after review",
         },
       },
     );

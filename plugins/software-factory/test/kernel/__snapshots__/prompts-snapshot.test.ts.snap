@@ -79,7 +79,7 @@ Each bullet starts with its slug: short kebab-case, unique across the goal, neve
 
 A bullet you delete cancels nothing: its task stays open. Retire a task with a line \`cancelled: <slug> — reason\` on its own; replace or split one with that line plus the new bullets. A merged slug is history and needs no cancellation.
 
-Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
+Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
 Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the edge cases and the dependency order from what and why plus the done-when.
 
@@ -276,7 +276,7 @@ Each bullet starts with its slug: short kebab-case, unique across the goal, neve
 
 A bullet you delete cancels nothing: its task stays open. Retire a task with a line \`cancelled: <slug> — reason\` on its own; replace or split one with that line plus the new bullets. A merged slug is history and needs no cancellation.
 
-Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
+Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
 Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the edge cases and the dependency order from what and why plus the done-when.
 
@@ -434,7 +434,7 @@ repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
 \`\`\`
 
-Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome). Configured tiers: implementer, escalation.
+Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). Configured tiers: implementer, escalation.
 
 
 For the front's file: \`type\` (\`trivial\` for trivial, \`development\` for task; a class with no configured type is \`bigger\`), \`deps: []\`, \`source: front\`, a unique slug, no missing dependency, and a \`tier\` naming \`default\` or a configured alias. Body: the brief with a \`Done when:\` line.
@@ -556,7 +556,7 @@ repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
 \`\`\`
 
-Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome). Configured tiers: implementer, escalation.
+Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). Configured tiers: implementer, escalation.
 
 
 - \`slug\` — keep the architect's slug; assign a short kebab-case one only when the bullet has none. Immutable, never reused, safe as a branch and file name, unique across the goal including dropped tasks.
@@ -1459,6 +1459,8 @@ exports[`role prompts renders plan-checker from exactly its documented variables
 
 Decide whether mechanical follow-ups can still move the plan forward with net positive gain, or the architect must step in.
 
+Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). A bullet whose type does not fit its \`use when\` is a plan gap, not a mechanical follow-up.
+
 ## Procedure
 
 1. Read the intent, then every plan (one per architect scope). Enumerate their milestones, bullets, done-whens, interfaces, and edge cases.
@@ -1854,7 +1856,7 @@ Each bullet starts with its slug: short kebab-case, unique across the goal, neve
 
 A bullet you delete cancels nothing: its task stays open. Retire a task with a line \`cancelled: <slug> — reason\` on its own; replace or split one with that line plus the new bullets. A merged slug is history and needs no cancellation.
 
-Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
+Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
 Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the edge cases and the dependency order from what and why plus the done-when.
 
@@ -2189,7 +2191,7 @@ Each bullet starts with its slug: short kebab-case, unique across the goal, neve
 
 A bullet you delete cancels nothing: its task stays open. Retire a task with a line \`cancelled: <slug> — reason\` on its own; replace or split one with that line plus the new bullets. A merged slug is history and needs no cancellation.
 
-Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
+Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
 Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the edge cases and the dependency order from what and why plus the done-when.
 
@@ -2374,7 +2376,7 @@ Each bullet starts with its slug: short kebab-case, unique across the goal, neve
 
 A bullet you delete cancels nothing: its task stays open. Retire a task with a line \`cancelled: <slug> — reason\` on its own; replace or split one with that line plus the new bullets. A merged slug is history and needs no cancellation.
 
-Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
+Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
 Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the edge cases and the dependency order from what and why plus the done-when.
 
@@ -2512,7 +2514,7 @@ repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
 \`\`\`
 
-Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome). Configured tiers: implementer, escalation.
+Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). Configured tiers: implementer, escalation.
 
 
 - \`slug\` — keep the architect's slug; assign a short kebab-case one only when the bullet has none. Immutable, never reused, safe as a branch and file name, unique across the goal including dropped tasks.
@@ -2789,7 +2791,7 @@ Each bullet starts with its slug: short kebab-case, unique across the goal, neve
 
 A bullet you delete cancels nothing: its task stays open. Retire a task with a line \`cancelled: <slug> — reason\` on its own; replace or split one with that line plus the new bullets. A merged slug is history and needs no cancellation.
 
-Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
+Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
 Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the edge cases and the dependency order from what and why plus the done-when.
 
@@ -2974,7 +2976,7 @@ Each bullet starts with its slug: short kebab-case, unique across the goal, neve
 
 A bullet you delete cancels nothing: its task stays open. Retire a task with a line \`cancelled: <slug> — reason\` on its own; replace or split one with that line plus the new bullets. A merged slug is history and needs no cancellation.
 
-Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
+Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
 Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the edge cases and the dependency order from what and why plus the done-when.
 
@@ -3112,7 +3114,7 @@ repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
 \`\`\`
 
-Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome). Configured tiers: implementer, escalation.
+Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). Configured tiers: implementer, escalation.
 
 
 - \`slug\` — keep the architect's slug; assign a short kebab-case one only when the bullet has none. Immutable, never reused, safe as a branch and file name, unique across the goal including dropped tasks.
@@ -3389,7 +3391,7 @@ Each bullet starts with its slug: short kebab-case, unique across the goal, neve
 
 A bullet you delete cancels nothing: its task stays open. Retire a task with a line \`cancelled: <slug> — reason\` on its own; replace or split one with that line plus the new bullets. A merged slug is history and needs no cancellation.
 
-Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
+Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
 Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the edge cases and the dependency order from what and why plus the done-when.
 
@@ -3574,7 +3576,7 @@ Each bullet starts with its slug: short kebab-case, unique across the goal, neve
 
 A bullet you delete cancels nothing: its task stays open. Retire a task with a line \`cancelled: <slug> — reason\` on its own; replace or split one with that line plus the new bullets. A merged slug is history and needs no cancellation.
 
-Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
+Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
 Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the edge cases and the dependency order from what and why plus the done-when.
 
@@ -3712,7 +3714,7 @@ repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
 \`\`\`
 
-Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome). Configured tiers: implementer, escalation.
+Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). Configured tiers: implementer, escalation.
 
 
 - \`slug\` — keep the architect's slug; assign a short kebab-case one only when the bullet has none. Immutable, never reused, safe as a branch and file name, unique across the goal including dropped tasks.
