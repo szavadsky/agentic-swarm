@@ -56,10 +56,10 @@ export { reapGateProcesses } from "./gate-processes.js";
 /**
  * Branch checks and merged-result gates share ports, caches and build dirs only
  * as far as a repo declares; a gate that names a mutex in `serial` holds it for
- * its own command, and a gate that names none never waits. Keyed by the
- * worktree, so concurrent runs in different worktrees of the same repo never
- * serialize on each other; only two gates in the same worktree naming the same
- * mutex wait.
+ * its own command, and a gate that names none never waits. Keyed by the repo
+ * root and the declared name, so two worktrees of one repo naming the same
+ * mutex wait for each other while gates of different repos and gates naming
+ * none stay parallel.
  */
 const gateMutexes = new KeyedMutex();
 
@@ -92,12 +92,14 @@ function gateEnvDirs(
  * Runs one declared gate command with its env dirs created and the mutexes it
  * names held. Names are taken in sorted order, so two gates naming the same
  * pair in different order cannot deadlock; a gate holds them only for its own
- * command, so the rest of the run — and every other worktree's run — proceeds.
+ * command, so the rest of the run — and every other repo's run — proceeds.
+ * Mutexes are scoped to `repoRoot`, so worktrees of one repo share them.
  */
 function runGateCommand(
   cwd: string,
   gate: GateConfig,
   command: string,
+  repoRoot: string,
   extraEnv?: Record<string, string>,
 ): Promise<ProcessResult> {
   const ordered = [...new Set(gate.serial)].sort();
@@ -134,8 +136,9 @@ function runGateCommand(
       });
       return run.finally(() => release?.());
     }
-    return gateMutexes.runExclusive(`${cwd}\u0000${name}`, () =>
-      launch(index + 1),
+    return gateMutexes.runExclusive(
+      `${path.resolve(repoRoot)}\u0000${name}`,
+      () => launch(index + 1),
     );
   };
   return launch(0);
@@ -261,11 +264,14 @@ function gateDetails(
  * and reads the same file for the case identities. A `format.pattern` gate's
  * runner is recorded so `gateSignatures` reads its printed failures. Both
  * `runGates` and the baseline use this, so a gate executes and is recorded
- * identically on base and in a task worktree.
+ * identically on base and in a task worktree. `repoRoot` names the repository
+ * whose worktrees share the gate's `serial` mutexes; it defaults to `cwd` for
+ * a caller running one tree in isolation.
  */
 export async function runDeclaredGate(
   cwd: string,
   gate: GateConfig,
+  repoRoot = cwd,
 ): Promise<DeclaredGateRun> {
   const junitPath = gate.format?.junit
     ? path.resolve(cwd, gate.format.junit)
@@ -275,6 +281,7 @@ export async function runDeclaredGate(
     cwd,
     gate,
     gate.command,
+    repoRoot,
     junitPath ? { FACTORY_JUNIT_PATH: junitPath } : undefined,
   );
 
@@ -301,7 +308,8 @@ export async function runDeclaredGate(
  * Runs the repo-config gates in `cwd`. Gates are commands, not the v2 check
  * pipeline: kernel-0 only needs a red/green signal and the output a fix turn
  * must read. `only` re-runs a subset after a red run. Runs in different
- * worktrees are independent; only mutexes a gate declares make it wait.
+ * worktrees of one repo still wait on the mutexes a gate declares; gates
+ * naming none run in parallel.
  */
 export async function runGates(
   runtime: KernelRuntime,
@@ -315,7 +323,7 @@ export async function runGates(
       ? runtime.configs.repo.gates
       : runtime.configs.repo.gates.filter((gate) => only.has(gate.id));
   for (const gate of gates) {
-    const { check } = await runDeclaredGate(cwd, gate);
+    const { check } = await runDeclaredGate(cwd, gate, runtime.paths.repoRoot);
     results.push(check);
   }
   return results;

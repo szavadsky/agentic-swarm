@@ -25,9 +25,9 @@ export interface GateConfig {
   id: string;
   command: string;
   /**
-   * Mutex names held while this gate runs. Same-named gates in one worktree
-   * never overlap; two worktrees never wait on each other because the key
-   * includes the worktree.
+   * Mutex names held while this gate runs. Same-named gates in any worktree of
+   * one repository never overlap; different repositories never wait for each
+   * other because the key includes the repository.
    */
   serial: string[];
   /**

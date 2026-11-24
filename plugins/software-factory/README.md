@@ -101,7 +101,7 @@ gates:
   - id: integration
     command: jest --ci
     format: { pattern: jest }                    # runner whose output it parses
-    serial: [database]                          # same-named gates in one worktree never overlap
+    serial: [database]                          # same-named gates in one repo never overlap
     env: { TMPDIR: .cache/gate }                # per-worktree scratch directory
 cleanliness:                                    # optional; default rules active without it
   maxFileSizeBytes: 1048576                     # default: 1048576 (1 MB)
@@ -142,9 +142,10 @@ absorbs the other's history; the same-repo root must also not be ignored by the
 repository (the store replaces only its own folder `.gitignore`).
 
 Gate runs in different worktrees run in parallel. A gate waits only for the
-mutexes it names in `serial`, and same-named gates serialize within one worktree
-only: two worktrees never wait on each other's mutex, and a gate that names none
-never waits. `env` maps variable names to worktree-relative directories; the
+mutexes it names in `serial`, and same-named gates serialize across one
+repository's worktrees: two worktrees naming the same mutex wait for each other,
+two repositories never wait on each other, and a gate that names none never
+waits. `env` maps variable names to worktree-relative directories; the
 kernel creates them and exports absolute paths, so two worktrees get two
 directories.
 

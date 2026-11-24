@@ -13,13 +13,15 @@ function shellQuote(value: string): string {
 }
 
 /**
- * A gate that leaves its worktree marked active in `shared` and waits for a
- * peer. Two runs that are not serialized both reach the wait, so the overlap
- * file appears deterministically; a serialized pair never sees a peer.
+ * A gate that logs its start and end in `shared/order.log`, leaves its worktree
+ * marked active in `shared` and waits for a peer. Two runs that are not
+ * serialized both reach the wait, so the overlap file appears deterministically;
+ * a serialized pair never sees a peer.
  */
 function overlapGate(shared: string): string {
   return [
     `shared=${shellQuote(shared)}`,
+    `printf 'start %s\\n' "$(basename "$PWD")" >> "$shared/order.log"`,
     'marker="$shared/active.$(basename "$PWD")"',
     'touch "$marker"',
     "for _ in $(seq 1 40); do",
@@ -28,6 +30,7 @@ function overlapGate(shared: string): string {
     "  sleep 0.05",
     "done",
     'rm -f "$marker"',
+    `printf 'end %s\\n' "$(basename "$PWD")" >> "$shared/order.log"`,
   ].join("\n");
 }
 
@@ -51,12 +54,23 @@ function logKinds(log: string): string[] {
     .map((line) => line.split(" ")[0] ?? "");
 }
 
+/** The worktree names in the log's `start` lines, in the order they started. */
+function startedTrees(log: string): string[] {
+  return fs
+    .readFileSync(log, "utf8")
+    .trim()
+    .split("\n")
+    .filter((line) => line.startsWith("start "))
+    .map((line) => line.slice("start ".length));
+}
+
 describe("gate runs across worktrees", () => {
   gateRunsAcrossWorktreesPart1();
   gateRunsAcrossWorktreesPart2();
   gateRunsAcrossWorktreesPart3();
   gateRunsAcrossWorktreesPart4();
   gateRunsAcrossWorktreesPart5();
+  gateRunsAcrossWorktreesPart6();
 });
 
 function gateRunsAcrossWorktreesPart1() {
@@ -88,12 +102,12 @@ function gateRunsAcrossWorktreesPart1() {
 }
 
 function gateRunsAcrossWorktreesPart2() {
-  it("runs two worktrees concurrently when they name the same mutex", async () => {
+  it("serializes two worktrees' gates that name the same mutex", async () => {
     const shared = sharedDir("serial");
     const log = path.join(shared, "order.log");
     const { repo, goal } = setupFlowRepo({
       gates: [
-        { id: "probe", command: timedGate(log), serial: ["shared-port"] },
+        { id: "probe", command: overlapGate(shared), serial: ["shared-port"] },
       ],
     });
     try {
@@ -103,19 +117,20 @@ function gateRunsAcrossWorktreesPart2() {
       const first = repo.createWorktree("probe-a");
       const second = repo.createWorktree("probe-b");
 
-      const started = performance.now();
       const [a, b] = await Promise.all([
         runGates(runtime, first),
         runGates(runtime, second),
       ]);
-      const elapsedMs = performance.now() - started;
 
       expect(a.map((check) => check.ok)).toEqual([true]);
       expect(b.map((check) => check.ok)).toEqual([true]);
-      // Each gate sleeps 400ms; two worktrees share no mutex key, so they
-      // overlap and finish in about 400ms, not 800ms.
-      expect(elapsedMs).toBeLessThan(800);
-      expect(logKinds(log).sort()).toEqual(["end", "end", "start", "start"]);
+      // Both worktrees hold the same repo-scoped mutex, so neither can see the
+      // other's active marker, and one gate's end precedes the other's start.
+      expect(fs.existsSync(path.join(shared, "overlap"))).toBe(false);
+      expect(logKinds(log)).toEqual(["start", "end", "start", "end"]);
+      expect(startedTrees(log).sort()).toEqual(
+        [path.basename(first), path.basename(second)].sort(),
+      );
     } finally {
       cleanupFlowRepo(repo);
       fs.rmSync(shared, { recursive: true, force: true });
@@ -240,4 +255,44 @@ function gateRunsAcrossWorktreesPart5() {
       fs.rmSync(shared, { recursive: true, force: true });
     }
   }, 10_000);
+}
+
+function gateRunsAcrossWorktreesPart6() {
+  it("runs same-named serial gates of different repositories concurrently", async () => {
+    const shared = sharedDir("cross-repo");
+    const first = setupFlowRepo({
+      gates: [
+        { id: "probe", command: overlapGate(shared), serial: ["shared-port"] },
+      ],
+    });
+    const second = setupFlowRepo({
+      gates: [
+        { id: "probe", command: overlapGate(shared), serial: ["shared-port"] },
+      ],
+    });
+    try {
+      const firstRuntime = await makeRuntime(first.repo, first.goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      const secondRuntime = await makeRuntime(second.repo, second.goal, {
+        fake: new FakeHarness({ id: "fake" }),
+      });
+      const firstTree = first.repo.createWorktree("probe-a");
+      const secondTree = second.repo.createWorktree("probe-b");
+
+      const [a, b] = await Promise.all([
+        runGates(firstRuntime, firstTree),
+        runGates(secondRuntime, secondTree),
+      ]);
+
+      expect(a.map((check) => check.ok)).toEqual([true]);
+      expect(b.map((check) => check.ok)).toEqual([true]);
+      // Each repository keys its own mutex, so the two gates run together.
+      expect(fs.existsSync(path.join(shared, "overlap"))).toBe(true);
+    } finally {
+      cleanupFlowRepo(first.repo);
+      cleanupFlowRepo(second.repo);
+      fs.rmSync(shared, { recursive: true, force: true });
+    }
+  }, 30_000);
 }
