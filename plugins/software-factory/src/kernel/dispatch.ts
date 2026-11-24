@@ -18,6 +18,7 @@ import { readInitialHolds, settledTurns } from "./dispatch-state.js";
 import { createSteerWatch, type SteerWatch } from "./dispatch-watch.js";
 import { scanInbox } from "./mailbox.js";
 import { next } from "./next.js";
+import { LiveSteerSessions } from "./sessions.js";
 import type { Action, KernelRuntime } from "./types.js";
 
 export { INFRA_REDISPATCH_DELAYS_MS } from "./dispatch-start.js";
@@ -60,6 +61,7 @@ async function prepareDispatch(
     seenSteers: new Set(opts.seenSteers ?? []),
     settling: new Map(),
     holds: [],
+    liveSteers: new LiveSteerSessions(),
     sleep:
       opts.sleep ??
       ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))),
@@ -226,6 +228,7 @@ export async function runDispatch(
       ? { tickMs: opts.steerWatchTickMs }
       : {}),
     ...(debounceMs !== undefined ? { debounceMs } : {}),
+    deliver: (steer) => state.liveSteers.inject(steer),
   });
   try {
     for (;;) {

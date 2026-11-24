@@ -174,10 +174,25 @@ async function steerSubagent(
   }
 }
 
-export function liveAgents(live: OmpRpc): LiveAgents {
+async function steerSession(live: OmpRpc, message: string): Promise<void> {
+  const frame = await live.request("steer", { message }, 10_000);
+  if (!frame.success) {
+    throw new Error(String(frame.error ?? "steer failed"));
+  }
+}
+
+/**
+ * The live turn's handles. Root steering rides the same firmware probe as the
+ * subagent surface: a binary too old to advertise steering is offered none, so
+ * the kernel queues the steer for the session's next turn instead.
+ */
+export function liveAgents(live: OmpRpc, canSteerSession: boolean): LiveAgents {
   return {
     list: () => listSubagents(live),
     steer: (id, message) => steerSubagent(live, id, message),
+    ...(canSteerSession
+      ? { steerSession: (message: string) => steerSession(live, message) }
+      : {}),
   };
 }
 

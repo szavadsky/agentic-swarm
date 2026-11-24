@@ -117,7 +117,10 @@ class OmpTurnRun {
       state.failure = await this.cancelBeforePrompt();
       return state;
     }
-    if (this.req.onLive) this.req.onLive(liveAgents(launch.rpc));
+    if (this.req.onLive) {
+      const canSteerSession = await this.runtime.supportsSteering();
+      this.req.onLive(liveAgents(launch.rpc, canSteerSession));
+    }
     // Idle resets on every frame, including streamed deltas the RPC discards.
     launch.rpc.setOnFrame(this.onFrame);
     if (this.req.timeouts.wallMs > 0) {

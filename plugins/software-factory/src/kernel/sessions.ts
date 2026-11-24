@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { CacheTtl, SessionRef } from "../harness/types.js";
 import { writeYamlAtomic } from "../core/records/io.js";
+import type { Steer } from "./mailbox.js";
 
 export interface LaunchSessions {
   launchId: string;
@@ -83,4 +84,50 @@ export async function createLaunchSessions(
     });
   }
   return { launchId, dir };
+}
+
+/** A live PM turn that can take a steer mid-flight. */
+export interface LiveSteerSink {
+  /** Delivers and claims one steer; false leaves it queued for a later turn. */
+  inject(steer: Steer): Promise<boolean>;
+}
+
+/**
+ * The one live session a steer can be injected into. The inbox watch offers
+ * each due steer here before waking the dispatch loop: a delivered steer is
+ * answered by the running turn, and the watch wakes the loop only when no
+ * session is live — that steer then queues for its own PM turn. One sink at a
+ * time is the one-PM invariant, so a second registration is a kernel bug.
+ */
+export class LiveSteerSessions {
+  private sink: LiveSteerSink | undefined;
+
+  /** Registers the live turn; the release clears only its own sink. */
+  register(sink: LiveSteerSink): () => void {
+    if (this.sink !== undefined) {
+      throw new Error(
+        "a live steer session is already registered; only one PM turn runs at a time",
+      );
+    }
+    this.sink = sink;
+    return () => {
+      if (this.sink === sink) this.sink = undefined;
+    };
+  }
+
+  /** True when the steer reached the live session, false when it must queue. */
+  async inject(steer: Steer): Promise<boolean> {
+    const sink = this.sink;
+    if (sink === undefined) return false;
+    try {
+      return await sink.inject(steer);
+    } catch (error) {
+      // Injection is best effort: a harness that refuses it must not lose the
+      // steer, so the watch announces it for the next PM turn instead.
+      console.warn(
+        `[factory] steer "${steer.id}" not injected into the live session: ${(error as Error).message}; queued for its next PM turn`,
+      );
+      return false;
+    }
+  }
 }

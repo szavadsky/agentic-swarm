@@ -1,9 +1,10 @@
 /**
  * The inbox watch: a timer that interrupts the dispatch loop's wait on running
  * turns, so a steer dropped during a long turn is answered before that turn
- * ends. It claims nothing and runs no turn: a wake makes the loop take a
- * normal pass, where `pollSteers` claims the settled batch and runs its one PM
- * turn.
+ * ends. A due steer is first offered to a live session (the running PM turn
+ * takes it into its own steerRoutes); only an undelivered one wakes the loop
+ * for a normal pass, where `pollSteers` claims the settled batch and runs its
+ * one PM turn. The watch claims nothing and runs no turn itself.
  *
  * A steer is announced once its content has held for the debounce window, so a
  * burst, or one steer written in several steps, reaches the PM as one batch.
@@ -23,6 +24,12 @@ export interface SteerWatchOptions {
   tickMs?: number;
   /** Stable-window before an announcement; defaults to `STEER_DEBOUNCE_MS`. */
   debounceMs?: number;
+  /**
+   * Tries to hand a due steer to the live session before waking the loop. True
+   * means the running turn took it; false (or absent) leaves it for the loop's
+   * own PM turn, which is the queue path.
+   */
+  deliver?: (steer: Steer) => Promise<boolean>;
 }
 
 export interface SteerWatch {
@@ -52,6 +59,7 @@ interface WatchState {
   /** The run's claimed steer ids: a steer already taken is never announced. */
   seen: ReadonlySet<string>;
   debounceMs: number;
+  deliver?: (steer: Steer) => Promise<boolean>;
   sightings: Map<string, Sighting>;
   announced: Set<string>;
 }
@@ -83,18 +91,19 @@ function prune(state: WatchState, present: ReadonlySet<string>): void {
 }
 
 /**
- * The ids due this tick: their content has held for the debounce window and,
- * when they are the first to be due, the goal has a plan to route them into.
+ * The steers due this tick: their content has held for the debounce window and
+ * the goal has a plan to route them into. A selected steer is marked announced
+ * before this function returns, so a tick that overlaps a slow delivery cannot
+ * select it again.
  */
-async function dueIds(
+async function dueSteers(
   store: ArtifactStore,
   state: WatchState,
   steers: Steer[],
   now: number,
-): Promise<string[]> {
+): Promise<Steer[]> {
   prune(state, new Set(steers.map((steer) => steer.id)));
-  const due: string[] = [];
-  let hasPlan: boolean | undefined;
+  const held: Steer[] = [];
   for (const steer of steers) {
     if (state.seen.has(steer.id) || state.announced.has(steer.id)) {
       state.sightings.delete(steer.id);
@@ -104,13 +113,29 @@ async function dueIds(
     if (sighting === undefined || now - sighting.since < state.debounceMs) {
       continue;
     }
-    hasPlan ??= await store.plans.exists();
-    if (!hasPlan) continue;
-    state.announced.add(steer.id);
-    state.sightings.delete(steer.id);
-    due.push(steer.id);
+    held.push(steer);
   }
-  return due;
+  if (held.length === 0 || !(await store.plans.exists())) return [];
+  // The plan probe yielded: a tick that ran meanwhile may have selected one of
+  // these already, so re-check and claim before delivery starts.
+  return held.filter((steer) => {
+    if (state.announced.has(steer.id)) return false;
+    state.sightings.delete(steer.id);
+    state.announced.add(steer.id);
+    return true;
+  });
+}
+
+/** Hands each due steer to the live session; an undelivered one wakes the loop. */
+async function deliverDue(
+  state: WatchState,
+  due: Steer[],
+  announce: () => void,
+): Promise<void> {
+  for (const steer of due) {
+    const delivered = (await state.deliver?.(steer)) ?? false;
+    if (!delivered) announce();
+  }
 }
 
 /**
@@ -126,6 +151,7 @@ export function createSteerWatch(
   const state: WatchState = {
     seen,
     debounceMs: opts.debounceMs ?? STEER_DEBOUNCE_MS,
+    ...(opts.deliver ? { deliver: opts.deliver } : {}),
     sightings: new Map(),
     announced: new Set(),
   };
@@ -149,9 +175,8 @@ export function createSteerWatch(
       announce();
       return;
     }
-    if ((await dueIds(store, state, steers, Date.now())).length > 0) {
-      announce();
-    }
+    const due = await dueSteers(store, state, steers, Date.now());
+    await deliverDue(state, due, announce);
   };
 
   const timer = setInterval(

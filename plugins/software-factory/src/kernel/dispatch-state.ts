@@ -8,6 +8,7 @@ import type { Hold } from "./mailbox.js";
 import { readHolds } from "./mailbox.js";
 import type { PriceTable } from "./pricing.js";
 import { pricedRecord } from "./pricing.js";
+import type { LiveSteerSessions } from "./sessions.js";
 import type { DrainController } from "./signals.js";
 import type { Cause, KernelRuntime, StepRecord } from "./types.js";
 
@@ -91,6 +92,8 @@ export interface DispatchState {
   /** Fresh files seen once but not yet stable: steer id -> last content hash. */
   settling: Map<string, string>;
   holds: Hold[];
+  /** The running PM turn a due steer is injected into instead of a new turn. */
+  liveSteers: LiveSteerSessions;
   sleep: (ms: number) => Promise<void>;
   /** The iteration's dollar brake, if configured. */
   usdLimit?: number;

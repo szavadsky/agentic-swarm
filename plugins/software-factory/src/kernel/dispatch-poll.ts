@@ -151,6 +151,7 @@ async function runSteerBatch(
         tasks,
         steers: claim,
         cwd: state.runtime.paths.goalCheckout,
+        liveSteers: state.liveSteers,
       }),
   );
   return reloadHolds(

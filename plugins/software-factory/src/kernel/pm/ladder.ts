@@ -1,6 +1,7 @@
 import { type AgentTurnResult, runAgentTurn } from "../agent.js";
 import { formatStop, makeCause } from "../cause.js";
 import { boundaryTarget, type TurnTarget } from "../flow-context.js";
+import type { LiveAgents } from "../../harness/types.js";
 import { holdsDir } from "../mailbox.js";
 import { KERNEL_TURN_STEPS } from "../outcome.js";
 import { formatPlanList } from "../plan-file.js";
@@ -307,6 +308,8 @@ interface PmTurnInput {
   stalls: string;
   planChecks: string;
   concerns: string;
+  /** A steer turn only: the live session handle, for injecting a late steer. */
+  onLive?: (agents: LiveAgents) => void;
 }
 
 /** Runs one PM rung on the shared prompt contract every route uses. */
@@ -334,5 +337,6 @@ export async function runPmTurn(
       concerns: input.concerns,
     },
     expectation: KERNEL_TURN_STEPS.pm,
+    ...(input.onLive ? { onLive: input.onLive } : {}),
   });
 }

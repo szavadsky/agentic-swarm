@@ -12,6 +12,7 @@ import {
   writeOutbox,
 } from "../../mailbox.js";
 import { scriptMeta } from "../../record.js";
+import { LiveSteerSessions } from "../../sessions.js";
 import type {
   KernelRuntime,
   Outcome,
@@ -46,6 +47,7 @@ import {
   unfixedBaseline,
 } from "../reconcile.js";
 import type { PmInfraStop, SteerRouteEntry } from "../types.js";
+import { SteerClaim } from "./steer-claim.js";
 import { steerWriteFindings } from "./steer-writes.js";
 
 /**
@@ -198,43 +200,48 @@ async function steerHoldFindings(
   return findings;
 }
 
+/** One steer PM run: the claimed batch, the snapshot's state and its cwd. */
+interface SteerPmOpts {
+  iteration: number;
+  state: State;
+  tasks: TaskFile[];
+  steers: Steer[];
+  cwd: string;
+  /** The dispatch watch's live session; the boundary has none and queues. */
+  liveSteers?: LiveSteerSessions;
+}
+
 /**
  * PM ladder for steers dropped mid-iteration. Each claimed steer gets one
  * route: `task` amends a pending task or writes a rework task and is answered
- * in the outbox now; `spike` writes a standalone task whose landed outcome is
- * answered later; `architect` waits for the next boundary with its hold;
- * `stall` drains the goal with `goal: true` and waits for the architect. The
- * record uses the PM step, so it stays out of the item's turn count and prices
- * into the iteration's spend like every other PM turn.
+ * in the outbox now; `spike` writes a standalone task answered when it lands;
+ * `architect` waits for the next boundary with its hold; `stall` drains the
+ * goal with `goal: true` and waits for the architect. The record uses the PM
+ * step, so it stays out of the item's turn count and prices into iteration spend.
  *
  * Accepted routes commit to a `steer-routes` script record; a failed rung's
  * routes die with its rollback, so the boundary never reads them. A legacy
- * turn with no `steerRoutes` keeps the old contract: any task-file or plan
- * write is restored and the steer reaches the architect. A routed turn that
- * exhausts the ladder or stops on infra falls back the same way: the writes
- * are rolled back and the steer still reaches the architect, so a steer turn
- * never blocks dispatch. Findings the graph already raised before the first
- * rung do not fail a rung: routing a steer is independent of a plan the PM
- * cannot derive; they come back as `architect` instead, the same outlet as a
- * steer that needs a ruling. The PM is not launched before a plan exists:
- * with no plan every claimed steer is the architect's, who takes it into the
- * whole plan.
+ * turn with no `steerRoutes` keeps the old contract: any write is restored and
+ * the steer reaches the architect. An exhausted or infra-stopped ladder falls
+ * back the same way, so a steer turn never blocks dispatch. Findings the graph
+ * already raised before the first rung do not fail a rung: they come back as
+ * `architect`. With no plan every claimed steer is the architect's, who takes
+ * it into the whole plan.
+ *
+ * A steer arriving while a rung is live is injected into that session when the
+ * harness offers `steerSession`; it joins this turn's claim and is routed by
+ * the same outcome, so no second PM starts. Without it, or at the boundary's
+ * PM where no watch runs, the steer stays queued for its next PM turn.
  */
 export async function runSteerPm(
   runtime: KernelRuntime,
-  opts: {
-    iteration: number;
-    state: State;
-    tasks: TaskFile[];
-    steers: Steer[];
-    cwd: string;
-  },
+  opts: SteerPmOpts,
 ): Promise<SteerPmRun> {
   if (!(await runtime.store.plans.exists())) {
     return { status: "architect", routes: [], findings: [] };
   }
   const setup = await setupPmTurn(runtime, opts);
-  const claim = new Map(opts.steers.map((steer) => [steer.id, steer]));
+  const claim = new SteerClaim(opts.steers);
   let failure: string[] = [];
 
   for (const [index, rung] of rungSteps(runtime).entries()) {
@@ -248,43 +255,73 @@ export async function runSteerPm(
       round,
       setup,
       failure,
+      claim,
     );
-    const outcome = result.outcome;
-    if (outcome?.steerRoutes === undefined) {
-      return steerWithoutRoutes(runtime, setup.snapshot, opts.iteration);
-    }
-    const findings = await validateSteerTurn(
+    const settled = await settleSteerRung(
       runtime,
-      { ...opts, round, claim: opts.steers },
-      setup.plansBefore,
-      setup.taskSnapshot,
-      outcome,
+      opts,
+      claim,
+      setup,
+      result,
+      round,
     );
-    const introduced = introducedFindings(findings, setup.baselineKeys);
-    if (outcome?.status === "done" && introduced.length === 0) {
-      return acceptSteerRoutes(
+    if ("run" in settled) return settled.run;
+    failure = settled.failure;
+  }
+  return steerExhausted(failure);
+}
+
+type RungSettlement = { run: SteerPmRun } | { failure: string[] };
+
+/**
+ * What one finished rung means: a finished run, or the reasons that send the
+ * ladder to its next alias with the claim intact.
+ */
+async function settleSteerRung(
+  runtime: KernelRuntime,
+  opts: SteerPmOpts,
+  claim: SteerClaim,
+  setup: PmTurnSetup,
+  result: AgentTurnResult,
+  round: number,
+): Promise<RungSettlement> {
+  const outcome = result.outcome;
+  if (outcome?.steerRoutes === undefined) {
+    return {
+      run: await steerWithoutRoutes(runtime, setup.snapshot, opts.iteration),
+    };
+  }
+  const findings = await validateSteerTurn(
+    runtime,
+    { ...opts, round, claim: claim.all() },
+    setup.plansBefore,
+    setup.taskSnapshot,
+    outcome,
+  );
+  const introduced = introducedFindings(findings, setup.baselineKeys);
+  if (outcome.status === "done" && introduced.length === 0) {
+    return {
+      run: await acceptSteerRoutes(
         runtime,
         opts,
-        claim,
+        claim.byId(),
         outcome.steerRoutes,
         setup.baseline,
         findings,
         round,
-      );
-    }
-    const reasons = failureReasons(outcome, introduced, result.record);
-    const exit = await rejectSteerRung(
-      runtime,
-      opts.iteration,
-      round,
-      reasons,
-      setup.snapshot,
-      result,
-    );
-    if (exit) return exit;
-    failure = reasons;
+      ),
+    };
   }
-  return steerExhausted(failure);
+  const reasons = failureReasons(outcome, introduced, result.record);
+  const exit = await rejectSteerRung(
+    runtime,
+    opts.iteration,
+    round,
+    reasons,
+    setup.snapshot,
+    result,
+  );
+  return exit ? { run: exit } : { failure: reasons };
 }
 
 /** An exhausted ladder sends its last findings, or the bare exhaustion, out. */
@@ -318,22 +355,33 @@ async function rejectSteerRung(
 /** Runs one steer rung on the shared PM prompt contract. */
 async function runSteerTurn(
   runtime: KernelRuntime,
-  opts: { iteration: number; state: State; cwd: string; steers: Steer[] },
+  opts: {
+    iteration: number;
+    state: State;
+    cwd: string;
+    liveSteers?: LiveSteerSessions;
+  },
   target: TurnTarget,
   rung: PmRungStep,
   round: number,
   setup: PmTurnSetup,
   failure: string[],
+  claim: SteerClaim,
 ): Promise<AgentTurnResult> {
   const { tasks } = await readTasks(runtime);
-  return runPmTurn(runtime, opts, target, {
-    round,
-    planList: setup.planList,
-    tasks,
-    repair: round === 1 ? "" : steerLadderNote(rung, target, failure),
-    ...NO_TURN_INPUTS,
-    steers: formatSteerTurn(opts.steers),
-  });
+  try {
+    return await runPmTurn(runtime, opts, target, {
+      round,
+      planList: setup.planList,
+      tasks,
+      repair: round === 1 ? "" : steerLadderNote(rung, target, failure),
+      ...NO_TURN_INPUTS,
+      steers: formatSteerTurn(claim.all()),
+      onLive: (agents) => claim.attach(agents, opts.liveSteers),
+    });
+  } finally {
+    claim.detach();
+  }
 }
 
 /** A legacy steer turn routes nothing: any write is rolled back. */

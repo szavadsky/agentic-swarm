@@ -3,7 +3,9 @@ import { DEFAULT_PARK_AMENDS } from "../config.js";
 import type { ForwardedConcern } from "../context-pack/types.js";
 import type { TurnTarget } from "../flow-context.js";
 import {
+  formatSteerTurn,
   planCheckProvenance,
+  type Steer,
   stallProvenance,
   steerProvenance,
 } from "../mailbox.js";
@@ -104,6 +106,20 @@ export function steerLadderNote(
     "Restated PM steer contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Route each pending steer as task|spike|intent|architect|stall (or {architect: id}), write one hold file per steer, write task files only for task and spike steers with source steer: <id>, then the outcome with steerRoutes.",
   );
 }
+
+/**
+ * The message injected into a PM steer turn when a new steer arrives: the
+ * running turn takes it into the same `steerRoutes`, so one turn answers both
+ * and no second PM starts. The contract is restated because the steer was not
+ * in the turn's opening prompt.
+ */
+export function steerInjectionNote(steer: Steer): string {
+  return [
+    "A steer arrived while this turn was running. Route it in this turn's steerRoutes as well (task|spike|intent|architect|stall, answer only a task route), then rewrite the outcome so it carries the route:",
+    formatSteerTurn([steer]),
+  ].join("\n");
+}
+
 /**
  * One stall entry per parked slug: the cause, this iteration's record paths,
  * the kept branch, spent turns and the done-when the continuation keeps.
