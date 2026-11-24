@@ -267,9 +267,9 @@ function deliveryGuardPart2() {
       });
 
       await expectLaunch(3, goal.repo, harness);
-      expect(harness.calls).toHaveLength(2);
-      expect(harness.calls[1]!.prompt).toContain("plan edit or stop decision");
-      expect(harness.calls[1]!.prompt).toContain(
+      expect(harness.calls).toHaveLength(3);
+      expect(harness.calls[2]!.prompt).toContain("plan edit or stop decision");
+      expect(harness.calls[2]!.prompt).toContain(
         "is unchanged since the turn started",
       );
       const summary = fs.readFileSync(

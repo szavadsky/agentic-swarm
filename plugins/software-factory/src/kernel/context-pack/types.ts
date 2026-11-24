@@ -38,6 +38,8 @@ export interface PlanCheckPack {
   iteration: number;
   verdict: string;
   evidence: PlanCheckEvidence[];
+  /** Why the checker could not run; absent when it reported normally. */
+  reason?: string;
 }
 
 /** The latest plan-review round's advisory findings, for the next architect turn. */

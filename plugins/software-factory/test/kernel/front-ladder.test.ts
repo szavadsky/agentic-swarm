@@ -270,7 +270,7 @@ function registerFrontLadderPart7(): void {
       const records = await recordsOf(goal);
       expect(records.filter((r) => r.step === "front")).toEqual([]);
       expect(records.filter((r) => r.step === "architect")).toHaveLength(1);
-      expect(harness.calls).toHaveLength(1);
+      expect(harness.calls).toHaveLength(2);
     } finally {
       cleanup(goal);
     }

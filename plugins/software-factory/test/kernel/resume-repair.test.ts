@@ -381,6 +381,9 @@ function scriptRepairSecondLaunch(
   queueTask(second, "beta-2", "beta.txt");
   queueTask(second, "gamma", "gamma.txt");
   queueTask(second, "delta", "delta.txt");
+  second.script(checkerTurn("architect"), {
+    when: whenTurn({ step: "plancheck" }),
+  });
   second.script((req, ctx) => {
     ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
     return fakeTurnResult(req);
@@ -406,8 +409,8 @@ async function expectRepairedResume(
     ).length,
   ).toBe(1);
   // One PM repair turn (the digest steer turn) on top of the first launch's
-  // derive PM turn. Every task landed, so no open work remained for the
-  // checker: the boundary consulted directly.
+  // derive PM turn. The checker runs before the architect consult even
+  // though no open work remained.
   expect(
     records.filter(
       (r) => r.actor === "agent" && r.step === "pm" && r.iteration === 1,
@@ -417,7 +420,7 @@ async function expectRepairedResume(
     (r) => r.step === "steer-routes" && r.iteration === 1,
   );
   expect(repair).toBeDefined();
-  expect(records.filter((r) => r.step === "plancheck")).toHaveLength(0);
+  expect(records.filter((r) => r.step === "plancheck")).toHaveLength(1);
   // Dispatch continued: the repaired continuation and its dependents landed.
   expect(state.tasks["beta-2"]!.status).toBe("merged");
   expect(state.tasks.gamma!.status).toBe("merged");

@@ -8,6 +8,7 @@ import {
 } from "../../src/harness/fake/index.js";
 import { runBoundary } from "../../src/kernel/boundary.js";
 import { numberedPlanFindings } from "../../src/kernel/context-pack.js";
+import { PLAN_CHECK_STEP } from "../../src/kernel/plan-check.js";
 import {
   latestPlanReview,
   PLAN_RETURN_STEP,
@@ -316,6 +317,7 @@ function registerArchitectureFlowPart1(): void {
       const first = await runBoundary(runtime, { relaunch: false });
       expect(first.decision).toBe("continue");
       expect(harness.calls.map((call) => fakeTurnIdentity(call).step)).toEqual([
+        PLAN_CHECK_STEP,
         "architect",
         PLAN_REVIEW_STEP,
         PLAN_RETURN_STEP,

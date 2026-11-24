@@ -115,16 +115,14 @@ export function planChecksSinceConsult(records: StepRecord[]): StepRecord[] {
 
 /**
  * Whether a boundary spends a checker round before the architect. The
- * checker runs only on open work, so a goal whose tasks all landed consults
- * directly (the plan is complete or needs a direction the checker cannot
- * give). `architect`, an exhausted repeat bound and a steer only the architect
- * can answer also skip the check: the consult is their resolver.
+ * checker runs before every consult with a plan, including when nothing is
+ * open: its clean record is the architect's evidence that the plan still
+ * holds. `architect`, an exhausted repeat bound and a steer only the
+ * architect can answer also skip the check: the consult is their resolver.
  */
 export function consultGate(input: {
   /** A plan exists to verify. */
   plan: boolean;
-  /** `openWork(state)`. */
-  open: string[];
   /** An unprocessed inbox steer waits: the architect is its consumer. */
   steerWaiting: boolean;
   records: StepRecord[];
@@ -132,7 +130,6 @@ export function consultGate(input: {
   bound: number;
 }): "check" | "consult" {
   if (!input.plan) return "consult";
-  if (input.open.length === 0) return "consult";
   if (input.steerWaiting) return "consult";
   const checks = planChecksSinceConsult(input.records);
   if (checks.length >= input.bound) return "consult";
@@ -353,9 +350,11 @@ export async function runPlanCheckRound(
 }
 
 /**
- * The latest plan-check turn carrying a report, newest record wins. The
- * boundary renders it into the pack, so the architect sees the evidence
- * that sent the goal its way.
+ * The latest plan-check turn carrying a report, newest record wins. A check
+ * that ended on infrastructure carries its reason instead of a report, so
+ * the architect reads why the checker did not run. The boundary renders it
+ * into the pack, so the architect sees the evidence that sent the goal its
+ * way, or the reason there was none.
  */
 export function latestPlanCheck(
   records: StepRecord[],
@@ -366,15 +365,28 @@ export function latestPlanCheck(
         record.step === PLAN_CHECK_STEP &&
         record.actor === "agent" &&
         record.endedAt &&
-        record.outcome?.planCheck,
+        (record.outcome?.planCheck !== undefined ||
+          record.stop?.kind === "infra"),
     )
     .sort((a, b) => a.seq - b.seq)
     .at(-1);
-  const check = last?.outcome?.planCheck;
-  if (!last || !check) return undefined;
-  return {
-    iteration: last.iteration,
-    verdict: check.verdict,
-    evidence: check.evidence,
-  };
+  if (!last) return undefined;
+  const check = last.outcome?.planCheck;
+  if (check) {
+    return {
+      iteration: last.iteration,
+      verdict: check.verdict,
+      evidence: check.evidence,
+    };
+  }
+  const stop = last.stop;
+  if (stop?.kind === "infra") {
+    return {
+      iteration: last.iteration,
+      verdict: "architect",
+      evidence: [],
+      reason: stop.details ? `${stop.cause}: ${stop.details}` : stop.cause,
+    };
+  }
+  return undefined;
 }

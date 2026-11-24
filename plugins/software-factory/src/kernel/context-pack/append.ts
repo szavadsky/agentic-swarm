@@ -145,6 +145,10 @@ export function appendPlanCheck(
     "## Plan check (the evidence that summoned the architect)",
     `- iteration ${check.iteration}, verdict ${check.verdict}`,
   );
+  if (check.reason) {
+    lines.push(`- checker did not run: ${check.reason}`);
+    return;
+  }
   if (check.evidence.length === 0) {
     lines.push("- no evidence recorded");
     return;

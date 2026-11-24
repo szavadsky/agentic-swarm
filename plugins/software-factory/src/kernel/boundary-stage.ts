@@ -57,7 +57,6 @@ import { PACK_PREP_STEP, runPackPreparer } from "./pack-prep.js";
 import {
   consultGate,
   latestPlanCheck,
-  openWork,
   PLAN_CHECK_STEP,
   runPlanCheckRound,
 } from "./plan-check.js";
@@ -108,7 +107,6 @@ export async function runChecker(
   const { runtime } = context;
   const gate = consultGate({
     plan: await runtime.store.plans.exists(),
-    open: openWork(context.state),
     steerWaiting: context.steers.length > 0,
     records: context.records,
     bound: runtime.limits.planCheckRounds,
