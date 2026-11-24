@@ -25,6 +25,8 @@ import {
   outcomeSchemaNames,
 } from "../../kernel/outcome-schemas.js";
 import { PLAN_CHECK_STEP } from "../../kernel/plan-check.js";
+import { architectureFlowPromptNames } from "../../kernel/prompt-dry-run.js";
+import { loadPrompts } from "../../kernel/prompts.js";
 import {
   PLAN_REVIEW_STEP,
   validatePlanReviewDelivery,
@@ -309,6 +311,7 @@ interface CrossLayerBundle {
   fallback: { file: string; key: string; message: string }[];
   runFile: string;
   processFile: string;
+  root: string;
 }
 
 function crossLayerBundle(
@@ -346,6 +349,7 @@ function crossLayerBundle(
     fallback: fallbackAliasFindings(bundle.run.aliases, runFile),
     runFile,
     processFile,
+    root,
   };
 }
 
@@ -362,7 +366,37 @@ function crossLayerFindings(
     ...crossLayerTaskTypeFindings(bundleOrError),
     ...crossLayerPoolFindings(bundleOrError),
     ...crossLayerChainFindings(bundleOrError),
+    ...crossLayerArchitecturePromptFindings(bundleOrError),
   ];
+}
+
+/** Every architect-flow prompt template the repo's prompt layers can resolve. */
+function crossLayerArchitecturePromptFindings(
+  bundle: CrossLayerBundle,
+): string[] {
+  const names = architectureFlowPromptNames(
+    bundle.process.architecture.flows ?? [],
+  );
+  if (names.size === 0) return [];
+  let library: ReturnType<typeof loadPrompts>;
+  try {
+    library = loadPrompts(bundle.process, bundle.root);
+  } catch (err) {
+    return [
+      `${bundle.processFile}: architecture.flows: ${(err as Error).message}`,
+    ];
+  }
+  const findings: string[] = [];
+  for (const name of [...names].sort()) {
+    try {
+      library.placeholders(name);
+    } catch (err) {
+      findings.push(
+        `${bundle.processFile}: architecture.flows: ${(err as Error).message}`,
+      );
+    }
+  }
+  return findings;
 }
 
 function crossLayerAliasFindings(bundle: CrossLayerBundle): string[] {

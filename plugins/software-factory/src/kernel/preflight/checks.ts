@@ -183,6 +183,11 @@ export function requiredAliases(process: ProcessConfig): Map<string, string> {
   for (const alias of process.architecture.reviewers) {
     note(alias, "architecture reviewer");
   }
+  for (const flow of process.architecture.flows ?? []) {
+    for (const step of flow.steps) {
+      if (step.alias) note(step.alias, `architecture flow step "${step.id}"`);
+    }
+  }
   for (const [name, flow] of Object.entries(process.flows)) {
     noteFlowAliases(note, name, flow);
   }

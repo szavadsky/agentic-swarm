@@ -64,14 +64,20 @@ export type {
   TaskState,
 } from "./types/state.js";
 export {
+  ARCHITECT_REASONS,
   ARCHITECTURE_STEPS,
   BOUNDARY_STEPS,
+  BUILTIN_ARCHITECTURE_FLOW_STEPS,
   BUILTIN_INGESTION_IDS,
+  DEFAULT_ARCHITECTURE_FLOWS,
   DEFAULT_TIMEOUTS,
   KERNEL_STEPS,
 } from "./types/flow.js";
 export type {
+  ArchitectReason,
   ArchitectureConfig,
+  ArchitectureFlow,
+  ArchitectureFlowStep,
   BoundaryStep,
   BuiltinIngestionId,
   FlowDefinition,

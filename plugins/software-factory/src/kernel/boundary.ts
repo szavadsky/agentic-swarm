@@ -7,7 +7,7 @@
  */
 export type { BoundaryOptions, BoundaryResult } from "./boundary-state.js";
 
-import { runArchitectStage } from "./boundary-architect.js";
+import { runArchitectureFlow } from "./architect-flow.js";
 import {
   partitionSteers,
   prepareBoundary,
@@ -18,12 +18,6 @@ import {
   writePack,
 } from "./boundary-stage.js";
 import type { BoundaryOptions, BoundaryResult } from "./boundary-state.js";
-import {
-  reviewChangedPlans,
-  runConsults,
-  runPmStage,
-  settleArchitectStage,
-} from "./boundary-tail.js";
 import type { KernelRuntime } from "./types.js";
 
 /**
@@ -43,12 +37,5 @@ export async function runBoundary(
   await routeUnroutedSteers(context);
   await partitionSteers(context);
   await writePack(context);
-  const architect = await runArchitectStage(context);
-  if (architect) return architect;
-  const settled = await settleArchitectStage(context);
-  if (settled) return settled;
-  const consulted = await runConsults(context);
-  if (consulted) return consulted;
-  await reviewChangedPlans(context);
-  return runPmStage(context);
+  return runArchitectureFlow(context);
 }

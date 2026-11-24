@@ -84,9 +84,47 @@ export interface PromptSpec extends RepairSpec {
 }
 
 /**
- * The architecture flow: who reviews the architect's plan, and whether the
- * architect gets one turn on the technical findings before the PM derives
- * tasks. `planReturn` is required exactly when that turn is allowed.
+ * Why a boundary consult ran: a fresh start, prior concerns, a finished
+ * iteration, a steer, or a relaunch after an interrupt.
+ */
+export const ARCHITECT_REASONS = [
+  "initial",
+  "concerns",
+  "iteration-done",
+  "steer",
+  "relaunch",
+] as const;
+export type ArchitectReason = (typeof ARCHITECT_REASONS)[number];
+
+/** Steps the kernel binds to its own boundary machinery in an architect flow. */
+export const BUILTIN_ARCHITECTURE_FLOW_STEPS = [
+  "architect",
+  "planreview",
+  "pm",
+] as const;
+/**
+ * One step of an architect flow. A built-in id runs the kernel's own stage; any
+ * other id runs one agent turn and must name its prompt and alias.
+ */
+export interface ArchitectureFlowStep extends RepairSpec {
+  id: string;
+  /** Prompt template under `prompts/`; required for a non-built-in step. */
+  prompt?: string;
+  /** Run-config alias; required for a non-built-in step. */
+  alias?: string;
+}
+
+/** One architect flow and the launch reasons that select it. */
+export interface ArchitectureFlow {
+  when: ArchitectReason[];
+  steps: ArchitectureFlowStep[];
+}
+
+/**
+ * The plan review flow: who reviews the architect's plan, whether the architect
+ * gets one turn on the technical findings before the PM derives tasks, and the
+ * steps the consult runs. `planReturn` is required exactly when that turn is
+ * allowed.
  */
 export interface ArchitectureConfig {
   planReview: PromptSpec;
@@ -94,7 +132,20 @@ export interface ArchitectureConfig {
   reviewers: string[];
   architectReturn: "on-technical-concerns" | "never";
   planReturn?: PromptSpec;
+  /** The consult's step lists, selected by launch reason. */
+  flows?: ArchitectureFlow[];
 }
+
+/**
+ * Today's consult as a configured flow: the architect, its plan review and the
+ * PM, selected for every reason. A config without `architecture.flows` runs it.
+ */
+export const DEFAULT_ARCHITECTURE_FLOWS: ArchitectureFlow[] = [
+  {
+    when: [...ARCHITECT_REASONS],
+    steps: [{ id: "architect" }, { id: "planreview" }, { id: "pm" }],
+  },
+];
 
 /**
  * Hierarchy depth and the epic architect's prompt. Depth 1 (the default) is

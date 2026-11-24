@@ -12,7 +12,7 @@ import { qaOutcomeSchema } from "./qa.js";
 import { loadPrompts } from "./prompts.js";
 import { sagaReminderVar } from "./saga-reminder.js";
 import { outcomeSchema } from "./types.js";
-import type { ConfigBundle } from "./types.js";
+import type { ArchitectureFlow, ConfigBundle } from "./types.js";
 
 export interface PromptRender {
   /** Prompt template name the kernel renders. */
@@ -30,6 +30,19 @@ function addPrompt(
   if (prompt !== undefined) names.add(prompt);
   if (repairPrompt !== undefined) names.add(repairPrompt);
   if (unfinishedPrompt !== undefined) names.add(unfinishedPrompt);
+}
+
+/** Every prompt an architecture flow's steps can render. */
+export function architectureFlowPromptNames(
+  flows: ArchitectureFlow[],
+): Set<string> {
+  const names = new Set<string>();
+  for (const flow of flows) {
+    for (const step of flow.steps) {
+      addPrompt(names, step.prompt, step.repairPrompt, step.unfinishedPrompt);
+    }
+  }
+  return names;
 }
 
 /**
@@ -60,6 +73,11 @@ export function promptNamesForConfig(configs: ConfigBundle): string[] {
     process.architecture.planReturn?.repairPrompt,
     process.architecture.planReturn?.unfinishedPrompt,
   );
+  for (const name of architectureFlowPromptNames(
+    process.architecture.flows ?? [],
+  )) {
+    names.add(name);
+  }
   addPrompt(
     names,
     process.hierarchy?.subarchitect.prompt,
@@ -99,12 +117,10 @@ interface PromptOutcome {
   expectation: OutcomeExpectation;
 }
 
-/** The owner's example prompt and expectation for a render name, if any. */
-function promptOutcome(
-  configs: ConfigBundle,
+function taskFlowPromptOutcome(
+  process: ConfigBundle["process"],
   name: string,
 ): PromptOutcome | undefined {
-  const { process } = configs;
   for (const flow of Object.values(process.flows)) {
     for (const step of flow.steps) {
       if (!ownsPrompt(step, name)) continue;
@@ -114,6 +130,13 @@ function promptOutcome(
       };
     }
   }
+  return undefined;
+}
+
+function boundaryPromptOutcome(
+  process: ConfigBundle["process"],
+  name: string,
+): PromptOutcome | undefined {
   for (const [id, turn] of Object.entries(process.boundary)) {
     if (ownsPrompt(turn, name) && Object.hasOwn(KERNEL_TURN_STEPS, id)) {
       return {
@@ -122,6 +145,13 @@ function promptOutcome(
       };
     }
   }
+  return undefined;
+}
+
+function architecturePromptOutcome(
+  process: ConfigBundle["process"],
+  name: string,
+): PromptOutcome | undefined {
   const architecture = [
     ["planreview", process.architecture.planReview],
     ["planreturn", process.architecture.planReturn],
@@ -133,6 +163,33 @@ function promptOutcome(
     }
   }
   return undefined;
+}
+
+function architectureFlowPromptOutcome(
+  process: ConfigBundle["process"],
+  name: string,
+): PromptOutcome | undefined {
+  for (const flow of process.architecture.flows ?? []) {
+    for (const step of flow.steps) {
+      if (!ownsPrompt(step, name)) continue;
+      return { prompt: step.prompt ?? name, expectation: "any" };
+    }
+  }
+  return undefined;
+}
+
+/** The owner's example prompt and expectation for a render name, if any. */
+function promptOutcome(
+  configs: ConfigBundle,
+  name: string,
+): PromptOutcome | undefined {
+  const { process } = configs;
+  return (
+    taskFlowPromptOutcome(process, name) ??
+    boundaryPromptOutcome(process, name) ??
+    architecturePromptOutcome(process, name) ??
+    architectureFlowPromptOutcome(process, name)
+  );
 }
 
 function goalVars(goal: string): Record<string, string> {

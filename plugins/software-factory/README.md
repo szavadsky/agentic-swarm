@@ -203,6 +203,14 @@ architecture:                   # the plan review flow, before the PM derives ta
   reviewers: [plan-reviewer]    # one fresh read-only review turn per alias
   architectReturn: on-technical-concerns  # or never
   planReturn: { prompt: architect-review-return, deliverable: "plan edit and marks" }
+  flows:                        # the consult's steps, selected by launch reason
+    - when: [initial, concerns, iteration-done, steer, relaunch]
+      steps:
+        - { id: architect }     # a built-in id runs its kernel stage
+        - { id: planreview }
+        - { id: pm }
+        # A custom id runs one agent turn on its prompt and alias:
+        # - { id: assess, prompt: previous-run-assessment, alias: architect }
 hierarchy:                      # 1 architect (the norm), or 2 with one subarchitect per epic
   depth: 1
   subarchitect: { prompt: subarchitect, repairPrompt: architect-repair, deliverable: "epic plan edit or stop decision" }
@@ -261,9 +269,15 @@ until a task reopens it. Each subarchitect's outcome paragraph is written to
 `iterations/<n>/epics/<epic>/summary.md`. Depth 1 never parses the register
 and keeps today's single-architect flow.
 
-The `architecture` flow completes before the PM derives tasks. Each alias in
-`reviewers` gets one fresh read-only review turn that delivers `planReview`
-findings (`technical`, `planNotes`) and no verdict. With `architectReturn:
+The `architecture` flow completes before the PM derives tasks. `flows` holds
+one step list per launch reason (`initial`, `concerns`, `iteration-done`,
+`steer`, `relaunch`); a reason no list names runs the `initial` flow. The
+built-in ids `architect`, `planreview` and `pm` run the kernel's own stages
+and take no prompt, alias or repair fields; any other id runs one agent turn and
+must name a `prompt` and `alias`, so an assessment before the architect or
+another reviewer after it is a config edit.
+Each alias in `reviewers` gets one fresh read-only review turn that delivers
+`planReview` findings (`technical`, `planNotes`) and no verdict. With `architectReturn:
 on-technical-concerns`, technical findings get one `planReturn` architect turn
 that edits the plan and marks every finding; the findings never block the
 iteration. With `never`, the findings reach the next architect's pack, which

@@ -101,6 +101,12 @@ function threeConfigLayersPart14() {
         prompt: "architect-review-return",
         deliverable: "plan edit and marks",
       },
+      flows: [
+        {
+          when: ["initial", "concerns", "iteration-done", "steer", "relaunch"],
+          steps: [{ id: "architect" }, { id: "planreview" }, { id: "pm" }],
+        },
+      ],
     });
     fs.rmSync(root, { recursive: true, force: true });
   });

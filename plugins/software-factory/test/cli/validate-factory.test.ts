@@ -382,6 +382,46 @@ function registerFactoryValidatePart14(): void {
   );
 }
 
+function registerFactoryValidatePart15(): void {
+  it(
+    "refuses an architect flow's unknown reason, prompt and alias",
+    withTmp(async (root) => {
+      const file = writeFile(
+        root,
+        ".factory/process.yaml",
+        "architecture:\n  flows:\n    - when: [cheker-done]\n      steps:\n        - id: architect\n        - id: pm\n",
+      );
+      const reason = await runValidate(file);
+      expect(reason.code).toBe(1);
+      expect(reason.err).toContain("architecture.flows.0.when.0");
+
+      writeFile(
+        root,
+        ".factory/process.yaml",
+        "architecture:\n  flows:\n    - when: [initial]\n      steps:\n        - id: assess\n          prompt: ghost\n          alias: reviewer-b\n        - id: architect\n        - id: pm\n",
+      );
+      const flow = await runValidate(file);
+      expect(flow.code).toBe(1);
+      expect(flow.err).toContain('Prompt fragment "ghost" not found');
+      expect(flow.err).toContain(
+        'aliases.reviewer-b: required by architecture flow step "assess" but missing',
+      );
+
+      writeFile(
+        root,
+        ".factory/process.yaml",
+        "architecture:\n  flows:\n    - when: [initial]\n      steps:\n        - id: assess\n          prompt: architect\n          alias: architect\n          repairPrompt: ghost-repair\n          unfinishedPrompt: ghost-unfinished\n        - id: architect\n        - id: pm\n",
+      );
+      const repairs = await runValidate(file);
+      expect(repairs.code).toBe(1);
+      expect(repairs.err).toContain('Prompt fragment "ghost-repair" not found');
+      expect(repairs.err).toContain(
+        'Prompt fragment "ghost-unfinished" not found',
+      );
+    }),
+  );
+}
+
 describe("factory validate", () => {
   registerFactoryValidatePart10();
 
@@ -392,4 +432,6 @@ describe("factory validate", () => {
   registerFactoryValidatePart13();
 
   registerFactoryValidatePart14();
+
+  registerFactoryValidatePart15();
 });

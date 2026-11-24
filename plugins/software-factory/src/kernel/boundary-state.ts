@@ -45,6 +45,8 @@ export interface BoundaryOptions {
    * clean one because it ran none — so the evidence is not gathered twice.
    */
   digest?: boolean;
+  /** Test seam; production derives the reason from the consult's own inputs. */
+  launchReason?: import("./types.js").ArchitectReason;
 }
 
 /** One architect turn's result, kept with the pre-turn snapshots it is judged against. */

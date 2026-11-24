@@ -100,11 +100,24 @@ boundary:
 # Plan review is the architecture flow: one fresh read-only review turn per
 # reviewer alias, then, when technical concerns exist and the policy allows it,
 # one architect turn on them. Both complete before the PM derives tasks.
+#
+# `flows` selects the consult's step list by launch reason. A built-in step id
+# (`architect`, `planreview`, `pm`) runs the kernel stage; any other id runs one
+# agent turn and names its prompt and alias, so a project adds an assessment
+# before the architect or another reviewer after it without a kernel change.
+# A launch reason no list names runs the `initial` flow; the shipped list runs
+# every reason, keeping today's consult.
 architecture:
   planReview: { prompt: review-architect, deliverable: "plan-review findings" }
   reviewers: [plan-reviewer]
   architectReturn: on-technical-concerns
   planReturn: { prompt: architect-review-return, deliverable: "plan edit and marks" }
+  flows:
+    - when: [initial, concerns, iteration-done, steer, relaunch]
+      steps:
+        - id: architect
+        - id: planreview
+        - id: pm
 # Hierarchy depth: 1 is the norm (one architect); 2 adds one subarchitect
 # consult per active epic in the architect register, on the architect's alias.
 # At depth 1 nothing in this block runs.
