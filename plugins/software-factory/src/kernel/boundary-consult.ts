@@ -9,6 +9,7 @@ import type { SessionRef } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
 import {
   missingPlanFinding,
+  planOwnerSelector,
   resumableSession,
   snapshotPlan,
 } from "./architect-session.js";
@@ -161,9 +162,9 @@ async function prepareConsult(
   const session = await resumableSession(
     runtime,
     opts.records,
-    (record) =>
-      record.step === "subarchitect" && record.architect === opts.epic,
+    planOwnerSelector(opts.epic),
     target,
+    `the subarchitect "${opts.epic}"`,
   );
   return {
     planBefore: snapshotPlan(plan.path) ?? undefined,

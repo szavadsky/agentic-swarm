@@ -5,7 +5,11 @@
  */
 import type { LiveAgents, SessionRef } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
-import { resumableSession, snapshotPlan } from "./architect-session.js";
+import {
+  planOwnerSelector,
+  resumableSession,
+  snapshotPlan,
+} from "./architect-session.js";
 import { infraCause, taskSnapshot } from "./boundary-context.js";
 import {
   collectSteered,
@@ -217,8 +221,9 @@ export async function runArchitectStage(
   const session = await resumableSession(
     runtime,
     context.records,
-    (record) => record.step === "architect",
+    planOwnerSelector(MAIN_ARCHITECT),
     target,
+    "the architect turn",
   );
   const turn = architectTurnKind(context.records, context.opts.relaunch);
   // Only a harness advertising `subagents: "steer"` hosts its subarchitects as

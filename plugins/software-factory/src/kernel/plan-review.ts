@@ -1,4 +1,6 @@
+import type { SessionRef } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
+import { planOwnerSelector, resumableSession } from "./architect-session.js";
 import { makeCause } from "./cause.js";
 import {
   formatPlanFinding,
@@ -269,8 +271,10 @@ async function discardForeignWrites(
 /**
  * The architect's one turn on the review's technical findings, before the PM
  * derives tasks. It edits the plan and marks every finding; it takes no goal
- * decision. A missing or failed return is recorded and the PM still runs:
- * the review advises, it never blocks the iteration.
+ * decision. It continues its plan owner's compacted session, so the return
+ * reads the plan it wrote instead of rebuilding that context. A missing or
+ * failed return is recorded and the PM still runs: the review advises, it
+ * never blocks the iteration.
  */
 /** The inputs of one architect return turn. */
 interface PlanReturnOptions {
@@ -315,6 +319,25 @@ function planReturnVars(
   };
 }
 
+/**
+ * The session the return continues: the compacted one its plan owner recorded,
+ * re-derived from disk because that owner's turn may have just written it.
+ */
+async function planReturnSession(
+  runtime: KernelRuntime,
+  plan: PlanFile,
+  architect: string,
+  target: ReturnType<typeof architectureTarget>,
+): Promise<SessionRef | undefined> {
+  return resumableSession(
+    runtime,
+    await runtime.store.listRecords(),
+    planOwnerSelector(architect),
+    target,
+    `the plan return for "${plan.rel}"`,
+  );
+}
+
 export async function runArchitectReturn(
   runtime: KernelRuntime,
   opts: PlanReturnOptions,
@@ -327,6 +350,8 @@ export async function runArchitectReturn(
     opts.iteration,
   );
   const numbered = numberedPlanFindings(opts.findings);
+  const architect = opts.architect ?? MAIN_ARCHITECT;
+  const session = await planReturnSession(runtime, plan, architect, target);
   const snapshot = await snapshotTurn(runtime, planSet(runtime, plan));
   const result = await runAgentTurn(runtime, {
     target,
@@ -335,10 +360,11 @@ export async function runArchitectReturn(
       iteration: opts.iteration,
       step: PLAN_RETURN_STEP,
       round: 1,
-      architect: opts.architect ?? MAIN_ARCHITECT,
+      architect,
     },
     vars: planReturnVars(runtime, opts, plan, target, numbered),
     expectation: KERNEL_TURN_STEPS[PLAN_RETURN_STEP],
+    session,
     validate: (outcome) => validatePlanReturnDelivery(opts.findings, outcome),
   });
   await discardForeignWrites(runtime, opts.iteration, snapshot, plan.rel);
