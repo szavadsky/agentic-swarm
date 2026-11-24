@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { derive, hasOpenDebt, openDebts } from "../../src/kernel/derive.js";
+import {
+  derive,
+  materialOpenDebts,
+  openDebts,
+} from "../../src/kernel/derive.js";
 import type { StepRecord } from "../../src/kernel/types.js";
 import { rec, script, task } from "./helpers.js";
 
@@ -160,7 +164,7 @@ function registerDerivePart38(): void {
         verdict: "approve",
       },
     });
-    expect(hasOpenDebt([fyi])).toBe(false);
+    expect(materialOpenDebts([fyi])).toEqual([]);
     expect(openDebts([fyi])).toEqual([
       {
         id: "00001#1",
@@ -189,7 +193,7 @@ function registerDerivePart38(): void {
 }
 
 function registerDerivePart39(): void {
-  it("ignores fyi debt and short close fragments for done", () => {
+  it("lands done with fyi debt or an uncited close still open", () => {
     const fyi = rec(1, {
       slug: "a",
       step: "review",
@@ -215,19 +219,14 @@ function registerDerivePart39(): void {
     });
     expect(derive([task("a")], [fyi, done]).goal).toBe("done");
 
+    const debtText = "cache invalidation needs a follow-up task";
     const material = rec(1, {
       slug: "a",
       step: "review",
       outcome: {
         status: "done",
         summary: "approved with debt",
-        concerns: [
-          {
-            kind: "debt",
-            calibration: "architect",
-            text: "cache invalidation needs a follow-up task",
-          },
-        ],
+        concerns: [{ kind: "debt", calibration: "architect", text: debtText }],
         forward: [],
         verdict: "approve",
       },
@@ -244,13 +243,18 @@ function registerDerivePart39(): void {
         decision: "done",
       },
     });
-    expect(hasOpenDebt([material, shortClose])).toBe(true);
-    expect(derive([task("a")], [material, shortClose]).goal).toBe("active");
+    // The fragment closes nothing, so the register keeps the debt.
+    expect(openDebts([material, shortClose]).map((debt) => debt.text)).toEqual([
+      debtText,
+    ]);
+    const state = derive([task("a")], [material, shortClose]);
+    expect(state.goal).toBe("done");
+    expect(state.terminal).toBe(true);
   });
 }
 
 function registerDerivePart40(): void {
-  it("refuses a front-stop done while debt is open", () => {
+  it("lands a front-stop done with owner debt still open", () => {
     const debt = rec(1, {
       slug: "a",
       step: "review",
@@ -279,12 +283,12 @@ function registerDerivePart40(): void {
         decision: "done",
       },
     });
-    expect(derive([task("a")], [debt, stop]).goal).toBe("active");
+    expect(derive([task("a")], [debt, stop]).goal).toBe("done");
   });
 }
 
 function registerDerivePart41(): void {
-  it("needs a later done after the debt closes", () => {
+  it("keeps the earlier done when a later turn closes the debt", () => {
     const debtText = "cache invalidation needs a follow-up task";
     const debt = rec(1, {
       slug: "a",
@@ -297,46 +301,34 @@ function registerDerivePart41(): void {
         verdict: "approve",
       },
     });
-    const refused = rec(2, {
+    const done = rec(2, {
       slug: undefined,
       step: "architect",
       iteration: 1,
       outcome: {
         status: "done",
-        summary: "premature done",
+        summary: "goal met with debt listed",
         concerns: [],
         forward: [],
         decision: "done",
       },
     });
-    expect(derive([task("a")], [debt, refused]).goal).toBe("active");
+    expect(derive([task("a")], [debt, done]).goal).toBe("done");
     const close = rec(3, {
-      slug: undefined,
-      step: "architect",
-      iteration: 2,
+      slug: "a",
+      step: "review",
       outcome: {
         status: "done",
         summary: "closed the debt",
         concerns: [],
         forward: [`debt closed: ${debtText}`],
-        decision: "continue",
+        verdict: "approve",
       },
     });
-    const landed = rec(4, {
-      slug: undefined,
-      step: "architect",
-      iteration: 2,
-      outcome: {
-        status: "done",
-        summary: "goal met",
-        concerns: [],
-        forward: [],
-        decision: "done",
-      },
-    });
-    expect(derive([task("a")], [debt, refused, close, landed]).goal).toBe(
-      "done",
-    );
+    const records = [debt, done, close];
+    expect(openDebts(records)).toEqual([]);
+    // A close that records no decision needs no second done.
+    expect(derive([task("a")], records).goal).toBe("done");
   });
 }
 

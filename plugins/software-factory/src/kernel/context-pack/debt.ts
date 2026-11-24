@@ -56,10 +56,9 @@ function blockingDebtOnly(record: StepRecord): StepRecord {
  * The records the goal architect's debt register reads: every goal-level
  * record plus the blocking debt of epics that finished. Strict-chain routing
  * keeps a live epic's task concerns inside it; a finished epic has no architect
- * left to close what it left open, and goal `done` refuses while material debt
- * is open, so its blocking debt rides up to the architect that can close it.
- * The finished epic's fyi notes stay behind, as calibration says they need not
- * travel.
+ * left to close what it left open, so its blocking debt rides up to the
+ * architect that can close it. The finished epic's fyi notes stay behind, as
+ * calibration says they need not travel.
  */
 export function goalDebtRecords(
   records: readonly StepRecord[],

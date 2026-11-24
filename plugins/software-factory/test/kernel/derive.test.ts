@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { derive } from "../../src/kernel/derive.js";
+import { derive, openDebts } from "../../src/kernel/derive.js";
 import type { StepRecord } from "../../src/kernel/types.js";
 import { rec, script, task, cause, causeText } from "./helpers.js";
 import type { Cause } from "../../src/kernel/types.js";
@@ -420,6 +420,53 @@ function registerDerivePart8(): void {
   });
 }
 
+function registerDerivePart9(): void {
+  it("settles the architect's done with open debt but still refuses an open epic", () => {
+    const debt = rec(1, {
+      slug: "auth.login",
+      step: "review",
+      outcome: {
+        status: "done",
+        summary: "approved with debt",
+        concerns: [
+          {
+            kind: "debt",
+            calibration: "architect",
+            text: "retry window drops head names",
+          },
+        ],
+        forward: [],
+        verdict: "approve",
+      },
+    });
+    const done = rec(2, {
+      slug: undefined,
+      step: "architect",
+      outcome: {
+        status: "done",
+        summary: "goal met with the debt listed",
+        concerns: [],
+        forward: [],
+        decision: "done",
+      },
+    });
+    const state = derive([task("auth.login")], [debt, done]);
+    // The debt stays open; the architect's done is not overridden.
+    expect(openDebts([debt, done])).toHaveLength(1);
+    expect(state.goal).toBe("done");
+    expect(state.terminal).toBe(true);
+
+    // An epic with a non-terminal task refuses the same done.
+    const epicState = derive(
+      [task("auth.login", { epic: "auth" })],
+      [debt, done],
+    );
+    expect(epicState.epics.auth?.done).toBe(false);
+    expect(epicState.goal).toBe("active");
+    expect(epicState.terminal).toBe(false);
+  });
+}
+
 describe("derive", () => {
   registerDerivePart1();
 
@@ -436,4 +483,6 @@ describe("derive", () => {
   registerDerivePart7();
 
   registerDerivePart8();
+
+  registerDerivePart9();
 });

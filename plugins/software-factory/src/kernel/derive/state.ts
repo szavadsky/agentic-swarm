@@ -21,7 +21,6 @@ import {
   supersedingContinuation,
 } from "./shared.js";
 import type { OrphanReductions, TaskReduction } from "./types.js";
-import { hasOpenDebt } from "./debt.js";
 
 /** The goal decision a completed record carries: the architect's, or the front path's stop. */
 function recordedDecision(rec: StepRecord): GoalDecision | undefined {
@@ -281,13 +280,11 @@ export function settleGoal(
   for (const rec of sorted) {
     const decision = recordedDecision(rec);
     if (!decision) continue;
-    // Done sees open debt and open epics: a done recorded while either is
-    // open is refused — the goal stays active so the next boundary plans the
-    // removers or lets an epic's architect close it. The check reads records
-    // up to this decision, so a later close needs a later done to land.
+    // Done sees open epics only: a done recorded while one is open is refused,
+    // so the next boundary lets the epic's architect close it. Debt is the
+    // architect's to own — the kernel never drops a done over it; the summary
+    // lists what remains open.
     if (decision === "done") {
-      const prior = sorted.filter((r) => r.seq <= rec.seq);
-      if (hasOpenDebt(prior)) continue;
       if (Object.values(epics).some((epic) => !epic.done)) continue;
       goal = "done";
     } else if (decision === "blocked") {

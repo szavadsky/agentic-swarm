@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { derive, hasOpenDebt, openDebts } from "../../src/kernel/derive.js";
+import { derive, openDebts } from "../../src/kernel/derive.js";
 import type { StepRecord } from "../../src/kernel/types.js";
 import { rec, script, task, cause, causeText } from "./helpers.js";
 
@@ -290,7 +290,7 @@ function registerDerivePart32(): void {
 }
 
 function registerDerivePart33(): void {
-  it("refuses done while material debt is open", () => {
+  it("lands the architect's done with material debt still open", () => {
     const debt = rec(1, {
       slug: "a",
       step: "review",
@@ -321,9 +321,10 @@ function registerDerivePart33(): void {
       },
     });
     const state = derive([task("a")], [debt, done]);
-    expect(hasOpenDebt([debt, done])).toBe(true);
-    expect(state.goal).toBe("active");
-    expect(state.terminal).toBe(false);
+    // The debt stays in the register; the architect's done is not overridden.
+    expect(openDebts([debt, done])).toHaveLength(1);
+    expect(state.goal).toBe("done");
+    expect(state.terminal).toBe(true);
   });
 }
 

@@ -3,7 +3,6 @@
 export type { OpenDebt } from "./derive/types.js";
 export { FRONT_STOP_STEP, OPEN_TASK_STATUSES } from "./derive/shared.js";
 export {
-  hasOpenDebt,
   knownDebtIds,
   materialOpenDebts,
   openDebts,

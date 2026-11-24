@@ -59,8 +59,8 @@ export function infraCause(stop: { cause: string; details?: string }): string {
 
 /**
  * The iteration status follows the launch result, not the architect's claim.
- * A done refused for open debt (derive stays active) reports in-progress, so
- * the summary's distance explains why the goal continues. Infra and signal
+ * A done refused for an open epic (derive stays active) reports in-progress,
+ * so the summary's distance explains why the goal continues. Infra and signal
  * stops win over any decision; a front-path blocked stop (unfinished tasks,
  * not a user block) reports stopped-with-debt.
  */

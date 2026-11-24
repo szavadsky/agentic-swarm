@@ -33,8 +33,8 @@ export function summaryTaskFacts(
   // Root causes group by kind: rewording a park's detail never splits a group.
   const parkedByKind = summaryParkedByKind(recs);
   const { pending, parked: parkedAll, cancelled } = summaryTaskLists(state);
-  // Distance counts what still blocks the goal: material debt left open after
-  // every recorded closure, not fyi notes and not debts already retired.
+  // Distance reports the goal's remaining obligations: material debt left
+  // open after every recorded closure, even when the architect settled done.
   const open = materialOpenDebts(allRecords);
   return {
     merged,
