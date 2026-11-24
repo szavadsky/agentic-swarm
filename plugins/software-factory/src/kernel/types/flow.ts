@@ -24,6 +24,12 @@ export interface RepairSpec {
    */
   repairPrompt?: string;
   /**
+   * Prompt template for the ask sent when the turn settled no outcome at all
+   * (it explored or planned instead of finishing). Absent renders the same
+   * outcome-only ask as `repairPrompt`.
+   */
+  unfinishedPrompt?: string;
+  /**
    * The product the turn must deliver, named in the repair ask and the failure
    * finding. Absent names the outcome (or the verdict on a review turn).
    */

@@ -62,6 +62,7 @@ const CONFIGURED_PROMPTS = [
   "steward",
   "subarchitect",
   "subarchitect-agent",
+  "unfinished-turn",
 ];
 
 beforeEach(() => {

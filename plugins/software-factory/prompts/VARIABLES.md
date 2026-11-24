@@ -329,6 +329,20 @@ The default in-session repair ask, rendered by the kernel when a turn delivers n
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome YAML skeleton from the kernel schema, narrowed to the fields this turn delivers; supplied by the repair ask
 
+## unfinished-turn.md
+
+The finish-the-task ask, named by a step's `unfinishedPrompt`. The kernel sends it instead of the outcome-only repair when the settled read found no outcome at all and no halted stop ended the turn, so the turn explored or planned but never delivered. It is not a role prompt: it is rendered directly and stands alone, naming the task path and worktree because the repair may land in a session that did not survive. A step that names no `unfinishedPrompt` keeps `delivery-repair`.
+
+- `role` — the prompt (the role) whose turn settled no outcome
+- `deliverable` — the product the turn must deliver; process config names it, else a review turn's verdict, else the outcome
+- `done_allowed` — `true` when a bare `status: done` delivers (no verdict or decision required), else `false`
+- `findings` — the missing or invalid findings as `- ` bullet lines
+- `task_path` — path to the task file the turn must finish
+- `worktree` — the worktree the turn must do the work in
+- `outcome_path` — path where the outcome must be written
+- `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
+- `outcome_schema` — outcome YAML skeleton from the kernel schema, narrowed to the fields this turn delivers; supplied by the repair ask
+
 ## architect-repair.md
 
 The architect's repair ask, named by the architect boundary step's `repairPrompt`. Same variables as `delivery-repair.md`; it adds that a continued turn must have its plan edit on disk, so the generic template stays free of role branches.

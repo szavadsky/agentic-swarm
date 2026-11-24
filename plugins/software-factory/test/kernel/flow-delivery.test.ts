@@ -202,7 +202,10 @@ function registerDeliveryGuardPart1(): void {
       );
       expect(harness.calls).toHaveLength(3);
       expect(harness.calls[1]!.prompt).toContain(
-        "You are the implementer. Your turn did not deliver its outcome.",
+        "You are the implementer. Your turn settled no outcome and did not finish the task.",
+      );
+      expect(harness.calls[1]!.prompt).toContain(
+        "no outcome written to the outcome path",
       );
       expect(
         records.filter((r) => r.slug === "task" && r.step === "review"),

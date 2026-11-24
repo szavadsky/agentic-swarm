@@ -14,7 +14,7 @@ import {
 import type { OutcomeSource } from "../outcome.js";
 import { outcomeRepairSchemaVar } from "../prompt-schema.js";
 import { DEFAULT_TIMEOUTS, outcomeSchema } from "../types.js";
-import type { KernelRuntime, TurnRecord } from "../types.js";
+import type { KernelRuntime, RepairAsk, TurnRecord } from "../types.js";
 import type {
   AgentTurnSpec,
   AgentTurnState,
@@ -87,7 +87,9 @@ export async function startTurnState(
     maxRepairs: Math.max(0, Math.floor(requestedRepairs)),
     repairs: 0,
     outcomeSettled: false,
+    outcomeAbsent: false,
     repairFindings: [],
+    asks: [],
     lastResult: first.result,
     attempts: first.attempts,
     stop: first.result.stop,
@@ -153,46 +155,61 @@ async function readTurnOutcome(
   return read();
 }
 
+/** The findings a delivered outcome earns under the step's contract. */
+async function deliveredFindings(
+  state: AgentTurnState,
+  delivered: OutcomeSource,
+): Promise<string[]> {
+  state.outcome = delivered.outcome;
+  // A closure cites an id ingest assigned to an earlier record, so the check
+  // needs the record tree; without a closure there is nothing to resolve and
+  // no reason to read it.
+  const records = state.outcome.debtClosed?.length
+    ? await state.runtime.store.listRecords()
+    : undefined;
+  return [
+    ...validateExpectation(state.outcome, state.spec.expectation, {
+      lastCall: state.spec.lastCall,
+      ...(records
+        ? {
+            records,
+            excludeRecordId: path.basename(state.started.dir),
+          }
+        : {}),
+    }),
+    ...(state.spec.validate?.(state.outcome) ?? []),
+  ];
+}
+
 export async function assessTurn(
   state: AgentTurnState,
   afterRepair: boolean,
 ): Promise<void> {
   state.outcome = null;
   state.findings = [];
+  state.outcomeAbsent = false;
+  let delivered: OutcomeSource | null = null;
   try {
-    const delivered = await readTurnOutcome(state);
+    delivered = await readTurnOutcome(state);
     if (delivered) {
-      state.outcome = delivered.outcome;
-      // A closure cites an id ingest assigned to an earlier record, so the
-      // check needs the record tree; without a closure there is nothing to
-      // resolve and no reason to read it.
-      const records = state.outcome.debtClosed?.length
-        ? await state.runtime.store.listRecords()
-        : undefined;
-      state.findings = [
-        ...validateExpectation(state.outcome, state.spec.expectation, {
-          lastCall: state.spec.lastCall,
-          ...(records
-            ? {
-                records,
-                excludeRecordId: path.basename(state.started.dir),
-              }
-            : {}),
-        }),
-        ...(state.spec.validate?.(state.outcome) ?? []),
-      ];
+      state.findings = await deliveredFindings(state, delivered);
+    } else {
+      // Nothing at all was delivered: the ask may be the finish-the-task one.
+      // A read that threw, or a delivered outcome the expectation rejects,
+      // is a repair, never an unfinished turn.
+      state.outcomeAbsent = !isHalted(state.stop);
     }
   } catch (err) {
     if (!(err instanceof OutcomeInvalidError)) throw err;
     state.findings = err.findings;
   }
-  if (state.findings.length === 0 && !state.outcome && !isHalted(state.stop)) {
+  if (state.findings.length === 0 && !delivered && !isHalted(state.stop)) {
     state.findings = [missingOutcomeFinding(state.deliverable, afterRepair)];
   }
   if (!isHalted(state.stop) && state.spec.expectation === "architect") {
     const planFinding = missingPlanFinding(
       state.spec.vars.plan_path,
-      state.outcome?.decision,
+      delivered?.outcome.decision,
       state.planBefore,
       state.planWho,
     );
@@ -200,9 +217,25 @@ export async function assessTurn(
   }
 }
 
+/** The template and marker for the ask this repair round sends. */
+function repairAsk(state: AgentTurnState): {
+  template: string;
+  ask: RepairAsk;
+} {
+  const unfinished = state.spec.target.unfinishedPrompt;
+  if (state.outcomeAbsent && unfinished !== undefined) {
+    return { template: unfinished, ask: "unfinished" };
+  }
+  return { template: state.repairPrompt, ask: "outcome" };
+}
+
 /** One in-session repair ask, rendered from the step's configured template. */
-function renderRepairPrompt(state: AgentTurnState): string {
-  return state.runtime.prompts.render(state.repairPrompt, {
+function renderRepairPrompt(
+  state: AgentTurnState,
+  template: string,
+  ask: RepairAsk,
+): string {
+  const vars: Record<string, string> = {
     role: state.spec.target.prompt,
     deliverable: state.deliverable,
     done_allowed: state.spec.expectation === "any" ? "true" : "false",
@@ -215,7 +248,13 @@ function renderRepairPrompt(state: AgentTurnState): string {
       state.spec.expectation,
       state.spec.outcomeSchema ?? outcomeSchema,
     ),
-  });
+  };
+  // The unfinished ask stands alone in a session that may not have survived:
+  // it names the task path and worktree the turn must work on.
+  return state.runtime.prompts.render(
+    template,
+    ask === "unfinished" ? { ...state.spec.vars, ...vars } : vars,
+  );
 }
 
 /** Bounded reminders: each repair ask re-reads the outcome it produced. */
@@ -226,13 +265,15 @@ export async function repairLoop(state: AgentTurnState): Promise<void> {
     state.repairs < state.maxRepairs
   ) {
     state.repairFindings.push(...state.findings);
+    const { template, ask } = repairAsk(state);
+    state.asks.push(ask);
     const repair = await callChain(
       state.runtime,
       state.spec,
       state.outcomePath,
       state.timeouts,
       state.tierIndex,
-      renderRepairPrompt(state),
+      renderRepairPrompt(state, template, ask),
       state.session,
     );
     state.repairs += 1;

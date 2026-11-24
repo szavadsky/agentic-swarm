@@ -97,6 +97,7 @@ export type {
   RecordEnd,
   RecordStart,
   RecordStore,
+  RepairAsk,
   StepRecord,
   TaskStore,
   TurnRecord,

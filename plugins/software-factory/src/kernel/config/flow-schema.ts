@@ -96,6 +96,8 @@ export const turnSchema = z
     alias: z.string().min(1),
     /** Prompt template for the missing-outcome repair ask; defaults to `delivery-repair`. */
     repairPrompt: z.string().min(1).optional(),
+    /** Prompt template for the no-outcome-at-all ask; absent keeps the repair ask. */
+    unfinishedPrompt: z.string().min(1).optional(),
     /** Product the turn must deliver; defaults by expectation, else `outcome`. */
     deliverable: z.string().min(1).optional(),
   })
@@ -141,6 +143,8 @@ export const flowStepSchema = z
     alias: z.string().min(1).optional(),
     /** Prompt template for the missing-outcome repair ask; defaults to `delivery-repair`. */
     repairPrompt: z.string().min(1).optional(),
+    /** Prompt template for the no-outcome-at-all ask; absent keeps the repair ask. */
+    unfinishedPrompt: z.string().min(1).optional(),
     /** Product the turn must deliver; defaults by expectation, else `outcome`. */
     deliverable: z.string().min(1).optional(),
     review: z.boolean().default(false),

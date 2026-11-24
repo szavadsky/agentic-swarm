@@ -103,6 +103,7 @@ function threeConfigLayersPart3() {
         prompt: "implementer",
         alias: "implementer",
         alternates: ["implementer-b"],
+        unfinishedPrompt: "unfinished-turn",
         review: false,
         qa: false,
       },
@@ -281,6 +282,7 @@ function threeConfigLayersPart8() {
       prompt: "implementer",
       alias: "researcher",
       alternates: ["implementer", "reviewer"],
+      unfinishedPrompt: "unfinished-turn",
       review: false,
       qa: false,
     });

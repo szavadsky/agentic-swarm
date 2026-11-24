@@ -94,6 +94,7 @@ function turnRecordEnd(
     ...(state.repairFindings.length > 0
       ? { repairFindings: state.repairFindings }
       : {}),
+    ...(state.asks.length > 0 ? { asks: state.asks } : {}),
     ...(repairFindingsResolved ? { repairFindingsResolved: true } : {}),
     ...(launchKind ? { launchKind } : {}),
     ...(state.lastResult.transcript

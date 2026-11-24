@@ -19,6 +19,7 @@ import type {
   Outcome,
   RecordEnd,
   RecordStart,
+  RepairAsk,
   StepRecord,
   TurnRecord,
 } from "../types.js";
@@ -112,7 +113,11 @@ export interface AgentTurnState {
   maxRepairs: number;
   repairs: number;
   outcomeSettled: boolean;
+  /** The last settled read returned no outcome and no halted stop ended it. */
+  outcomeAbsent: boolean;
   repairFindings: string[];
+  /** Each repair ask sent, in order. */
+  asks: RepairAsk[];
   lastResult: TurnResult;
   attempts: TurnAttempt[];
   stop: Stop;

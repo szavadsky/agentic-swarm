@@ -170,7 +170,7 @@ unreadable report is red rather than a silent pass. Records written before
 flows:
   implement-review:
     steps:
-      - { id: implement, prompt: implementer, alias: implementer }
+      - { id: implement, prompt: implementer, alias: implementer, unfinishedPrompt: unfinished-turn }
       - { id: qa, prompt: qa, alias: qa, qa: true, changeRequests: 2, deliverable: verdict }
       - { id: review, prompt: reviewer, alias: reviewer, review: true, changeRequests: 2 }
       - { id: resolve, prompt: steward, alias: steward }   # merge-conflict turn only; the wave-end steward also owns red-after-merge candidates
@@ -211,7 +211,11 @@ requirements step) is a config edit, and its turn is recorded like any flow step
 
 A step may name `repairPrompt` (the template its in-session repair ask
 renders) and `deliverable` (the product the ask and the missing-outcome finding
-name; default `outcome`, or `verdict` on an acceptance step). A `qa: true` step
+name; default `outcome`, or `verdict` on an acceptance step). It may also name
+`unfinishedPrompt`, the ask sent when the turn settles no outcome at all (it
+explored or planned instead of finishing); the shipped implement step of every
+flow names `unfinished-turn`, and a step that names none keeps the outcome-only
+repair. A `qa: true` step
 carries its own outcome schema (`qa: {verdict: accept | changes, findings}`)
 and acceptance duty; QA and the reviewer share the acceptance round, so a QA
 change request costs the same round budget as a review's. QA's own test and
@@ -226,8 +230,8 @@ result ran red is a red-after-merge candidate — its turn receives the red gate
 log and repairs the merged result on that branch, then the merge queue re-runs
 its gates. A branch the boundary's kept-land pass can still land (its approve
 covers the tip, or its review-less flow's checks are green) stays with
-kept-land. A step that names no
-template renders the process-level `repairPrompt` (default `delivery-repair`).
+kept-land. A step that names no `repairPrompt`
+renders the process-level `repairPrompt` (default `delivery-repair`).
 The architect names `architect-repair` because its ask also requires the plan
 edit on disk; the default template then carries no role branch.
 
