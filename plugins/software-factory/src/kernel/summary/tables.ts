@@ -5,12 +5,16 @@ import type { Usage } from "../../harness/types.js";
 import { recordedBaseGates } from "../baseline.js";
 import { formatCause } from "../cause.js";
 import { materialOpenDebts } from "../derive.js";
-import { costText } from "../metrics.js";
+import { costText, medianMs, worstMs } from "../metrics.js";
 import type { QaOnlyCatches } from "../qa.js";
 import type {
   GroupMetrics,
   IncidentCounts,
+  ParkMetrics,
   PlanReviewMarkCounts,
+  SteerLatency,
+  SteerLeg,
+  ZeroEditCounts,
 } from "../metrics.js";
 import type {
   ArtifactStore,
@@ -79,6 +83,49 @@ export function incidentLines(
     `- overflow parks: ${incidents.overflowParks}`,
     `- loop incidents: ${loopIncidents}`,
   ];
+}
+
+/** One park cause's records and its rate per merged task. */
+function parkCauseText(kind: string, count: number, merged: number): string {
+  const rate = merged > 0 ? `${(count / merged).toFixed(2)}/merged` : "n/a";
+  return `${kind} ${count} (${rate})`;
+}
+
+/** Park records by cause beside the merged tasks they took, and landings. */
+export function parkLines(parks: ParkMetrics): string[] {
+  const causes = Object.entries(parks.byCause)
+    .sort(([a, countA], [b, countB]) => countB - countA || a.localeCompare(b))
+    .map(([kind, count]) => parkCauseText(kind, count, parks.mergedSlugs));
+  const perTask =
+    parks.perMergedTask === null ? "n/a" : parks.perMergedTask.toFixed(2);
+  return [
+    `- park records: ${parks.records} over ${parks.distinctSlugs} slugs; ${parks.mergedSlugs} merged tasks; ${perTask} park records per merged task`,
+    `- by cause: ${causes.length > 0 ? causes.join("; ") : "none"}`,
+    `- landed unchanged: ${parks.landedUnchanged}; amended first: ${parks.landedAmended}; unknown: ${parks.landedUnknown}`,
+  ];
+}
+
+/** A steer leg's median and worst in minutes, or n/a when no steer is timed. */
+function steerLegText(label: string, leg: SteerLeg): string {
+  const minutes = (ms: number | undefined): string =>
+    ms === undefined ? "n/a" : `${(ms / 60_000).toFixed(1)} min`;
+  const timed = `${leg.samplesMs.length} ${leg.samplesMs.length === 1 ? "steer" : "steers"}`;
+  return `- ${label}: median ${minutes(medianMs(leg.samplesMs))}, worst ${minutes(worstMs(leg.samplesMs))} over ${timed}; unknown ${leg.unknown}`;
+}
+
+/** The mailbox's steers: how long the two legs took and how many still wait. */
+export function steerLines(steers: SteerLatency): string[] {
+  return [
+    `- steers: ${steers.steers}; unanswered: ${steers.unanswered}`,
+    steerLegText("drop to PM route", steers.route),
+    steerLegText("drop to final answer", steers.answer),
+  ];
+}
+
+/** Zero-edit turns split by what the turn owed. */
+export function zeroEditLine(zeroEdit: ZeroEditCounts): string {
+  const total = zeroEdit.reply + zeroEdit.finding + zeroEdit.noop;
+  return `- zero-edit turns: ${total} (reply ${zeroEdit.reply}, finding ${zeroEdit.finding}, no-op ${zeroEdit.noop})`;
 }
 
 export function concernLines(recs: StepRecord[], kind?: string): string[] {

@@ -6,17 +6,21 @@ import { pricedRecord } from "../pricing.js";
 import type { PriceTable } from "../pricing.js";
 import { qaOnlyCatches, type QaOnlyCatches } from "../qa.js";
 import type { SummaryStatus } from "../summary.js";
-import type { StepRecord } from "../types.js";
+import type { StepRecord, TaskFile } from "../types.js";
 import { wasteAccounting } from "../waste.js";
 import type { WasteAccounting } from "../waste.js";
+import { parkMetrics } from "./parks.js";
+import { spikeSlugs, zeroEditCounts } from "./zero-edit.js";
 import type {
   AliasMetrics,
   ArchitectMetrics,
   IncidentCounts,
   IterationMetrics,
   ModelMetrics,
+  ParkMetrics,
   PlanReviewMarkCounts,
   RoleMetrics,
+  ZeroEditCounts,
 } from "./types.js";
 import {
   DEFAULT_ROLE_BY_STEP,
@@ -181,6 +185,20 @@ interface IterationMetricsParts {
   waste: WasteAccounting;
   planReviewMarks: PlanReviewMarkCounts;
   qaOnlyCatches: QaOnlyCatches;
+  parks: ParkMetrics;
+  zeroEdit: ZeroEditCounts;
+}
+
+/** The architect's share of the iteration's spend, tokens and turns. */
+function architectShares(
+  architect: ArchitectMetrics,
+  usage: Usage,
+  tokens: number,
+  turns: number,
+): void {
+  architect.costShare = width(architect.usage.costUsd ?? 0, usage.costUsd ?? 0);
+  architect.tokenShare = width(architect.tokens, tokens);
+  architect.turnShare = width(architect.turns, turns);
 }
 
 /** Assembles one iteration's metrics from its accumulated parts. */
@@ -197,12 +215,7 @@ function iterationMetricsResult(
   );
   const operatorActs = humanInterventions + all.filter(isOutsideAct).length;
   const tokens = tokenTotal(usage);
-  acc.architect.costShare = width(
-    acc.architect.usage.costUsd ?? 0,
-    usage.costUsd ?? 0,
-  );
-  acc.architect.tokenShare = width(acc.architect.tokens, tokens);
-  acc.architect.turnShare = width(acc.architect.turns, recs.length);
+  architectShares(acc.architect, usage, tokens, recs.length);
   return {
     n: parts.n,
     status: parts.status,
@@ -228,6 +241,8 @@ function iterationMetricsResult(
     waste: parts.waste,
     incidents,
     loopIncidents: incidents.noProgressParks + incidents.emptyDiffParks,
+    parks: parts.parks,
+    zeroEdit: parts.zeroEdit,
     humanInterventions,
     operatorActs,
     gateWallMs,
@@ -240,6 +255,18 @@ function iterationMetricsResult(
   };
 }
 
+/** Park and zero-edit friction: records plus the task files they read. */
+function iterationFriction(
+  all: StepRecord[],
+  recs: StepRecord[],
+  tasks: readonly TaskFile[] | undefined,
+): { parks: ParkMetrics; zeroEdit: ZeroEditCounts } {
+  return {
+    parks: parkMetrics(all, tasks),
+    zeroEdit: zeroEditCounts(recs, spikeSlugs(all, tasks)),
+  };
+}
+
 /** One iteration's spend and incidents, shared by `metrics.yaml` and its summary. */
 export function iterationMetrics(
   n: number,
@@ -249,13 +276,13 @@ export function iterationMetrics(
   humanInterventions: number,
   prices: PriceTable,
   priceIds?: Record<string, string>,
+  tasks?: readonly TaskFile[],
 ): IterationMetrics {
   const recs = records.filter(
     (r) => r.iteration === n && r.endedAt && r.actor === "agent",
   );
   const acc = accumulateTurns(recs, roleByStep, prices, priceIds);
   const all = records.filter((r) => r.iteration === n);
-  const qaOnly = qaOnlyCatches(all);
   const { incidents, waste, planReviewMarks } = iterationIncidents(
     all,
     recs,
@@ -274,6 +301,7 @@ export function iterationMetrics(
     incidents,
     waste,
     planReviewMarks,
-    qaOnlyCatches: qaOnly,
+    qaOnlyCatches: qaOnlyCatches(all),
+    ...iterationFriction(all, recs, tasks),
   });
 }

@@ -1,0 +1,372 @@
+iteration: 1
+parks:
+- {seq: 10, slug: artifact-backends, revision: 0, cause: failed, at: '2026-11-23T02:30:37.937Z'}
+- {seq: 26, slug: canary-command, revision: 0, cause: empty-diff, at: '2026-11-23T02:55:47.959Z'}
+- {seq: 44, slug: cap-falls-back, revision: 0, cause: empty-diff, at: '2026-11-23T03:05:35.215Z'}
+- {seq: 58, slug: cleanliness-no-scope, revision: 0, cause: failed, at: '2026-11-23T03:15:28.487Z'}
+- {seq: 60, slug: checker-every-consult, revision: 0, cause: empty-diff, at: '2026-11-23T03:16:09.107Z'}
+- {seq: 66, slug: cost-split, revision: 0, cause: failed, at: '2026-11-23T03:22:25.468Z'}
+- {seq: 75, slug: coding-rules-config, revision: 0, cause: empty-diff, at: '2026-11-23T03:28:35.437Z'}
+- {seq: 110, slug: effort-opaque-preflight, revision: 0, cause: empty-diff, at: '2026-11-23T03:59:56.785Z'}
+- {seq: 114, slug: flows-as-dags, revision: 0, cause: empty-diff, at: '2026-11-23T04:03:12.043Z'}
+- {seq: 123, slug: canary-command, revision: 1, cause: failed, at: '2026-11-23T04:19:34.900Z'}
+- {seq: 140, slug: cap-falls-back, revision: 1, cause: empty-diff, at: '2026-11-23T04:29:39.444Z'}
+- {seq: 145, slug: checker-every-consult, revision: 1, cause: empty-diff, at: '2026-11-23T04:31:15.903Z'}
+- {seq: 147, slug: coding-rules-config, revision: 1, cause: empty-diff, at: '2026-11-23T04:33:11.130Z'}
+- {seq: 156, slug: gate-speed, revision: 0, cause: empty-diff, at: '2026-11-23T04:51:15.946Z'}
+- {seq: 178, slug: goal-branch-current, revision: 0, cause: empty-diff, at: '2026-11-23T05:40:39.047Z'}
+- {seq: 194, slug: pack-hashes, revision: 0, cause: empty-diff, at: '2026-11-23T06:01:27.004Z'}
+- {seq: 223, slug: parks-retired-on-land, revision: 0, cause: upscope, at: '2026-11-23T06:57:38.467Z'}
+- {seq: 244, slug: plan-review-prompt, revision: 0, cause: upscope, at: '2026-11-23T07:30:04.585Z'}
+- {seq: 248, slug: pin-check-run, revision: 0, cause: empty-diff, at: '2026-11-23T07:32:01.731Z'}
+- {seq: 261, slug: pm-env-notes, revision: 0, cause: empty-diff, at: '2026-11-23T08:09:27.709Z'}
+- {seq: 293, slug: prompt-dry-run-lint, revision: 0, cause: empty-diff, at: '2026-11-23T09:20:25.568Z'}
+- {seq: 309, slug: qa-catch-sampling, revision: 0, cause: empty-diff, at: '2026-11-23T09:36:28.481Z'}
+- {seq: 319, slug: resume-prompt-relaunch, revision: 0, cause: empty-diff, at: '2026-11-23T09:43:09.450Z'}
+- {seq: 329, slug: steer-answer-on-stop, revision: 0, cause: failed, at: '2026-11-23T09:52:42.922Z'}
+- {seq: 341, slug: run-configs-out-of-tests, revision: 0, cause: failed, at: '2026-11-23T09:56:08.987Z'}
+- {seq: 355, slug: validate-cross-layer, revision: 0, cause: failed, at: '2026-11-23T10:21:41.042Z'}
+- {seq: 374, slug: waste-to-spikes, revision: 0, cause: failed, at: '2026-11-23T10:35:29.772Z'}
+- {seq: 407, slug: steward-on-red, revision: 0, cause: empty-diff, at: '2026-11-23T11:26:35.688Z'}
+- {seq: 416, slug: worktree-cleanup-goal-end, revision: 0, cause: empty-diff, at: '2026-11-23T11:59:31.832Z'}
+- {seq: 494, slug: dashboard-intent-status, revision: 0, cause: empty-diff, at: '2026-11-23T15:16:21.451Z'}
+- {seq: 511, slug: compaction-config, revision: 0, cause: empty-diff, at: '2026-11-23T15:38:21.451Z'}
+- {seq: 527, slug: steer-answer-on-stop, revision: 1, cause: gates, at: '2026-11-23T15:48:53.578Z'}
+- {seq: 554, slug: real-names-out, revision: 0, cause: failed, at: '2026-11-23T16:17:28.773Z'}
+- {seq: 584, slug: sh-zero-logic, revision: 0, cause: empty-diff, at: '2026-11-23T16:45:44.281Z'}
+- {seq: 593, slug: validate-cross-layer, revision: 1, cause: gates, at: '2026-11-23T16:54:25.055Z'}
+- {seq: 620, slug: coding-rules-config-land, revision: 0, cause: failed, at: '2026-11-23T17:32:24.501Z'}
+- {seq: 623, slug: architect-flows-by-state, revision: 0, cause: failed, at: '2026-11-23T17:33:36.500Z'}
+- {seq: 626, slug: task-types-use-when, revision: 0, cause: failed, at: '2026-11-23T17:35:42.116Z'}
+- {seq: 641, slug: ingestion-steps, revision: 0, cause: failed, at: '2026-11-23T18:21:53.184Z'}
+- {seq: 691, slug: architect-flows-reason, revision: 0, cause: empty-diff, at: '2026-11-23T19:20:54.699Z'}
+- {seq: 706, slug: real-names-gate, revision: 0, cause: base-conflict, at: '2026-11-23T19:34:45.612Z'}
+- {seq: 728, slug: task-type-use-when, revision: 0, cause: failed, at: '2026-11-23T19:52:30.950Z'}
+- {seq: 796, slug: prompt-dry-run-lint-land, revision: 0, cause: blocked, at: '2026-11-23T21:40:16.437Z'}
+merges:
+- {seq: 81, slug: artifact-lsp, at: '2026-11-23T03:29:31.639Z'}
+- {seq: 89, slug: contributing-md, at: '2026-11-23T03:45:16.729Z'}
+- {seq: 91, slug: pitch-doc, at: '2026-11-23T03:48:56.791Z'}
+- {seq: 163, slug: lint-green-base, at: '2026-11-23T04:58:30.306Z'}
+- {seq: 170, slug: glitch-not-waste, at: '2026-11-23T05:16:55.103Z'}
+- {seq: 211, slug: merge-conflict-parks, at: '2026-11-23T06:31:56.187Z'}
+- {seq: 301, slug: repo-config-example, at: '2026-11-23T09:28:19.794Z'}
+- {seq: 336, slug: run-factory-skill-docs, at: '2026-11-23T09:54:25.995Z'}
+- {seq: 387, slug: upscope-implementer, at: '2026-11-23T10:51:39.116Z'}
+- {seq: 441, slug: cleanliness-no-scope, at: '2026-11-23T12:52:12.786Z'}
+- {seq: 462, slug: artifact-backends, at: '2026-11-23T13:45:10.076Z'}
+- {seq: 464, slug: cost-split, at: '2026-11-23T13:47:31.727Z'}
+- {seq: 478, slug: effort-opaque-preflight-land, at: '2026-11-23T14:28:48.299Z'}
+- {seq: 520, slug: pin-check-run-land, at: '2026-11-23T15:42:30.554Z'}
+- {seq: 542, slug: run-configs-out-of-tests-land, at: '2026-11-23T16:05:51.792Z'}
+- {seq: 565, slug: canary-command-land, at: '2026-11-23T16:31:36.539Z'}
+- {seq: 615, slug: flows-as-dags-land, at: '2026-11-23T17:31:36.208Z'}
+- {seq: 639, slug: waste-to-spikes, at: '2026-11-23T17:58:03.460Z'}
+- {seq: 663, slug: compaction-config, at: '2026-11-23T18:56:38.970Z'}
+- {seq: 676, slug: coding-rules-config-land, at: '2026-11-23T19:03:21.582Z'}
+- {seq: 698, slug: dashboard-intent-status, at: '2026-11-23T19:28:53.856Z'}
+- {seq: 708, slug: plan-review-prompt-land, at: '2026-11-23T19:35:25.282Z'}
+- {seq: 733, slug: pm-env-notes-land, at: '2026-11-23T19:55:49.633Z'}
+- {seq: 760, slug: sh-zero-logic, at: '2026-11-23T20:20:26.903Z'}
+- {seq: 766, slug: session-portability, at: '2026-11-23T20:26:44.735Z'}
+- {seq: 769, slug: steward-on-red-land, at: '2026-11-23T20:29:56.048Z'}
+- {seq: 777, slug: ingestion-steps, at: '2026-11-23T21:00:47.272Z'}
+routes:
+- seq: 33
+  at: '2026-11-23T03:01:16.476Z'
+  entries:
+  - {steer: 20261123T030022405Z-da73a3f8, route: intent}
+- seq: 119
+  at: '2026-11-23T04:17:20.869Z'
+  entries:
+  - {steer: 20261123T040429328Z-29bf4251, route: task, answer: 'Scopes widened to the repo-root paths their kept diffs touch; the committed work and done-when are unchanged.'}
+  - {steer: 20261123T040430129Z-77fb4e32, route: spike}
+- seq: 129
+  at: '2026-11-23T04:20:40.105Z'
+  entries:
+  - {steer: 20261123T041044650Z-bee00ef7, route: intent}
+zeroEdit:
+- {seq: 2, step: architect, slug: null}
+- {seq: 3, step: planreview, slug: null}
+- {seq: 4, step: planreturn, slug: null}
+- {seq: 5, step: pm, slug: null}
+- {seq: 6, step: implement, slug: artifact-backends}
+- {seq: 8, step: implement, slug: outcome-channel-spike}
+- {seq: 17, step: qa, slug: artifact-lsp}
+- {seq: 23, step: implement, slug: canary-command}
+- {seq: 31, step: review, slug: artifact-lsp}
+- {seq: 32, step: pm, slug: null}
+- {seq: 34, step: intent, slug: 20261123T030022405Z-da73a3f8}
+- {seq: 35, step: implement, slug: cap-falls-back}
+- {seq: 37, step: review, slug: outcome-channel-spike}
+- {seq: 48, step: qa, slug: pitch-doc}
+- {seq: 53, step: implement, slug: checker-every-consult}
+- {seq: 54, step: implement, slug: cleanliness-no-scope}
+- {seq: 64, step: implement, slug: cost-split}
+- {seq: 70, step: qa, slug: artifact-lsp}
+- {seq: 72, step: implement, slug: coding-rules-config}
+- {seq: 76, step: qa, slug: contributing-md}
+- {seq: 78, step: review, slug: artifact-lsp}
+- {seq: 83, step: review, slug: contributing-md}
+- {seq: 85, step: review, slug: pitch-doc}
+- {seq: 88, step: implement, slug: saga-passes-spike}
+- {seq: 96, step: implement, slug: saga-passes-spike}
+- {seq: 97, step: implement, slug: effort-opaque-preflight}
+- {seq: 104, step: review, slug: saga-passes-spike}
+- {seq: 105, step: implement, slug: flows-as-dags}
+- {seq: 109, step: implement, slug: sandbox-spike}
+- {seq: 118, step: pm, slug: null}
+- {seq: 121, step: implement, slug: canary-command}
+- {seq: 124, step: pm, slug: null}
+- {seq: 130, step: intent, slug: 20261123T041044650Z-bee00ef7}
+- {seq: 132, step: implement, slug: cap-falls-back}
+- {seq: 134, step: implement, slug: checker-every-consult}
+- {seq: 135, step: qa, slug: gate-speed}
+- {seq: 142, step: implement, slug: coding-rules-config}
+- {seq: 153, step: implement, slug: gate-speed}
+- {seq: 164, step: qa, slug: glitch-not-waste}
+- {seq: 166, step: review, slug: glitch-not-waste}
+- {seq: 175, step: implement, slug: goal-branch-current}
+- {seq: 182, step: implement, slug: pack-hashes}
+- {seq: 185, step: qa, slug: pack-hashes}
+- {seq: 188, step: implement, slug: pack-hashes}
+- {seq: 198, step: qa, slug: merge-conflict-parks}
+- {seq: 203, step: qa, slug: merge-conflict-parks}
+- {seq: 205, step: review, slug: merge-conflict-parks}
+- {seq: 215, step: implement, slug: parks-retired-on-land}
+- {seq: 218, step: qa, slug: parks-retired-on-land}
+- {seq: 221, step: implement, slug: parks-retired-on-land}
+- {seq: 227, step: implement, slug: pin-check-run}
+- {seq: 232, step: qa, slug: pin-check-run}
+- {seq: 233, step: implement, slug: plan-review-prompt}
+- {seq: 236, step: qa, slug: plan-review-prompt}
+- {seq: 241, step: implement, slug: plan-review-prompt}
+- {seq: 242, step: implement, slug: pin-check-run}
+- {seq: 252, step: implement, slug: pm-env-notes}
+- {seq: 255, step: qa, slug: pm-env-notes}
+- {seq: 258, step: implement, slug: pm-env-notes}
+- {seq: 265, step: implement, slug: prompt-dry-run-lint}
+- {seq: 270, step: implement, slug: qa-catch-sampling}
+- {seq: 271, step: qa, slug: prompt-dry-run-lint}
+- {seq: 281, step: qa, slug: qa-catch-sampling}
+- {seq: 284, step: qa, slug: repo-config-example}
+- {seq: 289, step: implement, slug: prompt-dry-run-lint}
+- {seq: 294, step: implement, slug: resume-prompt-relaunch}
+- {seq: 298, step: review, slug: repo-config-example}
+- {seq: 300, step: qa, slug: resume-prompt-relaunch}
+- {seq: 304, step: implement, slug: qa-catch-sampling}
+- {seq: 311, step: implement, slug: resume-prompt-relaunch}
+- {seq: 321, step: qa, slug: run-configs-out-of-tests}
+- {seq: 325, step: qa, slug: run-factory-skill-docs}
+- {seq: 332, step: review, slug: run-factory-skill-docs}
+- {seq: 333, step: implement, slug: run-configs-out-of-tests}
+- {seq: 335, step: review, slug: sandbox-spike}
+- {seq: 339, step: implement, slug: warm-starts-respike}
+- {seq: 345, step: implement, slug: upscope-implementer}
+- {seq: 350, step: qa, slug: upscope-implementer}
+- {seq: 360, step: qa, slug: upscope-implementer}
+- {seq: 362, step: review, slug: upscope-implementer}
+- {seq: 365, step: review, slug: warm-starts-respike}
+- {seq: 368, step: implement, slug: waste-to-spikes}
+- {seq: 372, step: implement, slug: zero-edit-done-spike}
+- {seq: 382, step: qa, slug: upscope-implementer}
+- {seq: 384, step: review, slug: upscope-implementer}
+- {seq: 386, step: implement, slug: zero-edit-done-spike}
+- {seq: 390, step: review, slug: zero-edit-done-spike}
+- {seq: 395, step: qa, slug: steward-on-red}
+- {seq: 399, step: implement, slug: worktree-cleanup-goal-end}
+- {seq: 401, step: implement, slug: steward-on-red}
+- {seq: 406, step: qa, slug: worktree-cleanup-goal-end}
+- {seq: 413, step: implement, slug: worktree-cleanup-goal-end}
+- {seq: 418, step: pm, slug: null}
+- {seq: 431, step: implement, slug: artifact-backends}
+- {seq: 432, step: qa, slug: cleanliness-no-scope}
+- {seq: 437, step: review, slug: cleanliness-no-scope}
+- {seq: 449, step: qa, slug: artifact-backends}
+- {seq: 450, step: qa, slug: cost-split}
+- {seq: 452, step: review, slug: artifact-backends}
+- {seq: 454, step: review, slug: cost-split}
+- {seq: 470, step: qa, slug: effort-opaque-preflight-land}
+- {seq: 472, step: qa, slug: steer-answer-on-stop}
+- {seq: 473, step: review, slug: effort-opaque-preflight-land}
+- {seq: 488, step: qa, slug: dashboard-intent-status}
+- {seq: 491, step: implement, slug: dashboard-intent-status}
+- {seq: 499, step: implement, slug: compaction-config}
+- {seq: 502, step: qa, slug: compaction-config}
+- {seq: 505, step: qa, slug: pin-check-run-land}
+- {seq: 508, step: implement, slug: compaction-config}
+- {seq: 512, step: review, slug: steer-answer-on-stop}
+- {seq: 514, step: review, slug: pin-check-run-land}
+- {seq: 516, step: qa, slug: validate-cross-layer}
+- {seq: 519, step: resolve, slug: steer-answer-on-stop}
+- {seq: 529, step: qa, slug: run-configs-out-of-tests-land}
+- {seq: 536, step: qa, slug: run-configs-out-of-tests-land}
+- {seq: 538, step: review, slug: run-configs-out-of-tests-land}
+- {seq: 546, step: implement, slug: canary-command-land}
+- {seq: 551, step: implement, slug: real-names-out}
+- {seq: 552, step: qa, slug: canary-command-land}
+- {seq: 555, step: implement, slug: sh-zero-logic}
+- {seq: 560, step: qa, slug: sh-zero-logic}
+- {seq: 562, step: review, slug: canary-command-land}
+- {seq: 564, step: qa, slug: validate-cross-layer}
+- {seq: 567, step: implement, slug: flows-as-dags-land}
+- {seq: 571, step: review, slug: validate-cross-layer}
+- {seq: 574, step: implement, slug: sh-zero-logic}
+- {seq: 575, step: qa, slug: flows-as-dags-land}
+- {seq: 581, step: implement, slug: sh-zero-logic}
+- {seq: 587, step: resolve, slug: validate-cross-layer}
+- {seq: 589, step: qa, slug: waste-to-spikes}
+- {seq: 596, step: qa, slug: flows-as-dags-land}
+- {seq: 606, step: qa, slug: waste-to-spikes}
+- {seq: 607, step: qa, slug: flows-as-dags-land}
+- {seq: 609, step: review, slug: waste-to-spikes}
+- {seq: 611, step: review, slug: flows-as-dags-land}
+- {seq: 616, step: implement, slug: architect-flows-by-state}
+- {seq: 624, step: implement, slug: task-types-use-when}
+- {seq: 634, step: qa, slug: waste-to-spikes}
+- {seq: 636, step: review, slug: waste-to-spikes}
+- {seq: 642, step: pm, slug: null}
+- {seq: 654, step: qa, slug: compaction-config}
+- {seq: 655, step: qa, slug: coding-rules-config-land}
+- {seq: 659, step: review, slug: compaction-config}
+- {seq: 660, step: implement, slug: architect-flows-reason}
+- {seq: 667, step: review, slug: coding-rules-config-land}
+- {seq: 668, step: qa, slug: architect-flows-reason}
+- {seq: 678, step: implement, slug: plan-review-prompt-land}
+- {seq: 688, step: implement, slug: architect-flows-reason}
+- {seq: 692, step: qa, slug: dashboard-intent-status}
+- {seq: 694, step: review, slug: dashboard-intent-status}
+- {seq: 696, step: qa, slug: plan-review-prompt-land}
+- {seq: 700, step: review, slug: plan-review-prompt-land}
+- {seq: 713, step: implement, slug: pm-env-notes-land}
+- {seq: 720, step: implement, slug: session-portability}
+- {seq: 721, step: qa, slug: pm-env-notes-land}
+- {seq: 726, step: implement, slug: task-type-use-when}
+- {seq: 730, step: review, slug: pm-env-notes-land}
+- {seq: 732, step: qa, slug: session-portability}
+- {seq: 740, step: qa, slug: ingestion-steps}
+- {seq: 744, step: qa, slug: sh-zero-logic}
+- {seq: 746, step: review, slug: ingestion-steps}
+- {seq: 748, step: review, slug: sh-zero-logic}
+- {seq: 752, step: qa, slug: steward-on-red-land}
+- {seq: 755, step: qa, slug: session-portability}
+- {seq: 762, step: review, slug: session-portability}
+- {seq: 764, step: review, slug: steward-on-red-land}
+- {seq: 780, step: implement, slug: prompt-dry-run-lint-land}
+- {seq: 791, step: implement, slug: infra-agent}
+- {seq: 792, step: implement, slug: prompt-dry-run-lint-land}
+- {seq: 797, step: qa, slug: infra-agent}
+tasks:
+- {slug: architect-flows-by-state, kind: development, revision: 0}
+- {slug: architect-flows-reason, kind: development, revision: 0}
+- {slug: artifact-backends, kind: development, revision: 1}
+- {slug: artifact-lsp, kind: development, revision: 0}
+- {slug: canary-command-land, kind: development, revision: 0}
+- {slug: canary-command, kind: development, revision: 1}
+- {slug: cap-falls-back-land, kind: development, revision: 0}
+- {slug: cap-falls-back, kind: development, revision: 1}
+- {slug: checker-every-consult-land, kind: development, revision: 0}
+- {slug: checker-every-consult, kind: development, revision: 1}
+- {slug: cleanliness-no-scope, kind: development, revision: 1}
+- {slug: coding-rules-config-land, kind: development, revision: 1}
+- {slug: coding-rules-config, kind: development, revision: 1}
+- {slug: compaction-config, kind: development, revision: 1}
+- {slug: concerns-funnel, kind: development, revision: 0}
+- {slug: contributing-md, kind: development, revision: 0}
+- {slug: cost-split, kind: development, revision: 1}
+- {slug: dashboard-intent-status, kind: development, revision: 1}
+- {slug: effort-opaque-preflight-land, kind: development, revision: 0}
+- {slug: effort-opaque-preflight, kind: development, revision: 0}
+- {slug: fallback-resume-prompt, kind: development, revision: 0}
+- {slug: flows-as-dags-land, kind: development, revision: 0}
+- {slug: flows-as-dags, kind: development, revision: 0}
+- {slug: gate-speed-land, kind: development, revision: 0}
+- {slug: gate-speed, kind: development, revision: 0}
+- {slug: glitch-not-waste, kind: development, revision: 0}
+- {slug: goal-branch-current-land, kind: development, revision: 0}
+- {slug: goal-branch-current, kind: development, revision: 0}
+- {slug: iface-lint, kind: development, revision: 0}
+- {slug: infra-agent, kind: development, revision: 0}
+- {slug: ingestion-steps, kind: development, revision: 1}
+- {slug: lint-green-base, kind: trivial, revision: 0}
+- {slug: merge-conflict-parks, kind: development, revision: 0}
+- {slug: outcome-channel-spike, kind: spike, revision: 0}
+- {slug: pack-hashes-land, kind: development, revision: 0}
+- {slug: pack-hashes, kind: development, revision: 0}
+- {slug: parks-retired-land, kind: development, revision: 0}
+- {slug: parks-retired-on-land, kind: development, revision: 0}
+- {slug: pin-check-run-land, kind: development, revision: 0}
+- {slug: pin-check-run, kind: development, revision: 0}
+- {slug: pitch-doc, kind: development, revision: 0}
+- {slug: plan-review-prompt-land, kind: development, revision: 0}
+- {slug: plan-review-prompt, kind: development, revision: 0}
+- {slug: pm-env-notes-land, kind: development, revision: 0}
+- {slug: pm-env-notes, kind: development, revision: 0}
+- {slug: prompt-debloat-check, kind: development, revision: 0}
+- {slug: prompt-dry-run-lint-land, kind: development, revision: 0}
+- {slug: prompt-dry-run-lint, kind: development, revision: 0}
+- {slug: qa-catch-sampling-land, kind: development, revision: 0}
+- {slug: qa-catch-sampling, kind: development, revision: 0}
+- {slug: quota-unstated-reset, kind: development, revision: 0}
+- {slug: real-names-gate, kind: development, revision: 0}
+- {slug: real-names-out, kind: development, revision: 0}
+- {slug: repo-config-example, kind: development, revision: 0}
+- {slug: resume-prompt-relaunch-land, kind: development, revision: 0}
+- {slug: resume-prompt-relaunch, kind: development, revision: 0}
+- {slug: run-configs-out-of-tests-land, kind: development, revision: 0}
+- {slug: run-configs-out-of-tests, kind: development, revision: 0}
+- {slug: run-factory-skill-docs, kind: development, revision: 0}
+- {slug: saga-passes-spike, kind: spike, revision: 0}
+- {slug: sandbox-spike, kind: spike, revision: 0}
+- {slug: self-improve-plugin, kind: development, revision: 0}
+- {slug: session-portability, kind: development, revision: 0}
+- {slug: sh-zero-logic, kind: development, revision: 1}
+- {slug: steer-answer-on-stop, kind: development, revision: 1}
+- {slug: steward-on-red-land, kind: development, revision: 0}
+- {slug: steward-on-red, kind: development, revision: 0}
+- {slug: task-type-use-when, kind: development, revision: 0}
+- {slug: task-types-use-when, kind: development, revision: 0}
+- {slug: upscope-implementer, kind: development, revision: 0}
+- {slug: validate-cross-layer, kind: development, revision: 1}
+- {slug: warm-starts-respike, kind: spike, revision: 0}
+- {slug: waste-to-spikes, kind: development, revision: 1}
+- {slug: worktree-cleanup-goal-end, kind: development, revision: 0}
+- {slug: worktree-cleanup-land, kind: development, revision: 0}
+- {slug: zero-edit-done-spike, kind: spike, revision: 0}
+inbox: [20261123T030022405Z-da73a3f8, 20261123T040430129Z-77fb4e32, 20261123T041044650Z-bee00ef7, 20261124T000533427Z-274cb060]
+processed: [20261123T020757226Z-2b78b532, 20261123T020757357Z-6db4e23f, 20261123T040429328Z-29bf4251]
+expected:
+  parkRecords: 43
+  distinctParkedSlugs: 37
+  mergedTasks: 27
+  byCause:
+    empty-diff: 23
+    failed: 14
+    upscope: 2
+    gates: 2
+    base-conflict: 1
+    blocked: 1
+  landedUnchanged: 0
+  landedAmended: 9
+  landedUnknown: 0
+  # The plan's reference: the three routes the inbox held during the run.
+  referenceRouteMinutes:
+  - 0.9
+  - 12.8
+  - 9.9
+  # The mailbox also holds a processed steer routed by the same PM record.
+  routeMinutes:
+  - 0.9
+  - 9.9
+  - 12.8
+  - 12.9
+  answerMinutes:
+  - 12.9
+  # The two processed steers the architect answered left the inbox unrouted.
+  routeUnknown: 2
+  answerUnknown: 2
+  unanswered: 4
+  zeroEdit:
+    reply: 103
+    finding: 7
+    noop: 60

@@ -7,8 +7,10 @@ import {
   DEFAULT_ROLE_BY_STEP,
   iterationMetrics,
   rolesByStep,
+  steerLatency,
   writeMetrics,
 } from "../metrics.js";
+import type { IterationMetrics, SteerLatency } from "../metrics.js";
 import { loadPriceTable } from "../openrouter.js";
 import type { ArtifactStore, KernelRuntime, StepRecord } from "../types.js";
 import {
@@ -19,7 +21,7 @@ import {
 import { writeIntentStatus } from "./intent-status.js";
 import { summaryHeadLines, summaryMetricsLines } from "./render.js";
 import { baseGateLines, defaultStatus, distanceDebtLines } from "./tables.js";
-import type { SummaryInput, SummaryRender } from "./types.js";
+import type { SummaryInput, SummaryRender, SummaryStatus } from "./types.js";
 
 /** Writes the summary and its outbox notice, returning the summary path. */
 async function writeSummaryFile(
@@ -55,6 +57,31 @@ async function writeArchitectIntentStatus(
   );
 }
 
+/** The iteration metrics and the mailbox's steer latency, read once. */
+async function summaryComputed(
+  store: ArtifactStore,
+  input: SummaryInput,
+  iteration: number,
+  status: SummaryStatus,
+): Promise<{ computed: IterationMetrics; steers: SteerLatency }> {
+  const roleByStep = { ...DEFAULT_ROLE_BY_STEP, ...(input.roleByStep ?? {}) };
+  // Park landings and spike kinds read the task files; the summary reports the
+  // same facts the metrics write does.
+  const tasks = await store.listTasks();
+  const steers = await steerLatency(store, input.records);
+  const computed = iterationMetrics(
+    iteration,
+    status,
+    input.records,
+    roleByStep,
+    input.humanInterventions ?? 0,
+    input.prices ?? {},
+    input.priceIds,
+    tasks,
+  );
+  return { computed, steers };
+}
+
 /**
  * The guaranteed remarkable: exactly one summary per iteration, written even
  * when the iteration crashed. Everything here is derived from records and
@@ -82,15 +109,11 @@ export async function writeIterationSummary(
     recs,
     budgetStop,
   );
-  const roleByStep = { ...DEFAULT_ROLE_BY_STEP, ...(input.roleByStep ?? {}) };
-  const computed = iterationMetrics(
+  const { computed, steers } = await summaryComputed(
+    store,
+    input,
     iteration,
     status,
-    input.records,
-    roleByStep,
-    input.humanInterventions ?? 0,
-    input.prices ?? {},
-    input.priceIds,
   );
   const render: SummaryRender = {
     iteration,
@@ -101,6 +124,7 @@ export async function writeIterationSummary(
     facts,
     remarks,
     computed,
+    steers,
     named: summaryNamedRows(computed),
     agentTurns: recs.filter((r) => r.actor === "agent" && r.endedAt).length,
     scriptTurns: recs.filter((r) => r.actor === "script" && r.endedAt).length,
