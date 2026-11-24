@@ -1,6 +1,7 @@
 /** The prompt-variable descriptors, one entry per template variable. */
 
 import type { PromptVariablesPage } from "./types.js";
+import { DECIDER_PAGE } from "./data-decider.js";
 import { PLAN_CHECKER_PAGE } from "./data-plan-checker.js";
 import { REPAIR_PROMPT_VARIABLES } from "./data-repair.js";
 
@@ -245,6 +246,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
         "outcome YAML skeleton narrowed to `status`, `summary`, `concerns` and `qa`; supplied by the turn",
     },
   },
+  DECIDER_PAGE,
   {
     file: "reviewer.md",
     prompt: "reviewer",

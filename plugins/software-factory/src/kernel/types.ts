@@ -60,6 +60,7 @@ export type {
   CauseKind,
   EpicState,
   GoalStatus,
+  PendingSignal,
   State,
   TaskState,
 } from "./types/state.js";

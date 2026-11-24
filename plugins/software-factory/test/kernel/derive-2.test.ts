@@ -190,7 +190,7 @@ function registerDerivePart12(): void {
 }
 
 function registerDerivePart13(): void {
-  it("parks an empty fix after changes when it carries no replies", () => {
+  it("raises the empty-diff signal for an empty fix after changes with no replies", () => {
     const state = derive(
       [task("a")],
       [
@@ -201,9 +201,9 @@ function registerDerivePart13(): void {
         implement(5, 2, { tree: "tree-1", commit: "c1", base: "c0" }),
       ],
     );
-    expect(state.tasks.a!.phase).toBe("parked");
-    expect(causeText(state.tasks.a!.park)).toStartWith(
-      "empty-diff: implement r2",
+    expect(state.tasks.a!.phase).toBe("decide");
+    expect(state.tasks.a!.pendingSignal?.evidence).toStartWith(
+      "implement r2 committed no changes",
     );
   });
 }
@@ -284,12 +284,13 @@ function registerDerivePart15(): void {
       implement(3, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
       redCheck(4),
     ]);
-    expect(state.tasks.a!.phase).toBe("parked");
-    expect(state.tasks.a!.park).toEqual(
-      cause(
-        "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
-      ),
-    );
+    expect(state.tasks.a!.phase).toBe("decide");
+    expect(state.tasks.a!.park).toBeUndefined();
+    expect(state.tasks.a!.pendingSignal).toEqual({
+      kind: "empty-diff",
+      evidence:
+        "implement r1 committed no changes after red checks: unit (exit 1)",
+    });
   });
 }
 

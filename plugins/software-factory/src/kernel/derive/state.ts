@@ -203,6 +203,7 @@ function taskStateFor(
     gateLastCall: terminal ? undefined : reduction.gateLastCall,
     cleanlinessRevision: terminal ? undefined : reduction.cleanlinessRevision,
     cleanlinessJustified: terminal ? undefined : reduction.cleanlinessJustified,
+    pendingSignal: terminal ? undefined : reduction.pendingSignal,
   };
 }
 

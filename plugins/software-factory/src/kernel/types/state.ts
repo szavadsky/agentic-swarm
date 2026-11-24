@@ -56,6 +56,16 @@ export const causeSchema = z.object({
 });
 export type Cause = z.infer<typeof causeSchema>;
 
+/**
+ * A no-progress signal a turn raised instead of parking it in the kernel: the
+ * decider turn reads it, the branch and the checks log, then decides through
+ * its outcome. `evidence` is the sentence the park would have carried.
+ */
+export interface PendingSignal {
+  kind: CauseKind;
+  evidence: string;
+}
+
 export interface TaskState {
   status: TaskStatus;
   /** The task file's epic, copied so a consumer reading state keeps the owner. */
@@ -88,6 +98,8 @@ export interface TaskState {
   cleanlinessRevision?: boolean;
   /** True when the author justified a cleanliness hit to advance to review. */
   cleanlinessJustified?: boolean;
+  /** A no-progress signal awaiting its decide turn; the next action is `decide`. */
+  pendingSignal?: PendingSignal;
 }
 
 export type GoalStatus = "active" | "done" | "blocked";

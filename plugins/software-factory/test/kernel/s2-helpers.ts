@@ -24,6 +24,7 @@ import type {
 } from "../../src/kernel/types.js";
 import { prepareIntegrationCheckout } from "../../src/kernel/worktree.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
+import { DECIDE_STEP } from "../../src/kernel/pending-signal.js";
 import { scriptKernelRoleFallbacks } from "./fake-defaults.js";
 
 export interface FlowRepoOptions {
@@ -322,6 +323,20 @@ export function filePerTaskHandler(
  * dispatches that stall on purpose: the turn answers, the reasons land in
  * the stall-routes record, and dispatch ends at the boundary as today.
  */
+/** Binds the kernel decide turn's verdict; it persists for every decide call. */
+export function scriptDecider(
+  harness: FakeHarness,
+  patch: { summary: string; verdict: "approve" | "changes" | "reject" },
+): void {
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(outcome(patch));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: DECIDE_STEP }), fallback: true },
+  );
+}
+
 export function scriptStallLeave(
   harness: FakeHarness,
   slugs: string[],

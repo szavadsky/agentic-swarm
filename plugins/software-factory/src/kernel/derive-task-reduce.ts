@@ -22,7 +22,12 @@ import {
 } from "./derive-task-state.js";
 import { applyAgentTurn } from "./derive-task-turn.js";
 import { agentSteps } from "./review.js";
-import type { FlowDefinition, StepRecord, TaskFile } from "./types.js";
+import type {
+  FlowDefinition,
+  StepRecord,
+  TaskFile,
+  TaskPhase,
+} from "./types.js";
 
 /** Script records that never move the phase or count a turn. */
 const FREE_STEPS = new Set(["merge-checks", "debt", "setup", "pm-validate"]);
@@ -76,13 +81,20 @@ function applyRecord(
   if (rec.actor === "agent") applyAgentTurn(context, state, rec);
 }
 
+/** The phase pending work names, the park last: a park never rides a signal. */
+function settlePhase(state: ReduceState): TaskPhase {
+  if (state.park) return "parked";
+  if (state.pendingSignal) return "decide";
+  if (state.pendingChecks) return "checks";
+  return state.phase;
+}
+
 /** Folds pending work and the terminal fact into the reduction's final shape. */
 function finishReduction(
   state: ReduceState,
   terminal: TaskReduction["terminal"],
 ): TaskReduction {
-  if (state.pendingChecks) state.phase = "checks";
-  if (state.park) state.phase = "parked";
+  state.phase = settlePhase(state);
   if (terminal) {
     state.phase = "done";
     state.gateFix = false;
@@ -109,6 +121,8 @@ function finishReduction(
     cleanlinessJustified: terminal
       ? undefined
       : state.cleanlinessJustified || undefined,
+    pendingSignal:
+      terminal || state.park ? undefined : (state.pendingSignal ?? undefined),
   };
 }
 

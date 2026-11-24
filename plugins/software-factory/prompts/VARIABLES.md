@@ -174,6 +174,24 @@ The QA step's acceptance prompt: the implementer's Work, Bounds and Code standar
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome YAML skeleton narrowed to `status`, `summary`, `concerns` and `qa`; supplied by the turn
 
+## decider.md
+
+The decide turn's prompt: a task turn committed nothing and the kernel raised a signal instead of parking. The decider reads the signal, the branch, the checks log and the prior findings, then answers through its outcome verdict: approve continues to acceptance and ships, changes opens the next fix round, reject parks. It reuses the reviewer alias and session.
+
+- `pending_signal` — the raised signal as `<kind>: <evidence>`; the sentence the kernel would have parked with
+- `task_path` — path to the task file whose done-when the branch is judged against
+- `worktree` — path to the task worktree holding the branch
+- `base_hash` — commit hash before this task's first turn; the range spans every round
+- `head_hash` — commit hash after the latest turn
+- `findings` — the latest acceptance or red-check handoff; empty when none
+- `prior_findings` — the last review's numbered summary and concerns; empty before the first review
+- `checks_result` — latest checks record's failing-check text, or `pass` when green; `no checks run` without a checks record
+- `checks_tree` — the checked tree's hash; `unknown` without a checks record
+- `checks_log` — the checks record's directory; `unknown` without a checks record
+- `outcome_path` — path where the outcome file must be written when the harness asks for a file
+- `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
+- `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default
+
 ## reviewer.md
 
 `reviewer.md` is the shared reviewer composition for task reviews: an author-neutral intro, the author's body, the duties partial named by `author`, the verdict sentence, and the turn block common to every review. The task reviewer renders it with `author: implementer`, which selects `implementer-body`, `review-implementer` and `review-implementer-turn`. All turn variables stay in the final `## This turn` block.

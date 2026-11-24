@@ -9,6 +9,7 @@ import {
   cleanupFlowRepo,
   makeRuntime,
   outcome,
+  scriptDecider,
   scriptStallLeave,
   setupFlowRepo,
   writeTask,
@@ -183,7 +184,7 @@ function kERNEL0Scenario10ReviewReplyRoundPart1() {
 }
 
 function kERNEL0Scenario10ReviewReplyRoundPart2() {
-  it("parks empty-diff when a changes fix has neither a diff nor replies", async () => {
+  it("sends a changes fix with neither a diff nor replies to the decider", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -200,6 +201,10 @@ function kERNEL0Scenario10ReviewReplyRoundPart2() {
         ctx.writeOutcome(outcome({ summary: "nothing to report" }));
         return fakeTurnResult(req);
       });
+      scriptDecider(harness, {
+        summary: "the fix neither changed nor answered",
+        verdict: "reject",
+      });
       scriptStallLeave(harness, ["task"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -214,7 +219,14 @@ function kERNEL0Scenario10ReviewReplyRoundPart2() {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(causeText(state.tasks.task!.cause)).toStartWith("empty-diff:");
+      expect(causeText(state.tasks.task!.cause)).toContain(
+        "the fix neither changed nor answered",
+      );
+      expect(
+        records.filter(
+          (r) => r.slug === "task" && r.step === "decide" && r.endedAt,
+        ),
+      ).toHaveLength(1);
       expect(
         records.filter((r) => r.slug === "task" && r.step === "review"),
       ).toHaveLength(1);

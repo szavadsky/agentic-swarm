@@ -4,6 +4,7 @@ import { preexistingRed, recordedBaseGates } from "./baseline.js";
 import { makeCause } from "./cause.js";
 import { worktreeClean } from "./flow-commit.js";
 import {
+  deciderSession,
   followUpSession,
   isFixTurn,
   isRelaunchStep,
@@ -24,6 +25,7 @@ import {
 } from "./flow-turn.js";
 import { openTaskWorktree } from "./flow-worktree.js";
 import { abortMerge, mergeHeadSha, prepareResolve } from "./merge-conflict.js";
+import { isDecideStep } from "./pending-signal.js";
 import { isAcceptanceStep, isVerdictStep } from "./review.js";
 import type {
   FlowDefinition,
@@ -300,10 +302,11 @@ async function chooseSession(
   );
   run.trivial = isTrivialImplementTurn(runtime, task, state, step.id);
   run.turnCwd = ensured.path;
-  run.session =
-    isAcceptanceStep(step) ||
-    (run.relaunch && !run.trivial) ||
-    (run.fix && !run.trivial)
+  run.session = isDecideStep(step)
+    ? await deciderSession(runtime, task, run.target, run.records, ensured.path)
+    : isAcceptanceStep(step) ||
+        (run.relaunch && !run.trivial) ||
+        (run.fix && !run.trivial)
       ? await followUpSession(
           runtime,
           task,

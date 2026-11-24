@@ -4,6 +4,7 @@
  * repeated failure escalates to.
  */
 
+import { DECIDE_STEP, decideStep, isDecideStep } from "./pending-signal.js";
 import { isRecoveryCrash } from "./recovery-seal.js";
 import { frontTarget, frontTaskClass } from "./flow-context-front.js";
 import { bySeq } from "./flow-context-history.js";
@@ -28,6 +29,9 @@ export function flowOf(runtime: KernelRuntime, task: TaskFile): FlowDefinition {
 }
 
 export function findStep(flow: FlowDefinition, id: string): FlowStep {
+  // The decide turn is raised by a signal, never configured: it borrows the
+  // reviewer's prompt role and alias without entering any step sequence.
+  if (id === DECIDE_STEP) return decideStep(flow);
   const step = flow.steps.find((s) => s.id === id);
   if (!step) throw new Error(`flow has no step "${id}"`);
   return step;
@@ -40,6 +44,9 @@ export function findStep(flow: FlowDefinition, id: string): FlowStep {
  * previous branch's tree, so the seam between ready steps is a gate too.
  */
 export function checksDue(flow: FlowDefinition, id: string): boolean {
+  // The decide turn reads the checks record already on the branch; it never
+  // gates the tree it produced no work on.
+  if (isDecideStep(id)) return false;
   // The resolve step is outside the agent sequence: its commit is the branch's
   // new tip, so the gates that decide the re-merge always run after it.
   if (id === "resolve") return true;

@@ -12,6 +12,7 @@ import { makeCause } from "./cause.js";
 import { frontTarget, lastFrontRecord } from "./flow-context-front.js";
 import { bySeq } from "./flow-context-history.js";
 import { findStep, flowOf } from "./flow-context-step.js";
+import { DECIDE_STEP } from "./pending-signal.js";
 import type { TurnTarget } from "./flow-context-targets.js";
 import { scriptMeta } from "./record.js";
 import type { PromptLibrary } from "./prompts.js";
@@ -140,6 +141,37 @@ export async function followUpSession(
     return undefined;
   }
   return prior!.session;
+}
+
+/**
+ * The session the decide turn continues: the task's reviewer session when one
+ * exists, else the decide turn's own prior session, else a fresh reviewer turn.
+ */
+export async function deciderSession(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  target: TurnTarget,
+  records: StepRecord[],
+  worktree: string,
+): Promise<SessionRef | undefined> {
+  const review = flowOf(runtime, task).steps.find(
+    (step) => step.review === true,
+  );
+  const reviewer =
+    review === undefined
+      ? undefined
+      : await followUpSession(
+          runtime,
+          task,
+          target,
+          review.id,
+          records,
+          worktree,
+        );
+  return (
+    reviewer ??
+    followUpSession(runtime, task, target, DECIDE_STEP, records, worktree)
+  );
 }
 
 /** The step's ended agent sessions for this task, oldest first. */

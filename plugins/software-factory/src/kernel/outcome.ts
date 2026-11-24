@@ -2,6 +2,7 @@ import fs from "node:fs";
 import yaml from "yaml";
 import type { z } from "zod";
 import { knownDebtIds } from "./derive.js";
+import { DECIDE_STEP } from "./pending-signal.js";
 import { qaReportOf } from "./qa.js";
 import {
   type FlowDefinition,
@@ -163,6 +164,8 @@ export function expectationForStep(
   flows: Record<string, FlowDefinition>,
 ): OutcomeExpectation {
   if (!step) return "any";
+  // A decide turn answers through a review verdict; it is no configured flow step.
+  if (step === DECIDE_STEP) return "review";
   if (Object.hasOwn(KERNEL_TURN_STEPS, step)) {
     return KERNEL_TURN_STEPS[step as KernelTurnStep];
   }

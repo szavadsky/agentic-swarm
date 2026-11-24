@@ -13,6 +13,7 @@ import {
   goalCheckout,
   makeRuntime,
   outcome,
+  scriptDecider,
   scriptStallLeave,
   setupFlowRepo,
   whenTurn,
@@ -73,6 +74,10 @@ function scriptZeroEditRevision(harness: FakeHarness): void {
     },
     { when: whenTurn({ step: "review" }) },
   );
+  scriptDecider(harness, {
+    summary: "the kept work is already on the head",
+    verdict: "reject",
+  });
 }
 
 /** Runs the revision to the boundary and returns its records and state. */
@@ -175,8 +180,9 @@ async function expectEqualTreeParks(repo: Repo, goal: string) {
   expect(advance.tree).toBe(advance.headTree);
   expect(state.tasks.beta!.status).toBe("parked");
   expect(causeText(state.tasks.beta!.cause)).toContain(
-    "kept work is already on the head",
+    "the kept work is already on the head",
   );
+  expect(revisionRecords(records, (r) => r.step === "decide")).toHaveLength(1);
   expect(revisionRecords(records, (r) => r.step === "review")).toEqual([]);
   expect(revisionRecords(records, (r) => r.step === "merge")).toEqual([]);
 }

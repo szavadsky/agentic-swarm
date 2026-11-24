@@ -170,7 +170,7 @@ function emptyGateFixDeferralPart4(
   scope: ReturnType<typeof emptyGateFixDeferralPart2>,
 ) {
   const { failedChecks } = scope;
-  it("an identical red after an empty gate fix parks empty-diff after red checks", () => {
+  it("an identical red after an empty gate fix raises the empty-diff signal", () => {
     const t = task("a");
     const flow = DEFAULT_FLOWS["implement-review"]!;
     const reduction = reduceTask(
@@ -183,12 +183,13 @@ function emptyGateFixDeferralPart4(
       ],
       flow,
     );
-    expect(reduction.phase).toBe("parked");
-    expect(reduction.park).toEqual(
-      cause(
-        "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
-      ),
-    );
+    expect(reduction.phase).toBe("decide");
+    expect(reduction.park).toBeUndefined();
+    expect(reduction.pendingSignal).toEqual({
+      kind: "empty-diff",
+      evidence:
+        "implement r1 committed no changes after red checks: unit (exit 1)",
+    });
   });
 
   it("a changed red set after an empty gate fix loops the fix", () => {
@@ -282,7 +283,7 @@ function emptyGateFixDeferralPart6(
     expect(reduction.loop).toBeUndefined();
   });
 
-  it("an identical red after an empty merge-gates fix parks empty-diff after red checks", () => {
+  it("an identical red after an empty merge-gates fix raises the empty-diff signal", () => {
     const t = task("a", { flow: "just-implement" });
     const flow = DEFAULT_FLOWS["just-implement"]!;
     const reduction = reduceTask(
@@ -296,12 +297,13 @@ function emptyGateFixDeferralPart6(
       ],
       flow,
     );
-    expect(reduction.phase).toBe("parked");
-    expect(reduction.park).toEqual(
-      cause(
-        "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
-      ),
-    );
+    expect(reduction.phase).toBe("decide");
+    expect(reduction.park).toBeUndefined();
+    expect(reduction.pendingSignal).toEqual({
+      kind: "empty-diff",
+      evidence:
+        "implement r1 committed no changes after red checks: unit (exit 1)",
+    });
   });
 }
 

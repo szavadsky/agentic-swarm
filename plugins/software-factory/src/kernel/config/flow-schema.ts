@@ -199,7 +199,7 @@ export const flowStepSchema = z
   );
 
 /** Step ids the flow vocabulary reserves; never usable as `after` targets. */
-const RESERVED_STEP_IDS = new Set(["checks", "resolve"]);
+const RESERVED_STEP_IDS = new Set(["checks", "decide", "resolve"]);
 
 /** A flow's raw shape: the step list every refinement reads. */
 const flowBaseSchema = z

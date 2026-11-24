@@ -11,6 +11,7 @@ import {
   cleanupFlowRepo,
   makeRuntime,
   outcome,
+  scriptDecider,
   scriptStallLeave,
   setupFlowRepo,
   writeTask,
@@ -230,22 +231,30 @@ function registerMidRunSteerHoldsPart2(): void {
         ctx.writeOutcome(outcome({ summary: "held alpha" }));
         return fakeTurnResult(req);
       });
+      scriptDecider(harness, {
+        summary: "the branch committed no changes",
+        verdict: "reject",
+      });
       scriptStallLeave(harness, ["alpha"]);
 
       const dispatched = await runDispatch(runtime, { iteration: 1 });
       expect(dispatched.reason).toBe("boundary");
       const state = await tasks(runtime);
       expect(state.tasks.alpha!.status).toBe("parked");
-      expect(state.tasks.alpha!.cause).toEqual(
-        cause("empty-diff: implement r1 committed no changes"),
-      );
+      expect(state.tasks.alpha!.cause).toEqual({
+        kind: "review-rejected",
+        detail: "the branch committed no changes",
+      });
       const records = await runtime.store.listRecords();
       expect(
         records.filter((r) => r.slug === "alpha" && r.step === "park"),
       ).toHaveLength(1);
       expect(
         records.find((r) => r.slug === "alpha" && r.step === "park")?.cause,
-      ).toEqual(cause("empty-diff: implement r1 committed no changes"));
+      ).toEqual({
+        kind: "review-rejected",
+        detail: "the branch committed no changes",
+      });
       expect(
         records.some((r) => r.slug === "alpha" && r.step === "merge"),
       ).toBe(false);

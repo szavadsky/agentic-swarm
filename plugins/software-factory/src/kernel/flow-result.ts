@@ -13,6 +13,7 @@ import {
 import { redGateCause, runTaskGates } from "./flow-gates.js";
 import { type TaskMeta, taskMeta } from "./flow-meta.js";
 import type { TaskActionResult } from "./flow-state.js";
+import { isDecideStep } from "./pending-signal.js";
 import { qaReportOf } from "./qa.js";
 import { appendDebt, appendPark } from "./record.js";
 import { isLastReviewCall } from "./review.js";
@@ -135,6 +136,9 @@ async function settleOutcome(
     await appendPark(runtime.store, meta, parkCause(status, outcome?.summary));
     return true;
   }
+  // The decide turn's verdict is read by derive against its signal, never
+  // parked or debited here.
+  if (isDecideStep(step)) return false;
   if (step.qa) return qaStepOutcome(runtime, step, state, meta, outcome);
   if (step.review) {
     await reviewStepOutcome(runtime, step, state, meta, outcome);

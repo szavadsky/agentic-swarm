@@ -11,6 +11,7 @@ import {
   cleanupFlowRepo,
   makeRuntime,
   outcome,
+  scriptDecider,
   scriptStallLeave,
   setupFlowRepo,
   writeTask,
@@ -220,7 +221,7 @@ async function landsNoChangeFirstTurnCarryingKeptPart2_1(
 }
 
 function registerEmptyDiffPart1(): void {
-  it("parks a task whose implement turn commits nothing instead of running the reviewer", async () => {
+  it("sends an empty implement turn to the decider, never straight to the reviewer", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -229,6 +230,10 @@ function registerEmptyDiffPart1(): void {
           outcome({ summary: "reported done without a change" }),
         );
         return fakeTurnResult(req);
+      });
+      scriptDecider(harness, {
+        summary: "the branch contradicts the done-when",
+        verdict: "reject",
       });
       scriptStallLeave(harness, ["task"]);
 
@@ -244,11 +249,15 @@ function registerEmptyDiffPart1(): void {
         runtime.configs.process.flows,
       );
       expect(state.tasks.task!.status).toBe("parked");
-      expect(state.tasks.task!.cause?.kind === "empty-diff").toBe(true);
-      expect(harness.calls.length).toBe(2);
+      expect(state.tasks.task!.cause?.kind).toBe("review-rejected");
+      // The implementer, its decider and the PM stall turn; no reviewer.
+      expect(harness.calls.length).toBe(3);
       expect(
         records.filter((r) => r.slug === "task" && r.step === "review"),
       ).toEqual([]);
+      expect(
+        records.filter((r) => r.slug === "task" && r.step === "decide"),
+      ).toHaveLength(1);
       expect(
         records.filter(
           (r) =>
@@ -256,7 +265,7 @@ function registerEmptyDiffPart1(): void {
             r.step === "park" &&
             r.cause?.kind === "empty-diff",
         ),
-      ).toHaveLength(1);
+      ).toEqual([]);
       expect(
         repo.git(["show", "factory/demo:task.txt"], { allowFail: true }).code,
       ).not.toBe(0);

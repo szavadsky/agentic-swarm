@@ -17,6 +17,7 @@ import {
   fixDispositions,
   lastAcceptance,
   lastChecks,
+  lastDecide,
   lastMergeChecks,
   lastReview,
 } from "./flow-context-history.js";
@@ -72,10 +73,13 @@ function readHandoff(
 ): Handoff {
   const review = lastReview(records, task.slug, flow);
   const acceptance = lastAcceptance(records, task.slug, flow);
+  const decide = lastDecide(records, task.slug);
   const qaStep = flow.steps.find((step) => step.id === stepId)?.qa === true;
   const checks = lastChecks(records, task.slug);
   const mergeChecks = lastMergeChecks(records, task.slug);
-  const latest = [acceptance, checks, mergeChecks]
+  // A decide turn's `changes` verdict is the next fix turn's findings, like a
+  // review's: it is the ask that sent the work back.
+  const latest = [acceptance, decide, checks, mergeChecks]
     .filter((r): r is StepRecord => Boolean(r))
     .sort(bySeq)
     .at(-1);
@@ -84,6 +88,8 @@ function readHandoff(
   let findings = "";
   if (latest === acceptance && acceptance?.outcome)
     findings = formatAcceptanceFindings(acceptance.outcome);
+  else if (latest === decide && decide?.outcome)
+    findings = formatAcceptanceFindings(decide.outcome);
   else if (latest?.checks)
     findings = formatFailingChecks(recordFailures(latest, preexisting));
 
@@ -142,6 +148,9 @@ function commonVars(
         .join("\n") || "none",
     base_gates: formatBaseGates(handoff.base),
     findings: handoff.findings,
+    pending_signal: state?.pendingSignal
+      ? `${state.pendingSignal.kind}: ${state.pendingSignal.evidence}`
+      : "",
     checks_result: checks?.checks
       ? formatFailingChecks(checks.checks) || "pass"
       : CHECK_HANDOFF_DEFAULTS.checks_result,

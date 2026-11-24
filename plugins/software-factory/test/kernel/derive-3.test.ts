@@ -188,12 +188,13 @@ function registerDerivePart21(): void {
     expect(deferred.tasks.a!.park).toBeUndefined();
 
     const state = derive(tasks, [...prefix, redCheck(11)]);
-    expect(state.tasks.a!.phase).toBe("parked");
-    expect(state.tasks.a!.park).toEqual(
-      cause(
-        "empty-diff: implement r2 committed no changes after red checks: unit (exit 1)",
-      ),
-    );
+    expect(state.tasks.a!.phase).toBe("decide");
+    expect(state.tasks.a!.park).toBeUndefined();
+    expect(state.tasks.a!.pendingSignal).toEqual({
+      kind: "empty-diff",
+      evidence:
+        "implement r2 committed no changes after red checks: unit (exit 1)",
+    });
   });
 }
 
@@ -256,25 +257,28 @@ function registerDerivePart23(): void {
     expect(deferred.tasks.a!.loop).toBeUndefined();
 
     const state = derive(tasks, [...prefix, redCheck(6)]);
-    expect(state.tasks.a!.phase).toBe("parked");
-    expect(state.tasks.a!.park).toEqual(
-      cause(
-        "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
-      ),
-    );
+    expect(state.tasks.a!.phase).toBe("decide");
+    expect(state.tasks.a!.park).toBeUndefined();
+    expect(state.tasks.a!.pendingSignal).toEqual({
+      kind: "empty-diff",
+      evidence:
+        "implement r1 committed no changes after red checks: unit (exit 1)",
+    });
   });
 }
 
 function registerDerivePart24(): void {
-  it("keeps the plain empty-diff cause for a first turn with no commit", () => {
+  it("keeps the plain empty-diff signal for a first turn with no commit", () => {
     const state = derive(
       [task("a")],
       [implement(1, 1, { tree: "tree-0", commit: "c0", base: "c0" })],
     );
-    expect(state.tasks.a!.phase).toBe("parked");
-    expect(state.tasks.a!.park).toEqual(
-      cause("empty-diff: implement r1 committed no changes"),
-    );
+    expect(state.tasks.a!.phase).toBe("decide");
+    expect(state.tasks.a!.park).toBeUndefined();
+    expect(state.tasks.a!.pendingSignal).toEqual({
+      kind: "empty-diff",
+      evidence: "implement r1 committed no changes",
+    });
   });
 
   it("does not park a productive turn that changed the tree", () => {

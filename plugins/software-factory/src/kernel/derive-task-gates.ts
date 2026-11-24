@@ -20,6 +20,7 @@ import {
 } from "./derive-task-facts.js";
 import type { ReduceContext, ReduceState } from "./derive-task-state.js";
 import { attributedFailures, isInfraCheck } from "./gates.js";
+import { DECIDE_STEP } from "./pending-signal.js";
 import { isRecoveryCrash } from "./recovery-seal.js";
 import { checksFixLimit, isLastChecksFixCall } from "./review.js";
 import type { Cause, StepRecord } from "./types.js";
@@ -125,15 +126,17 @@ function settleRedChecks(
   ) {
     // The fix changed nothing and the same checks still fail: a deterministic
     // red the fix did not address. A red without a comparable baseline (merge
-    // gates with no recorded checks) parks the same way; green and changed
+    // gates with no recorded checks) raises the same signal; green and changed
     // reds move on below.
-    state.park = makeCause(
-      "empty-diff",
-      state.gateFailure !== undefined
-        ? `${deferred.step} r${deferred.round} committed no changes after red checks: ${state.gateFailure}`
-        : `${deferred.step} r${deferred.round} committed no changes`,
-    );
-    state.phase = "parked";
+    state.pendingSignal = {
+      kind: "empty-diff",
+      evidence:
+        state.gateFailure !== undefined
+          ? `${deferred.step} r${deferred.round} committed no changes after red checks: ${state.gateFailure}`
+          : `${deferred.step} r${deferred.round} committed no changes`,
+    };
+    state.signalStepIndex = context.flowIndex.get(deferred.step) ?? 0;
+    state.phase = DECIDE_STEP;
     return;
   }
   state.gateFixCount += 1;

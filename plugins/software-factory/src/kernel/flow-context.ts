@@ -18,6 +18,7 @@ export {
 } from "./flow-context-history.js";
 export {
   compactSession,
+  deciderSession,
   followUpSession,
   priorStepCommit,
   resumeNote,

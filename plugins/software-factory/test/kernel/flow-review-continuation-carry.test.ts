@@ -15,6 +15,7 @@ import {
   goalCheckout,
   makeRuntime,
   outcome,
+  scriptDecider,
   scriptStallLeave,
   setupFlowRepo,
   writeTask,
@@ -204,6 +205,10 @@ async function parksEmptyDiffWhenKeptWorkAlreadyPart1(
     );
     return fakeTurnResult(req);
   });
+  scriptDecider(harness, {
+    summary: "the kept work is already on the head",
+    verdict: "reject",
+  });
   await writeTask(
     runtime,
     task("beta", { base: "alpha", scope: ["alpha.txt"] }),
@@ -226,8 +231,12 @@ async function parksEmptyDiffWhenKeptWorkAlreadyPart2(
     runtime.configs.process.flows,
   );
   expect(state.tasks.beta!.status).toBe("parked");
-  expect(causeText(state.tasks.beta!.cause)).toStartWith("empty-diff:");
-  expect(causeText(state.tasks.beta!.cause)).toContain("already on the head");
+  expect(causeText(state.tasks.beta!.cause)).toContain(
+    "the kept work is already on the head",
+  );
+  expect(
+    records.filter((r) => r.slug === "beta" && r.step === "decide"),
+  ).toHaveLength(1);
   expect(
     records.filter((r) => r.slug === "beta" && r.step === "review"),
   ).toEqual([]);

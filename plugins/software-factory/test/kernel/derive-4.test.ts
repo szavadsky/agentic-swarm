@@ -110,12 +110,13 @@ function stillLoopsImplementerWhenRedCheckPart2(
       ],
     }),
   ]);
-  expect(parked.tasks.a!.phase).toBe("parked");
-  expect(parked.tasks.a!.park).toEqual(
-    cause(
-      "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
-    ),
-  );
+  expect(parked.tasks.a!.phase).toBe("decide");
+  expect(parked.tasks.a!.park).toBeUndefined();
+  expect(parked.tasks.a!.pendingSignal).toEqual({
+    kind: "empty-diff",
+    evidence:
+      "implement r1 committed no changes after red checks: unit (exit 1)",
+  });
 }
 
 function registerDerivePart28(): void {

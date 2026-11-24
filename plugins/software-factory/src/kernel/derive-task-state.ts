@@ -11,6 +11,7 @@ import type {
   Cause,
   FlowDefinition,
   FlowStep,
+  PendingSignal,
   ProgressRepeat,
   ReviewVerdict,
   StepRecord,
@@ -65,6 +66,10 @@ export interface ReduceState {
   seenCountedTurn: boolean;
   turns: number;
   resolveRan: boolean;
+  /** A no-progress signal awaiting its decide turn. */
+  pendingSignal: PendingSignal | null;
+  /** The flow step that raised the signal; approval advances past it. */
+  signalStepIndex: number;
   seen: Map<string, { step: string; round: number }>;
   lastInfraStep?: string;
   infraRepeatCount: number;
@@ -96,6 +101,8 @@ export function createReduceState(
     seenCountedTurn: false,
     turns: 0,
     resolveRan: false,
+    pendingSignal: null,
+    signalStepIndex: 0,
     seen: new Map(),
     infraRepeatCount: 0,
   };

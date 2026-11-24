@@ -14,6 +14,7 @@ import {
   goalCheckout,
   makeRuntime,
   outcome,
+  scriptDecider,
   setupFlowRepo,
   scriptStallLeave,
   whenTurn,
@@ -295,6 +296,7 @@ async function failsTaskWhoseNewFailureHidesPart1(
     ctx.writeOutcome(outcome({ summary: "no change to make" }));
     return fakeTurnResult(req);
   });
+  scriptDecider(harness, { summary: "package red", verdict: "reject" });
   scriptStallLeave(harness, ["task"]);
 
   const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -350,9 +352,7 @@ async function failsTaskWhoseNewFailureHidesPart2(
   );
 
   expect(state.tasks.task!.status).toBe("parked");
-  expect(causeText(state.tasks.task!.cause)).toContain(
-    "empty-diff: implement r1 committed no changes after red checks: package",
-  );
+  expect(causeText(state.tasks.task!.cause)).toContain("package red");
   // Reason Y is absent from base, so the first branch check is the task's own.
   expect(checks).toHaveLength(3);
   expect(checks.every((r) => r.ok === false)).toBe(true);

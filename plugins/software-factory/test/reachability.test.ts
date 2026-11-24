@@ -133,6 +133,15 @@ const PROMPT_DOCS: Record<string, string> = {
   "VARIABLES.md": "prompt variable reference for authors, never rendered",
 };
 
+/**
+ * Kernel-raised prompts whose names are not a config literal: a signal or a
+ * kernel turn names them at runtime. Each needs a reason, like an allowlist.
+ */
+const RUNTIME_PROMPTS: Record<string, string> = {
+  decider:
+    "the kernel decide turn renders it on a signal; no flow step or config key names it",
+};
+
 /** Matches Liquid includes: `{% include 'name' %}` (either quote, `-` trims allowed). */
 const INCLUDE_SPECIFIER = /\{%\s*include\s*['"]([^'"]+)['"]/g;
 /** Matches direct fragment renders in src: `.render("name"` and `.placeholders("name"`. */
@@ -255,8 +264,25 @@ function entryFragments(): Set<string> {
 
 describe("prompt fragment reachability", () => {
   const fragments = promptFragments();
-  const used = new Set([...includedFragments(), ...entryFragments()]);
+  const used = new Set([
+    ...includedFragments(),
+    ...entryFragments(),
+    ...Object.keys(RUNTIME_PROMPTS),
+  ]);
   const dead = fragments.filter((fragment) => !used.has(fragment));
+
+  it("keeps every runtime prompt named and reason-carrying", () => {
+    for (const [fragment, reason] of Object.entries(RUNTIME_PROMPTS)) {
+      expect(
+        reason.trim().length,
+        `runtime prompt ${fragment} has no reason`,
+      ).toBeGreaterThan(0);
+      expect(
+        fs.existsSync(path.join(PACKAGE_ROOT, "prompts", `${fragment}.md`)),
+        `runtime prompt ${fragment} no longer exists`,
+      ).toBe(true);
+    }
+  });
 
   it("fails on a prompt fragment no template includes and no entrypoint renders", () => {
     expect(dead).toEqual([]);

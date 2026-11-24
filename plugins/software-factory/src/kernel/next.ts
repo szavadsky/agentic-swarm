@@ -1,4 +1,5 @@
 import { makeCause } from "./cause.js";
+import { DECIDE_STEP } from "./pending-signal.js";
 import { agentSteps, isAcceptanceStep, reviewRoundLimit } from "./review.js";
 import type {
   Action,
@@ -68,6 +69,8 @@ function readyTaskAction(
   slug: string,
   limits: Limits,
 ): Action {
+  if (task.pendingSignal)
+    return { kind: "step", slug, step: DECIDE_STEP, round: task.round };
   if (task.park) return park(slug, task.park);
   if (task.loop) {
     const loop = task.loop;

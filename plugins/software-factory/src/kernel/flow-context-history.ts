@@ -3,6 +3,7 @@
  * acceptance, checks and merge-checks, the task's base commits, and the red
  * gate request count. Pure reads over the record list.
  */
+import { DECIDE_STEP } from "./pending-signal.js";
 import { formatFixDispositions } from "./record.js";
 import { isVerdictStep } from "./review.js";
 import type { FlowDefinition, StepRecord, TaskState } from "./types.js";
@@ -80,6 +81,17 @@ export function fixDispositions(
   const fix = lastProductiveTurn(records, slug, flow);
   if (!fix || fix.round !== round || !fix.outcome) return "";
   return formatFixDispositions(fix.outcome);
+}
+
+/** The latest decide turn's outcome, the findings a `changes` decision hands on. */
+export function lastDecide(
+  records: StepRecord[],
+  slug: string,
+): StepRecord | undefined {
+  return records
+    .filter((r) => r.slug === slug && r.step === DECIDE_STEP && r.outcome)
+    .sort(bySeq)
+    .at(-1);
 }
 
 export function lastChecks(

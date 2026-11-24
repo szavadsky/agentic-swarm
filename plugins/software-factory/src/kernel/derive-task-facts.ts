@@ -16,6 +16,7 @@ import { SPIKE_REPORT_CHECK, spikeReportPath } from "./spike-report.js";
 import type {
   Cause,
   FlowDefinition,
+  PendingSignal,
   ProgressRepeat,
   ReviewVerdict,
   StepRecord,
@@ -86,6 +87,7 @@ export interface TaskReduction {
   gateLastCall?: boolean;
   cleanlinessRevision?: boolean;
   cleanlinessJustified?: boolean;
+  pendingSignal?: PendingSignal;
 }
 
 export interface PendingChecks {
