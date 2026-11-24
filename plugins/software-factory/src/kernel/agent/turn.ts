@@ -257,6 +257,44 @@ function renderRepairPrompt(
   );
 }
 
+/**
+ * One fresh-session turn judges the work the reminders could not deliver for:
+ * implement turns only, since only their branch carries the task's edits.
+ */
+export async function rescueTurn(state: AgentTurnState): Promise<void> {
+  const rescue = state.spec.rescue;
+  if (rescue === undefined) return;
+  if (state.findings.length === 0 || isHalted(state.stop)) return;
+  // The flow renders the ask from the turn's vars; the outcome path is the
+  // record's, so the kernel supplies it to that render.
+  state.spec.vars.outcome_path = state.outcomePath;
+  const ask = await rescue(state.findings);
+  // A branch that carries nothing is not rescued: the turn parks as before.
+  if (ask === null) return;
+  // A stale outcome from the failed attempt is not the rescue's.
+  fs.rmSync(state.outcomePath, { force: true });
+  state.repairFindings.push(...state.findings);
+  state.asks.push("rescue");
+  const rescueCall = await callChain(
+    state.runtime,
+    state.spec,
+    state.outcomePath,
+    state.timeouts,
+    state.tierIndex,
+    ask,
+    undefined,
+  );
+  state.lastResult = rescueCall.result;
+  state.attempts = [...state.attempts, ...rescueCall.attempts];
+  state.stop = rescueCall.result.stop;
+  state.usage = addUsage(state.usage, rescueCall.usage);
+  absorbServed(state, rescueCall);
+  state.session = rescueCall.result.session;
+  state.text = rescueCall.result.text;
+  state.tierIndex = rescueCall.endIndex;
+  await assessTurn(state, true);
+}
+
 /** Bounded reminders: each repair ask re-reads the outcome it produced. */
 export async function repairLoop(state: AgentTurnState): Promise<void> {
   while (

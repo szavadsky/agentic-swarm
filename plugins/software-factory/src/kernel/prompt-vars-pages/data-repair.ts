@@ -44,6 +44,28 @@ export const REPAIR_PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     },
   },
   {
+    file: "rescue-turn.md",
+    prompt: "rescue-turn",
+    intro:
+      "The fresh-session ask the flow renders when an implement turn left work on its branch but delivered no valid outcome after its reminders. The kernel sends it once, without a session, so the ask stands alone: it names the task, the worktree and the diff range the new turn must judge, then the outcome findings the hook passed and the acceptance findings from the turn's own vars that `replies` must answer. It is not a role prompt: it is rendered directly by the flow, never included by another prompt.",
+    variables: {
+      role: "the prompt (the role) whose turn left the work",
+      worktree: "the worktree holding the branch's work",
+      task_path: "path to the task file the work answers",
+      base_hash: "commit hash the branch's work is judged from",
+      head_hash: "commit hash the branch reached before the rescue call",
+      outcome_findings:
+        "the surviving outcome findings the kernel passed to the hook, as `- ` bullet lines",
+      findings:
+        "the acceptance findings the turn already answers, as the implementer's vars render them; empty when none",
+      outcome_path: "path where the outcome must be written",
+      validate_cmd:
+        "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
+      outcome_schema:
+        "outcome YAML skeleton from the kernel schema; supplied by the turn",
+    },
+  },
+  {
     file: "architect-repair.md",
     prompt: "architect-repair",
     intro:

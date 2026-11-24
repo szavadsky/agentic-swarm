@@ -58,6 +58,8 @@ export function promptNamesForConfig(configs: ConfigBundle): string[] {
     process.hierarchy?.subarchitect.unfinishedPrompt,
   );
   names.add(process.repairPrompt ?? "delivery-repair");
+  // The flow renders the rescue ask directly, not through a step's config key.
+  names.add("rescue-turn");
   names.add("architect-subarchitects");
   names.add("subarchitect-agent");
   return [...names].sort();

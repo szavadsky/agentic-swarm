@@ -59,6 +59,7 @@ const CONFIGURED_PROMPTS = [
   "qa",
   "review-architect",
   "reviewer",
+  "rescue-turn",
   "steward",
   "subarchitect",
   "subarchitect-agent",

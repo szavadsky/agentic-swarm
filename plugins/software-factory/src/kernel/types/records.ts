@@ -48,7 +48,8 @@ export interface StepRecord {
   repairFindings?: string[];
   /**
    * Each repair ask this turn sent, in order: `outcome` for the outcome-only
-   * repair, `unfinished` for the finish-the-task ask. Old records carry none.
+   * repair, `unfinished` for the finish-the-task ask, `rescue` for the fresh
+   * session that reads the branch's work. Old records carry none.
    */
   asks?: RepairAsk[];
   /**
