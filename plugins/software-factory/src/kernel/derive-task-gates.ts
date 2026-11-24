@@ -7,6 +7,8 @@
 import type { CheckResult } from "../core/checks/types.js";
 import { formatCause, makeCause } from "./cause.js";
 import {
+  cleanlinessLines,
+  everyCleanlinessLineAccepted,
   failingChecksText,
   failingNames,
   mergeGateNames,
@@ -43,6 +45,7 @@ function handleCleanlinessRevision(
 ): void {
   state.cleanlinessRevision = true;
   state.cleanlinessRevised = true;
+  state.cleanlinessRedLines = cleanlinessLines(red);
   state.gateFix = false;
   state.gateLastCall = false;
   state.gateFailure = failingChecksText(red);
@@ -57,19 +60,19 @@ function settleChecksVerdict(
   red: readonly CheckResult[],
   pending: PendingChecks,
 ): void {
-  const isJustified =
-    state.cleanlinessRevision &&
-    state.cleanlinessJustified &&
+  const cleanlinessOnly =
+    red.some((check) => check.name === "cleanliness") &&
     !red.some((check) => check.name !== "cleanliness");
-  if (isJustified) {
+  // Justification belongs to the finding: a red whose every line the author
+  // already accepted is held wherever it reappears, including after QA.
+  if (
+    cleanlinessOnly &&
+    everyCleanlinessLineAccepted(red, state.cleanlinessAccepted)
+  ) {
     advancePendingChecks(context, state, pending);
     return;
   }
-  const isFirstCleanlinessHit =
-    red.some((check) => check.name === "cleanliness") &&
-    !state.cleanlinessRevised &&
-    !red.some((check) => check.name !== "cleanliness");
-  if (isFirstCleanlinessHit) {
+  if (cleanlinessOnly && !state.cleanlinessRevised) {
     handleCleanlinessRevision(context, state, red);
     return;
   }
@@ -114,9 +117,10 @@ function settleRedChecks(
   pending: NonNullable<ReduceState["pendingChecks"]>,
 ): void {
   const deferred = pending.emptyFix;
+  // An accepted red was held above; a red reaching here was not accepted, so
+  // an empty fix that repeats it is a deterministic red.
   if (
     deferred &&
-    !state.cleanlinessJustified &&
     (state.gateRed === undefined || sameFailingSet(red, state.gateRed))
   ) {
     // The fix changed nothing and the same checks still fail: a deterministic

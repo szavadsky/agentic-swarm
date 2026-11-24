@@ -6,6 +6,7 @@ import type { AgentTurnResult, AgentTurnSpec } from "./types.js";
 import {
   assessTurn,
   repairLoop,
+  rescueTurn,
   retryOverflow,
   startTurnState,
 } from "./turn.js";
@@ -42,5 +43,6 @@ export async function runAgentTurn(
   await retryOverflow(state);
   await assessTurn(state, false);
   await repairLoop(state);
+  await rescueTurn(state);
   return finalizeTurn(state);
 }

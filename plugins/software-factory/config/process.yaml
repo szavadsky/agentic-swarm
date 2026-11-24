@@ -11,6 +11,7 @@ flows:
         prompt: implementer
         alias: implementer
         alternates: [implementer-b]
+        unfinishedPrompt: unfinished-turn
       # QA accepts the work before the reviewer reads it: it gets the checks
       # result and log, verifies the done-when, adds tests where coverage
       # requires them, and sends actionable findings back to the implementer.
@@ -49,6 +50,7 @@ flows:
         prompt: implementer
         alias: implementer
         alternates: [implementer-b]
+        unfinishedPrompt: unfinished-turn
       - id: resolve
         prompt: steward
         alias: steward
@@ -60,6 +62,7 @@ flows:
         prompt: implementer
         alias: researcher
         alternates: [implementer, reviewer]
+        unfinishedPrompt: unfinished-turn
       - id: review
         prompt: reviewer
         alias: reviewer

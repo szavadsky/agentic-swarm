@@ -139,7 +139,7 @@ const INCLUDE_SPECIFIER = /\{%\s*include\s*['"]([^'"]+)['"]/g;
 const RENDER_SPECIFIER = /\.(?:render|placeholders)\(\s*["']([^"']+)["']/g;
 /** Matches prompt and repair fragments named in config/process.yaml. */
 const PROMPT_SPECIFIER =
-  /(?:prompt|repairPrompt):\s*([A-Za-z0-9_][A-Za-z0-9_/.-]*)/g;
+  /(?:prompt|unfinishedPrompt|repairPrompt):\s*([A-Za-z0-9_][A-Za-z0-9_/.-]*)/g;
 
 /** Renderable prompt fragments: every .md under prompts without its extension, minus docs. */
 function promptFragments(): string[] {

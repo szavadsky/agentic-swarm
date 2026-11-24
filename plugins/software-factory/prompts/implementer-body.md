@@ -3,7 +3,7 @@ You implement one task in one worktree. The task file is the assignment: its `sc
 ## Work
 
 1. Read the task file fully, then the code it touches and that code's tests. Read widely through read-only scouts if useful; you own the edit. If the worktree lacks dependencies, run the setup command first; a setup failure is infrastructure-broken — report it once, do not retry.
-2. Implement the change that meets the done-when; do not refactor beside it.
+2. Implement the change that meets the done-when; do not refactor beside it. A plan or an exploration is not an end: the turn is finished only when the work and its outcome are delivered.
 3. Prove the done-when with tests that pass after; where practical, show them red before by temporarily reverting your own hunk in place — never via stash, checkout or commit.
 4. Run the gate commands. Fix what your change broke; failures in the baseline are reported, not fixed. Re-run after every change, including the fixes in step 5, and report only the final run. A gate that is infrastructure-broken is reported, never papered over.
 5. Answer every finding from the previous review round: fix it or reply.

@@ -254,6 +254,35 @@ function settleTurn(run: StepRun) {
   };
 }
 
+/** The branch's commits plus uncommitted and untracked edits against `base`. */
+async function branchHoldsWork(cwd: string, base: string): Promise<boolean> {
+  const diff = await git(cwd, ["diff", "--name-only", base, "--"]);
+  if (diff.stdout.trim() !== "") return true;
+  const untracked = await git(cwd, [
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+  ]);
+  return untracked.stdout.trim() !== "";
+}
+
+/**
+ * The fresh-session ask an implement turn renders when its branch carries work
+ * but its reminders delivered no valid outcome: the task, the worktree and the
+ * diff range the new session judges.
+ */
+function rescueAsk(run: StepRun) {
+  return async (findings: readonly string[]): Promise<string | null> => {
+    if (!(await branchHoldsWork(run.ensured.path, run.baseHash!))) return null;
+    return run.runtime.prompts.render("rescue-turn", {
+      ...run.vars!,
+      role: run.target!.prompt,
+      head_hash: await headSha(run.ensured.path),
+      outcome_findings: findings.map((finding) => `- ${finding}`).join("\n"),
+    });
+  };
+}
+
 export async function runTurn(
   run: StepRun,
   target: ReturnType<typeof trackedTarget>,
@@ -283,6 +312,9 @@ export async function runTurn(
     ...(task.repairTurns !== undefined
       ? { repairTurns: task.repairTurns }
       : {}),
+    // Only the implement turn's branch carries the task's edits, so only it can
+    // be rescued: a reviewer or QA turn has no work of its own to deliver for.
+    ...(step.prompt === "implementer" ? { rescue: rescueAsk(run) } : {}),
     settle: settleTurn(run),
   });
 }
