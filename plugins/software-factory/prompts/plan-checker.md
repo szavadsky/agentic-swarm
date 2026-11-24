@@ -17,6 +17,13 @@ A task's status already accounts for its `deps`, and a continuation is a task wh
 
 `missing-dep` is for a dependency no task file declares or a cancelled one with no merged or finished continuation. A parked dep with no merged or finished continuation is live work, not a missing task: name that parked slug under `cancel`, never a `missing-dep` on its dependent.
 
+## Concerns
+
+The turn block lists the open concerns with the id you name. A concern a merged follow-up or an earlier check already answered is absent; one you leave out reaches the architect unresolved. A debt-kind concern never appears here: the pack's debt register owns it, and only `debtClosed` or a `debt closed:` line retires it.
+
+- `resolve` — your own check answers it (a stale claim, work already on the head): write `{id, action: resolve, reason}`.
+- `task` — one of your follow-ups does the work: write `{id, action: task, slug: <follow-up slug>, reason}`. The concern leaves the pack when that task merges.
+
 ## Verdict
 
 - `progress` — mechanical follow-ups exist whose landed value outweighs their task-tier cost: `amend` a park whose direction is clear, `replace` a mechanical park under a new slug, `split` one holding separable outcomes, `cancel` work no longer worth an attempt, a missing dependency that restores dispatchability, done work left unmerged. Name each follow-up with its kind, slug, and reason.
@@ -55,5 +62,6 @@ Treat every self-report as an unproven claim: "done", "works", "0 defects" need 
 - goal checkout: `{{checkout}}`
 - tasks directory: `{{tasks_dir}}`
 - existing task files with status: `{{existing_tasks}}`
+- open concerns (name their ids in `planCheck.concerns`): `{{open_concerns}}`
 - last gate record: `{{gate_record_path}}`
 - outcome path: `{{outcome_path}}`

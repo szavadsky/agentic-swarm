@@ -47,7 +47,7 @@ const planCheck = (verdict?: "progress" | "architect") =>
           summary: `plan-check ${verdict}`,
           concerns: [],
           forward: [],
-          planCheck: { verdict, evidence: [], followUps: [] },
+          planCheck: { verdict, evidence: [], followUps: [], concerns: [] },
         }
       : undefined,
   });

@@ -143,7 +143,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -306,7 +306,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -427,7 +427,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -631,7 +631,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -747,7 +747,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -960,7 +960,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -1088,7 +1088,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -1174,7 +1174,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -1251,7 +1251,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -1293,6 +1293,13 @@ Decide whether mechanical follow-ups can still move the plan forward with net po
 A task's status already accounts for its \`deps\`, and a continuation is a task whose file names the parked or cancelled slug as \`base\`. A dependency is satisfied when it, or a task continuing it through \`base\` transitively, is \`merged\` or \`finished\`. Never report a \`missing-dep\` follow-up for a dependency satisfied this way.
 
 \`missing-dep\` is for a dependency no task file declares or a cancelled one with no merged or finished continuation. A parked dep with no merged or finished continuation is live work, not a missing task: name that parked slug under \`cancel\`, never a \`missing-dep\` on its dependent.
+
+## Concerns
+
+The turn block lists the open concerns with the id you name. A concern a merged follow-up or an earlier check already answered is absent; one you leave out reaches the architect unresolved. A debt-kind concern never appears here: the pack's debt register owns it, and only \`debtClosed\` or a \`debt closed:\` line retires it.
+
+- \`resolve\` — your own check answers it (a stale claim, work already on the head): write \`{id, action: resolve, reason}\`.
+- \`task\` — one of your follow-ups does the work: write \`{id, action: task, slug: <follow-up slug>, reason}\`. The concern leaves the pack when that task merges.
 
 ## Verdict
 
@@ -1352,7 +1359,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -1375,6 +1382,7 @@ planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark pe
 - goal checkout: \`/worktrees/demo\`
 - tasks directory: \`/goal/tasks\`
 - existing task files with status: \`- alpha | merged | abcdef1234 | deps: none | frozen\`
+- open concerns (name their ids in \`planCheck.concerns\`): \`- c-1a2b3c4d5e [risk/architect]: the retry window drops head names — alpha implement r1\`
 - last gate record: \`/goal/records/00007-i3-alpha-checks-r1/end.yaml\`
 - outcome path: \`/goal/records/00045-i3-plan-check-r1/outcome.yaml\`
 "
@@ -1447,7 +1455,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -1529,7 +1537,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -1921,7 +1929,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -2072,7 +2080,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -2263,7 +2271,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -2437,7 +2445,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -2588,7 +2596,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -2779,7 +2787,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -2953,7 +2961,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -3104,7 +3112,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
@@ -3295,7 +3303,7 @@ decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
 steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
 stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged
+planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
 planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
 planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
 planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful

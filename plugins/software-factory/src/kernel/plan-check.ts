@@ -2,6 +2,7 @@ import { runAgentTurn } from "./agent.js";
 import { makeCause } from "./cause.js";
 import { formatCause } from "./cause.js";
 import type { PlanCheckPack } from "./context-pack.js";
+import { formatOpenConcern, openConcerns } from "./context-pack.js";
 import { boundaryTarget } from "./flow-context.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import {
@@ -20,6 +21,7 @@ import {
   normalizeSlug,
   type Outcome,
   type PlanCheck,
+  type PlanCheckConcern,
   type PlanCheckEvidence,
   type PlanCheckFollowUp,
   type PlanCheckVerdict,
@@ -54,29 +56,85 @@ export function planSlugs(plan: string): Set<string> {
 }
 
 /**
+ * One checker report's findings about its concern entries: each names an open
+ * concern once, a `task` names a follow-up the same report carries, and a
+ * `resolve` names no slug. Without a record tree the open-id check is skipped.
+ */
+function concernFindings(
+  entries: readonly PlanCheckConcern[],
+  followUps: ReadonlySet<string>,
+  openConcernIds?: ReadonlySet<string>,
+): string[] {
+  const findings: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of entries) {
+    if (seen.has(entry.id)) {
+      findings.push(
+        `concern ${entry.id} is named twice; one entry per concern`,
+      );
+    }
+    seen.add(entry.id);
+    if (openConcernIds && !openConcernIds.has(entry.id)) {
+      findings.push(
+        `concern id "${entry.id}" is not an open concern; name an id from the brief's concern list`,
+      );
+    }
+    if (entry.action === "resolve") {
+      if (entry.slug) {
+        findings.push(
+          `concern ${entry.id} action resolve takes no slug; drop "${normalizeSlug(entry.slug)}"`,
+        );
+      }
+      continue;
+    }
+    if (!entry.slug) {
+      findings.push(
+        `concern ${entry.id} action task needs the slug of a follow-up it relies on`,
+      );
+    } else if (!followUps.has(normalizeSlug(entry.slug))) {
+      findings.push(
+        `concern ${entry.id} names slug "${normalizeSlug(entry.slug)}" that no follow-up carries`,
+      );
+    }
+  }
+  return findings;
+}
+
+/**
  * Findings for a plan-check report whose follow-ups reach outside every active
  * plan: each follow-up's own slug must be a `- <slug> —` bullet in one of them.
  * A `missing-dep` follow-up's dead dependency may be absent from the plans; it
  * is the dep, not the slug acted on. Only a `done` outcome carries a report to
- * check.
+ * check. A concern entry must name an open concern, and a `task` entry must
+ * name one of the report's own follow-up slugs. When the caller has no record
+ * tree to resolve ids against, the open-id check is skipped like the debt
+ * check is; the follow-up and duplicate checks always run.
  */
 export function validatePlanCheck(
   plans: readonly string[],
   outcome: Outcome,
+  openConcernIds?: ReadonlySet<string>,
 ): string[] {
   if (outcome.status !== "done" || !outcome.planCheck) return [];
+  const check = outcome.planCheck;
   const named = new Set(plans.flatMap((plan) => [...planSlugs(plan)]));
   const outside = [
     ...new Set(
-      outcome.planCheck.followUps
+      check.followUps
         .map((followUp) => normalizeSlug(followUp.slug))
         .filter((slug) => !named.has(slug)),
     ),
   ];
-  return outside.map(
-    (slug) =>
-      `follow-up slug "${slug}" has no "- ${slug} —" bullet in the plan; merged and retired slugs are history`,
+  const followUps = new Set(
+    check.followUps.map((followUp) => normalizeSlug(followUp.slug)),
   );
+  return [
+    ...outside.map(
+      (slug) =>
+        `follow-up slug "${slug}" has no "- ${slug} —" bullet in the plan; merged and retired slugs are history`,
+    ),
+    ...concernFindings(check.concerns ?? [], followUps, openConcernIds),
+  ];
 }
 
 /** Non-terminal task slugs, sorted: the work a boundary still owes the goal. */
@@ -192,13 +250,12 @@ export interface PlanCheckTurn {
   infra?: { cause: string };
 }
 
-/**
- * One plan-checker turn: a task-tier, read-only check of the plan against
- * the repo at a boundary or dispatch exhaustion. Writes outside the outcome
- * are discarded and recorded; a missing verdict, a refusal, or an infra stop
- * reports `architect`, so the checker can only add progress, never block the
- * iteration on its own failure.
- */
+/** The open concerns the checker judges, one line per concern, or `none`. */
+function openConcernLines(records: readonly StepRecord[]): string {
+  const open = openConcerns(records);
+  return open.length > 0 ? open.map(formatOpenConcern).join("\n") : "none";
+}
+
 /** The template variables of one plan-checker turn. */
 function planCheckVars(
   runtime: KernelRuntime,
@@ -206,6 +263,7 @@ function planCheckVars(
   plans: ReturnType<KernelRuntime["store"]["plans"]["existing"]>,
   tasks: Awaited<ReturnType<KernelRuntime["store"]["listTasks"]>>,
   gateRecord: string | undefined,
+  records: readonly StepRecord[],
 ): Record<string, string> {
   return {
     iteration: String(opts.iteration),
@@ -214,6 +272,7 @@ function planCheckVars(
     checkout: runtime.paths.goalCheckout,
     tasks_dir: runtime.store.tasks.dir,
     existing_tasks: planCheckBrief(opts.state, tasks),
+    open_concerns: openConcernLines(records),
     gate_record_path: gateRecord ?? "none recorded",
   };
 }
@@ -274,6 +333,13 @@ function planCheckTurnResult(
   };
 }
 
+/**
+ * One plan-checker turn: a task-tier, read-only check of the plan against
+ * the repo at a boundary or dispatch exhaustion. Writes outside the outcome
+ * are discarded and recorded; a missing verdict, a refusal, or an infra stop
+ * reports `architect`, so the checker can only add progress, never block the
+ * iteration on its own failure.
+ */
 export async function runPlanCheck(
   runtime: KernelRuntime,
   opts: { iteration: number; round: number; state: State },
@@ -285,10 +351,8 @@ export async function runPlanCheck(
   ).filter((text): text is string => text !== null);
   const snapshot = await snapshotTurn(runtime, allPlans);
   const tasks = await runtime.store.listTasks();
-  const gateRecord = lastGateRecord(
-    await runtime.store.listRecords(),
-    runtime.store,
-  );
+  const records = await runtime.store.listRecords();
+  const gateRecord = lastGateRecord(records, runtime.store);
   const result = await runAgentTurn(runtime, {
     target: boundaryTarget(runtime, "plancheck", opts.iteration),
     cwd: runtime.paths.goalCheckout,
@@ -297,9 +361,14 @@ export async function runPlanCheck(
       step: PLAN_CHECK_STEP,
       round: opts.round,
     },
-    vars: planCheckVars(runtime, opts, plans, tasks, gateRecord),
+    vars: planCheckVars(runtime, opts, plans, tasks, gateRecord, records),
     expectation: KERNEL_TURN_STEPS[PLAN_CHECK_STEP],
-    validate: (outcome) => validatePlanCheck(texts, outcome),
+    validate: (outcome) =>
+      validatePlanCheck(
+        texts,
+        outcome,
+        new Set(openConcerns(records).map((concern) => concern.id)),
+      ),
   });
   await recordDiscardedWrites(
     runtime,

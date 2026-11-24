@@ -94,7 +94,12 @@ async function aHealthyResumeRecordsAttemptWhenPart1(
     ctx.writeOutcome(
       outcome({
         summary: "needs the architect",
-        planCheck: { verdict: "architect", evidence: [], followUps: [] },
+        planCheck: {
+          verdict: "architect",
+          evidence: [],
+          followUps: [],
+          concerns: [],
+        },
       }),
     );
     return fakeTurnResult(req);
@@ -158,7 +163,12 @@ async function deltaStateRefusesResumeCauseRunsPart1(
         summary: "plan needs the architect",
         concerns: [],
         forward: [],
-        planCheck: { verdict: "architect", evidence: [], followUps: [] },
+        planCheck: {
+          verdict: "architect",
+          evidence: [],
+          followUps: [],
+          concerns: [],
+        },
       },
     },
   );

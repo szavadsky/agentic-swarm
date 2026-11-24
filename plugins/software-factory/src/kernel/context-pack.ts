@@ -10,6 +10,7 @@ export type {
 } from "./context-pack/types.js";
 export { goalDebtRecords, recordsForAudience } from "./context-pack/debt.js";
 export {
+  formatOpenConcern,
   formatPlanFinding,
   numberedPlanFindings,
 } from "./context-pack/plan-findings.js";

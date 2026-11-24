@@ -118,6 +118,22 @@ export const planCheckFollowUpSchema = z.object({
 export type PlanCheckFollowUp = z.infer<typeof planCheckFollowUpSchema>;
 
 /**
+ * What the checker decided about one open concern: it answered the concern in
+ * its own check (`resolve`), or a follow-up it emits does the work (`task`,
+ * naming that follow-up's slug). Anything the checker leaves out is
+ * unresolved and reaches the architect.
+ */
+export const planCheckConcernSchema = z.object({
+  /** The concern's id from the checker's brief. */
+  id: z.string().min(1),
+  action: z.enum(["resolve", "task"]),
+  /** A `task` concern's follow-up slug; absent for `resolve`. */
+  slug: optionalOutcomeSlugSchema,
+  reason: z.string().min(1),
+});
+export type PlanCheckConcern = z.infer<typeof planCheckConcernSchema>;
+
+/**
  * The checker's report: the kernel resumes dispatch on `progress` and
  * consults the architect on `architect`. One enum, because the kernel
  * branches on it.
@@ -126,6 +142,7 @@ export const planCheckSchema = z.object({
   verdict: z.enum(["progress", "architect"]),
   evidence: z.array(planCheckEvidenceSchema).default([]),
   followUps: z.array(planCheckFollowUpSchema).default([]),
+  concerns: z.array(planCheckConcernSchema).default([]),
 });
 export type PlanCheck = z.infer<typeof planCheckSchema>;
 export type PlanCheckVerdict = PlanCheck["verdict"];

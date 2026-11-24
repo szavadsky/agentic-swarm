@@ -24,8 +24,7 @@ import {
   outcomeSchemaFor,
   outcomeSchemaNames,
 } from "../../kernel/outcome-schemas.js";
-import { PLAN_CHECK_STEP, validatePlanCheck } from "../../kernel/plan-check.js";
-import { existingPlans, registeredPlans } from "../../kernel/plan-file.js";
+import { PLAN_CHECK_STEP } from "../../kernel/plan-check.js";
 import {
   PLAN_REVIEW_STEP,
   validatePlanReviewDelivery,
@@ -46,6 +45,7 @@ import {
 import type { ProcessConfig } from "../../kernel/types.js";
 import { outcomeSchema } from "../../kernel/types.js";
 import type { ValidateFileOptions, ValidateResult } from "./types.js";
+import { planCheckFindings } from "./validate-plan-check.js";
 
 /** One schema-enforced file kind `factory validate` recognizes, by path. */
 type ValidateKind =
@@ -195,19 +195,6 @@ function startedMeta(
 }
 
 /**
- * The plans a record outcome was delivered against. Records live at
- * `<goal>/records/<record>/outcome.yaml`; the goal plan's register names every
- * active plan. A file outside a goal layout has no plan to check against.
- */
-function recordPlans(abs: string): string[] {
-  const recordDir = path.dirname(abs);
-  const goalDir = path.dirname(path.dirname(recordDir));
-  return existingPlans(registeredPlans(goalDir)).map((plan) =>
-    fs.readFileSync(plan.path, "utf8"),
-  );
-}
-
-/**
  * One outcome's findings for the step it was given for: `--step` wins, the
  * record's `started.yaml` supplies it otherwise. Without either, only the
  * schema is enforced and the caller reports the narrower check.
@@ -261,8 +248,7 @@ async function outcomeResult(
       findings.push(...validatePlanReviewDelivery(outcome));
     }
     if (step === PLAN_CHECK_STEP) {
-      const plans = recordPlans(abs);
-      if (plans.length > 0) findings.push(...validatePlanCheck(plans, outcome));
+      findings.push(...(await planCheckFindings(abs, outcome, process)));
     }
     return { findings: findings.map((finding) => `${abs}: ${finding}`) };
   } catch (err) {

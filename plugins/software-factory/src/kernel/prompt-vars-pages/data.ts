@@ -1,6 +1,7 @@
 /** The prompt-variable descriptors, one entry per template variable. */
 
 import type { PromptVariablesPage } from "./types.js";
+import { PLAN_CHECKER_PAGE } from "./data-plan-checker.js";
 import { REPAIR_PROMPT_VARIABLES } from "./data-repair.js";
 
 /** One page per prompt template; the renderer emits them in this order. */
@@ -424,28 +425,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     },
     note: "The flow's `resolve` step renders this same prompt with the same variables: the wave-end steward and the in-flow resolve turn own one conflict ask.",
   },
-  {
-    file: "plan-checker.md",
-    prompt: "plan-checker",
-    variables: {
-      iteration: "1-based iteration number of this launch",
-      intent_path: "path to the goal's `intent.md`, for resolving wording only",
-      plans:
-        "the active plans, one `- goal: <path>` or ``- epic `<epic>`: <path>`` line each; verify every plan against the repo; read-only to the checker",
-      checkout: "path to the stable goal checkout (integration worktree)",
-      tasks_dir: "directory holding one `<slug>.md` task file per task",
-      existing_tasks:
-        "existing task files as `- slug | status | hash | deps: a,b` lines (`none` when empty), then parked slugs with their cause",
-      gate_record_path:
-        "`end.yaml` of the newest record that ran gates, to read instead of running them; `none recorded` when no gate has run",
-      outcome_path:
-        "path where the outcome file must be written when the harness asks for a file",
-      validate_cmd:
-        "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
-      outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
-    },
-  },
+  PLAN_CHECKER_PAGE,
   {
     file: "pack-preparer.md",
     prompt: "pack-preparer",

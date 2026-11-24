@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { recordedConcernId } from "../../src/core/concerns.js";
 import { dispatch } from "../../src/cli/dispatch.js";
 
 /** The fields inference reads from a record directory's started.yaml. */
@@ -253,12 +254,54 @@ function registerFactoryValidatePart17(): void {
   );
 }
 
+function registerFactoryValidatePart18(): void {
+  it(
+    "resolves a plan-check concern id against the record tree",
+    withTmp(async (root) => {
+      const concernText = "the retry window drops head names";
+      writeFile(
+        root,
+        "records/00010-i1-alpha-implement-r1/started.yaml",
+        STARTED("implement"),
+      );
+      writeFile(
+        root,
+        "records/00010-i1-alpha-implement-r1/outcome.yaml",
+        `status: done\nsummary: alpha shipped\nconcerns:\n  - kind: risk\n    calibration: architect\n    text: ${concernText}\n`,
+      );
+      writeFile(root, "plan.md", "# Plan\n\n- beta — Beta works.\n");
+      const record = "records/00042-i1-plancheck-r1";
+      writeFile(root, `${record}/started.yaml`, STARTED("plancheck"));
+      const id = recordedConcernId({ kind: "risk", text: concernText });
+      const accepted = writeFile(
+        root,
+        `${record}/outcome.yaml`,
+        `status: done\nsummary: checked\nplanCheck:\n  verdict: progress\n  evidence: []\n  followUps:\n    - kind: amend\n      slug: beta\n      reason: retry beta\n  concerns:\n    - id: ${id}\n      action: resolve\n      reason: the retry window is on the head\n`,
+      );
+      const ok = await runValidate(accepted);
+      expect(ok.code).toBe(0);
+      expect(ok.out).toContain(": valid");
+
+      const ghost = writeFile(
+        root,
+        `${record}/outcome.yaml`,
+        "status: done\nsummary: checked\nplanCheck:\n  verdict: progress\n  evidence: []\n  followUps:\n    - kind: amend\n      slug: beta\n      reason: retry beta\n  concerns:\n    - id: c-ghost\n      action: resolve\n      reason: already answered\n",
+      );
+      const bad = await runValidate(ghost);
+      expect(bad.code).toBe(1);
+      expect(bad.err).toContain('concern id "c-ghost" is not an open concern');
+    }),
+  );
+}
+
 describe("factory validate", () => {
   registerFactoryValidatePart15();
 
   registerFactoryValidatePart16();
 
   registerFactoryValidatePart17();
+
+  registerFactoryValidatePart18();
 });
 
 describe("factory validate: QA outcomes", () => {

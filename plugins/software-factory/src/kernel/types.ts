@@ -28,6 +28,7 @@ export type {
   ConcernId,
   Outcome,
   PlanCheck,
+  PlanCheckConcern,
   PlanCheckEvidence,
   PlanCheckFollowUp,
   PlanCheckRouteEntry,

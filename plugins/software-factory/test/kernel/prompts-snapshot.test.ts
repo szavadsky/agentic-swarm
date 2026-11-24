@@ -206,6 +206,8 @@ const ROLES: Record<string, Record<string, string>> = {
     checkout: "/worktrees/demo",
     tasks_dir: "/goal/tasks",
     existing_tasks: "- alpha | merged | abcdef1234 | deps: none | frozen",
+    open_concerns:
+      "- c-1a2b3c4d5e [risk/architect]: the retry window drops head names — alpha implement r1",
     gate_record_path: "/goal/records/00007-i3-alpha-checks-r1/end.yaml",
     outcome_path: "/goal/records/00045-i3-plan-check-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
