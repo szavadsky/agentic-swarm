@@ -57,6 +57,18 @@ function skeletonShape(skeleton: string, key: string): string {
   return shape;
 }
 
+/** One top-level field's rendered lines, including a block-rendered body. */
+function skeletonField(skeleton: string, key: string): string {
+  const lines = skeleton.split("\n");
+  const start = lines.findIndex((line) => line.startsWith(`${key}:`));
+  if (start === -1) throw new Error(`skeleton has no ${key} field`);
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => /^[A-Za-z0-9_]+:/.test(line));
+  return lines
+    .slice(start, end === -1 ? undefined : start + 1 + end)
+    .join("\n");
+}
+
 /** One top-level field's rendered comment, or "" without one. */
 function skeletonComment(skeleton: string, key: string): string {
   const line = skeletonLine(skeleton, key);
@@ -138,7 +150,7 @@ function promptsSchemaSkeletonsPart1() {
       ["planReviewMarks", planReviewMarkSchema],
     ];
     for (const [field, schema] of nested) {
-      const shape = skeletonShape(skeleton, field);
+      const shape = skeletonField(skeleton, field);
       for (const key of Object.keys(schema.shape)) {
         expect(shape, `${field} is missing nested key ${key}`).toContain(key);
       }
@@ -147,6 +159,19 @@ function promptsSchemaSkeletonsPart1() {
     expect(skeletonShape(skeleton, "concerns")).toContain("evidence?");
     expect(skeletonShape(skeleton, "steerRoutes")).toContain("answer?");
     expect(skeletonShape(skeleton, "planCheck")).toContain("dep?");
+  });
+
+  it("renders free text as a block scalar, so prose colons cannot break the YAML", () => {
+    const skeleton = outcomeSchemaVar();
+    const summary = skeletonField(skeleton, "summary").split("\n");
+    expect(summary[0]).toBe("summary: |");
+    expect(summary[1]).toBe("  one paragraph");
+    // A free-text leaf nested in an array takes the field block-style with it.
+    const replies = skeletonField(skeleton, "replies").split("\n");
+    expect(replies[0]).toMatch(/^replies: {2}# /);
+    expect(replies[1]).toBe("  - finding: 0");
+    expect(replies[2]).toBe("    reply: |");
+    expect(replies[3]).toBe("      ...");
   });
 }
 
@@ -211,12 +236,16 @@ function promptsSchemaSkeletonsPart3() {
       [
         "```yaml",
         "status: done | blocked | failed | upscope  # upscope on task steps only",
-        "summary: one paragraph",
+        "summary: |",
+        "  one paragraph",
         "intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction",
         "concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner",
         "debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it",
         "steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list",
-        "replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position",
+        "replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position",
+        "  - finding: 0",
+        "    reply: |",
+        "      ...",
         "verdict: approve | changes | reject  # optional; review steps only",
         "decision: continue | done | blocked  # optional; architect step only",
         "upscope: yes | no  # optional; standalone review escalation: answer with the verdict",

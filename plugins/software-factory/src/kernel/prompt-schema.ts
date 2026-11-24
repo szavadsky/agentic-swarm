@@ -166,11 +166,92 @@ function skeletonLine(
 }
 
 /**
+ * Fields whose value is the agent's own prose. The skeleton shows them as a
+ * YAML block scalar, and a field that holds one renders block-style so the
+ * nested leaf fits: an unquoted colon in prose breaks the YAML.
+ */
+const FREE_TEXT_FIELDS: ReadonlySet<string> = new Set(["summary", "reply"]);
+
+function isFreeText(key: string, node: JsonNode): boolean {
+  return FREE_TEXT_FIELDS.has(key) && node.type === "string";
+}
+
+/** Whether a field's nested leaves include a free-text one. */
+function holdsFreeText(raw: JsonNode, defs: Record<string, JsonNode>): boolean {
+  const node = resolveNode(raw, defs);
+  if (node.type === "array" && node.items) {
+    return holdsFreeText(node.items, defs);
+  }
+  if (node.type === "object" && node.properties) {
+    return Object.entries(node.properties).some(
+      ([key, value]) =>
+        isFreeText(key, resolveNode(value, defs)) || holdsFreeText(value, defs),
+    );
+  }
+  return false;
+}
+
+/** A free-text leaf: `key: |` and its description or placeholder, under `lead`. */
+function blockScalarLines(key: string, node: JsonNode, lead: string): string[] {
+  const body = node.description
+    ? oneLine(node.description)
+    : scalarFallback(node.type);
+  return [`${lead}${key}: |`, `${lead}  ${body}`];
+}
+
+/** One nested property inside a block-rendered field, already indented. */
+function blockEntryLines(
+  key: string,
+  raw: JsonNode,
+  required: ReadonlySet<string>,
+  lead: string,
+  defs: Record<string, JsonNode>,
+): string[] {
+  const node = resolveNode(raw, defs);
+  if (isFreeText(key, node)) return blockScalarLines(key, node, lead);
+  if (holdsFreeText(node, defs)) {
+    throw new Error(`skeleton cannot nest free text under ${key}`);
+  }
+  return [`${lead}${skeletonLine(key, node, required, defs)}`];
+}
+
+/**
+ * A field whose nested leaves hold free text: its commented key line, then one
+ * indented line per nested key, a sequence item under `- `.
+ */
+function blockFieldLines(
+  key: string,
+  node: JsonNode,
+  required: ReadonlySet<string>,
+  defs: Record<string, JsonNode>,
+): string[] {
+  const comments: string[] = [];
+  if (!required.has(key)) comments.push("optional");
+  if (node.description) comments.push(oneLine(node.description));
+  comments.push(...enumNotes(node, "", defs));
+  const item =
+    node.type === "array" && node.items ? resolveNode(node.items, defs) : node;
+  const bullet = node.type === "array" ? "- " : "";
+  const itemRequired = new Set(item.required ?? []);
+  const nested = Object.entries(item.properties ?? {}).flatMap(
+    ([child, value], index) => {
+      const lead =
+        index === 0 ? `  ${bullet}` : `  ${" ".repeat(bullet.length)}`;
+      return blockEntryLines(child, value, itemRequired, lead, defs);
+    },
+  );
+  const marker = comments.length > 0 ? `  # ${comments.join("; ")}` : "";
+  return [`${key}:${marker}`, ...nested];
+}
+
+/**
  * One renderer from a kernel object schema to the YAML skeleton prompts show:
  * one `key: value` line per field in declaration order, enums joined with
  * `|`, nested objects inlined as `{keys}` / `[{keys}]`, and a `#` comment
- * with the optional marker, the field description, and nested enum values. A
- * `keep` list narrows the rendering to those top-level fields, in schema order.
+ * with the optional marker, the field description, and nested enum values.
+ * Free text renders as a block scalar, and the field holding it renders its
+ * nested keys block-style. A `keep` list narrows the rendering to those
+ * top-level fields, in schema order.
  */
 export function renderSkeleton(
   schema: z.ZodType,
@@ -186,7 +267,16 @@ export function renderSkeleton(
   const required = new Set(root.required ?? []);
   return Object.entries(root.properties)
     .filter(([key]) => keep === undefined || keep.includes(key))
-    .map(([key, value]) => skeletonLine(key, value, required, defs))
+    .map(([key, value]) => {
+      const node = resolveNode(value, defs);
+      if (isFreeText(key, node)) {
+        return blockScalarLines(key, node, "").join("\n");
+      }
+      if (holdsFreeText(node, defs)) {
+        return blockFieldLines(key, node, required, defs).join("\n");
+      }
+      return skeletonLine(key, value, required, defs);
+    })
     .join("\n");
 }
 
