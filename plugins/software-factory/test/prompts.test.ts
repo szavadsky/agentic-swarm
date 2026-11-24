@@ -2,21 +2,31 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import yaml from "yaml";
 import { z } from "zod";
-import type { OutcomeExpectation } from "../src/kernel/outcome.js";
+import { validateFile } from "../src/cli/commands.js";
+import { loadConfigs, packageRoot } from "../src/kernel/config.js";
 import {
-  outcomeRepairSchemaVar,
-  outcomeSchemaVar,
-  qaOutcomeSchemaVar,
+  outcomeExampleVar,
+  outcomeExamples,
+} from "../src/kernel/outcome-example.js";
+import {
+  expectationForStep,
+  type OutcomeExpectation,
+  parseOutcome,
+  validateExpectation,
+} from "../src/kernel/outcome.js";
+import { dryRunPrompts } from "../src/kernel/prompt-dry-run.js";
+import {
   renderSkeleton,
   taskFrontmatterVar,
 } from "../src/kernel/prompt-schema.js";
 import { loadPromptLibrary, loadPrompts } from "../src/kernel/prompts.js";
+import { qaOutcomeSchema } from "../src/kernel/qa.js";
 import { parseTaskFile, taskFrontmatterSchema } from "../src/kernel/tasks.js";
 import type { ProcessConfig, RunConfig } from "../src/kernel/types.js";
 import {
   concernSchema,
-  debtClosedEntrySchema,
   outcomeSchema,
   planCheckEvidenceSchema,
   planCheckFollowUpSchema,
@@ -31,6 +41,10 @@ import {
   steerRouteEntrySchema,
 } from "../src/kernel/types.js";
 import { TEST_BOUNDARY } from "./kernel/helpers.js";
+import {
+  outcomeBlocks,
+  writeRecordOutcome,
+} from "./kernel/outcome-fixtures.js";
 
 let dir: string;
 
@@ -42,101 +56,151 @@ function skeletonKeys(skeleton: string): string[] {
     .filter((key): key is string => key !== undefined);
 }
 
-/** One top-level field's rendered line. */
-function skeletonLine(skeleton: string, key: string): string {
+/** One top-level field's rendered shape, before its trailing comment. */
+function skeletonShape(skeleton: string, key: string): string {
   const line = skeleton
     .split("\n")
     .find((candidate) => candidate.startsWith(`${key}: `));
   if (!line) throw new Error(`skeleton has no ${key} line`);
-  return line;
-}
-
-/** One top-level field's rendered shape, before its trailing comment. */
-function skeletonShape(skeleton: string, key: string): string {
-  const [shape = ""] = skeletonLine(skeleton, key).split("  # ");
+  const [shape = ""] = line.split("  # ");
   return shape;
 }
 
-/** One top-level field's rendered lines, including a block-rendered body. */
-function skeletonField(skeleton: string, key: string): string {
-  const lines = skeleton.split("\n");
-  const start = lines.findIndex((line) => line.startsWith(`${key}:`));
-  if (start === -1) throw new Error(`skeleton has no ${key} field`);
-  const rest = lines.slice(start + 1);
-  const end = rest.findIndex((line) => /^[A-Za-z0-9_]+:/.test(line));
-  return lines
-    .slice(start, end === -1 ? undefined : start + 1 + end)
-    .join("\n");
+/** A role prompt and the expectation its step enforces. */
+const ROLE_EXPECTATIONS: [string, OutcomeExpectation][] = [
+  ["architect", "architect"],
+  ["subarchitect", "architect"],
+  ["implementer", "any"],
+  ["reviewer", "review"],
+  ["qa", "qa"],
+  ["pm", "any"],
+  ["plan-checker", "any"],
+  ["review-architect", "any"],
+  ["architect-review-return", "any"],
+  ["front", "any"],
+  ["intent", "any"],
+  ["digest", "any"],
+  ["pack-preparer", "any"],
+  ["scout", "any"],
+  ["steward", "any"],
+  ["delivery-repair", "any"],
+  ["unfinished-turn", "any"],
+  ["rescue-turn", "any"],
+];
+
+function schemaFor(expectation: OutcomeExpectation) {
+  return expectation === "qa" ? qaOutcomeSchema : outcomeSchema;
 }
 
-/** One top-level field's rendered comment, or "" without one. */
-function skeletonComment(skeleton: string, key: string): string {
-  const line = skeletonLine(skeleton, key);
-  const at = line.indexOf("  # ");
-  return at === -1 ? "" : line.slice(at + 4);
+function qaReport(outcome: unknown): { verdict: string; findings: string[] } {
+  const report = (outcome as { qa?: { verdict: string; findings: string[] } })
+    .qa;
+  if (!report) throw new Error("outcome carries no qa report");
+  return report;
 }
 
-function promptsRepairSkeletonPart1() {
-  it("renders every ungated outcome field in some role's repair ask", () => {
-    const repairs: [string, OutcomeExpectation][] = [
-      ["implementer", "any"],
-      ["reviewer", "review"],
-      ["architect", "architect"],
-      ["pm", "any"],
-      ["plan-checker", "any"],
-      ["review-architect", "any"],
-      ["architect-review-return", "any"],
-    ];
+function promptsOutcomeExamplesValidity() {
+  it("renders two examples that parse and pass the step's expectation", () => {
+    for (const [prompt, expectation] of ROLE_EXPECTATIONS) {
+      const schema = schemaFor(expectation);
+      const blocks = outcomeBlocks(
+        outcomeExampleVar(prompt, expectation, schema),
+      );
+      expect(blocks, prompt).toHaveLength(2);
+      for (const [index, block] of blocks.entries()) {
+        const parsed = parseOutcome(block, schema);
+        expect(
+          validateExpectation(parsed, expectation),
+          `${prompt} example ${index}`,
+        ).toEqual([]);
+      }
+    }
+  });
+
+  it("keeps debtClosed empty, so the example needs no ingested id", () => {
+    for (const [prompt, expectation] of ROLE_EXPECTATIONS) {
+      const example = outcomeExamples(prompt, expectation).primary;
+      expect(example, prompt).toHaveProperty("debtClosed");
+      expect(example.debtClosed, prompt).toEqual([]);
+    }
+  });
+}
+
+function promptsOutcomeExamplesCoverage() {
+  it("renders every outcome field some step writes, so a new field cannot go missing", () => {
+    // `forward` is parse-only for old records; no step writes it.
+    const written = Object.keys(outcomeSchema.shape).filter(
+      (field) => field !== "forward",
+    );
     const rendered = new Set(
-      repairs.flatMap(([role, expectation]) =>
-        skeletonKeys(outcomeRepairSchemaVar(role, expectation)),
+      ROLE_EXPECTATIONS.flatMap(([prompt, expectation]) =>
+        Object.keys(outcomeExamples(prompt, expectation).primary),
       ),
     );
-    // `forward` is parse-only for old records; no repair ask can deliver it.
-    const ungated = Object.keys(outcomeSchema.shape).filter(
-      (key) => key !== "verdict" && key !== "decision" && key !== "forward",
-    );
-    expect(ungated.filter((key) => !rendered.has(key))).toEqual([]);
-  });
-
-  it("drops the gated lines a bare done cannot deliver", () => {
-    const implementer = outcomeRepairSchemaVar("implementer", "any");
-    expect(skeletonKeys(implementer)).toEqual([
-      "status",
-      "summary",
-      "concerns",
-      "debtClosed",
-      "steerAnswers",
-      "replies",
-    ]);
-    expect(implementer).not.toContain("verdict:");
-    expect(implementer).not.toContain("decision:");
-  });
-
-  it("keeps the one gated line the step delivers", () => {
-    const review = outcomeRepairSchemaVar("reviewer", "review");
-    expect(review).toContain("verdict: approve | changes | reject");
-    expect(review).not.toContain("decision:");
-    const architect = outcomeRepairSchemaVar("architect", "architect");
-    expect(architect).toContain("decision: continue | done | blocked");
-    expect(architect).not.toContain("verdict:");
+    expect(written.filter((field) => !rendered.has(field))).toEqual([]);
   });
 }
 
-function promptsSchemaSkeletonsPart1() {
-  it("renders every outcome field a turn writes, so a new field cannot go missing", () => {
-    expect(skeletonKeys(outcomeSchemaVar())).toEqual(
-      Object.keys(outcomeSchema.shape).filter((key) => key !== "forward"),
-    );
-    // `forward` is parse-only: old records still carry it, no turn writes one.
-    expect(outcomeSchemaVar()).not.toContain("forward:");
+function promptsOutcomeExamplesAlternatives() {
+  it("offers the other verdict or decision as the alternative", () => {
+    const review = outcomeExamples("reviewer", "review");
+    expect(review.primary.verdict).toBe("approve");
+    expect(review.alternative.verdict).toBe("changes");
+
+    const architect = outcomeExamples("architect", "architect");
+    expect(architect.primary.decision).toBe("continue");
+    expect(architect.alternative.decision).toBe("done");
+
+    const qa = outcomeExamples("qa", "qa", qaOutcomeSchema);
+    expect(qaReport(qa.primary).verdict).toBe("accept");
+    expect(qaReport(qa.primary).findings).toEqual([]);
+    expect(qaReport(qa.alternative).verdict).toBe("changes");
+    expect(qaReport(qa.alternative).findings.length).toBeGreaterThan(0);
   });
 
-  it("renders every nested outcome key in its own field's shape", () => {
-    const skeleton = outcomeSchemaVar();
+  it("keeps the same outcome as the fenced-block alternative when the step gates nothing", () => {
+    const any = outcomeExamples("implementer", "any");
+    expect(any.alternative).toEqual(any.primary);
+    expect(outcomeExampleVar("implementer", "any")).toContain(
+      "The same outcome as the last fenced YAML block of your final message is also valid:",
+    );
+  });
+}
+
+function promptsOutcomeExamplesNarrowing() {
+  it("narrows each example to the fields its step delivers", () => {
+    const implementer = outcomeExamples("implementer", "any").primary;
+    expect(implementer).toHaveProperty("replies");
+    expect(implementer).not.toHaveProperty("verdict");
+    expect(implementer).not.toHaveProperty("decision");
+
+    const reviewer = outcomeExamples("reviewer", "review").primary;
+    expect(reviewer).toHaveProperty("verdict");
+    expect(reviewer).toHaveProperty("upscope");
+    expect(reviewer).not.toHaveProperty("decision");
+    expect(reviewer).not.toHaveProperty("planCheck");
+
+    const architect = outcomeExamples("architect", "architect").primary;
+    expect(architect).toHaveProperty("decision");
+    expect(architect).toHaveProperty("intentStatus");
+    expect(architect).not.toHaveProperty("verdict");
+
+    const qa = outcomeExamples("qa", "qa", qaOutcomeSchema).primary;
+    expect(qaReport(qa).verdict).toBe("accept");
+    expect(qa).not.toHaveProperty("decision");
+    expect(qa).not.toHaveProperty("replies");
+  });
+}
+
+function promptsOutcomeExamplesNested() {
+  it("renders every nested key in its field's example, so a dropped key fails", () => {
+    const examples = ROLE_EXPECTATIONS.map(
+      ([prompt, expectation]) => outcomeExamples(prompt, expectation).primary,
+    );
+    // `debtClosed` stays empty: an entry cites an ingest-assigned id, so a
+    // filled entry would fail `validate` in a record directory.
     const nested: [string, { shape: Record<string, unknown> }][] = [
       ["concerns", concernSchema],
-      ["debtClosed", debtClosedEntrySchema],
       ["steerAnswers", steerAnswerSchema],
       ["replies", replySchema],
       ["steerRoutes", steerRouteEntrySchema],
@@ -150,68 +214,64 @@ function promptsSchemaSkeletonsPart1() {
       ["planReviewMarks", planReviewMarkSchema],
     ];
     for (const [field, schema] of nested) {
-      const shape = skeletonField(skeleton, field);
+      const example = examples.find((candidate) => field in candidate) as
+        | Record<string, unknown>
+        | undefined;
+      expect(example, `${field} has no example`).toBeDefined();
+      const text = yaml.stringify(example![field], { lineWidth: 0 });
       for (const key of Object.keys(schema.shape)) {
-        expect(shape, `${field} is missing nested key ${key}`).toContain(key);
+        expect(text, `${field} is missing nested key ${key}`).toContain(key);
       }
     }
-    // Optional nested fields keep their `?` marker.
-    expect(skeletonShape(skeleton, "concerns")).toContain("evidence?");
-    expect(skeletonShape(skeleton, "steerRoutes")).toContain("answer?");
-    expect(skeletonShape(skeleton, "planCheck")).toContain("dep?");
-  });
-
-  it("renders free text as a block scalar, so prose colons cannot break the YAML", () => {
-    const skeleton = outcomeSchemaVar();
-    const summary = skeletonField(skeleton, "summary").split("\n");
-    expect(summary[0]).toBe("summary: |");
-    expect(summary[1]).toBe("  one paragraph");
-    // A free-text leaf nested in an array takes the field block-style with it.
-    const replies = skeletonField(skeleton, "replies").split("\n");
-    expect(replies[0]).toMatch(/^replies: {2}# /);
-    expect(replies[1]).toBe("  - finding: 0");
-    expect(replies[2]).toBe("    reply: |");
-    expect(replies[3]).toBe("      ...");
   });
 }
 
-function promptsSchemaSkeletonsPart2() {
-  it("renders every nested enum value in its own field's comment", () => {
-    const skeleton = outcomeSchemaVar();
-    const enums: [string, string[]][] = [
-      [
-        "concerns",
-        ["debt", "risk", "uncertainty", "choice", "fyi", "architect", "owner"],
-      ],
-      ["steerRoutes", ["task", "spike", "architect", "stall", "{architect}"]],
-      ["stallRoutes", ["amend", "cancel", "replace", "split", "leave"]],
-      [
-        "planCheck",
-        [
-          "progress",
-          "architect",
-          "done",
-          "missing",
-          "below-standard",
-          "unverifiable",
-          "amend",
-          "cancel",
-          "replace",
-          "split",
-          "missing-dep",
-          "unmerged",
-        ],
-      ],
-      ["planCheckRoutes", ["continue", "leave"]],
-      ["planReviewMarks", ["helpful", "unhelpful"]],
-    ];
-    for (const [field, values] of enums) {
-      const comment = skeletonComment(skeleton, field);
-      for (const value of values) {
-        expect(comment, `${field} is missing enum value ${value}`).toContain(
-          value,
-        );
+function promptsOutcomeExamplesPart2() {
+  it("renders both examples for every shipped flow step, and factory validate accepts them", async () => {
+    const configs = loadConfigs(packageRoot);
+    const renders = new Map(
+      dryRunPrompts(configs, packageRoot).map((render) => [
+        render.name,
+        render.text,
+      ]),
+    );
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "prompts-examples-"));
+    try {
+      for (const flow of Object.values(configs.process.flows)) {
+        for (const step of flow.steps) {
+          if (step.prompt === undefined) continue;
+          const text = renders.get(step.prompt);
+          expect(
+            text,
+            `dry-run has no render for ${step.prompt}`,
+          ).toBeDefined();
+          const expectation = expectationForStep(
+            step.id,
+            configs.process.flows,
+          );
+          // The dry-run renders the same generated example, not a hand copy.
+          expect(text).toContain(
+            outcomeExampleVar(step.prompt, expectation, schemaFor(expectation)),
+          );
+          const blocks = outcomeBlocks(text!);
+          expect(blocks, `${step.id} examples`).toHaveLength(2);
+          for (const [index, block] of blocks.entries()) {
+            const file = writeRecordOutcome(
+              root,
+              `${step.id}-${index}`,
+              step.id,
+              block,
+            );
+            const result = await validateFile(file, {
+              step: step.id,
+              repo: packageRoot,
+            });
+            expect(result.findings, `${step.id} example ${index}`).toEqual([]);
+          }
+        }
       }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
     }
   });
 }
@@ -230,52 +290,9 @@ function promptsSchemaSkeletonsPart3() {
       ),
     ).toBe("report: {kept, added}");
   });
-
-  it("pins the outcome skeleton wording", () => {
-    expect(outcomeSchemaVar()).toBe(
-      [
-        "```yaml",
-        "status: done | blocked | failed | upscope  # upscope on task steps only",
-        "summary: |",
-        "  one paragraph",
-        "intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction",
-        "concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner",
-        "debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it",
-        "steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list",
-        "replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position",
-        "  - finding: 0",
-        "    reply: |",
-        "      ...",
-        "verdict: approve | changes | reject  # optional; review steps only",
-        "decision: continue | done | blocked  # optional; architect step only",
-        "upscope: yes | no  # optional; standalone review escalation: answer with the verdict",
-        "steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}",
-        "stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave",
-        "planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task",
-        "planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes",
-        "planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave",
-        "planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful",
-        "```",
-      ].join("\n"),
-    );
-  });
 }
 
 function promptsSchemaSkeletonsPart4() {
-  it("renders QA's own schema with its verdict and no reviewer decision line", () => {
-    const skeleton = qaOutcomeSchemaVar();
-    expect(skeletonKeys(skeleton)).toEqual([
-      "status",
-      "summary",
-      "concerns",
-      "qa",
-    ]);
-    expect(skeletonLine(skeleton, "qa")).toContain("verdict: accept | changes");
-    expect(skeletonLine(skeleton, "qa")).toContain("findings");
-    expect(skeleton).not.toContain("decision:");
-    expect(skeleton).not.toContain("verdict: approve");
-  });
-
   it("renders the fields a prompt author writes", () => {
     expect(skeletonKeys(taskFrontmatterVar())).toEqual([
       "slug",
@@ -452,11 +469,21 @@ describe("prompts: PromptLibrary", () => {
   registerPromptsPromptLibraryPart2();
 });
 
+describe("prompts: outcome examples", () => {
+  promptsOutcomeExamplesValidity();
+
+  promptsOutcomeExamplesCoverage();
+
+  promptsOutcomeExamplesAlternatives();
+
+  promptsOutcomeExamplesNarrowing();
+
+  promptsOutcomeExamplesNested();
+
+  promptsOutcomeExamplesPart2();
+});
+
 describe("prompts: schema skeletons", () => {
-  promptsSchemaSkeletonsPart1();
-
-  promptsSchemaSkeletonsPart2();
-
   promptsSchemaSkeletonsPart3();
 
   promptsSchemaSkeletonsPart4();
@@ -464,8 +491,4 @@ describe("prompts: schema skeletons", () => {
   promptsSchemaSkeletonsPart5();
 
   promptsSchemaSkeletonsPart6();
-});
-
-describe("prompts: repair skeleton", () => {
-  promptsRepairSkeletonPart1();
 });

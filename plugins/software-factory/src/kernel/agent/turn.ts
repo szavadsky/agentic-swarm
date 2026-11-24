@@ -12,7 +12,7 @@ import {
   validateExpectation,
 } from "../outcome.js";
 import type { OutcomeSource } from "../outcome.js";
-import { outcomeRepairSchemaVar } from "../prompt-schema.js";
+import { outcomeExampleVar } from "../outcome-example.js";
 import { DEFAULT_TIMEOUTS, outcomeSchema } from "../types.js";
 import type { KernelRuntime, RepairAsk, TurnRecord } from "../types.js";
 import type {
@@ -42,6 +42,13 @@ async function prepareTurn(
   const prompt = runtime.prompts.render(spec.target.prompt, {
     ...spec.vars,
     outcome_path: started.outcomePath,
+    // The first ask and every repair show the same filled example, narrowed
+    // to the fields this step delivers.
+    outcome_schema: outcomeExampleVar(
+      spec.target.prompt,
+      spec.expectation,
+      spec.outcomeSchema ?? outcomeSchema,
+    ),
   });
   // The rendered step prompt is the cost driver; a repair ask is small and
   // replaces it in the same session, so the record carries the first ask.
@@ -341,7 +348,7 @@ function renderRepairPrompt(
     outcome_path: state.outcomePath,
     // The repair shows only the fields this turn can deliver, so a bare done
     // is never asked for a verdict or decision.
-    outcome_schema: outcomeRepairSchemaVar(
+    outcome_schema: outcomeExampleVar(
       state.spec.target.prompt,
       state.spec.expectation,
       state.spec.outcomeSchema ?? outcomeSchema,

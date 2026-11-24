@@ -27,8 +27,10 @@ import {
   formatFailingChecks,
   newGateFailures,
 } from "./gates.js";
+import { outcomeExampleVar } from "./outcome-example.js";
+import { expectationForStep } from "./outcome.js";
 import { taskOutcomeSchema } from "./outcome-schemas.js";
-import { outcomeSchemaVar, qaOutcomeSchemaVar } from "./prompt-schema.js";
+import { qaOutcomeSchema } from "./qa.js";
 import { CHECK_HANDOFF_DEFAULTS, GATE_LAST_CALL_ASK } from "./prompts.js";
 import { formatAcceptanceFindings, formatReviewFindings } from "./record.js";
 import { isLastChecksFixCall } from "./review.js";
@@ -176,6 +178,15 @@ export function promptVars(
 ): Record<string, string> {
   const handoff = readHandoff(records, task, flow, state, stepId);
   const { qaStep, acceptance, review } = handoff;
+  const step = stepId
+    ? flow.steps.find((candidate) => candidate.id === stepId)
+    : undefined;
+  const expectation = step
+    ? expectationForStep(step.id, { current: flow })
+    : "any";
+  const schema = qaStep
+    ? qaOutcomeSchema
+    : taskOutcomeSchema(task, runtime.configs.process.taskTypes);
   return {
     ...commonVars(runtime, task, worktree, round, handoff, state),
     prior_findings: priorFindings(qaStep, acceptance, review),
@@ -189,12 +200,12 @@ export function promptVars(
     resume_note: "",
     // QA carries its own kernel schema; every other step delivers the task
     // type's schema (a spike and a development task may differ even when the
-    // same role runs both).
-    outcome_schema: qaStep
-      ? qaOutcomeSchemaVar()
-      : outcomeSchemaVar(
-          undefined,
-          taskOutcomeSchema(task, runtime.configs.process.taskTypes),
-        ),
+    // same role runs both). The example is narrowed to the fields this step
+    // delivers, so a bare done is never shown a verdict it cannot give.
+    outcome_schema: outcomeExampleVar(
+      step?.prompt ?? "implementer",
+      expectation,
+      schema,
+    ),
   };
 }

@@ -23,7 +23,7 @@ import {
   snapshotTurn,
   type TurnSnapshot,
 } from "./pm.js";
-import { outcomeRepairSchemaVar } from "./prompt-schema.js";
+import { outcomeExampleVar } from "./outcome-example.js";
 import { scriptMeta } from "./record.js";
 import { MAIN_ARCHITECT } from "./tasks.js";
 import {
@@ -109,7 +109,7 @@ function planReviewVars(
     plan_path: plan.path,
     pack_path: runtime.store.pathOf({ area: "goal", rel: opts.packRel }),
     worktree: runtime.paths.goalCheckout,
-    outcome_schema: outcomeRepairSchemaVar(target.prompt, "any"),
+    outcome_schema: outcomeExampleVar(target.prompt, "any"),
   };
 }
 
@@ -315,7 +315,7 @@ function planReturnVars(
     technical_findings: findingsOfKind(numbered, "technical"),
     plan_notes: findingsOfKind(numbered, "planNote"),
     finding_count: String(numbered.length),
-    outcome_schema: outcomeRepairSchemaVar(target.prompt, "any"),
+    outcome_schema: outcomeExampleVar(target.prompt, "any"),
   };
 }
 

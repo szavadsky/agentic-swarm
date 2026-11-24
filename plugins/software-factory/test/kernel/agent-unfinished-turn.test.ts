@@ -8,7 +8,7 @@ import { runAgentTurn } from "../../src/kernel/agent.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { resolveTurn } from "../../src/kernel/flow-context.js";
-import { outcomeRepairSchemaVar } from "../../src/kernel/prompt-schema.js";
+import { outcomeExampleVar } from "../../src/kernel/outcome-example.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type {
@@ -299,9 +299,35 @@ function rendersTodaysAskWithoutUnfinishedPrompt(): void {
           findings:
             "- no outcome written to the outcome path and no fenced YAML block in the final message",
           outcome_path: outcomePath,
-          outcome_schema: outcomeRepairSchemaVar("implementer", "any"),
+          outcome_schema: outcomeExampleVar("implementer", "any"),
         }),
       );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
+function showsTheSameOutcomeExampleInTheRepairAsk(): void {
+  it("shows the step's outcome examples in the first ask and the repair ask", async () => {
+    const { root, fake, runtime } = await setupDirect();
+    try {
+      fake.script((req) => fakeTurnResult(req, { text: "nothing" }));
+      fake.script((req, ctx) => {
+        ctx.writeOutcome({ status: "done", summary: "recovered" });
+        return fakeTurnResult(req);
+      });
+
+      await turn(runtime, root);
+
+      expect(fake.calls).toHaveLength(2);
+      const examples = (text: string) =>
+        [...text.matchAll(/```ya?ml\n([\s\S]*?)```/g)]
+          .map((match) => match[1]!)
+          .filter((block) => /^status:/m.test(block));
+      const first = examples(fake.calls[0]!.prompt);
+      expect(first).toHaveLength(2);
+      expect(examples(fake.calls[1]!.prompt)).toEqual(first);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -335,6 +361,7 @@ describe("unfinished implement turn", () => {
   keepsOutcomeAskForMalformedOutcome();
   keepsOutcomeAskWhenExpectationFails();
   rendersTodaysAskWithoutUnfinishedPrompt();
+  showsTheSameOutcomeExampleInTheRepairAsk();
   sendsNoAskAfterHaltedStop();
 });
 

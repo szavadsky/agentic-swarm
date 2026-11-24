@@ -2,7 +2,15 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { outcomeExampleVar } from "./outcome-example.js";
+import {
+  expectationForStep,
+  KERNEL_TURN_STEPS,
+  type OutcomeExpectation,
+} from "./outcome.js";
+import { qaOutcomeSchema } from "./qa.js";
 import { loadPrompts } from "./prompts.js";
+import { outcomeSchema } from "./types.js";
 import type { ConfigBundle } from "./types.js";
 
 export interface PromptRender {
@@ -63,6 +71,67 @@ export function promptNamesForConfig(configs: ConfigBundle): string[] {
   names.add("architect-subarchitects");
   names.add("subarchitect-agent");
   return [...names].sort();
+}
+
+/** A step or turn's three prompt names: first ask, repair ask, unfinished ask. */
+interface PromptOwner {
+  prompt?: string;
+  repairPrompt?: string;
+  unfinishedPrompt?: string;
+}
+
+/** Whether this owner's first, repair or unfinished ask is the named render. */
+function ownsPrompt(owner: PromptOwner, name: string): boolean {
+  return [owner.prompt, owner.repairPrompt, owner.unfinishedPrompt].includes(
+    name,
+  );
+}
+
+/**
+ * The role prompt and expectation a render's filled outcome must show. A step's
+ * repair and unfinished asks show the same example as its first ask; the
+ * shared process repair default has no step, so it keeps the `any` contract.
+ */
+interface PromptOutcome {
+  /** The step's role prompt; repair and unfinished asks reuse its example. */
+  prompt: string;
+  expectation: OutcomeExpectation;
+}
+
+/** The owner's example prompt and expectation for a render name, if any. */
+function promptOutcome(
+  configs: ConfigBundle,
+  name: string,
+): PromptOutcome | undefined {
+  const { process } = configs;
+  for (const flow of Object.values(process.flows)) {
+    for (const step of flow.steps) {
+      if (!ownsPrompt(step, name)) continue;
+      return {
+        prompt: step.prompt ?? name,
+        expectation: expectationForStep(step.id, process.flows),
+      };
+    }
+  }
+  for (const [id, turn] of Object.entries(process.boundary)) {
+    if (ownsPrompt(turn, name) && Object.hasOwn(KERNEL_TURN_STEPS, id)) {
+      return {
+        prompt: turn.prompt,
+        expectation: KERNEL_TURN_STEPS[id as keyof typeof KERNEL_TURN_STEPS],
+      };
+    }
+  }
+  const architecture = [
+    ["planreview", process.architecture.planReview],
+    ["planreturn", process.architecture.planReturn],
+    ["subarchitect", process.hierarchy?.subarchitect],
+  ] as const;
+  for (const [step, owner] of architecture) {
+    if (owner && ownsPrompt(owner, name)) {
+      return { prompt: owner.prompt, expectation: KERNEL_TURN_STEPS[step] };
+    }
+  }
+  return undefined;
 }
 
 function goalVars(goal: string): Record<string, string> {
@@ -215,6 +284,13 @@ export function dryRunPrompts(
       promptVars.role = "architect";
       promptVars.deliverable = "plan edit or stop decision";
     }
+    const outcome = promptOutcome(configs, name);
+    const expectation = outcome?.expectation ?? "any";
+    promptVars.outcome_schema = outcomeExampleVar(
+      outcome?.prompt ?? name,
+      expectation,
+      expectation === "qa" ? qaOutcomeSchema : outcomeSchema,
+    );
     return {
       name,
       text: library.render(name, promptVars),

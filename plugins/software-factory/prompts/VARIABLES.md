@@ -20,13 +20,13 @@ Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable
 - `pack-preparer` — `calibration`, `outcome`
 - `scout` — `plan-read-only`, `calibration`, `outcome`
 
-The shared definitions exist once as partials: `scope` (the predicted-area rule: out-of-area judgement, upscope condition; includes `plan-read-only`), `plan-read-only` (the plan, intent, other task files and records are read-only), `task-size` (what one task is: one implementer session, one seam, one reviewable diff, one done-when, and the split/merge criteria; included by `front`, `plan-standard` and `pm`), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract, shape rendered from the kernel outcome schema), `task-frontmatter` (the task-file frontmatter shape rendered from the kernel task schema, plus the configured task types and tiers; included by the authoring roles), `clean-code` (the code standard; the repo layer's `codingRules` file replaces its content per repo while the fragment name stays fixed, so implementer, QA, steward and adjudicator prompts render the same rule text through their shared bodies), `remarkable` (the remarkable definition), `finding-standards` (the no-praise, no-restating, no-taste rule shared by both reviews), `plan-review-marks` (the plan-review mark meaning, shared by the architect's turn and return), `plan-history` (merged work is history: what a merged bullet collapses to; included by `plan-standard`), `spike-report-general` (what a spike's done-when says; included by `pm` and `architect-body`), `verdict` (which step each of `verdict` and `decision` belongs to, for review and architect steps) and the role bodies `implementer-body` and `architect-body` (everything before the role's turn block; a reviewer includes its author's body by role name, so the plan review reuses the reviewer template over `architect-body`).
+The shared definitions exist once as partials: `scope` (the predicted-area rule: out-of-area judgement, upscope condition; includes `plan-read-only`), `plan-read-only` (the plan, intent, other task files and records are read-only), `task-size` (what one task is: one implementer session, one seam, one reviewable diff, one done-when, and the split/merge criteria; included by `front`, `plan-standard` and `pm`), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract, with a filled example and its alternative rendered from the kernel outcome schema), `task-frontmatter` (the task-file frontmatter shape rendered from the kernel task schema, plus the configured task types and tiers; included by the authoring roles), `clean-code` (the code standard; the repo layer's `codingRules` file replaces its content per repo while the fragment name stays fixed, so implementer, QA, steward and adjudicator prompts render the same rule text through their shared bodies), `remarkable` (the remarkable definition), `finding-standards` (the no-praise, no-restating, no-taste rule shared by both reviews), `plan-review-marks` (the plan-review mark meaning, shared by the architect's turn and return), `plan-history` (merged work is history: what a merged bullet collapses to; included by `plan-standard`), `spike-report-general` (what a spike's done-when says; included by `pm` and `architect-body`), `verdict` (which step each of `verdict` and `decision` belongs to, for review and architect steps) and the role bodies `implementer-body` and `architect-body` (everything before the role's turn block; a reviewer includes its author's body by role name, so the plan review reuses the reviewer template over `architect-body`).
 
 The architect's body is assembled from fragments so a reviewer and a subarchitect share the whole body: `architect-bounds` (the bounds), `architect-turn` (the consult's turn order, completeness check, stop decision and plan edit), `plan-standard` (what the plan carries and its granularity, with `plan-history` and `task-size`), `plan-rules` (debt, parked work and ADRs) and `architect-scope` (tiers and calibration, with `plan-rules` inside). `architect-body` is that shared body plus `outcome`; `architect-assignment` adds the top architect's role line before the bounds. `architect-goal` adds the top's scope (the whole goal, the register at depth 2, steers), and `architect-epic` adds the subarchitect's epic scope and upward brief. The plan reviewer includes `architect-assignment` and the whole `architect-body`; the architect's return includes `architect-assignment`.
 
 `calibration` is the default calibration partial. The process config may replace its content per repo; the prompt template does not change.
 
-Renderer defaults live outside any `This turn` block and the renderer supplies them, so turn code does not pass them: `validate_cmd` (the running build's absolute `bun <build>/bin/factory.ts validate`, stable only within one checkout), `outcome_schema` (the outcome YAML skeleton rendered from the task type's kernel output schema, or the QA step's own schema, in the `outcome` partial), `task_frontmatter` (the frontmatter YAML skeleton rendered from the kernel task schema, in the `task-frontmatter` partial), `task_types` (configured task type names in config order with the flow, kind and output schema each supplies, from the process config), `tiers` (run-config alias names in config order; `default` is kernel vocabulary for no tier override and stays literal), `depth` (`1` until the hierarchy config names `2`), `subagents` (the architect alias harness's `Caps.subagents`; `none` is the harness-generic default, and the steered hierarchy passes `steer` so only a steering harness renders the omp tool instructions), `author` (the reviewer's author role; it selects the `<role>-body` and `review-<role>` fragments) and `checks_result`/`checks_tree`/`checks_log` (the latest checks record's result, tree and log; a render with no checks record gets `no checks run`, `unknown` and `unknown`), and `base_gates` (the base tree's recorded gate result; a render with no base record gets `not recorded`, never a clean base). `author` defaults to `implementer`; the plan-review turn overrides it with `architect`. `class_types` is a turn-supplied variable above the block: the front turn renders its class-to-task-type mapping from the same kernel mapping the validator enforces. The delivery-repair ask also supplies its own narrowed `outcome_schema`; it has no role prompt, so its shape must match the turn it repairs.
+Renderer defaults live outside any `This turn` block and the renderer supplies them, so turn code does not pass them: `validate_cmd` (the running build's absolute `bun <build>/bin/factory.ts validate`, stable only within one checkout), `outcome_schema` (a filled outcome YAML example and its alternative rendered from the task type's kernel output schema, or the QA step's own schema, and narrowed to the fields the step delivers, in the `outcome` partial), `task_frontmatter` (the frontmatter YAML skeleton rendered from the kernel task schema, in the `task-frontmatter` partial), `task_types` (configured task type names in config order with the flow, kind and output schema each supplies, from the process config), `tiers` (run-config alias names in config order; `default` is kernel vocabulary for no tier override and stays literal), `depth` (`1` until the hierarchy config names `2`), `subagents` (the architect alias harness's `Caps.subagents`; `none` is the harness-generic default, and the steered hierarchy passes `steer` so only a steering harness renders the omp tool instructions), `author` (the reviewer's author role; it selects the `<role>-body` and `review-<role>` fragments) and `checks_result`/`checks_tree`/`checks_log` (the latest checks record's result, tree and log; a render with no checks record gets `no checks run`, `unknown` and `unknown`), and `base_gates` (the base tree's recorded gate result; a render with no base record gets `not recorded`, never a clean base). `author` defaults to `implementer`; the plan-review turn overrides it with `architect`. `class_types` is a turn-supplied variable above the block: the front turn renders its class-to-task-type mapping from the same kernel mapping the validator enforces. The turn code supplies its own narrowed `outcome_schema` from the step's prompt, expectation and schema, so the role prompt and its repair ask show the same examples.
 
 ## architect.md
 
@@ -40,7 +40,7 @@ Renderer defaults live outside any `This turn` block and the renderer supplies t
 - `steers` — formatted pending steers: id, first line, file path; `none` when empty
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default
+- `outcome_schema` — outcome examples from the kernel schema; renderer default
 - `task_types` — configured task types with their flow, kind and schema; renderer default
 - `tiers` — run-config alias names; renderer default
 - `depth` — `2` renders the architect register; `1` (renderer default) leaves it out
@@ -76,7 +76,7 @@ One epic's architect, below the top architect: the same bounds, turn order, plan
 - `digest_path` — path to the previous launch's digest; empty string when this launch has none
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default
+- `outcome_schema` — outcome examples from the kernel schema; renderer default
 - `task_types` — configured task types with their flow, kind and schema; renderer default
 - `tiers` — run-config alias names; renderer default
 
@@ -93,7 +93,7 @@ One epic's architect, below the top architect: the same bounds, turn order, plan
 - `gate_commands` — configured gate commands as `- id: command` lines; `none` when empty
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default
+- `outcome_schema` — outcome examples from the kernel schema; renderer default
 - `task_frontmatter` — frontmatter YAML skeleton from the kernel schema; renderer default
 - `task_types` — configured task types with their flow, kind and schema; renderer default
 - `tiers` — run-config alias names; renderer default
@@ -107,7 +107,7 @@ One epic's architect, below the top architect: the same bounds, turn order, plan
 - `steer` — the pending steer as `- <id> (<relPath>):` plus its full indented text
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default
+- `outcome_schema` — outcome examples from the kernel schema; renderer default
 
 The turn's record carries the unified diff of the edit; the next architect pack renders it beside the pending steer.
 
@@ -126,7 +126,7 @@ The turn's record carries the unified diff of the edit; the next architect pack 
 - `holds_dir` — directory for one `<id>.yaml` hold per steer or concern
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default
+- `outcome_schema` — outcome examples from the kernel schema; renderer default
 - `task_frontmatter` — frontmatter YAML skeleton from the kernel schema; renderer default
 - `task_types` — configured task types with their flow, kind and schema; renderer default
 - `tiers` — run-config alias names; renderer default
@@ -146,7 +146,7 @@ The turn's record carries the unified diff of the edit; the next architect pack 
 - `findings` — previous acceptance round's summary and findings for this task (QA or review), plus any legacy forward lines (summary first); gate failures when the latest record is red checks; empty string before the first acceptance. Each numbered finding is answered by a change, a reply or both
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default
+- `outcome_schema` — outcome examples from the kernel schema; renderer default
 
 ## cleanliness-revision.md
 
@@ -172,7 +172,7 @@ The QA step's acceptance prompt: the implementer's Work, Bounds and Code standar
 - `fix_dispositions` — the current fix round's summary plus one numbered reply per prior finding; round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; renderer default
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton narrowed to `status`, `summary`, `concerns` and `qa`; supplied by the turn
+- `outcome_schema` — outcome examples narrowed to the base fields and `qa`; supplied by the turn
 
 ## decider.md
 
@@ -203,7 +203,7 @@ The decide turn's prompt: a task turn committed nothing and the kernel raised a 
 - `checks_log` — the checks record's directory; `unknown` without a checks record (renderer default)
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default
+- `outcome_schema` — outcome examples from the kernel schema; renderer default
 
 ## review-implementer.md
 
@@ -243,7 +243,7 @@ The review-adjudication prompt: a step after a review re-judges that review's `c
 - `checks_log` — the checks record's directory (renderer default)
 - `outcome_path` — path for the outcome file the harness asks for
 - `validate_cmd` — absolute validate command for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton; renderer default
+- `outcome_schema` — outcome examples; renderer default
 
 ## review-architect.md
 
@@ -256,7 +256,7 @@ The plan-review prompt the architecture flow renders on each reviewer alias. It 
 - `worktree` — goal checkout; the reviewer reads the repo from it
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton narrowed to `status`, `summary`, `concerns`, `steerAnswers`, `debtClosed` and `planReview`; supplied by the turn
+- `outcome_schema` — outcome examples narrowed to `status`, `summary`, `concerns`, `steerAnswers`, `debtClosed` and `planReview`; supplied by the turn
 - `task_types` — configured task types with their flow, kind and schema, read by the included plan standard; renderer default
 - `tiers` — run-config alias names, read by the included architect scope; renderer default
 
@@ -274,7 +274,7 @@ The architect's one turn on the plan review's technical findings, before the PM 
 - `finding_count` — total findings; every number `1..finding_count` must appear once in `planReviewMarks`
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton narrowed to the base fields and `planReviewMarks`; supplied by the turn
+- `outcome_schema` — outcome examples narrowed to the base fields and `planReviewMarks`; supplied by the turn
 
 ## digest.md
 
@@ -285,7 +285,7 @@ The architect's one turn on the plan review's technical findings, before the PM 
 - `digest_path` — path where the digest must be written; the script has already written the cost-and-turn table there
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default
+- `outcome_schema` — outcome examples from the kernel schema; renderer default
 
 The digest scout appends loops, failures and interventions; it does not restate the script table.
 
@@ -300,7 +300,7 @@ The digest scout appends loops, failures and interventions; it does not restate 
 - `base_gates` — the base tree's recorded gate result: commit plus `green`, the pre-existing failing checks, or `not recorded`
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default
+- `outcome_schema` — outcome examples from the kernel schema; renderer default
 
 The flow's `resolve` step renders this same prompt with the same variables: the wave-end steward and the in-flow resolve turn own one conflict ask.
 
@@ -316,7 +316,7 @@ The flow's `resolve` step renders this same prompt with the same variables: the 
 - `gate_record_path` — `end.yaml` of the newest record that ran gates, to read instead of running them; `none recorded` when no gate has run
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default
+- `outcome_schema` — outcome examples from the kernel schema; renderer default
 
 ## pack-preparer.md
 
@@ -327,7 +327,7 @@ The flow's `resolve` step renders this same prompt with the same variables: the 
 - `checkout` — path to the stable goal checkout (integration worktree)
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton from the kernel schema plus this turn's `packBriefs`; the turn supplies it
+- `outcome_schema` — outcome examples from the kernel schema plus this turn's `packBriefs`; the turn supplies it
 
 ## scout.md
 
@@ -337,7 +337,7 @@ The flow's `resolve` step renders this same prompt with the same variables: the 
 - `code_map_path` — path of the code map to write, with one entry per directory; the one artifact the turn authors (the outcome file is the other)
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default
+- `outcome_schema` — outcome examples from the kernel schema; renderer default
 
 ## delivery-repair.md
 
@@ -349,7 +349,7 @@ The default in-session repair ask, rendered by the kernel when a turn delivers n
 - `findings` — the missing or invalid findings as `- ` bullet lines
 - `outcome_path` — path where the corrected outcome must be written
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton from the kernel schema, narrowed to the fields this turn delivers; supplied by the repair ask
+- `outcome_schema` — outcome examples from the kernel schema, narrowed to the fields this turn delivers; supplied by the repair ask
 
 ## unfinished-turn.md
 
@@ -363,7 +363,7 @@ The finish-the-task ask, named by a step's `unfinishedPrompt`. The kernel sends 
 - `worktree` — the worktree the turn must do the work in
 - `outcome_path` — path where the outcome must be written
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton from the kernel schema, narrowed to the fields this turn delivers; supplied by the repair ask
+- `outcome_schema` — outcome examples from the kernel schema, narrowed to the fields this turn delivers; supplied by the repair ask
 
 ## rescue-turn.md
 
@@ -378,7 +378,7 @@ The fresh-session ask the flow renders when an implement turn left work on its b
 - `findings` — the acceptance findings the turn already answers, as the implementer's vars render them; empty when none
 - `outcome_path` — path where the outcome must be written
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton from the kernel schema; supplied by the turn
+- `outcome_schema` — outcome examples from the kernel schema; supplied by the turn
 
 ## architect-repair.md
 
@@ -390,7 +390,7 @@ The architect's repair ask, named by the architect boundary step's `repairPrompt
 - `findings` — the missing or invalid findings as `- ` bullet lines
 - `outcome_path` — path where the corrected outcome must be written
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
-- `outcome_schema` — outcome YAML skeleton from the kernel schema, narrowed to the fields this turn delivers; supplied by the repair ask
+- `outcome_schema` — outcome examples from the kernel schema, narrowed to the fields this turn delivers; supplied by the repair ask
 
 ## resume.md
 

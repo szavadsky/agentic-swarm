@@ -265,7 +265,8 @@ function scriptArchitectureFlowTurns(
       expect(req.prompt).toContain("## What the plan carries");
       expect(req.prompt).toContain("## Turn order");
       expect(req.prompt).toContain("Temporary debt only with a named remover");
-      expect(req.prompt).toContain("planReview: {technical:");
+      expect(req.prompt).toContain("planReview:");
+      expect(req.prompt).toContain("planNotes:");
       expect(req.prompt).not.toContain("verdict:");
       ctx.writeOutcome(reviewed("reviewed", FINDINGS));
       return fakeTurnResult(req);

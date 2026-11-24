@@ -6,7 +6,6 @@
 export {
   concernSchema,
   intentStatusEntrySchema,
-  debtClosedEntrySchema,
   normalizeSlug,
   outcomeSchema,
   outcomeSlugSchema,

@@ -3,18 +3,35 @@ import path from "node:path";
 import { packageRoot } from "../../src/kernel/config.js";
 import { frontClassTypesVar } from "../../src/kernel/front.js";
 import {
-  outcomeRepairSchemaVar,
-  outcomeSchemaVar,
-  qaOutcomeSchemaVar,
   taskFrontmatterVar,
   taskTypesVar,
   tierNamesVar,
 } from "../../src/kernel/prompt-schema.js";
+import { outcomeExampleVar } from "../../src/kernel/outcome-example.js";
 import { packPreparerOutcomeSchemaVar } from "../../src/kernel/pack-prep.js";
+import { qaOutcomeSchema } from "../../src/kernel/qa.js";
 import { loadPromptLibrary } from "../../src/kernel/prompts.js";
 import { outcome } from "./s2-helpers.js";
 
-const OUTCOME_SCHEMA = outcomeSchemaVar();
+const OUTCOME_SCHEMA = outcomeExampleVar("implementer", "any");
+
+const BASE_SCHEMA = outcomeExampleVar("front", "any");
+
+const ARCHITECT_SCHEMA = outcomeExampleVar("architect", "architect");
+
+const SUBARCHITECT_SCHEMA = outcomeExampleVar("subarchitect", "architect");
+
+const PM_SCHEMA = outcomeExampleVar("pm", "any");
+
+const QA_SCHEMA = outcomeExampleVar("qa", "qa", qaOutcomeSchema);
+
+const REVIEWER_SCHEMA = outcomeExampleVar("reviewer", "review");
+
+const CHECKER_SCHEMA = outcomeExampleVar("plan-checker", "any");
+
+const PLAN_REVIEW_SCHEMA = outcomeExampleVar("review-architect", "any");
+
+const PLAN_RETURN_SCHEMA = outcomeExampleVar("architect-review-return", "any");
 
 const TASK_FRONTMATTER = taskFrontmatterVar();
 
@@ -51,7 +68,7 @@ const ROLES: Record<string, Record<string, string>> = {
     steers: "- s1 (mailbox/inbox/s1.md): keep the API stable",
     outcome_path: "/goal/records/00042-i3-architect-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
+    outcome_schema: ARCHITECT_SCHEMA,
     task_types: TASK_TYPES,
     tiers: TIERS,
     depth: "2",
@@ -69,7 +86,7 @@ const ROLES: Record<string, Record<string, string>> = {
     digest_path: "/goal/iterations/3/epics/auth/digest.md",
     outcome_path: "/goal/records/00048-i3-subarchitect-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
+    outcome_schema: SUBARCHITECT_SCHEMA,
     task_types: TASK_TYPES,
     tiers: TIERS,
   },
@@ -86,7 +103,7 @@ const ROLES: Record<string, Record<string, string>> = {
     gate_commands: "- test: bun test",
     outcome_path: "/goal/records/00041-i3-front-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
+    outcome_schema: BASE_SCHEMA,
     task_frontmatter: TASK_FRONTMATTER,
     task_types: TASK_TYPES,
     tiers: TIERS,
@@ -108,7 +125,7 @@ const ROLES: Record<string, Record<string, string>> = {
     plan_checks:
       "- alpha (replace): mechanical park\n  cause: infra: runner lost\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 spent\n  done-when: Done when: it works.",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
+    outcome_schema: PM_SCHEMA,
     task_frontmatter: TASK_FRONTMATTER,
     task_types: TASK_TYPES,
     tiers: TIERS,
@@ -146,7 +163,7 @@ const ROLES: Record<string, Record<string, string>> = {
     fix_dispositions: "",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: qaOutcomeSchemaVar(),
+    outcome_schema: QA_SCHEMA,
   },
   reviewer: {
     task_path: "/goal/tasks/alpha.md",
@@ -166,7 +183,7 @@ const ROLES: Record<string, Record<string, string>> = {
     fix_dispositions: "",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
+    outcome_schema: REVIEWER_SCHEMA,
   },
   digest: {
     launch_id: "previous-launch-before-3",
@@ -176,7 +193,7 @@ const ROLES: Record<string, Record<string, string>> = {
     digest_path: "/goal/iterations/3/digest.md",
     outcome_path: "/goal/records/00044-i3-digest-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
+    outcome_schema: BASE_SCHEMA,
   },
   steward: {
     worktree: "/worktrees/demo-tasks/alpha",
@@ -188,7 +205,7 @@ const ROLES: Record<string, Record<string, string>> = {
     base_gates: "base abc1234def: green",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
+    outcome_schema: BASE_SCHEMA,
   },
   intent: {
     iteration: "3",
@@ -196,7 +213,7 @@ const ROLES: Record<string, Record<string, string>> = {
     steer: "- s1 (mailbox/inbox/s1.md):\n  keep the API stable",
     outcome_path: "/goal/records/00009-i3-s1-intent-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
+    outcome_schema: BASE_SCHEMA,
   },
   "plan-checker": {
     iteration: "3",
@@ -210,7 +227,7 @@ const ROLES: Record<string, Record<string, string>> = {
     gate_record_path: "/goal/records/00007-i3-alpha-checks-r1/end.yaml",
     outcome_path: "/goal/records/00045-i3-plan-check-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
+    outcome_schema: CHECKER_SCHEMA,
   },
   "pack-preparer": {
     iteration: "3",
@@ -230,7 +247,7 @@ const ROLES: Record<string, Record<string, string>> = {
     worktree: "/worktrees/demo",
     outcome_path: "/goal/records/00046-i3-planreview-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: outcomeRepairSchemaVar("review-architect", "any"),
+    outcome_schema: PLAN_REVIEW_SCHEMA,
     task_types: TASK_TYPES,
     tiers: TIERS,
   },
@@ -246,7 +263,7 @@ const ROLES: Record<string, Record<string, string>> = {
     finding_count: "2",
     outcome_path: "/goal/records/00047-i3-planreturn-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: outcomeRepairSchemaVar("architect-review-return", "any"),
+    outcome_schema: PLAN_RETURN_SCHEMA,
   },
 };
 
@@ -266,11 +283,10 @@ function architectSubarchitectSharePart1() {
     expect(start, "no turn order").toBeGreaterThanOrEqual(0);
     const outcome = rendered.indexOf("## Outcome\n", start);
     expect(outcome, "no outcome").toBeGreaterThan(start);
-    const end = rendered.indexOf("\n## ", outcome + 1);
-    return rendered.slice(start, end === -1 ? undefined : end);
+    return rendered.slice(start, outcome);
   }
 
-  it("renders the bounds and the whole body identically in both", () => {
+  it("renders the bounds and the shared body identically in both", () => {
     const architect = library().render("architect", ROLES.architect!);
     const subarchitect = library().render("subarchitect", ROLES.subarchitect!);
     expect(bounds(subarchitect).trimEnd()).toBe(bounds(architect).trimEnd());
@@ -420,17 +436,15 @@ describe("outcome protocol in prompts", () => {
   it("renders the typed protocol fields from the schema and never asks for a forward line", () => {
     for (const role of ["architect", "pm"]) {
       const rendered = library().render(role, ROLES[role]!);
-      expect(rendered, `${role} lost debtClosed`).toContain(
-        "debtClosed: [{id, reason}]",
-      );
-      expect(rendered, `${role} lost steerAnswers`).toContain(
-        "steerAnswers: [{steer, answer}]",
-      );
+      expect(rendered, `${role} lost debtClosed`).toContain("debtClosed:");
+      expect(rendered, `${role} lost steerAnswers`).toContain("steerAnswers:");
       expect(rendered, `${role} still asks for a forward line`).not.toContain(
         "forward:",
       );
-      // The skeleton renders the same schema the parser validates.
-      expect(rendered).toContain(OUTCOME_SCHEMA);
+      // The filled example renders the same schema the parser validates.
+      expect(rendered).toContain(
+        outcomeExampleVar(role, role === "architect" ? "architect" : "any"),
+      );
     }
   });
 });

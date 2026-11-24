@@ -135,27 +135,52 @@ Filter: raise a concern only when acting without it would be wrong.
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+intentStatus:
+  - section: M1 — Work is never lost to the kernel
+    status: works
+    note: every flow step renders a filled outcome example
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+decision: continue
+planReviewMarks:
+  - finding: 1
+    mark: helpful
+\`\`\`
+
+The other decision is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+intentStatus:
+  - section: M1 — Work is never lost to the kernel
+    status: works
+    note: every flow step renders a filled outcome example
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+decision: done
+planReviewMarks:
+  - finding: 1
+    mark: helpful
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -307,27 +332,38 @@ Filter: raise a concern only when acting without it would be wrong.
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+decision: continue
+\`\`\`
+
+The other decision is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+decision: done
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -428,27 +464,36 @@ Filter: raise a concern only when acting without it would be wrong.
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+\`\`\`
+
+The same outcome as the last fenced YAML block of your final message is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -632,27 +677,60 @@ Filter: raise a concern only when acting without it would be wrong.
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+steerRoutes:
+  - steer: s1
+    route: task
+    answer: the API stays stable
+stallRoutes:
+  - slug: alpha
+    action: amend
+    reason: the parked cause no longer applies
+planCheckRoutes:
+  - slug: alpha
+    action: continue
+    reason: the follow-up retries the turn
+\`\`\`
+
+The same outcome as the last fenced YAML block of your final message is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+steerRoutes:
+  - steer: s1
+    route: task
+    answer: the API stays stable
+stallRoutes:
+  - slug: alpha
+    action: amend
+    reason: the parked cause no longer applies
+planCheckRoutes:
+  - slug: alpha
+    action: continue
+    reason: the follow-up retries the turn
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -748,27 +826,42 @@ Filter: raise a concern only when acting without it would be wrong.
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+replies:
+  - finding: 1
+    reply: fixed in the code; the test covers it
+\`\`\`
+
+The same outcome as the last fenced YAML block of your final message is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+replies:
+  - finding: 1
+    reply: fixed in the code; the test covers it
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -846,12 +939,43 @@ Filter: raise a concern only when acting without it would be wrong.
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-qa: {verdict, findings: []}  # optional; QA step only: accept, or changes with findings; verdict: accept | changes
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+qa:
+  verdict: accept
+  findings: []
+\`\`\`
+
+The other QA verdict is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+qa:
+  verdict: changes
+  findings:
+    - the done-when needs a failing case in test/prompts.test.ts
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -961,27 +1085,40 @@ Filter: raise a concern only when acting without it would be wrong.
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+verdict: approve
+upscope: no
+\`\`\`
+
+The other verdict is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+verdict: changes
+upscope: no
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -1089,27 +1226,36 @@ Filter: raise a concern only when acting without it would be wrong.
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+\`\`\`
+
+The same outcome as the last fenced YAML block of your final message is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -1175,27 +1321,36 @@ Filter: raise a concern only when acting without it would be wrong.
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+\`\`\`
+
+The same outcome as the last fenced YAML block of your final message is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -1252,27 +1407,36 @@ Filter: raise a concern only when acting without it would be wrong.
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+\`\`\`
+
+The same outcome as the last fenced YAML block of your final message is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -1360,27 +1524,68 @@ Filter: raise a concern only when acting without it would be wrong.
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+planCheck:
+  verdict: progress
+  evidence:
+    - item: outcome-examples
+      status: done
+      evidence: test/prompts.test.ts
+  followUps:
+    - kind: missing-dep
+      slug: alpha
+      dep: beta
+      reason: dependency beta is parked
+  concerns:
+    - id: example id
+      action: resolve
+      slug: example slug
+      reason: example reason
+\`\`\`
+
+The same outcome as the last fenced YAML block of your final message is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+planCheck:
+  verdict: progress
+  evidence:
+    - item: outcome-examples
+      status: done
+      evidence: test/prompts.test.ts
+  followUps:
+    - kind: missing-dep
+      slug: alpha
+      dep: beta
+      reason: dependency beta is parked
+  concerns:
+    - id: example id
+      action: resolve
+      slug: example slug
+      reason: example reason
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -1453,31 +1658,42 @@ Filter: raise a concern only when acting without it would be wrong.
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
-packBriefs:  # optional; one entry per index section to name with a pointer and this one-line summary; a section you omit renders whole; section: planCheck | planReview | forwarded | spikeFindings | pmAnswers | codeMap
-  - section: planCheck | planReview | forwarded | spikeFindings | pmAnswers | codeMap
-    summary: |
-      one line: what the section says and why it does not change this iteration's plan
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+packBriefs:
+  - section: planCheck
+    summary: the checker's follow-ups all landed; no plan change
+\`\`\`
+
+The same outcome as the last fenced YAML block of your final message is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+packBriefs:
+  - section: planCheck
+    summary: the checker's follow-ups all landed; no plan change
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -1538,27 +1754,36 @@ Filter: raise a concern only when acting without it would be wrong.
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+\`\`\`
+
+The same outcome as the last fenced YAML block of your final message is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -1689,14 +1914,50 @@ Filter: raise a concern only when acting without it would be wrong.
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+planReview:
+  technical:
+    - planLine: "- \`outcome-examples\` — render a filled outcome example per step"
+      finding: the plan assumes a prompt helper the repo lacks; name the helper or drop the assumption
+  planNotes:
+    - planLine: "Done when: every flow step's example passes \`validate\`"
+      finding: the done-when names no command; name \`bun test test/prompts.test.ts\`
+\`\`\`
+
+The same outcome as the last fenced YAML block of your final message is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+planReview:
+  technical:
+    - planLine: "- \`outcome-examples\` — render a filled outcome example per step"
+      finding: the plan assumes a prompt helper the repo lacks; name the helper or drop the assumption
+  planNotes:
+    - planLine: "Done when: every flow step's example passes \`validate\`"
+      finding: the done-when names no command; name \`bun test test/prompts.test.ts\`
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -1797,14 +2058,42 @@ Filter: raise a concern only when acting without it would be wrong.
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+planReviewMarks:
+  - finding: 1
+    mark: helpful
+\`\`\`
+
+The same outcome as the last fenced YAML block of your final message is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+planReviewMarks:
+  - finding: 1
+    mark: helpful
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -1948,27 +2237,52 @@ AUTO
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+intentStatus:
+  - section: M1 — Work is never lost to the kernel
+    status: works
+    note: every flow step renders a filled outcome example
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+decision: continue
+planReviewMarks:
+  - finding: 1
+    mark: helpful
+\`\`\`
+
+The other decision is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+intentStatus:
+  - section: M1 — Work is never lost to the kernel
+    status: works
+    note: every flow step renders a filled outcome example
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+decision: done
+planReviewMarks:
+  - finding: 1
+    mark: helpful
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -2108,27 +2422,38 @@ AUTO
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+decision: continue
+\`\`\`
+
+The other decision is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+decision: done
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -2299,27 +2624,60 @@ AUTO
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+steerRoutes:
+  - steer: s1
+    route: task
+    answer: the API stays stable
+stallRoutes:
+  - slug: alpha
+    action: amend
+    reason: the parked cause no longer applies
+planCheckRoutes:
+  - slug: alpha
+    action: continue
+    reason: the follow-up retries the turn
+\`\`\`
+
+The same outcome as the last fenced YAML block of your final message is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+steerRoutes:
+  - steer: s1
+    route: task
+    answer: the API stays stable
+stallRoutes:
+  - slug: alpha
+    action: amend
+    reason: the parked cause no longer applies
+planCheckRoutes:
+  - slug: alpha
+    action: continue
+    reason: the follow-up retries the turn
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -2482,27 +2840,52 @@ PRINCIPAL
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+intentStatus:
+  - section: M1 — Work is never lost to the kernel
+    status: works
+    note: every flow step renders a filled outcome example
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+decision: continue
+planReviewMarks:
+  - finding: 1
+    mark: helpful
+\`\`\`
+
+The other decision is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+intentStatus:
+  - section: M1 — Work is never lost to the kernel
+    status: works
+    note: every flow step renders a filled outcome example
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+decision: done
+planReviewMarks:
+  - finding: 1
+    mark: helpful
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -2642,27 +3025,38 @@ PRINCIPAL
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+decision: continue
+\`\`\`
+
+The other decision is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+decision: done
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -2833,27 +3227,60 @@ PRINCIPAL
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+steerRoutes:
+  - steer: s1
+    route: task
+    answer: the API stays stable
+stallRoutes:
+  - slug: alpha
+    action: amend
+    reason: the parked cause no longer applies
+planCheckRoutes:
+  - slug: alpha
+    action: continue
+    reason: the follow-up retries the turn
+\`\`\`
+
+The same outcome as the last fenced YAML block of your final message is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+steerRoutes:
+  - steer: s1
+    route: task
+    answer: the API stays stable
+stallRoutes:
+  - slug: alpha
+    action: amend
+    reason: the parked cause no longer applies
+planCheckRoutes:
+  - slug: alpha
+    action: continue
+    reason: the follow-up retries the turn
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -3016,27 +3443,52 @@ DETAILED
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+intentStatus:
+  - section: M1 — Work is never lost to the kernel
+    status: works
+    note: every flow step renders a filled outcome example
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+decision: continue
+planReviewMarks:
+  - finding: 1
+    mark: helpful
+\`\`\`
+
+The other decision is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+intentStatus:
+  - section: M1 — Work is never lost to the kernel
+    status: works
+    note: every flow step renders a filled outcome example
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+decision: done
+planReviewMarks:
+  - finding: 1
+    mark: helpful
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -3176,27 +3628,38 @@ DETAILED
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+decision: continue
+\`\`\`
+
+The other decision is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+decision: done
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -3367,27 +3830,60 @@ DETAILED
 
 Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
+A complete outcome for this step:
+
 \`\`\`yaml
-status: done | blocked | failed | upscope  # upscope on task steps only
-summary: |
-  one paragraph
-intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
-concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
-debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
-steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
-  - finding: 0
-    reply: |
-      ...
-verdict: approve | changes | reject  # optional; review steps only
-decision: continue | done | blocked  # optional; architect step only
-upscope: yes | no  # optional; standalone review escalation: answer with the verdict
-steerRoutes: [{steer, route, answer?}]  # optional; PM steer turns only: one route per claimed steer; route: task | spike | intent | architect | stall | {architect}
-stallRoutes: [{slug, action, reason}]  # optional; PM stall turns only: one entry per parked slug; action: amend | cancel | replace | split | leave
-planCheck: {verdict, evidence: [{item, status, evidence}], followUps: [{kind, slug, dep?, reason}], concerns: [{id, action, slug?, reason}]}  # optional; plan-checker turns only; verdict: progress | architect; evidence.status: done | missing | below-standard | unverifiable; followUps.kind: amend | cancel | replace | split | missing-dep | unmerged; concerns.action: resolve | task
-planReview: {technical: [{planLine, finding}], planNotes: [{planLine, finding}]}  # optional; plan-review turns only: technical findings and plan notes
-planCheckRoutes: [{slug, action, reason}]  # optional; plan-check PM turns only: one entry per checker follow-up; action: continue | leave
-planReviewMarks: [{finding, mark}]  # optional; architect step only: one mark per plan-review finding; mark: helpful | unhelpful
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+steerRoutes:
+  - steer: s1
+    route: task
+    answer: the API stays stable
+stallRoutes:
+  - slug: alpha
+    action: amend
+    reason: the parked cause no longer applies
+planCheckRoutes:
+  - slug: alpha
+    action: continue
+    reason: the follow-up retries the turn
+\`\`\`
+
+The same outcome as the last fenced YAML block of your final message is also valid:
+
+\`\`\`yaml
+status: done
+summary: the requested work is complete and the gates pass
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the retry path has no test without a live harness
+    evidence: test/prompts.test.ts
+debtClosed: []
+steerAnswers:
+  - steer: s1
+    answer: the API stays stable
+steerRoutes:
+  - steer: s1
+    route: task
+    answer: the API stays stable
+stallRoutes:
+  - slug: alpha
+    action: amend
+    reason: the parked cause no longer applies
+planCheckRoutes:
+  - slug: alpha
+    action: continue
+    reason: the follow-up retries the turn
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.

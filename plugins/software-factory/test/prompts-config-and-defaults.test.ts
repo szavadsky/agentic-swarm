@@ -1,11 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import os from "node:os";
 import { FRONT_CLASS_FLOWS, frontClassTypesVar } from "../src/kernel/front.js";
-import {
-  outcomeRepairSchemaVar,
-  taskTypesVar,
-  tierNamesVar,
-} from "../src/kernel/prompt-schema.js";
+import { taskTypesVar, tierNamesVar } from "../src/kernel/prompt-schema.js";
+import { outcomeExampleVar } from "../src/kernel/outcome-example.js";
 import { packPreparerOutcomeSchema } from "../src/kernel/pack-prep.js";
 import { loadPrompts } from "../src/kernel/prompts.js";
 import type { ProcessConfig } from "../src/kernel/types.js";
@@ -92,10 +89,10 @@ function promptsSchemaDefaultsPart1() {
 
   it("fills the outcome partial from the schema without turn vars", () => {
     const rendered = libraryWithConfig({}).render("outcome", {});
-    expect(rendered).toContain("status: done | blocked | failed | upscope");
-    expect(rendered).toContain(
-      "verdict: approve | changes | reject  # optional; review steps only",
-    );
+    expect(rendered).toContain("A complete outcome for this step:");
+    expect(rendered).toContain("status: done");
+    expect(rendered).toContain("replies:");
+    expect(rendered).not.toContain("status: done |");
     expect(rendered).not.toContain("{{");
   });
 
@@ -146,46 +143,42 @@ function promptsSchemaDefaultsPart2(
   });
 }
 
-describe("prompts: repair skeleton", () => {
+describe("prompts: repair examples", () => {
   it("keeps the reporting fields a role's turns deliver", () => {
-    const pm = outcomeRepairSchemaVar("pm", "any");
+    const pm = outcomeExampleVar("pm", "any");
     for (const field of ["steerRoutes:", "stallRoutes:", "planCheckRoutes:"]) {
       expect(pm).toContain(field);
     }
     // The plan check itself belongs to the checker, not the PM's routing turn.
     expect(pm).not.toContain("planCheck:");
     expect(pm).not.toContain("verdict:");
-    expect(outcomeRepairSchemaVar("plan-checker", "any")).toContain(
-      "planCheck:",
-    );
-    expect(outcomeRepairSchemaVar("reviewer", "review")).toContain(
-      "upscope: yes | no",
-    );
-    expect(outcomeRepairSchemaVar("implementer", "any")).toContain("replies:");
-    expect(outcomeRepairSchemaVar("implementer", "any")).not.toContain(
+    expect(outcomeExampleVar("plan-checker", "any")).toContain("planCheck:");
+    expect(outcomeExampleVar("reviewer", "review")).toContain("upscope: no");
+    expect(outcomeExampleVar("implementer", "any")).toContain("replies:");
+    expect(outcomeExampleVar("implementer", "any")).not.toContain(
       "steerRoutes:",
     );
     expect(
-      outcomeRepairSchemaVar("pack-preparer", "any", packPreparerOutcomeSchema),
+      outcomeExampleVar("pack-preparer", "any", packPreparerOutcomeSchema),
     ).toContain("packBriefs:");
-    expect(outcomeRepairSchemaVar("architect", "architect")).toContain(
+    expect(outcomeExampleVar("architect", "architect")).toContain(
       "planReviewMarks:",
     );
-    expect(outcomeRepairSchemaVar("review-architect", "any")).toContain(
+    expect(outcomeExampleVar("review-architect", "any")).toContain(
       "planReview:",
     );
-    expect(outcomeRepairSchemaVar("review-architect", "any")).not.toContain(
+    expect(outcomeExampleVar("review-architect", "any")).not.toContain(
       "verdict:",
     );
-    expect(outcomeRepairSchemaVar("architect-review-return", "any")).toContain(
+    expect(outcomeExampleVar("architect-review-return", "any")).toContain(
       "planReviewMarks:",
     );
     // Debt closure and steer answers are protocol fields on every role's ask.
     for (const role of ["architect", "pm", "implementer"]) {
-      const rendered = outcomeRepairSchemaVar(role, "any");
+      const rendered = outcomeExampleVar(role, "any");
       expect(rendered).toContain("debtClosed:");
       expect(rendered).toContain("steerAnswers:");
     }
-    expect(outcomeRepairSchemaVar("pm", "any")).not.toContain("forward:");
+    expect(outcomeExampleVar("pm", "any")).not.toContain("forward:");
   });
 });

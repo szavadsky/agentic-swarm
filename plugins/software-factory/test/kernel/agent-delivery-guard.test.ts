@@ -227,7 +227,8 @@ function registerDeliveryGuardPart6(): void {
       expect(repair).toContain(
         "You are the architect. Your turn did not deliver its plan edit or stop decision.",
       );
-      expect(repair).toContain("decision: continue | done | blocked");
+      expect(repair).toContain("decision: continue");
+      expect(repair).toContain("decision: done");
       expect(repair).not.toContain("verdict:");
       expect(result.outcome?.decision).toBe("done");
     } finally {

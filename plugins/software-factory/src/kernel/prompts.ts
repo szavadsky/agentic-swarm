@@ -3,8 +3,8 @@ import path from "node:path";
 import { type FS, Liquid } from "liquidjs";
 import { BASE_GATES_NOT_RECORDED } from "./baseline.js";
 import { packageRoot } from "./config.js";
+import { outcomeExampleVar } from "./outcome-example.js";
 import {
-  outcomeSchemaVar,
   taskFrontmatterVar,
   taskTypesVar,
   tierNamesVar,
@@ -308,7 +308,7 @@ export function loadPrompts(
       // A task with no environment notes renders none; promptVars supplies them per task.
       env_notes: "",
       fix_dispositions: "",
-      outcome_schema: outcomeSchemaVar(),
+      outcome_schema: outcomeExampleVar(DEFAULT_PROMPT_AUTHOR, "any"),
       task_frontmatter: taskFrontmatterVar(),
       task_types: taskTypesVar(process.taskTypes),
       tiers: tierNamesVar(aliases),

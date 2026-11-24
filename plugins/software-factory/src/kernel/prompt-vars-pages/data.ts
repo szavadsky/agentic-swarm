@@ -27,7 +27,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
       task_types:
         "configured task types with their flow, kind and schema; renderer default",
       tiers: "run-config alias names; renderer default",
@@ -79,7 +79,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
       task_types:
         "configured task types with their flow, kind and schema; renderer default",
       tiers: "run-config alias names; renderer default",
@@ -106,7 +106,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
       task_frontmatter:
         "frontmatter YAML skeleton from the kernel schema; renderer default",
       task_types:
@@ -132,7 +132,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
     },
     note: "The turn's record carries the unified diff of the edit; the next architect pack renders it beside the pending steer.",
   },
@@ -163,7 +163,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
       task_frontmatter:
         "frontmatter YAML skeleton from the kernel schema; renderer default",
       task_types:
@@ -200,7 +200,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
     },
   },
   {
@@ -243,7 +243,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton narrowed to `status`, `summary`, `concerns` and `qa`; supplied by the turn",
+        "outcome examples narrowed to the base fields and `qa`; supplied by the turn",
     },
   },
   DECIDER_PAGE,
@@ -268,7 +268,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
     },
   },
   {
@@ -331,7 +331,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       outcome_path: "path for the outcome file the harness asks for",
       validate_cmd:
         "absolute validate command for this launch; renderer default",
-      outcome_schema: "outcome YAML skeleton; renderer default",
+      outcome_schema: "outcome examples; renderer default",
     },
   },
   {
@@ -352,7 +352,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton narrowed to `status`, `summary`, `concerns`, `steerAnswers`, `debtClosed` and `planReview`; supplied by the turn",
+        "outcome examples narrowed to `status`, `summary`, `concerns`, `steerAnswers`, `debtClosed` and `planReview`; supplied by the turn",
       task_types:
         "configured task types with their flow, kind and schema, read by the included plan standard; renderer default",
       tiers:
@@ -380,7 +380,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton narrowed to the base fields and `planReviewMarks`; supplied by the turn",
+        "outcome examples narrowed to the base fields and `planReviewMarks`; supplied by the turn",
     },
   },
   {
@@ -399,7 +399,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
     },
     note: "The digest scout appends loops, failures and interventions; it does not restate the script table.",
   },
@@ -423,7 +423,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
     },
     note: "The flow's `resolve` step renders this same prompt with the same variables: the wave-end steward and the in-flow resolve turn own one conflict ask.",
   },
@@ -443,7 +443,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema plus this turn's `packBriefs`; the turn supplies it",
+        "outcome examples from the kernel schema plus this turn's `packBriefs`; the turn supplies it",
     },
   },
   {
@@ -461,7 +461,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
     },
   },
   ...REPAIR_PROMPT_VARIABLES,

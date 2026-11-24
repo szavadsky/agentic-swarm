@@ -65,7 +65,8 @@ function scriptAcceptFlow(harness: FakeHarness): void {
     (req: TurnRequest, ctx) => {
       expect(req.prompt).toContain("- checks: `pass`");
       expect(req.prompt).toContain("- round: `1` of `3`");
-      expect(req.prompt).toContain("qa: {verdict");
+      expect(req.prompt).toContain("qa:");
+      expect(req.prompt).toContain("verdict: accept");
       ctx.writeOutcome(
         outcome({ summary: "accepted", qa: { verdict: "accept" } }),
       );
@@ -160,7 +161,8 @@ async function expectQaVerdictRepair(
   );
   expect(qaCalls).toHaveLength(2);
   expect(qaCalls[1]!.prompt).toContain("qa verdict is required");
-  expect(qaCalls[1]!.prompt).toContain("qa: {verdict");
+  expect(qaCalls[1]!.prompt).toContain("qa:");
+  expect(qaCalls[1]!.prompt).toContain("verdict: accept");
 
   const records = await runtime.store.listRecords();
   const qa = records.find(

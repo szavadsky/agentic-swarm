@@ -22,7 +22,6 @@ export const PLAN_CHECKER_PAGE: PromptVariablesPage = {
       "path where the outcome file must be written when the harness asks for a file",
     validate_cmd:
       "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
-    outcome_schema:
-      "outcome YAML skeleton from the kernel schema; renderer default",
+    outcome_schema: "outcome examples from the kernel schema; renderer default",
   },
 };

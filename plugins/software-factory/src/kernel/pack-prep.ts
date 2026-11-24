@@ -4,7 +4,7 @@ import type { PackBrief } from "./context-pack/sections.js";
 import { packBriefSchema } from "./context-pack/sections.js";
 import { boundaryTarget } from "./flow-context.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
-import { outcomeSchemaVar } from "./prompt-schema.js";
+import { outcomeExampleVar } from "./outcome-example.js";
 import type { KernelRuntime, Outcome } from "./types.js";
 import { outcomeSchema } from "./types.js";
 
@@ -25,9 +25,9 @@ export const packPreparerOutcomeSchema = outcomeSchema.extend({
     ),
 });
 
-/** The `outcome_schema` variable for a pack-preparer turn. */
+/** The `outcome_schema` example for a pack-preparer turn, including its `packBriefs`. */
 export function packPreparerOutcomeSchemaVar(): string {
-  return outcomeSchemaVar(undefined, packPreparerOutcomeSchema);
+  return outcomeExampleVar("pack-preparer", "any", packPreparerOutcomeSchema);
 }
 
 /** What one preparer turn delivered, or why the boundary must render whole. */

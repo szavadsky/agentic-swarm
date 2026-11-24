@@ -1,12 +1,7 @@
 import { z } from "zod";
-import { expectationField, type OutcomeExpectation } from "./outcome.js";
-import { qaOutcomeSchema } from "./qa.js";
+import { type JsonNode, resolveNode } from "./json-schema.js";
 import { taskFrontmatterSchema } from "./tasks.js";
-import {
-  type Outcome,
-  outcomeSchema,
-  type TaskTypeDefinition,
-} from "./types.js";
+import type { TaskTypeDefinition } from "./types.js";
 
 /**
  * Prompt variables rendered from kernel schemas and config, supplied as
@@ -14,17 +9,6 @@ import {
  * `z.toJSONSchema` — the same zod schemas the validators use, so a field the
  * skeleton drops is a renderer bug the tests catch, never prompt drift.
  */
-
-interface JsonNode {
-  type?: string;
-  enum?: unknown[];
-  anyOf?: JsonNode[];
-  description?: string;
-  properties?: Record<string, JsonNode>;
-  required?: string[];
-  items?: JsonNode;
-  $ref?: string;
-}
 
 function oneLine(text: string): string {
   return text.replace(/\s+/g, " ").trim();
@@ -34,14 +18,6 @@ function scalarFallback(type: string | undefined): string {
   if (type === "integer" || type === "number") return "0";
   if (type === "boolean") return "true | false";
   return "...";
-}
-
-/** A local `$ref` resolved against the schema's definitions. */
-function resolveNode(node: JsonNode, defs: Record<string, JsonNode>): JsonNode {
-  if (!node.$ref?.startsWith("#/$defs/")) return node;
-  const target = defs[node.$ref.slice("#/$defs/".length)];
-  if (!target) throw new Error(`unresolvable schema ref ${node.$ref}`);
-  return resolveNode(target, defs);
 }
 
 function inlineUnion(node: JsonNode, defs: Record<string, JsonNode>): string {
@@ -166,92 +142,12 @@ function skeletonLine(
 }
 
 /**
- * Fields whose value is the agent's own prose. The skeleton shows them as a
- * YAML block scalar, and a field that holds one renders block-style so the
- * nested leaf fits: an unquoted colon in prose breaks the YAML.
- */
-const FREE_TEXT_FIELDS: ReadonlySet<string> = new Set(["summary", "reply"]);
-
-function isFreeText(key: string, node: JsonNode): boolean {
-  return FREE_TEXT_FIELDS.has(key) && node.type === "string";
-}
-
-/** Whether a field's nested leaves include a free-text one. */
-function holdsFreeText(raw: JsonNode, defs: Record<string, JsonNode>): boolean {
-  const node = resolveNode(raw, defs);
-  if (node.type === "array" && node.items) {
-    return holdsFreeText(node.items, defs);
-  }
-  if (node.type === "object" && node.properties) {
-    return Object.entries(node.properties).some(
-      ([key, value]) =>
-        isFreeText(key, resolveNode(value, defs)) || holdsFreeText(value, defs),
-    );
-  }
-  return false;
-}
-
-/** A free-text leaf: `key: |` and its description or placeholder, under `lead`. */
-function blockScalarLines(key: string, node: JsonNode, lead: string): string[] {
-  const body = node.description
-    ? oneLine(node.description)
-    : scalarFallback(node.type);
-  return [`${lead}${key}: |`, `${lead}  ${body}`];
-}
-
-/** One nested property inside a block-rendered field, already indented. */
-function blockEntryLines(
-  key: string,
-  raw: JsonNode,
-  required: ReadonlySet<string>,
-  lead: string,
-  defs: Record<string, JsonNode>,
-): string[] {
-  const node = resolveNode(raw, defs);
-  if (isFreeText(key, node)) return blockScalarLines(key, node, lead);
-  if (holdsFreeText(node, defs)) {
-    throw new Error(`skeleton cannot nest free text under ${key}`);
-  }
-  return [`${lead}${skeletonLine(key, node, required, defs)}`];
-}
-
-/**
- * A field whose nested leaves hold free text: its commented key line, then one
- * indented line per nested key, a sequence item under `- `.
- */
-function blockFieldLines(
-  key: string,
-  node: JsonNode,
-  required: ReadonlySet<string>,
-  defs: Record<string, JsonNode>,
-): string[] {
-  const comments: string[] = [];
-  if (!required.has(key)) comments.push("optional");
-  if (node.description) comments.push(oneLine(node.description));
-  comments.push(...enumNotes(node, "", defs));
-  const item =
-    node.type === "array" && node.items ? resolveNode(node.items, defs) : node;
-  const bullet = node.type === "array" ? "- " : "";
-  const itemRequired = new Set(item.required ?? []);
-  const nested = Object.entries(item.properties ?? {}).flatMap(
-    ([child, value], index) => {
-      const lead =
-        index === 0 ? `  ${bullet}` : `  ${" ".repeat(bullet.length)}`;
-      return blockEntryLines(child, value, itemRequired, lead, defs);
-    },
-  );
-  const marker = comments.length > 0 ? `  # ${comments.join("; ")}` : "";
-  return [`${key}:${marker}`, ...nested];
-}
-
-/**
  * One renderer from a kernel object schema to the YAML skeleton prompts show:
  * one `key: value` line per field in declaration order, enums joined with
  * `|`, nested objects inlined as `{keys}` / `[{keys}]`, and a `#` comment
  * with the optional marker, the field description, and nested enum values.
- * Free text renders as a block scalar, and the field holding it renders its
- * nested keys block-style. A `keep` list narrows the rendering to those
- * top-level fields, in schema order.
+ * A `keep` list narrows the rendering to those top-level fields, in schema
+ * order.
  */
 export function renderSkeleton(
   schema: z.ZodType,
@@ -267,105 +163,8 @@ export function renderSkeleton(
   const required = new Set(root.required ?? []);
   return Object.entries(root.properties)
     .filter(([key]) => keep === undefined || keep.includes(key))
-    .map(([key, value]) => {
-      const node = resolveNode(value, defs);
-      if (isFreeText(key, node)) {
-        return blockScalarLines(key, node, "").join("\n");
-      }
-      if (holdsFreeText(node, defs)) {
-        return blockFieldLines(key, node, required, defs).join("\n");
-      }
-      return skeletonLine(key, value, required, defs);
-    })
+    .map(([key, value]) => skeletonLine(key, value, required, defs))
     .join("\n");
-}
-
-/**
- * Parse-only outcome fields: old records still carry them, so the parser keeps
- * them, but no prompt asks an agent to write one.
- */
-const LEGACY_OUTCOME_FIELDS: readonly string[] = ["forward"];
-
-/** Every field the skeleton may ask for: the schema's own fields minus the legacy ones. */
-function writtenFields(schema: z.ZodType<Outcome>): string[] {
-  const json = z.toJSONSchema(schema) as {
-    properties?: Record<string, unknown>;
-  };
-  return Object.keys(json.properties ?? {}).filter(
-    (key) => !LEGACY_OUTCOME_FIELDS.includes(key),
-  );
-}
-
-/** The `outcome_schema` prompt variable: the fenced outcome skeleton block. */
-export function outcomeSchemaVar(
-  keep?: readonly string[],
-  schema: z.ZodType<Outcome> = outcomeSchema,
-): string {
-  return `\`\`\`yaml\n${renderSkeleton(schema, keep ?? writtenFields(schema))}\n\`\`\``;
-}
-
-/** The fields a QA turn writes: the kernel shape plus its own report. */
-export const QA_OUTCOME_FIELDS = [
-  "status",
-  "summary",
-  "concerns",
-  "qa",
-] as const;
-
-/**
- * The `outcome_schema` variable for a QA turn. The QA turn's repair ask uses
- * the same schema through `outcomeRepairSchemaVar`; the task type's schema
- * stays the shape every other step delivers.
- */
-export function qaOutcomeSchemaVar(): string {
-  return outcomeSchemaVar(QA_OUTCOME_FIELDS, qaOutcomeSchema);
-}
-
-/** The unconditional outcome fields every turn delivers. */
-const BASE_OUTCOME_FIELDS = [
-  "status",
-  "summary",
-  "concerns",
-  "steerAnswers",
-  "debtClosed",
-];
-
-/**
- * Reporting fields a prompt's turns deliver beyond the base shape and the one
- * field its expectation gates: the PM routes steers, stalls and plan-check
- * follow-ups, the checker reports a plan check, a standalone review answers
- * the upscope ask.
- */
-const PROMPT_OUTCOME_FIELDS: Record<string, string[]> = {
-  architect: ["planReviewMarks", "intentStatus"],
-  "architect-review-return": ["planReviewMarks"],
-  implementer: ["replies"],
-  "pack-preparer": ["packBriefs"],
-  pm: ["steerRoutes", "stallRoutes", "planCheckRoutes"],
-  "plan-checker": ["planCheck"],
-  "review-architect": ["planReview"],
-  reviewer: ["upscope"],
-};
-
-/**
- * The repair ask's outcome skeleton: only the fields this turn delivers, so a
- * bare done is never asked for a verdict or decision it cannot give. A review
- * repair keeps the verdict, an architect repair the decision.
- */
-export function outcomeRepairSchemaVar(
-  prompt: string,
-  expectation: OutcomeExpectation,
-  schema: z.ZodType<Outcome> = outcomeSchema,
-): string {
-  const delivered = expectationField(expectation);
-  return outcomeSchemaVar(
-    [
-      ...BASE_OUTCOME_FIELDS,
-      ...(PROMPT_OUTCOME_FIELDS[prompt] ?? []),
-      ...(delivered ? [delivered] : []),
-    ],
-    schema,
-  );
 }
 
 /**
