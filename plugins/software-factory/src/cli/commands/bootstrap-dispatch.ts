@@ -1,6 +1,9 @@
 /**
  * `bootstrap/dispatch.sh`'s body: run one assignment file through the
- * Agent-d CLI on a free model (LOG D10). The assignment's worktree and
+ * harness CLI on a free model (LOG D10). Which harness and model to run is
+ * machine configuration, never repo code: `$FACTORY_DISPATCH_BIN` names the
+ * executable, `$FACTORY_DISPATCH_MODEL` (or the `[model]` argument) the
+ * `<provider>/<model>[#effort]` to pass it. The assignment's worktree and
  * branch follow its name: ../<name> on factory-v3-<name>, created from
  * factory-v3 when missing. The event log (JSONL) goes outside git:
  * $FACTORY_BOOTSTRAP_RUNS or ~/.local/share/factory/bootstrap-runs.
@@ -38,11 +41,42 @@ export function stampNow(date: Date = new Date()): string {
   );
 }
 
-/** One free-tier run at a time: a free model takes the slot lock (LOG D14). */
+/**
+ * One free-tier run at a time: a free model takes the slot lock (LOG D14).
+ * Free-tier models carry the `-free` model id, whatever provider prefix or
+ * effort suffix surrounds it.
+ */
 export function isFreeModel(model: string): boolean {
-  if (model === "agent-d/big-pickle") return true;
-  if (!model.startsWith("agent-d/")) return false;
-  return model.includes("-free");
+  const id = model.split("#")[0] ?? "";
+  return id.slice(id.lastIndexOf("/") + 1).endsWith("-free");
+}
+
+/** A required machine setting, or the dispatch failure that names it. */
+function setting(env: NodeJS.ProcessEnv, name: string, what: string): string {
+  const value = env[name]?.trim();
+  if (!value) throw new DispatchError(`${name} is not set: ${what}`, 1);
+  return value;
+}
+
+/** The executable and model this machine dispatches: repo code names neither. */
+function dispatchTarget(
+  env: NodeJS.ProcessEnv,
+  model: string | undefined,
+): { binary: string; model: string } {
+  return {
+    binary: setting(
+      env,
+      "FACTORY_DISPATCH_BIN",
+      "name the harness executable to spawn",
+    ),
+    model:
+      model ??
+      setting(
+        env,
+        "FACTORY_DISPATCH_MODEL",
+        "name the model as <provider>/<model>[#effort]",
+      ),
+  };
 }
 
 function logsDir(env: NodeJS.ProcessEnv): string {
@@ -78,7 +112,7 @@ function runMust(
   return res;
 }
 
-/** Aggregates of one agent-d JSONL event log, as the old jq pipes printed. */
+/** Aggregates of one harness JSONL event log, as the old jq pipes printed. */
 export interface LogSummary {
   session: string;
   steps: number;
@@ -149,7 +183,7 @@ export interface DispatchOptions {
   root: string;
   /** Assignment name; usage and exit 1 when missing. */
   name?: string;
-  /** Model; the free-model default when missing. */
+  /** Model; `$FACTORY_DISPATCH_MODEL` when missing. */
   model?: string;
   env?: NodeJS.ProcessEnv;
   /** Overrides the clock, for deterministic log names in tests. */
@@ -157,10 +191,10 @@ export interface DispatchOptions {
 }
 
 /**
- * Runs one assignment through the Agent-d CLI in its worktree, printing the
+ * Runs one assignment through the harness CLI in its worktree, printing the
  * summary the old dispatch.sh printed and returning its exit code. A missing
- * name prints usage and returns 1; a failed worktree add or install is a
- * hard error.
+ * name prints usage and returns 1; a missing executable or model is a hard
+ * error, as is a failed worktree add or install.
  */
 export async function dispatchAssignment(
   opts: DispatchOptions,
@@ -171,7 +205,7 @@ export async function dispatchAssignment(
     return 1;
   }
   const name = opts.name;
-  const model = opts.model ?? "agent-d/model-c-free#max";
+  const { binary, model } = dispatchTarget(env, opts.model);
   const root = path.resolve(opts.root);
   const lower = name.toLowerCase();
   const wt = path.join(path.dirname(root), lower);
@@ -198,12 +232,14 @@ export async function dispatchAssignment(
   });
 
   const message = env.MESSAGE ?? assignmentMessage(name, wt);
-  const status = runOpencode({
+  const status = runHarness({
     name,
     model,
+    binary,
+    /** One slot per harness executable, so two free runs never overlap. */
+    lock: path.join(slots, `${path.basename(binary)}-free.lock`),
     wt,
     free,
-    slots,
     env,
     message,
     log,
@@ -213,18 +249,19 @@ export async function dispatchAssignment(
   return status;
 }
 
-/** Runs the Agent-d CLI for one assignment, under the timeout. */
-function runOpencode(opts: {
+/** Runs the harness CLI for one assignment, under the timeout. */
+function runHarness(opts: {
   name: string;
   model: string;
+  binary: string;
+  lock: string;
   wt: string;
   free: boolean;
-  slots: string;
   env: NodeJS.ProcessEnv;
   message: string;
   log: string;
 }): number {
-  const args: string[] = [
+  const cliArgs: string[] = [
     "run",
     "--auto",
     "--archived",
@@ -235,22 +272,20 @@ function runOpencode(opts: {
     "-m",
     opts.model,
   ];
-  if (opts.env.SESSION) args.push("-s", opts.env.SESSION);
-  args.push(opts.message);
+  if (opts.env.SESSION) cliArgs.push("-s", opts.env.SESSION);
+  cliArgs.push(opts.message);
   const runArgs: string[] = [
     opts.env.FACTORY_DISPATCH_TIMEOUT ?? "3h",
-    "agent-d",
-    ...args,
+    opts.binary,
+    ...cliArgs,
   ];
-  const opCmd = opts.free ? "flock" : "timeout";
-  const opArgs = opts.free
-    ? [path.join(opts.slots, "agent-d-free.lock"), "timeout", ...runArgs]
-    : runArgs;
+  const cmd = opts.free ? "flock" : "timeout";
+  const spawnArgs = opts.free ? [opts.lock, "timeout", ...runArgs] : runArgs;
 
   const stdoutFd = fs.openSync(opts.log, "w");
   const stderrFd = fs.openSync(`${opts.log}.stderr`, "w");
   try {
-    const res = spawnSync(opCmd, opArgs, {
+    const res = spawnSync(cmd, spawnArgs, {
       cwd: opts.wt,
       env: opts.env,
       stdio: ["ignore", stdoutFd, stderrFd],

@@ -32,33 +32,59 @@ function makeFixture(target: string, files: Record<string, string>): void {
   }
 }
 
+/** Rewrites one fixture file, then runs the gate over the tree. */
+function gateAfterWrite(
+  dir: string,
+  rel: string,
+  content: string,
+): { status: number; out: string } {
+  fs.writeFileSync(path.join(dir, rel), content);
+  return runGate([dir]);
+}
+
 describe("real-names gate", () => {
-  it("passes on fake names and fails on a real one", () => {
+  it("passes on fake names and fails on a real one in src or test", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "real-names-gate-"));
     try {
       makeFixture(dir, {
-        "src/fake.ts": 'export const F = "fake-host/fake-model";\n',
+        "src/fake.ts": 'export const H = "fakehost/fakemodel";\n',
         "test/fake.test.ts": 'it("x", () => { expect(1).toBe(1); });\n',
       });
       expect(runGate([dir]).status).toBe(0);
 
-      fs.writeFileSync(
-        path.join(dir, "test", "fake.test.ts"),
+      const inSrc = gateAfterWrite(
+        dir,
+        "src/fake.ts",
+        'export const H = "fakehost/fakemodel"; // realharness\n',
+      );
+      expect(inSrc.status).toBe(1);
+      expect(inSrc.out).toContain("src/fake.ts:1");
+
+      gateAfterWrite(
+        dir,
+        "src/fake.ts",
+        'export const H = "fakehost/fakemodel";\n',
+      );
+      const inTest = gateAfterWrite(
+        dir,
+        "test/fake.test.ts",
         'it("x", () => { expect(1).toBe(1); }); // realmodel\n',
       );
-      const red = runGate([dir]);
-      expect(red.status).toBe(1);
-      expect(red.out).toContain("test/fake.test.ts:1");
+      expect(inTest.status).toBe(1);
+      expect(inTest.out).toContain("test/fake.test.ts:1");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+});
 
+describe("real-names gate exemptions", () => {
   it("excludes the omp adapter and the name list itself", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "real-names-gate-"));
     try {
       makeFixture(dir, {
         "src/harness/omp/turn.ts": 'export const X = "realmodel";\n',
+        "src/harness/omp/deep/step.ts": 'export const X = "realharness";\n',
         "src/ok.ts": 'export const X = "fake-model";\n',
       });
       expect(runGate([dir]).status).toBe(0);
@@ -66,7 +92,9 @@ describe("real-names gate", () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+});
 
+describe("real-names gate name list", () => {
   it("empty name list is a gate failure, never a silent pass", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "real-names-gate-"));
     try {

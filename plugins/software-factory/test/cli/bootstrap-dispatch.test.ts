@@ -36,11 +36,13 @@ printf '%s\n' '{"type":"error","error":"boom two"}'
 exit 3
 `;
 
-/** A fake-AGENTD bin dir on PATH, so no real agent ever launches. */
+/** A fake harness executable on PATH, so no real agent ever launches. */
+const FAKE_BIN = "fake-harness";
+
 function fakeBinDir(script: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-fakebin-"));
-  fs.writeFileSync(path.join(dir, "agent-d"), script, "utf8");
-  fs.chmodSync(path.join(dir, "agent-d"), 0o755);
+  fs.writeFileSync(path.join(dir, FAKE_BIN), script, "utf8");
+  fs.chmodSync(path.join(dir, FAKE_BIN), 0o755);
   return dir;
 }
 
@@ -114,7 +116,7 @@ function cleanupRun(s: RunSetup): void {
 async function runIt(
   s: RunSetup,
   lines: string[],
-  opts: { model?: string } = {},
+  opts: { model?: string; extraEnv?: NodeJS.ProcessEnv } = {},
 ): Promise<number> {
   const log = console.log;
   console.log = (msg: string) => lines.push(msg);
@@ -128,7 +130,9 @@ async function runIt(
         PATH: `${s.fakeBin}:${process.env.PATH}`,
         FACTORY_BOOTSTRAP_RUNS: path.join(s.root, "logs"),
         FACTORY_SLOT_DIR: path.join(s.root, "slots"),
+        FACTORY_DISPATCH_BIN: path.join(s.fakeBin, FAKE_BIN),
         FACTORY_DISPATCH_TIMEOUT: "30s",
+        ...opts.extraEnv,
       },
     });
   } finally {
@@ -137,11 +141,13 @@ async function runIt(
 }
 
 describe("dispatch helpers", () => {
-  it("matches the shell's free-model test", () => {
-    expect(isFreeModel("agent-d/model-c-free#max")).toBe(true);
-    expect(isFreeModel("agent-d/big-pickle")).toBe(true);
-    expect(isFreeModel("agent-d/model-x#max")).toBe(false);
-    expect(isFreeModel("provider-z/model-z")).toBe(false);
+  it("takes a model as free when its id ends with -free, whatever the prefix", () => {
+    expect(isFreeModel("fake/model-free#max")).toBe(true);
+    expect(isFreeModel("fake/model-free")).toBe(true);
+    expect(isFreeModel("other-provider/other-model-free#high")).toBe(true);
+    expect(isFreeModel("fake/model#max")).toBe(false);
+    expect(isFreeModel("fake/free-model")).toBe(false);
+    expect(isFreeModel("fake/model-freely")).toBe(false);
   });
 
   it("stamps logs in the shell's %Y%m%dT%H%M%S shape", () => {
@@ -185,7 +191,7 @@ describe("dispatch helpers", () => {
 });
 
 describe("dispatch logic", () => {
-  it("creates the worktree, runs agent-d and prints the summary", async () => {
+  it("creates the worktree, runs the executable and prints the summary", async () => {
     const s = setup(AGENTD_OK);
     const logs = path.join(s.root, "logs");
     const lines: string[] = [];
@@ -214,7 +220,7 @@ describe("dispatch logic", () => {
     }
   }, 60_000);
 
-  it("returns agent-d's exit code and prints the last errors", async () => {
+  it("returns the child's exit code and prints the last errors", async () => {
     const s = setup(AGENTD_RED);
     const lines: string[] = [];
     try {
@@ -227,17 +233,60 @@ describe("dispatch logic", () => {
       cleanupRun(s);
     }
   }, 60_000);
+});
 
-  it("takes the slot lock for a free model", async () => {
+describe("dispatch slot lock", () => {
+  it("takes the slot lock for a free model from the environment", async () => {
     const s = setup(AGENTD_OK);
     const slots = path.join(s.root, "slots");
+    const lines: string[] = [];
     try {
-      expect(await runIt(s, [])).toBe(0);
-      expect(fs.existsSync(path.join(slots, "agent-d-free.lock"))).toBe(true);
+      expect(
+        await runIt(s, lines, {
+          extraEnv: { FACTORY_DISPATCH_MODEL: "fake/model-free#max" },
+        }),
+      ).toBe(0);
+      expect(lines.join("\n")).toContain("model=fake/model-free#max");
+      expect(fs.existsSync(path.join(slots, `${FAKE_BIN}-free.lock`))).toBe(
+        true,
+      );
     } finally {
       cleanupRun(s);
     }
   }, 60_000);
+
+  it("runs a non-free model without a slot lock", async () => {
+    const s = setup(AGENTD_OK);
+    const slots = path.join(s.root, "slots");
+    try {
+      expect(await runIt(s, [], { model: "custom/model" })).toBe(0);
+      expect(fs.existsSync(path.join(slots, `${FAKE_BIN}-free.lock`))).toBe(
+        false,
+      );
+    } finally {
+      cleanupRun(s);
+    }
+  }, 60_000);
+});
+
+describe("dispatch settings", () => {
+  it("fails loudly when the executable or the model is missing", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-dispatch-"));
+    try {
+      await expect(
+        dispatchAssignment({ root, name: "n", model: "fake/model", env: {} }),
+      ).rejects.toThrow("FACTORY_DISPATCH_BIN is not set");
+      await expect(
+        dispatchAssignment({
+          root,
+          name: "n",
+          env: { FACTORY_DISPATCH_BIN: "fake-harness" },
+        }),
+      ).rejects.toThrow("FACTORY_DISPATCH_MODEL is not set");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe.skipIf(DISPATCH_SH === undefined)(
@@ -261,6 +310,7 @@ describe.skipIf(DISPATCH_SH === undefined)(
               PATH: `${s.fakeBin}:${process.env.PATH}`,
               FACTORY_BOOTSTRAP_RUNS: path.join(s.root, "logs"),
               FACTORY_SLOT_DIR: path.join(s.root, "slots"),
+              FACTORY_DISPATCH_BIN: path.join(s.fakeBin, FAKE_BIN),
               FACTORY_DISPATCH_TIMEOUT: "30s",
             },
             encoding: "utf8",
