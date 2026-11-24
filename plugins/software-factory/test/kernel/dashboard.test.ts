@@ -26,6 +26,11 @@ function emptySnapshot(): StatusDocument {
     iteration: 0,
     iterations: 0,
     updatedAt: "2026-01-01T00:00:00.000Z",
+    summary: {
+      source: "mechanical",
+      text: "Goal active, iteration 0; no task recorded yet.",
+      iteration: 0,
+    },
     tasks: {
       open: [],
       merged: [],
@@ -83,6 +88,11 @@ describe("dashboard content", () => {
     expect(html).toContain("iteration 2");
     expect(html).toContain("2026-02-03T04:05:06.000Z");
     expect(html).toContain("1 cancelled");
+    expect(html).toContain(
+      "Iteration 2 wrote the remaining task files and parked one task for its reviewer.",
+    );
+    expect(html).toContain("PM summary, iteration 2");
+    expect(html).toContain('href="records/00006-i2-pm-r1/"');
 
     expect(html).toContain("Pending &lt;one&gt;");
     expect(html).toContain("Merge &amp; one");
@@ -143,31 +153,81 @@ describe("dashboard intent artifact", () => {
 });
 
 describe("dashboard intent status", () => {
-  it("renders unknown when no architect artifact was written", () => {
+  it("says the architect has not reported it instead of an unknown status", () => {
     const doc = fixture();
     delete doc.intentStatus;
 
     const html = renderDashboard(doc);
     const intent = intentSection(html);
 
-    expect(intent).toContain("unknown");
+    expect(intent).toContain("not reported");
+    expect(intent).toContain("names its source");
     expect(intent).toContain("never falls back to task counts");
+    expect(intent).not.toContain("unknown");
     expect(intent).not.toContain("%");
     expect(intent).not.toContain("Sandbox");
+    expect(html).not.toContain("unknown");
     expect(html).not.toContain("intent-chart-data");
     expect(html).not.toContain("vendor/chart.umd.min.js");
   });
 
-  it("renders unknown when the architect reported no sections", () => {
+  it("says an architect artifact with no sections is not reported", () => {
     const doc = fixture();
     doc.intentStatus = { iteration: 2, sections: [] };
 
     const html = renderDashboard(doc);
     const intent = intentSection(html);
 
-    expect(intent).toContain("unknown");
+    expect(intent).toContain("not reported");
     expect(intent).toContain("iteration 2 summary lists no intent sections");
+    expect(html).not.toContain("unknown");
     expect(html).not.toContain("intent-chart-data");
+  });
+});
+
+describe("dashboard status summary", () => {
+  it("shows the PM's summary with its record", () => {
+    const html = renderDashboard(fixture());
+
+    expect(html).toContain(
+      '<p class="lead">Iteration 2 wrote the remaining task files and parked one task for its reviewer.</p>',
+    );
+    expect(html).toContain("PM summary, iteration 2");
+    expect(html).toContain('href="records/00006-i2-pm-r1/"');
+  });
+
+  it("shows the kernel's mechanical account when no PM summary exists", () => {
+    const doc = fixture();
+    doc.summary = {
+      source: "mechanical",
+      text: "Goal active, iteration 2; 2 of 6 tasks landed, 1 open, 1 parked.",
+      iteration: 2,
+    };
+
+    const html = renderDashboard(doc);
+
+    expect(html).toContain(
+      '<p class="lead">Goal active, iteration 2; 2 of 6 tasks landed, 1 open, 1 parked.</p>',
+    );
+    expect(html).toContain("kernel-derived mechanical status");
+    expect(html).not.toContain("unknown");
+  });
+
+  it("escapes the PM's summary", () => {
+    const doc = fixture();
+    doc.summary = {
+      source: "pm",
+      text: '<img src=x onerror=alert(1)> wrote "tasks"',
+      iteration: 2,
+      record: "records/00006-i2-pm-r1",
+    };
+
+    const html = renderDashboard(doc);
+
+    expect(html).toContain(
+      "&lt;img src=x onerror=alert(1)&gt; wrote &#34;tasks&#34;",
+    );
+    expect(html).not.toContain("<img");
   });
 });
 
@@ -292,7 +352,9 @@ describe("dashboard links and empty states", () => {
   it("renders an empty snapshot without unrendered placeholders", () => {
     const html = renderDashboard(emptySnapshot());
 
-    expect(html).toContain("unknown");
+    expect(html).toContain("no task recorded yet");
+    expect(html).toContain("not reported");
+    expect(html).not.toContain("unknown");
     expect(html).toContain("No tasks recorded yet.");
     expect(html).toContain("No task is waiting to start.");
     expect(html).toContain("No parked task.");

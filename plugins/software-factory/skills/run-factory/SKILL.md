@@ -69,9 +69,10 @@ bun bin/factory.ts benchmark --repo "$REPO" --goal demo
   after each agent launch and finish.
 - Dashboard — `<artifact root>/<goal>/dashboard.html`, a static page rendered
   beside `status.json`. Pico CSS and Chart.js are vendored under `vendor/` and
-  loaded locally; the intent section reads the architect's
-  `iterations/<n>/intent-status.json`. Open it in a browser and refresh it; it
-  updates only when the kernel writes a snapshot.
+  loaded locally; it leads with the PM's latest summary (or the kernel's
+  mechanical account when none was written) and reads the architect's
+  `iterations/<n>/intent-status.json` as one input. Open it in a browser and
+  refresh it; it updates only when the kernel writes a snapshot.
 - `benchmark` — cost, tokens, architect share, cost per merged task, work,
   incidents and wall time.
 - Iteration record — `<artifact root>/<goal>/iterations/<n>/summary.md` and

@@ -82,10 +82,14 @@ decision parks the goal until a steer arrives.
   prints the stored snapshot.
 - `dashboard.html` is fully static: the kernel vendors Pico CSS and Chart.js
   under `vendor/` and links them locally; no request leaves disk and every
-  value is escaped. Its intent section reads the newest
-  `iterations/<n>/intent-status.json` the architect's summary wrote, and says
-  `unknown` when none exists instead of deriving intent status from tasks.
-  Open the file directly in a browser and refresh after a launch.
+  value is escaped. It leads with the status paragraph: the newest PM turn's
+  summary, or the kernel's own mechanical account (goal, iteration, landed,
+  open and parked tasks) when no PM turn wrote one, so records never read as
+  an unknown status. The architect's intent status is one input of that page:
+  its section reads the newest `iterations/<n>/intent-status.json` the
+  architect's summary wrote, and says `not reported` when none exists instead
+  of deriving intent status from tasks. Open the file directly in a browser
+  and refresh after a launch.
 - `status` text is the quick read; `--json` is for editors, scripts and the
   dashboard's data source. Both derive from the same records.
 - `benchmark` adds cost, token, architect-share, work, incident and wall rows.

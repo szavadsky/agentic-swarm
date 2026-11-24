@@ -4,6 +4,12 @@
   "iteration": 2,
   "iterations": 2,
   "updatedAt": "2026-02-03T04:05:06.000Z",
+  "summary": {
+    "source": "pm",
+    "text": "Iteration 2 wrote the remaining task files and parked one task for its reviewer.",
+    "iteration": 2,
+    "record": "records/00006-i2-pm-r1"
+  },
   "tasks": {
     "open": [
       {

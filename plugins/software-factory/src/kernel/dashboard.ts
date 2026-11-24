@@ -94,12 +94,20 @@ interface IntentView {
   chartJson: string;
 }
 
+/** The lead paragraph plus who wrote it, so the page never presents a guess as a PM summary. */
+interface StatusView {
+  text: string;
+  attribution: string;
+  record: string | null;
+}
+
 /**
  * The dashboard's derived view: Liquid stays a template language, so counts,
  * percentages, money, number formatting and chart JSON are settled here and
  * tested as values rather than re-derived inside markup.
  */
 interface DashboardSummary {
+  status: StatusView;
   intent: IntentView;
   tasks: StatusTask[];
   spend: {
@@ -183,6 +191,17 @@ function workTotals(work: StatusDocument["work"]): WorkTotals {
   };
 }
 
+function statusView(summary: StatusDocument["summary"]): StatusView {
+  return {
+    text: summary.text,
+    attribution:
+      summary.source === "pm"
+        ? `PM summary, iteration ${summary.iteration}`
+        : "kernel-derived mechanical status",
+    record: summary.record ?? null,
+  };
+}
+
 function intentView(artifact: IntentStatusArtifact | undefined): IntentView {
   const rows: IntentRow[] = (artifact?.sections ?? []).map((entry) => ({
     section: entry.section,
@@ -216,6 +235,7 @@ function summaryOf(status: StatusDocument): DashboardSummary {
     0,
   );
   return {
+    status: statusView(status.summary),
     intent: intentView(status.intentStatus),
     tasks: [
       ...status.tasks.open,

@@ -29,6 +29,7 @@ export const DASHBOARD_TEMPLATE = `<!doctype html>
   }
 }
 .page { max-width: 1180px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+.lead { margin: 0; font-size: 1rem; line-height: 1.5; white-space: pre-line; }
 h1 { margin: .15rem 0; font-size: 2rem; line-height: 1.15; letter-spacing: -.025em; }
 h2 { margin: 0 0 1rem; font-size: 1.15rem; letter-spacing: -.01em; }
 h3 { margin: 1.35rem 0 .55rem; font-size: .95rem; }
@@ -139,6 +140,7 @@ footer { margin-top: 2rem; color: var(--pico-muted-color); font-size: .78rem; }
   </div>
   <nav class="links" aria-label="Page sections">
     <a href="status.json">status.json</a>
+    <a href="#status">Status</a>
     <a href="#intent">Intent</a>
     <a href="#tasks">Tasks</a>
     <a href="#distance">Distance</a>
@@ -148,6 +150,12 @@ footer { margin-top: 2rem; color: var(--pico-muted-color); font-size: .78rem; }
   </nav>
 </header>
 
+<section id="status" class="panel" aria-labelledby="status-heading">
+  <h2 id="status-heading">Status</h2>
+  <p class="lead">{{ summary.status.text | escape }}</p>
+  <p class="muted">{{ summary.status.attribution | escape }}{% if summary.status.record %} · <a class="record" href="{{ summary.status.record | escape }}/" title="{{ summary.status.record | escape }}">{{ summary.status.record | split: "/" | last | escape }}</a>{% endif %}</p>
+</section>
+
 <div class="cards">
   <article class="card">
     <span class="label">Intent status</span>
@@ -156,8 +164,8 @@ footer { margin-top: 2rem; color: var(--pico-muted-color); font-size: .78rem; }
     <p>intent sections · works {{ summary.intent.works }} · not built {{ summary.intent.notBuilt }} · friction {{ summary.intent.friction }}</p>
     <p>architect summary, iteration {{ summary.intent.iteration }}</p>
     {% else %}
-    <strong class="value">unknown</strong>
-    <p>No architect intent status yet</p>
+    <strong class="value">not reported</strong>
+    <p>No architect intent status yet; the Status section names its source</p>
     {% endif %}
   </article>
   <article class="card">
@@ -199,9 +207,9 @@ footer { margin-top: 2rem; color: var(--pico-muted-color); font-size: .78rem; }
   </table>
   </div>
   {% elsif summary.intent.hasArtifact %}
-  <p class="empty">unknown — the architect's iteration {{ summary.intent.iteration }} summary lists no intent sections.</p>
+  <p class="empty">not reported — the architect's iteration {{ summary.intent.iteration }} summary lists no intent sections. The Status section above names its source.</p>
   {% else %}
-  <p class="empty">unknown — no architect intent-status artifact has been written yet. This section never falls back to task counts.</p>
+  <p class="empty">not reported — the architect has written no intent-status artifact yet. The Status section above names its source; this section never falls back to task counts.</p>
   {% endif %}
 </section>
 

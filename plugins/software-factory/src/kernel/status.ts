@@ -18,6 +18,12 @@ import type { PriceTable } from "./pricing.js";
 import { latestRunLog } from "./run-log.js";
 import { recordDirName } from "./store.js";
 import {
+  latestPmSummary,
+  mechanicalSummary,
+  type StatusSummary,
+  type StatusTaskCounts,
+} from "./status-summary.js";
+import {
   type IntentStatusArtifact,
   readLatestIntentStatus,
 } from "./summary/intent-status.js";
@@ -113,6 +119,12 @@ export interface StatusDocument {
   /** Iterations recorded so far; equals `iteration` and names the count. */
   iterations: number;
   updatedAt: string;
+  /**
+   * The one-paragraph status the user reads. A PM turn's summary when one was
+   * written; otherwise the kernel's mechanical account, so records never read
+   * as an unknown status.
+   */
+  summary: StatusSummary;
   tasks: {
     open: StatusTask[];
     merged: StatusTask[];
@@ -270,6 +282,18 @@ function statusConcerns(records: readonly StepRecord[]): StatusConcern[] {
   );
 }
 
+/** The counts the mechanical account names, from the grouped tasks. */
+function taskCounts(tasks: StatusDocument["tasks"]): StatusTaskCounts {
+  const landed = tasks.merged.length + tasks.finished.length;
+  return {
+    landed,
+    total:
+      landed + tasks.open.length + tasks.parked.length + tasks.cancelled.length,
+    open: tasks.open.length,
+    parked: tasks.parked.length,
+  };
+}
+
 function goalTotals(
   records: readonly StepRecord[],
   roleByStep: Record<string, string>,
@@ -377,6 +401,13 @@ export function buildStatus(input: StatusInput): StatusDocument {
     iteration: input.state.iteration,
     iterations: input.state.iteration,
     updatedAt: input.updatedAt ?? new Date().toISOString(),
+    summary:
+      latestPmSummary(input.records) ??
+      mechanicalSummary(
+        input.state.goal,
+        input.state.iteration,
+        taskCounts(groups),
+      ),
     tasks: groups,
     distance: {
       pending: groups.open
