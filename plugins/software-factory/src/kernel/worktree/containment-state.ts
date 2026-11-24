@@ -57,6 +57,12 @@ const OPERATOR_CHANNELS = new Set([
   "mailbox/outbox",
 ]);
 
+/**
+ * Goal-relative directories that are never artifacts: the kernel's launch logs
+ * grow while a turn runs and are not its writes.
+ */
+const PRIVATE_DIRS = new Set(["logs"]);
+
 /** Directory entries, or undefined when the directory vanished. */
 function readEntries(abs: string): fs.Dirent[] | undefined {
   try {
@@ -87,7 +93,7 @@ function walkArtifacts(
   if (!entries) return;
   for (const entry of entries) {
     const childRel = rel === "" ? entry.name : `${rel}/${entry.name}`;
-    if (OPERATOR_CHANNELS.has(childRel)) continue;
+    if (OPERATOR_CHANNELS.has(childRel) || PRIVATE_DIRS.has(childRel)) continue;
     const childAbs = path.join(abs, entry.name);
     if (entry.isDirectory()) {
       walkArtifacts(childAbs, childRel, files);
