@@ -17,7 +17,7 @@ import {
   sameFailingSet,
 } from "./derive-task-facts.js";
 import type { ReduceContext, ReduceState } from "./derive-task-state.js";
-import { isInfraCheck } from "./gates.js";
+import { attributedFailures, isInfraCheck } from "./gates.js";
 import { isRecoveryCrash } from "./recovery-seal.js";
 import { checksFixLimit, isLastChecksFixCall } from "./review.js";
 import type { Cause, StepRecord } from "./types.js";
@@ -87,17 +87,19 @@ export function applyChecks(
     state.lastChecksTree = rec.tree;
   const pending = state.pendingChecks;
   if (!pending) return;
-  const red = rec.checks?.filter((check) => !check.ok) ?? [];
-  if (rec.ok === false && red.length > 0 && red.every(isInfraCheck)) {
+  // The reds this record charges the task: an inherited failure is not the
+  // task's, so it never opens a revision, a fix or a park.
+  const charged = attributedFailures(rec.checks);
+  if (rec.ok === false && charged.length > 0 && charged.every(isInfraCheck)) {
     // A gate that could not start is not a red verdict on the task: looping
     // the implementer ends in an empty-diff park (B6).
     state.park = makeCause(
       "infra",
-      `gate could not start: ${red.map((check) => check.name).join(", ")}`,
+      `gate could not start: ${charged.map((check) => check.name).join(", ")}`,
     );
     state.phase = "parked";
   } else if (rec.ok === false) {
-    settleChecksVerdict(context, state, red, pending);
+    settleChecksVerdict(context, state, charged, pending);
   } else {
     advancePendingChecks(context, state, pending);
   }

@@ -6,7 +6,7 @@
  */
 import type { CheckResult } from "../core/checks/types.js";
 import { makeCause } from "./cause.js";
-import { isInfraCheck } from "./gates.js";
+import { attributedFailures, checksAttributed, isInfraCheck } from "./gates.js";
 import {
   agentSteps,
   DEFAULT_CHANGE_REQUESTS,
@@ -209,11 +209,16 @@ export function committedNothing(
 }
 
 /**
- * The merge-gate names the cause lists that the record's checks carry. The
- * cause lists only the new failures; the record's checks also carry inherited
- * reds, so read the names from the cause.
+ * The merge-gate names the record charges the task: its close-time
+ * attribution when the record carries the stamp. An older record reads the
+ * cause, which lists only the new failures; its checks also carry inherited
+ * reds, so the cause stays the identity there.
  */
 export function mergeGateNames(rec: StepRecord): string[] {
+  if (checksAttributed(rec.checks))
+    return attributedFailures(rec.checks)
+      .filter((check) => !isInfraCheck(check))
+      .map((check) => check.name);
   const cause = rec.cause?.kind === "gates" ? rec.cause.detail : "";
   const names = cause
     .split(",")

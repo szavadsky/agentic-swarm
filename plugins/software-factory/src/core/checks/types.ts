@@ -1,9 +1,21 @@
+/**
+ * A failing check's owner: `new` is the task's own failure, `inherited` was
+ * already red on the base tree before the task ran.
+ */
+export type CheckAttribution = "new" | "inherited";
+
 export interface CheckResult {
   name: string;
   ok: boolean;
   summary: string;
   output: string;
   fingerprint: string;
+  /**
+   * Stamp of who owns the failure, written when the checks record closes. A
+   * green check, an infra red (never a verdict on the tree) and a record
+   * written before the stamp carry none.
+   */
+  attribution?: CheckAttribution;
   details?: unknown;
   flaky?: string[];
   skipped?: boolean;
