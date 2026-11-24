@@ -1,5 +1,6 @@
 import yaml from "yaml";
 import { type ZodIssue, z } from "zod";
+import { deadDepFindings } from "./task-deps.js";
 import type {
   FlowDefinition,
   State,
@@ -461,6 +462,7 @@ export function validateTaskGraph(
       ...baseFindings(task, bySlug, opts.status),
     );
   }
+  if (opts.status) findings.push(...deadDepFindings(tasks, opts.status));
   findings.push(...cycleFindings(bySlug));
   return [...new Set(findings)];
 }
