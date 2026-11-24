@@ -393,6 +393,28 @@ function registerContextPackPart5(): void {
   });
 }
 
+function registerContextPackPart6(): void {
+  it("renders files without a slash and splits a large package by subdirectory", () => {
+    const map = shallowCodeMap([
+      "package.json",
+      "src/main.ts",
+      ...Array.from({ length: 24 }, (_, i) => `plugins/big/src/f${i}.ts`),
+      "plugins/big/test/one.test.ts",
+      "plugins/big/package.json",
+      "plugins/small/src/a.ts",
+      "plugins/small/src/b.ts",
+    ]);
+    expect(map).toEqual([
+      "(root) — 1 file",
+      "plugins/big/package.json",
+      "plugins/big/src/ — 24 files",
+      "plugins/big/test/ — 1 file",
+      "plugins/small/ — 2 files",
+      "src/main.ts",
+    ]);
+  });
+}
+
 describe("context pack", () => {
   registerContextPackPart1();
 
@@ -403,4 +425,6 @@ describe("context pack", () => {
   registerContextPackPart4();
 
   registerContextPackPart5();
+
+  registerContextPackPart6();
 });

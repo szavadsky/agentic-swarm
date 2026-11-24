@@ -7,23 +7,70 @@ import type { ConcernScope, ForwardedConcern } from "./types.js";
 import { epicByTask, visibleToAudience } from "./debt.js";
 
 /**
- * Groups repository-relative paths into a shallow directory index. The
- * architect gets shapes and paths, never file bodies; scouting reads them.
- * Every group is kept: the pack preparer decides what the index shows.
+ * A package with at least this many files is one unhelpful row, so the index
+ * shows its subdirectories instead.
+ */
+const PACKAGE_SPLIT_MIN_FILES = 20;
+
+interface CodeMapEntry {
+  count: number;
+  directory: boolean;
+}
+
+/**
+ * Groups repository-relative paths into a shallow index. A directory keeps
+ * its trailing slash and file count; a file is its bare path, so a slash
+ * alone tells the two apart. The architect gets shapes and paths, never file
+ * bodies; scouting reads them. Every group is kept: the pack preparer decides
+ * what the index shows.
  */
 export function shallowCodeMap(paths: string[]): string[] {
-  const counts = new Map<string, number>();
-  for (const raw of paths) {
-    const clean = raw.replace(/\\/g, "/").replace(/^\.\//, "");
-    if (!clean) continue;
-    const parts = clean.split("/");
-    if (parts[0] === "node_modules" || parts[0] === ".git") continue;
-    const key = parts.length === 1 ? "(root)" : `${parts[0]}/${parts[1]}/`;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+  const clean = paths
+    .map((raw) => raw.replace(/\\/g, "/").replace(/^\.\//, ""))
+    .filter((path) => {
+      if (!path) return false;
+      const top = path.split("/")[0];
+      return top !== "node_modules" && top !== ".git";
+    });
+
+  const packageCounts = new Map<string, number>();
+  for (const path of clean) {
+    const parts = path.split("/");
+    if (parts.length < 3) continue;
+    const pkg = `${parts[0]}/${parts[1]}`;
+    packageCounts.set(pkg, (packageCounts.get(pkg) ?? 0) + 1);
   }
-  return [...counts.entries()]
+
+  const entries = new Map<string, CodeMapEntry>();
+  const count = (label: string, directory: boolean): void => {
+    const entry = entries.get(label) ?? { count: 0, directory };
+    entry.count += 1;
+    entries.set(label, entry);
+  };
+  for (const path of clean) {
+    const parts = path.split("/");
+    if (parts.length === 1) {
+      count("(root)", true);
+      continue;
+    }
+    const pkg = `${parts[0]}/${parts[1]}`;
+    const split =
+      parts.length > 2 &&
+      (packageCounts.get(pkg) ?? 0) >= PACKAGE_SPLIT_MIN_FILES;
+    const depth = split ? 3 : 2;
+    if (parts.length <= depth) {
+      count(path, false);
+    } else {
+      count(`${parts.slice(0, depth).join("/")}/`, true);
+    }
+  }
+  return [...entries.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([key, n]) => `${key} — ${n} file${n === 1 ? "" : "s"}`);
+    .map(([label, entry]) =>
+      entry.directory
+        ? `${label} — ${entry.count} file${entry.count === 1 ? "" : "s"}`
+        : label,
+    );
 }
 
 function calibrationRank(calibration: string): number {
