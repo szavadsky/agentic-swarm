@@ -35,6 +35,20 @@ function wasteTable(label: string, rows: readonly WasteGroupRow[]): string[] {
   ];
 }
 
+function quotaStopLines(waste: WasteAccounting): string[] {
+  const lines = [
+    `- quota stops (reported apart, not waste): ${waste.quotaStops.length}`,
+  ];
+  if (waste.quotaStops.length === 0) return lines;
+  lines.push("- quota-stop records:");
+  for (const stop of waste.quotaStops) {
+    lines.push(
+      `  - ${stop.record}: ${stop.role}/${stop.alias} (${stop.step} r${stop.round}) — ${stop.detail}`,
+    );
+  }
+  return lines;
+}
+
 function wasteEntryLines(waste: WasteAccounting): string[] {
   const lines = ["- records:"];
   if (waste.entries.length === 0) lines.push("  - none");
@@ -68,6 +82,7 @@ export function wasteLines(
     ...WASTE_REASONS.map(
       (reason) => `  - ${WASTE_REASON_LABEL[reason]}: ${waste.counts[reason]}`,
     ),
+    ...quotaStopLines(waste),
     `- rebutted reviews (accepted tax, not waste): ${waste.rebuttedReviews.length}`,
     ...wasteEntryLines(waste),
     "",

@@ -143,5 +143,6 @@ export function sumWaste(total: WasteAccounting, part: WasteAccounting): void {
     total.counts[reason] += part.counts[reason];
   }
   total.entries.push(...part.entries);
+  total.quotaStops.push(...part.quotaStops);
   total.rebuttedReviews.push(...part.rebuttedReviews);
 }

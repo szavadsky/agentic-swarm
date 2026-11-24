@@ -551,8 +551,10 @@ unfinished ask and the rescue recovered, loop incidents (no-progress and
 empty-diff parks; a spike's empty finish and overflow parks are not loop
 incidents), wasted turns by reason and by role and alias (complete implementer
 failure; structure: protocol, containment, outcome channel, infra; flaky-test
-rejection), rebutted review turns counted apart as accepted tax, QA-only
-catches per task (findings no earlier gate failure or reviewer finding matched),
+rejection), quota stops that landed no work reported apart from waste (a
+failed launch that landed work still counts), rebutted review turns counted
+apart as accepted tax, QA-only catches per task (findings no earlier gate
+failure or reviewer finding matched),
 human interventions (processed steers) and the observable
 operator-act counter (steers plus containment outside-changes and
 integration-moved merges), gate and commit wall time, and turns, tokens, cost

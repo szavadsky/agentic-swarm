@@ -1,9 +1,10 @@
 import { countOutcomeRepairs } from "../harness/usage.js";
-import { formatCause } from "./cause.js";
+import { formatCause, stopDetail } from "./cause.js";
 import { isGlitchTurn } from "./glitch.js";
 import { recordDirName } from "./store.js";
 import { KERNEL_STEPS } from "./types.js";
 import type { Cause, CauseKind, StepRecord } from "./types.js";
+import { type QuotaStop, isQuotaStop, quotaStopsOf } from "./waste-quota.js";
 
 /**
  * Why a turn was wasted. Rebutted reviews are not a reason: a change review
@@ -87,6 +88,8 @@ export interface WasteAccounting {
   turns: number;
   counts: WasteCounts;
   entries: WasteEntry[];
+  /** Quota stops that landed no work; reported apart from waste. */
+  quotaStops: QuotaStop[];
   /** Review turns whose verdict was `changes`; counted apart from waste. */
   rebuttedReviews: RebuttedReview[];
 }
@@ -96,6 +99,7 @@ export function emptyWasteAccounting(): WasteAccounting {
     turns: 0,
     counts: emptyWasteCounts(),
     entries: [],
+    quotaStops: [],
     rebuttedReviews: [],
   };
 }
@@ -136,18 +140,6 @@ function recordPath(rec: StepRecord): string {
 function summaryLine(text: string, max = 160): string {
   const line = text.replace(/\s+/g, " ").trim();
   return line.length <= max ? line : `${line.slice(0, max - 1)}…`;
-}
-
-function stopDetail(rec: StepRecord): string {
-  if (!rec.stop) return "no recorded stop";
-  if (rec.stop.kind === "infra") {
-    return `infra: ${rec.stop.cause}${rec.stop.details ? ` (${rec.stop.details})` : ""}`;
-  }
-  if (rec.stop.kind === "refusal") {
-    return `refusal${rec.stop.details ? `: ${rec.stop.details}` : ""}`;
-  }
-  if (rec.stop.kind === "truncated") return `truncated: ${rec.stop.cause}`;
-  return rec.stop.kind;
 }
 
 /** A task-flow turn: not a boundary role and not a review carrying a verdict. */
@@ -311,7 +303,7 @@ function parkCandidate(
   const rule = parkRule(park.cause);
   if (!rule) return undefined;
   const turn = turnForPark(ordered, park);
-  if (!turn) return undefined;
+  if (!turn || isQuotaStop(turn)) return undefined;
   if (rule.productiveOnly && !isTaskTurn(turn, roleOf(turn.step))) {
     return undefined;
   }
@@ -347,7 +339,7 @@ function ownCandidate(rec: StepRecord, role: string): Candidate | undefined {
       reason: "structureInfra",
       priority: PRIORITY.infra,
       evidence: rec,
-      detail: summaryLine(stopDetail(rec)),
+      detail: summaryLine(stopDetail(rec.stop)),
     };
   }
   if (
@@ -358,7 +350,7 @@ function ownCandidate(rec: StepRecord, role: string): Candidate | undefined {
       reason: "structureProtocol",
       priority: PRIORITY.protocol,
       evidence: rec,
-      detail: summaryLine(stopDetail(rec)),
+      detail: summaryLine(stopDetail(rec.stop)),
     };
   }
   if (
@@ -394,10 +386,9 @@ function collectCandidates(
   roleOf: (step: string) => string,
 ): Map<number, Candidate> {
   const candidates = new Map<number, Candidate>();
-  for (const rec of ordered) {
-    if (!isAgentTurn(rec) || rec.outcome?.verdict === "changes") continue;
-    addOwnCandidate(candidates, rec, ownCandidate(rec, roleOf(rec.step)));
-  }
+  const counted = ordered.filter(
+    (rec) => isAgentTurn(rec) && !isQuotaStop(rec),
+  );
   for (const park of ordered) {
     if (park.actor !== "script" || park.step !== "park" || !park.endedAt) {
       continue;
@@ -405,8 +396,9 @@ function collectCandidates(
     const found = parkCandidate(ordered, park, roleOf);
     if (found) addOwnCandidate(candidates, found.turn, found.candidate);
   }
-  for (const rec of ordered) {
-    if (!isAgentTurn(rec) || rec.outcome?.verdict === "changes") continue;
+  for (const rec of counted) {
+    if (rec.outcome?.verdict === "changes") continue;
+    addOwnCandidate(candidates, rec, ownCandidate(rec, roleOf(rec.step)));
     addOwnCandidate(
       candidates,
       rec,
@@ -493,6 +485,9 @@ export function wasteAccounting(input: WasteInput): WasteAccounting {
     turns: entries.length,
     counts,
     entries,
+    quotaStops: quotaStopsOf(ordered, input.roleOf, recordPath, (rec) =>
+      summaryLine(stopDetail(rec.stop)),
+    ),
     rebuttedReviews: rebuttedOf(ordered, wasted, input.roleOf),
   };
 }
