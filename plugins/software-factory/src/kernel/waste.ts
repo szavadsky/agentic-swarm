@@ -5,10 +5,12 @@ import { recordDirName } from "./store.js";
 import { KERNEL_STEPS } from "./types.js";
 import type { Cause, CauseKind, StepRecord } from "./types.js";
 import { type QuotaStop, isQuotaStop, quotaStopsOf } from "./waste-quota.js";
+import { type RebuttedReview, rebuttedReviewsOf } from "./waste-rebutted.js";
 
 /**
- * Why a turn was wasted. Rebutted reviews are not a reason: a change review
- * asked to improve is the accepted tax, counted apart from waste.
+ * Why a turn was wasted. Rebutted reviews are not a reason: a change request
+ * the author answered with replies alone, which the next review accepted, is
+ * the accepted tax, counted apart from waste.
  */
 export interface WasteCounts {
   /** The implementer spent tokens and landed nothing. */
@@ -72,17 +74,6 @@ export interface WasteEntry {
   detail: string;
 }
 
-/** A review turn whose verdict was `changes`: accepted tax, never waste. */
-export interface RebuttedReview {
-  record: string;
-  role: string;
-  alias: string;
-  slug?: string;
-  step: string;
-  round: number;
-  summary: string;
-}
-
 export interface WasteAccounting {
   /** Wasted turns in this iteration: one entry per turn. */
   turns: number;
@@ -90,7 +81,7 @@ export interface WasteAccounting {
   entries: WasteEntry[];
   /** Quota stops that landed no work; reported apart from waste. */
   quotaStops: QuotaStop[];
-  /** Review turns whose verdict was `changes`; counted apart from waste. */
+  /** Review turns rebutted by replies alone and then accepted; counted apart from waste. */
   rebuttedReviews: RebuttedReview[];
 }
 
@@ -440,35 +431,10 @@ function wasteEntries(
     });
 }
 
-function rebuttedOf(
-  ordered: readonly StepRecord[],
-  wasted: ReadonlySet<string>,
-  roleOf: (step: string) => string,
-): RebuttedReview[] {
-  return ordered
-    .filter(
-      (rec) =>
-        isAgentTurn(rec) &&
-        rec.outcome?.verdict === "changes" &&
-        !wasted.has(recordPath(rec)),
-    )
-    .map((review) => {
-      const role = roleOf(review.step);
-      return {
-        record: recordPath(review),
-        role,
-        alias: review.alias ?? role,
-        ...(review.slug ? { slug: review.slug } : {}),
-        step: review.step,
-        round: review.round,
-        summary: summaryLine(review.outcome?.summary ?? "no summary"),
-      };
-    });
-}
-
 /**
- * The iteration's wasted turns by reason, per role and alias input. A review
- * whose verdict is `changes` is a rebutted review unless a structure failure
+ * The iteration's wasted turns by reason, per role and alias input. A review's
+ * `changes` is a rebutted review only when the author answered it with replies
+ * alone and the next review accepted that answer, and no structure failure
  * (park, stop) also names it; rebutted reviews are counted apart, never as waste.
  */
 export function wasteAccounting(input: WasteInput): WasteAccounting {
@@ -488,6 +454,12 @@ export function wasteAccounting(input: WasteInput): WasteAccounting {
     quotaStops: quotaStopsOf(ordered, input.roleOf, recordPath, (rec) =>
       summaryLine(stopDetail(rec.stop)),
     ),
-    rebuttedReviews: rebuttedOf(ordered, wasted, input.roleOf),
+    rebuttedReviews: rebuttedReviewsOf({
+      ordered,
+      wasted,
+      roleOf: input.roleOf,
+      recordOf: recordPath,
+      summaryOf: summaryLine,
+    }),
   };
 }

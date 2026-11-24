@@ -137,7 +137,7 @@ function checksAndFallbackRecords(): StepRecord[] {
   ];
 }
 
-/** The rebutted review and a clean approval on the next round. */
+/** A change request, the replies-only answer it got, and the approval that accepted it. */
 function reviewRecords(): StepRecord[] {
   return [
     rec(12, {
@@ -146,6 +146,25 @@ function reviewRecords(): StepRecord[] {
       alias: "reviewer",
       usage: USAGE,
       outcome: outcome({ verdict: "changes", summary: "needs a test" }),
+    }),
+    rec(14, {
+      slug: "alpha",
+      step: "implement",
+      round: 2,
+      alias: "implementer",
+      usage: USAGE,
+      edits: { files: 0, added: 0, removed: 0 },
+      outcome: outcome({
+        replies: [{ finding: 1, reply: "the test is already at line 40" }],
+      }),
+    }),
+    rec(15, {
+      slug: "alpha",
+      step: "review",
+      round: 2,
+      alias: "reviewer",
+      usage: USAGE,
+      outcome: outcome({ verdict: "approve", summary: "the reply holds" }),
     }),
     rec(13, {
       slug: "bravo",
@@ -175,7 +194,6 @@ describe("waste accounting", () => {
   registerWasteAccountingPart1();
   registerWasteAccountingPart2();
   registerWasteAccountingPart3();
-  registerWasteAccountingPart4();
 });
 
 async function countsEachReasonPerRoleAliasNamesPart1(
@@ -278,7 +296,7 @@ async function countsEachReasonPerRoleAliasNamesPart3(
   const { records } = scope;
   const text = (await store.readFile("iterations/1/summary.md"))!;
   expect(text).toContain("## Waste");
-  expect(text).toContain("- wasted turns: 7 of 9 agent turns");
+  expect(text).toContain("- wasted turns: 7 of 11 agent turns");
   expect(text).toContain("- by reason:");
   expect(text).toContain("  - complete implementer failure: 2");
   expect(text).toContain("  - structure: protocol: 1");
@@ -393,63 +411,5 @@ function registerWasteAccountingPart3(): void {
       evidence: pathOf(records, 4),
       detail: expect.stringContaining("red merge-checks"),
     });
-  });
-}
-
-function registerWasteAccountingPart4(): void {
-  it("never counts a review's accepted change request as waste", () => {
-    const review = rec(2, {
-      slug: "a",
-      step: "review",
-      round: 1,
-      alias: "reviewer",
-      outcome: outcome({
-        verdict: "changes",
-        summary: "add a regression test",
-      }),
-    });
-    const records = [
-      rec(1, {
-        slug: "a",
-        step: "implement",
-        round: 1,
-        alias: "implementer",
-        edits: { files: 2, added: 10, removed: 1 },
-        outcome: outcome(),
-      }),
-      review,
-    ];
-    const accounting = wasteAccounting({
-      records,
-      roleOf: (step) => ROLE_BY_STEP[step as keyof typeof ROLE_BY_STEP] ?? step,
-    });
-    expect(accounting.turns).toBe(0);
-    expect(accounting.rebuttedReviews).toHaveLength(1);
-    expect(accounting.rebuttedReviews[0]!.record).toBe(pathOf(records, 2));
-
-    // A contract breach (changes on the last call) is not an accepted rebuttal:
-    // the park names the review record and the protocol failure wins.
-    const breach = script(3, {
-      slug: "a",
-      step: "park",
-      round: 1,
-      ok: true,
-      cause: {
-        kind: "invalid-outcome",
-        detail: "changes on the last review call: too late",
-      },
-    });
-    const breached = wasteAccounting({
-      records: [...records, breach],
-      roleOf: (step) => ROLE_BY_STEP[step as keyof typeof ROLE_BY_STEP] ?? step,
-    });
-    expect(breached.rebuttedReviews).toEqual([]);
-    expect(breached.entries).toEqual([
-      expect.objectContaining({
-        reason: "structureProtocol",
-        record: pathOf(records, 2),
-        evidence: pathOf([...records, breach], 3),
-      }),
-    ]);
   });
 }
