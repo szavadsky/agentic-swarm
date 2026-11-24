@@ -19,6 +19,7 @@ import type { PinGate } from "../../kernel/preflight/pin.js";
 export const PROMOTE_TREE_PATHS: readonly string[] = [
   "bootstrap/run",
   "bootstrap/promote.sh",
+  "bootstrap/dispatch.sh",
 ];
 
 /** Result of one synchronous command run. */
