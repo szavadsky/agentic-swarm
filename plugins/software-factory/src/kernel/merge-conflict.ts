@@ -6,6 +6,7 @@ import { git } from "../core/git/exec.js";
 import { hasConflictMarkers, unmergedFiles } from "../core/git/merge.js";
 import { porcelainStatus } from "../core/git/status.js";
 import { formatBaseGates, recordedBaseGates } from "./baseline.js";
+import { gateCommandsText } from "./infra.js";
 import { commitEdits, scriptMeta } from "./record.js";
 import type { KernelRuntime, RecordEnd, StepRecord } from "./types.js";
 import { headSha, integrationHead, mergeRef, treeSha } from "./worktree.js";
@@ -61,10 +62,10 @@ export function resolveVars(
     integration_head: head,
     conflicts: conflicts.join(", ") || "none",
     gate_log_path: gateLogPath ?? "none",
-    gate_commands:
-      runtime.configs.repo.gates
-        .map((g) => `- ${g.id}: ${g.command}`)
-        .join("\n") || "none",
+    gate_commands: gateCommandsText(
+      runtime.store.goalDir,
+      runtime.configs.repo.gates,
+    ),
     base_gates: formatBaseGates(base),
   };
 }

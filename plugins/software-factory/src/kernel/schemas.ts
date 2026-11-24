@@ -7,6 +7,7 @@ import {
   runConfigSchema,
 } from "./config.js";
 import { classSchema } from "./flow-context.js";
+import { infraSchema } from "./infra.js";
 import { holdFileSchema } from "./mailbox.js";
 import { pinGateSchema } from "./preflight/pin.js";
 import { qaOutcomeSchema } from "./qa.js";
@@ -92,6 +93,7 @@ const kernelSchemas = {
   qa: () => inputSchema(qaOutcomeSchema),
   hold: () => inputSchema(holdFileSchema),
   class: () => inputSchema(classSchema),
+  infra: () => inputSchema(infraSchema),
   gate: () => inputSchema(pinGateSchema), // the pin build's gate record; promote writes it, run reads it
   repo: () => inputSchema(repoConfigSchema),
   run: runLayerSchema,

@@ -6,6 +6,7 @@ import {
   frontTarget,
   readFrontClass,
 } from "./flow-context.js";
+import { attachInfraToPack, gateCommandsText, InfraError } from "./infra.js";
 import {
   CODE_MAP_FILE,
   type IngestionResult,
@@ -234,14 +235,6 @@ async function validateFrontTasks(
   }
 }
 
-export function gateCommands(runtime: KernelRuntime): string {
-  return (
-    runtime.configs.repo.gates
-      .map((gate) => `- ${gate.id}: ${gate.command}`)
-      .join("\n") || "none"
-  );
-}
-
 async function resultFor(
   runtime: KernelRuntime,
   cls: FrontClass,
@@ -290,7 +283,10 @@ function frontTurnVars(
     pack_path: packPath,
     checkout: runtime.paths.goalCheckout,
     setup_command: runtime.configs.repo.setup.join(" && ") || "none",
-    gate_commands: gateCommands(runtime),
+    gate_commands: gateCommandsText(
+      runtime.store.goalDir,
+      runtime.configs.repo.gates,
+    ),
     class_types: frontClassTypesVar(runtime.configs.process.taskTypes),
     code_map_path: codeMapPath,
   };
@@ -402,6 +398,9 @@ async function classifyFront(
   }
   const after = await runIngestionSteps(runtime, opts.iteration, true);
   if (after.cause) return ingestionStop(after);
+  // The infra step runs after the front in the shipped sequence: put the gates
+  // and their observed status into the pack the architect reads next.
+  await attachInfraToPack(runtime, packPath);
   return await resultFor(runtime, cls, {
     ran: true,
     iteration: opts.iteration,
@@ -433,7 +432,11 @@ export async function runFront(
       ? await resumeClassified(runtime, opts, existing)
       : await classifyFront(runtime, opts);
   } catch (err) {
-    if (err instanceof FrontError || err instanceof FrontClassError) {
+    if (
+      err instanceof FrontError ||
+      err instanceof FrontClassError ||
+      err instanceof InfraError
+    ) {
       return { action: "infra", cause: err.message };
     }
     throw err;

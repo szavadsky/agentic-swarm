@@ -38,6 +38,9 @@ codingRules: .factory/prompts/coding-rules.md  # optional; replaces the factory 
   missing, empty or unreadable report is red. `pattern` is `pytest`, `jest` or
   `cargo`.
 - Gates run once on the base; a red base is recorded and warned once, not fatal.
+- With no `gates` configured, the goal's `infra.yaml` (written by the shipped
+  `infra` ingestion step) supplies the commands the task runs; a configured gate
+  always wins, and the infra turn's observed red/flaky status is advisory.
 - The tracked layer names no worktree root: checkouts and sessions belong to
   the run layer.
 - `artifacts` selects the store by backend name, not by path:
@@ -92,6 +95,10 @@ architecture:                    # plan review, before the PM derives tasks
   squash merge conflicts.
 - `boundary` and `architecture` name the kernel turns. Every boundary step is
   required in the merged layer; the package default supplies them.
+- `ingestion` names the goal-start sequence: `branch` first, exactly one
+  `front`, then configured agent steps such as the shipped `infra` (gate
+  discovery and status) and `scout` (`when: [bigger]`); `when` cannot appear
+  ahead of `front`.
 - `reminders` (default 1) bounds missing-outcome reminders; `repairPrompt`
   names the default missing-outcome template; `promptsDir` shadows prompt files
   from a repo directory; `sagaTaskCount` (default 20) is the task count past

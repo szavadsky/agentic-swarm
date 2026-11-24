@@ -7,6 +7,7 @@ Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable
 - `architect` — `architect-assignment` (`architect-bounds`), `architect-goal`, `architect-body` (`architect-turn`, `plan-standard` (`plan-history`, `task-size`), `architect-scope` (`plan-rules`, `calibration`)), `outcome`, `plan-review-marks`, `verdict`
 - `subarchitect` — `architect-bounds`, `architect-epic`, `architect-body` (`architect-turn`, `plan-standard` (`plan-history`, `task-size`), `architect-scope` (`plan-rules`, `calibration`)), `outcome`
 - `front` — `task-size`, `plan-read-only`, `calibration`, `outcome`, `task-frontmatter`
+- `infra` — `plan-read-only`, `calibration`, `outcome`
 - `intent` — `calibration`, `outcome`
 - `pm` — `task-size`, `plan-read-only`, `spike-report-general`, `calibration`, `outcome`, `task-frontmatter`
 - `implementer` — `cleanliness-revision`, `implementer-body`, `clean-code`, `scope` (`plan-read-only`), `calibration`, `outcome`
@@ -340,6 +341,20 @@ The flow's `resolve` step renders this same prompt with the same variables: the 
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome examples from the kernel schema; renderer default
+
+## infra.md
+
+The ingestion gate discovery: with repo-config gates present it copies them exactly and reports their status; with none it discovers the project's commands. Its output is `infra.yaml`, the kernel schema the gates the kernel runs are read from.
+
+- `iteration` — 1-based iteration number of this launch
+- `intent_path` — path to the goal's `intent.md`; a pointer, never pasted
+- `checkout` — path to the stable goal checkout (integration worktree) the gates run in
+- `setup_command` — repository setup command; `none` when not needed
+- `gate_commands` — configured gate commands as `- id: command` lines with any recorded status; `none` when the repo config declares none, which is when discovery is allowed
+- `infra_path` — path of the `infra.yaml` to write, naming each gate's command, speed and observed status; the one artifact the turn authors (the outcome file is the other)
+- `outcome_path` — path where the outcome file must be written when the harness asks for a file
+- `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
+- `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default
 
 ## delivery-repair.md
 

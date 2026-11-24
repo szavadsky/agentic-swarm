@@ -27,6 +27,7 @@ import {
   formatFailingChecks,
   newGateFailures,
 } from "./gates.js";
+import { gateCommandsText } from "./infra.js";
 import { outcomeExampleVar } from "./outcome-example.js";
 import { expectationForStep } from "./outcome.js";
 import { taskOutcomeSchema } from "./outcome-schemas.js";
@@ -144,10 +145,10 @@ function commonVars(
     report_path: task.kind === "spike" ? spikeReportPath(task.slug) : "",
     env_notes: formatEnvNotes(task.envNotes),
     setup_command: runtime.configs.repo.setup.join(" && ") || "none",
-    gate_commands:
-      runtime.configs.repo.gates
-        .map((g) => `- ${g.id}: ${g.command}`)
-        .join("\n") || "none",
+    gate_commands: gateCommandsText(
+      runtime.store.goalDir,
+      runtime.configs.repo.gates,
+    ),
     base_gates: formatBaseGates(handoff.base),
     findings: handoff.findings,
     pending_signal: state?.pendingSignal

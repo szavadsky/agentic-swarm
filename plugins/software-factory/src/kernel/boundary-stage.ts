@@ -34,6 +34,7 @@ import {
 } from "./context-pack.js";
 import { derive, openDebts } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
+import { packGates } from "./infra.js";
 import { runKeptLand } from "./integrate.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import { carryIntentSteers, intentChanges } from "./intent.js";
@@ -402,7 +403,7 @@ async function packGovernance(
   const { runtime } = context;
   return {
     setup: runtime.configs.repo.setup,
-    gates: runtime.configs.repo.gates,
+    gates: packGates(runtime.store.goalDir, runtime.configs.repo.gates),
     baseGates: recordedBaseGates(context.records),
     forwarded: forwardedConcerns(context.records, {
       tasks: context.tasks,

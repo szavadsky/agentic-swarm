@@ -278,6 +278,7 @@ describe("cleanliness revision promptVars", () => {
     } as any;
     const runtime = {
       store: {
+        goalDir: "/goal",
         pathOf: () => "/path/class.yaml",
         tasks: { path: (slug: string) => `/tasks/${slug}.md` },
         records: { checksLog: () => "/logs/checks" },

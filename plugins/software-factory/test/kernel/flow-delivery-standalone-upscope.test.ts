@@ -17,6 +17,7 @@ import {
   stateOf,
   writeTask as writeGoalTask,
 } from "./e2e-helpers.js";
+import { workCalls } from "./fake-defaults.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -330,7 +331,7 @@ async function parksImplementerUpscopeRewritesClassPart2(
   expect(architect?.iteration).toBe(2);
   expect((await stateOf(goal.goalDir)).goal).toBe("done");
   // One implement turn and the stall PM: the review never runs.
-  expect(first.calls).toHaveLength(2);
+  expect(workCalls(first)).toHaveLength(2);
   // digest, the scout, the pack preparer and the architect: iteration 2
   // prepares its index from the script data before the consult.
   expect(second.calls).toHaveLength(4);

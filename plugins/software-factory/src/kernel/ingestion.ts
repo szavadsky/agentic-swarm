@@ -8,10 +8,17 @@
 import fs from "node:fs";
 import { git } from "../core/git/exec.js";
 import { runAgentTurn } from "./agent.js";
-import { frontClassTypesVar, gateCommands } from "./front.js";
 import { shallowCodeMap } from "./context-pack.js";
 import { FrontClassError, readFrontClass } from "./flow-context.js";
 import { resolveTurn, type TurnTarget } from "./flow-context-targets.js";
+import { frontClassTypesVar } from "./front.js";
+import {
+  gateCommandsText,
+  INFRA_FILE,
+  InfraError,
+  infraPath,
+  readInfra,
+} from "./infra.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import { scriptMeta } from "./record.js";
 import type {
@@ -176,7 +183,7 @@ function ingestionStepVars(
   runtime: KernelRuntime,
   iteration: number,
   packPath: string,
-  extra: { codeMapPath: string },
+  extra: { codeMapPath: string; infraPath: string },
 ): Record<string, string> {
   return {
     iteration: String(iteration),
@@ -187,9 +194,13 @@ function ingestionStepVars(
     pack_path: packPath,
     checkout: runtime.paths.goalCheckout,
     setup_command: runtime.configs.repo.setup.join(" && ") || "none",
-    gate_commands: gateCommands(runtime),
+    gate_commands: gateCommandsText(
+      runtime.store.goalDir,
+      runtime.configs.repo.gates,
+    ),
     class_types: frontClassTypesVar(runtime.configs.process.taskTypes),
     code_map_path: extra.codeMapPath,
+    infra_path: extra.infraPath,
   };
 }
 
@@ -218,6 +229,7 @@ async function runGenericIngestionStep(
         meta: { iteration, step: step.id, round: 1 },
         vars: ingestionStepVars(runtime, iteration, packPath, {
           codeMapPath,
+          infraPath: infraPath(runtime.store.goalDir),
         }),
         expectation: "any",
       }),
@@ -241,15 +253,27 @@ async function runGenericIngestionStep(
   return {};
 }
 
-/** The artifact a finished step promised but did not write; none when present. */
+/** One step's promised artifact is missing or invalid; none when present. */
 function missingDeliverable(
   step: IngestionStepConfig,
   runtime: KernelRuntime,
 ): string | undefined {
-  if (step.id !== "scout") return undefined;
-  const file = codeMapFile(runtime);
-  if (fs.existsSync(file)) return undefined;
-  return `ingestion step "scout" wrote no code map at ${file}`;
+  if (step.id === "scout") {
+    const file = codeMapFile(runtime);
+    if (fs.existsSync(file)) return undefined;
+    return `ingestion step "scout" wrote no code map at ${file}`;
+  }
+  if (step.id !== "infra") return undefined;
+  const file = infraPath(runtime.store.goalDir);
+  try {
+    if (readInfra(runtime.store.goalDir) !== undefined) return undefined;
+  } catch (err) {
+    if (err instanceof InfraError) {
+      return `ingestion step "infra" wrote an invalid ${INFRA_FILE}: ${err.message}`;
+    }
+    throw err;
+  }
+  return `ingestion step "infra" wrote no ${INFRA_FILE} at ${file}`;
 }
 
 /** The scout-written entries, one per line; empty when no scout wrote one. */
@@ -338,9 +362,10 @@ async function runStepList(
 /**
  * Runs the configured steps in list order, skipping the ones a previous pass
  * already finished and the class-gated ones this goal skips. The classifier
- * names the class the later gates read; the scout writes the code map the
- * packs carry. `runFront` itself is not invoked here: the caller runs the
- * classifier and leaves the post-classification step list to this module.
+ * names the class the later gates read; the infra step writes the gates and
+ * status the kernel runs by; the scout writes the code map the packs carry.
+ * `runFront` itself is not invoked here: the caller runs the classifier and
+ * leaves the post-classification step list to this module.
  */
 export async function runIngestionSteps(
   runtime: KernelRuntime,

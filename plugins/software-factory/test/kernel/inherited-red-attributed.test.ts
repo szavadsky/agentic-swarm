@@ -290,6 +290,7 @@ describe("a stamped record keeps a non-task red out of the fix", () => {
 function promptVarsRuntime(): KernelRuntime {
   return {
     store: {
+      goalDir: "/goal",
       pathOf: () => "/nonexistent/class.yaml",
       tasks: { path: (slug: string) => `/tasks/${slug}.md` },
       records: { checksLog: () => "/logs/checks" },

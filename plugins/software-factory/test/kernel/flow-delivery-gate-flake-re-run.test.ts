@@ -15,6 +15,7 @@ import type {
   TaskState,
 } from "../../src/kernel/types.js";
 import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
+import { workCalls } from "./fake-defaults.js";
 import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -180,7 +181,7 @@ async function parksReviewUpscopeYesRewritesClassPart2(
   expect(architect).toBeDefined();
   expect(architect?.iteration).toBe(2);
   expect((await stateOf(goal.goalDir)).goal).toBe("done");
-  expect(first.calls).toHaveLength(4);
+  expect(workCalls(first)).toHaveLength(4);
   // digest, the pack preparer and the architect: iteration 2 prepares its
   // index from the script data before the consult; the bigger relaunch also
   // scouted the plan-less goal first.

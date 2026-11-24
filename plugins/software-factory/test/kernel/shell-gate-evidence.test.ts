@@ -25,6 +25,7 @@ function runtimeWith(
 ): KernelRuntime {
   return {
     paths: { repoRoot: root },
+    store: { goalDir: root },
     configs: { repo: { gates } },
   } as unknown as KernelRuntime;
 }

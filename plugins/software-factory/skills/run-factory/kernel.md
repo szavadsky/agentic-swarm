@@ -28,8 +28,8 @@ bun bin/factory.ts variables --out <file>
 | `status --json` | Prints `status.json`, the snapshot written after each agent launch and finish. Before the first launch it derives the same document. |
 | `benchmark` | Prints one goal's benchmark rows from `metrics.yaml` and its records. |
 | `steer` | Writes a steer file into the mailbox inbox atomically. |
-| `validate` | Checks one schema-enforced file with the gate's validators: `tasks/*.md`, `class.yaml`, `outcome.yaml`, `mailbox/holds/*.yaml`, `repo.yaml`, `run.yaml`, `process.yaml`. `--run-config` names the run config explicitly, including one not named `run.yaml`. A repo, process or run file also gets the cross-layer checks (required aliases, task-type flows/schemas, quota pools) — launches nothing. Exit 0 valid, 1 invalid or unknown kind. |
-| `schemas` | Writes every kernel schema as JSON Schema (`task`, `outcome`, `hold`, `class`, `repo`, `run`, `process`). |
+| `validate` | Checks one schema-enforced file with the gate's validators: `tasks/*.md`, `class.yaml`, `outcome.yaml`, `mailbox/holds/*.yaml`, `repo.yaml`, `run.yaml`, `process.yaml`, `infra.yaml`. `--run-config` names the run config explicitly, including one not named `run.yaml`. A repo, process or run file also gets the cross-layer checks (required aliases, task-type flows/schemas, quota pools) — launches nothing. Exit 0 valid, 1 invalid or unknown kind. |
+| `schemas` | Writes every kernel schema as JSON Schema (`task`, `outcome`, `hold`, `class`, `infra`, `repo`, `run`, `process`). |
 | `variables` | Renders `prompts/VARIABLES.md` from the typed prompt-variable descriptor. |
 
 `init` creates the goal directory under the configured artifact root
@@ -43,6 +43,7 @@ it into the repository or a separate one). The goal name must be kebab-case.
   intent.md plan.md tasks/    # intent, plan and one file per task
   epics/<epic>.md             # one plan per architect scope
   class.yaml                  # the front's classification
+  infra.yaml                  # the infra turn's gates, speeds and observed status
   records/                    # one directory per settled step and round
   mailbox/{inbox,processed,outbox}/
   iterations/<n>/{context-pack.md,summary.md,metrics.yaml,intent-status.json}
@@ -62,8 +63,10 @@ it into the repository or a separate one). The goal name must be kebab-case.
    artifact is on disk and continues that same iteration, so stale worktrees
    are recovered and a half-delivered step reruns instead of counting.
 3. The boundary runs the kernel turns the iteration needs: front (classify a
-   fresh goal), plan checker, architect consult, plan review, digest, pack
-   preparer, PM/steward. The architect owns `plan.md`.
+   fresh goal), the configured ingestion steps (the shipped `infra` step writes
+   `infra.yaml`; its gates drive the task runs when the repo config declares
+   none), plan checker, architect consult, plan review, digest, pack preparer,
+   PM/steward. The architect owns `plan.md`.
 4. Dispatch runs each ready task's flow in its own worktree, step by step, with
    real gates and a squash merge into the goal's integration branch. State comes
    from the task files plus the append-only records, so a crash never needs a

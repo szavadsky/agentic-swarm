@@ -146,7 +146,7 @@ async function writesEveryKernelSchemaOneConfigPart1() {
 
   const schemas = yaml.settings?.yaml?.schemas ?? {};
   const entries = Object.entries(schemas);
-  expect(entries).toHaveLength(3);
+  expect(entries).toHaveLength(4);
   for (const [schema, globs] of entries) {
     expect(path.isAbsolute(schema)).toBe(true);
     expect(fs.existsSync(schema)).toBe(true);
@@ -172,6 +172,7 @@ async function writesEveryKernelSchemaOneConfigPart2(
     path.join(goalDir, "mailbox/holds/*.yaml"),
   );
   expect(byName["class.schema.json"]).toBe(path.join(goalDir, "class.yaml"));
+  expect(byName["infra.schema.json"]).toBe(path.join(goalDir, "infra.yaml"));
 
   // Markdown is the frontmatter server's job: yamlls would parse the body
   // as a second YAML document and false-report every task file.

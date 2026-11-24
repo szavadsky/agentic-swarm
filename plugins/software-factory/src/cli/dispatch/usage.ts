@@ -87,8 +87,8 @@ factory validate [--step <id>] [--run-config <file>] [<file>]
 Validates one schema-enforced file with the same validators as the
 schema-validation gate: tasks/*.md (with its directory's dependency graph and
 flow existence against the merged process config), class.yaml, outcome.yaml,
-mailbox/holds/*.yaml, repo.yaml, run.yaml and process.yaml. A repo, process
-or run file also gets the cross-layer checks — required aliases present,
+mailbox/holds/*.yaml, repo.yaml, run.yaml, process.yaml and infra.yaml. A repo,
+process or run file also gets the cross-layer checks — required aliases present,
 task-type flow/schema names known, quota pools defined — without launching
 a harness. --run-config <file> names a run config explicitly, including a file
 not named run.yaml, and is the validated file when no positional file is given.

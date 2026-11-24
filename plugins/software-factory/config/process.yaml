@@ -78,6 +78,13 @@ flows:
 ingestion:
   - id: branch
   - id: front
+  # The infra turn reports the gate commands the kernel runs and the status it
+  # observed for each. Repo-config gates win; with none configured it
+  # discovers them from the checkout.
+  - id: infra
+    prompt: infra
+    alias: pm
+    deliverable: gate commands and status
   - id: scout
     prompt: scout
     alias: pm

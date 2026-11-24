@@ -63,6 +63,9 @@ export function artifactLspConfig(goalDir: string): Record<string, unknown> {
               [path.join(schemas, "class.schema.json")]: [
                 path.join(dir, "class.yaml"),
               ],
+              [path.join(schemas, "infra.schema.json")]: [
+                path.join(dir, "infra.yaml"),
+              ],
             },
           },
         },

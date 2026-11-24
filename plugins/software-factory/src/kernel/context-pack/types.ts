@@ -2,6 +2,7 @@
 
 import type { BaseGateState } from "../baseline.js";
 import type { OpenDebt } from "../derive.js";
+import type { PackGate } from "../infra.js";
 import type { Steer } from "../mailbox.js";
 import type { WasteSpikeProposal } from "../metrics/recurring.js";
 import type { PackBrief } from "./sections.js";
@@ -154,7 +155,8 @@ export interface ContextPackInput {
   /** Pending steers the intent agent carried or failed to carry before this pack. */
   intentChanges?: IntentChange[];
   setup: string[];
-  gates: { id: string; command: string }[];
+  /** Resolved config-or-discovered gates with the infra turn's status. */
+  gates: PackGate[];
   /** Last recorded pre-flight base run; absent when it was skipped. */
   baseGates?: BaseGateState;
   forwarded: ForwardedConcern[];

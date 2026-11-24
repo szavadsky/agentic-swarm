@@ -20,6 +20,7 @@ import {
   runDeclaredGate,
   UNIDENTIFIED_GATE_FAILURE,
 } from "./gates.js";
+import { resolveGates } from "./infra.js";
 import type {
   ArtifactStore,
   ConfigBundle,
@@ -209,12 +210,12 @@ function gateCheck(
 
 async function runBaseGates(
   configs: ConfigBundle,
+  gates: readonly GateConfig[],
   repoRoot: string,
   commit: string,
   mergeFrom?: string,
 ): Promise<CheckResult[]> {
-  if (configs.repo.gates.length === 0 && configs.repo.setup.length === 0)
-    return [];
+  if (gates.length === 0 && configs.repo.setup.length === 0) return [];
   const dir = scratchPath(configs, repoRoot);
   const root = path.resolve(repoRoot);
   try {
@@ -259,7 +260,7 @@ async function runBaseGates(
       return [infra("setup", setup.error ?? "setup failed")];
     }
     const checks: CheckResult[] = [];
-    for (const gate of configs.repo.gates) {
+    for (const gate of gates) {
       const { res, check } = await runDeclaredGate(dir, gate, root);
       checks.push(gateCheck(gate, res, check));
     }
@@ -432,7 +433,14 @@ export async function checkBase(
   const described = mergeFrom
     ? `base "${targetBranch}" at ${target.slice(0, 8)} with "${baseBranch}" merged`
     : `base "${targetBranch}" at ${target.slice(0, 8)}`;
-  const checks = await runBaseGates(configs, repoRoot, target, mergeFrom);
+  const gates = resolveGates(store.goalDir, configs.repo.gates);
+  const checks = await runBaseGates(
+    configs,
+    gates,
+    repoRoot,
+    target,
+    mergeFrom,
+  );
   const infraChecks = checks.filter(isInfraCheck);
   if (infraChecks.length > 0)
     return await recordInfraBase(store, target, described, checks, infraChecks);

@@ -3,6 +3,7 @@
 import { formatCause } from "../cause.js";
 import { OPEN_TASK_STATUSES } from "../derive.js";
 import type { OpenDebt } from "../derive.js";
+import { renderInfraSection } from "../infra.js";
 import { spikeReportPath } from "../spike-report.js";
 import type { WasteSpikeProposal } from "../metrics/recurring.js";
 import type { Cause, TaskFile } from "../types.js";
@@ -294,13 +295,7 @@ export function appendCodeMap(lines: string[], input: ContextPackInput): void {
 }
 
 export function appendInfra(lines: string[], input: ContextPackInput): void {
-  lines.push("", "## Infra");
-  lines.push(
-    `- setup: ${input.setup.length ? input.setup.join(" && ") : "none"}`,
-  );
-  for (const gate of input.gates) {
-    lines.push(`- gate ${gate.id}: ${gate.command}`);
-  }
+  lines.push("", ...renderInfraSection(input.setup, input.gates).split("\n"));
 }
 
 export function appendBaseGates(

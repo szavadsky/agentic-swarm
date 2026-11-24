@@ -1,9 +1,10 @@
 /** The prompt-variable descriptors, one entry per template variable. */
 
-import type { PromptVariablesPage } from "./types.js";
 import { DECIDER_PAGE } from "./data-decider.js";
+import { INFRA_PROMPT_VARIABLES } from "./data-infra.js";
 import { PLAN_CHECKER_PAGE } from "./data-plan-checker.js";
 import { REPAIR_PROMPT_VARIABLES } from "./data-repair.js";
+import type { PromptVariablesPage } from "./types.js";
 
 /** One page per prompt template; the renderer emits them in this order. */
 export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
@@ -467,6 +468,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
         "outcome examples from the kernel schema; renderer default",
     },
   },
+  INFRA_PROMPT_VARIABLES,
   ...REPAIR_PROMPT_VARIABLES,
   {
     file: "resume.md",

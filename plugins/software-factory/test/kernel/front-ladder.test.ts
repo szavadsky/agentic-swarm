@@ -151,7 +151,7 @@ function registerFrontLadderPart4(): void {
           (r) => r.slug === "alpha" && r.step === "merge" && r.ok === true,
         ),
       ).toBe(true);
-      expect(harness.calls).toHaveLength(4);
+      expect(workCalls(harness)).toHaveLength(4);
     } finally {
       cleanup(goal);
     }
@@ -311,7 +311,7 @@ function registerFrontLadderPart8(): void {
           (r) => r.slug === "tiny" && r.step === "merge" && r.ok === true,
         ),
       ).toBe(false);
-      expect(harness.calls).toHaveLength(1);
+      expect(workCalls(harness)).toHaveLength(1);
       expect((await stateOf(goal.goalDir)).goal).toBe("blocked");
     } finally {
       cleanup(goal);
@@ -346,7 +346,7 @@ function registerFrontLadderPart9(): void {
           (r) => r.slug === "tiny" && r.step === "merge" && r.ok === true,
         ),
       ).toBe(false);
-      expect(harness.calls).toHaveLength(2);
+      expect(workCalls(harness)).toHaveLength(2);
       expect((await stateOf(goal.goalDir)).goal).toBe("blocked");
     } finally {
       cleanup(goal);

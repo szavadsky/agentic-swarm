@@ -13,6 +13,7 @@ import {
   repoConfigSchema,
 } from "../../kernel/config.js";
 import { classSchema } from "../../kernel/flow-context.js";
+import { infraSchema } from "../../kernel/infra.js";
 import { holdFileSchema } from "../../kernel/mailbox.js";
 import {
   expectationForStep,
@@ -47,33 +48,12 @@ import {
 import type { ProcessConfig } from "../../kernel/types.js";
 import { outcomeSchema } from "../../kernel/types.js";
 import type { ValidateFileOptions, ValidateResult } from "./types.js";
+import {
+  inferValidateKind,
+  KNOWN_VALIDATE_KINDS,
+  type ValidateKind,
+} from "./validate-kind.js";
 import { planCheckFindings } from "./validate-plan-check.js";
-
-/** One schema-enforced file kind `factory validate` recognizes, by path. */
-type ValidateKind =
-  | "task"
-  | "class"
-  | "outcome"
-  | "hold"
-  | "repo"
-  | "run"
-  | "process";
-
-const KNOWN_VALIDATE_KINDS =
-  "tasks/*.md, holds/*.yaml, class.yaml, outcome.yaml, repo.yaml, run.yaml, process.yaml";
-
-function inferValidateKind(absPath: string): ValidateKind | null {
-  const base = path.basename(absPath);
-  if (base === "class.yaml" || base === "class.yml") return "class";
-  if (base === "outcome.yaml" || base === "outcome.yml") return "outcome";
-  if (base === "repo.yaml" || base === "repo.yml") return "repo";
-  if (base === "run.yaml" || base === "run.yml") return "run";
-  if (base === "process.yaml" || base === "process.yml") return "process";
-  const segments = absPath.split(path.sep);
-  if (segments.includes("holds") && /\.ya?ml$/i.test(base)) return "hold";
-  if (segments.includes("tasks") && base.endsWith(".md")) return "task";
-  return null;
-}
 
 /**
  * A run config through its `extends` chain: its findings already name the
@@ -491,6 +471,9 @@ export async function validateFile(
       break;
     case "process":
       findings = zodFindings(text, abs, processOverrideSchema);
+      break;
+    case "infra":
+      findings = zodFindings(text, abs, infraSchema);
       break;
   }
   findings.push(...crossLayerFindings(abs, kind, { ...opts, runConfig }));

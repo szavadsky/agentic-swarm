@@ -18,6 +18,7 @@ import {
   stateOf,
   writeTask,
 } from "./e2e-helpers.js";
+import { workCalls } from "./fake-defaults.js";
 
 /** A process layer whose own development type runs a one-step flow. */
 const CUSTOM_TYPE_PROCESS = [
@@ -126,7 +127,7 @@ function registerCustomTypeDispatch(): void {
           (r) => r.slug === "feat" && r.step === "merge" && r.ok === true,
         ),
       ).toBe(true);
-      expect(harness.calls).toHaveLength(2);
+      expect(workCalls(harness)).toHaveLength(2);
     } finally {
       cleanup(goal);
     }
@@ -152,7 +153,7 @@ function registerWrongKindRepair(): void {
       await expectLaunch(0, goal.repo, harness, 3);
 
       expect((await stateOf(goal.goalDir)).tasks.feat!.status).toBe("merged");
-      expect(harness.calls).toHaveLength(3);
+      expect(workCalls(harness)).toHaveLength(3);
     } finally {
       cleanup(goal);
     }
@@ -188,7 +189,7 @@ function registerUnknownTypeRepair(): void {
       ]);
       expect(front?.outcome?.status).toBe("done");
       expect((await stateOf(goal.goalDir)).tasks.feat!.status).toBe("merged");
-      expect(harness.calls).toHaveLength(3);
+      expect(workCalls(harness)).toHaveLength(3);
     } finally {
       cleanup(goal);
     }

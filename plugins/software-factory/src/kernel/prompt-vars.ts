@@ -57,6 +57,10 @@ export const PROMPT_COMPOSITIONS: readonly PromptComposition[] = [
     ],
   },
   {
+    prompt: "infra",
+    partials: ["`plan-read-only`", "`calibration`", "`outcome`"],
+  },
+  {
     prompt: "intent",
     partials: ["`calibration`", "`outcome`"],
   },

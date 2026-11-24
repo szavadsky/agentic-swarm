@@ -36,6 +36,7 @@ import {
 } from "./context-pack.js";
 import { openDebts } from "./derive.js";
 import { compactSession, subarchitectTarget } from "./flow-context.js";
+import { packGates } from "./infra.js";
 import { contextCodeMap } from "./ingestion.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
@@ -109,7 +110,7 @@ async function epicPackInput(
     codeMap: await contextCodeMap(runtime),
     steers: [],
     setup: runtime.configs.repo.setup,
-    gates: runtime.configs.repo.gates,
+    gates: packGates(runtime.store.goalDir, runtime.configs.repo.gates),
     baseGates: recordedBaseGates([...opts.records]),
     forwarded: forwardedConcerns([...opts.records], {
       tasks: opts.tasks,

@@ -11,6 +11,7 @@ import {
   repoConfigSchema,
 } from "./kernel/config.js";
 import { classSchema } from "./kernel/flow-context.js";
+import { infraSchema } from "./kernel/infra.js";
 import { holdFileSchema } from "./kernel/mailbox.js";
 import { parseOutcome } from "./kernel/outcome.js";
 import { parseTaskFile, validateTaskGraph } from "./kernel/tasks.js";
@@ -189,6 +190,14 @@ if (fs.existsSync(artifactFactoryDir)) {
     validateYamlFile(file, classSchema);
   }
 
+  // Infra files.
+  for (const file of walk(
+    artifactFactoryDir,
+    (f) => path.basename(f) === "infra.yaml",
+  )) {
+    validateYamlFile(file, infraSchema);
+  }
+
   // Outcome files.
   for (const file of walk(
     artifactFactoryDir,
@@ -204,7 +213,7 @@ if (fs.existsSync(artifactFactoryDir)) {
   }
 } else {
   missing.push(
-    `${artifactFactoryDir} (artifact-level: tasks, class, outcomes)`,
+    `${artifactFactoryDir} (artifact-level: tasks, class, infra, outcomes)`,
   );
 }
 

@@ -123,6 +123,7 @@ describe("schema validation", () => {
   schemaValidationPart1();
   schemaValidationPart2();
   schemaValidationPart3();
+  schemaValidationInfra();
   schemaValidationPart4();
 });
 
@@ -321,6 +322,32 @@ function schemaValidationPart3() {
     expect(result.output).toContain(
       factory("artifacts/demo/mailbox/holds/steer-1.yaml"),
     );
+  });
+}
+
+function schemaValidationInfra() {
+  it("passes a valid infra.yaml the infra turn wrote", () => {
+    freshCase(() =>
+      write(
+        ".factory/artifacts/demo/infra.yaml",
+        'gates:\n  - { name: unit, command: "bun test", speed: fast, status: green }\n',
+      ),
+    );
+    const result = validRun();
+    expect(result.code).toBe(0);
+    expect(result.output).toContain("8 schema-enforced file(s) valid");
+  });
+
+  it("fails on an invalid infra.yaml and names the file", () => {
+    freshCase(() =>
+      write(
+        ".factory/artifacts/demo/infra.yaml",
+        'gates:\n  - { name: unit, command: "bun test", speed: medium, status: green }\n',
+      ),
+    );
+    const result = validRun();
+    expect(result.code).toBe(1);
+    expect(result.output).toContain(factory("artifacts/demo/infra.yaml"));
   });
 }
 

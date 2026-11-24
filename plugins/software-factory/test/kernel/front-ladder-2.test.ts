@@ -17,6 +17,7 @@ import {
   simpleTask,
   writeTask,
 } from "./e2e-helpers.js";
+import { workCalls } from "./fake-defaults.js";
 import { scriptStallLeave } from "./s2-helpers.js";
 
 function writeClass(goal: E2EGoal, text: string): void {
@@ -184,7 +185,7 @@ function registerFrontLadderPart13(): void {
       );
       expect(summary).toContain("status: blocked-by-user");
       expect(summary).toContain("the intent names no deliverable");
-      expect(harness.calls).toHaveLength(1);
+      expect(workCalls(harness)).toHaveLength(1);
     } finally {
       cleanup(goal);
     }
@@ -213,7 +214,7 @@ function registerFrontLadderPart14(): void {
       );
       expect(summary).toContain("status: stopped-with-debt");
       expect(summary).toContain("front turn ended the launch as infra");
-      expect(harness.calls).toHaveLength(1);
+      expect(workCalls(harness)).toHaveLength(1);
     } finally {
       cleanup(goal);
     }
@@ -247,7 +248,7 @@ function registerFrontLadderPart15(): void {
         "utf8",
       );
       expect(summary).toContain('depends on missing task "ghost"');
-      expect(harness.calls).toHaveLength(1);
+      expect(workCalls(harness)).toHaveLength(1);
     } finally {
       cleanup(goal);
     }

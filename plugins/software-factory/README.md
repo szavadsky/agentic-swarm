@@ -54,9 +54,10 @@ schema-enforced file with the gate's validators (tasks/*.md with its
 directory's dependency graph and flow existence against the merged process
 config, class.yaml, outcome.yaml keyed by the step in the sibling
 started.yaml or `--step`, mailbox/holds/*.yaml, repo.yaml, run.yaml,
-process.yaml); exit 0 valid, 1 invalid or unknown kind. `schemas` writes every
-kernel file schema as JSON Schema (`task`, `outcome`, `qa`, `hold`, `class`, `repo`,
-`run`, `process`, `gate`) into `--out` for editors and the artifact LSP. `variables`
+process.yaml, infra.yaml); exit 0 valid, 1 invalid or unknown kind. `schemas`
+writes every kernel file schema as JSON Schema (`task`, `outcome`, `qa`, `hold`,
+`class`, `infra`, `repo`, `run`, `process`, `gate`) into `--out` for editors and
+the artifact LSP. `variables`
 renders `prompts/VARIABLES.md` from the typed prompt-variable descriptor; the
 prompt tests fail when the committed file differs from that render.
 
@@ -172,6 +173,15 @@ A JUnit red's summary names its failing cases, and a missing, empty or
 unreadable report is red rather than a silent pass. Records written before
 `details.junit` existed still classify by their output lines.
 
+With no `gates` configured, the gates the kernel runs come from the goal's
+`infra.yaml`, written by the shipped `infra` ingestion step: each gate names a
+command, `speed: fast | slow`, the `status` the turn observed (`green`,
+`yellow` or `red`), and optionally `flaky` and `notes`. Discovery fills an empty
+repo config only; a configured gate is never replaced by a discovered one. The
+observed status is advisory — the kernel still runs the command and judges the
+tree — and reaches the context pack on the first iteration, before the
+architect's turn.
+
 **Process** — package `config/process.yaml`, optionally overridden by
 `.factory/process.yaml`:
 
@@ -188,6 +198,7 @@ taskTypes:
 ingestion:                      # the goal-start step sequence, in list order
   - { id: branch }              # records the goal branch the launch created
   - { id: front }               # the classifier; exactly one, prompt/alias from boundary.front
+  - { id: infra, prompt: infra, alias: pm, deliverable: gate commands and status }
   - { id: scout, prompt: scout, alias: pm, deliverable: code map, when: [bigger] }
 boundary:                       # the kernel turns outside any task flow
   architect: { prompt: architect, alias: architect, repairPrompt: architect-repair, deliverable: "plan edit or stop decision" }
@@ -221,10 +232,15 @@ first and exactly one `front` classifies the goal. Any other id runs one agent
 turn with its `prompt` on its `alias` (default `pm`) and must name a `prompt`;
 `deliverable` names what the turn produces. `when` gates a step to one or more
 goal classes (`trivial`, `task`, `bigger`) and cannot be named ahead of `front`,
-where the class is not known yet. The shipped `scout` step runs for bigger goals
-and writes the code map the context packs carry; without a scout step the packs
-keep the shallow directory index. Adding an ingestion agent (e.g. a
-requirements step) is a config edit, and its turn is recorded like any flow step.
+where the class is not known yet. The shipped `infra` step writes `infra.yaml`
+at the goal root: it copies the configured gates exactly, or discovers the
+project's commands when the repo config declares none, and reports the status it
+observed. The kernel runs those gates when none are configured and appends the
+report to the front's pack, so the architect reads a red or flaky gate before
+its turn. The shipped `scout` step runs for bigger goals and writes the code map
+the context packs carry; without a scout step the packs keep the shallow
+directory index. Adding an ingestion agent (e.g. a requirements step) is a
+config edit, and its turn is recorded like any flow step.
 
 A step may name `repairPrompt` (the template its in-session repair ask
 renders) and `deliverable` (the product the ask and the missing-outcome finding

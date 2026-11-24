@@ -321,6 +321,7 @@ function registerInheritedRedIsMatchedPerSignatureNotPerGatePart11(): void {
             ],
           },
         },
+        store: { goalDir: root },
       } as unknown as KernelRuntime;
       const [run] = await runGates(runtime, root);
       expect(run!.output).toBe("");

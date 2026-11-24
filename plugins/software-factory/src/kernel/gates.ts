@@ -22,6 +22,7 @@ import {
   gateSignatureKey,
   gateSignatures,
 } from "./gates-signatures.js";
+import { resolveGates } from "./infra.js";
 import type { GateConfig, GatePattern, KernelRuntime } from "./types.js";
 
 export const GATE_TIMEOUT_SEC = 900;
@@ -305,11 +306,11 @@ export async function runDeclaredGate(
 }
 
 /**
- * Runs the repo-config gates in `cwd`. Gates are commands, not the v2 check
- * pipeline: kernel-0 only needs a red/green signal and the output a fix turn
- * must read. `only` re-runs a subset after a red run. Runs in different
- * worktrees of one repo still wait on the mutexes a gate declares; gates
- * naming none run in parallel.
+ * Runs the repo-config and discovered gates in `cwd`. Gates are commands, not
+ * the v2 check pipeline: kernel-0 only needs a red/green signal and the output
+ * a fix turn must read. `only` re-runs a subset after a red run. Runs in
+ * different worktrees of one repo still wait on the mutexes a gate declares;
+ * gates naming none run in parallel.
  */
 export async function runGates(
   runtime: KernelRuntime,
@@ -318,10 +319,14 @@ export async function runGates(
 ): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
   const only = opts.only;
+  const declared = resolveGates(
+    runtime.store.goalDir,
+    runtime.configs.repo.gates,
+  );
   const gates =
     only === undefined
-      ? runtime.configs.repo.gates
-      : runtime.configs.repo.gates.filter((gate) => only.has(gate.id));
+      ? declared
+      : declared.filter((gate) => only.has(gate.id));
   for (const gate of gates) {
     const { check } = await runDeclaredGate(cwd, gate, runtime.paths.repoRoot);
     results.push(check);
