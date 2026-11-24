@@ -40,8 +40,9 @@ export interface BoundaryOptions {
   /** Absolute path of the run config the launch loaded; the pack names it. */
   runConfigPath?: string;
   /**
-   * Write this consult's launch digest. Defaults to `relaunch`; a resume that
-   * already ran its digest passes false so the evidence is not gathered twice.
+   * Write this consult's launch digest. Defaults to `relaunch`; a resume always
+   * passes false — a repair resume because it already posted its digest, a
+   * clean one because it ran none — so the evidence is not gathered twice.
    */
   digest?: boolean;
 }

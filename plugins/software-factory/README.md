@@ -457,11 +457,14 @@ also resumes in place: a step whose turn already wrote a valid outcome and its
 promised artifact (the front's class, the scout's code map) is adopted with it,
 so the completed steps are not rerun, a done outcome the step never backed is
 sealed a crash and reruns, the adopted turn is priced as unpriced (its usage
-died with the process), and the boundary runs in that same iteration. An
-architect route (a stall waits for the architect too) or an underivable graph
-finding from the resume's steer turn runs the boundary before dispatch in the
-same iteration, and that ruling counts as the pass's progress. A resumed pass
-that starts no task turn and runs no boundary does not consume the
+died with the process), and the boundary runs in that same iteration. A clean
+resume is script-only: dispatch starts from the records with no digest and no PM
+turn first. A problematic resume — a task file the scan quarantined, or a task
+graph finding the script cannot derive away — gets the digest and one PM repair
+turn before dispatch. An architect route (a stall waits for the architect too)
+or an underivable graph finding from that repair turn runs the boundary before
+dispatch in the same iteration, and that ruling counts as the pass's progress. A
+resumed pass that starts no task turn and runs no boundary does not consume the
 `iterations` budget: the boundary runs next in the same launch.
 
 Pre-flight resolves every alias (and fallback) through the harness, checks the

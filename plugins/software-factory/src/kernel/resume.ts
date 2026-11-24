@@ -38,6 +38,21 @@ function isProgress(record: StepRecord): boolean {
 }
 
 /**
+ * Whether the resumed iteration holds an unreadable artifact: its scan
+ * quarantined a task file, so the work that file carried is unreachable and
+ * only an agent can repair it. A clean resume has none and needs no turn.
+ */
+export function hasUnreadableArtifact(
+  records: readonly StepRecord[],
+  iteration: number,
+): boolean {
+  return records.some(
+    (record) =>
+      record.iteration === iteration && record.step === "task-quarantine",
+  );
+}
+
+/**
  * Whether a relaunch may resume the interrupted iteration. A resume is a
  * standing predicate the resumed pass itself keeps true, so each refusal is a
  * condition that a resume cannot change. Its progress is a task turn or the

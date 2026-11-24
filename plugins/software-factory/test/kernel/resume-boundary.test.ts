@@ -20,6 +20,7 @@ import {
   queueDigestSteer,
   setupRepo,
   silenceWarn,
+  turnsBeforeFirstTask,
 } from "./resume-helpers.js";
 
 /** The architect's ruling the injected live finding expects. */
@@ -138,16 +139,11 @@ function scriptTaskTurns(
 }
 
 describe("resume boundary — architect routing has an outlet", () => {
-  it("variant A: a clean frozen-base resume dispatches a task turn", async () => {
-    const { repo, goalDir, taskDir, store } = await deltaI5Goal(false);
+  it("variant A: a clean frozen-base resume dispatches a task turn with no agent first", async () => {
+    const { repo, store } = await deltaI5Goal(false);
     const restoreWarn = silenceWarn();
     try {
-      const scope1 = await variantCleanFrozenBaseResumePart1(
-        taskDir,
-        goalDir,
-        repo,
-        store,
-      );
+      const scope1 = await variantCleanFrozenBaseResumePart1(repo, store);
       await variantCleanFrozenBaseResumePart2(scope1);
     } finally {
       restoreWarn();
@@ -174,20 +170,11 @@ describe("resume boundary — architect routing has an outlet", () => {
 });
 
 async function variantCleanFrozenBaseResumePart1(
-  taskDir: string,
-  goalDir: string,
   repo: Awaited<ReturnType<typeof deltaI5Goal>>["repo"],
   store: Awaited<ReturnType<typeof deltaI5Goal>>["store"],
 ) {
   const harness = new FakeHarness({ id: "fake" });
-  queueDigestSteer(harness, digestSpikeTurn(taskDir));
-  harness.script(digestScoutTurn(goalDir, 2), {
-    when: whenTurn({ step: "digest" }),
-  });
   scriptTaskTurns(harness, "alpha", writesTaskFile("alpha", "alpha.txt"));
-  scriptTaskTurns(harness, "digest-spike", writesSpikeReport("digest-spike"));
-  // The resumed pass started task turns but its plan-check summons the
-  // architect, so the pass is refunded and the closing boundary runs next.
   harness.script(
     (req, ctx) => {
       ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
@@ -210,34 +197,32 @@ async function variantCleanFrozenBaseResumePart1(
   expect(state.tasks["kept-land-fix"]!.status).toBe("parked");
   expect(state.tasks["metrics-attrib-land"]!.status).toBe("merged");
   expect(state.tasks.alpha!.status).toBe("merged");
-  expect(state.tasks["digest-spike"]!.status).toBe("finished");
   expect(
     records.filter(
       (r) => r.actor === "agent" && r.slug !== undefined && r.iteration === 2,
     ).length,
   ).toBeGreaterThan(0);
 
-  return { records };
+  return { records, harness };
 }
 
 async function variantCleanFrozenBaseResumePart2(
   scope: Awaited<ReturnType<typeof variantCleanFrozenBaseResumePart1>>,
 ) {
-  const { records } = scope;
+  const { records, harness } = scope;
+  // Script-only: no digest scout and no PM turn before alpha's task turn.
+  expect(turnsBeforeFirstTask(harness)).toEqual([]);
   expect(
     records.filter(
-      (r) => r.actor === "agent" && r.step === "architect" && r.iteration === 2,
+      (r) => r.actor === "agent" && r.step === "digest" && r.iteration === 2,
     ),
-  ).toHaveLength(1);
-  expect(records.filter((r) => r.step === "pm-validate")).toHaveLength(0);
+  ).toHaveLength(0);
   expect(
-    records.some((r) =>
-      (r.outcome?.steerRoutes ?? []).some(
-        (entry) =>
-          entry.steer.startsWith("digest-2-") && entry.route === "spike",
-      ),
+    records.filter(
+      (r) => r.actor === "agent" && r.step === "pm" && r.iteration === 2,
     ),
-  ).toBe(true);
+  ).toHaveLength(0);
+  expect(records.filter((r) => r.step === "pm-validate")).toHaveLength(0);
 }
 
 async function variantBUnderivableLiveFindingRunsPart1(

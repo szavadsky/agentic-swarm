@@ -52,10 +52,6 @@ async function endsStillStuckResumedIterationAtPart1(
   );
 
   const second = new FakeHarness({ id: "fake" });
-  queueDigestSteer(second);
-  second.script(digestScoutTurn(goalDir, 1), {
-    when: whenTurn({ step: "digest" }),
-  });
   second.script(checkerTurn("architect"), {
     when: whenTurn({ step: "plancheck" }),
   });
@@ -117,13 +113,18 @@ async function endsStillStuckResumedIterationAtPart2(
   expect(causeText(state.tasks.beta!.cause)).toContain("does not exist");
   expect(state.tasks.gamma!.status).toBe("pending");
   expect(state.tasks.delta!.status).toBe("merged");
-  // The resume's architect route reached the boundary in iteration 1
-  // (the first launch also had one architect there); the checker ran.
+  // The resume is script-only: iteration 1 keeps the first launch's one
+  // architect, and the stuck state reaches the boundary at iteration 2.
   expect(
     records.filter(
       (r) => r.actor === "agent" && r.step === "architect" && r.iteration === 1,
     ).length,
-  ).toBe(2);
+  ).toBe(1);
+  expect(
+    records.filter(
+      (r) => r.actor === "agent" && r.step === "architect" && r.iteration === 2,
+    ).length,
+  ).toBe(1);
 
   return { ...scope, store, records };
 }
@@ -138,23 +139,10 @@ async function endsStillStuckResumedIterationAtPart3(
       (r) => r.actor === "agent" && r.step === "plancheck" && r.iteration === 1,
     ),
   ).toHaveLength(1);
-  const routes = records.filter((r) => r.step === "steer-routes");
-  expect(
-    routes.some((r) =>
-      (r.outcome?.steerRoutes ?? []).some(
-        (entry) =>
-          entry.steer.startsWith("digest-1-") && entry.route === "architect",
-      ),
-    ),
-  ).toBe(true);
-  // The iteration ends at the boundary with the stuck state recorded, and
-  // the digest steer stays in the inbox, unanswered by this boundary's
-  // architect, so a later consult presents it again.
-  expect(
-    records.filter(
-      (r) => r.actor === "agent" && r.step === "architect" && r.iteration === 2,
-    ),
-  ).toHaveLength(0);
+  // A script-only resume writes no digest steers.
+  expect(records.filter((r) => r.step === "steer-routes")).toHaveLength(0);
+  // The iteration ends at the boundary with the stuck state recorded; the
+  // next iteration's architect reads the cause.
   expect(await store.readFile("iterations/1/summary.md")).toContain(
     "nothing dispatchable, non-terminal work remains: gamma pending",
   );
@@ -162,7 +150,7 @@ async function endsStillStuckResumedIterationAtPart3(
     fs
       .readdirSync(path.join(goalDir, "mailbox/inbox"))
       .some((name) => name.startsWith("digest-1-")),
-  ).toBe(true);
+  ).toBe(false);
 }
 
 const PLAN4 = `# Milestone 1 — files

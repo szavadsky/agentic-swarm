@@ -16,7 +16,6 @@ import {
   outcome,
   setupRepo,
   silenceWarn,
-  queueDigestSteer,
   drainedAfterAlpha,
   setLimits,
 } from "./resume-helpers.js";
@@ -65,7 +64,6 @@ async function anExhaustedUSDBudgetSendsRelaunchPart1(
   setLimits(s.repo, "iterationUsd: 1");
 
   const second = new FakeHarness({ id: "fake" });
-  queueDigestSteer(second);
 
   return { second };
 }
@@ -129,7 +127,6 @@ function registerResumeGuardsHoldsAndBudgetsPart1(): void {
       );
 
       const second = new FakeHarness({ id: "fake" });
-      queueDigestSteer(second);
       second.script((req, ctx) => {
         ctx.writeOutcome(
           outcome({ summary: "still going", decision: "continue" }),
@@ -184,7 +181,6 @@ function registerResumeGuardsHoldsAndBudgetsPart2(): void {
       setLimits(repo, "turns: 2");
 
       const second = new FakeHarness({ id: "fake" });
-      queueDigestSteer(second);
       second.script((req, ctx) => {
         fs.appendFileSync(
           path.join(goalDir, "plan.md"),
@@ -260,7 +256,6 @@ function registerResumeGuardsHoldsAndBudgetsPart4(): void {
       setLimits(repo, "iterationMinutes: 0.00001");
 
       const second = new FakeHarness({ id: "fake" });
-      queueDigestSteer(second);
       second.script((req, ctx) => {
         ctx.writeOutcome(
           outcome({ summary: "still going", decision: "continue" }),

@@ -1,7 +1,7 @@
 /**
- * One iteration's phases: prepare the resume, post the resume evidence, run the
- * front or resume front, the boundary turn, dispatch, the front-path stop and
- * the iteration facts that decide whether the launch continues.
+ * One iteration's phases: prepare the resume, repair a problematic one, run
+ * the front or resume front, the boundary turn, dispatch, the front-path stop
+ * and the iteration facts that decide whether the launch continues.
  */
 import { runBoundary } from "./boundary.js";
 import { formatCause, makeCause } from "./cause.js";
@@ -29,7 +29,12 @@ import type { GoalRun, IterationRun } from "./launch-run.js";
 import { type Hold, scanInbox, sweepHolds } from "./mailbox.js";
 import { runSteerPm } from "./pm.js";
 import { scriptMeta } from "./record.js";
-import { RESUME_REFUSED_STEP, RESUME_STEP } from "./resume.js";
+import {
+  RESUME_REFUSED_STEP,
+  RESUME_STEP,
+  hasUnreadableArtifact,
+} from "./resume.js";
+import { taskStatuses, validateTaskGraph } from "./tasks.js";
 import type { State } from "./types.js";
 
 export async function prepareIteration(
@@ -94,26 +99,32 @@ export async function prepareIteration(
 }
 
 /**
- * A clean resume skips the architect turn but not the digest: the digest is
- * delivered to the PM as a steer, and that one turn routes the evidence and
- * any repair it warrants before dispatch. A relaunch that recovered an
- * interrupted turn continues that turn instead, so it runs no digest and
- * posts nothing to the PM. A resume into an unfinished front phase has no
- * iteration evidence to digest yet: the ingestion sequence finishes first and
- * the boundary runs its own digest.
+ * A clean resume is script-only: dispatch reads the records and starts work
+ * with no digest and no PM turn first. A problematic resume — an unreadable
+ * task file or a graph finding the script cannot derive away — leaves work
+ * unreachable unless an agent repairs it, so that state gets the digest and
+ * exactly one PM repair turn before dispatch. A relaunch that recovered an
+ * interrupted turn continues that turn instead. A resume into an unfinished
+ * front phase has no iteration work to repair: the ingestion sequence finishes
+ * first and the boundary runs its own digest.
  */
-async function runResumeEvidence(it: IterationRun): Promise<void> {
+async function runResumeRepair(it: IterationRun): Promise<void> {
   if (interruptedRelaunch(it.run)) return;
   const { runtime, store } = it.run;
+  const records = await store.listRecords();
+  const tasks = await store.listTasks();
+  const state = derive(tasks, records, runtime.configs.process.flows);
+  const problematic =
+    hasUnreadableArtifact(records, it.iteration) ||
+    validateTaskGraph(tasks, { status: taskStatuses(state) }).length > 0;
+  if (!problematic) return;
   it.digestSteer = await runBoundaryTurn(
     runtime,
     { iteration: it.iteration, step: "digest" },
-    async () =>
-      postLaunchDigest(runtime, it.iteration, await store.listRecords()),
+    async () => postLaunchDigest(runtime, it.iteration, records),
   );
   if (!it.digestSteer) return;
   const steer = it.digestSteer;
-  const tasks = await store.listTasks();
   it.resumeSteerPm = await runBoundaryTurn(
     runtime,
     { iteration: it.iteration, step: "pm" },
@@ -190,9 +201,9 @@ async function runBoundaryStage(it: IterationRun): Promise<void> {
   it.boundary = await runBoundary(runtime, {
     relaunch:
       it.run.relaunch && it.run.loopIndex === 0 && !it.run.resumeForcedOff,
-    // A clean resume already wrote this iteration's digest and posted it as a
-    // steer; an interrupt relaunch runs none at all. Either way a second
-    // scout turn would duplicate or invent evidence.
+    // A repair resume already wrote this iteration's digest and posted it as
+    // a steer; a clean resume and an interrupt relaunch run none. Either way a
+    // second scout turn would duplicate or invent evidence.
     ...(it.resume || interruptedRelaunch(it.run) ? { digest: false } : {}),
     iteration: it.iteration,
     frontPack: it.front.packPath,
@@ -378,14 +389,14 @@ async function settleIteration(
   return "giveBack";
 }
 
-/** One iteration: resume evidence, front, boundary, dispatch, facts. */
+/** One iteration: resume repair, front, boundary, dispatch, facts. */
 export async function runIteration(
   it: IterationRun,
 ): Promise<"continue" | "stop" | "giveBack"> {
   // The decision phase resumes straight into dispatch; the front phase still
   // owes its ingestion sequence and its boundary, so it re-enters the front.
   const decisionPhase = it.resume && it.resumePhase === "work";
-  if (decisionPhase) await runResumeEvidence(it);
+  if (decisionPhase) await runResumeRepair(it);
   it.processedBefore = await processedSteers(it.run.store);
   it.front = decisionPhase ? await resumeFront(it) : await runFrontTurn(it);
   if (it.front.action === "blocked" || it.front.action === "infra")

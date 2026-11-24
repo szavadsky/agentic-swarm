@@ -14,11 +14,11 @@ import {
   expectLaunch,
   makeGoal,
   outcome,
-  scriptDigest,
   writePlan,
   writeTask,
 } from "./e2e-helpers.js";
 import { simpleTask } from "./e2e-helpers.js";
+import { scriptKernelRoleFallbacks } from "./fake-defaults.js";
 
 const OUTBOX = "mailbox/outbox/steer-s1.md";
 const INBOX = "mailbox/inbox/s1.md";
@@ -76,6 +76,43 @@ function whenStep(
   return (req) => fakeTurnIdentity(req).step === step;
 }
 
+/** A development task's implement and review turns, bound to its own slug. */
+function scriptTask(harness: FakeHarness, slug: string): void {
+  harness.script(
+    (req, ctx) => {
+      fs.writeFileSync(path.join(req.cwd!, `${slug}.txt`), `${slug}\n`, "utf8");
+      ctx.writeOutcome(outcome({ summary: `${slug} added` }));
+      return fakeTurnResult(req);
+    },
+    {
+      when: (req) => {
+        const identity = fakeTurnIdentity(req);
+        return identity.slug === slug && identity.step === "implement";
+      },
+    },
+  );
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(
+        outcome({ summary: `${slug} approved`, verdict: "approve" }),
+      );
+      return fakeTurnResult(req);
+    },
+    {
+      when: (req) => {
+        const identity = fakeTurnIdentity(req);
+        return identity.slug === slug && identity.step === "review";
+      },
+    },
+  );
+}
+
+/** The two ready tasks a script-only resume dispatches before the architect. */
+function scriptSeedTasks(harness: FakeHarness): void {
+  scriptTask(harness, "alpha");
+  scriptTask(harness, "beta");
+}
+
 /** PM steer turn: route each claimed steer to the architect, like the real ladder does. */
 function scriptSteerToArchitect(harness: FakeHarness): void {
   harness.script(
@@ -97,7 +134,7 @@ function scriptSteerToArchitect(harness: FakeHarness): void {
     },
     { when: whenStep("pm") },
   );
-  // The boundary's own PM turn for a steer the resume evidence did not claim.
+  // The boundary's own PM turn for a steer the resume repair did not claim.
   harness.script(
     (req, ctx) => {
       const claimed = [
@@ -175,8 +212,8 @@ function stopOnInfraWritesHeldNote(): void {
       await post(goal, "Keep the public API names stable.\n");
 
       const harness = new FakeHarness({ id: "fake" });
-      scriptDigest(harness, goal.goalDir, 2);
       scriptSteerToArchitect(harness);
+      scriptSeedTasks(harness);
       scriptArchitectInfra(harness);
       await expectLaunch(1, goal.repo, harness);
 
@@ -216,14 +253,13 @@ function relaunchCompletesHeldNote(): void {
       await post(goal, "Keep the public API names stable.\n");
 
       const stopped = new FakeHarness({ id: "fake" });
-      scriptDigest(stopped, goal.goalDir, 2);
       scriptSteerToArchitect(stopped);
+      scriptSeedTasks(stopped);
       scriptArchitectInfra(stopped);
       await expectLaunch(1, goal.repo, stopped);
       expect(outboxText(goal) ?? "").toContain("Held, not yet processed");
 
       const resumed = new FakeHarness({ id: "fake" });
-      scriptDigest(resumed, goal.goalDir, 2);
       scriptArchitectAnswer(resumed);
       await expectLaunch(0, goal.repo, resumed);
 
@@ -263,8 +299,8 @@ function normalCompletionWritesOneAnswer(): void {
       await seedPlan(goal);
       await post(goal, "Keep the public API names stable.\n");
       const harness = new FakeHarness({ id: "fake" });
-      scriptDigest(harness, goal.goalDir, 2);
       scriptSteerToArchitect(harness);
+      scriptSeedTasks(harness);
       scriptArchitectAnswer(harness);
       await expectLaunch(0, goal.repo, harness);
       const answer = outboxText(goal);
@@ -283,8 +319,9 @@ function infraMidLaunchWritesHeldNote(): void {
       await seedPlan(goal);
       await post(goal, "Keep the public API names stable.\n");
       const harness = new FakeHarness({ id: "fake" });
-      scriptDigest(harness, goal.goalDir, 2);
+      scriptKernelRoleFallbacks(harness);
       scriptSteerToArchitect(harness);
+      scriptSeedTasks(harness);
       scriptArchitectInfra(harness);
       const result = await runGoal({
         repo: goal.repo.dir,

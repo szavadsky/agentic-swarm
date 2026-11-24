@@ -5,6 +5,7 @@ import { expectDispatch } from "./e2e-helpers.js";
 import {
   FakeHarness,
   type FakeTurnHandler,
+  fakeTurnIdentity,
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
 import type { TurnRequest } from "../../src/harness/types.js";
@@ -139,7 +140,7 @@ export function scriptInterruptedFirstLaunch(
 /** The builtin resume fragment's ask; a repo override replaces the fragment. */
 export const RESUME_ASK = "assess status first, keep going";
 
-/** First line of the steer a resumed launch posts for its digest. */
+/** First line of the digest steer a repair resume posts. */
 export const DIGEST_STEER_HEADER = "# Launch digest before iteration";
 
 /** A marker only the digest scout writes, so tests can prove the PM read it. */
@@ -155,7 +156,7 @@ export function digestSteerId(req: TurnRequest): string {
   return id;
 }
 
-/** Routes the resumed launch's digest steer to the architect (no task writes). */
+/** Routes a repair resume's digest steer to the architect (no task writes). */
 export function digestSteerTurn(): FakeTurnHandler {
   return (req, ctx) => {
     const id = digestSteerId(req);
@@ -169,8 +170,19 @@ export function digestSteerTurn(): FakeTurnHandler {
   };
 }
 
+/** The agent turns a launch ran before its first task turn, in order. */
+export function turnsBeforeFirstTask(harness: FakeHarness): string[] {
+  const steps: string[] = [];
+  for (const call of harness.calls) {
+    const identity = fakeTurnIdentity(call);
+    if (identity.slug !== undefined) break;
+    steps.push(identity.step ?? "");
+  }
+  return steps;
+}
+
 /**
- * Queues the resume's digest steer turn before the FIFO scripts: an unbound
+ * Queues a repair resume's digest steer before the FIFO scripts: an unbound
  * handler matches any request, so bound handlers must come first.
  */
 export function queueDigestSteer(
@@ -178,31 +190,6 @@ export function queueDigestSteer(
   handler: FakeTurnHandler = digestSteerTurn(),
 ): FakeHarness {
   return harness.script(handler, { when: isDigestSteerTurn });
-}
-
-/** Routes the resumed launch's digest steer to a task (no architect route). */
-export function digestTaskTurn(taskDir: string, slug: string): FakeTurnHandler {
-  return (req, ctx) => {
-    const id = digestSteerId(req);
-    fs.appendFileSync(
-      path.join(taskDir, `${slug}.md`),
-      "\nDigest evidence noted; no scope change.\n",
-      "utf8",
-    );
-    ctx.writeOutcome(
-      outcome({
-        summary: `digest steer ${id} routed to task ${slug}`,
-        steerRoutes: [
-          {
-            steer: id,
-            route: "task",
-            answer: `Noted for ${slug}; scope unchanged.`,
-          },
-        ],
-      }),
-    );
-    return fakeTurnResult(req);
-  };
 }
 
 /** Scripts the digest scout a resumed launch runs before its PM steer turn. */
