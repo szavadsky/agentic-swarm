@@ -65,9 +65,10 @@ bun run schema-validation  # bun src/schema-check.ts
 
 `bun test` runs the whole suite directly.
 
-Typecheck, tests, format and schema-validation run green at head. Lint runs
-but is red at base from pre-existing diagnostics (see the recorded base gates);
-a red it does not list is yours to fix.
+Typecheck, tests, format, lint and schema-validation all run green at head.
+Lint gates only on errors: warnings do not gate until `lint-warnings` raises
+the fixed rules to error. A red the recorded base gates do not list is yours
+to fix.
 
 ## Conventions
 
