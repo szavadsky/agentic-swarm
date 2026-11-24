@@ -87,6 +87,7 @@ describe("next", () => {
   registerNextPart2();
   registerNextPart3();
   registerNextPart4();
+  registerNextPart5();
 });
 
 function registerNextPart1(): void {
@@ -245,5 +246,29 @@ function registerNextPart4(): void {
         (action) => action.kind === "step" && action.slug === "b",
       ),
     ).toEqual([{ kind: "step", slug: "b", step: "implement", round: 1 }]);
+  });
+}
+
+function registerNextPart5(): void {
+  it("keeps a revised task's kept work started for dispatch order", () => {
+    const state = deriveFlow(
+      [
+        task("a", { revision: 1 }),
+        task("b"),
+        task("c", { deps: ["b"] }),
+        task("d", { deps: ["b"] }),
+      ],
+      [
+        implement(1),
+        script(2, { step: "park", ok: true, cause: cause("revised") }),
+      ],
+    );
+    expect(state.tasks.a!.status).toBe("ready");
+    expect(
+      next(state, limits, new Set()).filter((action) => action.kind === "step"),
+    ).toEqual([
+      { kind: "step", slug: "a", step: "implement", round: 1 },
+      { kind: "step", slug: "b", step: "implement", round: 1 },
+    ]);
   });
 }

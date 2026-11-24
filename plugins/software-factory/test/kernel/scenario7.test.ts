@@ -15,7 +15,7 @@ import {
   writePlan,
   writeTask,
 } from "./e2e-helpers.js";
-import { scriptStallLeave } from "./s2-helpers.js";
+import { scriptStallLeave, whenTurn } from "./s2-helpers.js";
 import { formatCause } from "../../src/kernel/cause.js";
 import { causeText } from "./helpers.js";
 
@@ -78,19 +78,27 @@ function scriptFirstIteration(harness: FakeHarness, goalDir: string): void {
   });
   // p parks while alpha merges: the wave-end stall owns the park.
   scriptStallLeave(harness, ["p"]);
-  harness.script(implementerTurn("alpha.txt"));
-  harness.script((req, ctx) => {
-    ctx.writeOutcome(
-      outcome({ summary: "alpha is correct", verdict: "approve" }),
-    );
-    return fakeTurnResult(req);
+  harness.script(implementerTurn("alpha.txt"), {
+    when: whenTurn({ slug: "alpha", step: "implement" }),
   });
-  harness.script((req, ctx) => {
-    ctx.writeOutcome(
-      outcome({ status: "blocked", summary: "p needs an owner decision" }),
-    );
-    return fakeTurnResult(req);
-  });
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(
+        outcome({ summary: "alpha is correct", verdict: "approve" }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ slug: "alpha", step: "review" }) },
+  );
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(
+        outcome({ status: "blocked", summary: "p needs an owner decision" }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ slug: "p", step: "implement" }) },
+  );
 }
 
 function scriptSecondIteration(harness: FakeHarness, goalDir: string): void {

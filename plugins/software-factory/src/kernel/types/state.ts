@@ -70,9 +70,13 @@ export interface TaskState {
   status: TaskStatus;
   /** The task file's epic, copied so a consumer reading state keeps the owner. */
   epic?: string;
+  /** The task's dependency edges, copied so dispatch can order ready work. */
+  deps?: readonly string[];
   cause?: Cause;
   /** Agent turns spent on this slug, a spend fact only: no bound reads it. */
   turns: number;
+  /** An agent turn on this slug has started; dispatch finishes it first. */
+  started?: boolean;
   /** Current implementation/review round, 1-based. */
   round: number;
   kind: TaskKind;

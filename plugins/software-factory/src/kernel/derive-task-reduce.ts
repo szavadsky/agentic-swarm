@@ -94,6 +94,7 @@ function settlePhase(state: ReduceState): TaskPhase {
 function finishReduction(
   state: ReduceState,
   terminal: TaskReduction["terminal"],
+  started: boolean,
 ): TaskReduction {
   state.phase = settlePhase(state);
   if (terminal) {
@@ -108,6 +109,7 @@ function finishReduction(
     phase: state.phase,
     round: state.round,
     turns: state.turns,
+    started,
     verdict: state.verdict,
     commit: state.commit,
     park: terminal ? undefined : state.park,
@@ -147,6 +149,8 @@ export function reduceTask(
     firstStep: steps[0]?.id ?? "done",
   };
   const owned = records.slice(revisionStart(task, records));
+  // A revision bump keeps the branch and its work, so started reads the slug's whole history.
+  const started = records.some((rec) => rec.actor === "agent");
   const terminal = terminalFactFromRecords(owned, task.slug, task.kind);
   const state = createReduceState(context, terminal);
 
@@ -159,5 +163,5 @@ export function reduceTask(
   }
   settleDag(context, state, owned);
   raiseBudgetSignal(context, state);
-  return finishReduction(state, terminal);
+  return finishReduction(state, terminal, started);
 }

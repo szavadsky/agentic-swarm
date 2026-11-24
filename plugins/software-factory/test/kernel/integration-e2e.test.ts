@@ -15,7 +15,7 @@ import {
   scriptSteerRoutes,
   stateOf,
 } from "./e2e-helpers.js";
-import { scriptStallLeave } from "./s2-helpers.js";
+import { scriptStallLeave, whenTurn } from "./s2-helpers.js";
 import { formatCause } from "../../src/kernel/cause.js";
 import { causeText } from "./helpers.js";
 
@@ -85,6 +85,34 @@ function write(goalDir: string, rel: string, text: string): void {
 
 function writeTask(goalDir: string, slug: string, text: string): void {
   write(goalDir, `tasks/${slug}.md`, text);
+}
+
+/** One implement turn bound to its slug, so task order cannot borrow it. */
+function scriptWriteTurn(harness: FakeHarness, slug: string, text: string) {
+  harness.script(
+    (req, ctx) => {
+      write(req.cwd!, `${slug}.txt`, text);
+      ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ slug, step: "implement" }) },
+  );
+}
+
+/** One review turn bound to its slug, in call order for repeated rounds. */
+function scriptVerdictTurn(
+  harness: FakeHarness,
+  slug: string,
+  summary: string,
+  verdict: string,
+): void {
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(outcome({ summary, verdict }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ slug, step: "review" }) },
+  );
 }
 
 function summaryOf(goalDir: string, iteration: number): string {
@@ -202,42 +230,17 @@ function scriptLaunch1Planning(first: FakeHarness, ctx: E2ECtx): void {
 
 /** Launch 1's task turns: alpha merges, beta is rejected, gamma waits. */
 function scriptLaunch1Tasks(first: FakeHarness): void {
-  first.script((req, turnedCtx) => {
-    write(req.cwd!, "alpha.txt", "alpha\n");
-    turnedCtx.writeOutcome(outcome({ summary: "alpha implemented" }));
-    return fakeTurnResult(req);
-  });
-  first.script((req, turnedCtx) => {
-    turnedCtx.writeOutcome(
-      outcome({ summary: "alpha approved", verdict: "approve" }),
-    );
-    return fakeTurnResult(req);
-  });
-  first.script((req, turnedCtx) => {
-    write(req.cwd!, "beta.txt", "beta v1\n");
-    turnedCtx.writeOutcome(outcome({ summary: "beta v1" }));
-    return fakeTurnResult(req);
-  });
-  first.script((req, turnedCtx) => {
-    turnedCtx.writeOutcome(
-      outcome({
-        summary: "beta needs the second direction",
-        verdict: "changes",
-      }),
-    );
-    return fakeTurnResult(req);
-  });
-  first.script((req, turnedCtx) => {
-    write(req.cwd!, "beta.txt", "beta v2\n");
-    turnedCtx.writeOutcome(outcome({ summary: "beta v2" }));
-    return fakeTurnResult(req);
-  });
-  first.script((req, turnedCtx) => {
-    turnedCtx.writeOutcome(
-      outcome({ summary: "not salvageable", verdict: "reject" }),
-    );
-    return fakeTurnResult(req);
-  });
+  scriptWriteTurn(first, "alpha", "alpha\n");
+  scriptVerdictTurn(first, "alpha", "alpha approved", "approve");
+  scriptWriteTurn(first, "beta", "beta v1\n");
+  scriptVerdictTurn(
+    first,
+    "beta",
+    "beta needs the second direction",
+    "changes",
+  );
+  scriptWriteTurn(first, "beta", "beta v2\n");
+  scriptVerdictTurn(first, "beta", "not salvageable", "reject");
 }
 
 /** Launch 1 ended merged/merged/parked with the recorded rejection. */
@@ -315,34 +318,32 @@ function scriptLaunch2Planning(second: FakeHarness, ctx: E2ECtx): void {
 
 /** Launch 2's task turns continue beta's kept branch, then gamma. */
 function scriptLaunch2Tasks(second: FakeHarness): void {
-  second.script((req, turnedCtx) => {
-    expect(fs.readFileSync(path.join(req.cwd!, "beta.txt"), "utf8")).toBe(
-      "beta v2\n",
-    );
-    write(req.cwd!, "beta2.txt", "beta2\n");
-    turnedCtx.writeOutcome(
-      outcome({ summary: "beta2 completed on beta's branch" }),
-    );
-    return fakeTurnResult(req);
-  });
-  second.script((req, turnedCtx) => {
-    turnedCtx.writeOutcome(
-      outcome({ summary: "beta2 approved", verdict: "approve" }),
-    );
-    return fakeTurnResult(req);
-  });
-  second.script((req, turnedCtx) => {
-    expect(fs.existsSync(path.join(req.cwd!, "beta2.txt"))).toBe(true);
-    write(req.cwd!, "gamma.txt", "gamma\n");
-    turnedCtx.writeOutcome(outcome({ summary: "gamma implemented on beta2" }));
-    return fakeTurnResult(req);
-  });
-  second.script((req, turnedCtx) => {
-    turnedCtx.writeOutcome(
-      outcome({ summary: "gamma approved", verdict: "approve" }),
-    );
-    return fakeTurnResult(req);
-  });
+  second.script(
+    (req, turnedCtx) => {
+      expect(fs.readFileSync(path.join(req.cwd!, "beta.txt"), "utf8")).toBe(
+        "beta v2\n",
+      );
+      write(req.cwd!, "beta2.txt", "beta2\n");
+      turnedCtx.writeOutcome(
+        outcome({ summary: "beta2 completed on beta's branch" }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ slug: "beta2", step: "implement" }) },
+  );
+  scriptVerdictTurn(second, "beta2", "beta2 approved", "approve");
+  second.script(
+    (req, turnedCtx) => {
+      expect(fs.existsSync(path.join(req.cwd!, "beta2.txt"))).toBe(true);
+      write(req.cwd!, "gamma.txt", "gamma\n");
+      turnedCtx.writeOutcome(
+        outcome({ summary: "gamma implemented on beta2" }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ slug: "gamma", step: "implement" }) },
+  );
+  scriptVerdictTurn(second, "gamma", "gamma approved", "approve");
 }
 
 /** Launch 2 landed beta2 and gamma on beta's kept branch. */

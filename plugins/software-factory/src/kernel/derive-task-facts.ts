@@ -79,6 +79,8 @@ export interface TaskReduction {
   phase: TaskPhase;
   round: number;
   turns: number;
+  /** An agent turn on this slug has started, ended or not. */
+  started: boolean;
   verdict?: ReviewVerdict;
   commit?: string;
   park?: Cause;

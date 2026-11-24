@@ -1,13 +1,18 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
+import {
+  FakeHarness,
+  type FakeTurnHandler,
+  fakeTurnResult,
+} from "../../src/harness/fake/index.js";
 import { forwardedConcerns } from "../../src/kernel/context-pack.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import type { KernelRuntime } from "../../src/kernel/types.js";
 import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
 import type { TmpRepo } from "../helpers/tmp-repo.js";
+import { implementerTurn } from "./e2e-helpers.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -75,46 +80,55 @@ const stewardAliases = {
   "pack-preparer": { harness: "fake", model: "fake-pack-prep" },
 };
 
+/** A review turn that approves whatever it reads. */
+const approveTurn: FakeTurnHandler = (req, ctx) => {
+  ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+  return fakeTurnResult(req);
+};
+
+/** Alpha merges clean; beta conflicts with work that landed while it waited. */
+function scriptAlphaAndBeta(harness: FakeHarness): void {
+  harness.script(implementerTurn("alpha.txt"), {
+    when: whenTurn({ slug: "alpha", step: "implement" }),
+  });
+  harness.script(approveTurn, {
+    when: whenTurn({ slug: "alpha", step: "review" }),
+  });
+  harness.script(implementerTurn("conflict.txt"), {
+    when: whenTurn({ slug: "beta", step: "implement" }),
+  });
+  harness.script(approveTurn, {
+    when: whenTurn({ slug: "beta", step: "review" }),
+  });
+}
+
+/** The wave-end steward resolves beta's conflict; gamma waits on beta. */
+function scriptStewardAndGamma(harness: FakeHarness): void {
+  harness.script(
+    (req, ctx) => {
+      fs.writeFileSync(
+        path.join(req.cwd!, "conflict.txt"),
+        "steward-resolved\n",
+        "utf8",
+      );
+      ctx.writeOutcome(outcome({ summary: "steward resolved beta" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "steward" }) },
+  );
+  harness.script(implementerTurn("gamma.txt"), {
+    when: whenTurn({ slug: "gamma", step: "implement" }),
+  });
+  harness.script(approveTurn, {
+    when: whenTurn({ slug: "gamma", step: "review" }),
+  });
+}
+
 async function readiesDependentsAfterLandingPart1(repo: TmpRepo, goal: string) {
   const harness = new FakeHarness({ id: "fake" });
   scriptResolveLeavesConflict(harness);
-  harness.script((req, ctx) => {
-    fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
-    ctx.writeOutcome(outcome({ summary: "alpha side" }));
-    return fakeTurnResult(req);
-  });
-  harness.script((req, ctx) => {
-    ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
-    return fakeTurnResult(req);
-  });
-  harness.script((req, ctx) => {
-    fs.writeFileSync(path.join(req.cwd!, "conflict.txt"), "task\n", "utf8");
-    ctx.writeOutcome(outcome({ summary: "beta side" }));
-    return fakeTurnResult(req);
-  });
-  harness.script((req, ctx) => {
-    ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
-    return fakeTurnResult(req);
-  });
-  harness.script((req, ctx) => {
-    fs.writeFileSync(
-      path.join(req.cwd!, "conflict.txt"),
-      "steward-resolved\n",
-      "utf8",
-    );
-    ctx.writeOutcome(outcome({ summary: "steward resolved beta" }));
-    return fakeTurnResult(req);
-  });
-  harness.script((req, ctx) => {
-    fs.writeFileSync(path.join(req.cwd!, "gamma.txt"), "gamma\n", "utf8");
-    ctx.writeOutcome(outcome({ summary: "gamma side" }));
-    return fakeTurnResult(req);
-  });
-  harness.script((req, ctx) => {
-    ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
-    return fakeTurnResult(req);
-  });
-
+  scriptAlphaAndBeta(harness);
+  scriptStewardAndGamma(harness);
   const runtime = await makeRuntime(repo, goal, { fake: harness });
   await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
   const beta = task("beta", { scope: ["conflict.txt"] });

@@ -188,8 +188,10 @@ function taskStateFor(
   return {
     status,
     ...(task.epic !== undefined ? { epic: task.epic } : {}),
+    deps: task.deps,
     cause: terminal?.cause ?? reduction.park,
     turns: reduction.turns,
+    started: reduction.started,
     round: reduction.round,
     kind: task.kind,
     flow: task.flow,
@@ -257,6 +259,7 @@ export function addOrphanTaskStates(
       status: terminal.status,
       cause: terminal.cause,
       turns: reduction.turns,
+      started: reduction.started,
       round: reduction.round,
       kind: "development",
       flow: "implement-review",
