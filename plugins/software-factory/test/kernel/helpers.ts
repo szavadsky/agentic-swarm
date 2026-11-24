@@ -43,7 +43,7 @@ export const TEST_BOUNDARY: Record<BoundaryStep, TurnSpec> = {
   packprep: {
     prompt: "pack-preparer",
     alias: "pack-preparer",
-    deliverable: "context pack",
+    deliverable: "pack briefs",
   },
   plancheck: {
     prompt: "plan-checker",

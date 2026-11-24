@@ -7,7 +7,19 @@ import { spikeReportPath } from "../spike-report.js";
 import type { WasteSpikeProposal } from "../metrics/recurring.js";
 import type { Cause, TaskFile } from "../types.js";
 import type { ContextPackInput, ForwardedConcern } from "./types.js";
+import type { PackSection } from "./sections.js";
 import { formatPlanFinding, numberedPlanFindings } from "./plan-findings.js";
+
+/** The headings a full section and its brief share, so only the content differs. */
+export const SECTION_HEADINGS = {
+  planCheck: "## Plan check (the evidence that summoned the architect)",
+  planReview:
+    "## Plan review (advisory findings; mark each finding helpful or unhelpful in planReviewMarks)",
+  forwarded: "## Forwarded concerns (architect/owner)",
+  spikeFindings: "## Spike findings",
+  pmAnswers: "## PM steer answers",
+  codeMap: "## Code map (shallow; read paths directly)",
+} as const satisfies Record<PackSection, string>;
 
 /** One parked task's cause as the pack reads it. */
 function parkedCauseText(cause: Cause | undefined): string {
@@ -147,7 +159,7 @@ export function appendPlanCheck(
   if (!check) return;
   lines.push(
     "",
-    "## Plan check (the evidence that summoned the architect)",
+    SECTION_HEADINGS.planCheck,
     `- iteration ${check.iteration}, verdict ${check.verdict}`,
   );
   if (check.reason) {
@@ -171,7 +183,7 @@ export function appendPlanReview(
   if (!review) return;
   lines.push(
     "",
-    "## Plan review (advisory findings; mark each finding helpful or unhelpful in planReviewMarks)",
+    SECTION_HEADINGS.planReview,
     `- iteration ${review.iteration}, reviewers ${review.reviewers
       .map((alias) => `\`${alias}\``)
       .join(", ")}`,
@@ -201,11 +213,11 @@ function proposalWasteText(proposal: {
   return `${proposal.count} wasted turn${proposal.count === 1 ? "" : "s"} in ${places}`;
 }
 
-/** The section's first line; the kernel writes it, so a pack carrying it is left alone. */
+/** The section's first line; the script writes it, so no pack can drop it. */
 const SPIKE_PROPOSALS_HEADING =
   "## Spike proposals (recurring waste at the configured threshold)";
 
-/** The section naming recurring waste at the threshold; the kernel owns it, so no pack can drop it. */
+/** The section naming recurring waste at the threshold; no pack can drop it. */
 export function spikeProposalsSection(
   proposals: readonly WasteSpikeProposal[],
 ): string {
@@ -219,18 +231,6 @@ export function spikeProposalsSection(
     );
   }
   return lines.join("\n");
-}
-
-/** The agent's pack with the kernel-owned proposals section appended when it is missing. */
-export function withSpikeProposals(
-  pack: string,
-  input: ContextPackInput,
-): string {
-  const proposals = input.spikeProposals ?? [];
-  if (proposals.length === 0 || pack.includes(SPIKE_PROPOSALS_HEADING)) {
-    return pack;
-  }
-  return `${pack.trimEnd()}\n\n${spikeProposalsSection(proposals)}\n`;
 }
 
 /** Recurring waste: one proposal line per cause at or above the configured threshold. */
@@ -257,7 +257,7 @@ export function appendForwarded(
       .filter((hold) => hold.slugs.length > 0)
       .map((hold) => [hold.steer, hold.slugs]),
   );
-  lines.push("", "## Forwarded concerns (architect/owner)");
+  lines.push("", SECTION_HEADINGS.forwarded);
   for (const concern of input.forwarded) {
     lines.push(formatForwarded(concern, heldBy.get(concern.id) ?? []));
   }
@@ -289,7 +289,7 @@ export function appendOpenRecords(
 
 export function appendCodeMap(lines: string[], input: ContextPackInput): void {
   if (!input.codeMap || input.codeMap.length === 0) return;
-  lines.push("", "## Code map (shallow; read paths directly)");
+  lines.push("", SECTION_HEADINGS.codeMap);
   lines.push(...input.codeMap.map((entry) => `- ${entry}`));
 }
 
@@ -350,7 +350,7 @@ export function appendPmAnswers(
   lines: string[],
   input: ContextPackInput,
 ): void {
-  lines.push("", "## PM steer answers");
+  lines.push("", SECTION_HEADINGS.pmAnswers);
   lines.push(
     input.pmAnswers && input.pmAnswers.length > 0
       ? input.pmAnswers.join("\n")
@@ -386,7 +386,7 @@ export function appendSpikeFindings(
   input: ContextPackInput,
 ): void {
   if (!input.spikeFindings || input.spikeFindings.length === 0) return;
-  lines.push("", "## Spike findings");
+  lines.push("", SECTION_HEADINGS.spikeFindings);
   for (const { slug, finding } of [...input.spikeFindings].sort((a, b) =>
     a.slug.localeCompare(b.slug),
   )) {

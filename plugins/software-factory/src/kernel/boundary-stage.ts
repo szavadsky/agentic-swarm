@@ -24,6 +24,7 @@ import { boundaryResult, type ConsultContext } from "./boundary-state.js";
 import { makeCause } from "./cause.js";
 import {
   type ContextPackInput,
+  contextDataRelPath,
   forwardedConcerns,
   goalDebtRecords,
   type PlanReviewPack,
@@ -31,7 +32,6 @@ import {
   renderContextData,
   renderContextPack,
 } from "./context-pack.js";
-import { withSpikeProposals } from "./context-pack/append.js";
 import { derive, openDebts } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
 import { runKeptLand } from "./integrate.js";
@@ -331,6 +331,10 @@ async function packInput(context: ConsultContext): Promise<ContextPackInput> {
       context.iteration - 1,
     ),
     previousWaste: await previousWaste(runtime.store, context.iteration - 1),
+    dataPath: runtime.store.pathOf({
+      area: "goal",
+      rel: contextDataRelPath(context.iteration),
+    }),
     spikeProposals: wasteSpikeProposals(
       await readWasteMetrics(runtime.store),
       runtime.configs.process.wasteSpikeThreshold ??
@@ -438,24 +442,21 @@ async function planReviewWithKernel(
   };
 }
 
-/** Renders the pack: an agent index after iteration 1, the script render on failure. */
+/** Renders the pack: one script render, briefed where the preparer decided. */
 export async function writePack(context: ConsultContext): Promise<void> {
   if (context.opts.frontPack) return;
   const { runtime } = context;
   const input = await packInput(context);
-  const dataRel = runtime.store.iterations.rel(
-    context.iteration,
-    "context-data.json",
-  );
+  const dataRel = contextDataRelPath(context.iteration);
   await runtime.store.iterations.write(
     context.iteration,
     "context-data.json",
     renderContextData(input),
   );
-  const packRel = context.packRel!;
-  // After the first iteration a cheap agent turns the full status into the
-  // index. The script render is the first iteration's pack and every fallback.
-  const prepFailure =
+  // After the first iteration a cheap agent reads the full status and returns
+  // the sections it judges better as a pointer and one line. The script
+  // renders the single index either way; the preparer never authors it.
+  const preparer =
     context.iteration > 1
       ? await runBoundaryTurn(
           runtime,
@@ -463,22 +464,17 @@ export async function writePack(context: ConsultContext): Promise<void> {
           () =>
             runPackPreparer(runtime, {
               iteration: context.iteration,
-              packRel,
               dataRel,
             }),
         )
       : undefined;
-  if (context.iteration === 1 || prepFailure !== undefined) {
-    await runtime.store.writeFile(packRel, renderContextPack(input));
-    if (prepFailure !== undefined)
-      await recordPackFallback(context, prepFailure);
-  } else {
-    const pack = await runtime.store.readFile(packRel);
-    if (pack !== null) {
-      const updated = withSpikeProposals(pack, input);
-      if (updated !== pack) await runtime.store.writeFile(packRel, updated);
-    }
-  }
+  const briefs = preparer && "briefs" in preparer ? preparer.briefs : undefined;
+  await runtime.store.writeFile(
+    context.packRel!,
+    renderContextPack({ ...input, ...(briefs ? { briefs } : {}) }),
+  );
+  if (preparer !== undefined && "failure" in preparer)
+    await recordPackFallback(context, preparer.failure);
 }
 
 async function recordPackFallback(

@@ -17,9 +17,11 @@ the plan checker first: a `progress` verdict resumes dispatch without a
 consult, bounded by `limits.planCheckRounds`; the consult runs on `architect`,
 when nothing is open, or when the bound is hit. State is derived from task
 files and append-only records; there is no state file to repair. After the
-first iteration a pack-preparer turn turns the script's full status data into
-the iteration's index pack; when it fails, it tries its alias fallback chain before the
-script renders a bounded index pack and the fallback is recorded as a glitch.
+first iteration a pack-preparer turn reads the script's full status data and
+returns the sections it judges better as a pointer and a one-line brief; the
+script renders the iteration's index from that one renderer either way. When
+the preparer fails, it tries its alias fallback chain before the script renders
+every section whole and the fallback is recorded as a glitch.
 
 ## Commands
 
@@ -192,7 +194,7 @@ boundary:                       # the kernel turns outside any task flow
   digest: { prompt: digest, alias: digest }
   front: { prompt: front, alias: pm, deliverable: "class, task, and pack" }
   intent: { prompt: intent, alias: intent, deliverable: "intent edit" }
-  packprep: { prompt: pack-preparer, alias: pack-preparer, deliverable: "context pack" }
+  packprep: { prompt: pack-preparer, alias: pack-preparer, deliverable: "pack briefs" }
   plancheck: { prompt: plan-checker, alias: plan-checker, deliverable: "plan verdict" }
   pm: { prompt: pm, alias: pm, deliverable: "task files" }
   steward: { prompt: steward, alias: steward, deliverable: "merge resolution" }

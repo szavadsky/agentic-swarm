@@ -432,9 +432,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     variables: {
       iteration: "1-based iteration number of this launch",
       context_data_path:
-        "the script's full derived status for this iteration as JSON; the preparer's input",
-      pack_path:
-        "path of the context pack to write; the one artifact the turn authors (the outcome file is the other)",
+        "the script's full derived status for this iteration as JSON; the preparer reads it and returns the sections to brief",
       intent_path: "path to the goal's `intent.md`; a pointer, never pasted",
       plan_path: "path to the current plan; a pointer, never pasted",
       checkout: "path to the stable goal checkout (integration worktree)",
@@ -443,7 +441,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome YAML skeleton from the kernel schema plus this turn's `packBriefs`; the turn supplies it",
     },
   },
   {

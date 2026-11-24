@@ -4,6 +4,7 @@ import type { BaseGateState } from "../baseline.js";
 import type { OpenDebt } from "../derive.js";
 import type { Steer } from "../mailbox.js";
 import type { WasteSpikeProposal } from "../metrics/recurring.js";
+import type { PackBrief } from "./sections.js";
 import type {
   PlanCheckEvidence,
   PlanReviewFinding,
@@ -169,6 +170,13 @@ export interface ContextPackInput {
   planReview?: PlanReviewPack;
   /** Ready tasks with no turn in the previous segment; absent before one exists. */
   agedReady?: ReadyAgingTask[];
+  /**
+   * Absolute path of the derived status JSON the pack renders from; the
+   * pointer a briefed section names.
+   */
+  dataPath?: string;
+  /** Sections the preparer judged better as a pointer and one line. */
+  briefs?: PackBrief[];
 }
 
 export interface AgingContext {

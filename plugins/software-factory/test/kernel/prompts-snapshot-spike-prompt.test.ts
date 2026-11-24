@@ -12,6 +12,7 @@ import {
   taskTypesVar,
   tierNamesVar,
 } from "../../src/kernel/prompt-schema.js";
+import { packPreparerOutcomeSchemaVar } from "../../src/kernel/pack-prep.js";
 import { loadPromptLibrary } from "../../src/kernel/prompts.js";
 import { formatReviewFindings } from "../../src/kernel/record.js";
 import { rec, task } from "./helpers.js";
@@ -223,13 +224,12 @@ const ROLES: Record<string, Record<string, string>> = {
   "pack-preparer": {
     iteration: "3",
     context_data_path: "/goal/iterations/3/context-data.json",
-    pack_path: "/goal/iterations/3/context-pack.md",
     intent_path: "/goal/intent.md",
     plan_path: "/goal/plan.md",
     checkout: "/worktrees/demo",
     outcome_path: "/goal/records/00046-i3-packprep-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
+    outcome_schema: packPreparerOutcomeSchemaVar(),
   },
   "review-architect": {
     iteration: "3",

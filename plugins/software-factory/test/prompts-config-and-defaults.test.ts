@@ -6,6 +6,7 @@ import {
   taskTypesVar,
   tierNamesVar,
 } from "../src/kernel/prompt-schema.js";
+import { packPreparerOutcomeSchema } from "../src/kernel/pack-prep.js";
 import { loadPrompts } from "../src/kernel/prompts.js";
 import type { ProcessConfig } from "../src/kernel/types.js";
 import { TEST_BOUNDARY } from "./kernel/helpers.js";
@@ -164,6 +165,9 @@ describe("prompts: repair skeleton", () => {
     expect(outcomeRepairSchemaVar("implementer", "any")).not.toContain(
       "steerRoutes:",
     );
+    expect(
+      outcomeRepairSchemaVar("pack-preparer", "any", packPreparerOutcomeSchema),
+    ).toContain("packBriefs:");
     expect(outcomeRepairSchemaVar("architect", "architect")).toContain(
       "planReviewMarks:",
     );

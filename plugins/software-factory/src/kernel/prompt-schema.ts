@@ -340,6 +340,7 @@ const PROMPT_OUTCOME_FIELDS: Record<string, string[]> = {
   architect: ["planReviewMarks", "intentStatus"],
   "architect-review-return": ["planReviewMarks"],
   implementer: ["replies"],
+  "pack-preparer": ["packBriefs"],
   pm: ["steerRoutes", "stallRoutes", "planCheckRoutes"],
   "plan-checker": ["planCheck"],
   "review-architect": ["planReview"],

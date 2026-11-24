@@ -1,10 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import {
+  type ContextPackInput,
   forwardedConcerns,
   renderContextData,
   renderContextPack,
   shallowCodeMap,
 } from "../../src/kernel/context-pack.js";
+import { PACK_SECTIONS } from "../../src/kernel/context-pack/sections.js";
 import { derive } from "../../src/kernel/derive.js";
 import { rec, script, task, cause } from "./helpers.js";
 
@@ -418,6 +420,56 @@ function registerContextPackPart6(): void {
   });
 }
 
+function briefPackInput(): ContextPackInput {
+  return {
+    goal: "briefs",
+    iteration: 2,
+    intentPath: "/goal/intent.md",
+    planPath: "/goal/plan.md",
+    checkout: "/wt/briefs",
+    integrationBranch: "factory/briefs",
+    headHash: "abcdef1234567890",
+    recordsDir: "/goal/records",
+    tasksDir: "/goal/tasks",
+    dataPath: "/goal/iterations/2/context-data.json",
+    tasks,
+    state: derive(tasks, []),
+    steers: [],
+    setup: [],
+    gates: [],
+    forwarded: [],
+    debts: [],
+    planCheck: {
+      iteration: 1,
+      verdict: "architect",
+      evidence: [{ item: "a", status: "missing", evidence: "no task file" }],
+    },
+  };
+}
+
+function registerPackBriefs(): void {
+  it("points every briefable section at a key the status data carries", () => {
+    const data = JSON.parse(renderContextData(briefPackInput())) as Record<
+      string,
+      unknown
+    >;
+    for (const section of PACK_SECTIONS) {
+      expect(Object.hasOwn(data, section)).toBe(true);
+    }
+  });
+
+  it("keeps a brief on one line so it cannot break the index", () => {
+    const pack = renderContextPack({
+      ...briefPackInput(),
+      briefs: [
+        { section: "planCheck", summary: "first line\n## Fake heading" },
+      ],
+    });
+    expect(pack.split("\n")).not.toContain("## Fake heading");
+    expect(pack).toContain("- first line ## Fake heading");
+  });
+}
+
 describe("context pack", () => {
   registerContextPackPart1();
 
@@ -430,4 +482,6 @@ describe("context pack", () => {
   registerContextPackPart5();
 
   registerContextPackPart6();
+
+  registerPackBriefs();
 });

@@ -70,7 +70,7 @@ function threeConfigLayersPart13() {
     expect(boundary.packprep).toEqual({
       prompt: "pack-preparer",
       alias: "pack-preparer",
-      deliverable: "context pack",
+      deliverable: "pack briefs",
     });
     expect(boundary.front).toEqual({
       prompt: "front",

@@ -2,6 +2,7 @@
 
 import { makeCause } from "../cause.js";
 import type { ContextPackInput } from "./types.js";
+import type { PackSection } from "./sections.js";
 import {
   appendAgedReady,
   appendBaseGates,
@@ -23,6 +24,7 @@ import {
   appendWaste,
   parkedLines,
   pendingLines,
+  SECTION_HEADINGS,
   short,
 } from "./append.js";
 
@@ -60,12 +62,57 @@ function recordedHash(hash: string | undefined): string {
 }
 
 /**
+ * The longest one-line brief the index prints. A cap shortens the text only;
+ * the pointer line that follows it always renders.
+ */
+export const PACK_BRIEF_SUMMARY_MAX = 280;
+
+function cappedSummary(summary: string): string {
+  const text = summary.trim().replace(/\s+/g, " ");
+  if (text.length <= PACK_BRIEF_SUMMARY_MAX) return text;
+  return `${text.slice(0, PACK_BRIEF_SUMMARY_MAX - 1)}…`;
+}
+
+/**
+ * Appends one section whole, or — when the preparer briefed it — its heading,
+ * the preparer's one-line summary and the pointer to the full status data.
+ * A section the input would not render stays absent rather than becoming an
+ * empty brief.
+ */
+function appendWholeOrBrief(
+  lines: string[],
+  section: PackSection,
+  input: ContextPackInput,
+  append: (out: string[]) => void,
+): void {
+  const brief = input.briefs?.find((entry) => entry.section === section);
+  if (!brief) {
+    append(lines);
+    return;
+  }
+  const full: string[] = [];
+  append(full);
+  if (full.length === 0) return;
+  if (!input.dataPath) {
+    throw new Error(`pack brief for \`${section}\` needs the status data path`);
+  }
+  lines.push(
+    "",
+    SECTION_HEADINGS[section],
+    `- ${cappedSummary(brief.summary)}`,
+    `- full: ${input.dataPath} (#${section})`,
+  );
+}
+
+/**
  * Deterministic index, never pasted content (KERNEL0 §5): status, hashes,
  * rounds, infra commands and paths the architect can drill into. The render
  * reads no clock; volatile admission facts (a pending hold, a pool's reset
  * time) arrive through the input, so the same input renders the same pack.
- * Uncapped: the status table and every pointer section render whole on every
- * pack.
+ * One renderer for every pack: a section the preparer briefed renders its
+ * heading, one line and a pointer, and every other section renders whole.
+ * Uncapped: the status table and every pointer section render whole unless a
+ * brief replaces them, and a capped summary never drops its pointer.
  */
 export function renderContextPack(input: ContextPackInput): string {
   const epicScope = input.epic ? `, epic \`${input.epic}\`` : "";
@@ -93,30 +140,47 @@ export function renderContextPack(input: ContextPackInput): string {
     parkedLines(input),
   );
   appendSection(lines, "## Pending", pendingLines(input));
+  appendIndexBody(lines, input);
+  return `${lines.join("\n")}\n`;
+}
+
+/** Everything after the status table: whole unless the preparer briefed it. */
+function appendIndexBody(lines: string[], input: ContextPackInput): void {
   appendAgedReady(lines, input);
-  appendPlanCheck(lines, input);
-  appendPlanReview(lines, input);
+  appendWholeOrBrief(lines, "planCheck", input, (out) =>
+    appendPlanCheck(out, input),
+  );
+  appendWholeOrBrief(lines, "planReview", input, (out) =>
+    appendPlanReview(out, input),
+  );
   appendWaste(lines, input);
   appendSpikeProposals(lines, input);
-  appendForwarded(lines, input);
+  appendWholeOrBrief(lines, "forwarded", input, (out) =>
+    appendForwarded(out, input),
+  );
   appendDebts(lines, input);
   appendOpenRecords(lines, input);
-  appendCodeMap(lines, input);
+  appendWholeOrBrief(lines, "codeMap", input, (out) =>
+    appendCodeMap(out, input),
+  );
   appendInfra(lines, input);
   appendBaseGates(lines, input);
   appendSteers(lines, input);
-  appendPmAnswers(lines, input);
+  appendWholeOrBrief(lines, "pmAnswers", input, (out) =>
+    appendPmAnswers(out, input),
+  );
   appendIntentChanges(lines, input);
-  appendSpikeFindings(lines, input);
+  appendWholeOrBrief(lines, "spikeFindings", input, (out) =>
+    appendSpikeFindings(out, input),
+  );
   appendTaskFiles(lines, input);
-  return `${lines.join("\n")}\n`;
 }
 
 /**
  * The derived state behind the pack as JSON: every task, hold, debt and
- * pointer, with no cap. The pack preparer reads it to decide what the index
- * keeps in full and what it names with a pointer and a summary; the fallback
- * render above consumes the same input.
+ * pointer, with no cap. The pack preparer reads it and returns the sections it
+ * judges better as a brief; the render above places them and consumes the same
+ * input. Every brief's pointer names this file and its section.
  */
 /** Every task with its derived run-state, sorted by slug. */
 function contextTaskStatuses(input: ContextPackInput) {

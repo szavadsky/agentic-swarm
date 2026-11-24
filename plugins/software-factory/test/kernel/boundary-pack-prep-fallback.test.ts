@@ -9,9 +9,13 @@ import {
 } from "../../src/harness/fake/index.js";
 import { runBoundary } from "../../src/kernel/boundary.js";
 import {
+  type ContextPackInput,
+  contextDataRelPath,
   contextPackRelPath,
+  PACK_BRIEF_SUMMARY_MAX,
   renderContextPack,
 } from "../../src/kernel/context-pack.js";
+import { SECTION_HEADINGS } from "../../src/kernel/context-pack/append.js";
 import { derive } from "../../src/kernel/derive.js";
 import { PACK_PREP_STEP } from "../../src/kernel/pack-prep.js";
 import { scriptMeta } from "../../src/kernel/record.js";
@@ -81,12 +85,7 @@ function scriptBoundaryFollowThrough(
   );
 }
 
-function scriptFallbackPreparer(
-  harness: FakeHarness,
-  runtime: Awaited<ReturnType<typeof makeRuntime>>,
-  packRel: string,
-  prepared: string,
-) {
+function scriptFallbackPreparer(harness: FakeHarness) {
   harness.script(
     (req, ctx) => {
       ctx.writeOutcome(
@@ -103,12 +102,14 @@ function scriptFallbackPreparer(
 
   harness.script(
     (req, ctx) => {
-      fs.writeFileSync(
-        path.join(runtime.store.goalDir, packRel),
-        prepared,
-        "utf8",
+      ctx.writeOutcome(
+        outcome({
+          summary: "backup selected the briefs",
+          packBriefs: [
+            { section: "codeMap", summary: "only src/kernel changed" },
+          ],
+        }),
       );
-      ctx.writeOutcome(outcome({ summary: "backup prepared the pack" }));
       return fakeTurnResult(req);
     },
     {
@@ -141,10 +142,8 @@ async function runFallbackSuccessTest() {
     await writeRuntimeTask(runtime, task("alpha"));
     fs.writeFileSync(path.join(runtime.store.goalDir, "plan.md"), PLAN, "utf8");
     const packRel = contextPackRelPath(2);
-    const prepared =
-      "# Prepared by backup alias\n\n## Paths\n- plan: /goal/plan.md\n";
 
-    scriptFallbackPreparer(harness, runtime, packRel, prepared);
+    scriptFallbackPreparer(harness);
     scriptBoundaryFollowThrough(harness, runtime);
 
     const boundary = await runBoundary(runtime, {
@@ -153,9 +152,15 @@ async function runFallbackSuccessTest() {
     });
     expect(boundary.decision).toBe("continue");
     expect(boundary.packPath).toBe(packRel);
-    expect(
-      fs.readFileSync(path.join(runtime.store.goalDir, packRel), "utf8"),
-    ).toBe(prepared);
+    const pack = fs.readFileSync(
+      path.join(runtime.store.goalDir, packRel),
+      "utf8",
+    );
+    expect(pack).toContain("- only src/kernel changed");
+    expect(pack).toContain(
+      `- full: ${path.join(runtime.store.goalDir, contextDataRelPath(2))} (#codeMap)`,
+    );
+    expect(pack).toContain("## Task status");
     await verifyAliasFallbackRecords(runtime);
   } finally {
     cleanupFlowRepo(repo);
@@ -358,7 +363,113 @@ function testEmptyDerivedStatusPack() {
   expect(pack).toContain("- none");
 }
 
-describe("pack-preparer fallback chain and bounded script index", () => {
+/** A pack input with every briefable section populated. */
+function briefPackInput(): ContextPackInput {
+  const tasks = [task("alpha")];
+  return {
+    goal: "brief-demo",
+    iteration: 2,
+    intentPath: "/goal/intent.md",
+    planPath: "/goal/plan.md",
+    checkout: "/wt/demo",
+    integrationBranch: "factory/demo",
+    headHash: "0123456789abcdef",
+    recordsDir: "/goal/records",
+    tasksDir: "/goal/tasks",
+    dataPath: "/goal/iterations/2/context-data.json",
+    tasks,
+    state: derive(tasks, []),
+    steers: [],
+    setup: [],
+    gates: [],
+    forwarded: [],
+    debts: [],
+    planCheck: {
+      iteration: 1,
+      verdict: "architect",
+      evidence: [
+        { item: "alpha", status: "missing", evidence: "no task file" },
+      ],
+    },
+    codeMap: ["src/"],
+    pmAnswers: ["- s1: answered"],
+  };
+}
+
+/** The pack split at section boundaries, so a brief can be compared block by block. */
+function sectionBlocks(pack: string): Map<string, string> {
+  return new Map(
+    pack.split("\n\n").map((block) => [block.split("\n")[0]!, block]),
+  );
+}
+
+describe("pack briefs", () => {
+  it("renders every section a brief does not name exactly as the fallback", () => {
+    const input = briefPackInput();
+    const fallback = sectionBlocks(renderContextPack(input));
+    const briefed = sectionBlocks(
+      renderContextPack({
+        ...input,
+        briefs: [
+          { section: "planCheck", summary: "stale check, no new evidence" },
+        ],
+      }),
+    );
+    expect([...briefed.keys()]).toEqual([...fallback.keys()]);
+    for (const [title, block] of fallback) {
+      if (title === SECTION_HEADINGS.planCheck) continue;
+      expect(briefed.get(title)).toBe(block);
+    }
+    expect(briefed.get(SECTION_HEADINGS.planCheck)).toContain(
+      "- stale check, no new evidence",
+    );
+    expect(fallback.get(SECTION_HEADINGS.planCheck)).toContain(
+      "- alpha (missing): no task file",
+    );
+  });
+
+  it("caps a long brief but never drops its pointer", () => {
+    const input = briefPackInput();
+    const summary = "detail ".repeat(60).trim();
+    const pack = renderContextPack({
+      ...input,
+      briefs: [{ section: "planCheck", summary }],
+    });
+    expect(pack).toContain(`- full: ${input.dataPath} (#planCheck)`);
+    const briefLine = pack
+      .split("\n")
+      .find((line) => line.startsWith("- detail"));
+    expect(briefLine?.endsWith("…")).toBe(true);
+    expect(briefLine!.length).toBeLessThanOrEqual(PACK_BRIEF_SUMMARY_MAX + 2);
+    expect(pack).not.toContain(summary);
+  });
+});
+
+describe("pack brief pointers", () => {
+  it("leaves an absent section absent rather than briefing nothing", () => {
+    const input = briefPackInput();
+    const pack = renderContextPack({
+      ...input,
+      planCheck: undefined,
+      briefs: [{ section: "planCheck", summary: "nothing to say" }],
+    });
+    expect(pack).not.toContain(SECTION_HEADINGS.planCheck);
+    expect(pack).not.toContain("(#planCheck)");
+  });
+
+  it("refuses a brief when the input names no pointer", () => {
+    const input = briefPackInput();
+    delete input.dataPath;
+    expect(() =>
+      renderContextPack({
+        ...input,
+        briefs: [{ section: "planCheck", summary: "no pointer" }],
+      }),
+    ).toThrow("needs the status data path");
+  });
+});
+
+describe("pack-preparer fallback chain and single script index", () => {
   it(
     "tries fallback chain when primary fails and keeps backup pack",
     () => runFallbackSuccessTest(),
@@ -366,7 +477,7 @@ describe("pack-preparer fallback chain and bounded script index", () => {
   );
 
   it(
-    "falls back to bounded script index when every preparer fails",
+    "renders every section whole when every preparer fails",
     () => runAllAliasesFailTest(),
     90_000,
   );

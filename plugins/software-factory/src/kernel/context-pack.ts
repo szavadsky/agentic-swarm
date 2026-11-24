@@ -19,6 +19,7 @@ export {
   contextPackRelPath,
   epicContextPackRelPath,
   epicSummaryRelPath,
+  PACK_BRIEF_SUMMARY_MAX,
   renderContextData,
   renderContextPack,
   summaryRelPath,
