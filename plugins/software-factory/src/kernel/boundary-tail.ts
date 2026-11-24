@@ -29,9 +29,11 @@ import {
 } from "./boundary-state.js";
 import { makeCause } from "./cause.js";
 import { runBoundaryTurn } from "./integration-lock.js";
+import { openConcernIds } from "./context-pack/misc.js";
 import {
   expireHold,
   markProcessed,
+  readHolds,
   type Steer,
   steerResponses,
   writeOutbox,
@@ -375,6 +377,7 @@ export async function runPmStage(
   context: ConsultContext,
 ): Promise<BoundaryResult> {
   const { runtime } = context;
+  await releaseConcernMarks(context);
   const pm = await runBoundaryTurn(
     runtime,
     { iteration: context.iteration, step: "pm" },
@@ -386,6 +389,34 @@ export async function runPmStage(
       }),
   );
   return pmResult(context, pm);
+}
+
+/**
+ * A blocking concern's mark decides the wave it was written in, not every
+ * later one: the architect's consult read the mark in its pack and ruled on
+ * the concern, so the next iteration's dispatch is not withheld by a mark
+ * nobody revisits. A passed-on concern's empty mark stays — it is the "judged"
+ * record that keeps the concern off later wave-end briefs. Resolution tracking
+ * narrows the blocking release later; until then the consult is the release.
+ * A hold directory that cannot be read is dispatch's infra finding, not the
+ * boundary's.
+ */
+async function releaseConcernMarks(context: ConsultContext): Promise<void> {
+  const open = openConcernIds(context.records);
+  if (open.size === 0) return;
+  let holds: Awaited<ReturnType<typeof readHolds>>["holds"];
+  try {
+    ({ holds } = await readHolds(context.runtime.store));
+  } catch (err) {
+    console.warn(
+      `[factory] holds unreadable for concern-mark release: ${(err as Error).message}`,
+    );
+    return;
+  }
+  for (const hold of holds) {
+    if (!open.has(hold.steer) || hold.slugs.length === 0) continue;
+    await expireHold(context.runtime.store, hold.steer);
+  }
 }
 
 function pmResult(

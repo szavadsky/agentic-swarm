@@ -145,6 +145,7 @@ function recordVars(
     existing_tasks: "none",
     gate_record_path: path.join(goal, "records", "dry-run-checks"),
     repair: "",
+    concerns: "none",
     holds_dir: path.join(goal, "mailbox", "holds"),
     stalls: "none",
     plan_checks: "none",

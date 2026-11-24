@@ -121,8 +121,9 @@ The turn's record carries the unified diff of the edit; the next architect pack 
 - `repair` — the script validator's findings from the previous ask; empty string on the first ask and on steer turns
 - `steers` — pending steers as `- id (file):` plus indented full text; `none` on a derive, stall or plan-check turn
 - `stalls` — this iteration's undecided parks as one entry per slug (cause, record paths, kept branch, spent turns, amends used of the limit, the cause's default action, done-when); `none` except on a stall turn
+- `concerns` — open concerns no wave-end turn has marked yet, one per line
 - `plan_checks` — checker follow-ups as one entry per slug (kind, reason, cause, record paths, kept branch, spent turns, amends used of the limit, the cause's default action, done-when); `none` except on a plan-check turn
-- `holds_dir` — directory for one `<steer-id>.yaml` hold file per structured steer
+- `holds_dir` — directory for one `<id>.yaml` hold per steer or concern
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome YAML skeleton from the kernel schema; renderer default

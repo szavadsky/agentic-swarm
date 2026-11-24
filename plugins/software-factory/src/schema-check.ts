@@ -169,8 +169,9 @@ if (fs.existsSync(artifactFactoryDir)) {
     }
   }
 
-  // Pending-steer holds: one YAML per steer, written by the PM's steer turn.
-  // Dotfiles are the writer's temp siblings, not holds `readHolds` would read.
+  // Holds: one YAML per steer (the steer turn) or per open concern (the
+  // wave-end mark). Dotfiles are the writer's temp siblings, not holds
+  // `readHolds` would read.
   for (const file of walk(
     artifactFactoryDir,
     (f) =>

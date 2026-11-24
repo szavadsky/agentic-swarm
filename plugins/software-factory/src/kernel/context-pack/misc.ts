@@ -1,7 +1,7 @@
 /** Code map, calibration and forwarded concerns. */
 
 import type { ConcernKind } from "../../core/concern-types.js";
-import { concernFingerprint } from "../../core/concerns.js";
+import { concernFingerprint, recordedConcernId } from "../../core/concerns.js";
 import type { StepRecord } from "../types.js";
 import type { ConcernScope, ForwardedConcern } from "./types.js";
 import { epicByTask, visibleToAudience } from "./debt.js";
@@ -78,16 +78,13 @@ function calibrationRank(calibration: string): number {
 }
 
 /**
- * The kept fingerprint function hashes the kind string; the kernel's kinds are
- * the manifesto's four (`debt|risk|uncertainty|choice`), so the stored v2 enum
- * is only a type-level stand-in here. Same text and evidence, same identity.
+ * A forwarded `forward` string's identity. The kept fingerprint function hashes
+ * the kind string; the kernel's kinds are the manifesto's four
+ * (`debt|risk|uncertainty|choice`), so the stored v2 enum is only a type-level
+ * stand-in here.
  */
-function fingerprintOf(kind: string, text: string, evidence?: string): string {
-  return concernFingerprint({
-    kind: kind as ConcernKind,
-    summary: text,
-    ...(evidence ? { location: { file: evidence } } : {}),
-  });
+function forwardFingerprint(text: string): string {
+  return concernFingerprint({ kind: "forward" as ConcernKind, summary: text });
 }
 
 /**
@@ -98,7 +95,7 @@ function fingerprintOf(kind: string, text: string, evidence?: string): string {
  * an audience, every record counts: the depth-1 pack's single architect.
  */
 export function forwardedConcerns(
-  records: StepRecord[],
+  records: readonly StepRecord[],
   scope: ConcernScope = {},
 ): ForwardedConcern[] {
   const bySlug = epicByTask(scope.tasks ?? []);
@@ -131,33 +128,51 @@ export function forwardedConcerns(
 
   for (const rec of records) {
     if (!rec.outcome || !visible(rec)) continue;
-    for (const concern of rec.outcome.concerns) {
-      if (concern.calibration === "fyi") continue;
-      const source = `${rec.slug ?? rec.architect ?? "goal"} ${rec.step} r${rec.round}`;
-      const fingerprint = fingerprintOf(
-        concern.kind,
-        concern.text,
-        concern.evidence,
-      );
-      add(
-        {
-          source,
-          calibration: concern.calibration,
-          kind: concern.kind,
-          text: concern.text,
-          evidence: concern.evidence,
-        },
-        fingerprint,
-      );
-    }
-    for (const forwarded of rec.outcome.forward) {
-      const source = `${rec.slug ?? rec.architect ?? "goal"} ${rec.step} r${rec.round}`;
-      const fingerprint = fingerprintOf("forward", forwarded);
-      add(
-        { source, calibration: "architect", kind: "forward", text: forwarded },
-        fingerprint,
-      );
-    }
+    for (const concern of recordConcerns(rec)) add(concern, concern.id);
   }
   return [...byFingerprint.values()];
+}
+
+/**
+ * One record's concerns and forward lines as they travel: non-FYI concerns
+ * keep their kind, a forwarded remark travels as its own `forward` entry.
+ */
+function recordConcerns(rec: StepRecord): ForwardedConcern[] {
+  if (!rec.outcome) return [];
+  const source = `${rec.slug ?? rec.architect ?? "goal"} ${rec.step} r${rec.round}`;
+  const concerns = rec.outcome.concerns
+    .filter((concern) => concern.calibration !== "fyi")
+    .map((concern) => ({
+      id: recordedConcernId(concern),
+      source,
+      calibration: concern.calibration,
+      kind: concern.kind,
+      text: concern.text,
+      evidence: concern.evidence,
+    }));
+  const forwards = rec.outcome.forward.map((text) => ({
+    id: forwardFingerprint(text),
+    source,
+    calibration: "architect",
+    kind: "forward",
+    text,
+  }));
+  return [...concerns, ...forwards];
+}
+
+/**
+ * Every open concern, deduplicated by identity: the forwarded set without the
+ * free-text `forward` lines, which are remarks, not concerns the PM judges.
+ */
+export function openConcerns(
+  records: readonly StepRecord[],
+): ForwardedConcern[] {
+  return forwardedConcerns(records).filter(
+    (concern) => concern.kind !== "forward",
+  );
+}
+
+/** The ids of every open concern: a hold named by one is a live block. */
+export function openConcernIds(records: readonly StepRecord[]): Set<string> {
+  return new Set(openConcerns(records).map((concern) => concern.id));
 }

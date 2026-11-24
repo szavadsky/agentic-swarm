@@ -70,6 +70,7 @@ function rendersIdenticalBytesIdenticalPart2(
     },
     forwarded: [
       {
+        id: "c-watchit",
         source: "a review r1",
         calibration: "architect",
         kind: "risk",
@@ -152,6 +153,7 @@ function bulkPointerMailFragment() {
     gates: [{ id: "test", command: "bun test" }],
     forwarded: [
       {
+        id: "c-bulk003",
         source: "bulk-003 review r1",
         calibration: "architect",
         kind: "debt",
@@ -159,6 +161,7 @@ function bulkPointerMailFragment() {
         evidence: "src/kernel/baseline.ts:175",
       },
       {
+        id: "c-bulk004",
         source: "bulk-004 review r1",
         calibration: "architect",
         kind: "risk",

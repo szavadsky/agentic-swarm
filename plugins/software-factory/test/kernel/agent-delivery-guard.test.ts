@@ -74,6 +74,7 @@ const pmVars = {
   existing_tasks: "none",
   repair: "",
   steers: "none",
+  concerns: "none",
   holds_dir: "/g/mailbox/holds",
   stalls: "none",
   plan_checks: "none",

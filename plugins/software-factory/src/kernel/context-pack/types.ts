@@ -13,6 +13,8 @@ import type {
 } from "../types.js";
 
 export interface ForwardedConcern {
+  /** Stable identity: the hold file the PM's mark writes and the pack line share it. */
+  id: string;
   source: string;
   calibration: string;
   kind: string;

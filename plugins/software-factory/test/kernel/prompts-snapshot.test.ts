@@ -101,6 +101,7 @@ const ROLES: Record<string, Record<string, string>> = {
     existing_tasks: "- alpha | merged | abcdef1234 | deps: none | frozen",
     repair: '- task "beta" depends on missing task "ghost"',
     steers: "- s1 (mailbox/inbox/s1.md):\n  keep the API stable",
+    concerns: "none",
     holds_dir: "/goal/mailbox/holds",
     stalls:
       "- alpha\n  cause: blocked: stuck\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 spent\n  done-when: Done when: it works.",

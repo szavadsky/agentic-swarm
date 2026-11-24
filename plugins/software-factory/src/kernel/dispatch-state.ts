@@ -62,7 +62,7 @@ export interface InfraFault {
 
 /** Holds still in force: the goal-wide hold name and the slugs held. */
 export interface ActiveHolds {
-  /** Task slug -> the steer that holds it. First steer in file order wins. */
+  /** Task slug -> the hold's owner as the boundary names it (`s1`, `concern c-…`). */
   slugs: Map<string, string>;
   /** The steer holding the whole goal, when one does. */
   goal?: string;

@@ -2,6 +2,7 @@
 
 import { KERNEL_STEPS } from "../types.js";
 import type { StepRecord, TaskFile } from "../types.js";
+import { openConcernIds } from "./misc.js";
 import type { AgingContext, ReadyAgingInput, ReadyAgingTask } from "./types.js";
 
 /** Boundary and architecture roles run between segments and never start a task turn. */
@@ -58,25 +59,25 @@ function sharedAreas(a: readonly string[], b: readonly string[]): string[] {
   return [...shared].sort();
 }
 
-/**
- * The ready tasks that started no task turn in `segment`, with what withheld
- * them: a pending steer's hold, a dep that only landed in that segment, a
- * declared-area clash with live work, or a next step whose alias has no live
- * tier. Reporting only: the hold deadlock itself is derived elsewhere.
- */
-/** A pending steer -> the slugs it holds. */
-function heldBySteers(
+/** A live hold's owner -> the slugs it holds; a stale hold decides nothing. */
+function heldBy(
   holds: ReadyAgingInput["holds"],
   pending: ReadonlySet<string>,
+  openConcerns: ReadonlySet<string>,
 ): Map<string, string[]> {
-  const heldBy = new Map<string, string[]>();
+  const bySteer = new Map<string, string[]>();
   for (const hold of holds) {
-    if (!pending.has(hold.steer)) continue;
+    const owner = pending.has(hold.steer)
+      ? `steer ${hold.steer}`
+      : openConcerns.has(hold.steer)
+        ? `concern ${hold.steer}`
+        : undefined;
+    if (owner === undefined) continue;
     for (const slug of hold.slugs) {
-      heldBy.set(slug, [...(heldBy.get(slug) ?? []), hold.steer]);
+      bySteer.set(slug, [...(bySteer.get(slug) ?? []), owner]);
     }
   }
-  return heldBy;
+  return bySteer;
 }
 
 /** Why one ready task started no turn this segment. */
@@ -86,12 +87,8 @@ function agingCauses(
   context: AgingContext,
 ): string[] {
   const causes: string[] = [];
-  const steers = [...new Set(heldBy.get(task.slug) ?? [])].sort();
-  if (steers.length > 0) {
-    causes.push(
-      `${steers.length === 1 ? "held by steer" : "held by steers"} ${steers.join(", ")}`,
-    );
-  }
+  const owners = [...new Set(heldBy.get(task.slug) ?? [])].sort();
+  if (owners.length > 0) causes.push(`held by ${owners.join(", ")}`);
   for (const dep of [...new Set(task.deps)].sort()) {
     const end = context.terminal.get(dep);
     if (end) causes.push(`dep ${dep} ${end} in iteration ${context.segment}`);
@@ -107,6 +104,13 @@ function agingCauses(
   return causes;
 }
 
+/**
+ * The ready tasks that started no task turn in `segment`, with what withheld
+ * them: a pending steer's hold, an open concern's hold, a dep that only
+ * landed in that segment, a declared-area clash with live work, or a next
+ * step whose alias has no live tier. Reporting only: the hold deadlock itself
+ * is derived elsewhere.
+ */
 export function readyAging(input: ReadyAgingInput): ReadyAgingTask[] {
   const { started, terminal } = segmentStarts(input.records, input.segment);
   const ready = new Set(
@@ -114,7 +118,11 @@ export function readyAging(input: ReadyAgingInput): ReadyAgingTask[] {
       .filter((task) => input.state.tasks[task.slug]?.status === "ready")
       .map((task) => task.slug),
   );
-  const heldBy = heldBySteers(input.holds, new Set(input.pendingSteers));
+  const held = heldBy(
+    input.holds,
+    new Set(input.pendingSteers),
+    openConcernIds(input.records),
+  );
   // A live-area clash is either a task that ran in the segment or one still
   // ready beside this one; a merged task's area is history.
   const active = new Set([...started, ...ready]);
@@ -129,7 +137,7 @@ export function readyAging(input: ReadyAgingInput): ReadyAgingTask[] {
   const aged: ReadyAgingTask[] = [];
   for (const task of ordered) {
     if (!ready.has(task.slug) || started.has(task.slug)) continue;
-    aged.push({ slug: task.slug, causes: agingCauses(task, heldBy, context) });
+    aged.push({ slug: task.slug, causes: agingCauses(task, held, context) });
   }
   return aged;
 }

@@ -6,6 +6,7 @@
 import { formatCause, makeCause } from "./cause.js";
 import { derive } from "./derive.js";
 import { heldBoundaryCause, undecidedParked } from "./dispatch-holds.js";
+import { reloadHolds } from "./dispatch-poll.js";
 import {
   dispatchable,
   INFRA_REDISPATCH_DELAYS_MS,
@@ -100,7 +101,15 @@ async function runStallStage(state: DispatchState): Promise<Wave | undefined> {
         cwd: state.runtime.paths.goalCheckout,
       }),
   );
-  return stalled.continued.length > 0 ? "continue" : undefined;
+  if (stalled.continued.length === 0) return undefined;
+  // The turn may have marked concerns: a resumed wave reads the new holds.
+  const holdError = await reloadHolds(state, "holds after the stall turn");
+  if (holdError) {
+    return result(state, "infra", await freshTurns(state), {
+      cause: makeCause("error", holdError),
+    });
+  }
+  return "continue";
 }
 
 /** A task-tier checker verifies the plan; `progress` resumes dispatch in this iteration. */

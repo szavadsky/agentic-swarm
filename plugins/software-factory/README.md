@@ -6,7 +6,13 @@ set runs out with fresh parks, the PM decides each one in the same iteration —
 amend on its kept branch with the park's evidence, replace, split, cancel, or
 leave for the architect — whether or not the wave merged anything. An amended
 task reruns on its kept branch, after merging a moved head in its first turn,
-and on its step's next alternate. When open work remains, the boundary runs
+and on its step's next alternate. The same wave-end turn marks the open
+concerns it has not judged: a concern that makes the remaining work wasteful
+leaves a hold naming the tasks it withholds, and one that blocks nothing keeps
+an empty hold and reaches the architect unchanged. The mark is a
+`mailbox/holds/<concern-id>.yaml` file, so a judged concern is never asked
+twice and a concern's hold lapses when no record raises it any more. When open
+work remains, the boundary runs
 the plan checker first: a `progress` verdict resumes dispatch without a
 consult, bounded by `limits.planCheckRounds`; the consult runs on `architect`,
 when nothing is open, or when the bound is hit. State is derived from task

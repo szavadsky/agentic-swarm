@@ -18,14 +18,19 @@ export function short(hash: string | undefined): string {
   return hash ? hash.slice(0, 10) : "-";
 }
 
-function formatForwarded(concern: ForwardedConcern): string {
+function formatForwarded(
+  concern: ForwardedConcern,
+  held: readonly string[],
+): string {
   const repeats =
     concern.occurrences && concern.occurrences > 1
       ? ` x${concern.occurrences}`
       : "";
+  const holds =
+    held.length > 0 ? ` · holds ${[...held].sort().join(", ")}` : "";
   return `- [${concern.calibration}/${concern.kind}]${repeats} ${concern.text}${
     concern.evidence ? ` (${concern.evidence})` : ""
-  } — ${concern.source}`;
+  }${holds} — ${concern.source}`;
 }
 
 /** One register line: the id the architect closes, then what the debt is and where it came from. */
@@ -238,13 +243,24 @@ export function appendSpikeProposals(
   lines.push("", spikeProposalsSection(proposals));
 }
 
+/**
+ * The forwarded concerns. A concern the wave-end PM marked blocking carries
+ * the tasks its hold withholds; one it passed on renders unchanged.
+ */
 export function appendForwarded(
   lines: string[],
   input: ContextPackInput,
 ): void {
   if (input.forwarded.length === 0) return;
+  const heldBy = new Map(
+    (input.holds ?? [])
+      .filter((hold) => hold.slugs.length > 0)
+      .map((hold) => [hold.steer, hold.slugs]),
+  );
   lines.push("", "## Forwarded concerns (architect/owner)");
-  for (const concern of input.forwarded) lines.push(formatForwarded(concern));
+  for (const concern of input.forwarded) {
+    lines.push(formatForwarded(concern, heldBy.get(concern.id) ?? []));
+  }
 }
 
 export function appendDebts(lines: string[], input: ContextPackInput): void {

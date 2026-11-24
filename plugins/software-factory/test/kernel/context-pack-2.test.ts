@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { recordedConcernId } from "../../src/core/concerns.js";
 import {
   forwardedConcerns,
   renderContextPack,
@@ -73,6 +74,7 @@ function contextPackFor(
   state: ReturnType<typeof derive>,
   records: ReturnType<typeof rec>[],
   epic?: string,
+  holds: { steer: string; slugs: string[]; goal: boolean }[] = [],
 ): string {
   return renderContextPack({
     goal: "demo",
@@ -95,6 +97,7 @@ function contextPackFor(
       audience: epic ? { kind: "epic", epic } : { kind: "goal" },
     }),
     debts: [],
+    holds,
   });
 }
 
@@ -112,6 +115,44 @@ function expectConcernScoping(top: string, alpha: string, beta: string): void {
   expect(top).toContain("alpha brief risk");
   expect(top).toContain("alpha carry");
   expect(alpha).not.toContain("alpha carry");
+}
+
+/** The pack line one forwarded concern rendered, or undefined. */
+function forwardedLine(pack: string, text: string): string | undefined {
+  return pack.split("\n").find((line) => line.includes(text));
+}
+
+function registerContextPackPart7(): void {
+  it("marks the tasks a blocking concern holds on its line and leaves the rest unchanged", () => {
+    const chained = [
+      task("alpha.build", { epic: "alpha" }),
+      task("beta.build", { epic: "beta" }),
+    ];
+    const records = contextPackTaskRecords();
+    const state = derive(chained, records);
+    const goalRisk = recordedConcernId({ kind: "risk", text: "goal risk" });
+    const withHold = contextPackFor(chained, state, records, undefined, [
+      { steer: goalRisk, slugs: ["alpha.build"], goal: false },
+    ]);
+    expect(forwardedLine(withHold, "goal risk")).toBe(
+      `- [owner/risk] goal risk · holds alpha.build — goal.close review r1`,
+    );
+    // A concern the PM passed on renders exactly as it did before the mark.
+    expect(forwardedLine(withHold, "alpha task risk")).toBeUndefined();
+  });
+
+  it("renders a passed-on concern unchanged beside a held one", () => {
+    const chained = [task("alpha.build", { epic: "alpha" })];
+    const records = [...contextPackTaskRecords(), contextPackBriefRecord()];
+    const state = derive(chained, records);
+    const goalRisk = recordedConcernId({ kind: "risk", text: "goal risk" });
+    const pack = contextPackFor(chained, state, records, undefined, [
+      { steer: goalRisk, slugs: [], goal: false },
+    ]);
+    expect(forwardedLine(pack, "goal risk")).toBe(
+      `- [owner/risk] goal risk — goal.close review r1`,
+    );
+  });
 }
 
 function registerContextPackPart6(): void {
@@ -132,4 +173,5 @@ function registerContextPackPart6(): void {
 
 describe("context pack", () => {
   registerContextPackPart6();
+  registerContextPackPart7();
 });

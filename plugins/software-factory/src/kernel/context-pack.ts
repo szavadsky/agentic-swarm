@@ -23,4 +23,9 @@ export {
   summaryRelPath,
 } from "./context-pack/render.js";
 export { readyAging } from "./context-pack/aging.js";
-export { forwardedConcerns, shallowCodeMap } from "./context-pack/misc.js";
+export {
+  forwardedConcerns,
+  openConcernIds,
+  openConcerns,
+  shallowCodeMap,
+} from "./context-pack/misc.js";

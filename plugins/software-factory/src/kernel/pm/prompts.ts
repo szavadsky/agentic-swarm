@@ -1,5 +1,6 @@
 import { formatCause, makeCause } from "../cause.js";
 import { DEFAULT_PARK_AMENDS } from "../config.js";
+import type { ForwardedConcern } from "../context-pack/types.js";
 import type { TurnTarget } from "../flow-context.js";
 import {
   planCheckProvenance,
@@ -119,6 +120,25 @@ export async function stallBrief(
   }
   lines.push(`integration head: ${facts.head}`);
   return lines.join("\n");
+}
+
+/**
+ * The open concerns a wave-end turn marks, one per identity: the id names the
+ * hold file, and the rest is what the PM judges. `none` when no concern waits
+ * for a mark.
+ */
+export function openConcernBrief(
+  concerns: readonly ForwardedConcern[],
+): string {
+  if (concerns.length === 0) return "none";
+  return concerns
+    .map(
+      (concern) =>
+        `- ${concern.id} [${concern.kind}/${concern.calibration}]: ${concern.text}${
+          concern.evidence ? ` (${concern.evidence})` : ""
+        }\n  raised by ${concern.source}`,
+    )
+    .join("\n");
 }
 
 /** Everything a per-slug brief entry needs, read once per PM turn. */

@@ -119,7 +119,12 @@ async function pollStage(
   state: DispatchState,
   read: LoopRead,
 ): Promise<PollStage | DispatchResult> {
-  const polled = await pollSteers(state, read.snapshot, read.tasks);
+  const polled = await pollSteers(
+    state,
+    read.snapshot,
+    read.tasks,
+    read.recordsBefore,
+  );
   if (polled.holdError) {
     await settleRunning(state);
     return {

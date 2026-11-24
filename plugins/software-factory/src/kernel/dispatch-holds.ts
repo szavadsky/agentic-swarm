@@ -10,21 +10,28 @@ import { STALL_ROUTES_STEP } from "./pm.js";
 import type { Cause, State, StepRecord } from "./types.js";
 
 /**
- * A hold applies only while its steer is still pending: the architect answers a
- * steer at the boundary and moves it to processed, and the hold then expires
- * with it. This also keeps a hold file from surviving into later iterations.
+ * A hold applies only while its owner still decides something: a steer's hold
+ * while the steer is pending (the architect answers it at the boundary and
+ * moves it to processed), a concern's hold while the concern is still open.
+ * This also keeps a hold file from surviving into later iterations.
+ *
+ * The value is the owner as the boundary cause names it, so a concern hold
+ * reads as a concern and not as a steer id.
  */
 export function activeHolds(
   holds: Hold[],
   pending: ReadonlySet<string>,
+  openConcerns: ReadonlySet<string>,
 ): ActiveHolds {
   const slugs = new Map<string, string>();
   let goal: string | undefined;
   for (const hold of holds) {
-    if (!pending.has(hold.steer)) continue;
-    if (hold.goal && goal === undefined) goal = hold.steer;
+    const steer = pending.has(hold.steer);
+    if (!steer && !openConcerns.has(hold.steer)) continue;
+    const owner = steer ? hold.steer : `concern ${hold.steer}`;
+    if (steer && hold.goal && goal === undefined) goal = hold.steer;
     for (const slug of hold.slugs) {
-      if (!slugs.has(slug)) slugs.set(slug, hold.steer);
+      if (!slugs.has(slug)) slugs.set(slug, owner);
     }
   }
   return { slugs, goal };

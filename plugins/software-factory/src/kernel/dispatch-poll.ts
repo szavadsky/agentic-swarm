@@ -3,12 +3,13 @@
  * window per new batch, then exactly one PM steer turn; the holds it may
  * rewrite are re-read against the tasks on disk after that turn.
  */
+import { openConcernIds } from "./context-pack/misc.js";
 import { activeHolds } from "./dispatch-holds.js";
 import type { ActiveHolds, DispatchState } from "./dispatch-state.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import { readHolds, type Steer, scanInbox } from "./mailbox.js";
 import { runSteerPm } from "./pm.js";
-import type { State, TaskFile } from "./types.js";
+import type { State, StepRecord, TaskFile } from "./types.js";
 
 export interface SteerPoll {
   hold: ActiveHolds;
@@ -77,21 +78,25 @@ async function claimSteers(
   return claim;
 }
 
-/** The steer turn may have created tasks; holds validate against the files now on disk. */
-async function refreshHolds(
+/**
+ * Re-reads the holds after a turn that may have written or amended them. They
+ * validate against the task files now on disk, so a mark naming a task a turn
+ * just created still decides.
+ */
+export async function reloadHolds(
   state: DispatchState,
-  claim: readonly Steer[],
+  after: string,
 ): Promise<string | undefined> {
   try {
-    const after = await state.runtime.store.listTasks();
+    const tasks = await state.runtime.store.listTasks();
     state.holds = (
       await readHolds(state.runtime.store, {
-        knownSlugs: after.map((task) => task.slug),
+        knownSlugs: tasks.map((task) => task.slug),
       })
     ).holds;
     return undefined;
   } catch (err) {
-    return `steer holds after ${claim.map((steer) => steer.id).join(", ")}: ${(err as Error).message}`;
+    return `${after}: ${(err as Error).message}`;
   }
 }
 
@@ -104,13 +109,15 @@ export async function pollSteers(
   state: DispatchState,
   snapshot: State,
   tasks: TaskFile[],
+  records: readonly StepRecord[],
 ): Promise<SteerPoll> {
   const steers = await scanInbox(state.runtime.store, { settleMs: 0 });
   const pending = new Set(steers.map((steer) => steer.id));
+  const openConcerns = openConcernIds(records);
   const urgent = steers.find((steer) => steer.urgent)?.id;
   if (state.cancelled) {
     return {
-      hold: activeHolds(state.holds, pending),
+      hold: activeHolds(state.holds, pending, openConcerns),
       steerTurn: false,
       urgent,
     };
@@ -119,14 +126,17 @@ export async function pollSteers(
   // pending for the consult the next iteration opens, and the caller drains.
   if (urgent !== undefined) {
     return {
-      hold: activeHolds(state.holds, pending),
+      hold: activeHolds(state.holds, pending, openConcerns),
       steerTurn: false,
       urgent,
     };
   }
   const claim = await claimSteers(state, steers);
   if (claim.length === 0) {
-    return { hold: activeHolds(state.holds, pending), steerTurn: false };
+    return {
+      hold: activeHolds(state.holds, pending, openConcerns),
+      steerTurn: false,
+    };
   }
   await runBoundaryTurn(
     state.runtime,
@@ -140,9 +150,12 @@ export async function pollSteers(
         cwd: state.runtime.paths.goalCheckout,
       }),
   );
-  const holdError = await refreshHolds(state, claim);
+  const holdError = await reloadHolds(
+    state,
+    `steer holds after ${claim.map((steer) => steer.id).join(", ")}`,
+  );
   return {
-    hold: activeHolds(state.holds, pending),
+    hold: activeHolds(state.holds, pending, openConcerns),
     steerTurn: true,
     ...(holdError ? { holdError } : {}),
   };

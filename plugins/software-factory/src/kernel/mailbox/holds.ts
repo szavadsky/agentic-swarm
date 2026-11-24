@@ -33,8 +33,8 @@ async function listHoldNames(store: ArtifactStore): Promise<string[]> {
  * Reads the PM's hold decisions without touching the mailbox. A malformed hold
  * and a hold naming a slug outside `knownSlugs` (when given) decide nothing:
  * each is returned as a finding while the valid holds beside it still apply.
- * Parking those files is `sweepHolds`'s job. Holds for steers the architect
- * already processed are the caller's to ignore.
+ * Parking those files is `sweepHolds`'s job. A hold's owner is a steer id or a
+ * concern id; `activeHolds` decides which of those still decides anything.
  */
 export async function readHolds(
   store: ArtifactStore,
@@ -145,9 +145,10 @@ export async function sweepHolds(
 }
 
 /**
- * Removes one steer's hold file. A boundary expires the hold of a steer the
+ * Removes one hold file. A boundary expires the hold of a steer the
  * architect left unanswered, so held work resumes instead of waiting for an
- * answer that may never come.
+ * answer that may never come. A concern's hold needs no expiry: it lapses when
+ * the concern stops being open.
  */
 export async function expireHold(
   store: ArtifactStore,

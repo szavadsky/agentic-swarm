@@ -27,6 +27,7 @@ import {
 } from "../holds.js";
 import {
   failureReasons,
+  NO_TURN_INPUTS,
   type PmRungStep,
   type PmTurnSetup,
   recordPmRejection,
@@ -330,9 +331,8 @@ async function runSteerTurn(
     planList: setup.planList,
     tasks,
     repair: round === 1 ? "" : steerLadderNote(rung, target, failure),
+    ...NO_TURN_INPUTS,
     steers: formatSteerTurn(opts.steers),
-    stalls: "none",
-    planChecks: "none",
   });
 }
 

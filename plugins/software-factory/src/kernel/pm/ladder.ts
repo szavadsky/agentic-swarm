@@ -154,9 +154,7 @@ export async function runPm(
       planList: setup.planList,
       tasks,
       repair: round === 1 ? "" : pmLadderNote(rung, target, failure),
-      steers: "none",
-      stalls: "none",
-      planChecks: "none",
+      ...NO_TURN_INPUTS,
     });
     const findings = await graphFindings(
       runtime,
@@ -292,6 +290,14 @@ export async function recordPmRejection(
   await restoreTurn(runtime, snapshot);
 }
 
+/** A rung handles one kind of turn; every list it does not handle is `none`. */
+export const NO_TURN_INPUTS = {
+  steers: "none",
+  stalls: "none",
+  planChecks: "none",
+  concerns: "none",
+} as const;
+
 interface PmTurnInput {
   round: number;
   planList: string;
@@ -300,6 +306,7 @@ interface PmTurnInput {
   steers: string;
   stalls: string;
   planChecks: string;
+  concerns: string;
 }
 
 /** Runs one PM rung on the shared prompt contract every route uses. */
@@ -324,6 +331,7 @@ export async function runPmTurn(
       holds_dir: holdsDir(runtime.store),
       stalls: input.stalls,
       plan_checks: input.planChecks,
+      concerns: input.concerns,
     },
     expectation: KERNEL_TURN_STEPS.pm,
   });

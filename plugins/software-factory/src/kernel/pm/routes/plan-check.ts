@@ -15,6 +15,7 @@ import type {
 } from "../../types.js";
 import {
   failureReasons,
+  NO_TURN_INPUTS,
   type PmTurnSetup,
   recordPmRejection,
   runPmTurn,
@@ -289,8 +290,7 @@ export async function runPlanCheckPm(
       planList: setup.planList,
       tasks,
       repair: round === 1 ? "" : planCheckLadderNote(rung, target, failure),
-      steers: "none",
-      stalls: "none",
+      ...NO_TURN_INPUTS,
       planChecks: brief,
     });
     const outcome = result.outcome;
