@@ -39,6 +39,34 @@ function writeRepoConfig(root: string, body: string): void {
   fs.writeFileSync(path.join(root, ".factory", "repo.yaml"), body);
 }
 
+/**
+ * A repo whose integration branch landed a disallowed file, and a task branch
+ * cut from the head as it stood at dispatch, carrying one clean file of its own.
+ */
+async function setupHeadAndTask() {
+  const { root, runtime } = await setupTest(undefined);
+  await git(root, ["checkout", "-b", "factory/g"]);
+  fs.writeFileSync(path.join(root, "landed.tmp"), "other task");
+  await git(root, ["add", "landed.tmp"]);
+  await git(root, ["commit", "-m", "head lands an artifact"]);
+
+  const start = (await git(root, ["rev-parse", "HEAD~1"])).stdout.trim();
+  await git(root, ["checkout", "-b", "factory/task", start]);
+  fs.writeFileSync(path.join(root, "mine.ts"), "export const mine = 1;\n");
+  await git(root, ["add", "mine.ts"]);
+  await git(root, ["commit", "-m", "task work"]);
+  return { root, runtime, start };
+}
+
+/** Lands another file on the integration branch and returns to the task branch. */
+async function landOnHead(root: string, file: string, body: string) {
+  await git(root, ["checkout", "factory/g"]);
+  fs.writeFileSync(path.join(root, file), body);
+  await git(root, ["add", file]);
+  await git(root, ["commit", "-m", `head lands ${file}`]);
+  await git(root, ["checkout", "factory/task"]);
+}
+
 describe("runCleanlinessCheck with repo config", () => {
   it("flags large file and disallowed extension with repo config", async () => {
     const { root, runtime } = await setupTest({
@@ -61,7 +89,7 @@ describe("runCleanlinessCheck with repo config", () => {
     await git(root, ["commit", "-m", "new"]);
 
     // HEAD~2 is "start" commit.
-    const result = await runCleanlinessCheck(runtime, root, "HEAD~2");
+    const result = await runCleanlinessCheck(runtime, root, "HEAD~2", "HEAD~2");
     expect(result.ok).toBe(false);
     expect(result.output).toContain("Large file: large.ts");
     expect(result.output).toContain("Disallowed extension: bad.js");
@@ -90,7 +118,7 @@ describe("runCleanlinessCheck default rules hit", () => {
     await git(root, ["add", "."]);
     await git(root, ["commit", "-m", "dirty"]);
 
-    const result = await runCleanlinessCheck(runtime, root, "HEAD~1");
+    const result = await runCleanlinessCheck(runtime, root, "HEAD~1", "HEAD~1");
     expect(result.ok).toBe(false);
     expect(result.output).toContain("Large file: large.ts");
     expect(result.output).toContain("Disallowed artifact: model.pt");
@@ -110,7 +138,7 @@ describe("runCleanlinessCheck default rules pass", () => {
     await git(root, ["add", "clean.ts"]);
     await git(root, ["commit", "-m", "clean"]);
 
-    const result = await runCleanlinessCheck(runtime, root, "HEAD~1");
+    const result = await runCleanlinessCheck(runtime, root, "HEAD~1", "HEAD~1");
     expect(result.ok).toBe(true);
     expect(result.summary).toBe("pass");
   });
@@ -128,7 +156,7 @@ describe("runCleanlinessCheck default rules pass", () => {
     await git(root, ["add", "."]);
     await git(root, ["commit", "-m", "multi-file"]);
 
-    const result = await runCleanlinessCheck(runtime, root, "HEAD~1");
+    const result = await runCleanlinessCheck(runtime, root, "HEAD~1", "HEAD~1");
     expect(result.ok).toBe(true);
     expect(result.output).toBe("Clean");
   });
@@ -142,7 +170,7 @@ describe("runCleanlinessCheck allowed-file override", () => {
     await git(root, ["add", "data.csv"]);
     await git(root, ["commit", "-m", "data"]);
 
-    const result = await runCleanlinessCheck(runtime, root, "HEAD~1");
+    const result = await runCleanlinessCheck(runtime, root, "HEAD~1", "HEAD~1");
     expect(result.ok).toBe(true);
   });
 
@@ -153,7 +181,7 @@ describe("runCleanlinessCheck allowed-file override", () => {
     await git(root, ["add", "data.csv"]);
     await git(root, ["commit", "-m", "data"]);
 
-    const before = await runCleanlinessCheck(runtime, root, "HEAD~1");
+    const before = await runCleanlinessCheck(runtime, root, "HEAD~1", "HEAD~1");
     expect(before.ok).toBe(false);
     expect(before.output).toContain("Large file: data.csv");
     expect(before.output).toContain("New extension: data.csv (.csv)");
@@ -163,7 +191,7 @@ describe("runCleanlinessCheck allowed-file override", () => {
     await git(root, ["add", ".factory/repo.yaml"]);
     await git(root, ["commit", "-m", "override"]);
 
-    const after = await runCleanlinessCheck(runtime, root, "HEAD~2");
+    const after = await runCleanlinessCheck(runtime, root, "HEAD~2", "HEAD~2");
     expect(after.ok).toBe(true);
   });
 
@@ -175,7 +203,7 @@ describe("runCleanlinessCheck allowed-file override", () => {
     await git(root, ["add", "."]);
     await git(root, ["commit", "-m", "bad override"]);
 
-    const result = await runCleanlinessCheck(runtime, root, "HEAD~1");
+    const result = await runCleanlinessCheck(runtime, root, "HEAD~1", "HEAD~1");
     expect(result.ok).toBe(false);
     expect(result.output).toContain(
       "cleanliness.allowedFiles must be a list of paths",
@@ -193,8 +221,68 @@ describe("runCleanlinessCheck ignored files", () => {
 
     fs.writeFileSync(path.join(root, "ignored.log"), "x".repeat(2 * 1048576));
 
-    const result = await runCleanlinessCheck(runtime, root, "HEAD~1");
+    const result = await runCleanlinessCheck(runtime, root, "HEAD~1", "HEAD~1");
     expect(result.ok).toBe(true);
+  });
+});
+
+describe("runCleanlinessCheck against the absorbed integration head", () => {
+  it("keeps the recorded base while the branch has not absorbed the head", async () => {
+    const { root, runtime, start } = await setupHeadAndTask();
+
+    const result = await runCleanlinessCheck(runtime, root, start, "factory/g");
+    expect(result.ok).toBe(true);
+  });
+
+  it("does not charge the head's files once the branch absorbs it", async () => {
+    const { root, runtime, start } = await setupHeadAndTask();
+
+    await git(root, ["merge", "--no-edit", "factory/g"]);
+    const absorbed = await runCleanlinessCheck(
+      runtime,
+      root,
+      start,
+      "factory/g",
+    );
+    expect(absorbed.ok).toBe(true);
+    expect(absorbed.output).toBe("Clean");
+
+    // A head that moves past the absorbed commit stays out of the range: the
+    // merge base follows, not the head's tip.
+    await landOnHead(root, "later.log", "another task's log");
+
+    const moved = await runCleanlinessCheck(runtime, root, start, "factory/g");
+    expect(moved.ok).toBe(true);
+  });
+
+  it("still charges a disallowed file the task adds itself", async () => {
+    const { root, runtime, start } = await setupHeadAndTask();
+
+    await git(root, ["merge", "--no-edit", "factory/g"]);
+    fs.writeFileSync(path.join(root, "own.tmp"), "mine");
+    await git(root, ["add", "own.tmp"]);
+    await git(root, ["commit", "-m", "own artifact"]);
+
+    const result = await runCleanlinessCheck(runtime, root, start, "factory/g");
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain("Disallowed artifact: own.tmp");
+    expect(result.output).not.toContain("landed.tmp");
+  });
+});
+
+describe("runCleanlinessCheck with a recorded base ahead of the merge base", () => {
+  it("charges a revision's own rework", async () => {
+    const { root, runtime } = await setupHeadAndTask();
+    const head = (await git(root, ["rev-parse", "factory/g"])).stdout.trim();
+    fs.writeFileSync(path.join(root, "mine.tmp"), "mine");
+    await git(root, ["add", "mine.tmp"]);
+    await git(root, ["commit", "-m", "revision work"]);
+
+    // The amend stamps the head it could not merge as the revision base.
+    const result = await runCleanlinessCheck(runtime, root, head, "factory/g");
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain("Disallowed artifact: mine.tmp");
+    expect(result.output).not.toContain("landed.tmp");
   });
 });
 
@@ -251,7 +339,12 @@ describe("cleanliness hit routing", () => {
       await git(root, ["add", "."]);
       await git(root, ["commit", "-m", "hit"]);
 
-      const result = await runCleanlinessCheck(runtime, root, "HEAD~1");
+      const result = await runCleanlinessCheck(
+        runtime,
+        root,
+        "HEAD~1",
+        "HEAD~1",
+      );
       expect(result.ok).toBe(false);
       expect(result.output).toContain(hit.output);
 

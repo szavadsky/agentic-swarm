@@ -23,7 +23,7 @@ import {
 } from "./record.js";
 import { checkSpikeReport } from "./spike-report.js";
 import type { Cause, KernelRuntime, StepRecord, TaskFile } from "./types.js";
-import { headSha, treeSha } from "./worktree.js";
+import { headSha, integrationHead, treeSha } from "./worktree.js";
 
 /**
  * Infra gate evidence the kernel itself owns: the gate's own wall timeout and
@@ -145,7 +145,12 @@ export async function runTaskGates(
     revisionBase(gatesRecords, meta.slug, task.revision) ??
     firstBase(gatesRecords, meta.slug) ??
     "HEAD";
-  const cleanliness = await runCleanlinessCheck(runtime, worktree, base);
+  const cleanliness = await runCleanlinessCheck(
+    runtime,
+    worktree,
+    base,
+    await integrationHead(runtime),
+  );
   if (!cleanliness.ok) checks.push(cleanliness);
 
   const red = newGateFailures(checks, preexisting).filter(
