@@ -491,7 +491,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     variables: {
       branch: "task branch the relaunch continues; empty when none",
       reason:
-        "`relaunch` after an interruption, `trivial` in the front's session",
+        "`relaunch` after an interruption, `fallback` for a tier that continues edited work, `trivial` in the front's session",
       session_cwd:
         "directory the resumed session's tools run in; trivial turns only",
       worktree: "absolute worktree a trivial turn must use; trivial turns only",

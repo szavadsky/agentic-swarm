@@ -322,7 +322,7 @@ function keptSession(
 }
 
 /** Why a turn is rendered the resume fragment. */
-export type ResumeReason = "relaunch" | "trivial";
+export type ResumeReason = "relaunch" | "fallback" | "trivial";
 
 /** The facts the resume fragment renders; empty strings for the parts a reason does not use. */
 export interface ResumeNoteOptions {
@@ -332,11 +332,12 @@ export interface ResumeNoteOptions {
 }
 
 /**
- * The resume fragment a relaunched turn carries. A relaunch continues the
- * task branch and says to assess status first; a trivial turn also continues
- * the front's session, so its note names the session cwd and the absolute
- * worktree the tools must use instead. The leading newline separates the
- * fragment from the `worktree:` line it follows.
+ * The resume fragment a relaunched or fallback turn carries. A relaunch
+ * continues the task branch and says to assess status first; a fallback tier
+ * continues the same worktree under the same ask; a trivial turn also
+ * continues the front's session, so its note names the session cwd and the
+ * absolute worktree the tools must use instead. The leading newline separates
+ * the fragment from the `worktree:` line it follows.
  */
 export function resumeNote(
   prompts: PromptLibrary,

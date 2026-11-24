@@ -1,5 +1,6 @@
 /** Pack measurement, fallback chains and opaque-turn delivery. */
 
+import { git } from "../../core/git/exec.js";
 import { portable } from "../../harness/types.js";
 import type {
   PoolLatch,
@@ -10,7 +11,7 @@ import type {
   Usage,
 } from "../../harness/types.js";
 import { addUsage, reportsUsage, zeroUsage } from "../../harness/usage.js";
-import { noLiveTierCause, tierPoolKey } from "../flow-context.js";
+import { noLiveTierCause, resumeNote, tierPoolKey } from "../flow-context.js";
 import {
   latchPool,
   markPoolExhausted,
@@ -276,12 +277,64 @@ function noLiveTierResult(
   };
 }
 
+/** The worktree's HEAD and porcelain status before the first tier call. */
+interface WorktreeState {
+  head: string;
+  status: string;
+}
+
+async function worktreeState(cwd: string): Promise<WorktreeState | undefined> {
+  const [head, status] = await Promise.all([
+    git(cwd, ["rev-parse", "HEAD"], { allowFail: true }),
+    git(cwd, ["status", "--porcelain"], { allowFail: true }),
+  ]);
+  if (head.code !== 0 || status.code !== 0) return undefined;
+  return { head: head.stdout.trim(), status: status.stdout };
+}
+
+/**
+ * Whether a fallback tier continues work: the chain starts on a dirty tree,
+ * the tree changed since the chain started, or the branch already carries
+ * commits past the turn's base. A later chain in the same turn (repair,
+ * rescue, overflow retry) starts after the earlier chain's edits, so its
+ * starting dirt is continued work too.
+ */
+async function worktreeEdited(
+  cwd: string,
+  base: string | undefined,
+  start: WorktreeState | undefined,
+): Promise<boolean> {
+  if (start === undefined) return false;
+  if (start.status.trim() !== "") return true;
+  const current = await worktreeState(cwd);
+  if (current === undefined) return false;
+  if (current.head !== start.head || current.status !== start.status)
+    return true;
+  return base !== undefined && current.head !== base;
+}
+
+/**
+ * A fallback that continues edited work assesses the tree first. The note is
+ * its own block so it never fuses with the ask's opening line; an ask that
+ * already carries it (a relaunch) keeps its single copy.
+ */
+function fallbackAsk(
+  prompts: KernelRuntime["prompts"],
+  ask: string,
+  edited: boolean,
+): string {
+  if (!edited) return ask;
+  const note = resumeNote(prompts, "fallback").trim();
+  return note !== "" && !ask.includes(note) ? `${note}\n\n${ask}` : ask;
+}
+
 /**
  * Walks the alias's tiers from `fromIndex`: one harness call per live tier,
  * each with its own model, effort and opaque config, advancing on
  * infrastructure stops the tier's own retries could not cure. A tier whose
  * pool is latched makes no call; every attempt is stamped with the harness
- * that ran it.
+ * that ran it. A fallback that continues edited work gets the resume fragment
+ * as its own block before the ask, unless the ask already carries it.
  */
 export async function callChain(
   runtime: KernelRuntime,
@@ -294,6 +347,11 @@ export async function callChain(
 ): Promise<ChainResult> {
   let index = fromIndex;
   let current = chainSession;
+  let tierAsk = ask;
+  const startState =
+    spec.target.tiers.length > fromIndex + 1
+      ? await worktreeState(spec.cwd)
+      : undefined;
   const state: ChainState = {
     attempts: [],
     served: [],
@@ -312,7 +370,7 @@ export async function callChain(
       runtime,
       spec,
       tier,
-      ask,
+      tierAsk,
       current,
       outcomePath,
       timeouts,
@@ -324,6 +382,11 @@ export async function callChain(
       break;
     }
     index += 1;
+    tierAsk = fallbackAsk(
+      runtime.prompts,
+      ask,
+      await worktreeEdited(spec.cwd, spec.meta.base, startState),
+    );
   }
   if (result === undefined) {
     result = noLiveTierResult(runtime, spec);
