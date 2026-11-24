@@ -4,7 +4,7 @@ import {
   renderDashboard,
   writeDashboardAssets,
 } from "./dashboard.js";
-import { derive, materialOpenDebts, type OpenDebt } from "./derive.js";
+import { derive, materialOpenDebts } from "./derive.js";
 import {
   DEFAULT_ROLE_BY_STEP,
   type GroupMetrics,
@@ -18,6 +18,21 @@ import type { PriceTable } from "./pricing.js";
 import { latestRunLog } from "./run-log.js";
 import { recordDirName } from "./store.js";
 import {
+  debtEntry,
+  openConcernEntries,
+  readStatusMailbox,
+  statusConcerns,
+  statusSteers,
+} from "./status-triage.js";
+import type {
+  StatusConcern,
+  StatusDebt,
+  StatusMailbox,
+  StatusOpenConcern,
+  StatusSteer,
+  StatusStop,
+} from "./status-triage.js";
+import {
   latestPmSummary,
   mechanicalSummary,
   type StatusSummary,
@@ -30,8 +45,6 @@ import {
 import type {
   ArtifactStore,
   Cause,
-  Concern,
-  ConcernId,
   FlowDefinition,
   GoalStatus,
   KernelRuntime,
@@ -45,6 +58,16 @@ import type {
 
 /** Goal-relative path of the machine-readable status snapshot. */
 export const STATUS_REL_PATH = "status.json";
+
+export type {
+  StatusConcern,
+  StatusDebt,
+  StatusMailbox,
+  StatusOpenConcern,
+  StatusSteer,
+  StatusStop,
+  SteerState,
+} from "./status-triage.js";
 
 /** One task as status.json names it, with the record a dashboard can link. */
 export interface StatusTask {
@@ -64,32 +87,6 @@ export interface StatusTask {
   supersededBy?: string;
   /** `records/<dir>` of the slug's latest record. */
   record?: string;
-}
-
-/** One open debt, with the record that raised it. */
-export interface StatusDebt {
-  id?: ConcernId;
-  text: string;
-  evidence?: string;
-  calibration: Concern["calibration"];
-  /** `slug step rN` of the record that raised it. */
-  source: string;
-  iteration: number;
-  record?: string;
-}
-
-/** One concern a record delivered, with its source record. */
-export interface StatusConcern {
-  id?: ConcernId;
-  slug?: string;
-  step: string;
-  round: number;
-  kind: Concern["kind"];
-  calibration: Concern["calibration"];
-  text: string;
-  evidence?: string;
-  /** `records/<dir>` of the record that raised it. */
-  record: string;
 }
 
 export interface StatusCost {
@@ -143,6 +140,12 @@ export interface StatusDocument {
     openDebt: StatusDebt[];
   };
   concerns: StatusConcern[];
+  /** Open, non-FYI concerns: what the dashboard's default view lists. */
+  openConcerns: StatusOpenConcern[];
+  /** Every steer the mailbox or a route record names. */
+  steers: StatusSteer[];
+  /** How the last launch stopped; absent while it runs or before the first launch. */
+  stop?: StatusStop;
   /** Latest intent-wise status an architect summary wrote; absent until one does. */
   intentStatus?: IntentStatusArtifact;
   /** Goal-relative path of the latest launch log; absent before the first launch. */
@@ -175,6 +178,10 @@ export interface StatusInput {
   tasks: readonly TaskFile[];
   /** Latest intent status artifact; absent before an architect summary writes one. */
   intentStatus?: IntentStatusArtifact;
+  /** The mailbox queues the dashboard's steer panel reads; absent means none. */
+  mailbox?: StatusMailbox;
+  /** How the launch that wrote this snapshot stopped; absent while it runs. */
+  stop?: StatusStop;
   /** Goal-relative path of the latest launch log; absent before the first launch. */
   runLog?: string;
   records: readonly StepRecord[];
@@ -192,13 +199,6 @@ const OPEN: ReadonlySet<TaskStatus> = new Set(["pending", "ready", "running"]);
 
 function recordPath(record: StepRecord): string {
   return `records/${recordDirName(record.seq, record)}`;
-}
-
-/** The record directory a concern id names: `<recordId>#<n>`. */
-function concernRecord(id: ConcernId | undefined): string | undefined {
-  if (!id) return undefined;
-  const dir = id.slice(0, id.indexOf("#"));
-  return dir ? `records/${dir}` : undefined;
 }
 
 function latestRecords(
@@ -251,35 +251,6 @@ function statusTasks(input: StatusInput): StatusTask[] {
   return Object.entries(input.state.tasks)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([slug, state]) => statusTask(slug, state, titles, latest));
-}
-
-function debtEntry(debt: OpenDebt): StatusDebt {
-  const record = concernRecord(debt.id);
-  return {
-    ...(debt.id ? { id: debt.id } : {}),
-    text: debt.text,
-    ...(debt.evidence ? { evidence: debt.evidence } : {}),
-    calibration: debt.calibration,
-    source: debt.source,
-    iteration: debt.iteration,
-    ...(record ? { record } : {}),
-  };
-}
-
-function statusConcerns(records: readonly StepRecord[]): StatusConcern[] {
-  return records.flatMap((record) =>
-    (record.outcome?.concerns ?? []).map((concern) => ({
-      ...(concern.id ? { id: concern.id } : {}),
-      ...(record.slug ? { slug: record.slug } : {}),
-      step: record.step,
-      round: record.round,
-      kind: concern.kind,
-      calibration: concern.calibration,
-      text: concern.text,
-      ...(concern.evidence ? { evidence: concern.evidence } : {}),
-      record: recordPath(record),
-    })),
-  );
 }
 
 /** The counts the mechanical account names, from the grouped tasks. */
@@ -417,11 +388,14 @@ export function buildStatus(input: StatusInput): StatusDocument {
       openDebt: materialOpenDebts([...input.records]).map(debtEntry),
     },
     concerns: statusConcerns(input.records),
+    openConcerns: openConcernEntries(input.records),
+    steers: statusSteers(input.records, input.mailbox),
     cost: costView(totals),
     work: workView(totals),
     ...(epics ? { epics } : {}),
     ...(input.intentStatus ? { intentStatus: input.intentStatus } : {}),
     ...(input.runLog ? { runLog: input.runLog } : {}),
+    ...(input.stop ? { stop: input.stop } : {}),
   };
 }
 
@@ -440,6 +414,7 @@ export interface StatusSource {
 /** Derives the snapshot from the goal's current task files and records. */
 export async function collectStatus(
   source: StatusSource,
+  stop?: StatusStop,
 ): Promise<StatusDocument> {
   const tasks = await source.store.listTasks();
   const records = await source.store.listRecords();
@@ -449,6 +424,8 @@ export async function collectStatus(
     state,
     tasks,
     records,
+    mailbox: await readStatusMailbox(source.store),
+    ...(stop ? { stop } : {}),
     intentStatus: await readLatestIntentStatus(source.store, state.iteration),
     runLog: await latestRunLog(source.store.goalDir),
     roleByStep: rolesByStep(source.flows),
@@ -458,8 +435,11 @@ export async function collectStatus(
 }
 
 /** Rewrites `status.json` and its dashboard after an agent launch or finish. */
-export async function writeStatus(source: StatusSource): Promise<string> {
-  const status = await collectStatus(source);
+export async function writeStatus(
+  source: StatusSource,
+  stop?: StatusStop,
+): Promise<string> {
+  const status = await collectStatus(source, stop);
   // Render before either write: a template failure never leaves a fresh
   // status.json beside a dashboard describing the previous snapshot.
   const dashboard = renderDashboard(status);

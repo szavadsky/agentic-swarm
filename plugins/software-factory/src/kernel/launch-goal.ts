@@ -14,6 +14,8 @@ import type { GoalRun } from "./launch-run.js";
 import { prepareLaunch, recoverOrInfra } from "./launch-setup.js";
 import { drainHeldNotes } from "./mailbox.js";
 import { landStoreCommits } from "./store-backend.js";
+import { statusSource, writeStatus } from "./status.js";
+import type { StatusStop } from "./status.js";
 import type { LaunchResult, RunGoalOptions } from "./launch-types.js";
 import type { State } from "./types.js";
 import { sweepWorktrees } from "./worktree.js";
@@ -58,6 +60,15 @@ function launchStop(run: GoalRun, state: State): LaunchResult["stop"] {
   return run.ended === "infra" ? "infra" : "iteration-limit";
 }
 
+/** The snapshot field that makes the dashboard badge follow this launch's stop. */
+function statusStop(result: LaunchResult): StatusStop {
+  return {
+    reason: result.stop,
+    ...(result.cause ? { cause: result.cause } : {}),
+    ...(result.interruptedBy ? { interruptedBy: result.interruptedBy } : {}),
+  };
+}
+
 async function launchResult(
   opts: RunGoalOptions,
   run: GoalRun,
@@ -95,6 +106,10 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     const recovered = await recoverOrInfra(runtime, opts, interrupted);
     if (recovered) {
       await drainHeldNotes(store);
+      // This launch stopped before its first turn; the stored snapshot must
+      // name that stop too, and settle on the goal branch like any other.
+      await writeStatus(statusSource(runtime), statusStop(recovered));
+      await landStoreCommits(setup.paths);
       return recovered;
     }
     // The artifact folder carries the schemas and one LSP config for editors
@@ -116,11 +131,11 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     };
     await runIterations(run);
     await drainHeldNotes(store);
-    // The run's last writes settle on the goal branch too, not just the
-    // checkout the next launch reads; a crash before this leaves them for
-    // recovery to land.
-    await landStoreCommits(setup.paths);
     const result = await launchResult(opts, run);
+    // The dashboard reads the stored snapshot, so the final stop is written
+    // before the launch's writes settle on the goal branch.
+    await writeStatus(statusSource(runtime), statusStop(result));
+    await landStoreCommits(setup.paths);
     if (result.stop === "done") await sweepWorktrees(runtime);
     return result;
   } finally {

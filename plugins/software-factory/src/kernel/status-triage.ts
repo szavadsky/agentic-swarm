@@ -1,0 +1,294 @@
+/**
+ * The dashboard's triage views: open concerns, mailbox steers and the launch
+ * stop. Status derives them from the same records and queues the page reads.
+ */
+
+import path from "node:path";
+import { recordedConcernId } from "../core/concerns.js";
+import { openConcerns } from "./context-pack/misc.js";
+import { materialOpenDebts, type OpenDebt } from "./derive.js";
+import type { LaunchStop } from "./launch-types.js";
+import { steerResponses } from "./mailbox/routes.js";
+import type { DrainSignal } from "./signals.js";
+import { recordDirName } from "./store.js";
+import type {
+  ArtifactStore,
+  Concern,
+  ConcernId,
+  StepRecord,
+  SteerRoute,
+} from "./types.js";
+
+/** One open debt, with the record that raised it. */
+export interface StatusDebt {
+  id?: ConcernId;
+  text: string;
+  evidence?: string;
+  calibration: Concern["calibration"];
+  /** `slug step rN` of the record that raised it. */
+  source: string;
+  iteration: number;
+  record?: string;
+}
+
+/** One concern a record delivered, with its source record. */
+export interface StatusConcern {
+  id?: ConcernId;
+  slug?: string;
+  step: string;
+  round: number;
+  kind: Concern["kind"];
+  calibration: Concern["calibration"];
+  text: string;
+  evidence?: string;
+  /** `records/<dir>` of the record that raised it. */
+  record: string;
+}
+
+/**
+ * One open concern the default view lists: no FYI notes, no debt the kernel
+ * closed or the plan owns, and no concern a checker or merged follow-up
+ * answered. Debt entries keep the id a `debtClosed` names.
+ */
+export interface StatusOpenConcern {
+  id?: ConcernId;
+  kind: Concern["kind"];
+  calibration: Concern["calibration"];
+  text: string;
+  evidence?: string;
+  /** `slug step rN` of the record that raised it. */
+  source: string;
+  /** `records/<dir>` of the record that raised it. */
+  record?: string;
+}
+
+/** Where one steer stands between the mailbox and its answer. */
+export type SteerState = "waiting" | "routed" | "answered" | "processed";
+
+/** One steer as the dashboard panel lists it. */
+export interface StatusSteer {
+  id: string;
+  state: SteerState;
+  /** The PM's route, once one is recorded. */
+  route?: SteerRoute;
+  /** The latest answer this steer received. */
+  answer?: string;
+  /** `records/<dir>` of the record that routed or answered it. */
+  record?: string;
+}
+
+/** How the last launch stopped, so the dashboard's badge follows the stop. */
+export interface StatusStop {
+  reason: LaunchStop;
+  /** The formatted cause the launch printed, when it had one. */
+  cause?: string;
+  /** The signal that interrupted the launch, when one did. */
+  interruptedBy?: DrainSignal;
+}
+
+/** The mailbox queues a status snapshot reads, as file names. */
+export interface StatusMailbox {
+  inbox: readonly string[];
+  processed: readonly string[];
+}
+
+function recordPath(record: StepRecord): string {
+  return `records/${recordDirName(record.seq, record)}`;
+}
+
+/** The record directory a concern id names: `<recordId>#<n>`. */
+function concernRecord(id: ConcernId | undefined): string | undefined {
+  if (!id) return undefined;
+  const dir = id.slice(0, id.indexOf("#"));
+  return dir ? `records/${dir}` : undefined;
+}
+
+/** Every concern a record delivered, unfiltered: the count the page reports. */
+export function statusConcerns(
+  records: readonly StepRecord[],
+): StatusConcern[] {
+  return records.flatMap((record) =>
+    (record.outcome?.concerns ?? []).map((concern) => ({
+      ...(concern.id ? { id: concern.id } : {}),
+      ...(record.slug ? { slug: record.slug } : {}),
+      step: record.step,
+      round: record.round,
+      kind: concern.kind,
+      calibration: concern.calibration,
+      text: concern.text,
+      ...(concern.evidence ? { evidence: concern.evidence } : {}),
+      record: recordPath(record),
+    })),
+  );
+}
+
+/** One open debt as the distance view names it. */
+export function debtEntry(debt: OpenDebt): StatusDebt {
+  const record = concernRecord(debt.id);
+  return {
+    ...(debt.id ? { id: debt.id } : {}),
+    text: debt.text,
+    ...(debt.evidence ? { evidence: debt.evidence } : {}),
+    calibration: debt.calibration,
+    source: debt.source,
+    iteration: debt.iteration,
+    ...(record ? { record } : {}),
+  };
+}
+
+/** The latest record that raised each concern fingerprint, for the dashboard's link. */
+function concernRecords(records: readonly StepRecord[]): Map<string, string> {
+  const byId = new Map<string, string>();
+  for (const record of [...records].sort((a, b) => a.seq - b.seq)) {
+    for (const concern of record.outcome?.concerns ?? []) {
+      byId.set(recordedConcernId(concern), recordPath(record));
+    }
+  }
+  return byId;
+}
+
+/**
+ * Open, non-FYI concerns: the forwarded set the checker did not answer plus
+ * the debt register's non-FYI entries. Debt also appears in the distance view;
+ * this panel lists every open concern so the page has one triage list.
+ */
+export function openConcernEntries(
+  records: readonly StepRecord[],
+): StatusOpenConcern[] {
+  const recordsById = concernRecords(records);
+  const forwarded: StatusOpenConcern[] = openConcerns(records).map(
+    (concern) => ({
+      id: concern.id,
+      kind: concern.kind as Concern["kind"],
+      calibration: concern.calibration as Concern["calibration"],
+      text: concern.text,
+      ...(concern.evidence ? { evidence: concern.evidence } : {}),
+      source: concern.source,
+      ...(recordsById.has(concern.id)
+        ? { record: recordsById.get(concern.id) }
+        : {}),
+    }),
+  );
+  const debts: StatusOpenConcern[] = materialOpenDebts(records).map((debt) => {
+    const record = concernRecord(debt.id);
+    return {
+      ...(debt.id ? { id: debt.id } : {}),
+      kind: "debt",
+      calibration: debt.calibration,
+      text: debt.text,
+      ...(debt.evidence ? { evidence: debt.evidence } : {}),
+      source: debt.source,
+      ...(record ? { record } : {}),
+    };
+  });
+  return [...forwarded, ...debts].sort(
+    (a, b) =>
+      (a.record ?? "").localeCompare(b.record ?? "") ||
+      a.text.localeCompare(b.text),
+  );
+}
+
+/** A steer queue file name's id; an archive suffix is not part of the id. */
+const STEER_ARCHIVE = /^(.*)\.[0-9a-f]{8}$/;
+
+function steerId(file: string): string {
+  const stem = path.basename(file, path.extname(file));
+  const archived = STEER_ARCHIVE.exec(stem);
+  return archived ? (archived[1] as string) : stem;
+}
+
+interface SteerFact {
+  route?: SteerRoute;
+  answer?: string;
+  record?: string;
+}
+
+/** The PM's committed routes in one steer-routes record. */
+function applyRoutes(
+  facts: Map<string, SteerFact>,
+  known: Set<string>,
+  record: StepRecord,
+): void {
+  if (record.step !== "steer-routes" || record.actor !== "script") return;
+  for (const entry of record.outcome?.steerRoutes ?? []) {
+    known.add(entry.steer);
+    const answer = entry.answer?.trim();
+    facts.set(entry.steer, {
+      route: entry.route,
+      ...(answer ? { answer } : {}),
+      record: recordPath(record),
+    });
+  }
+}
+
+/** Every steer answer one record carries, typed or a legacy forward line. */
+function applyAnswers(
+  facts: Map<string, SteerFact>,
+  known: Set<string>,
+  record: StepRecord,
+): void {
+  if (!record.outcome) return;
+  for (const [id, answer] of steerResponses(record.outcome, known)) {
+    facts.set(id, {
+      ...(facts.get(id) ?? {}),
+      answer,
+      record: recordPath(record),
+    });
+  }
+}
+
+/** Routes and answers from the records, including legacy forward-line answers. */
+function steerFacts(
+  records: readonly StepRecord[],
+  knownIds: Iterable<string>,
+): Map<string, SteerFact> {
+  const facts = new Map<string, SteerFact>();
+  const known = new Set(knownIds);
+  const sorted = [...records].sort(
+    (a, b) => a.seq - b.seq || a.startedAt.localeCompare(b.startedAt),
+  );
+  for (const record of sorted) {
+    if (!record.outcome) continue;
+    applyRoutes(facts, known, record);
+    applyAnswers(facts, known, record);
+  }
+  return facts;
+}
+
+/** Every steer the mailbox or a route record names, with its state and answer. */
+export function statusSteers(
+  records: readonly StepRecord[],
+  mailbox: StatusMailbox | undefined,
+): StatusSteer[] {
+  const inbox = new Set((mailbox?.inbox ?? []).map(steerId));
+  const processed = new Set((mailbox?.processed ?? []).map(steerId));
+  const facts = steerFacts(records, [...inbox, ...processed]);
+  const ids = [...new Set([...inbox, ...processed, ...facts.keys()])].sort();
+  return ids.map((id) => {
+    const fact = facts.get(id);
+    const state: SteerState = fact?.answer
+      ? "answered"
+      : fact?.route
+        ? "routed"
+        : inbox.has(id)
+          ? "waiting"
+          : "processed";
+    return {
+      id,
+      state,
+      ...(fact?.route ? { route: fact.route } : {}),
+      ...(fact?.answer ? { answer: fact.answer } : {}),
+      ...(fact?.record ? { record: fact.record } : {}),
+    };
+  });
+}
+
+/** The mailbox file names a snapshot reads; a missing queue is empty. */
+export async function readStatusMailbox(
+  store: ArtifactStore,
+): Promise<StatusMailbox> {
+  return {
+    inbox: await store.mailbox.files("inbox"),
+    processed: await store.mailbox.files("processed"),
+  };
+}

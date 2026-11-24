@@ -169,6 +169,14 @@ function registerInfraStopDetailsPart4(): void {
       expect(
         fs.existsSync(path.join(goal.goalDir, "iterations/2/summary.md")),
       ).toBe(false);
+      const dashboard = fs.readFileSync(
+        path.join(goal.goalDir, "dashboard.html"),
+        "utf8",
+      );
+      expect(dashboard).toContain(
+        '<span class="badge stop-infra">stopped: infrastructure stop</span>',
+      );
+      expect(dashboard).toContain(stopText);
     } finally {
       cleanup(goal);
     }

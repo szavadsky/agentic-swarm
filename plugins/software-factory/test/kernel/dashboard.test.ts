@@ -41,6 +41,8 @@ function emptySnapshot(): StatusDocument {
     },
     distance: { pending: [], parks: [], openDebt: [] },
     concerns: [],
+    openConcerns: [],
+    steers: [],
     cost: {
       harnessCostUsd: null,
       listCostUsd: null,
@@ -359,7 +361,8 @@ describe("dashboard links and empty states", () => {
     expect(html).toContain("No task is waiting to start.");
     expect(html).toContain("No parked task.");
     expect(html).toContain("No open debt.");
-    expect(html).toContain("No concerns recorded.");
+    expect(html).toContain("No open concerns.");
+    expect(html).toContain("No steer in the mailbox.");
     expect(html).toContain("n/a");
     expect(html).not.toContain("Latest launch log");
     expect(html).not.toContain("{{");
