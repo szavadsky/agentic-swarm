@@ -928,3 +928,7 @@ Landed via goal branch factory/ops-friction: base-format-green (trivial), fricti
 Friction evidence (the campaign's own subject matter): task branches root at the goal head at launch, so the 3 tasks launched before base-format-green merged parked on the inherited format red — 2 held done work (empty-diff parks), 1 was a no-op implementer (pi maiden turn). Later tasks inherited the fix. All 6 implementer turns ran pi/deepseek xhigh and reported $0 cost (usage not flowing from the pi leg — spend understated).
 
 Correction: the 2026-11-23 landing journal claimed format-green from a repo-root `biome format .` that checks 0 files; the base was red at src/cli/dispatch/commands.ts. The architect caught it, base-format-green fixed it. Base now green from plugins/software-factory: typecheck + lint (658) + format (711) + 1882 tests, 0 fail.
+
+## 2026-11-24 — run config: reviewer primary rotated to agy (owner order)
+
+Reviewer now agy gemini-3.8-flash (high, antigravity); fallbacks omp spark, codex deepseek, opencode hy4. Rest unchanged. Validated. Old goal dirs removed (delta, ops-friction), their 9 branches deleted, worktrees cleaned (9.2G reclaimed).
