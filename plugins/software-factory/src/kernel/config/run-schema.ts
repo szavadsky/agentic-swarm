@@ -235,6 +235,12 @@ export const limitsSchema = z
     iterationUsd: z.number().positive().optional(),
     turnMinutes: z.number().positive().optional(),
     iterationMinutes: z.number().positive().optional(),
+    /**
+     * How long a stable inbox steer waits before it interrupts a running turn,
+     * in seconds; defaults to 60. The inbox is watched every few seconds, so a
+     * steer dropped during a long turn is answered well inside that turn.
+     */
+    steerDebounceSeconds: z.number().positive().optional(),
     minTmpFreeBytes: z.number().int().nonnegative().optional(),
   })
   .strict()

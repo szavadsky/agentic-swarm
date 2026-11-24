@@ -234,6 +234,8 @@ export interface RunConfig {
     turnMinutes?: number;
     /** Per-iteration wall bound in minutes; folds into `iterationWallMs`. */
     iterationMinutes?: number;
+    /** Stable-window an inbox steer waits before it interrupts a running turn, in seconds. */
+    steerDebounceSeconds?: number;
     /** Minimum free bytes in the temporary directory. */
     minTmpFreeBytes?: number;
   };

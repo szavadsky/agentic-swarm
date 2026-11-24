@@ -221,6 +221,9 @@ export function toLimits(configs: ConfigBundle): Limits {
     ...(runLimits.iterationMinutes !== undefined
       ? { iterationMinutes: runLimits.iterationMinutes }
       : {}),
+    ...(runLimits.steerDebounceSeconds !== undefined
+      ? { steerDebounceMs: Math.round(runLimits.steerDebounceSeconds * 1000) }
+      : {}),
     ...(runLimits.minTmpFreeBytes !== undefined
       ? { minTmpFreeBytes: runLimits.minTmpFreeBytes }
       : {}),

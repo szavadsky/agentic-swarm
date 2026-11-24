@@ -424,6 +424,48 @@ function registerDispatchPassSignalsPart6(): void {
   }, 60_000);
 }
 
+function registerDispatchPassSignalsPart7(): void {
+  it("ends the iteration as an infra stop when the inbox becomes unreadable during a long turn", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      const inbox = path.join(runtime.store.goalDir, "mailbox/inbox");
+
+      // The pass that admitted this turn read the inbox; only the watch's own
+      // timer sees the breakage while the turn is still in flight.
+      harness.script(
+        async (req, ctx) => {
+          fs.rmSync(inbox, { recursive: true, force: true });
+          fs.writeFileSync(inbox, "not a mailbox\n", "utf8");
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
+          ctx.writeOutcome(outcome({ summary: "alpha implemented" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ slug: "alpha", step: "implement" }) },
+      );
+
+      const result = await runDispatch(runtime, {
+        iteration: 1,
+        steerWatchTickMs: 20,
+      });
+
+      expect(result.reason).toBe("infra");
+      expect(result.cause?.detail).toContain("steer watch:");
+      const records = await runtime.store.listRecords();
+      expect(
+        records.some((r) => r.slug === "alpha" && r.step === "review"),
+      ).toBe(false);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
 describe("dispatch pass signals", () => {
   registerDispatchPassSignalsPart1();
 
@@ -436,4 +478,6 @@ describe("dispatch pass signals", () => {
   registerDispatchPassSignalsPart5();
 
   registerDispatchPassSignalsPart6();
+
+  registerDispatchPassSignalsPart7();
 });

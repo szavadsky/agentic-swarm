@@ -147,7 +147,8 @@ envAllowlist: [ANTHROPIC_API_KEY]
   `bootstrap/run/self.yaml` are complete examples.
 - `limits`: `iterations` (default 1), `concurrency`, `planCheckRounds`,
   `resumeAttempts`, `parkAmends`, `turns`, `wallMinutes`, `iterationUsd`,
-  `turnMinutes`, `iterationMinutes`, `minTmpFreeBytes`.
+  `turnMinutes`, `iterationMinutes`, `steerDebounceSeconds`,
+  `minTmpFreeBytes`.
 - `worktreeRoot` defaults to `../.factory-worktrees/<repo-id>` beside the
   checkout; `sessions.dir` defaults to `<worktreeRoot>/.sessions`. Both must be
   outside the repo and writable.

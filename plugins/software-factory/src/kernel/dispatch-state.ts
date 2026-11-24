@@ -42,6 +42,13 @@ export interface DispatchOptions {
    * inject a recorder instead of waiting.
    */
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * The inbox watch's timer cadence, in milliseconds; defaults to
+   * `STEER_WATCH_TICK_MS`. Its stable window is the run's
+   * `limits.steerDebounceSeconds`, so a test shortens the wait from its run
+   * config.
+   */
+  steerWatchTickMs?: number;
 }
 
 export interface Running {

@@ -248,6 +248,8 @@ export interface Limits {
   turnMinutes?: number;
   /** Per-iteration wall bound in minutes; folds into `iterationWallMs`. */
   iterationMinutes?: number;
+  /** Stable-window an inbox steer waits before it interrupts a running turn. */
+  steerDebounceMs?: number;
   /** Plan-checker re-runs per iteration; exhausted rounds consult the architect. */
   planCheckRounds: number;
   /** Resume attempts limit; default 2. */

@@ -1,11 +1,13 @@
 /**
- * The inbox poll between dispatch decisions, never inside a turn: one settle
- * window per new batch, then exactly one PM steer turn; the holds it may
- * rewrite are re-read against the tasks on disk after that turn.
+ * The inbox poll: the dispatch loop's single mailbox consumer, run between
+ * dispatch decisions and never inside a turn. It claims one settle window per
+ * new batch, runs exactly one PM steer turn, and re-reads the holds that turn
+ * may have rewritten against the tasks on disk.
  */
 import { openConcernIds } from "./context-pack/misc.js";
 import { activeHolds } from "./dispatch-holds.js";
 import type { ActiveHolds, DispatchState } from "./dispatch-state.js";
+import type { SteerWatch } from "./dispatch-watch.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import { readHolds, type Steer, scanInbox } from "./mailbox.js";
 import { runSteerPm } from "./pm.js";
@@ -14,7 +16,8 @@ import type { State, StepRecord, TaskFile } from "./types.js";
 export interface SteerPoll {
   hold: ActiveHolds;
   steerTurn: boolean;
-  holdError?: string;
+  /** An inbox read failed: the iteration ends as an infra stop. */
+  error?: string;
   urgent?: string;
 }
 
@@ -103,41 +106,47 @@ export async function reloadHolds(
 /**
  * Polls the inbox between dispatch decisions, never inside a turn. The batch
  * gets exactly one PM turn; its record lands before the caller reads records,
- * so its dollars count against the iteration brake.
+ * so its dollars count against the iteration brake. `watch` owns the timer
+ * that interrupts a long wait: this pass consumes its wake, so one
+ * announcement never makes the loop pass twice.
  */
 export async function pollSteers(
   state: DispatchState,
   snapshot: State,
   tasks: TaskFile[],
   records: readonly StepRecord[],
+  watch: SteerWatch,
 ): Promise<SteerPoll> {
+  const watchError = watch.take();
+  // Without an inbox read the batch is unknown, and the loop must not go on
+  // as if the mailbox were empty: the watch's failure ends the iteration.
+  if (watchError) {
+    return {
+      hold: activeHolds(state.holds, new Set(), new Set()),
+      steerTurn: false,
+      error: watchError,
+    };
+  }
   const steers = await scanInbox(state.runtime.store, { settleMs: 0 });
   const pending = new Set(steers.map((steer) => steer.id));
   const openConcerns = openConcernIds(records);
+  const hold = activeHolds(state.holds, pending, openConcerns);
   const urgent = steers.find((steer) => steer.urgent)?.id;
   if (state.cancelled) {
-    return {
-      hold: activeHolds(state.holds, pending, openConcerns),
-      steerTurn: false,
-      urgent,
-    };
+    return { hold, steerTurn: false, ...(urgent ? { urgent } : {}) };
   }
   // Urgency is the owner's exception: no PM turn, no claim. The steer stays
   // pending for the consult the next iteration opens, and the caller drains.
   if (urgent !== undefined) {
-    return {
-      hold: activeHolds(state.holds, pending, openConcerns),
-      steerTurn: false,
-      urgent,
-    };
+    return { hold, steerTurn: false, urgent };
+  }
+  // The PM routes nothing before a plan exists, so a steer dropped that early
+  // waits for the plan instead of being claimed into an architect hand-off.
+  if (!(await state.runtime.store.plans.exists())) {
+    return { hold, steerTurn: false };
   }
   const claim = await claimSteers(state, steers);
-  if (claim.length === 0) {
-    return {
-      hold: activeHolds(state.holds, pending, openConcerns),
-      steerTurn: false,
-    };
-  }
+  if (claim.length === 0) return { hold, steerTurn: false };
   await runBoundaryTurn(
     state.runtime,
     { iteration: state.iteration, step: "pm" },
@@ -157,6 +166,6 @@ export async function pollSteers(
   return {
     hold: activeHolds(state.holds, pending, openConcerns),
     steerTurn: true,
-    ...(holdError ? { holdError } : {}),
+    ...(holdError ? { error: holdError } : {}),
   };
 }
