@@ -207,7 +207,7 @@ function recordVars(
     goal_dir: goal,
     records_dir: path.join(goal, "records"),
     transcripts_dir: path.join(goal, "transcripts"),
-    class_types: "`development` for task",
+    class_types: "`trivial` for trivial, `development` for task",
     tasks_dir: path.join(goal, "tasks"),
     class_path: path.join(goal, "class.yaml"),
     plans: `- goal: ${path.join(goal, "plan.md")}`,

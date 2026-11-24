@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import { formatFindings } from "../findings.js";
 import type { Finding } from "../findings.js";
-import { FRONT_CLASS_FLOWS } from "../front.js";
+import { FRONT_TRIVIAL_FLOW } from "../front.js";
 import { BOUNDARY_STEPS, BUILTIN_INGESTION_IDS } from "../types.js";
 import type {
   AliasConfig,
@@ -204,7 +204,7 @@ export function trivialFollowUpFindings(
   process: ProcessConfig,
   file: string,
 ): Finding[] {
-  const flowName = FRONT_CLASS_FLOWS.trivial;
+  const flowName = FRONT_TRIVIAL_FLOW;
   const flow = process.flows[flowName];
   if (!flow) return [];
   return flow.steps

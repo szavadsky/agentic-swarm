@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { loadConfigs } from "../src/kernel/config.js";
-import { FRONT_CLASS_FLOWS, frontClassTypesVar } from "../src/kernel/front.js";
+import { FRONT_TRIVIAL_FLOW, frontClassTypesVar } from "../src/kernel/front.js";
 import { taskTypesVar, tierNamesVar } from "../src/kernel/prompt-schema.js";
 import { outcomeExampleVar } from "../src/kernel/outcome-example.js";
 import { packPreparerOutcomeSchema } from "../src/kernel/pack-prep.js";
@@ -47,26 +47,55 @@ describe("prompts: config names", () => {
     expect(tierNamesVar(undefined)).toBe("none");
   });
 
-  it("renders the task type each front class writes", () => {
-    const rendered = frontClassTypesVar({
-      development: {
-        flow: FRONT_CLASS_FLOWS.task,
-        kind: "development",
-        schema: "outcome",
-        useWhen: "work that lands after review",
-      },
-      trivial: {
-        flow: FRONT_CLASS_FLOWS.trivial,
-        kind: "development",
-        schema: "outcome",
-        useWhen: "a small fully understood change",
-      },
-    });
-    expect(rendered).toContain("`development` for task");
-    expect(rendered).toContain("`trivial` for trivial");
-    expect(frontClassTypesVar({})).toContain("none for task");
-  });
+  registerFrontClassTypes();
 });
+
+function registerFrontClassTypes(): void {
+  it("renders every configured development type a front class may write", () => {
+    expect(
+      frontClassTypesVar({
+        feature: {
+          flow: "feature",
+          kind: "development",
+          schema: "outcome",
+          useWhen: "a repo's own delivery shape",
+        },
+        development: {
+          flow: "implement-review",
+          kind: "development",
+          schema: "outcome",
+          useWhen: "work that lands after review",
+        },
+        trivial: {
+          flow: FRONT_TRIVIAL_FLOW,
+          kind: "development",
+          schema: "outcome",
+          useWhen: "a small fully understood change",
+        },
+        spike: {
+          flow: "spike",
+          kind: "spike",
+          schema: "outcome",
+          useWhen: "a question only evidence answers",
+        },
+      }),
+    ).toBe("`trivial` for trivial, `feature` or `development` for task");
+    expect(frontClassTypesVar({})).toBe("none for trivial, none for task");
+  });
+
+  it("has no task type for a class whose only development flow is the trivial one", () => {
+    expect(
+      frontClassTypesVar({
+        trivial: {
+          flow: FRONT_TRIVIAL_FLOW,
+          kind: "development",
+          schema: "outcome",
+          useWhen: "a small fully understood change",
+        },
+      }),
+    ).toBe("`trivial` for trivial, none for task");
+  });
+}
 
 describe("prompts: configured use-when", () => {
   it("renders a repo's own use-when to the architect, PM and checker", () => {

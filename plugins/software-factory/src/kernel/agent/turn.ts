@@ -282,7 +282,7 @@ async function deliveredFindings(
           }
         : {}),
     }),
-    ...(state.spec.validate?.(state.outcome) ?? []),
+    ...(await (state.spec.validate?.(state.outcome) ?? [])),
   ];
 }
 

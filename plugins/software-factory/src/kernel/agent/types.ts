@@ -34,9 +34,10 @@ export interface AgentTurnSpec {
   expectation: OutcomeExpectation;
   /**
    * The step's contract beyond the outcome schema: findings that send the
-   * delivered outcome back for repair, like a schema failure.
+   * delivered outcome back for repair, like a schema failure. A step whose
+   * contract reads artefacts the turn wrote returns them asynchronously.
    */
-  validate?: (outcome: Outcome) => string[];
+  validate?: (outcome: Outcome) => string[] | Promise<string[]>;
   /**
    * Implement turns only: renders the fresh-session ask that rescues a turn
    * whose branch holds work but delivered no valid outcome. Returns `null`

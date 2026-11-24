@@ -112,7 +112,8 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       task_types:
         "configured task types with their flow, kind, output schema and use-when; renderer default",
       tiers: "run-config alias names; renderer default",
-      class_types: "class-to-task-type mapping, rendered by the front turn",
+      class_types:
+        "the configured development types each front class may write, rendered by the front turn",
       code_map_path:
         "path of the code map a `when: [bigger]` scout step wrote; `none` when no scout ran",
     },
