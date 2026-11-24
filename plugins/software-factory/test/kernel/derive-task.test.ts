@@ -252,6 +252,56 @@ function continuationCarryPart7() {
   });
 }
 
+function revisionAdvanceCarryPart1() {
+  it("takes the latest first-turn advance when an infra stop repeats the turn", () => {
+    const t = task("beta", { revision: 1 });
+    const flow = DEFAULT_FLOWS["implement-review"]!;
+    const reduction = reduceTask(
+      t,
+      [
+        script(1, {
+          step: "park",
+          revision: 0,
+          cause: cause("failed: the earlier revision stopped short"),
+          startedAt: new Date(1).toISOString(),
+        }),
+        // The first attempt advanced and stopped on infra; the head then moved.
+        advance(2, "tree-kept", "tree-head-1"),
+        advance(3, "tree-head-2", "tree-head-2"),
+        implement(4, 1, {
+          tree: "tree-head-2",
+          commit: "c1",
+          base: "b0",
+          revision: 1,
+        }),
+      ],
+      flow,
+    );
+    expect(reduction.phase).toBe("parked");
+    expect(causeText(reduction.park)).toContain("already on the head");
+  });
+}
+
+function revisionAdvanceCarryPart2() {
+  it("still parks a later empty turn after the first turn carried kept work", () => {
+    const t = task("beta", { base: "alpha" });
+    const flow = DEFAULT_FLOWS["implement-review"]!;
+    const reduction = reduceTask(
+      t,
+      [
+        advance(1, "tree-kept", "tree-head"),
+        implement(2, 1, { tree: "tree-kept", commit: "c1", base: "b0" }),
+        checks(3),
+        review(4, "changes", 1),
+        implement(5, 2, { tree: "tree-kept", commit: "c2", base: "b0" }),
+      ],
+      flow,
+    );
+    expect(reduction.phase).toBe("parked");
+    expect(causeText(reduction.park)).toContain("committed no changes");
+  });
+}
+
 describe("continuation carry", () => {
   continuationCarryPart1();
 
@@ -266,4 +316,8 @@ describe("continuation carry", () => {
   continuationCarryPart6();
 
   continuationCarryPart7();
+
+  revisionAdvanceCarryPart1();
+
+  revisionAdvanceCarryPart2();
 });

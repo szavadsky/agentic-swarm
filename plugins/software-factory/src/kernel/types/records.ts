@@ -83,7 +83,7 @@ export interface StepRecord {
   transcript?: string;
   /** Tree of the resulting worktree, the per-step no-progress component. */
   tree?: string;
-  /** base-advance only: integration head tree at the creation advance. */
+  /** base-advance only: the integration head's tree at the advance. */
   headTree?: string;
   /**
    * Resolve only: tracked paths the turn changed outside the conflict set.
@@ -166,7 +166,7 @@ export interface RecordEnd {
   /** Intent turn only: the unified diff the turn carried into the goal's intent. */
   diff?: string;
   tree?: string;
-  /** base-advance only: integration head tree at the creation advance. */
+  /** base-advance only: the integration head's tree at the advance. */
   headTree?: string;
   /** Resolve only: paths the turn changed outside the conflict set. */
   outside?: string[];

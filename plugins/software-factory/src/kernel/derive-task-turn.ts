@@ -98,8 +98,8 @@ export function applyAgentTurn(
 
 /**
  * A base continuation whose kept branch already meets its done-when commits
- * nothing on its first turn: when the creation advance carried work beyond the
- * head, that no-change turn is progress. Consumed by the first counted turn.
+ * nothing on its first turn: when the advance carried work beyond the head,
+ * that no-change turn is progress. Consumed by the first counted turn.
  */
 function takeCreationAdvance(
   state: ReduceState,

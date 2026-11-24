@@ -38,15 +38,16 @@ function applyRecord(
     return;
   }
   if (rec.step === "base-advance") {
-    // A continuation worktree advanced to the integration head without the
-    // agent (creation merge or reused-worktree sync): the next turn's
-    // empty-diff baseline is the post-advance tree, not the last counted
+    // A kept worktree advanced to the integration head without the agent
+    // (creation merge, revision first turn, or reused-worktree sync): the next
+    // turn's empty-diff baseline is the post-advance tree, not the last counted
     // turn's. Free: not a turn.
     state.countedTree = rec.tree ?? state.countedTree;
-    // Only the creation advance carries, and only for the first counted turn.
+    // Only an advance before the first counted turn carries. A repeated first
+    // turn (an infra stop) records again: the latest advance wins, since the
+    // head may have moved.
     if (
       !state.seenCountedTurn &&
-      state.creationAdvance === null &&
       rec.tree !== undefined &&
       rec.headTree !== undefined
     ) {
