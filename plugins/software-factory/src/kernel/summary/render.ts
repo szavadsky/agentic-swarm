@@ -4,6 +4,7 @@ import { wasteLines } from "../waste-summary.js";
 import type { SummaryRender } from "./types.js";
 import {
   architectLines,
+  askRecoveryLine,
   budgetLines,
   costByRoleLines,
   decisionLines,
@@ -19,6 +20,7 @@ import {
   spendTable,
   steerLines,
   zeroEditLine,
+  zeroEditParkLine,
 } from "./tables.js";
 
 /** The summary's distance through remarkable sections. */
@@ -83,6 +85,8 @@ function metricLines(render: SummaryRender): string[] {
     `- cost per merged task: harness-reported ${perMergedCost(computed.harnessCostPerMergedTask, unpricedTurns)}; list-price estimate ${perMergedCost(computed.listCostPerMergedTask, unpricedTurns)}`,
     `- work: ${computed.edits} files (+${computed.addedLines}/-${computed.removedLines}), ${computed.testRuns} test runs in ${computed.gateRuns} gate runs`,
     zeroEditLine(computed.zeroEdit),
+    zeroEditParkLine(computed.zeroEditParks),
+    askRecoveryLine(computed.askRecoveries),
     qaCatchLine(computed.qaOnlyCatches),
     `- gate wall: ${(computed.gateWallMs / 1000).toFixed(1)}s gates, ${(computed.commitWallMs / 1000).toFixed(1)}s commits`,
     `- operator acts: ${computed.operatorActs} (${computed.humanInterventions} steers)`,

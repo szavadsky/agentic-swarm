@@ -39,6 +39,19 @@ export interface FixtureTurn {
   slug: string | null;
 }
 
+/** One implement turn: its measured edits, outcome and whether its ask resolved. */
+export interface FixtureImplement {
+  seq: number;
+  slug: string;
+  revision: number;
+  files?: number;
+  outcome?: "done" | "blocked" | "failed" | "upscope";
+  /** A record that started and never settled. */
+  unfinished?: boolean;
+  resolved?: boolean;
+  unresolved?: boolean;
+}
+
 export interface FixtureTask {
   slug: string;
   kind: TaskFile["kind"];
@@ -50,6 +63,7 @@ export interface FullFixture {
   parks: FixturePark[];
   merges: { seq: number; slug: string; at: string }[];
   routes: FixtureRoute[];
+  implement: FixtureImplement[];
   zeroEdit: FixtureTurn[];
   tasks: FixtureTask[];
   inbox: string[];
@@ -69,6 +83,16 @@ export interface FullFixture {
     answerUnknown: number;
     unanswered: number;
     zeroEdit: { reply: number; finding: number; noop: number };
+    zeroEditParks: {
+      parks: number;
+      implementTurns: number;
+      byCause: {
+        failed: number;
+        "invalid-outcome": number;
+        "empty-diff": number;
+      };
+    };
+    askRecoveries: { unfinished: number; rescue: number };
   };
 }
 

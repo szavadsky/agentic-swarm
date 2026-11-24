@@ -8,6 +8,7 @@ import { materialOpenDebts } from "../derive.js";
 import { costText, medianMs, worstMs } from "../metrics.js";
 import type { QaOnlyCatches } from "../qa.js";
 import type {
+  AskRecoveryCounts,
   GroupMetrics,
   IncidentCounts,
   ParkMetrics,
@@ -15,6 +16,7 @@ import type {
   SteerLatency,
   SteerLeg,
   ZeroEditCounts,
+  ZeroEditParkMetrics,
 } from "../metrics.js";
 import type {
   ArtifactStore,
@@ -126,6 +128,18 @@ export function steerLines(steers: SteerLatency): string[] {
 export function zeroEditLine(zeroEdit: ZeroEditCounts): string {
   const total = zeroEdit.reply + zeroEdit.finding + zeroEdit.noop;
   return `- zero-edit turns: ${total} (reply ${zeroEdit.reply}, finding ${zeroEdit.finding}, no-op ${zeroEdit.noop})`;
+}
+
+/** Parks after a zero-edit implement turn, over implement turns, split by cause. */
+export function zeroEditParkLine(parks: ZeroEditParkMetrics): string {
+  const rate =
+    parks.rate === null ? "n/a" : `${(parks.rate * 100).toFixed(1)}%`;
+  return `- zero-edit parks: ${parks.parks} of ${parks.implementTurns} implement turns (${rate}); failed ${parks.byCause.failed}, invalid outcome ${parks.byCause["invalid-outcome"]}, empty-diff ${parks.byCause["empty-diff"]}`;
+}
+
+/** Turns the unfinished ask and the rescue each recovered. */
+export function askRecoveryLine(recoveries: AskRecoveryCounts): string {
+  return `- ask recoveries: unfinished ${recoveries.unfinished}, rescue ${recoveries.rescue}`;
 }
 
 export function concernLines(recs: StepRecord[], kind?: string): string[] {

@@ -527,13 +527,15 @@ that waste section. `metrics.yaml` is rebuilt from the usage records;
 cost, token and turn share, cost and list cost per merged task, incident counts
 (infra retries, fallback hops, outcome-repair turns, merge conflicts,
 merged-gate failures, and round-limit, no-progress, empty-diff and overflow
-parks), loop incidents (no-progress and empty-diff parks; a spike's empty
-finish and overflow parks are not loop incidents), wasted turns by reason and
-by role and alias (complete implementer failure; structure: protocol,
-containment, outcome channel, infra; flaky-test rejection), rebutted review
-turns counted apart as accepted tax, QA-only catches per task (findings no
-earlier gate failure or reviewer finding matched), human interventions
-(processed steers) and the observable
+parks), the zero-edit park rate (failed, invalid-outcome and empty-diff parks
+whose last implement turn committed no files, over implement turns), turns the
+unfinished ask and the rescue recovered, loop incidents (no-progress and
+empty-diff parks; a spike's empty finish and overflow parks are not loop
+incidents), wasted turns by reason and by role and alias (complete implementer
+failure; structure: protocol, containment, outcome channel, infra; flaky-test
+rejection), rebutted review turns counted apart as accepted tax, QA-only
+catches per task (findings no earlier gate failure or reviewer finding matched),
+human interventions (processed steers) and the observable
 operator-act counter (steers plus containment outside-changes and
 integration-moved merges), gate and commit wall time, and turns, tokens, cost
 and work (committed files/lines) by role, alias and model, with gate runs
