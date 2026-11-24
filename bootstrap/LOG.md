@@ -932,3 +932,5 @@ Correction: the 2026-11-23 landing journal claimed format-green from a repo-root
 ## 2026-11-24 — run config: reviewer primary rotated to agy (owner order)
 
 Reviewer now agy gemini-3.8-flash (high, antigravity); fallbacks omp spark, codex deepseek, opencode hy4. Rest unchanged. Validated. Old goal dirs removed (delta, ops-friction), their 9 branches deleted, worktrees cleaned (9.2G reclaimed).
+
+Correction to the entry above: the 9 ops-friction branches were restored on owner order ("no need to delete branches") — only the goal artifact dirs and worktrees were removed.
