@@ -24,7 +24,6 @@ export interface TaskFile {
   /** Resolved from `type`; a legacy file declares it directly. */
   flow: string;
   deps: string[];
-  scope: string[];
   /** The epic that owns this task; absent means goal-level work. */
   epic?: string;
   tier?: string;

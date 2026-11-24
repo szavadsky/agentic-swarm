@@ -384,13 +384,13 @@ describe("architect bullet", () => {
     expect(architect).not.toContain("Non-obvious edge cases that must hold.");
     expect(architect).not.toContain("Ordering and what must not be touched");
     expect(architect).toContain(
-      "The PM derives the area, the edge cases and the dependency order",
+      "The PM derives the edge cases and the dependency order",
     );
   });
 });
 
 describe("PM formalization", () => {
-  it("owns area, edges and order from the short bullet", () => {
+  it("owns edges and order from the short bullet", () => {
     const pm = library().render("pm", ROLES.pm!);
     expect(pm).toContain("Edges — the non-obvious cases the done-when implies");
     expect(pm).toContain(

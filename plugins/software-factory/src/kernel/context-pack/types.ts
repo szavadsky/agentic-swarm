@@ -181,8 +181,6 @@ export interface ContextPackInput {
 
 export interface AgingContext {
   terminal: ReadonlyMap<string, string>;
-  active: ReadonlySet<string>;
-  ordered: readonly TaskFile[];
   segment: number;
   unavailableAliases: ReadyAgingInput["unavailableAliases"];
 }

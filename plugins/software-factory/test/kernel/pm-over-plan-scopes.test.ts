@@ -131,7 +131,6 @@ function registerPMOverPlanScopesPart1(): void {
             const slug = match[1]!;
             const taskFile = task(slug, {
               epic,
-              scope: [`src/${epic}/${slug.split(".")[1]}.ts`],
               source: "plan",
             });
             fs.writeFileSync(
@@ -208,14 +207,12 @@ function registerPMOverPlanScopesPart3(): void {
       await runtime.store.writeTask(
         task("auth.old", {
           epic: "auth",
-          scope: ["src/auth/old.ts"],
           body: "Old auth work.\nDone when: it works.",
         }),
       );
       await runtime.store.writeTask(
         task("billing.old", {
           epic: "billing",
-          scope: ["src/billing/old.ts"],
           body: "Old billing work.\nDone when: it works.",
         }),
       );

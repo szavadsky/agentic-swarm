@@ -136,7 +136,6 @@ function standinTask(slug: string): TaskFile {
     kind: "development",
     flow: "implement-review",
     deps: [],
-    scope: [],
     revision: 0,
     source: "orphan terminal record",
     body: "",

@@ -14,7 +14,7 @@ A bullet you delete cancels nothing: its task stays open. Retire a task with a l
 
 Name a non-default task type ({{task_types}}) on the bullet, and a parked task's slug as `base` when this task continues it.
 
-Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the area, the edge cases and the dependency order from what and why plus the done-when.
+Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the edge cases and the dependency order from what and why plus the done-when.
 
 Write from your whole scope's perspective — interactions, layers, sequence.
 

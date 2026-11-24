@@ -12,7 +12,6 @@ For each task the plans yield, write one file in the tasks directory. A bullet b
 
 The bullet gives what, why and the done-when. You formalize the rest from it and the repo:
 
-- Area — `scope`: the predicted area at module granularity. Tasks that run together get disjoint areas; no dependency between them means no shared area, so add the dependency instead of overlapping.
 - Edges — the non-obvious cases the done-when implies: inputs, failure paths, boundaries. Never a new requirement.
 - Order — `deps`: the tasks the bullet names as interfaces or predecessors, in their landing order; never the bullet's position.
 
@@ -23,7 +22,6 @@ A bullet deleted from the plan cancels nothing: its task stays open and dispatch
 - `slug` — keep the architect's slug; assign a short kebab-case one only when the bullet has none. Immutable, never reused, safe as a branch and file name, unique across the goal including dropped tasks.
 - `flow` — the flow named on the bullet, or the marked default when the bullet names none.
 - `deps` — slugs that must merge first, per the order above.
-- `scope` — the predicted area you formalized; never empty. If the bullet names no work you can locate, file no task and record the concern.
 - `epic` — the epic that owns the task, when you derive it from an epic plan; the slug must start with `<epic>.`. Omit it for a goal-level bullet.
 - `tier` — `default` unless the plan names one of the configured tiers.
 - `base` — the parked task this continues, only when the plan names one.
@@ -107,7 +105,7 @@ On a plan-check turn, `plan_checks` lists the checker's follow-ups with their ki
 - Frozen means status `merged` or `finished`; those lines are marked `frozen (read-only)`. A `cancelled` slug is spent: its file is read-only and the slug is never reused. Leave lines marked `steer <id>`, `stall <n>` or `plan-check <n>` untouched: they are not in the plan. Every other status may change. Never edit a frozen file, never reword a slug.
 - A change to a frozen task arrives as a new bullet with its own slug. If the plan states a change but gives no new bullet, file nothing and record a concern; never edit the frozen file and never synthesize a rework slug.
 - Split or merge only as formalization of the plan's own bullets: every resulting task keeps a done-when; merge only when the plan gives one direction.
-- Ambiguity: formalize only what the plan states. If a task's done-when or area cannot be derived, file no task for it and record `kind: uncertainty`, `calibration: architect`, naming the missing statement and the plan heading.
+- Ambiguity: formalize only what the plan states. If a task's done-when cannot be derived, file no task for it and record `kind: uncertainty`, `calibration: architect`, naming the missing statement and the plan heading.
 - Missing branch, misplaced artifact, plan bullet mapping to no task: resolve it in the task files only when the plan's intent is clear; otherwise concern.
 - Fix every `repair` finding; a finding you cannot fix from the plan goes in the outcome.
 - Only an escalated ask may put a question for the architect in the summary.

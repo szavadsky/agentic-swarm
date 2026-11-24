@@ -100,7 +100,7 @@ async function readTasks(runtime: KernelRuntime): Promise<TaskFile[]> {
 
 /**
  * The front's task file gets the same `tasks.ts` validation as a PM file: parse,
- * graph (slug, scope, deps, base), and the run-config tier pre-flight would have
+ * graph (slug, deps, base), and the run-config tier pre-flight would have
  * checked had the file existed before launch.
  */
 async function validateFrontTasks(

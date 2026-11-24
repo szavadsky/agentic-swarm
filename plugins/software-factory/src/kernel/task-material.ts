@@ -11,8 +11,8 @@ export function doneWhen(body: string): string {
 
 /**
  * Material hash: frozen-task comparisons must ignore cosmetic edits but catch
- * a changed dependency set, scope, epic, type, flow, tier, revision, kind,
- * slug or done-when.
+ * a changed dependency set, epic, type, flow, tier, revision, kind, slug or
+ * done-when.
  */
 export function materialHash(task: TaskFile): string {
   const canonical = JSON.stringify([
@@ -21,7 +21,6 @@ export function materialHash(task: TaskFile): string {
     task.flow,
     task.type ?? "",
     [...task.deps].sort(),
-    [...task.scope],
     task.epic ?? "",
     task.tier ?? "",
     task.revision,

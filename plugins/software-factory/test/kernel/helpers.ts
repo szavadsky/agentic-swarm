@@ -66,18 +66,22 @@ export const TEST_ARCHITECTURE: ArchitectureConfig = {
   planReturn: { prompt: "architect-review-return" },
 };
 
-export function task(slug: string, patch: Partial<TaskFile> = {}): TaskFile {
+/** A test task; a legacy `scope` patch is accepted and dropped, as the parser does. */
+export function task(
+  slug: string,
+  patch: Partial<TaskFile> & { scope?: string[] } = {},
+): TaskFile {
+  const { scope: _legacyScope, ...rest } = patch;
   return {
     slug,
     title: slug,
     kind: "development",
     flow: "implement-review",
     deps: [],
-    scope: [],
     revision: 0,
     source: "test",
     body: "Do it.\nDone when: it works.",
-    ...patch,
+    ...rest,
   };
 }
 

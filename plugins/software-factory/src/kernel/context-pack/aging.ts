@@ -46,19 +46,6 @@ function segmentStarts(
   return { started, terminal };
 }
 
-function sharedAreas(a: readonly string[], b: readonly string[]): string[] {
-  const left = new Set(
-    a.map((area) => area.trim()).filter((area) => area !== ""),
-  );
-  if (left.size === 0) return [];
-  const shared = new Set<string>();
-  for (const raw of b) {
-    const area = raw.trim();
-    if (area !== "" && left.has(area)) shared.add(area);
-  }
-  return [...shared].sort();
-}
-
 /** A live hold's owner -> the slugs it holds; a stale hold decides nothing. */
 function heldBy(
   holds: ReadyAgingInput["holds"],
@@ -93,12 +80,6 @@ function agingCauses(
     const end = context.terminal.get(dep);
     if (end) causes.push(`dep ${dep} ${end} in iteration ${context.segment}`);
   }
-  for (const other of context.ordered) {
-    if (other.slug === task.slug || !context.active.has(other.slug)) continue;
-    for (const area of sharedAreas(task.scope, other.scope)) {
-      causes.push(`area "${area}" clashes with ${other.slug}`);
-    }
-  }
   const alias = context.unavailableAliases?.get(task.slug);
   if (alias !== undefined) causes.push(alias);
   return causes;
@@ -106,10 +87,9 @@ function agingCauses(
 
 /**
  * The ready tasks that started no task turn in `segment`, with what withheld
- * them: a pending steer's hold, an open concern's hold, a dep that only
- * landed in that segment, a declared-area clash with live work, or a next
- * step whose alias has no live tier. Reporting only: the hold deadlock itself
- * is derived elsewhere.
+ * them: a pending steer's hold, an open concern's hold, a dep that only landed
+ * in that segment, or a next step whose alias has no live tier. Reporting only:
+ * the hold deadlock itself is derived elsewhere.
  */
 export function readyAging(input: ReadyAgingInput): ReadyAgingTask[] {
   const { started, terminal } = segmentStarts(input.records, input.segment);
@@ -123,19 +103,15 @@ export function readyAging(input: ReadyAgingInput): ReadyAgingTask[] {
     new Set(input.pendingSteers),
     openConcernIds(input.records),
   );
-  // A live-area clash is either a task that ran in the segment or one still
-  // ready beside this one; a merged task's area is history.
-  const active = new Set([...started, ...ready]);
-  const ordered = [...input.tasks].sort((a, b) => a.slug.localeCompare(b.slug));
   const context: AgingContext = {
     terminal,
-    active,
-    ordered,
     segment: input.segment,
     unavailableAliases: input.unavailableAliases,
   };
   const aged: ReadyAgingTask[] = [];
-  for (const task of ordered) {
+  for (const task of [...input.tasks].sort((a, b) =>
+    a.slug.localeCompare(b.slug),
+  )) {
     if (!ready.has(task.slug) || started.has(task.slug)) continue;
     aged.push({ slug: task.slug, causes: agingCauses(task, held, context) });
   }

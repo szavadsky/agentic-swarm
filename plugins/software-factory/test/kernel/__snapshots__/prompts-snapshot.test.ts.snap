@@ -81,7 +81,7 @@ A bullet you delete cancels nothing: its task stays open. Retire a task with a l
 
 Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
-Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the area, the edge cases and the dependency order from what and why plus the done-when.
+Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the edge cases and the dependency order from what and why plus the done-when.
 
 Write from your whole scope's perspective — interactions, layers, sequence.
 
@@ -278,7 +278,7 @@ A bullet you delete cancels nothing: its task stays open. Retire a task with a l
 
 Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
-Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the area, the edge cases and the dependency order from what and why plus the done-when.
+Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the edge cases and the dependency order from what and why plus the done-when.
 
 Write from your whole scope's perspective — interactions, layers, sequence.
 
@@ -424,7 +424,6 @@ slug: namespaced kebab-case, matches the file name
 title: one line
 type: one of the configured task types; it supplies flow, kind and schema
 deps: [a slug that must merge first]
-scope: [a predicted area]
 epic: the epic that owns this task; absent means goal-level work  # optional
 tier: default, or a run-config alias  # optional
 revision: one more than the parked revision when amending under its slug  # optional
@@ -438,7 +437,7 @@ turnMinutes: per-turn wall bound in minutes  # optional
 Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome). Configured tiers: implementer, escalation.
 
 
-For the front's file: \`type\` (\`trivial\` for trivial, \`development\` for task; a class with no configured type is \`bigger\`), \`deps: []\`, \`source: front\`, a unique slug, a non-empty \`scope\` (the predicted area), no missing dependency, and a \`tier\` naming \`default\` or a configured alias. Body: the brief with a \`Done when:\` line.
+For the front's file: \`type\` (\`trivial\` for trivial, \`development\` for task; a class with no configured type is \`bigger\`), \`deps: []\`, \`source: front\`, a unique slug, no missing dependency, and a \`tier\` naming \`default\` or a configured alias. Body: the brief with a \`Done when:\` line.
 
 3. The context pack at the pack path, for every class: a deterministic index — paths, risks, open questions; never paste file bodies. On \`trivial\` or \`task\`, carry the area and risks the task file leaves implicit.
 
@@ -535,7 +534,6 @@ One task is one implementer session, one seam, one reviewable diff, one done-whe
 
 The bullet gives what, why and the done-when. You formalize the rest from it and the repo:
 
-- Area — \`scope\`: the predicted area at module granularity. Tasks that run together get disjoint areas; no dependency between them means no shared area, so add the dependency instead of overlapping.
 - Edges — the non-obvious cases the done-when implies: inputs, failure paths, boundaries. Never a new requirement.
 - Order — \`deps\`: the tasks the bullet names as interfaces or predecessors, in their landing order; never the bullet's position.
 
@@ -548,7 +546,6 @@ slug: namespaced kebab-case, matches the file name
 title: one line
 type: one of the configured task types; it supplies flow, kind and schema
 deps: [a slug that must merge first]
-scope: [a predicted area]
 epic: the epic that owns this task; absent means goal-level work  # optional
 tier: default, or a run-config alias  # optional
 revision: one more than the parked revision when amending under its slug  # optional
@@ -565,7 +562,6 @@ Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an
 - \`slug\` — keep the architect's slug; assign a short kebab-case one only when the bullet has none. Immutable, never reused, safe as a branch and file name, unique across the goal including dropped tasks.
 - \`flow\` — the flow named on the bullet, or the marked default when the bullet names none.
 - \`deps\` — slugs that must merge first, per the order above.
-- \`scope\` — the predicted area you formalized; never empty. If the bullet names no work you can locate, file no task and record the concern.
 - \`epic\` — the epic that owns the task, when you derive it from an epic plan; the slug must start with \`<epic>.\`. Omit it for a goal-level bullet.
 - \`tier\` — \`default\` unless the plan names one of the configured tiers.
 - \`base\` — the parked task this continues, only when the plan names one.
@@ -650,7 +646,7 @@ A spike's done-when is "the report answers <question>", never a records path.
 - Frozen means status \`merged\` or \`finished\`; those lines are marked \`frozen (read-only)\`. A \`cancelled\` slug is spent: its file is read-only and the slug is never reused. Leave lines marked \`steer <id>\`, \`stall <n>\` or \`plan-check <n>\` untouched: they are not in the plan. Every other status may change. Never edit a frozen file, never reword a slug.
 - A change to a frozen task arrives as a new bullet with its own slug. If the plan states a change but gives no new bullet, file nothing and record a concern; never edit the frozen file and never synthesize a rework slug.
 - Split or merge only as formalization of the plan's own bullets: every resulting task keeps a done-when; merge only when the plan gives one direction.
-- Ambiguity: formalize only what the plan states. If a task's done-when or area cannot be derived, file no task for it and record \`kind: uncertainty\`, \`calibration: architect\`, naming the missing statement and the plan heading.
+- Ambiguity: formalize only what the plan states. If a task's done-when cannot be derived, file no task for it and record \`kind: uncertainty\`, \`calibration: architect\`, naming the missing statement and the plan heading.
 - Missing branch, misplaced artifact, plan bullet mapping to no task: resolve it in the task files only when the plan's intent is clear; otherwise concern.
 - Fix every \`repair\` finding; a finding you cannot fix from the plan goes in the outcome.
 - Only an escalated ask may put a question for the architect in the summary.
@@ -773,7 +769,7 @@ planCheckRoutes:
 exports[`role prompts renders implementer from exactly its documented variables: implementer 1`] = `
 "Commit the report at \`.factory/spikes/alpha.md\` first, then refine it.
 
-You implement one task in one worktree. The task file is the assignment: its \`scope\` (the predicted area), done-when, edge cases and named approach. For a spike, the finding named in the brief is the product: write it, state the evidence, and do not manufacture a code diff. A spike commits its finding at the report path in the turn block, and the outcome cites that path.
+You implement one task in one worktree. The task file is the assignment: its done-when, edge cases and named approach. For a spike, the finding named in the brief is the product: write it, state the evidence, and do not manufacture a code diff. A spike commits its finding at the report path in the turn block, and the outcome cites that path.
 
 ## Work
 
@@ -886,7 +882,7 @@ replies:
 `;
 
 exports[`role prompts renders qa from exactly its documented variables: qa 1`] = `
-"You implement one task in one worktree. The task file is the assignment: its \`scope\` (the predicted area), done-when, edge cases and named approach. For a spike, the finding named in the brief is the product: write it, state the evidence, and do not manufacture a code diff. A spike commits its finding at the report path in the turn block, and the outcome cites that path.
+"You implement one task in one worktree. The task file is the assignment: its done-when, edge cases and named approach. For a spike, the finding named in the brief is the product: write it, state the evidence, and do not manufacture a code diff. A spike commits its finding at the report path in the turn block, and the outcome cites that path.
 
 ## Work
 
@@ -1032,7 +1028,7 @@ No praise, no restating, no taste without a rule or an observable consequence.
 exports[`role prompts renders reviewer from exactly its documented variables: reviewer 1`] = `
 "You review one author's work. You do not fix code.
 
-You implement one task in one worktree. The task file is the assignment: its \`scope\` (the predicted area), done-when, edge cases and named approach. For a spike, the finding named in the brief is the product: write it, state the evidence, and do not manufacture a code diff. A spike commits its finding at the report path in the turn block, and the outcome cites that path.
+You implement one task in one worktree. The task file is the assignment: its done-when, edge cases and named approach. For a spike, the finding named in the brief is the product: write it, state the evidence, and do not manufacture a code diff. A spike commits its finding at the report path in the turn block, and the outcome cites that path.
 
 ## Work
 
@@ -1860,7 +1856,7 @@ A bullet you delete cancels nothing: its task stays open. Retire a task with a l
 
 Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
-Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the area, the edge cases and the dependency order from what and why plus the done-when.
+Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the edge cases and the dependency order from what and why plus the done-when.
 
 Write from your whole scope's perspective — interactions, layers, sequence.
 
@@ -2195,7 +2191,7 @@ A bullet you delete cancels nothing: its task stays open. Retire a task with a l
 
 Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
-Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the area, the edge cases and the dependency order from what and why plus the done-when.
+Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the edge cases and the dependency order from what and why plus the done-when.
 
 Write from your whole scope's perspective — interactions, layers, sequence.
 
@@ -2380,7 +2376,7 @@ A bullet you delete cancels nothing: its task stays open. Retire a task with a l
 
 Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
-Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the area, the edge cases and the dependency order from what and why plus the done-when.
+Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the edge cases and the dependency order from what and why plus the done-when.
 
 Write from your whole scope's perspective — interactions, layers, sequence.
 
@@ -2494,7 +2490,6 @@ One task is one implementer session, one seam, one reviewable diff, one done-whe
 
 The bullet gives what, why and the done-when. You formalize the rest from it and the repo:
 
-- Area — \`scope\`: the predicted area at module granularity. Tasks that run together get disjoint areas; no dependency between them means no shared area, so add the dependency instead of overlapping.
 - Edges — the non-obvious cases the done-when implies: inputs, failure paths, boundaries. Never a new requirement.
 - Order — \`deps\`: the tasks the bullet names as interfaces or predecessors, in their landing order; never the bullet's position.
 
@@ -2507,7 +2502,6 @@ slug: namespaced kebab-case, matches the file name
 title: one line
 type: one of the configured task types; it supplies flow, kind and schema
 deps: [a slug that must merge first]
-scope: [a predicted area]
 epic: the epic that owns this task; absent means goal-level work  # optional
 tier: default, or a run-config alias  # optional
 revision: one more than the parked revision when amending under its slug  # optional
@@ -2524,7 +2518,6 @@ Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an
 - \`slug\` — keep the architect's slug; assign a short kebab-case one only when the bullet has none. Immutable, never reused, safe as a branch and file name, unique across the goal including dropped tasks.
 - \`flow\` — the flow named on the bullet, or the marked default when the bullet names none.
 - \`deps\` — slugs that must merge first, per the order above.
-- \`scope\` — the predicted area you formalized; never empty. If the bullet names no work you can locate, file no task and record the concern.
 - \`epic\` — the epic that owns the task, when you derive it from an epic plan; the slug must start with \`<epic>.\`. Omit it for a goal-level bullet.
 - \`tier\` — \`default\` unless the plan names one of the configured tiers.
 - \`base\` — the parked task this continues, only when the plan names one.
@@ -2609,7 +2602,7 @@ A spike's done-when is "the report answers <question>", never a records path.
 - Frozen means status \`merged\` or \`finished\`; those lines are marked \`frozen (read-only)\`. A \`cancelled\` slug is spent: its file is read-only and the slug is never reused. Leave lines marked \`steer <id>\`, \`stall <n>\` or \`plan-check <n>\` untouched: they are not in the plan. Every other status may change. Never edit a frozen file, never reword a slug.
 - A change to a frozen task arrives as a new bullet with its own slug. If the plan states a change but gives no new bullet, file nothing and record a concern; never edit the frozen file and never synthesize a rework slug.
 - Split or merge only as formalization of the plan's own bullets: every resulting task keeps a done-when; merge only when the plan gives one direction.
-- Ambiguity: formalize only what the plan states. If a task's done-when or area cannot be derived, file no task for it and record \`kind: uncertainty\`, \`calibration: architect\`, naming the missing statement and the plan heading.
+- Ambiguity: formalize only what the plan states. If a task's done-when cannot be derived, file no task for it and record \`kind: uncertainty\`, \`calibration: architect\`, naming the missing statement and the plan heading.
 - Missing branch, misplaced artifact, plan bullet mapping to no task: resolve it in the task files only when the plan's intent is clear; otherwise concern.
 - Fix every \`repair\` finding; a finding you cannot fix from the plan goes in the outcome.
 - Only an escalated ask may put a question for the architect in the summary.
@@ -2798,7 +2791,7 @@ A bullet you delete cancels nothing: its task stays open. Retire a task with a l
 
 Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
-Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the area, the edge cases and the dependency order from what and why plus the done-when.
+Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the edge cases and the dependency order from what and why plus the done-when.
 
 Write from your whole scope's perspective — interactions, layers, sequence.
 
@@ -2983,7 +2976,7 @@ A bullet you delete cancels nothing: its task stays open. Retire a task with a l
 
 Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
-Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the area, the edge cases and the dependency order from what and why plus the done-when.
+Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the edge cases and the dependency order from what and why plus the done-when.
 
 Write from your whole scope's perspective — interactions, layers, sequence.
 
@@ -3097,7 +3090,6 @@ One task is one implementer session, one seam, one reviewable diff, one done-whe
 
 The bullet gives what, why and the done-when. You formalize the rest from it and the repo:
 
-- Area — \`scope\`: the predicted area at module granularity. Tasks that run together get disjoint areas; no dependency between them means no shared area, so add the dependency instead of overlapping.
 - Edges — the non-obvious cases the done-when implies: inputs, failure paths, boundaries. Never a new requirement.
 - Order — \`deps\`: the tasks the bullet names as interfaces or predecessors, in their landing order; never the bullet's position.
 
@@ -3110,7 +3102,6 @@ slug: namespaced kebab-case, matches the file name
 title: one line
 type: one of the configured task types; it supplies flow, kind and schema
 deps: [a slug that must merge first]
-scope: [a predicted area]
 epic: the epic that owns this task; absent means goal-level work  # optional
 tier: default, or a run-config alias  # optional
 revision: one more than the parked revision when amending under its slug  # optional
@@ -3127,7 +3118,6 @@ Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an
 - \`slug\` — keep the architect's slug; assign a short kebab-case one only when the bullet has none. Immutable, never reused, safe as a branch and file name, unique across the goal including dropped tasks.
 - \`flow\` — the flow named on the bullet, or the marked default when the bullet names none.
 - \`deps\` — slugs that must merge first, per the order above.
-- \`scope\` — the predicted area you formalized; never empty. If the bullet names no work you can locate, file no task and record the concern.
 - \`epic\` — the epic that owns the task, when you derive it from an epic plan; the slug must start with \`<epic>.\`. Omit it for a goal-level bullet.
 - \`tier\` — \`default\` unless the plan names one of the configured tiers.
 - \`base\` — the parked task this continues, only when the plan names one.
@@ -3212,7 +3202,7 @@ A spike's done-when is "the report answers <question>", never a records path.
 - Frozen means status \`merged\` or \`finished\`; those lines are marked \`frozen (read-only)\`. A \`cancelled\` slug is spent: its file is read-only and the slug is never reused. Leave lines marked \`steer <id>\`, \`stall <n>\` or \`plan-check <n>\` untouched: they are not in the plan. Every other status may change. Never edit a frozen file, never reword a slug.
 - A change to a frozen task arrives as a new bullet with its own slug. If the plan states a change but gives no new bullet, file nothing and record a concern; never edit the frozen file and never synthesize a rework slug.
 - Split or merge only as formalization of the plan's own bullets: every resulting task keeps a done-when; merge only when the plan gives one direction.
-- Ambiguity: formalize only what the plan states. If a task's done-when or area cannot be derived, file no task for it and record \`kind: uncertainty\`, \`calibration: architect\`, naming the missing statement and the plan heading.
+- Ambiguity: formalize only what the plan states. If a task's done-when cannot be derived, file no task for it and record \`kind: uncertainty\`, \`calibration: architect\`, naming the missing statement and the plan heading.
 - Missing branch, misplaced artifact, plan bullet mapping to no task: resolve it in the task files only when the plan's intent is clear; otherwise concern.
 - Fix every \`repair\` finding; a finding you cannot fix from the plan goes in the outcome.
 - Only an escalated ask may put a question for the architect in the summary.
@@ -3401,7 +3391,7 @@ A bullet you delete cancels nothing: its task stays open. Retire a task with a l
 
 Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
-Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the area, the edge cases and the dependency order from what and why plus the done-when.
+Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the edge cases and the dependency order from what and why plus the done-when.
 
 Write from your whole scope's perspective — interactions, layers, sequence.
 
@@ -3586,7 +3576,7 @@ A bullet you delete cancels nothing: its task stays open. Retire a task with a l
 
 Name a non-default task type (development (flow: implement-review, kind: development, schema: outcome), spike (flow: spike, kind: spike, schema: outcome), trivial (flow: just-implement, kind: development, schema: outcome)) on the bullet, and a parked task's slug as \`base\` when this task continues it.
 
-Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the area, the edge cases and the dependency order from what and why plus the done-when.
+Leave out: area breakdown, edge-case lists, ordering steps, file-by-file steps, code bodies, line counts, test lists, anything the repo's conventions already say. The PM derives the edge cases and the dependency order from what and why plus the done-when.
 
 Write from your whole scope's perspective — interactions, layers, sequence.
 
@@ -3700,7 +3690,6 @@ One task is one implementer session, one seam, one reviewable diff, one done-whe
 
 The bullet gives what, why and the done-when. You formalize the rest from it and the repo:
 
-- Area — \`scope\`: the predicted area at module granularity. Tasks that run together get disjoint areas; no dependency between them means no shared area, so add the dependency instead of overlapping.
 - Edges — the non-obvious cases the done-when implies: inputs, failure paths, boundaries. Never a new requirement.
 - Order — \`deps\`: the tasks the bullet names as interfaces or predecessors, in their landing order; never the bullet's position.
 
@@ -3713,7 +3702,6 @@ slug: namespaced kebab-case, matches the file name
 title: one line
 type: one of the configured task types; it supplies flow, kind and schema
 deps: [a slug that must merge first]
-scope: [a predicted area]
 epic: the epic that owns this task; absent means goal-level work  # optional
 tier: default, or a run-config alias  # optional
 revision: one more than the parked revision when amending under its slug  # optional
@@ -3730,7 +3718,6 @@ Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an
 - \`slug\` — keep the architect's slug; assign a short kebab-case one only when the bullet has none. Immutable, never reused, safe as a branch and file name, unique across the goal including dropped tasks.
 - \`flow\` — the flow named on the bullet, or the marked default when the bullet names none.
 - \`deps\` — slugs that must merge first, per the order above.
-- \`scope\` — the predicted area you formalized; never empty. If the bullet names no work you can locate, file no task and record the concern.
 - \`epic\` — the epic that owns the task, when you derive it from an epic plan; the slug must start with \`<epic>.\`. Omit it for a goal-level bullet.
 - \`tier\` — \`default\` unless the plan names one of the configured tiers.
 - \`base\` — the parked task this continues, only when the plan names one.
@@ -3815,7 +3802,7 @@ A spike's done-when is "the report answers <question>", never a records path.
 - Frozen means status \`merged\` or \`finished\`; those lines are marked \`frozen (read-only)\`. A \`cancelled\` slug is spent: its file is read-only and the slug is never reused. Leave lines marked \`steer <id>\`, \`stall <n>\` or \`plan-check <n>\` untouched: they are not in the plan. Every other status may change. Never edit a frozen file, never reword a slug.
 - A change to a frozen task arrives as a new bullet with its own slug. If the plan states a change but gives no new bullet, file nothing and record a concern; never edit the frozen file and never synthesize a rework slug.
 - Split or merge only as formalization of the plan's own bullets: every resulting task keeps a done-when; merge only when the plan gives one direction.
-- Ambiguity: formalize only what the plan states. If a task's done-when or area cannot be derived, file no task for it and record \`kind: uncertainty\`, \`calibration: architect\`, naming the missing statement and the plan heading.
+- Ambiguity: formalize only what the plan states. If a task's done-when cannot be derived, file no task for it and record \`kind: uncertainty\`, \`calibration: architect\`, naming the missing statement and the plan heading.
 - Missing branch, misplaced artifact, plan bullet mapping to no task: resolve it in the task files only when the plan's intent is clear; otherwise concern.
 - Fix every \`repair\` finding; a finding you cannot fix from the plan goes in the outcome.
 - Only an escalated ask may put a question for the architect in the summary.

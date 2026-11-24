@@ -260,7 +260,6 @@ export function simpleTask(
     `kind: ${opts.kind ?? "task"}`,
     `flow: ${opts.flow ?? "implement-review"}`,
     `deps: [${(opts.deps ?? []).join(", ")}]`,
-    `scope: [${file}]`,
     "source: plan",
     "---",
     "",

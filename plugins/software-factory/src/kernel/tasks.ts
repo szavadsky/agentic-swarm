@@ -55,7 +55,6 @@ export const taskFrontmatterSchema = z
     deps: z
       .array(z.string().describe("a slug that must merge first"))
       .default([]),
-    scope: z.array(z.string().describe("a predicted area")).default([]),
     epic: z
       .string()
       .min(1)
@@ -164,7 +163,6 @@ function frontmatterIssue(
     type: "a non-empty string",
     flow: "a non-empty string",
     deps: "a list of strings",
-    scope: "a list of strings",
     tier: "a non-empty string",
     revision: "a non-negative integer",
     base: "a non-empty string",
@@ -241,6 +239,8 @@ export function parseTaskFile(
   taskTypes: Record<string, TaskTypeDefinition> = {},
 ): TaskFile {
   const { meta, body } = taskSections(text, fileSlug);
+  // Tasks have no file scope: a legacy `scope` key is accepted and ignored.
+  delete meta.scope;
   const result = taskFrontmatterSchema.safeParse({
     ...meta,
     slug: meta.slug ?? fileSlug,
@@ -295,7 +295,6 @@ export function renderTaskFile(task: TaskFile): string {
     front.flow = task.flow;
   }
   front.deps = task.deps;
-  front.scope = task.scope;
   if (task.epic !== undefined) front.epic = task.epic;
   if (task.tier) front.tier = task.tier;
   if (task.revision > 0) front.revision = task.revision;
@@ -342,7 +341,7 @@ export function taskStatuses(state: State): Map<string, TaskStatus> {
  * the edge away. A live continuation names a base that is not parked by the
  * base's state (merged, finished, cancelled, or not parked at all).
  */
-/** Slug, scope, duplicate and epic findings; registers the task by slug. */
+/** Slug, duplicate and epic findings; registers the task by slug. */
 function taskFieldFindings(
   task: TaskFile,
   bySlug: Map<string, TaskFile>,
@@ -351,11 +350,6 @@ function taskFieldFindings(
   if (!isValidTaskSlug(task.slug)) {
     findings.push(
       `slug "${task.slug}" is not namespaced kebab-case (example: auth.token-refresh)`,
-    );
-  }
-  if (task.scope.length === 0) {
-    findings.push(
-      `task "${task.slug}" has no scope: declare the predicted area it works in`,
     );
   }
   if (bySlug.has(task.slug)) {

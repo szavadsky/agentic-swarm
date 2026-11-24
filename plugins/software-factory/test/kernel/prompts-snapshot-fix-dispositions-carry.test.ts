@@ -443,21 +443,21 @@ describe("scope as predicted area", () => {
     expect(reviewer).not.toContain("Scope creep");
   });
 
-  it("formalizes area in the PM, not in the plan bullet", () => {
+  it("keeps a task's area out of the PM and front assignments", () => {
     const architect = library().render("architect", ROLES.architect!);
     expect(architect).not.toContain("the predicted area this task works in");
     expect(architect).not.toContain("must declare disjoint areas");
     expect(architect).not.toContain("must not overlap in scope");
     const pm = library().render("pm", ROLES.pm!);
-    expect(pm).toContain(
+    expect(pm).not.toContain(
       "Area — `scope`: the predicted area at module granularity",
     );
-    expect(pm).toContain("Tasks that run together get disjoint areas");
-    expect(pm).toContain("the predicted area you formalized");
+    expect(pm).not.toContain("Tasks that run together get disjoint areas");
+    expect(pm).not.toContain("the predicted area you formalized");
     expect(pm).not.toContain("from the task's stated area");
     expect(pm).not.toContain("globs the task may touch");
     const front = library().render("front", ROLES.front!);
-    expect(front).toContain("`scope` (the predicted area)");
+    expect(front).not.toContain("non-empty `scope`");
     expect(front).not.toContain("globs the task may touch");
   });
 });

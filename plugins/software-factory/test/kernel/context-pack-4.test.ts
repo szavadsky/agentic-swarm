@@ -89,11 +89,11 @@ function registerContextPackPart10(): void {
 }
 
 function registerContextPackPart11(): void {
-  it("names a dep that landed in the segment and a declared-area clash", () => {
+  it("names a dep that landed in the segment", () => {
     const tasks = [
-      task("landed", { scope: ["kernel pack"] }),
-      task("waiter", { deps: ["landed"], scope: ["kernel pack"] }),
-      task("twin", { scope: ["kernel pack"] }),
+      task("landed"),
+      task("waiter", { deps: ["landed"] }),
+      task("twin"),
       // Still pending on waiter: the aging list is ready work only.
       task("queued", { deps: ["waiter"] }),
     ];
@@ -113,10 +113,7 @@ function registerContextPackPart11(): void {
     ).toEqual([
       {
         slug: "waiter",
-        causes: [
-          "dep landed merged in iteration 1",
-          'area "kernel pack" clashes with twin',
-        ],
+        causes: ["dep landed merged in iteration 1"],
       },
     ]);
   });

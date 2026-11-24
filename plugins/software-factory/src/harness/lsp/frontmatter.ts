@@ -43,7 +43,6 @@ const TASK_KEYS = new Set([
   "kind",
   "flow",
   "deps",
-  "scope",
   "tier",
   "revision",
   "base",

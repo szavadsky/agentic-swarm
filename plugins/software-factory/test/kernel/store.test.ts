@@ -127,7 +127,6 @@ function registerCreateFolderStorePart3(): void {
       title: "Base",
       kind: "spike",
       flow: "spike",
-      scope: [],
       body: "spike body",
     });
     await store.writeTask(login);

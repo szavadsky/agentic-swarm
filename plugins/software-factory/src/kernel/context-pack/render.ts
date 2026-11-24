@@ -191,7 +191,6 @@ function contextTaskStatuses(input: ContextPackInput) {
       return {
         slug: task.slug,
         title: task.title,
-        scope: task.scope,
         status: input.running?.includes(task.slug)
           ? "running"
           : (state?.status ?? "unknown"),

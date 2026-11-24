@@ -30,7 +30,7 @@ function taskFilesPart1() {
     const parsed = parseTaskFile(TEXT, "auth.token-refresh");
     expect(parsed.slug).toBe("auth.token-refresh");
     expect(parsed.deps).toEqual(["auth.session-store"]);
-    expect(parsed.scope).toEqual(["auth"]);
+    expect(parsed).not.toHaveProperty("scope");
     expect(doneWhen(parsed.body)).toBe("Done when: refresh rotates the token.");
     const round = parseTaskFile(renderTaskFile(parsed), parsed.slug);
     expect(round).toEqual(parsed);
@@ -247,7 +247,7 @@ Done when: refresh rotates the token.
     expect(parsed.kind).toBe("development");
     expect(parsed.flow).toBe("implement-review");
     expect(parsed.deps).toEqual([]);
-    expect(parsed.scope).toEqual([]);
+    expect(parsed).not.toHaveProperty("scope");
     expect(parsed.source).toBe("");
     expect(parsed.revision).toBe(0);
     expect(parsed.tier).toBeUndefined();
@@ -361,12 +361,12 @@ function taskFilesPart9() {
     ).toEqual(['task "new" continues "old", which is cancelled']);
   });
 
-  it("still checks duplicates, scope and cycles on terminal tasks", () => {
+  it("still checks duplicates and cycles on terminal tasks", () => {
     const findings = validateTaskGraph(
       [
-        task("a", { scope: [], deps: ["b"] }),
-        task("a", { scope: [], deps: ["b"] }),
-        task("b", { scope: ["b"], deps: ["a"] }),
+        task("a", { deps: ["b"] }),
+        task("a", { deps: ["b"] }),
+        task("b", { deps: ["a"] }),
       ],
       {
         status: new Map([
@@ -375,18 +375,17 @@ function taskFilesPart9() {
         ]),
       },
     );
-    expect(findings).toContain(
-      'task "a" has no scope: declare the predicted area it works in',
-    );
     expect(findings.some((f) => f.includes("declared twice"))).toBe(true);
     expect(findings.some((f) => f.includes("cycle"))).toBe(true);
   });
 
-  it("rejects a task with no scope", () => {
-    const findings = validateTaskGraph([task("narrow", { scope: [] })]);
-    expect(findings).toContain(
-      'task "narrow" has no scope: declare the predicted area it works in',
-    );
+  it("accepts a task with no scope and drops a legacy scope", () => {
+    expect(validateTaskGraph([task("narrow")])).toEqual([]);
+    const parsed = parseTaskFile(TEXT, "auth.token-refresh");
+    expect(parsed).not.toHaveProperty("scope");
+    const rendered = renderTaskFile(parsed);
+    expect(rendered).not.toContain("scope:");
+    expect(parseTaskFile(rendered, parsed.slug)).toEqual(parsed);
   });
 }
 
