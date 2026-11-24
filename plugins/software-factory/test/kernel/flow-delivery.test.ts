@@ -178,10 +178,8 @@ function registerDeliveryGuardPart1(): void {
     const { repo, goal } = setupFlowRepo();
     try {
       const harness = new FakeHarness({ id: "fake" });
-      harness.script((req) => {
-        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "work\n", "utf8");
-        return fakeTurnResult(req, { text: "nothing" });
-      });
+      // No edit: a branch with no diff gets no rescue, so the turn parks.
+      harness.script((req) => fakeTurnResult(req, { text: "nothing" }));
       scriptStallLeave(harness, ["task"]);
       harness.script((req) => fakeTurnResult(req, { text: "still nothing" }));
 
@@ -202,7 +200,10 @@ function registerDeliveryGuardPart1(): void {
       );
       expect(harness.calls).toHaveLength(3);
       expect(harness.calls[1]!.prompt).toContain(
-        "You are the implementer. Your turn did not deliver its outcome.",
+        "You are the implementer. Your turn settled no outcome and did not finish the task.",
+      );
+      expect(harness.calls[1]!.prompt).toContain(
+        "no outcome written to the outcome path",
       );
       expect(
         records.filter((r) => r.slug === "task" && r.step === "review"),
@@ -309,10 +310,8 @@ function registerDeliveryGuardPart4(): void {
     const { repo, goal } = setupFlowRepo();
     try {
       const harness = new FakeHarness({ id: "fake" });
-      harness.script((req) => {
-        fs.writeFileSync(path.join(req.cwd!, "task.txt"), "work\n", "utf8");
-        return fakeTurnResult(req, { text: "nothing" });
-      });
+      // No edit: a branch with no diff gets no rescue, so the turn parks.
+      harness.script((req) => fakeTurnResult(req, { text: "nothing" }));
       scriptStallLeave(harness, ["task"]);
 
       const runtime = await makeRuntime(repo, goal, { fake: harness });

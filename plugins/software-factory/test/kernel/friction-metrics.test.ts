@@ -13,7 +13,37 @@ import {
   written,
   zero,
 } from "./friction-metrics-helpers.js";
+import type { StepRecord } from "../../src/kernel/types.js";
 import { rec, script, task } from "./helpers.js";
+
+const EDITED = { files: 1, added: 1, removed: 0 };
+
+/** One implement turn; a zero-edit diff unless the patch overrides it. */
+function implement(
+  seq: number,
+  slug: string,
+  patch: Partial<StepRecord> = {},
+): StepRecord {
+  return rec(seq, { step: "implement", slug, edits: zero, ...patch });
+}
+
+function doneOutcome() {
+  return {
+    status: "done" as const,
+    summary: "done",
+    concerns: [],
+    forward: [],
+  };
+}
+
+function failedOutcome() {
+  return {
+    status: "failed" as const,
+    summary: "no work",
+    concerns: [],
+    forward: [],
+  };
+}
 
 function registerParkUnits(): void {
   it("counts every park record and every distinct slug, landing tasks included", async () => {
@@ -130,6 +160,184 @@ function registerSteerLatency(): void {
   });
 }
 
+function zeroEditParkRateRecords(): StepRecord[] {
+  return [
+    // A failed park whose turn sent an ask and never resolved it.
+    implement(1, "unresolved", {
+      asks: ["outcome"],
+      repairFindings: ["no outcome after repair"],
+    }),
+    parkRecord(2, "unresolved"),
+    // A park already typed invalid-outcome.
+    implement(3, "invalid-kind"),
+    parkRecord(4, "invalid-kind", {
+      cause: { kind: "invalid-outcome", detail: "" },
+    }),
+    // An honest failed answer with no ask.
+    implement(5, "reported", { outcome: failedOutcome() }),
+    parkRecord(6, "reported"),
+    // A failed park whose turn made edits is not in the numerator.
+    implement(7, "edited", {
+      edits: { files: 2, added: 4, removed: 1 },
+      outcome: failedOutcome(),
+    }),
+    parkRecord(8, "edited"),
+    // An empty-diff park after a zero-edit done turn.
+    implement(9, "empty", { outcome: doneOutcome() }),
+    parkRecord(10, "empty", { cause: { kind: "empty-diff", detail: "" } }),
+    // No implement turn before the park: it counts nowhere.
+    parkRecord(11, "orphan"),
+    // An implement turn after the park is not the park's last turn.
+    parkRecord(12, "after"),
+    implement(13, "after"),
+    // A turn measured with no diff is not a zero-edit fact.
+    implement(14, "unmeasured", { edits: undefined }),
+    parkRecord(15, "unmeasured"),
+    // A cause the rate leaves out.
+    implement(16, "upscoped", {
+      outcome: {
+        status: "upscope",
+        summary: "different seam",
+        concerns: [],
+        forward: [],
+      },
+    }),
+    parkRecord(17, "upscoped", { cause: { kind: "upscope", detail: "" } }),
+  ];
+}
+
+function registerZeroEditParkRate(): void {
+  it("counts failed, invalid-outcome and empty-diff parks after a zero-edit implement turn", async () => {
+    const { one } = await written(zeroEditParkRateRecords(), []);
+    expect(one.zeroEditParks).toEqual({
+      parks: 4,
+      implementTurns: 8,
+      rate: 0.5,
+      byCause: { failed: 1, "invalid-outcome": 2, "empty-diff": 1 },
+    });
+  });
+
+  it("reports no rate when no implement turn ran, and a lone park counts nowhere", async () => {
+    const { one } = await written([parkRecord(1, "orphan")], []);
+    expect(one.zeroEditParks).toEqual({
+      parks: 0,
+      implementTurns: 0,
+      rate: null,
+      byCause: { failed: 0, "invalid-outcome": 0, "empty-diff": 0 },
+    });
+  });
+
+  it("does not credit a park to an implement turn from an earlier revision", async () => {
+    const { one } = await written(
+      [
+        implement(1, "revised", { revision: 0 }),
+        parkRecord(2, "revised", { revision: 1 }),
+      ],
+      [],
+    );
+    expect(one.zeroEditParks.parks).toBe(0);
+    expect(one.zeroEditParks.implementTurns).toBe(1);
+  });
+}
+
+/** Turns the two asks recovered, and the unfinished ask that delivered nothing. */
+function recoveredAskRecords(): StepRecord[] {
+  const resolved = { repairFindingsResolved: true };
+  return [
+    // The unfinished ask recovered a turn that delivered edits.
+    rec(1, {
+      ...resolved,
+      asks: ["unfinished"],
+      outcome: doneOutcome(),
+      edits: { files: 1, added: 2, removed: 0 },
+    }),
+    // The same ask with no edits is not a recovery.
+    rec(2, {
+      ...resolved,
+      asks: ["unfinished"],
+      outcome: doneOutcome(),
+      edits: zero,
+    }),
+    // The rescue is the last ask, so the unfinished ask before it is not double-counted.
+    rec(3, {
+      ...resolved,
+      asks: ["unfinished", "rescue"],
+      outcome: doneOutcome(),
+      edits: zero,
+    }),
+    // A rescue counts with edits too.
+    rec(4, {
+      ...resolved,
+      asks: ["rescue"],
+      outcome: doneOutcome(),
+      edits: { files: 3, added: 1, removed: 2 },
+    }),
+  ];
+}
+
+/** Turns an ask cannot credit: wrong answer, wrong ask or unresolved findings. */
+function unrecoveredAskRecords(): StepRecord[] {
+  const resolved = { repairFindingsResolved: true };
+  return [
+    // An honest failed answer is not a recovery.
+    rec(5, {
+      ...resolved,
+      asks: ["unfinished"],
+      outcome: failedOutcome(),
+      edits: EDITED,
+    }),
+    // Blocked and upscope said why; they count neither.
+    rec(6, {
+      ...resolved,
+      asks: ["rescue"],
+      outcome: {
+        status: "blocked",
+        summary: "needs the owner",
+        concerns: [],
+        forward: [],
+      },
+      edits: EDITED,
+    }),
+    rec(7, {
+      ...resolved,
+      asks: ["rescue"],
+      outcome: {
+        status: "upscope",
+        summary: "different seam",
+        concerns: [],
+        forward: [],
+      },
+      edits: EDITED,
+    }),
+    // A record without asks counts neither.
+    rec(8, { ...resolved, outcome: doneOutcome(), edits: EDITED }),
+    // An unresolved ask and the outcome-only ask are not the two reported.
+    rec(9, {
+      asks: ["unfinished"],
+      repairFindings: ["no outcome after repair"],
+      outcome: doneOutcome(),
+      edits: EDITED,
+    }),
+    rec(10, {
+      ...resolved,
+      asks: ["outcome"],
+      outcome: doneOutcome(),
+      edits: EDITED,
+    }),
+  ];
+}
+
+function askRecoveryRecords(): StepRecord[] {
+  return [...recoveredAskRecords(), ...unrecoveredAskRecords()];
+}
+
+function registerAskRecoveries(): void {
+  it("credits a turn to its last ask only when its findings resolved and it reported done", async () => {
+    const { one } = await written(askRecoveryRecords(), []);
+    expect(one.askRecoveries).toEqual({ unfinished: 1, rescue: 2 });
+  });
+}
+
 function registerZeroEditSplit(): void {
   it("splits replies, findings and no-ops by what the turn owed", async () => {
     const { one } = await written(
@@ -177,4 +385,6 @@ describe("friction metrics edges", () => {
   registerParkLandings();
   registerSteerLatency();
   registerZeroEditSplit();
+  registerZeroEditParkRate();
+  registerAskRecoveries();
 });

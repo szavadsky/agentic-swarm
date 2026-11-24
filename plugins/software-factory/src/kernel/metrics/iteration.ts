@@ -11,9 +11,11 @@ import { wasteAccounting } from "../waste.js";
 import type { WasteAccounting } from "../waste.js";
 import { parkMetrics } from "./parks.js";
 import { spikeSlugs, zeroEditCounts } from "./zero-edit.js";
+import { askRecoveryCounts, zeroEditParkMetrics } from "./zero-edit-parks.js";
 import type {
   AliasMetrics,
   ArchitectMetrics,
+  AskRecoveryCounts,
   IncidentCounts,
   IterationMetrics,
   ModelMetrics,
@@ -21,6 +23,7 @@ import type {
   PlanReviewMarkCounts,
   RoleMetrics,
   ZeroEditCounts,
+  ZeroEditParkMetrics,
 } from "./types.js";
 import {
   DEFAULT_ROLE_BY_STEP,
@@ -187,6 +190,8 @@ interface IterationMetricsParts {
   qaOnlyCatches: QaOnlyCatches;
   parks: ParkMetrics;
   zeroEdit: ZeroEditCounts;
+  zeroEditParks: ZeroEditParkMetrics;
+  askRecoveries: AskRecoveryCounts;
 }
 
 /** The architect's share of the iteration's spend, tokens and turns. */
@@ -243,6 +248,8 @@ function iterationMetricsResult(
     loopIncidents: incidents.noProgressParks + incidents.emptyDiffParks,
     parks: parts.parks,
     zeroEdit: parts.zeroEdit,
+    zeroEditParks: parts.zeroEditParks,
+    askRecoveries: parts.askRecoveries,
     humanInterventions,
     operatorActs,
     gateWallMs,
@@ -255,15 +262,22 @@ function iterationMetricsResult(
   };
 }
 
-/** Park and zero-edit friction: records plus the task files they read. */
+/** Park, zero-edit and ask-recovery friction: records plus the task files they read. */
 function iterationFriction(
   all: StepRecord[],
   recs: StepRecord[],
   tasks: readonly TaskFile[] | undefined,
-): { parks: ParkMetrics; zeroEdit: ZeroEditCounts } {
+): {
+  parks: ParkMetrics;
+  zeroEdit: ZeroEditCounts;
+  zeroEditParks: ZeroEditParkMetrics;
+  askRecoveries: AskRecoveryCounts;
+} {
   return {
     parks: parkMetrics(all, tasks),
     zeroEdit: zeroEditCounts(recs, spikeSlugs(all, tasks)),
+    zeroEditParks: zeroEditParkMetrics(all),
+    askRecoveries: askRecoveryCounts(recs),
   };
 }
 

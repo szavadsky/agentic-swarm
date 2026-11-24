@@ -14,7 +14,8 @@ const MIN_PARAGRAPH_WORDS = 5;
 const PREVIEW_CHARS = 60;
 /** Unigram-plus-bigram Dice similarity at which two paragraphs count as duplicated. */
 const DUPLICATE_THRESHOLD = 0.8;
-const PROMPT_KEY = /\b(?:prompt|repairPrompt)\s*:\s*["']?([A-Za-z0-9_./-]+)/g;
+const PROMPT_KEY =
+  /\b(?:prompt|unfinishedPrompt|repairPrompt)\s*:\s*["']?([A-Za-z0-9_./-]+)/g;
 
 /** A template's prose paragraphs, without fenced code, Liquid tags or headings. */
 function paragraphs(fragment: PromptFragment): string[] {

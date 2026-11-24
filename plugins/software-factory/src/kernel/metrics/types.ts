@@ -142,6 +142,37 @@ export interface ZeroEditCounts {
   noop: number;
 }
 
+/** The park causes the zero-edit rate counts: a failed report, an invalid outcome, an empty diff. */
+export type ZeroEditParkCause = "failed" | "invalid-outcome" | "empty-diff";
+
+/**
+ * Parks whose last implement turn committed no files, over the iteration's
+ * implement turns, split by the cause the park names. The rate is the bar the
+ * next campaign is measured against; it is null when the iteration had no
+ * implement turn to divide by.
+ */
+export interface ZeroEditParkMetrics {
+  /** Parks named by a counted cause whose last implement turn made zero edits. */
+  parks: number;
+  /** Implement turns in the iteration, the rate's denominator. */
+  implementTurns: number;
+  /** `parks / implementTurns`; null when no implement turn ran. */
+  rate: number | null;
+  /** Counted parks by cause: an honest failure, an invalid outcome, an empty diff. */
+  byCause: Record<ZeroEditParkCause, number>;
+}
+
+/**
+ * Turns a repair ask recovered: the turn's findings resolved and it reported
+ * `done`. A record without `asks` counts as neither.
+ */
+export interface AskRecoveryCounts {
+  /** Turns whose last ask was `unfinished` and which delivered edits. */
+  unfinished: number;
+  /** Turns whose last ask was `rescue`, with or without edits. */
+  rescue: number;
+}
+
 export interface ArchitectMetrics {
   turns: number;
   launches: number;
@@ -192,6 +223,10 @@ export interface IterationMetrics {
   parks: ParkMetrics;
   /** Agent turns that committed nothing, by what they owed. */
   zeroEdit: ZeroEditCounts;
+  /** Parks whose last implement turn made zero edits, over implement turns, by cause. */
+  zeroEditParks: ZeroEditParkMetrics;
+  /** Turns the unfinished ask and the rescue recovered. */
+  askRecoveries: AskRecoveryCounts;
   /** Steers moved from inbox to processed during this iteration. */
   humanInterventions: number;
   /**
@@ -216,7 +251,10 @@ export interface IterationMetrics {
 }
 
 export interface MetricsTotals
-  extends Omit<IterationMetrics, "n" | "status" | "parks" | "zeroEdit"> {
+  extends Omit<
+    IterationMetrics,
+    "n" | "status" | "parks" | "zeroEdit" | "zeroEditParks" | "askRecoveries"
+  > {
   iterations: number;
 }
 

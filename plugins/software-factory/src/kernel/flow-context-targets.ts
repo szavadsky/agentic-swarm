@@ -74,6 +74,8 @@ export interface TurnTarget {
   alias: string;
   /** Repair template the step named; absent renders `delivery-repair`. */
   repairPrompt?: string;
+  /** Ask for a turn that settled no outcome at all; absent keeps the repair ask. */
+  unfinishedPrompt?: string;
   /** Product the step named; absent derives from the turn's expectation. */
   deliverable?: string;
   harness: Harness;
@@ -337,9 +339,10 @@ export function resolveTurn(
 /** A step's repair ask; absent fields stay absent so the kernel default applies. */
 export function repairFields(
   spec: RepairSpec,
-): Pick<TurnTarget, "repairPrompt" | "deliverable"> {
+): Pick<TurnTarget, "repairPrompt" | "unfinishedPrompt" | "deliverable"> {
   return {
     repairPrompt: spec.repairPrompt,
+    unfinishedPrompt: spec.unfinishedPrompt,
     deliverable: spec.deliverable,
   };
 }

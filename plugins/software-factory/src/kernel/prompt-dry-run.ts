@@ -11,14 +11,16 @@ export interface PromptRender {
   text: string;
 }
 
-/** Adds a step's prompt and repair ask; script-only steps name neither. */
+/** Adds a step's prompt, repair ask and unfinished-turn ask; script-only steps name none. */
 function addPrompt(
   names: Set<string>,
   prompt: string | undefined,
   repairPrompt: string | undefined,
+  unfinishedPrompt?: string,
 ): void {
   if (prompt !== undefined) names.add(prompt);
   if (repairPrompt !== undefined) names.add(repairPrompt);
+  if (unfinishedPrompt !== undefined) names.add(unfinishedPrompt);
 }
 
 /**
@@ -31,28 +33,33 @@ export function promptNamesForConfig(configs: ConfigBundle): string[] {
   const names = new Set<string>();
   for (const flow of Object.values(process.flows)) {
     for (const step of flow.steps) {
-      addPrompt(names, step.prompt, step.repairPrompt);
+      addPrompt(names, step.prompt, step.repairPrompt, step.unfinishedPrompt);
     }
   }
   for (const turn of Object.values(process.boundary)) {
-    addPrompt(names, turn.prompt, turn.repairPrompt);
+    addPrompt(names, turn.prompt, turn.repairPrompt, turn.unfinishedPrompt);
   }
   addPrompt(
     names,
     process.architecture.planReview.prompt,
     process.architecture.planReview.repairPrompt,
+    process.architecture.planReview.unfinishedPrompt,
   );
   addPrompt(
     names,
     process.architecture.planReturn?.prompt,
     process.architecture.planReturn?.repairPrompt,
+    process.architecture.planReturn?.unfinishedPrompt,
   );
   addPrompt(
     names,
     process.hierarchy?.subarchitect.prompt,
     process.hierarchy?.subarchitect.repairPrompt,
+    process.hierarchy?.subarchitect.unfinishedPrompt,
   );
   names.add(process.repairPrompt ?? "delivery-repair");
+  // The flow renders the rescue ask directly, not through a step's config key.
+  names.add("rescue-turn");
   names.add("architect-subarchitects");
   names.add("subarchitect-agent");
   return [...names].sort();

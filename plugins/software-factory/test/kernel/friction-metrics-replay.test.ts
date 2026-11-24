@@ -1,4 +1,4 @@
-/** The `full` i1 replay: parks, steer latency and the zero-edit split. */
+/** The `full` i1 replay: parks, steer latency, zero-edit turn split, park rate and ask recovery. */
 
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
@@ -28,7 +28,36 @@ import {
 } from "./friction-metrics-helpers.js";
 import { rec, script } from "./helpers.js";
 
-/** One fixture park, merge, route or zero-edit turn as the record it was. */
+/** The fixture's implement turns as records, with the facts the park rate reads. */
+function fixtureImplementRecords(fixture: FullFixture): StepRecord[] {
+  return fixture.implement.map((turn) =>
+    rec(turn.seq, {
+      step: "implement",
+      slug: turn.slug,
+      revision: turn.revision,
+      ...(turn.unfinished ? { endedAt: undefined } : {}),
+      ...(turn.files === undefined
+        ? {}
+        : { edits: { files: turn.files, added: 0, removed: 0 } }),
+      ...(turn.outcome === undefined
+        ? {}
+        : {
+            outcome: {
+              status: turn.outcome,
+              summary: "",
+              concerns: [],
+              forward: [],
+            },
+          }),
+      ...(turn.resolved ? { repairFindingsResolved: true } : {}),
+      ...(turn.unresolved
+        ? { repairFindings: ["no outcome after repair"] }
+        : {}),
+    }),
+  );
+}
+
+/** One fixture park, merge, route, implement or zero-edit turn as the record it was. */
 function fixtureRecords(fixture: FullFixture): StepRecord[] {
   return [
     ...fixture.parks.map((park) =>
@@ -54,6 +83,7 @@ function fixtureRecords(fixture: FullFixture): StepRecord[] {
     ...fixture.routes.map((route) =>
       routeRecord(route.seq, route.at, route.entries),
     ),
+    ...fixtureImplementRecords(fixture),
     ...fixture.zeroEdit.map((turn) =>
       rec(turn.seq, {
         step: turn.step,
@@ -138,6 +168,10 @@ function expectSummaryText(summary: string): void {
   expect(summary).toContain(
     "- zero-edit turns: 170 (reply 103, finding 7, no-op 60)",
   );
+  expect(summary).toContain(
+    "- zero-edit parks: 33 of 154 implement turns (21.4%); failed 8, invalid outcome 2, empty-diff 23",
+  );
+  expect(summary).toContain("- ask recoveries: unfinished 0, rescue 0");
   expect(summary).toContain("- steers: 7; unanswered: 4");
   expect(summary).toContain(
     "- drop to PM route: median 11.4 min, worst 12.9 min over 4 steers; unknown 2",
@@ -183,6 +217,17 @@ describe("friction metrics replay", () => {
       const one = metrics.iterations[0]!;
       expectParkFigures(one.parks, fixture.expected);
       expect(one.zeroEdit).toEqual(fixture.expected.zeroEdit);
+      const zeroEditParks = fixture.expected.zeroEditParks;
+      expect(one.zeroEditParks.parks).toBe(zeroEditParks.parks);
+      expect(one.zeroEditParks.implementTurns).toBe(
+        zeroEditParks.implementTurns,
+      );
+      expect(one.zeroEditParks.rate).toBeCloseTo(
+        zeroEditParks.parks / zeroEditParks.implementTurns,
+        10,
+      );
+      expect(one.zeroEditParks.byCause).toEqual(zeroEditParks.byCause);
+      expect(one.askRecoveries).toEqual(fixture.expected.askRecoveries);
       expectSteerFigures(metrics.steers, fixture.expected);
 
       await writeIterationSummary(store, {

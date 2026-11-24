@@ -47,6 +47,12 @@ export interface StepRecord {
   /** Validator findings that triggered outcome reminders, in round order. */
   repairFindings?: string[];
   /**
+   * Each repair ask this turn sent, in order: `outcome` for the outcome-only
+   * repair, `unfinished` for the finish-the-task ask, `rescue` for the fresh
+   * session that reads the branch's work. Old records carry none.
+   */
+  asks?: RepairAsk[];
+  /**
    * Set when the turn delivered after its reminders: the final outcome passed
    * the same checks, so every listed finding is closed.
    */
@@ -83,7 +89,7 @@ export interface StepRecord {
   transcript?: string;
   /** Tree of the resulting worktree, the per-step no-progress component. */
   tree?: string;
-  /** base-advance only: integration head tree at the creation advance. */
+  /** base-advance only: the integration head's tree at the advance. */
   headTree?: string;
   /**
    * Resolve only: tracked paths the turn changed outside the conflict set.
@@ -104,6 +110,9 @@ export interface StepRecord {
   startedAt: string;
   endedAt?: string;
 }
+
+/** The repair asks a turn may send, in the order it sends them. */
+export type RepairAsk = "outcome" | "unfinished" | "rescue";
 
 /** Work one turn committed: files changed plus added/removed lines. */
 export interface WorkEdits {
@@ -153,6 +162,8 @@ export interface RecordEnd {
   served?: ServedUsage[];
   /** Validator findings that triggered outcome reminders, in round order. */
   repairFindings?: string[];
+  /** Each repair ask this turn sent, in order; absent when it sent none. */
+  asks?: RepairAsk[];
   /**
    * Set when the turn delivered after its reminders: the final outcome passed
    * the same checks, so every listed finding is closed.
@@ -166,7 +177,7 @@ export interface RecordEnd {
   /** Intent turn only: the unified diff the turn carried into the goal's intent. */
   diff?: string;
   tree?: string;
-  /** base-advance only: integration head tree at the creation advance. */
+  /** base-advance only: the integration head's tree at the advance. */
   headTree?: string;
   /** Resolve only: paths the turn changed outside the conflict set. */
   outside?: string[];

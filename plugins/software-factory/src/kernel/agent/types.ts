@@ -19,6 +19,7 @@ import type {
   Outcome,
   RecordEnd,
   RecordStart,
+  RepairAsk,
   StepRecord,
   TurnRecord,
 } from "../types.js";
@@ -36,6 +37,13 @@ export interface AgentTurnSpec {
    * delivered outcome back for repair, like a schema failure.
    */
   validate?: (outcome: Outcome) => string[];
+  /**
+   * Implement turns only: renders the fresh-session ask that rescues a turn
+   * whose branch holds work but delivered no valid outcome. Returns `null`
+   * when the branch carries nothing against its base. The kernel writes the
+   * record's outcome path into `vars` before the ask is rendered.
+   */
+  rescue?: (findings: readonly string[]) => Promise<string | null>;
   /**
    * The task type's output schema; defaults to the kernel outcome schema for
    * kernel turns and legacy tasks.
@@ -112,7 +120,11 @@ export interface AgentTurnState {
   maxRepairs: number;
   repairs: number;
   outcomeSettled: boolean;
+  /** The last settled read returned no outcome and no halted stop ended it. */
+  outcomeAbsent: boolean;
   repairFindings: string[];
+  /** Each repair ask sent, in order. */
+  asks: RepairAsk[];
   lastResult: TurnResult;
   attempts: TurnAttempt[];
   stop: Stop;

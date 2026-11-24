@@ -173,14 +173,20 @@ async function advanceKeptBranch(
     return undefined;
   }
   run.startPoint = head;
-  if ((await headSha(ensured.path)) !== before) {
-    // The branch moved without the agent; the fix turn's tree must compare
-    // against this post-advance tree, not the last counted turn's.
+  const moved = (await headSha(ensured.path)) !== before;
+  // The branch moved without the agent, or this is the revision's first turn:
+  // record the post-advance tree and the head's, so derive can tell kept work
+  // from a no-progress turn even when the advance moved nothing.
+  if (moved || run.state.turns === 0) {
+    const headTree = (
+      await git(run.runtime.paths.repoRoot, ["rev-parse", `${head}^{tree}`])
+    ).stdout.trim();
     await recordBaseAdvance(
       run.runtime,
       taskMeta(task, run.state, run.iteration),
       await headSha(ensured.path),
       await treeSha(ensured.path),
+      headTree,
     );
   }
   return undefined;

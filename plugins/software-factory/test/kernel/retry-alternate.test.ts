@@ -191,13 +191,10 @@ async function runsAmendedRetryNextAlternateAfterPart1(
 ) {
   const harness = new FakeHarness({ id: "fake" });
   const implement = whenTurn({ slug: "task", step: "implement" });
-  harness.script(
-    (req) => {
-      fs.writeFileSync(path.join(req.cwd!, "task.txt"), "first\n", "utf8");
-      return fakeTurnResult(req, { text: "nothing" });
-    },
-    { when: implement },
-  );
+  // No edit: a branch with no diff gets no rescue, so the turn parks.
+  harness.script((req) => fakeTurnResult(req, { text: "nothing" }), {
+    when: implement,
+  });
   harness.script((req) => fakeTurnResult(req, { text: "still nothing" }), {
     when: implement,
   });

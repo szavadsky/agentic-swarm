@@ -1,6 +1,7 @@
 /** The metrics aggregation's public surface; recording and summing are split under `metrics/`. */
 
 export type {
+  AskRecoveryCounts,
   GoalMetrics,
   GroupMetrics,
   IncidentCounts,
@@ -11,6 +12,7 @@ export type {
   SteerLatency,
   SteerLeg,
   ZeroEditCounts,
+  ZeroEditParkMetrics,
 } from "./metrics/types.js";
 export {
   DEFAULT_ROLE_BY_STEP,

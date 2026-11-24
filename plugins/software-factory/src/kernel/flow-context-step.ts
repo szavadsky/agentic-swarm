@@ -117,6 +117,7 @@ function stepTurn(
       prompt: step.prompt,
       alias: followUp.alias,
       repairPrompt: step.repairPrompt,
+      unfinishedPrompt: step.unfinishedPrompt,
       deliverable: step.deliverable,
     };
   }
@@ -124,6 +125,7 @@ function stepTurn(
     prompt: step.prompt,
     alias: step.alias,
     repairPrompt: step.repairPrompt,
+    unfinishedPrompt: step.unfinishedPrompt,
     deliverable: step.deliverable,
   };
 }
