@@ -918,3 +918,13 @@ Verbatim, newest last; each with what it changed.
 - Left parked for clean next-iteration relaunch: architect-flows-reason + goal-branch-current (stale restructures, 10-file conflicts), 8 REAL no-code (explore-only/invalid-outcome). 7 false parks already re-landed via *-land tasks. parks-retired-on-land auto-supersedes landed parks at next derive.
 - False-park causes removed: scope fence gone from tree (cleanliness-no-scope) + fresh pin at promote; base lint fixed (21 errors → green: precise types, no non-null assertions, quotes helper deduped, knip binaries scrubbed); merge-parent diff paths moot post-fence (cleanliness no longer counts out-of-scope files). Residual (architect's): justification-loop on genuine hits, invalid-outcome agent behavior.
 - Gates on the stack: typecheck + lint + format green, suite 1851 (1 stale-assertion fix during landing).
+
+## 2026-11-24 — ops-friction i1 drained by operator (79 records, $3.25), landed 4 + 2 + spike
+
+Run: new task-level legs per owner order (pi/deepseek-v4.1-flash, opencode/deepseek-free + hy4-flash-free, agy/gemini, codex/deepseek, omp/spark + deepseek, cmdc/deepseek-v4.1-flash; architect/escalation Claude-only). Preflight refused first launch on 5 effort mismatches (pi legs max→xhigh, opencode hy4 max→high); second launch ran. Drained on owner order (SIGTERM once, exit 143, stop=interrupted); in-flight turns finished and merged during drain.
+
+Landed via goal branch factory/ops-friction: base-format-green (trivial), friction-metrics, inherited-red-attributed, outcome-first-ask. Spike kept-branch-rot-spike finished (finding cherry-picked). Operator-merged 2 parked branches with done work, rebased onto the green head and gate-verified: cleanliness-own-diff (f9ad7d86), durable-run-log (846cf253). checkout-lock-split parked empty (no-op implementer), no value. 12 tasks left open, 3 parked.
+
+Friction evidence (the campaign's own subject matter): task branches root at the goal head at launch, so the 3 tasks launched before base-format-green merged parked on the inherited format red — 2 held done work (empty-diff parks), 1 was a no-op implementer (pi maiden turn). Later tasks inherited the fix. All 6 implementer turns ran pi/deepseek xhigh and reported $0 cost (usage not flowing from the pi leg — spend understated).
+
+Correction: the 2026-11-23 landing journal claimed format-green from a repo-root `biome format .` that checks 0 files; the base was red at src/cli/dispatch/commands.ts. The architect caught it, base-format-green fixed it. Base now green from plugins/software-factory: typecheck + lint (658) + format (711) + 1882 tests, 0 fail.
