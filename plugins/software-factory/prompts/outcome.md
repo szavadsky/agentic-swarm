@@ -1,4 +1,4 @@
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 {{outcome_schema}}
 

@@ -85,7 +85,7 @@ async function launchResult(
  * derived; relaunching after a kill runs the same code path.
  */
 export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
-  const { setup, store, runtime, signals, uninstall, lock } =
+  const { setup, store, runtime, signals, uninstall, lock, closeRunLog } =
     await prepareLaunch(opts);
 
   try {
@@ -124,6 +124,7 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     if (result.stop === "done") await sweepWorktrees(runtime);
     return result;
   } finally {
+    closeRunLog();
     lock.release();
     uninstall?.();
   }

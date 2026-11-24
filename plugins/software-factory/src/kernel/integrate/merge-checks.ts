@@ -9,6 +9,7 @@ import {
   isInfraCheck,
   newGateFailures,
   runGates,
+  stampAttribution,
 } from "../gates.js";
 import { integrationExclusive } from "../integration-lock.js";
 import {
@@ -53,6 +54,17 @@ function judgedMergeChecks(
       `skipped merge-checks: merged tree equals checked tree ${mergedTree}`,
     ),
   };
+}
+
+/** The red merge's cause: the new gates it names, or the infra park. */
+function mergeRedCause(red: CheckResult[]): Cause {
+  const actionable = red.filter((check) => !isInfraCheck(check));
+  if (actionable.length > 0)
+    return makeCause("gates", actionable.map((check) => check.name).join(", "));
+  return makeCause(
+    "infra",
+    `gate could not start: ${red.map((check) => check.name).join(", ")}`,
+  );
 }
 
 /** Runs (or reuses) merge gates; undefined means a gate failed and is recorded. */
@@ -111,15 +123,16 @@ async function mergeChecks(
   await finishChecks(gate, ran, { preexisting });
   const red = newGateFailures(ran, preexisting);
   if (red.length > 0) {
-    const actionable = red.filter((c) => !isInfraCheck(c));
-    const cause =
-      actionable.length > 0
-        ? makeCause("gates", actionable.map((c) => c.name).join(", "))
-        : makeCause(
-            "infra",
-            `gate could not start: ${red.map((c) => c.name).join(", ")}`,
-          );
-    await failMerge(runtime, task, iteration, round, cause, ran);
+    // The merge record closes outside `finishChecks`, so stamp its checks
+    // here: its merge-gate names read the same attribution as the run.
+    await failMerge(
+      runtime,
+      task,
+      iteration,
+      round,
+      mergeRedCause(red),
+      stampAttribution(ran, preexisting),
+    );
     return undefined;
   }
   return { checks: ran };

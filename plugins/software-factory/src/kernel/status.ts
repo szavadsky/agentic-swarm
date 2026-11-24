@@ -15,6 +15,7 @@ import {
 } from "./metrics.js";
 import { loadPriceTable, type PriceSource } from "./openrouter.js";
 import type { PriceTable } from "./pricing.js";
+import { latestRunLog } from "./run-log.js";
 import { recordDirName } from "./store.js";
 import {
   type IntentStatusArtifact,
@@ -132,6 +133,8 @@ export interface StatusDocument {
   concerns: StatusConcern[];
   /** Latest intent-wise status an architect summary wrote; absent until one does. */
   intentStatus?: IntentStatusArtifact;
+  /** Goal-relative path of the latest launch log; absent before the first launch. */
+  runLog?: string;
   cost: {
     harnessCostUsd: number | null;
     listCostUsd: number | null;
@@ -160,6 +163,8 @@ export interface StatusInput {
   tasks: readonly TaskFile[];
   /** Latest intent status artifact; absent before an architect summary writes one. */
   intentStatus?: IntentStatusArtifact;
+  /** Goal-relative path of the latest launch log; absent before the first launch. */
+  runLog?: string;
   records: readonly StepRecord[];
   /** Step id -> role; the process flows supply it at write time. */
   roleByStep?: Record<string, string>;
@@ -385,6 +390,7 @@ export function buildStatus(input: StatusInput): StatusDocument {
     work: workView(totals),
     ...(epics ? { epics } : {}),
     ...(input.intentStatus ? { intentStatus: input.intentStatus } : {}),
+    ...(input.runLog ? { runLog: input.runLog } : {}),
   };
 }
 
@@ -413,6 +419,7 @@ export async function collectStatus(
     tasks,
     records,
     intentStatus: await readLatestIntentStatus(source.store, state.iteration),
+    runLog: await latestRunLog(source.store.goalDir),
     roleByStep: rolesByStep(source.flows),
     prices: await loadPriceTable(source.priceSource),
     priceIds: source.priceIds,

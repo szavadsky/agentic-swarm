@@ -1,3 +1,4 @@
+import { isAncestor } from "../core/git/commit.js";
 import { git } from "../core/git/exec.js";
 import type { CheckResult } from "../core/checks/types.js";
 import type { KernelRuntime } from "./types.js";
@@ -217,10 +218,32 @@ function readAllowedFiles(cwd: string): {
   return { allowedFiles, errors: [] };
 }
 
+/**
+ * The commit the check diffs from: the merge base of the task tree and the
+ * integration head, so a branch that absorbed the head is not charged for the
+ * files other tasks landed. A branch that absorbed nothing newer than its
+ * recorded base keeps that base: it is the range the revision owns, and a
+ * conflicted amend that could not merge the head it stamped stays charged back
+ * to that head rather than to an older merge base.
+ */
+async function diffBase(
+  cwd: string,
+  base: string,
+  head: string,
+): Promise<string> {
+  const res = await git(cwd, ["merge-base", "HEAD", head], { allowFail: true });
+  const mergeBase = res.stdout.trim();
+  // Unrelated histories share no merge base; the recorded base is the range
+  // the task owns either way.
+  if (!mergeBase) return base;
+  return (await isAncestor(cwd, base, mergeBase)) ? mergeBase : base;
+}
+
 export async function runCleanlinessCheck(
   runtime: KernelRuntime,
   cwd: string,
   base: string,
+  head: string,
 ): Promise<CheckResult> {
   const config = runtime.configs.repo.cleanliness;
   const maxBytes = config?.maxFileSizeBytes ?? DEFAULT_MAX_FILE_SIZE_BYTES;
@@ -229,7 +252,8 @@ export async function runCleanlinessCheck(
   for (const file of config?.allowedFiles ?? [])
     override.allowedFiles.add(normalizeFile(file));
 
-  const diffResult = await git(cwd, ["diff", "--name-only", base]);
+  const from = await diffBase(cwd, base, head);
+  const diffResult = await git(cwd, ["diff", "--name-only", from]);
   const files = diffResult.stdout
     .split("\n")
     .filter(Boolean)
@@ -239,7 +263,7 @@ export async function runCleanlinessCheck(
     disallowedArtifacts(files, cwd);
   const extLines = config?.allowedExtensions
     ? disallowedExtensions(files, cwd, config.allowedExtensions)
-    : await newExtensions(files, cwd, base, artifactFlagged);
+    : await newExtensions(files, cwd, from, artifactFlagged);
 
   const outputLines = [
     ...override.errors,

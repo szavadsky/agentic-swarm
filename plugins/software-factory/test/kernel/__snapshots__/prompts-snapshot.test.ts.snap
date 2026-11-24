@@ -124,16 +124,20 @@ Filter: raise a concern only when acting without it would be wrong.
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -283,16 +287,20 @@ Filter: raise a concern only when acting without it would be wrong.
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -400,16 +408,20 @@ Filter: raise a concern only when acting without it would be wrong.
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -584,16 +596,20 @@ Filter: raise a concern only when acting without it would be wrong.
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -695,16 +711,20 @@ Filter: raise a concern only when acting without it would be wrong.
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -789,11 +809,12 @@ Filter: raise a concern only when acting without it would be wrong.
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 qa: {verdict, findings: []}  # optional; QA step only: accept, or changes with findings; verdict: accept | changes
 \`\`\`
@@ -903,16 +924,20 @@ Filter: raise a concern only when acting without it would be wrong.
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -1027,16 +1052,20 @@ Filter: raise a concern only when acting without it would be wrong.
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -1109,16 +1138,20 @@ Filter: raise a concern only when acting without it would be wrong.
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -1182,16 +1215,20 @@ Filter: raise a concern only when acting without it would be wrong.
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -1279,16 +1316,20 @@ Filter: raise a concern only when acting without it would be wrong.
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -1370,16 +1411,20 @@ Filter: raise a concern only when acting without it would be wrong.
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -1448,16 +1493,20 @@ Filter: raise a concern only when acting without it would be wrong.
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -1586,11 +1635,12 @@ Filter: raise a concern only when acting without it would be wrong.
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -1693,11 +1743,12 @@ Autonomy: take a reversible assumption, record it as a remarkable, continue. It 
 Filter: raise a concern only when acting without it would be wrong.
 
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
@@ -1834,16 +1885,20 @@ AUTO
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -1981,16 +2036,20 @@ AUTO
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -2152,16 +2211,20 @@ AUTO
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -2321,16 +2384,20 @@ PRINCIPAL
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -2468,16 +2535,20 @@ PRINCIPAL
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -2639,16 +2710,20 @@ PRINCIPAL
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -2808,16 +2883,20 @@ DETAILED
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -2955,16 +3034,20 @@ DETAILED
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict
@@ -3126,16 +3209,20 @@ DETAILED
 
 ## Outcome
 
-Emit exactly one outcome per turn. Delivery, first available: native structured output, then a file at the outcome path from the inputs, then a fenced YAML block as the last thing in the message. One parser reads one format; do not mix formats or add prose beside it.
+Write exactly one outcome per turn to the outcome path named in the inputs. If you cannot write that file, end your message with a fenced YAML block holding the same outcome instead; one parser reads one format, so do not mix formats or add prose beside it.
 
 \`\`\`yaml
 status: done | blocked | failed | upscope  # upscope on task steps only
-summary: one paragraph
+summary: |
+  one paragraph
 intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction
 concerns: [{kind, calibration, text, evidence?}]  # kind: debt | risk | uncertainty | choice; calibration: fyi | architect | owner
 debtClosed: [{id, reason}]  # optional; close one open debt by the id in the pack's debt register; reason says what removed it
 steerAnswers: [{steer, answer}]  # optional; one {steer, answer} per pending steer, steer id from the steer list
-replies: [{finding, reply}]  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+replies:  # optional; fix turns only: one {finding, reply} per numbered prior finding; finding is its 1-based position
+  - finding: 0
+    reply: |
+      ...
 verdict: approve | changes | reject  # optional; review steps only
 decision: continue | done | blocked  # optional; architect step only
 upscope: yes | no  # optional; standalone review escalation: answer with the verdict

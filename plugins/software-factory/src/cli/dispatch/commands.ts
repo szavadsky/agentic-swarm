@@ -184,8 +184,7 @@ function canaryCombination(parsed: ParsedArgs): {
   effort?: string;
 } {
   const aliasName =
-    parsed.alias ??
-    (parsed.file?.includes("/") ? undefined : parsed.file);
+    parsed.alias ?? (parsed.file?.includes("/") ? undefined : parsed.file);
   const configs = loadConfigs(path.resolve(parsed.repo), {
     runConfigPath: parsed.runConfig,
   });

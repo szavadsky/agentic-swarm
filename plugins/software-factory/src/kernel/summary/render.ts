@@ -11,11 +11,14 @@ import {
   launchTable,
   listLine,
   orNone,
+  parkLines,
   parkedCauseLines,
   perMergedCost,
   qaCatchLine,
   sourceCostText,
   spendTable,
+  steerLines,
+  zeroEditLine,
 } from "./tables.js";
 
 /** The summary's distance through remarkable sections. */
@@ -65,8 +68,8 @@ export function summaryHeadLines(render: SummaryRender): string[] {
   ];
 }
 
-/** The summary's metrics, incidents, waste and launch/spend tables. */
-export function summaryMetricsLines(render: SummaryRender): string[] {
+/** The metrics block: spend, work and the park, steer and incident counts. */
+function metricLines(render: SummaryRender): string[] {
   const computed = render.computed;
   const { usage, unpricedTurns, incidents, loopIncidents } = computed;
   const architectShare = `${(computed.architect.turnShare * 100).toFixed(1)}%`;
@@ -79,6 +82,7 @@ export function summaryMetricsLines(render: SummaryRender): string[] {
     ...costByRoleLines(render.named.roleNames),
     `- cost per merged task: harness-reported ${perMergedCost(computed.harnessCostPerMergedTask, unpricedTurns)}; list-price estimate ${perMergedCost(computed.listCostPerMergedTask, unpricedTurns)}`,
     `- work: ${computed.edits} files (+${computed.addedLines}/-${computed.removedLines}), ${computed.testRuns} test runs in ${computed.gateRuns} gate runs`,
+    zeroEditLine(computed.zeroEdit),
     qaCatchLine(computed.qaOnlyCatches),
     `- gate wall: ${(computed.gateWallMs / 1000).toFixed(1)}s gates, ${(computed.commitWallMs / 1000).toFixed(1)}s commits`,
     `- operator acts: ${computed.operatorActs} (${computed.humanInterventions} steers)`,
@@ -88,9 +92,22 @@ export function summaryMetricsLines(render: SummaryRender): string[] {
     "## Incidents",
     ...incidentLines(incidents, loopIncidents),
     "",
+    "## Parks",
+    ...parkLines(computed.parks),
+    "",
+    "## Steers",
+    ...steerLines(render.steers),
+    "",
+  ];
+}
+
+/** The summary's metrics, incidents, waste and launch/spend tables. */
+export function summaryMetricsLines(render: SummaryRender): string[] {
+  return [
+    ...metricLines(render),
     "## Waste",
     ...wasteLines(
-      computed.waste,
+      render.computed.waste,
       render.agentTurns,
       render.named.roleNames,
       render.named.aliasNames,

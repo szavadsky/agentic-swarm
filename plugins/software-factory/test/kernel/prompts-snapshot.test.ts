@@ -15,26 +15,7 @@ import { loadPromptLibrary, loadPrompts } from "../../src/kernel/prompts.js";
 import type { ProcessConfig, RunConfig } from "../../src/kernel/types.js";
 import { TEST_ARCHITECTURE, TEST_BOUNDARY } from "./helpers.js";
 
-/**
- * The integration base adds the architect-only `intentStatus` field to the
- * outcome schema. The scout snapshot renders the head's skeleton so it stays
- * valid before and after the base merge; this branch's kernel schema is
- * unchanged and the other roles keep it.
- */
-const INTENT_STATUS_FIXTURE =
-  "intentStatus: [{section, status, note?}]  # optional; architect step only: one entry per intent section — works, not built or friction — which the kernel writes to the dashboard's intent status; status: works | not-built | friction";
-
-function scoutOutcomeSchemaFixture(): string {
-  const schema = outcomeSchemaVar();
-  if (schema.includes("intentStatus:")) return schema;
-  return schema.replace(
-    "summary: one paragraph\n",
-    `summary: one paragraph\n${INTENT_STATUS_FIXTURE}\n`,
-  );
-}
-
 const OUTCOME_SCHEMA = outcomeSchemaVar();
-const SCOUT_OUTCOME_SCHEMA = scoutOutcomeSchemaFixture();
 
 const TASK_FRONTMATTER = taskFrontmatterVar();
 
@@ -247,7 +228,7 @@ const ROLES: Record<string, Record<string, string>> = {
     code_map_path: "/goal/code-map.md",
     outcome_path: "/goal/records/00049-i3-scout-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: SCOUT_OUTCOME_SCHEMA,
+    outcome_schema: OUTCOME_SCHEMA,
   },
   "review-architect": {
     iteration: "3",

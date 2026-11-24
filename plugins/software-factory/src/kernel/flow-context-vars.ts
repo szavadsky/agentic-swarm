@@ -3,6 +3,7 @@
  * acceptance or the checks that sent it back), the gate-last-call ask, and the
  * task/worktree facts every prompt shares. `promptVars` is the composition.
  */
+import type { CheckResult } from "../core/checks/types.js";
 import {
   type BaseGateState,
   formatBaseGates,
@@ -19,7 +20,12 @@ import {
   lastMergeChecks,
   lastReview,
 } from "./flow-context-history.js";
-import { formatFailingChecks, newGateFailures } from "./gates.js";
+import {
+  attributedFailures,
+  checksAttributed,
+  formatFailingChecks,
+  newGateFailures,
+} from "./gates.js";
 import { taskOutcomeSchema } from "./outcome-schemas.js";
 import { outcomeSchemaVar, qaOutcomeSchemaVar } from "./prompt-schema.js";
 import { CHECK_HANDOFF_DEFAULTS, GATE_LAST_CALL_ASK } from "./prompts.js";
@@ -41,6 +47,19 @@ interface Handoff {
   checks?: StepRecord;
   base?: BaseGateState;
   findings: string;
+}
+
+/**
+ * The red checks a record charges the task for the fix ask: the close-time
+ * attribution when the record carries it, else the baseline comparison the
+ * older record was judged by.
+ */
+function recordFailures(
+  rec: StepRecord,
+  preexisting: ReadonlySet<string>,
+): CheckResult[] {
+  if (checksAttributed(rec.checks)) return attributedFailures(rec.checks);
+  return newGateFailures(rec.checks ?? [], preexisting);
 }
 
 /** The latest acceptance or red checks, and the last-call ask when this is the gate fix's last round. */
@@ -66,7 +85,7 @@ function readHandoff(
   if (latest === acceptance && acceptance?.outcome)
     findings = formatAcceptanceFindings(acceptance.outcome);
   else if (latest?.checks)
-    findings = formatFailingChecks(newGateFailures(latest.checks, preexisting));
+    findings = formatFailingChecks(recordFailures(latest, preexisting));
 
   const isGateLastCall =
     state?.gateLastCall === true ||

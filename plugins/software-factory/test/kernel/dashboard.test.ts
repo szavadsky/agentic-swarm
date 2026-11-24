@@ -299,6 +299,7 @@ describe("dashboard links and empty states", () => {
     expect(html).toContain("No open debt.");
     expect(html).toContain("No concerns recorded.");
     expect(html).toContain("n/a");
+    expect(html).not.toContain("Latest launch log");
     expect(html).not.toContain("{{");
     expect(html).not.toContain("{%");
     expect(html).not.toContain("NaN");
