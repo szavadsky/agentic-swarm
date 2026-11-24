@@ -10,6 +10,7 @@ import {
   spikeTerminal,
 } from "./boundary-context.js";
 import {
+  collectSteerRoutes,
   expireHold,
   markProcessed,
   type Steer,
@@ -38,4 +39,30 @@ export async function runSpikeSteer(
   await markProcessed(runtime.store, steer);
   await expireHold(runtime.store, steer.id);
   return "handled";
+}
+
+/**
+ * Answers the spike-routed steers whose linked tasks have settled. Dispatch
+ * calls this after its passes, so a spike that finishes mid-iteration is
+ * answered there: a goal made terminal by that finish never opens a boundary.
+ * Returns the ids it answered.
+ */
+export async function answerSettledSpikeSteers(
+  runtime: KernelRuntime,
+  tasks: TaskFile[],
+  state: State,
+  records: StepRecord[],
+  steers: Steer[],
+): Promise<Set<string>> {
+  const routes = collectSteerRoutes(records);
+  const answered = new Set<string>();
+  for (const steer of steers) {
+    if (routes.get(steer.id)?.route !== "spike") continue;
+    if (
+      (await runSpikeSteer(runtime, tasks, state, records, steer)) === "handled"
+    ) {
+      answered.add(steer.id);
+    }
+  }
+  return answered;
 }

@@ -4,6 +4,7 @@
  * new batch, runs exactly one PM steer turn, and re-reads the holds that turn
  * may have rewritten against the tasks on disk.
  */
+import { answerSettledSpikeSteers } from "./boundary-spike.js";
 import { openConcernIds } from "./context-pack/misc.js";
 import { activeHolds } from "./dispatch-holds.js";
 import type { ActiveHolds, DispatchState } from "./dispatch-state.js";
@@ -104,6 +105,61 @@ export async function reloadHolds(
 }
 
 /**
+ * Answers the spike steers whose linked tasks settled, and drops them from the
+ * poll's batch. A hold left with an answer is re-read so the rest of the loop
+ * does not keep a task it no longer blocks.
+ */
+async function answerSettledSteers(
+  state: DispatchState,
+  snapshot: State,
+  tasks: TaskFile[],
+  records: readonly StepRecord[],
+): Promise<{ steers: Steer[]; error?: string }> {
+  const scanned = await scanInbox(state.runtime.store, { settleMs: 0 });
+  const answered = await answerSettledSpikeSteers(
+    state.runtime,
+    tasks,
+    snapshot,
+    [...records],
+    scanned,
+  );
+  if (answered.size === 0) return { steers: scanned };
+  const error = await reloadHolds(
+    state,
+    `holds after answering ${[...answered].join(", ")}`,
+  );
+  return {
+    steers: scanned.filter((steer) => !answered.has(steer.id)),
+    ...(error ? { error } : {}),
+  };
+}
+
+/** One claim gets its one PM steer turn; the holds it wrote are re-read. */
+async function runSteerBatch(
+  state: DispatchState,
+  snapshot: State,
+  tasks: TaskFile[],
+  claim: Steer[],
+): Promise<string | undefined> {
+  await runBoundaryTurn(
+    state.runtime,
+    { iteration: state.iteration, step: "pm" },
+    () =>
+      runSteerPm(state.runtime, {
+        iteration: state.iteration,
+        state: snapshot,
+        tasks,
+        steers: claim,
+        cwd: state.runtime.paths.goalCheckout,
+      }),
+  );
+  return reloadHolds(
+    state,
+    `steer holds after ${claim.map((steer) => steer.id).join(", ")}`,
+  );
+}
+
+/**
  * Polls the inbox between dispatch decisions, never inside a turn. The batch
  * gets exactly one PM turn; its record lands before the caller reads records,
  * so its dollars count against the iteration brake. `watch` owns the timer
@@ -127,7 +183,21 @@ export async function pollSteers(
       error: watchError,
     };
   }
-  const steers = await scanInbox(state.runtime.store, { settleMs: 0 });
+  // A spike steer stays in the inbox until its linked task settles; answer it
+  // here, in the same poll that would otherwise claim it again.
+  const { steers, error: answerError } = await answerSettledSteers(
+    state,
+    snapshot,
+    tasks,
+    records,
+  );
+  if (answerError) {
+    return {
+      hold: activeHolds(state.holds, new Set(), new Set()),
+      steerTurn: false,
+      error: answerError,
+    };
+  }
   const pending = new Set(steers.map((steer) => steer.id));
   const openConcerns = openConcernIds(records);
   const hold = activeHolds(state.holds, pending, openConcerns);
@@ -147,22 +217,7 @@ export async function pollSteers(
   }
   const claim = await claimSteers(state, steers);
   if (claim.length === 0) return { hold, steerTurn: false };
-  await runBoundaryTurn(
-    state.runtime,
-    { iteration: state.iteration, step: "pm" },
-    () =>
-      runSteerPm(state.runtime, {
-        iteration: state.iteration,
-        state: snapshot,
-        tasks,
-        steers: claim,
-        cwd: state.runtime.paths.goalCheckout,
-      }),
-  );
-  const holdError = await reloadHolds(
-    state,
-    `steer holds after ${claim.map((steer) => steer.id).join(", ")}`,
-  );
+  const holdError = await runSteerBatch(state, snapshot, tasks, claim);
   return {
     hold: activeHolds(state.holds, pending, openConcerns),
     steerTurn: true,

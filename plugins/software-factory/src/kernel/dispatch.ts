@@ -3,6 +3,7 @@
  * disposes) and the public result/options. The rule modules are
  * `dispatch-{state,holds,start,poll,admit,end}.ts`.
  */
+import { answerSettledSpikeSteers } from "./boundary-spike.js";
 import { makeCause } from "./cause.js";
 import { derive } from "./derive.js";
 import { admitAction, updateDrain } from "./dispatch-admit.js";
@@ -15,6 +16,7 @@ import type {
 } from "./dispatch-state.js";
 import { readInitialHolds, settledTurns } from "./dispatch-state.js";
 import { createSteerWatch, type SteerWatch } from "./dispatch-watch.js";
+import { scanInbox } from "./mailbox.js";
 import { next } from "./next.js";
 import type { Action, KernelRuntime } from "./types.js";
 
@@ -113,6 +115,18 @@ async function readLoop(state: DispatchState): Promise<LoopRead> {
     recordsBefore,
     snapshot: derive(tasks, recordsBefore, state.runtime.configs.process.flows),
   };
+}
+
+/** Answer the spike steers whose linked tasks settled in the last pass. */
+async function answerSettledSteers(state: DispatchState): Promise<void> {
+  const read = await readLoop(state);
+  await answerSettledSpikeSteers(
+    state.runtime,
+    read.tasks,
+    read.snapshot,
+    read.recordsBefore,
+    await scanInbox(state.runtime.store, { settleMs: 0 }),
+  );
 }
 
 /** Poll the inbox and the iteration brake; a failed poll ends the iteration. */
@@ -218,6 +232,9 @@ export async function runDispatch(
       const read = await readLoop(state);
       if (read.snapshot.terminal) {
         await settleRunning(state);
+        // A final settle must answer its spike steer before the launch stops:
+        // a terminal goal never reaches the boundary that would answer it.
+        await answerSettledSteers(state);
         return {
           reason: "terminal",
           turns: settledTurns(read.recordsBefore, state.iteration),
@@ -245,6 +262,9 @@ export async function runDispatch(
         read.runningAtRead,
       );
       if (ended === "continue") continue;
+      // A terminal script step settles inside this wave, after the poll read;
+      // answer its steer here because the wave may end without another pass.
+      await answerSettledSteers(state);
       return ended;
     }
   } finally {
