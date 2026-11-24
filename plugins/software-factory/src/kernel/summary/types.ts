@@ -1,7 +1,7 @@
 /** Summary input and the fact shapes the renderer reads. */
 
 import type { materialOpenDebts } from "../derive.js";
-import type { IterationMetrics } from "../metrics.js";
+import type { IterationMetrics, SteerLatency } from "../metrics.js";
 import type { PriceTable } from "../pricing.js";
 import type {
   Cause,
@@ -74,6 +74,8 @@ export interface SummaryRender {
   facts: SummaryTaskFacts;
   remarks: SummaryRemarkFacts;
   computed: IterationMetrics;
+  /** The mailbox's steer latency; a goal fact the iteration summary reports. */
+  steers: SteerLatency;
   named: ReturnType<typeof summaryNamedRows>;
   agentTurns: number;
   scriptTurns: number;

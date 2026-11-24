@@ -82,6 +82,66 @@ export interface PlanReviewMarkCounts {
   unhelpful: number;
 }
 
+/**
+ * Park friction: every settled park record, split by cause, beside the merged
+ * tasks it took, and the parked slugs whose work landed without the task file
+ * being amended past the park.
+ */
+export interface ParkMetrics {
+  /** Settled park records: every slug and every round. */
+  records: number;
+  /** Distinct slugs behind those records. */
+  distinctSlugs: number;
+  /** Distinct slugs with a verified merge record. */
+  mergedSlugs: number;
+  /** Park records per merged slug; null when nothing merged. */
+  perMergedTask: number | null;
+  /** Records per cause kind; a park with no cause counts as `unknown`. */
+  byCause: Record<string, number>;
+  /** Parked slugs whose verified merge landed at the task revision it parked. */
+  landedUnchanged: number;
+  /** Parked slugs whose verified merge landed after the task file was amended. */
+  landedAmended: number;
+  /** Parked-then-merged slugs whose task file is missing or unreadable. */
+  landedUnknown: number;
+}
+
+/** One steer leg's measured samples and the steers it could not time. */
+export interface SteerLeg {
+  /** Steer times in ms, one per steer whose drop and event stamps are both known. */
+  samplesMs: number[];
+  /**
+   * Steers whose time cannot be known: a missing drop stamp, an event with no
+   * stamp, or a processed steer with no recorded event to time.
+   */
+  unknown: number;
+}
+
+/**
+ * Steer latency for the goal's mailbox: drop to the PM's accepted route, drop
+ * to the final answer, and the steers still waiting for an answer. A steer is
+ * timed from the stamp in its inbox id, so a steer dropped without one reads
+ * unknown.
+ */
+export interface SteerLatency {
+  /** Steers the mailbox holds: inbox plus processed. */
+  steers: number;
+  route: SteerLeg;
+  answer: SteerLeg;
+  /** Steers with no final answer: still in the inbox, routed or not. */
+  unanswered: number;
+}
+
+/** A zero-edit turn, split by what the turn owed. */
+export interface ZeroEditCounts {
+  /** Reviews, QA and boundary turns: the answer is the product. */
+  reply: number;
+  /** Spike turns: the finding is the product. */
+  finding: number;
+  /** Work steps whose turn owed a diff and committed none. */
+  noop: number;
+}
+
 export interface ArchitectMetrics {
   turns: number;
   launches: number;
@@ -128,6 +188,10 @@ export interface IterationMetrics {
   incidents: IncidentCounts;
   /** Parks that name no-progress or an empty diff; the loop signals in kernel-0. */
   loopIncidents: number;
+  /** Settled parks by cause, the merged tasks they took, and park landings. */
+  parks: ParkMetrics;
+  /** Agent turns that committed nothing, by what they owed. */
+  zeroEdit: ZeroEditCounts;
   /** Steers moved from inbox to processed during this iteration. */
   humanInterventions: number;
   /**
@@ -151,13 +215,16 @@ export interface IterationMetrics {
   removedLines: number;
 }
 
-export interface MetricsTotals extends Omit<IterationMetrics, "n" | "status"> {
+export interface MetricsTotals
+  extends Omit<IterationMetrics, "n" | "status" | "parks" | "zeroEdit"> {
   iterations: number;
 }
 
 export interface GoalMetrics {
   iterations: IterationMetrics[];
   totals: MetricsTotals;
+  /** The mailbox's steer latency at write time; a goal fact, not an iteration sum. */
+  steers: SteerLatency;
 }
 
 export interface MetricsInput {

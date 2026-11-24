@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { CheckResult } from "../core/checks/types.js";
+import type { CheckAttribution, CheckResult } from "../core/checks/types.js";
 import {
   capJunit,
   parseJunit,
@@ -14,6 +14,7 @@ import {
   GATE_OUTPUT_CAP,
   capGateOutput,
   caseLabel,
+  isInfraCheck,
   type CappedGateOutput,
 } from "./gates-normalise.js";
 import {
@@ -322,6 +323,44 @@ export async function runGates(
 
 export function failingChecks(checks: readonly CheckResult[]): CheckResult[] {
   return checks.filter((c) => !c.ok);
+}
+
+/**
+ * Stamps each failing check with its owner, from the `preexisting` set the run
+ * was judged by, so derive reads the attribution instead of looking the
+ * baseline up again. Green checks and infra reds carry none: an infra gate
+ * that could not start is not a red verdict on the tree.
+ */
+export function stampAttribution(
+  checks: readonly CheckResult[],
+  preexisting: ReadonlySet<string>,
+): CheckResult[] {
+  const own = new Set(newGateFailures(checks, preexisting));
+  return checks.map((check) => {
+    if (check.ok || isInfraCheck(check)) return check;
+    const attribution: CheckAttribution = own.has(check) ? "new" : "inherited";
+    return { ...check, attribution };
+  });
+}
+
+/**
+ * The failing checks a record charges the task: every red it holds except the
+ * ones stamped `inherited` when it closed. A record written before the stamp
+ * carries none, so its reds keep the reading they had then.
+ */
+export function attributedFailures(
+  checks: readonly CheckResult[] | undefined,
+): CheckResult[] {
+  return failingChecks(checks ?? []).filter(
+    (check) => check.attribution !== "inherited",
+  );
+}
+
+/** Whether a record's checks carry the close-time attribution stamp. */
+export function checksAttributed(
+  checks: readonly CheckResult[] | undefined,
+): boolean {
+  return (checks ?? []).some((check) => check.attribution !== undefined);
 }
 
 /** Compact red-gate text for an implementer's next turn; empty when green. */

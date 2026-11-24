@@ -1,6 +1,6 @@
 import type { CheckResult } from "../core/checks/types.js";
 import { git } from "../core/git/exec.js";
-import { newGateFailures } from "./gates.js";
+import { newGateFailures, stampAttribution } from "./gates.js";
 import { committedSpikeReport, spikeReportRef } from "./spike-report.js";
 import { makeCause } from "./cause.js";
 import { qaReportOf } from "./qa.js";
@@ -70,9 +70,10 @@ export async function finishChecks(
   const wallMs = Number.isFinite(started)
     ? Math.max(0, Date.now() - started)
     : 0;
+  const preexisting = opts.preexisting ?? new Set<string>();
   return turn.finish({
-    ok: newGateFailures(checks, opts.preexisting ?? new Set()).length === 0,
-    checks,
+    ok: newGateFailures(checks, preexisting).length === 0,
+    checks: stampAttribution(checks, preexisting),
     testRuns: checks.length,
     wallMs,
     ...(opts.tree !== undefined ? { tree: opts.tree } : {}),
