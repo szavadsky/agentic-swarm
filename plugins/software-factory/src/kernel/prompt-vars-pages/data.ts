@@ -38,20 +38,21 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
   {
     file: "architect-subarchitects.md",
     prompt: "architect-subarchitects",
-    intro:
-      "The steered hierarchy's launch block: rendered once per architect turn and passed to `architect.md` as `subarchitect_block`, so the top architect launches or revives one named subarchitect per active epic in its own session.",
+    intro: "Architect's steered-subarchitect block; omp text conditional.",
     variables: {
       subarchitects:
         "one row per epic: the epic id, the agent id `subarchitect`, and the exact spawn name the script steers",
+      subagents: "the architect harness's `Caps.subagents`; `none` by default",
     },
   },
   {
     file: "subarchitect-agent.md",
     prompt: "subarchitect-agent",
-    intro:
-      "The transient omp agent definition the steered hierarchy installs with `-e`. Its body is the standing role; the per-iteration consult arrives over IRC, so it reads no turn variables.",
+    intro: "Transient subarchitect definition; omp tool text is conditional.",
     note: "The file opens with the agent's YAML frontmatter, so `biome.json` excludes it from markdown formatting: the formatter would re-indent the definition.",
-    variables: {},
+    variables: {
+      subagents: "`Caps.subagents`; `steer` renders the omp tool text",
+    },
   },
   {
     file: "subarchitect.md",

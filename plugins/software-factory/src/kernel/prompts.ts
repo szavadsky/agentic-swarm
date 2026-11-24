@@ -320,6 +320,9 @@ export function loadPrompts(
       depth: "1",
       // No steered subarchitects by default; the steered hierarchy renders the block.
       subarchitect_block: "",
+      // A render that knows no harness gets the generic launch text; the
+      // steered hierarchy supplies `steer` for its own block and definition.
+      subagents: "none",
     },
   });
 }

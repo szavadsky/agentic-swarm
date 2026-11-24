@@ -184,6 +184,9 @@ function steeredHostingBlock(
           `- epic \`${consult.epic}\` — agent \`${SUBARCHITECT_AGENT}\`, name \`${consult.name}\``,
       )
       .join("\n"),
+    // This block exists only on the steered path; the template's omp text is
+    // the steer variant, never a guess about a harness that cannot steer.
+    subagents: "steer",
   })}\n`;
 }
 
@@ -211,7 +214,9 @@ export async function steeredHosting(
     agents: [
       {
         name: SUBARCHITECT_AGENT,
-        markdown: runtime.prompts.render("subarchitect-agent", {}),
+        markdown: runtime.prompts.render("subarchitect-agent", {
+          subagents: "steer",
+        }),
       },
     ],
     block: steeredHostingBlock(runtime, consults),

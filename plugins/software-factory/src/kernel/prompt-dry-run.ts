@@ -79,6 +79,20 @@ function goalVars(goal: string): Record<string, string> {
   };
 }
 
+/**
+ * The `subagents` sample for the architect alias's harness: an acpx-bound
+ * harness advertises no subagent surface, so it renders the generic launch
+ * text; the native adapter carries its own named subagents, so the sample
+ * renders the steering variant it can reach. A config without the alias is
+ * the harness-agnostic default `none`. The samples cannot probe a binary, so
+ * they never claim `spawn`.
+ */
+function sampledSubagents(configs: ConfigBundle): string {
+  const alias = configs.run.aliases[configs.process.boundary.architect.alias];
+  if (!alias) return "none";
+  return configs.run.harnesses?.[alias.harness]?.acpx ? "none" : "steer";
+}
+
 function taskVars(
   configs: ConfigBundle,
   goal: string,
@@ -155,7 +169,26 @@ function sampleVars(
     ...goalVars(goal),
     ...taskVars(configs, goal, worktree),
     ...recordVars(configs, goal),
+    depth: String(configs.process.hierarchy?.depth ?? 1),
+    subagents: sampledSubagents(configs),
   };
+}
+
+/**
+ * The architect turn's launch block, when the sample is a depth-2 steering
+ * harness. An empty block is the depth-1 sample and every harness that cannot
+ * steer: the script runs their epic consults as separate turns.
+ */
+function subarchitectBlock(
+  library: ReturnType<typeof loadPrompts>,
+  vars: Record<string, string>,
+): string {
+  if (vars.depth !== "2" || vars.subagents !== "steer") return "";
+  const block = library.render("architect-subarchitects", {
+    subarchitects: vars.subarchitects ?? "",
+    subagents: "steer",
+  });
+  return `${block}\n`;
 }
 
 /** Renders every configured prompt with representative turn values. */
@@ -168,6 +201,7 @@ export function dryRunPrompts(
     run: configs.run,
   });
   const vars = sampleVars(configs, repoRoot);
+  const block = subarchitectBlock(library, vars);
   return promptNamesForConfig(configs).map((name) => {
     const promptVars: Record<string, string> = { ...vars };
     for (const placeholder of library.placeholders(name)) {
@@ -175,6 +209,7 @@ export function dryRunPrompts(
         promptVars[placeholder] = `dry-run ${placeholder}`;
       }
     }
+    if (name === "architect") promptVars.subarchitect_block = block;
     if (name === "architect-repair") {
       promptVars.role = "architect";
       promptVars.deliverable = "plan edit or stop decision";

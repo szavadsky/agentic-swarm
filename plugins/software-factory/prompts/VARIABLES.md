@@ -26,7 +26,7 @@ The architect's body is assembled from fragments so a reviewer and a subarchitec
 
 `calibration` is the default calibration partial. The process config may replace its content per repo; the prompt template does not change.
 
-Renderer defaults live outside any `This turn` block and the renderer supplies them, so turn code does not pass them: `validate_cmd` (the running build's absolute `bun <build>/bin/factory.ts validate`, stable only within one checkout), `outcome_schema` (the outcome YAML skeleton rendered from the task type's kernel output schema, or the QA step's own schema, in the `outcome` partial), `task_frontmatter` (the frontmatter YAML skeleton rendered from the kernel task schema, in the `task-frontmatter` partial), `task_types` (configured task type names in config order with the flow, kind and output schema each supplies, from the process config), `tiers` (run-config alias names in config order; `default` is kernel vocabulary for no tier override and stays literal), `depth` (`1` until the hierarchy config names `2`), `author` (the reviewer's author role; it selects the `<role>-body` and `review-<role>` fragments) and `checks_result`/`checks_tree`/`checks_log` (the latest checks record's result, tree and log; a render with no checks record gets `no checks run`, `unknown` and `unknown`), and `base_gates` (the base tree's recorded gate result; a render with no base record gets `not recorded`, never a clean base). `author` defaults to `implementer`; the plan-review turn overrides it with `architect`. `class_types` is a turn-supplied variable above the block: the front turn renders its class-to-task-type mapping from the same kernel mapping the validator enforces. The delivery-repair ask also supplies its own narrowed `outcome_schema`; it has no role prompt, so its shape must match the turn it repairs.
+Renderer defaults live outside any `This turn` block and the renderer supplies them, so turn code does not pass them: `validate_cmd` (the running build's absolute `bun <build>/bin/factory.ts validate`, stable only within one checkout), `outcome_schema` (the outcome YAML skeleton rendered from the task type's kernel output schema, or the QA step's own schema, in the `outcome` partial), `task_frontmatter` (the frontmatter YAML skeleton rendered from the kernel task schema, in the `task-frontmatter` partial), `task_types` (configured task type names in config order with the flow, kind and output schema each supplies, from the process config), `tiers` (run-config alias names in config order; `default` is kernel vocabulary for no tier override and stays literal), `depth` (`1` until the hierarchy config names `2`), `subagents` (the architect alias harness's `Caps.subagents`; `none` is the harness-generic default, and the steered hierarchy passes `steer` so only a steering harness renders the omp tool instructions), `author` (the reviewer's author role; it selects the `<role>-body` and `review-<role>` fragments) and `checks_result`/`checks_tree`/`checks_log` (the latest checks record's result, tree and log; a render with no checks record gets `no checks run`, `unknown` and `unknown`), and `base_gates` (the base tree's recorded gate result; a render with no base record gets `not recorded`, never a clean base). `author` defaults to `implementer`; the plan-review turn overrides it with `architect`. `class_types` is a turn-supplied variable above the block: the front turn renders its class-to-task-type mapping from the same kernel mapping the validator enforces. The delivery-repair ask also supplies its own narrowed `outcome_schema`; it has no role prompt, so its shape must match the turn it repairs.
 
 ## architect.md
 
@@ -48,13 +48,16 @@ Renderer defaults live outside any `This turn` block and the renderer supplies t
 
 ## architect-subarchitects.md
 
-The steered hierarchy's launch block: rendered once per architect turn and passed to `architect.md` as `subarchitect_block`, so the top architect launches or revives one named subarchitect per active epic in its own session.
+Architect's steered-subarchitect block; omp text conditional.
 
 - `subarchitects` — one row per epic: the epic id, the agent id `subarchitect`, and the exact spawn name the script steers
+- `subagents` — the architect harness's `Caps.subagents`; `none` by default
 
 ## subarchitect-agent.md
 
-The transient omp agent definition the steered hierarchy installs with `-e`. Its body is the standing role; the per-iteration consult arrives over IRC, so it reads no turn variables.
+Transient subarchitect definition; omp tool text is conditional.
+
+- `subagents` — `Caps.subagents`; `steer` renders the omp tool text
 
 The file opens with the agent's YAML frontmatter, so `biome.json` excludes it from markdown formatting: the formatter would re-indent the definition.
 
