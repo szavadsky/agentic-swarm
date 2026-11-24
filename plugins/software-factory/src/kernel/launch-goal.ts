@@ -136,7 +136,9 @@ export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
     // before the launch's writes settle on the goal branch.
     await writeStatus(statusSource(runtime), statusStop(result));
     await landStoreCommits(setup.paths);
-    if (result.stop === "done") await sweepWorktrees(runtime);
+    // Every end sweeps: an interrupted or bounded launch must not leave the
+    // terminal trees the next launch would only clear after its pre-flight.
+    await sweepWorktrees(runtime);
     return result;
   } finally {
     closeRunLog();
