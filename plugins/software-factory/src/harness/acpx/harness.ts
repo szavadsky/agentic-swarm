@@ -1,4 +1,5 @@
 import path from "node:path";
+import { promptGroupIsLive, waitForPromptGroupExit } from "./liveness.js";
 import { type RetryPolicy, runWithFallbacks } from "../fallback.js";
 import type {
   Caps,
@@ -39,6 +40,16 @@ export class AcpxHarness implements Harness {
     this.id = opts.id;
     this.runtime = runtimeOf(opts);
     this.retry = opts.retry ?? {};
+  }
+
+  /** Whether the prompt child recorded for this session still has a live group. */
+  isLive(session?: SessionRef): boolean {
+    return promptGroupIsLive(this.runtime.activePids, session);
+  }
+
+  /** Polls the session's prompt group until it exits or the caller's bound ends. */
+  async waitExit(session?: SessionRef, timeoutMs = 0): Promise<void> {
+    await waitForPromptGroupExit(this.runtime.activePids, session, timeoutMs);
   }
 
   async caps(_model: ModelRef): Promise<Caps> {
@@ -150,6 +161,7 @@ function runtimeOf(opts: AcpxHarnessOptions): AcpxRuntime {
     sessionDir: path.resolve(opts.sessionDir),
     envAllowlist: opts.envAllowlist,
     retention: opts.retention,
+    activePids: new Map<string, number>(),
     // The entry's opaque options win over the structured block; the adapter
     // reads only `args` and `env` from the result.
     acpx: {

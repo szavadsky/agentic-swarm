@@ -3,6 +3,7 @@
 import { spawn } from "node:child_process";
 import { childEnv } from "../../../core/env.js";
 import {
+  isChildGroupAlive,
   registerChildGroup,
   unregisterChildGroup,
 } from "../../../core/shutdown.js";
@@ -56,6 +57,7 @@ class PromptProcessRun {
     transcriptPath: string | undefined,
     private readonly signal: AbortSignal | undefined,
     private readonly resolve: (result: PromptProcessResult) => void,
+    private readonly sessionName?: string,
   ) {
     this.opened = openTranscript(transcriptPath);
     this.transcript = this.opened.transcript;
@@ -112,7 +114,12 @@ class PromptProcessRun {
       return false;
     }
     this.pid = this.child.pid ?? 0;
-    if (this.pid > 0) registerChildGroup(this.pid);
+    if (this.pid > 0) {
+      registerChildGroup(this.pid);
+      if (this.sessionName) {
+        this.runtime.activePids?.set(this.sessionName, this.pid);
+      }
+    }
     return true;
   }
 
@@ -141,13 +148,24 @@ class PromptProcessRun {
     }
   }
 
+  /**
+   * Drops the group from the kill and liveness registries once it is gone.
+   * A group with surviving members stays recorded so a later read can wait
+   * for the outcome it may still write.
+   */
+  private releaseGroup(): void {
+    if (this.pid <= 0 || isChildGroupAlive(this.pid)) return;
+    unregisterChildGroup(this.pid);
+    if (this.sessionName) this.runtime.activePids?.delete(this.sessionName);
+  }
+
   private wireExit(): void {
     this.child?.on("error", (error) => {
       this.stderr = `${this.stderr}\n${error.message}`.slice(-MAX_STDERR_BYTES);
       this.closed = true;
       this.clearTimers();
       this.clearSignal();
-      if (this.pid > 0) unregisterChildGroup(this.pid);
+      this.releaseGroup();
       this.resolve({
         code: null,
         signal: null,
@@ -167,7 +185,7 @@ class PromptProcessRun {
       }
       this.clearTimers();
       this.clearSignal();
-      if (this.pid > 0) unregisterChildGroup(this.pid);
+      this.releaseGroup();
       this.resolve({
         code,
         signal,
@@ -237,6 +255,7 @@ export function runPromptProcess(
   parser: AcpxTranscriptParser,
   transcriptPath: string | undefined,
   signal?: AbortSignal,
+  sessionName?: string,
 ): Promise<PromptProcessResult> {
   if (signal?.aborted) {
     return Promise.resolve({
@@ -258,6 +277,7 @@ export function runPromptProcess(
       transcriptPath,
       signal,
       resolve,
+      sessionName,
     ).start();
   });
 }

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { Repo } from "../../src/core/git/repo.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
-import { runAgentTurn } from "../../src/kernel/agent.js";
+import { OUTCOME_SETTLE_MS, runAgentTurn } from "../../src/kernel/agent.js";
 import type { AgentTurnSpec } from "../../src/kernel/agent/types.js";
 import { resolveTurn } from "../../src/kernel/flow-context.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
@@ -306,6 +306,53 @@ function endsOnRescueInfraStop(): void {
   });
 }
 
+function waitsForTheLiveProcessBeforeRescuing(): void {
+  it("sends the rescue ask only after the live process has exited", async () => {
+    const { root, fake, runtime } = await setupDirect();
+    try {
+      let live = false;
+      let exitResolve: (() => void) | undefined;
+      let exitPromise = Promise.resolve();
+      const armExit = (delayMs: number) => {
+        exitPromise = new Promise<void>((resolve) => {
+          exitResolve = resolve;
+        });
+        live = true;
+        setTimeout(() => {
+          live = false;
+          exitResolve?.();
+        }, delayMs);
+      };
+      fake.isLive = () => live;
+      fake.waitExit = async () => {
+        await exitPromise;
+      };
+      fake.script((req) => {
+        armExit(OUTCOME_SETTLE_MS + 200);
+        return fakeTurnResult(req, { text: "planned" });
+      });
+      fake.script((req) => {
+        armExit(OUTCOME_SETTLE_MS + 200);
+        return fakeTurnResult(req, { text: "still planned" });
+      });
+      let rescueRanWhileLive = false;
+      fake.script((req, ctx) => {
+        rescueRanWhileLive = live;
+        ctx.writeOutcome({ status: "done", summary: "rescued after exit" });
+        return fakeTurnResult(req);
+      });
+
+      const result = await turn(runtime, root, async () => "rescue this turn");
+
+      expect(rescueRanWhileLive).toBe(false);
+      expect(result.record.asks).toEqual(["unfinished", "rescue"]);
+      expect(result.outcome?.summary).toBe("rescued after exit");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
 describe("rescue of a turn whose work survived its reminder", () => {
   rescuesAfterTheReminder();
   clearsTheStaleOutcomeFile();
@@ -314,4 +361,5 @@ describe("rescue of a turn whose work survived its reminder", () => {
   skipsDeliveredOutcomes();
   failsOnSecondInvalidOutcome();
   endsOnRescueInfraStop();
+  waitsForTheLiveProcessBeforeRescuing();
 });

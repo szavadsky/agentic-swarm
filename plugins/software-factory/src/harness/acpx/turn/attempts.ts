@@ -247,6 +247,7 @@ export async function runPromptPhase(
       context.name,
     ),
     context.req.signal,
+    context.name,
   );
   if (processResult.transcriptError) {
     throw new Error(

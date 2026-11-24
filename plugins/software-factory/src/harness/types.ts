@@ -260,6 +260,17 @@ export interface Harness {
   /** Live model/effort discovery for harnesses that only expose it in a session. */
   probe?(model: ModelRef): Promise<ModelProbe>;
   turn(req: TurnRequest): Promise<TurnResult>;
+  /**
+   * Whether the harness's process for this session is still running. A turn
+   * may report its stop before a child that writes the outcome has exited;
+   * absent means the harness cannot tell, so the kernel does not wait.
+   */
+  isLive?(session?: SessionRef): boolean | Promise<boolean>;
+  /**
+   * Resolves when that process exits, or after `timeoutMs` when positive.
+   * The caller rechecks `isLive` and owns the bound.
+   */
+  waitExit?(session?: SessionRef, timeoutMs?: number): Promise<void>;
   /** Absent capability = missing member, a type error at the call site. */
   compact?(ref: SessionRef): Promise<CompactResult>;
 }

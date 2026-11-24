@@ -21,6 +21,20 @@ export function unregisterChildGroup(pid: number): void {
 }
 
 /**
+ * Whether a child process group still has a live member. `EPERM` means the
+ * group exists but belongs to another user; only `ESRCH` proves it is gone.
+ */
+export function isChildGroupAlive(pid: number): boolean {
+  if (pid <= 0) return false;
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch (err: unknown) {
+    return (err as NodeJS.ErrnoException).code !== "ESRCH";
+  }
+}
+
+/**
  * Terminates a single child process group by PID (SIGTERM then SIGKILL).
  * Ensures it NEVER kills the factory's own process group (requires pid > 0).
  */

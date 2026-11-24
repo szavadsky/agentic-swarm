@@ -84,6 +84,15 @@ export function missingOutcomeFinding(
     : `${base} (missing deliverable: ${deliverable})`;
 }
 
+/** The stop the kernel reports when the turn's wall bound fires. */
+export function wallTimeoutStop(wallMs: number): Stop {
+  return {
+    kind: "infra",
+    cause: "timeout",
+    details: `wall clock ${wallMs}ms exceeded`,
+  };
+}
+
 /**
  * One agent step: outcome path in the prompt (LOG D6), file first, fenced-block
  * fallback, up to `reminders` same-session repair turns, then an invalid
@@ -102,11 +111,7 @@ async function turnWithTimeout(
   const req = { ...request, signal: controller.signal };
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeoutResult: import("../../harness/types.js").TurnResult = {
-    stop: {
-      kind: "infra",
-      cause: "timeout",
-      details: `wall clock ${wallMs}ms exceeded`,
-    },
+    stop: wallTimeoutStop(wallMs),
     text: "",
     usage: {
       in: 0,

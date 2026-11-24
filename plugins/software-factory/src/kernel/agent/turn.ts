@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import type { ServedUsage, Usage } from "../../harness/types.js";
+import type { Harness, ServedUsage, Usage } from "../../harness/types.js";
 import { addUsage, reportsUsage } from "../../harness/usage.js";
 import { missingPlanFinding, snapshotPlan } from "../architect-session.js";
 import {
@@ -29,6 +29,7 @@ import {
   mergeServed,
   missingOutcomeFinding,
   overflowed,
+  wallTimeoutStop,
 } from "./chain.js";
 
 /** Renders the first prompt and snapshots the plan it must compare against. */
@@ -137,6 +138,86 @@ export async function retryOverflow(state: AgentTurnState): Promise<void> {
   state.tierIndex = retry.endIndex;
 }
 
+/** How the live-process wait before a read ended. */
+type LiveSettle =
+  | { status: "delivered"; delivered: OutcomeSource }
+  | { status: "waited" | "dead" | "expired" };
+
+/**
+ * Waits out a child that outlives the stop it reported, bounded by the turn's
+ * remaining wall clock. The outcome path is probed between bounded waits, so a
+ * late write ends the wait without the child exiting and is never lost at the
+ * bound. A harness that cannot report liveness is never waited for; a dead one
+ * keeps the fixed settle read that already covered it.
+ */
+async function settleLiveProcess(
+  state: AgentTurnState,
+  readLive: () => OutcomeSource | null,
+): Promise<LiveSettle> {
+  const harness = state.spec.target.tiers[state.tierIndex]?.harness;
+  if (harness?.isLive === undefined) return { status: "dead" };
+  if (!(await harness.isLive(state.session))) return { status: "dead" };
+  const wallMs = state.timeouts.wallMs;
+  if (wallMs <= 0) return { status: "dead" };
+  const startedMs = new Date(state.started.meta.startedAt).getTime();
+  const deadline = startedMs + wallMs;
+  for (;;) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      const delivered = readLive();
+      if (delivered !== null) return { status: "delivered", delivered };
+      state.stop = wallTimeoutStop(wallMs);
+      return { status: "expired" };
+    }
+    const exited = await waitUntilExit(
+      harness,
+      state.session,
+      Math.min(OUTCOME_SETTLE_MS, remainingMs),
+      state.spec.sleep,
+    );
+    const delivered = readLive();
+    if (delivered !== null) return { status: "delivered", delivered };
+    if (exited) return { status: "waited" };
+  }
+}
+
+/**
+ * Resolves true once the harness child has exited, false when this wait's bound
+ * ran out first. A harness with `waitExit` races it against the bound; one with
+ * only `isLive` polls that probe, and every path rechecks liveness so a
+ * `waitExit` that returned early cannot be trusted. The bound is a slice of the
+ * turn's remaining wall so the caller can probe the outcome path in between.
+ */
+async function waitUntilExit(
+  harness: Harness,
+  session: AgentTurnState["session"],
+  remainingMs: number,
+  sleepFn?: (ms: number) => Promise<void>,
+): Promise<boolean> {
+  if (harness.waitExit) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), remainingMs);
+    });
+    try {
+      await Promise.race([
+        harness.waitExit(session, remainingMs).then(() => true),
+        expired,
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  } else {
+    const deadline = Date.now() + remainingMs;
+    while (harness.isLive !== undefined && (await harness.isLive(session))) {
+      const left = deadline - Date.now();
+      if (left <= 0) return false;
+      await (sleepFn ?? sleep)(Math.min(OUTCOME_SETTLE_MS, left));
+    }
+  }
+  return harness.isLive === undefined || !(await harness.isLive(session));
+}
+
 /** One settled read per turn; a missing outcome waits the bound once. */
 async function readTurnOutcome(
   state: AgentTurnState,
@@ -147,9 +228,26 @@ async function readTurnOutcome(
       state.text,
       state.spec.outcomeSchema ?? outcomeSchema,
     );
-  const delivered = read();
-  if (delivered !== null || state.outcomeSettled) return delivered;
-  if (isHalted(state.stop)) return delivered;
+  const readLive = (): OutcomeSource | null => {
+    try {
+      return read();
+    } catch (err) {
+      // A live child may be mid-write; an unparsable file is not yet an answer.
+      if (err instanceof OutcomeInvalidError) return null;
+      throw err;
+    }
+  };
+  const delivered = readLive();
+  if (delivered !== null) return delivered;
+  if (isHalted(state.stop)) return read();
+
+  const live = await settleLiveProcess(state, readLive);
+  if (live.status === "delivered") return live.delivered;
+  if (live.status === "expired") return null;
+  if (live.status === "waited") return read();
+
+  // A dead process's file is final now; the strict read reports it.
+  if (state.outcomeSettled) return read();
   state.outcomeSettled = true;
   await (state.spec.sleep ?? sleep)(OUTCOME_SETTLE_MS);
   return read();

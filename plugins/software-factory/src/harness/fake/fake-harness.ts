@@ -155,6 +155,10 @@ export class FakeHarness implements Harness {
   public readonly id: string;
   public readonly calls: TurnRequest[] = [];
   public readonly compactions: SessionRef[] = [];
+  /** The harness's child-process probe, when the test staged one. */
+  public isLive?: (session?: SessionRef) => boolean | Promise<boolean>;
+  /** The harness's child-exit wait, when the test staged one. */
+  public waitExit?: (session?: SessionRef, timeoutMs?: number) => Promise<void>;
   /**
    * The fake's live probe, answering every model with the canned answer when
    * the constructor was given one; absent keeps the fake probe-less so
