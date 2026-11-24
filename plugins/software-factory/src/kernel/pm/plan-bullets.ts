@@ -5,12 +5,13 @@
  * only be answered in the plan.
  */
 import { planBullets, planCancellations } from "../plan-file.js";
-import type {
-  KernelRuntime,
-  PlanReviewFinding,
-  State,
-  TaskFile,
-  TaskStatus,
+import {
+  type KernelRuntime,
+  normalizeSlug,
+  type PlanReviewFinding,
+  type State,
+  type TaskFile,
+  type TaskStatus,
 } from "../types.js";
 
 /** The iteration file a derive turn writes its plan texts to. */
@@ -168,19 +169,40 @@ function bulletEditFindings(edits: readonly BulletEdit[]): PlanReviewFinding[] {
   }));
 }
 
-/** The open tasks the current plans claim, for the plan-return check. */
-async function planBulletEdits(
-  runtime: KernelRuntime,
-  tasks: readonly OpenTask[],
-): Promise<BulletEdit[]> {
-  const baseline = await latestBulletBaseline(runtime);
-  if (!baseline) return [];
-  return bulletEdits(await readPlanTexts(runtime), tasks, baseline);
+/** A merged task's bullet collapsed to its one line: `<slug> — merged`. */
+const COLLAPSED_MERGED_BULLET = /^-\s+\S+\s+—\s+merged\.?$/iu;
+
+/** Whether a merged bullet is already the one line the plan keeps. */
+function collapsedMergedBullet(text: string): boolean {
+  const lines = text.split(/\r?\n/).filter((line) => line.trim() !== "");
+  return lines.length === 1 && COLLAPSED_MERGED_BULLET.test(lines[0]!.trim());
 }
 
 /**
- * The kernel findings a plan return carries for the current plan texts. A
- * `plan` rel narrows them to one changed plan; absent covers every plan.
+ * The merged task bullets one plan still carries in full. A merged bullet's
+ * history lives in the records; the plan keeps only its one-line collapse.
+ */
+export function staleMergedFindings(
+  planRel: string,
+  text: string,
+  merged: ReadonlySet<string>,
+): PlanReviewFinding[] {
+  const findings: PlanReviewFinding[] = [];
+  for (const [raw, bullet] of planBullets(text)) {
+    const slug = normalizeSlug(raw);
+    if (!merged.has(slug) || collapsedMergedBullet(bullet.text)) continue;
+    findings.push({
+      planLine: `${planRel}:${bullet.line} (${slug})`,
+      finding: `merged task "${slug}" is still carried in full; collapse it to the one line \`- ${slug} — merged.\` and keep its what and done-when in the records`,
+    });
+  }
+  return findings;
+}
+
+/**
+ * The kernel findings a plan review carries for the current plan texts: an
+ * open bullet edited in place, and a merged bullet still carried in full. A
+ * `plan` rel narrows them to one plan; absent covers every plan.
  */
 export async function planBulletEditFindings(
   runtime: KernelRuntime,
@@ -188,10 +210,24 @@ export async function planBulletEditFindings(
   state: State,
   plan?: string,
 ): Promise<PlanReviewFinding[]> {
-  const edits = await planBulletEdits(runtime, openTasks(tasks, state));
-  return bulletEditFindings(
-    plan === undefined ? edits : edits.filter((edit) => edit.plan === plan),
+  const current = openTasks(tasks, state);
+  const plans = await readPlanTexts(runtime);
+  const edits = bulletEdits(
+    plans,
+    current,
+    await latestBulletBaseline(runtime),
   );
+  const merged = new Set(
+    current.filter((task) => task.status === "merged").map((task) => task.slug),
+  );
+  const narrowed =
+    plan === undefined ? plans : plans.filter((p) => p.rel === plan);
+  return [
+    ...bulletEditFindings(
+      plan === undefined ? edits : edits.filter((edit) => edit.plan === plan),
+    ),
+    ...narrowed.flatMap((p) => staleMergedFindings(p.rel, p.text, merged)),
+  ];
 }
 
 function parseBaseline(text: string): BulletBaseline {

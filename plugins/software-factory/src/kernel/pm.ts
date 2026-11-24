@@ -4,7 +4,10 @@
  * ladders. The implementation is split by concern under `pm/`.
  */
 export { runPm } from "./pm/ladder.js";
-export { planBulletEditFindings } from "./pm/plan-bullets.js";
+export {
+  planBulletEditFindings,
+  staleMergedFindings,
+} from "./pm/plan-bullets.js";
 export { existingTasks } from "./pm/prompts.js";
 export {
   type PlanSnapshot,

@@ -236,7 +236,14 @@ function scriptBoundaryIteration2(ctx: SagaBoundaryCtx): void {
       expect(req.prompt).toContain("- turn: `boundary`");
       expect(req.session?.compacted).toBe(true);
       ctx.betaSecondSession = req.session?.id;
-      fs.appendFileSync(ctx.betaPlan, "\n## Milestone 2\n- hold.\n", "utf8");
+      fs.writeFileSync(
+        ctx.betaPlan,
+        `${BETA_PLAN.replace(
+          "- `beta.build` — create beta.txt.\n  - done: beta.txt exists.\n",
+          "- `beta.build` — merged.\n",
+        )}\n## Milestone 2\n- hold.\n`,
+        "utf8",
+      );
       turnedCtx.writeOutcome(
         outcome({ summary: "epic beta reviewed", decision: "continue" }),
       );

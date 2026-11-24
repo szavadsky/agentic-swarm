@@ -255,9 +255,12 @@ function scriptIrcArchitectI2(ctx: SagaIrcCtx): void {
 function scriptIrcChildSteer(ctx: SagaIrcCtx): void {
   ctx.live.childSteer = (_id, message) => {
     const outcomePath = steeredOutcome(message);
-    fs.appendFileSync(
+    fs.writeFileSync(
       ctx.betaPlan,
-      "\n## Milestone 2\n- child review.\n",
+      `${BETA_PLAN.replace(
+        "- `beta.build` — create beta.txt.\n  - done: beta.txt exists.\n",
+        "- `beta.build` — merged.\n",
+      )}\n## Milestone 2\n- child review.\n`,
       "utf8",
     );
     fs.mkdirSync(path.dirname(outcomePath), { recursive: true });
