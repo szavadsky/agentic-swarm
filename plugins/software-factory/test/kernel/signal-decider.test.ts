@@ -249,7 +249,7 @@ function registerApproveShips(): void {
       expect(deciderCalls(harness)).toHaveLength(1);
       // The decider borrows the reviewer's prompt role and its live session.
       expect(deciderCalls(harness)[0]!.prompt).toContain(
-        "You decide one task's no-progress signal",
+        "You decide one task's mechanical signal",
       );
       expect(deciderCalls(harness)[0]!.session).toBeDefined();
       expect((await stateOf(runtime)).tasks.task!.status).toBe("merged");

@@ -5,13 +5,43 @@
 import { makeCause } from "./cause.js";
 import { phaseAfter } from "./derive-task-facts.js";
 import type { ReduceContext, ReduceState } from "./derive-task-state.js";
+import { raisePendingSignal } from "./derive-task-state.js";
 import {
   adjudicationDue,
   isAcceptanceStep,
   isAdjudicatorStep,
   isLastReviewCall,
+  reviewRoundLimit,
 } from "./review.js";
 import type { FlowStep, ReviewVerdict, StepRecord } from "./types.js";
+
+/** A gate fix that changed nothing and defers to the checks that follow it. */
+export type DeferredFix = { step: string; round: number };
+
+/** A productive turn answers the flow: checks before acceptance, else the next step. */
+export function applyAnswer(
+  context: ReduceContext,
+  state: ReduceState,
+  idx: number,
+  answeredReview: boolean,
+  deferred: DeferredFix | null,
+): void {
+  state.replyOnlyFix = answeredReview;
+  state.changesPending = false;
+  state.stepIndex = idx + 1;
+  const nextStep = context.steps[state.stepIndex];
+  if (!nextStep || isAcceptanceStep(nextStep)) {
+    state.pendingChecks = {
+      nextIndex: state.stepIndex,
+      mergeAfter: state.mergeFix,
+      ...(deferred ? { emptyFix: deferred } : {}),
+    };
+    state.phase = "checks";
+    return;
+  }
+  state.pendingChecks = null;
+  state.phase = nextStep.id;
+}
 
 /** A QA accept advances; checks run before the next acceptance or the end. */
 export function advanceAfterQa(
@@ -205,4 +235,34 @@ export function startFixRound(
 
 function phaseAfterStep(context: ReduceContext, index: number) {
   return phaseAfter(context.flow, index, context.task.kind);
+}
+
+/**
+ * The acceptance rounds a step may run: its configured change requests plus the
+ * last call, plus the rounds a decider's `changes` bought. When the flow settles
+ * on an acceptance step past that bound, the signal replaces the kernel's park:
+ * the round limit is a mechanical fact, never the decision.
+ */
+export function raiseBudgetSignal(
+  context: ReduceContext,
+  state: ReduceState,
+): void {
+  if (state.terminal || state.park || state.pendingSignal) return;
+  const index = context.flowIndex.get(state.phase);
+  if (index === undefined) return;
+  const step = context.steps[index]!;
+  if (!isAcceptanceStep(step)) return;
+  const limit = reviewRoundLimit(step) + state.roundGrants;
+  if (state.round <= limit) return;
+  raisePendingSignal(
+    state,
+    {
+      kind:
+        state.verdict === "changes"
+          ? "change-requests-exhausted"
+          : "round-limit",
+      evidence: `after verdict "${state.verdict ?? "none"}" (${limit} rounds)`,
+    },
+    { kind: "past-step", index },
+  );
 }

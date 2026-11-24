@@ -13,6 +13,7 @@ import {
   goalCheckout,
   makeRuntime,
   outcome,
+  scriptDecider,
   scriptStallLeave,
   setupFlowRepo,
   writeTask,
@@ -178,6 +179,10 @@ async function parksAfterRedMergedGateLetsOneGatePart1(
     ctx.writeOutcome(outcome({ summary: "v2" }));
     return fakeTurnResult(req);
   });
+  scriptDecider(harness, {
+    summary: "the head is poisoned; keep the branch for the steward",
+    verdict: "reject",
+  });
 
   const runtime = await makeRuntime(repo, goal, { fake: harness });
   const file = task("task", {
@@ -220,9 +225,10 @@ async function parksAfterRedMergedGateLetsOneGatePart2(
     runtime.configs.process.flows,
   );
   expect(state.tasks.task!.status).toBe("parked");
-  expect(causeText(state.tasks.task!.cause)).toContain("gates: poison-gate");
+  expect(state.tasks.task!.cause?.kind).toBe("gates");
+  expect(causeText(state.tasks.task!.cause)).toContain("poison-gate");
   expect(state.tasks.task!.round).toBe(1);
-  expect(harness.calls.length).toBe(3);
+  expect(harness.calls.length).toBe(4);
   expect(
     records.filter(
       (r) => r.slug === "task" && r.step === "merge" && r.ok === false,

@@ -27,6 +27,7 @@ import {
   cleanupFlowRepo,
   makeRuntime,
   outcome,
+  scriptDecider,
   setupFlowRepo,
   whenTurn,
   writeTask,
@@ -142,6 +143,10 @@ function scriptBetaRetries(harness: FakeHarness, turns: { n: number }): void {
     harness.script(betaTurn, {
       when: whenTurn({ slug: "beta", step: "implement" }),
     });
+  scriptDecider(harness, {
+    summary: "the red gate survives its fix; the PM decides the park",
+    verdict: "reject",
+  });
 }
 
 /** Scripts the PM's amend route for beta and returns its prompt. */
@@ -216,7 +221,8 @@ function expectParkRecoveredInIteration(
     expect(record.iteration).toBe(1);
   }
   // The PM saw the park evidence, the kept branch and the cause's default.
-  expect(stallPrompt).toContain("cause: gates: ready");
+  expect(stallPrompt).toContain("cause: gates:");
+  expect(stallPrompt).toContain("ready");
   expect(stallPrompt).toContain("factory-task/demo/beta");
   expect(stallPrompt).toContain("amends: 0 of 1");
   expect(stallPrompt).toContain("default: amend — fix the named gate");

@@ -97,8 +97,12 @@ function registerDerivePart18(): void {
       script(10, { step: "merge", ok: false, cause: cause("gates: unit") }),
     ];
     const r4 = derive(tasks, records4);
-    expect(r4.tasks.a!.phase).toBe("parked");
-    expect(r4.tasks.a!.park).toEqual(cause("gates: unit"));
+    expect(r4.tasks.a!.phase).toBe("decide");
+    expect(r4.tasks.a!.park).toBeUndefined();
+    expect(r4.tasks.a!.pendingSignal).toEqual({
+      kind: "gates",
+      evidence: "merge gates red after the gate fix: unit",
+    });
   });
 }
 

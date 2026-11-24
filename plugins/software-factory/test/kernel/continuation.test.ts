@@ -13,6 +13,7 @@ import {
   goalCheckout,
   makeRuntime,
   outcome,
+  scriptDecider,
   scriptStallLeave,
   setupFlowRepo,
   writeTask,
@@ -60,6 +61,10 @@ async function landsFlakeParkedKeptBranchNoNewPart1(
     ctx.writeOutcome(outcome({ summary: "nothing to fix" }));
     return fakeTurnResult(req);
   });
+  scriptDecider(harness, {
+    summary: "the merged gate is red and the fix changed nothing",
+    verdict: "reject",
+  });
   scriptStallLeave(harness, ["kept-flake"]);
   const runtime = await makeRuntime(repo, goal, { fake: harness });
   const file = task("kept-flake", { scope: ["feature.txt"] });
@@ -71,10 +76,13 @@ async function landsFlakeParkedKeptBranchNoNewPart1(
     "boundary",
   );
   expect((await stateOf(runtime)).tasks["kept-flake"]!.status).toBe("parked");
+  expect((await stateOf(runtime)).tasks["kept-flake"]!.cause?.kind).toBe(
+    "gates",
+  );
   expect(
     causeText((await stateOf(runtime)).tasks["kept-flake"]!.cause),
-  ).toContain("gates: unit");
-  expect(workCalls(harness)).toHaveLength(4);
+  ).toContain("unit (exit 1)");
+  expect(workCalls(harness)).toHaveLength(5);
 
   scriptContinueBoundary(harness, runtime);
   const boundary = await runBoundary(runtime, { relaunch: false });
@@ -90,8 +98,8 @@ async function landsFlakeParkedKeptBranchNoNewPart1(
   expect(await runtime.store.listTasks()).toHaveLength(1);
   expect(
     records.filter((r) => r.slug === "kept-flake" && r.actor === "agent"),
-  ).toHaveLength(3);
-  expect(workCalls(harness)).toHaveLength(6);
+  ).toHaveLength(4);
+  expect(workCalls(harness)).toHaveLength(7);
   expect(repo.git(["show", "factory/demo:feature.txt"]).stdout.trim()).toBe(
     "feature",
   );
@@ -119,6 +127,10 @@ async function leavesConflictedKeptBranchParkedPart1(
   harness.script((req, ctx) => {
     ctx.writeOutcome(outcome({ summary: "nothing to fix" }));
     return fakeTurnResult(req);
+  });
+  scriptDecider(harness, {
+    summary: "the conflict stays red; the branch cannot land as it stands",
+    verdict: "reject",
   });
   scriptStallLeave(harness, ["kept-conflict"]);
   const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -169,8 +181,8 @@ async function leavesConflictedKeptBranchParkedPart2(
   ).toHaveLength(1);
   expect(
     records.filter((r) => r.slug === "kept-conflict" && r.actor === "agent"),
-  ).toHaveLength(3);
-  expect(workCalls(harness)).toHaveLength(6);
+  ).toHaveLength(4);
+  expect(workCalls(harness)).toHaveLength(7);
   const pack = fs.readFileSync(
     path.join(runtime.store.goalDir, contextPackRelPath(2)),
     "utf8",
@@ -267,6 +279,10 @@ async function leavesRepeatRedKeptBranchParkedPart1(
     ctx.writeOutcome(outcome({ summary: "nothing to fix" }));
     return fakeTurnResult(req);
   });
+  scriptDecider(harness, {
+    summary: "the red repeats on this tip; keep the branch for the steward",
+    verdict: "reject",
+  });
   scriptStallLeave(harness, ["kept-red"]);
   const runtime = await makeRuntime(repo, goal, { fake: harness });
   const file = task("kept-red", { scope: ["feature.txt"] });
@@ -305,7 +321,7 @@ async function leavesRepeatRedKeptBranchParkedPart1(
   expect(failed[0]!.ok).toBe(false);
   expect(failed[0]!.cause).toEqual(merge!.cause!);
   expect(causeText(failed[0]!.cause)).toContain("gates: unit");
-  expect(workCalls(harness)).toHaveLength(6);
+  expect(workCalls(harness)).toHaveLength(7);
 
   return { harness, runtime };
 }
@@ -344,7 +360,7 @@ async function leavesRepeatRedKeptBranchParkedPart2(
   expect(skipped).toHaveLength(1);
   expect(skipped[0]!.ok).toBe(true);
   expect(skipped[0]!.cause).toEqual(cause("skipped: deterministic-red"));
-  expect(workCalls(harness)).toHaveLength(8);
+  expect(workCalls(harness)).toHaveLength(9);
 }
 
 function registerKeptLandPart1(): void {

@@ -1,4 +1,4 @@
-/** The decide turn's prompt page: a kernel-raised turn on a no-progress signal. */
+/** The decide turn's prompt page: a kernel-raised turn on a mechanical signal. */
 
 import type { PromptVariablesPage } from "./types.js";
 
@@ -6,7 +6,7 @@ export const DECIDER_PAGE: PromptVariablesPage = {
   file: "decider.md",
   prompt: "decider",
   intro:
-    "The decide turn's prompt: a task turn committed nothing and the kernel raised a signal instead of parking. The decider reads the signal, the branch, the checks log and the prior findings, then answers through its outcome verdict: approve continues to acceptance and ships, changes opens the next fix round, reject parks. It reuses the reviewer alias and session.",
+    "The decide turn's prompt: a mechanical signal (an empty diff, a spent round bound, or red gates that survived their fixes) stopped the task and the kernel raised it instead of parking. The decider reads the signal, the branch, the checks log and the prior findings, then answers through its outcome verdict: approve continues past the stopped point and ships (accepting a red on a gates signal), changes grants the next fix round or fix budget, reject parks. It reuses the reviewer alias and session.",
   variables: {
     pending_signal:
       "the raised signal as `<kind>: <evidence>`; the sentence the kernel would have parked with",

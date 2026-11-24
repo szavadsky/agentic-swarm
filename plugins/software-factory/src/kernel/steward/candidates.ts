@@ -101,7 +101,16 @@ function keptLandOwnsTip(own: readonly StepRecord[]): boolean {
     .filter((r) => r.actor === "agent" && r.outcome?.verdict === "approve")
     .at(-1);
   if (approved) return approved.commit === tip;
-  const tipIndex = own.findLastIndex((r) => r.commit === tip);
+  const tipIndex = own.findLastIndex(
+    (r) =>
+      r.actor === "agent" &&
+      r.commit === tip &&
+      // A verdict turn (a review, or the decider the kernel raises) reads the
+      // tip; it never moves it, so green checks between the code turn and the
+      // verdict still cover the branch.
+      r.outcome?.verdict === undefined,
+  );
+  if (tipIndex < 0) return false;
   return own
     .slice(tipIndex + 1)
     .some((r) => r.step === "checks" && r.ok === true);

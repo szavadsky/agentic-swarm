@@ -121,7 +121,7 @@ function registerDerivePart10(): void {
 }
 
 function registerDerivePart11(): void {
-  it("merges a review-less flow without a review and parks after repeated red merge gates", () => {
+  it("merges a review-less flow without a review and signals after repeated red merge gates", () => {
     const tasks = [task("a", { flow: "just-implement" })];
     const merging = derive(tasks, [implement(1), doneCheck(2)]);
     expect(merging.tasks.a!.phase).toBe("merge");
@@ -136,7 +136,7 @@ function registerDerivePart11(): void {
     expect(fixed.tasks.a!.round).toBe(1);
     expect(fixed.tasks.a!.gateFix).toBe(true);
 
-    const parked = derive(tasks, [
+    const signalled = derive(tasks, [
       implement(1),
       doneCheck(2),
       script(3, { step: "merge", ok: false, cause: cause("gates: unit") }),
@@ -144,9 +144,13 @@ function registerDerivePart11(): void {
       doneCheck(5),
       script(6, { step: "merge", ok: false, cause: cause("gates: unit") }),
     ]);
-    expect(parked.tasks.a!.phase).toBe("parked");
-    expect(causeText(parked.tasks.a!.park)).toContain("gates: unit");
-    expect(parked.tasks.a!.round).toBe(1);
+    expect(signalled.tasks.a!.phase).toBe("decide");
+    expect(signalled.tasks.a!.park).toBeUndefined();
+    expect(signalled.tasks.a!.pendingSignal).toEqual({
+      kind: "gates",
+      evidence: "merge gates red after the gate fix: unit",
+    });
+    expect(signalled.tasks.a!.round).toBe(1);
   });
 }
 
@@ -294,55 +298,38 @@ function registerDerivePart15(): void {
   });
 }
 
+/** `failures` alternating implement/red-check turns on a fresh tree each fix. */
+function redFixCycles(failures: number): StepRecord[] {
+  const records: StepRecord[] = [];
+  for (let turn = 1; turn <= failures; turn += 1) {
+    records.push(
+      implement(2 * turn - 1, 1, {
+        tree: `tree-${turn}`,
+        commit: `c${turn}`,
+        base: "c0",
+      }),
+    );
+    records.push(redCheck(2 * turn));
+  }
+  return records;
+}
+
 function registerDerivePart16(): void {
-  it("bounds task red-gate fixes and marks gateLastCall on the third fix turn before parking on the fourth failure", () => {
+  it("bounds task red-gate fixes and marks gateLastCall on the third fix turn before signalling on the fourth failure", () => {
     const tasks = [task("a")];
-    // Failure 1 -> Fix 1
-    const r1 = derive(tasks, [
-      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
-      redCheck(2),
-    ]);
-    expect(r1.tasks.a!.phase).toBe("implement");
-    expect(r1.tasks.a!.gateFix).toBe(true);
-    expect(r1.tasks.a!.gateLastCall).toBeUndefined();
-
-    // Failure 2 -> Fix 2
-    const r2 = derive(tasks, [
-      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
-      redCheck(2),
-      implement(3, 1, { tree: "tree-2", commit: "c2", base: "c0" }),
-      redCheck(4),
-    ]);
-    expect(r2.tasks.a!.phase).toBe("implement");
-    expect(r2.tasks.a!.gateFix).toBe(true);
-    expect(r2.tasks.a!.gateLastCall).toBeUndefined();
-
-    // Failure 3 -> Fix 3 (last call!)
-    const r3 = derive(tasks, [
-      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
-      redCheck(2),
-      implement(3, 1, { tree: "tree-2", commit: "c2", base: "c0" }),
-      redCheck(4),
-      implement(5, 1, { tree: "tree-3", commit: "c3", base: "c0" }),
-      redCheck(6),
-    ]);
+    const r3 = derive(tasks, redFixCycles(3));
     expect(r3.tasks.a!.phase).toBe("implement");
     expect(r3.tasks.a!.gateFix).toBe(true);
     expect(r3.tasks.a!.gateLastCall).toBe(true);
 
-    // Failure 4 -> parks!
-    const r4 = derive(tasks, [
-      implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
-      redCheck(2),
-      implement(3, 1, { tree: "tree-2", commit: "c2", base: "c0" }),
-      redCheck(4),
-      implement(5, 1, { tree: "tree-3", commit: "c3", base: "c0" }),
-      redCheck(6),
-      implement(7, 1, { tree: "tree-4", commit: "c4", base: "c0" }),
-      redCheck(8),
-    ]);
-    expect(r4.tasks.a!.phase).toBe("parked");
-    expect(r4.tasks.a!.park).toEqual(cause("gates: unit"));
+    // Failure 4 -> the red base signal
+    const r4 = derive(tasks, redFixCycles(4));
+    expect(r4.tasks.a!.phase).toBe("decide");
+    expect(r4.tasks.a!.park).toBeUndefined();
+    expect(r4.tasks.a!.pendingSignal).toEqual({
+      kind: "gates",
+      evidence: "task checks red after 3 fix turns: unit",
+    });
     expect(r4.tasks.a!.gateFix).toBeUndefined();
     expect(r4.tasks.a!.gateLastCall).toBeUndefined();
   });
@@ -360,49 +347,19 @@ function registerDerivePart17(): void {
         ],
       },
     };
-    // Failure 1 -> Fix 1
-    const r1 = derive(
-      tasks,
-      [
-        implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
-        redCheck(2),
-      ],
-      flows,
-    );
-    expect(r1.tasks.a!.phase).toBe("implement");
-    expect(r1.tasks.a!.gateFix).toBe(true);
-    expect(r1.tasks.a!.gateLastCall).toBeUndefined();
-
-    // Failure 2 -> Fix 2 (last call because bound is 1, so fix 2 is last call!)
-    const r2 = derive(
-      tasks,
-      [
-        implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
-        redCheck(2),
-        implement(3, 1, { tree: "tree-2", commit: "c2", base: "c0" }),
-        redCheck(4),
-      ],
-      flows,
-    );
+    const r2 = derive(tasks, redFixCycles(2), flows);
     expect(r2.tasks.a!.phase).toBe("implement");
     expect(r2.tasks.a!.gateFix).toBe(true);
     expect(r2.tasks.a!.gateLastCall).toBe(true);
 
-    // Failure 3 -> parks!
-    const r3 = derive(
-      tasks,
-      [
-        implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
-        redCheck(2),
-        implement(3, 1, { tree: "tree-2", commit: "c2", base: "c0" }),
-        redCheck(4),
-        implement(5, 1, { tree: "tree-3", commit: "c3", base: "c0" }),
-        redCheck(6),
-      ],
-      flows,
-    );
-    expect(r3.tasks.a!.phase).toBe("parked");
-    expect(r3.tasks.a!.park).toEqual(cause("gates: unit"));
+    // Failure 3 -> the red base signal
+    const r3 = derive(tasks, redFixCycles(3), flows);
+    expect(r3.tasks.a!.phase).toBe("decide");
+    expect(r3.tasks.a!.park).toBeUndefined();
+    expect(r3.tasks.a!.pendingSignal).toEqual({
+      kind: "gates",
+      evidence: "task checks red after 2 fix turns: unit",
+    });
   });
 }
 

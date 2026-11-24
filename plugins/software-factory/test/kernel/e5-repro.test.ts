@@ -8,7 +8,7 @@ import { executeTaskAction } from "../../src/kernel/flow.js";
 import { GATE_LAST_CALL_TEXT } from "../../src/kernel/prompts.js";
 import type { Action } from "../../src/kernel/types.js";
 import { integrationHead } from "../../src/kernel/worktree.js";
-import { task, cause, causeText } from "./helpers.js";
+import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   goalCheckout,
@@ -185,33 +185,24 @@ async function drivesThreeDifferingRedFixesParksPart1(
   const harness = new FakeHarness({ id: "fake" });
   const promptsSeen: string[] = [];
 
-  // Initial turn: introduces task-broken.txt
-  harness.script((req, ctx) => {
-    promptsSeen.push(req.prompt ?? "");
-    fs.writeFileSync(path.join(req.cwd!, "task-broken.txt"), "Y\n", "utf8");
-    ctx.writeOutcome(outcome({ summary: "feature broken implemented" }));
-    return fakeTurnResult(req);
-  });
-  // Fix turn 1: writes fix-1.txt, still keeping task-broken.txt (red)
-  harness.script((req, ctx) => {
-    promptsSeen.push(req.prompt ?? "");
-    fs.writeFileSync(path.join(req.cwd!, "fix-1.txt"), "fix 1\n", "utf8");
-    ctx.writeOutcome(outcome({ summary: "fix 1 attempt" }));
-    return fakeTurnResult(req);
-  });
-  // Fix turn 2: writes fix-2.txt, still keeping task-broken.txt (red)
-  harness.script((req, ctx) => {
-    promptsSeen.push(req.prompt ?? "");
-    fs.writeFileSync(path.join(req.cwd!, "fix-2.txt"), "fix 2\n", "utf8");
-    ctx.writeOutcome(outcome({ summary: "fix 2 attempt" }));
-    return fakeTurnResult(req);
-  });
-  // Fix turn 3 (last call): writes fix-3.txt, still keeping task-broken.txt (red)
-  harness.script((req, ctx) => {
-    promptsSeen.push(req.prompt ?? "");
-    fs.writeFileSync(path.join(req.cwd!, "fix-3.txt"), "fix 3\n", "utf8");
-    ctx.writeOutcome(outcome({ summary: "fix 3 attempt" }));
-    return fakeTurnResult(req);
+  // Each turn adds a file but keeps task-broken.txt, so every red repeats.
+  const turns = [
+    ["task-broken.txt", "Y\n", "feature broken implemented"],
+    ["fix-1.txt", "fix 1\n", "fix 1 attempt"],
+    ["fix-2.txt", "fix 2\n", "fix 2 attempt"],
+    ["fix-3.txt", "fix 3\n", "fix 3 attempt"],
+  ] as const;
+  for (const [file, text, summary] of turns) {
+    harness.script((req, ctx) => {
+      promptsSeen.push(req.prompt ?? "");
+      fs.writeFileSync(path.join(req.cwd!, file), text, "utf8");
+      ctx.writeOutcome(outcome({ summary }));
+      return fakeTurnResult(req);
+    });
+  }
+  scriptDecider(harness, {
+    summary: "the task broke the package gate and the fixes did not restore it",
+    verdict: "reject",
   });
   scriptStallLeave(harness, ["task"]);
 
@@ -242,7 +233,8 @@ async function drivesThreeDifferingRedFixesParksPart2(
 ) {
   const { state, promptsSeen, records } = scope;
   expect(state.tasks.task!.status).toBe("parked");
-  expect(state.tasks.task!.cause).toEqual(cause("gates: package"));
+  expect(state.tasks.task!.cause?.kind).toBe("gates");
+  expect(formatCause(state.tasks.task!.cause!)).toContain("package");
 
   // Verify harness was called 4 times (1 initial + 3 fixes)
   expect(promptsSeen).toHaveLength(4);
@@ -465,7 +457,11 @@ async function failsMergeWhoseNewFailureHidesPart3(
   await drive({ kind: "merge", slug: "task" });
   await drive({ kind: "step", slug: "task", step: "implement", round: 1 });
   await drive({ kind: "merge", slug: "task" });
-  // The gate fix is spent, so the wave-end steward owns the red merged result.
+  // The gate fix is spent; the decider leaves the red merged result to the steward.
+  scriptDecider(harness, {
+    summary: "the merged result is red; the steward owns the repair",
+    verdict: "reject",
+  });
   harness.script(
     (req, ctx) => {
       ctx.writeOutcome(outcome({ summary: "steward found no repair" }));
@@ -489,11 +485,12 @@ async function failsMergeWhoseNewFailureHidesPart3(
   );
 
   expect(state.tasks.task!.status).toBe("parked");
-  expect(state.tasks.task!.cause).toEqual(cause("gates: package"));
+  expect(state.tasks.task!.cause?.kind).toBe("gates");
+  expect(formatCause(state.tasks.task!.cause!)).toContain("package");
   expect(merges.map((r) => r.ok)).toEqual([false, false]);
   expect(mergeChecks.map((r) => r.ok)).toEqual([false, false]);
   expect(mergeChecks[0]!.checks![0]!.output).toContain("reason Y");
-  expect(harness.calls.length).toBe(5);
+  expect(harness.calls.length).toBe(6);
   expect(
     repo.git(["show", "factory/demo:feature.txt"], { allowFail: true }).code,
   ).not.toBe(0);

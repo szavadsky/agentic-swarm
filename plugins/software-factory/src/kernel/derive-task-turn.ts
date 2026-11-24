@@ -5,24 +5,28 @@
  */
 import { countOutcomeRepairs } from "../harness/usage.js";
 import { makeCause } from "./cause.js";
+import { applyDecideTurn, checkTerminalStatus } from "./derive-task-decide.js";
 import { committedNothing } from "./derive-task-facts.js";
 import { recordInfraRepeat } from "./derive-task-gates.js";
 import {
   type ReduceContext,
   type ReduceState,
+  raisePendingSignal,
   routeResolve,
 } from "./derive-task-state.js";
 import {
   advanceAfterQa,
   applyAdjudicator,
+  applyAnswer,
   applyReview,
+  type DeferredFix,
   startFixRound,
 } from "./derive-task-verdict.js";
 import { DECIDE_STEP, isDecideStep } from "./pending-signal.js";
 import { isRecoveryCrash } from "./recovery-seal.js";
 import { stepFingerprint } from "./progress.js";
 import { qaReportOf } from "./qa.js";
-import { isAcceptanceStep, isLastReviewCall, isVerdictStep } from "./review.js";
+import { isLastReviewCall, isVerdictStep } from "./review.js";
 import type { FlowStep, StepRecord } from "./types.js";
 
 interface AgentTurn {
@@ -31,8 +35,6 @@ interface AgentTurn {
   answeredReview: boolean;
   replyCount: number;
 }
-
-type DeferredFix = { step: string; round: number };
 
 /**
  * One ended agent record: ignored infra turns first, then the counted turn,
@@ -192,22 +194,6 @@ function trackFingerprint(
   return answeredReview;
 }
 
-function checkTerminalStatus(state: ReduceState, rec: StepRecord): boolean {
-  if (rec.stop?.kind === "refusal") {
-    state.park = makeCause("refused", rec.stop.details ?? "no details");
-    state.phase = "parked";
-    return true;
-  }
-  const status = rec.outcome?.status;
-  const summary = rec.outcome?.summary ?? "no summary";
-  if (status === "blocked" || status === "failed" || status === "upscope") {
-    state.park = makeCause(status, summary);
-    state.phase = "parked";
-    return true;
-  }
-  return false;
-}
-
 function checkCleanlinessJustification(
   state: ReduceState,
   rec: StepRecord,
@@ -267,7 +253,7 @@ function applyFlowStepTurn(
     return;
   }
   checkCleanlinessJustification(state, rec);
-  applyAnswer(context, state, idx, turn, empty.deferred);
+  applyAnswer(context, state, idx, turn.answeredReview, empty.deferred);
 }
 
 /**
@@ -339,76 +325,21 @@ function classifyEmptyDiff(
   };
 }
 
-/** A no-progress signal replaces the kernel park: the decide turn owns the call. */
+/** A mechanical signal replaces the kernel park: the decide turn owns the call. */
 function raiseSignal(
   context: ReduceContext,
   state: ReduceState,
   rec: StepRecord,
   evidence: string,
 ): void {
-  state.pendingSignal = { kind: "empty-diff", evidence };
-  state.signalStepIndex = context.flowIndex.get(rec.step) ?? state.stepIndex;
-  state.phase = DECIDE_STEP;
-}
-
-/**
- * The decide turn answers the signal through its outcome: an approve advances
- * past the step the signal stopped (the kept work is sufficient), a changes
- * opens the next fix round, a reject parks, and a blocked/failed/upscope status
- * parks with that cause. A decide turn that settled nothing parks the signal so
- * the PM stall turn decides it; it never redispatches the same signal.
- */
-function applyDecideTurn(
-  context: ReduceContext,
-  state: ReduceState,
-  rec: StepRecord,
-): void {
-  const signal = state.pendingSignal;
-  state.pendingSignal = null;
-  if (!signal) return;
-  state.round = Math.max(state.round, rec.round);
-  state.commit = rec.commit ?? state.commit;
-  if (checkTerminalStatus(state, rec)) return;
-  const outcome = rec.outcome;
-  if (!outcome?.status) {
-    state.park = makeCause(
-      signal.kind,
-      `${signal.evidence}; the decider settled no outcome`,
-    );
-    state.phase = "parked";
-    return;
-  }
-  const verdict = outcome.verdict;
-  if (verdict === "approve") {
-    // The approval is the answer to the round the signal stopped: the
-    // acceptance round after it judges the same tree by design.
-    applyAnswer(
-      context,
-      state,
-      state.signalStepIndex,
-      { carriedWork: null, answeredReview: true, replyCount: 0 },
-      null,
-    );
-    return;
-  }
-  if (verdict === "changes") {
-    state.verdict = "changes";
-    startFixRound(context, state, rec);
-    return;
-  }
-  if (verdict === "reject") {
-    state.park = makeCause(
-      "review-rejected",
-      outcome.summary ?? "the decider rejected the work",
-    );
-    state.phase = "parked";
-    return;
-  }
-  state.park = makeCause(
-    "invalid-outcome",
-    `decide turn delivered no review verdict: ${outcome.summary ?? "no summary"}`,
+  raisePendingSignal(
+    state,
+    { kind: "empty-diff", evidence },
+    {
+      kind: "past-step",
+      index: context.flowIndex.get(rec.step) ?? state.stepIndex,
+    },
   );
-  state.phase = "parked";
 }
 
 /** QA's verdict: accept advances, changes starts the next round, else park. */
@@ -472,29 +403,4 @@ function applyQaChanges(
     state.verdict = "changes";
   }
   state.replyOnlyFix = false;
-}
-
-/** A productive turn answers the flow: checks before acceptance, else the next step. */
-function applyAnswer(
-  context: ReduceContext,
-  state: ReduceState,
-  idx: number,
-  turn: AgentTurn,
-  deferred: DeferredFix | null,
-): void {
-  state.replyOnlyFix = turn.answeredReview;
-  state.changesPending = false;
-  state.stepIndex = idx + 1;
-  const nextStep = context.steps[state.stepIndex];
-  if (!nextStep || isAcceptanceStep(nextStep)) {
-    state.pendingChecks = {
-      nextIndex: state.stepIndex,
-      mergeAfter: state.mergeFix,
-      ...(deferred ? { emptyFix: deferred } : {}),
-    };
-    state.phase = "checks";
-    return;
-  }
-  state.pendingChecks = null;
-  state.phase = nextStep.id;
 }

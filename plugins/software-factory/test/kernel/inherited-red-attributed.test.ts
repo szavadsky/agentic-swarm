@@ -168,10 +168,11 @@ describe("checks attribution stamp", () => {
       ],
       { "implement-review": ONE_FIX_FLOW },
     );
-    expect(reduction.tasks.a!.park?.kind).toBe("gates");
-    expect(causeText(reduction.tasks.a!.park)).toBe(
-      "gates: cleanliness, package",
-    );
+    expect(reduction.tasks.a!.park).toBeUndefined();
+    expect(reduction.tasks.a!.pendingSignal).toEqual({
+      kind: "gates",
+      evidence: "task checks red after 1 fix turn: cleanliness, package",
+    });
   });
 });
 
@@ -232,8 +233,12 @@ describe("a stamped record still charges a new failure", () => {
       ],
       ONE_FIX_FLOW,
     );
-    expect(parked.phase).toBe("parked");
-    expect(causeText(parked.park)).toBe("gates: unit");
+    expect(parked.phase).toBe("decide");
+    expect(parked.park).toBeUndefined();
+    expect(parked.pendingSignal).toEqual({
+      kind: "gates",
+      evidence: "task checks red after 1 fix turn: unit",
+    });
   });
 });
 

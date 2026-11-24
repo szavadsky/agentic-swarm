@@ -5,11 +5,13 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { GATE_LAST_CALL_TEXT } from "../../src/kernel/prompts.js";
-import { task, cause } from "./helpers.js";
+import { task } from "./helpers.js";
+import { formatCause } from "../../src/kernel/cause.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
   outcome,
+  scriptDecider,
   scriptStallLeave,
   setupFlowRepo,
   writeTask,
@@ -125,6 +127,10 @@ async function honorsChecksStepChangeRequests1ByPart1(
     ctx.writeOutcome(outcome({ summary: "fix 2" }));
     return fakeTurnResult(req);
   });
+  scriptDecider(harness, {
+    summary: "the red repeats after the last gate fix; keep the branch parked",
+    verdict: "reject",
+  });
   scriptStallLeave(harness, ["task"]);
 
   const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -151,7 +157,8 @@ async function honorsChecksStepChangeRequests1ByPart2(
   );
 
   expect(state.tasks.task!.status).toBe("parked");
-  expect(state.tasks.task!.cause).toEqual(cause("gates: unit"));
+  expect(state.tasks.task!.cause?.kind).toBe("gates");
+  expect(formatCause(state.tasks.task!.cause!)).toContain("unit");
 
   // Initial + Fix 1 + Fix 2 = 3 turns
   expect(prompts).toHaveLength(3);

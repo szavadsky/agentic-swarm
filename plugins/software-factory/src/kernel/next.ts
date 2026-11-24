@@ -1,6 +1,6 @@
 import { makeCause } from "./cause.js";
 import { DECIDE_STEP } from "./pending-signal.js";
-import { agentSteps, isAcceptanceStep, reviewRoundLimit } from "./review.js";
+import { agentSteps } from "./review.js";
 import type {
   Action,
   Cause,
@@ -48,19 +48,8 @@ function agentStepAction(
       slug,
       makeCause("stuck", `flow "${task.flow}" has no step "${task.phase}"`),
     );
-  if (isAcceptanceStep(step)) {
-    const roundLimit = reviewRoundLimit(step);
-    if (task.round > roundLimit)
-      return park(
-        slug,
-        makeCause(
-          task.verdict === "changes"
-            ? "change-requests-exhausted"
-            : "round-limit",
-          `after verdict "${task.verdict ?? "none"}" (${roundLimit} rounds)`,
-        ),
-      );
-  }
+  // A spent round bound raises a signal in derive, never a park here: the
+  // decider owns the limit.
   return { kind: "step", slug, step: step.id, round: task.round };
 }
 

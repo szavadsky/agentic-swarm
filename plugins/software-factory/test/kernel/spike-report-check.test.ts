@@ -5,6 +5,7 @@ import path from "node:path";
 import { git } from "../../src/core/git/exec.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
+import { formatCause } from "../../src/kernel/cause.js";
 import {
   checkSpikeReport,
   spikeFinding,
@@ -17,11 +18,12 @@ import type {
   StepRecord,
 } from "../../src/kernel/types.js";
 import { createTmpRepo } from "../helpers/tmp-repo.js";
-import { rec, task, cause } from "./helpers.js";
+import { rec, task } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
   outcome,
+  scriptDecider,
   scriptStallLeave,
   setupFlowRepo,
   writeTask,
@@ -281,6 +283,10 @@ function spikeReportCheckPart2() {
           n === 4 ? "  \n\t\n" : undefined,
         );
       }
+      scriptDecider(harness, {
+        summary: "the report is empty; the spike cannot ship",
+        verdict: "reject",
+      });
       scriptStallLeave(harness, ["never"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, spike("never"));
@@ -288,8 +294,9 @@ function spikeReportCheckPart2() {
 
       const parked = (await stateOf(runtime)).tasks.never!;
       expect(parked.status).toBe("parked");
-      expect(parked.cause).toEqual(
-        cause(`gates: ${SPIKE_REPORT_CHECK} (${spikeReportPath("never")})`),
+      expect(parked.cause?.kind).toBe("gates");
+      expect(formatCause(parked.cause!)).toContain(
+        `${SPIKE_REPORT_CHECK} (${spikeReportPath("never")})`,
       );
       expect(names(await stepsOf(runtime, "never"))).not.toContain("review");
     } finally {

@@ -6,6 +6,7 @@
 
 import { makeCause } from "./cause.js";
 import type { PendingChecks, TerminalFact } from "./derive-task-facts.js";
+import { DECIDE_STEP } from "./pending-signal.js";
 import { isAcceptanceStep } from "./review.js";
 import type {
   Cause,
@@ -26,6 +27,15 @@ export interface ReduceContext {
   flowIndex: Map<string, number>;
   firstStep: string;
 }
+
+/**
+ * How the decider's approve resumes from the point a signal stopped: past the
+ * flow step that raised it, into the checks it gated, or into a fresh landing.
+ */
+export type SignalResume =
+  | { kind: "past-step"; index: number }
+  | { kind: "checks"; pending: PendingChecks }
+  | { kind: "merge" };
 
 export interface ReduceState {
   terminal: TerminalFact | null;
@@ -66,10 +76,12 @@ export interface ReduceState {
   seenCountedTurn: boolean;
   turns: number;
   resolveRan: boolean;
-  /** A no-progress signal awaiting its decide turn. */
+  /** A mechanical signal awaiting its decide turn. */
   pendingSignal: PendingSignal | null;
-  /** The flow step that raised the signal; approval advances past it. */
-  signalStepIndex: number;
+  /** Where the signal stopped the flow; its decide turn's approve resumes there. */
+  signalResume: SignalResume | null;
+  /** Acceptance rounds the decider's `changes` verdicts bought past the bound. */
+  roundGrants: number;
   seen: Map<string, { step: string; round: number }>;
   lastInfraStep?: string;
   infraRepeatCount: number;
@@ -102,7 +114,8 @@ export function createReduceState(
     turns: 0,
     resolveRan: false,
     pendingSignal: null,
-    signalStepIndex: 0,
+    signalResume: null,
+    roundGrants: 0,
     seen: new Map(),
     infraRepeatCount: 0,
   };
@@ -147,4 +160,19 @@ export function routeResolve(
   state.gateLastCall = false;
   state.mergeFix = false;
   state.changesPending = false;
+}
+
+/**
+ * Raises a mechanical signal instead of parking: the phase the next action
+ * reads becomes the decide turn, and the resume point says what an approve
+ * continues to.
+ */
+export function raisePendingSignal(
+  state: ReduceState,
+  signal: PendingSignal,
+  resume: SignalResume,
+): void {
+  state.pendingSignal = signal;
+  state.signalResume = resume;
+  state.phase = DECIDE_STEP;
 }

@@ -21,6 +21,7 @@ import {
   routeResolve,
 } from "./derive-task-state.js";
 import { applyAgentTurn } from "./derive-task-turn.js";
+import { raiseBudgetSignal } from "./derive-task-verdict.js";
 import { agentSteps } from "./review.js";
 import type {
   FlowDefinition,
@@ -152,7 +153,11 @@ export function reduceTask(
   for (const rec of owned) {
     if (!rec.endedAt) continue;
     applyRecord(context, state, rec);
+    // A record that settles the flow on an acceptance step past its round bound
+    // raises the signal before the next dispatch, never a kernel park.
+    raiseBudgetSignal(context, state);
   }
   settleDag(context, state, owned);
+  raiseBudgetSignal(context, state);
   return finishReduction(state, terminal);
 }

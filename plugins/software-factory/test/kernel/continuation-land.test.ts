@@ -10,6 +10,7 @@ import {
   cleanupFlowRepo,
   makeRuntime,
   outcome,
+  scriptDecider,
   scriptStallLeave,
   setupFlowRepo,
   writeTask,
@@ -44,6 +45,10 @@ async function skipsBaseAnotherTaskContinuesPart1(
   harness.script((req, ctx) => {
     ctx.writeOutcome(outcome({ summary: "nothing to fix" }));
     return fakeTurnResult(req);
+  });
+  scriptDecider(harness, {
+    summary: "the merged gate is red; a continuation carries this branch",
+    verdict: "reject",
   });
   scriptStallLeave(harness, ["kept-base"]);
   const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -85,7 +90,7 @@ async function skipsBaseAnotherTaskContinuesPart2(
   scope: Awaited<ReturnType<typeof skipsBaseAnotherTaskContinuesPart1>>,
 ) {
   const { harness } = scope;
-  expect(workCalls(harness)).toHaveLength(6);
+  expect(workCalls(harness)).toHaveLength(7);
 }
 
 async function landsWhenBoundaryReRunFlipsRedGatePart1(
@@ -98,6 +103,10 @@ async function landsWhenBoundaryReRunFlipsRedGatePart1(
     ctx.writeOutcome(outcome({ summary: "nothing to fix" }));
     return fakeTurnResult(req);
   });
+  scriptDecider(harness, {
+    summary: "the merged gate is red; the boundary re-run owns the verdict",
+    verdict: "reject",
+  });
   scriptStallLeave(harness, ["kept-flip"]);
   const runtime = await makeRuntime(repo, goal, { fake: harness });
   const file = task("kept-flip", { scope: ["feature.txt"] });
@@ -109,7 +118,7 @@ async function landsWhenBoundaryReRunFlipsRedGatePart1(
     "boundary",
   );
   expect((await stateOf(runtime)).tasks["kept-flip"]!.status).toBe("parked");
-  expect(workCalls(harness)).toHaveLength(4);
+  expect(workCalls(harness)).toHaveLength(5);
 
   scriptContinueBoundary(harness, runtime);
   const boundary = await runBoundary(runtime, { relaunch: false });
@@ -130,8 +139,8 @@ async function landsWhenBoundaryReRunFlipsRedGatePart1(
   expect(causeText(flakes[0]!.cause)).toContain("unit");
   expect(
     records.filter((r) => r.slug === "kept-flip" && r.actor === "agent"),
-  ).toHaveLength(3);
-  expect(workCalls(harness)).toHaveLength(6);
+  ).toHaveLength(4);
+  expect(workCalls(harness)).toHaveLength(7);
 }
 
 async function landsWhenBoundaryReRunFlipsRedGatePart2(
@@ -155,6 +164,10 @@ async function landsJustImplementBranchGreenPart1(
   harness.script((req, ctx) => {
     ctx.writeOutcome(outcome({ summary: "nothing to fix" }));
     return fakeTurnResult(req);
+  });
+  scriptDecider(harness, {
+    summary: "the merged gate is red; keep the branch for the wave end",
+    verdict: "reject",
   });
   scriptStallLeave(harness, ["kept-simple"]);
   const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -182,7 +195,7 @@ async function landsJustImplementBranchGreenPart1(
   );
   expect(kept).toHaveLength(1);
   expect(kept[0]!.ok).toBe(true);
-  expect(workCalls(harness)).toHaveLength(5);
+  expect(workCalls(harness)).toHaveLength(6);
 }
 
 async function landsJustImplementBranchGreenPart2(
@@ -204,6 +217,20 @@ function scriptStewardNoRepair(harness: FakeHarness): void {
   });
 }
 
+/** A fix turn that commits a later change, and the decider's park for it. */
+function scriptVoidedApprove(harness: FakeHarness): void {
+  harness.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "fix.txt"), "fix\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "gate fix attempt" }));
+    return fakeTurnResult(req);
+  });
+  scriptDecider(harness, {
+    summary: "the fix commit voided the approve; the branch stays parked",
+    verdict: "reject",
+  });
+  scriptStewardNoRepair(harness);
+}
+
 function registerKeptLandPart1(): void {
   it("never lands when a later commit voids the approve", async () => {
     const counter = freshCounter();
@@ -219,12 +246,7 @@ function registerKeptLandPart1(): void {
     try {
       const harness = new FakeHarness({ id: "fake" });
       scriptImplementApprove(harness, "feature.txt", "feature\n");
-      harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "fix.txt"), "fix\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "gate fix attempt" }));
-        return fakeTurnResult(req);
-      });
-      scriptStewardNoRepair(harness);
+      scriptVoidedApprove(harness);
       scriptStallLeave(harness, ["kept-void"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const file = task("kept-void", { scope: ["feature.txt"] });
@@ -237,7 +259,8 @@ function registerKeptLandPart1(): void {
       );
       const parked = (await stateOf(runtime)).tasks["kept-void"]!;
       expect(parked.status).toBe("parked");
-      expect(parked.cause).toEqual(cause("gates: unit"));
+      expect(parked.cause?.kind).toBe("gates");
+      expect(formatCause(parked.cause!)).toContain("unit");
 
       scriptContinueBoundary(harness, runtime);
       const boundary = await runBoundary(runtime, { relaunch: false });
@@ -254,7 +277,7 @@ function registerKeptLandPart1(): void {
             r.slug === "kept-void" && r.step === "merge" && r.iteration === 2,
         ),
       ).toHaveLength(0);
-      expect(workCalls(harness)).toHaveLength(7);
+      expect(workCalls(harness)).toHaveLength(8);
     } finally {
       rmCounter(counter);
       cleanupFlowRepo(repo);

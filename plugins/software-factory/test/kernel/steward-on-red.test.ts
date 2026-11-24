@@ -15,6 +15,7 @@ import {
   makeRuntime,
   outcome,
   setupFlowRepo,
+  scriptDecider,
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
@@ -68,6 +69,10 @@ function scriptRedAfterMerge(
     },
     { when: whenTurn({ step: "review" }), fallback: true },
   );
+  scriptDecider(harness, {
+    summary: "the merged result is red; the steward owns the repair",
+    verdict: "reject",
+  });
   harness.script(
     (req, ctx) => {
       onStewardTurn(req.prompt ?? "");

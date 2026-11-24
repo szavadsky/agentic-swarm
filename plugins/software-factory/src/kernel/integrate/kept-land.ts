@@ -32,7 +32,14 @@ function deterministicRed(
   const tipSeq = records
     .filter(
       (r) =>
-        r.slug === slug && r.actor === "agent" && r.endedAt && r.commit === tip,
+        r.slug === slug &&
+        r.actor === "agent" &&
+        r.endedAt &&
+        r.commit === tip &&
+        // A verdict turn (a review, or the decider the kernel raises) reads
+        // the tip; it never moves it, so it is not the anchor the reds date
+        // from.
+        r.outcome?.verdict === undefined,
     )
     .sort(bySeq)
     .at(-1)?.seq;
