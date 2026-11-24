@@ -198,6 +198,9 @@ function checkCleanlinessJustification(
   );
   if (hasReplies || hasSummary) {
     state.cleanlinessJustified = true;
+    // The reply accepts the lines of the red it answered: a later red naming
+    // only those lines is the same finding and holds.
+    state.cleanlinessAccepted = state.cleanlinessRedLines;
   }
 }
 

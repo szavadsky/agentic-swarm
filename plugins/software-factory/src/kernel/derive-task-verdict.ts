@@ -24,7 +24,9 @@ export function advanceAfterQa(
   state.gateFix = false;
   state.gateLastCall = false;
   state.cleanlinessRevision = false;
-  state.cleanlinessJustified = false;
+  // The accepted cleanliness finding and its justification stay: QA accepting
+  // the tree does not re-judge a red the author already answered, and the
+  // reviewer must still see the reply that held it.
   state.mergeFix = false;
   state.changesPending = false;
   // The checks before QA already judged this tree: do not spend a second run

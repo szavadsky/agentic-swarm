@@ -44,6 +44,10 @@ export interface ReduceState {
   cleanlinessRevision: boolean;
   cleanlinessRevised: boolean;
   cleanlinessJustified: boolean;
+  /** The finding lines of the cleanliness red awaiting the author's answer. */
+  cleanlinessRedLines: string[];
+  /** The cleanliness finding lines the author's reply accepted. */
+  cleanlinessAccepted: string[];
   /** The gate fix came from merged-result gates: green checks merge, skipping review. */
   mergeFix: boolean;
   /** The last review's `changes` still awaits its answer. */
@@ -81,6 +85,8 @@ export function createReduceState(
     cleanlinessRevision: false,
     cleanlinessRevised: false,
     cleanlinessJustified: false,
+    cleanlinessRedLines: [],
+    cleanlinessAccepted: [],
     mergeFix: false,
     changesPending: false,
     replyOnlyFix: false,

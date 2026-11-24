@@ -273,6 +273,31 @@ export function parkedGateNames(
   return names.join(", ") || "failing checks";
 }
 
+/**
+ * The distinct finding lines a cleanliness red reports. The check's output is
+ * a set of finding lines, not a step position: the same line is the same
+ * finding across turns, and a new line is a new one.
+ */
+export function cleanlinessLines(red: readonly CheckResult[]): string[] {
+  const lines = red
+    .filter((check) => check.name === "cleanliness")
+    .flatMap((check) => check.output.split("\n"))
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return [...new Set(lines)];
+}
+
+/** Whether the red's every cleanliness line is one the author's reply accepted. */
+export function everyCleanlinessLineAccepted(
+  red: readonly CheckResult[],
+  accepted: readonly string[],
+): boolean {
+  const lines = cleanlinessLines(red);
+  if (lines.length === 0) return false;
+  const acceptedLines = new Set(accepted);
+  return lines.every((line) => acceptedLines.has(line));
+}
+
 /** Whether the follow-up red names the same actionable set as the red that sent the fix. */
 export function sameFailingSet(
   red: readonly CheckResult[],
