@@ -121,6 +121,8 @@ export interface ProcessConfig {
   repairPrompt?: string;
   /** Outcome reminders after the first attempt; a task file's `repairTurns` overrides it for that task's turns only. */
   reminders: number;
+  /** Task files past which the architect prompt suggests a saga; absent renders no reminder. */
+  sagaTaskCount?: number;
   /** Wasted turns of one cause across iterations at or above which the pack proposes a spike; defaults to 2. */
   wasteSpikeThreshold?: number;
   calibration?: string;

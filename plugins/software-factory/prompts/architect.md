@@ -2,7 +2,7 @@
 {% include 'architect-goal' %}
 {% include 'architect-body' %}
 
-{{ subarchitect_block }}## Plan review marks
+{{ saga_reminder }}{{ subarchitect_block }}## Plan review marks
 
 In `## Plan review`, mark every numbered finding in your outcome `planReviewMarks`. {% include 'plan-review-marks' -%}
 

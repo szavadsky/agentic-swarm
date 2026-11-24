@@ -53,6 +53,7 @@ const ROLES: Record<string, Record<string, string>> = {
     tiers: TIERS,
     depth: "2",
     subarchitect_block: "",
+    saga_reminder: "",
   },
   subarchitect: {
     turn: "boundary",

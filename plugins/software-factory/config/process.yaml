@@ -132,6 +132,8 @@ taskTypes:
     schema: outcome
     useWhen: small fully understood change with one implement turn and no acceptance step
 reminders: 1
+# Past this many tasks the architect prompt reminds him to weigh a saga.
+sagaTaskCount: 20
 # The repair ask a step renders unless it names another template.
 repairPrompt: delivery-repair
 presets:

@@ -40,6 +40,8 @@ export const processConfigSchema = z
     /** Repair template a step renders when it names none. */
     repairPrompt: z.string().min(1).optional(),
     reminders: z.number().int().nonnegative().default(1),
+    /** Task files past which the architect prompt suggests a saga; absent renders no reminder. */
+    sagaTaskCount: z.number().int().positive().optional(),
     /** Wasted turns of one cause across iterations that call for a spike; defaults to 2. */
     wasteSpikeThreshold: z.number().int().positive().optional(),
     calibration: z.string().optional(),

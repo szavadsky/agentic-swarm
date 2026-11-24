@@ -10,6 +10,7 @@ import {
 } from "./outcome.js";
 import { qaOutcomeSchema } from "./qa.js";
 import { loadPrompts } from "./prompts.js";
+import { sagaReminderVar } from "./saga-reminder.js";
 import { outcomeSchema } from "./types.js";
 import type { ConfigBundle } from "./types.js";
 
@@ -228,6 +229,12 @@ function recordVars(
   };
 }
 
+/**
+ * The dry-run's task count: past the package default `sagaTaskCount`, so the
+ * sample architect render exercises the reminder.
+ */
+const SAGA_SAMPLE_TASKS = 24;
+
 function sampleVars(
   configs: ConfigBundle,
   repoRoot: string,
@@ -241,6 +248,10 @@ function sampleVars(
     ...recordVars(configs, goal),
     depth: String(configs.process.hierarchy?.depth ?? 1),
     subagents: sampledSubagents(configs),
+    saga_reminder: sagaReminderVar(
+      SAGA_SAMPLE_TASKS,
+      configs.process.sagaTaskCount,
+    ),
   };
 }
 

@@ -45,6 +45,7 @@ Renderer defaults live outside any `This turn` block and the renderer supplies t
 - `tiers` — run-config alias names; renderer default
 - `depth` — `2` renders the architect register; `1` (renderer default) leaves it out
 - `subarchitect_block` — the rendered launch block naming each live subarchitect with its agent id and spawn name; empty when the harness cannot steer or no epic has a plan to review
+- `saga_reminder` — the rendered consider-a-saga block, naming the goal's task count and the configured `sagaTaskCount`; empty at or below the threshold and when none is configured
 
 ## architect-subarchitects.md
 

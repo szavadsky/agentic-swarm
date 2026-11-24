@@ -28,6 +28,7 @@ import { runBoundaryTurn } from "./integration-lock.js";
 import { formatSteers } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { snapshotPlans } from "./pm.js";
+import { sagaReminderVar } from "./saga-reminder.js";
 import { MAIN_ARCHITECT } from "./tasks.js";
 
 /** The architect's turn with one de-novo retry after an infra death. */
@@ -68,6 +69,10 @@ async function architectTurn(
           steers: formatSteers(context.forArchitect),
           depth: String(context.runtime.configs.process.hierarchy?.depth ?? 1),
           subarchitect_block: steered?.block ?? "",
+          saga_reminder: sagaReminderVar(
+            context.tasks.length,
+            context.runtime.configs.process.sagaTaskCount,
+          ),
         },
         expectation: KERNEL_TURN_STEPS.architect,
         session,

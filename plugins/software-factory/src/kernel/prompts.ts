@@ -253,6 +253,15 @@ export const CHECK_HANDOFF_DEFAULTS = {
 /** Default author used by prompt renders. */
 export const DEFAULT_PROMPT_AUTHOR = "implementer";
 /**
+ * A render that knows no hierarchy: depth 1, no steered subarchitects and no
+ * saga reminder. The hierarchy turns and the dry-run supply their own blocks.
+ */
+const HIERARCHY_DEFAULTS = {
+  depth: "1",
+  subarchitect_block: "",
+  saga_reminder: "",
+} as const;
+/**
  * Templates live in the package `prompts/` dir; a repo may shadow any
  * template under `.factory/prompts/` and replace the calibration partial with
  * process-config text. Schema and config names render as launch-wide defaults
@@ -316,10 +325,7 @@ export function loadPrompts(
       // A render with no base record must never read as a clean base: the
       // reviewer treats a "pre-existing" claim without a record as a finding.
       base_gates: BASE_GATES_NOT_RECORDED,
-      // No hierarchy is the default; the epic consult passes `2` on its turn.
-      depth: "1",
-      // No steered subarchitects by default; the steered hierarchy renders the block.
-      subarchitect_block: "",
+      ...HIERARCHY_DEFAULTS,
       // A render that knows no harness gets the generic launch text; the
       // steered hierarchy supplies `steer` for its own block and definition.
       subagents: "none",

@@ -94,7 +94,8 @@ architecture:                    # plan review, before the PM derives tasks
   required in the merged layer; the package default supplies them.
 - `reminders` (default 1) bounds missing-outcome reminders; `repairPrompt`
   names the default missing-outcome template; `promptsDir` shadows prompt files
-  from a repo directory.
+  from a repo directory; `sagaTaskCount` (default 20) is the task count past
+  which the architect prompt reminds him to weigh a saga.
 - `presets` defines named calibration text; the run layer's `preset` selects
   one.
 
