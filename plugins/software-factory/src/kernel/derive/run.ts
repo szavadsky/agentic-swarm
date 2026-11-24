@@ -18,6 +18,7 @@ import {
   closeEpics,
   hasArchitectDecision,
   hasBlockingCrash,
+  ingestionInterrupted,
   latestIteration,
   reduceOrphans,
   reduceTasks,
@@ -64,12 +65,17 @@ export function derive(
   closeEpics(epics, statuses);
 
   const goal = settleGoal(sorted, epics);
+  // A decided iteration resumes only for the ready work its decision left. One
+  // that died inside ingestion never reached its decision: the pass still owes
+  // that iteration both the rest of the sequence and the boundary, so a
+  // relaunch resumes it rather than opening and summarising the next one.
   const interrupted =
     goal === "active" &&
     iteration > 0 &&
-    hasArchitectDecisionThisIteration &&
     !hasBlockingCrashThisIteration &&
-    Object.values(taskStates).some((task) => task.status === "ready");
+    (hasArchitectDecisionThisIteration
+      ? Object.values(taskStates).some((task) => task.status === "ready")
+      : ingestionInterrupted(sorted, iteration));
   return {
     goal,
     iteration,

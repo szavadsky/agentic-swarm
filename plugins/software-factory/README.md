@@ -450,11 +450,17 @@ spent, the previous resume started no task turn or architect ruling, the
 iteration's latest plan-check is `architect`, every ready task is held by a
 pending steer, a hold file is unreadable, or a goal hold or iteration brake
 stands. A refused resume goes straight to the boundary at the next iteration.
-An architect route (a stall waits for the architect too) or an underivable graph
+An iteration that died before its decision — inside the ingestion sequence —
+also resumes in place: a step whose turn already wrote a valid outcome and its
+promised artifact (the front's class, the scout's code map) is adopted with it,
+so the completed steps are not rerun, a done outcome the step never backed is
+sealed a crash and reruns, the adopted turn is priced as unpriced (its usage
+died with the process), and the boundary runs in that same iteration. An
+architect route (a stall waits for the architect too) or an underivable graph
 finding from the resume's steer turn runs the boundary before dispatch in the
-same iteration, and that ruling counts as the pass's progress. A resumed pass that starts no task turn and runs no
-boundary does not consume the `iterations` budget: the boundary runs next in the
-same launch.
+same iteration, and that ruling counts as the pass's progress. A resumed pass
+that starts no task turn and runs no boundary does not consume the
+`iterations` budget: the boundary runs next in the same launch.
 
 Pre-flight resolves every alias (and fallback) through the harness, checks the
 model list, the effort level, binaries, the base branch, and that

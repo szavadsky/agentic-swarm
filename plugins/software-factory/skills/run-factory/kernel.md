@@ -57,8 +57,10 @@ it into the repository or a separate one). The goal name must be kebab-case.
 1. Pre-flight resolves aliases, fallbacks, models, efforts, binaries, the base
    branch, the roots and the base gates. Nothing is written before it passes.
 2. The goal lock admits one launch per goal. An interrupted iteration resumes
-   as a recorded attempt, bounded by `limits.resumeAttempts`; stale worktrees
-   are recovered.
+   as a recorded attempt, bounded by `limits.resumeAttempts`; a pass that died
+   inside ingestion adopts the outcome its turn delivered once the step's
+   artifact is on disk and continues that same iteration, so stale worktrees
+   are recovered and a half-delivered step reruns instead of counting.
 3. The boundary runs the kernel turns the iteration needs: front (classify a
    fresh goal), plan checker, architect consult, plan review, digest, pack
    preparer, PM/steward. The architect owns `plan.md`.

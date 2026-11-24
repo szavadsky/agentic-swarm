@@ -112,7 +112,11 @@ export interface State {
   /** Highest iteration seen in records; 0 before the first boundary turn. */
   iteration: number;
   terminal: boolean;
-  /** The current iteration was interrupted with ready work left; a relaunch resumes it. */
+  /**
+   * The current iteration was interrupted before it settled: it decided with
+   * ready work left, or it never reached a decision at all; a relaunch resumes
+   * it.
+   */
   interrupted: boolean;
   tasks: Record<string, TaskState>;
   /** Every epic the task files and subarchitect records name. */

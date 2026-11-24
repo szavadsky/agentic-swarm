@@ -18,6 +18,7 @@ import type {
   IngestionStepConfig,
   IngestionWhenClass,
   KernelRuntime,
+  Outcome,
   StepRecord,
 } from "./types.js";
 
@@ -33,6 +34,57 @@ function ingestionSteps(runtime: KernelRuntime): IngestionStepConfig[] {
   return (
     runtime.configs.process.ingestion ?? [{ id: "branch" }, { id: "front" }]
   );
+}
+
+/**
+ * The configured ingestion step ids. These steps have no mechanical settle
+ * after the turn — their product is the files the agent wrote — so recovery can
+ * adopt a delivered outcome for one where a task turn must be redispatched.
+ */
+export function ingestionStepIds(runtime: KernelRuntime): ReadonlySet<string> {
+  return new Set(ingestionSteps(runtime).map((step) => step.id));
+}
+
+/**
+ * Whether a delivered outcome completes a step: the turn said done and the
+ * artifact the step promised is on disk. A scout that died between its outcome
+ * and its code map is unfinished, so its step reruns and the loud
+ * missing-deliverable failure still fires.
+ */
+function deliveredComplete(
+  step: IngestionStepConfig,
+  runtime: KernelRuntime,
+  outcome: Outcome | undefined,
+): boolean {
+  return (
+    outcome?.status === "done" &&
+    missingDeliverable(step, runtime) === undefined
+  );
+}
+
+/**
+ * Whether a killed turn's delivered outcome completes its configured ingestion
+ * step. Recovery adopts a step only through this predicate: a done outcome the
+ * step never backed with its artifact is not a result, and a blocked or failed
+ * outcome is the turn's own stop, never a completion.
+ */
+export function deliveredIngestionComplete(
+  runtime: KernelRuntime,
+  stepId: string,
+  outcome: Outcome | undefined,
+): boolean {
+  if (outcome?.status !== "done") return false;
+  if (stepId === "front") {
+    try {
+      return readFrontClass(runtime) !== null;
+    } catch (err) {
+      // A malformed class is the front step's failure to report, not adoption.
+      if (err instanceof FrontClassError) return false;
+      throw err;
+    }
+  }
+  const step = ingestionSteps(runtime).find((entry) => entry.id === stepId);
+  return step !== undefined && deliveredComplete(step, runtime, outcome);
 }
 
 function isStepFinished(
@@ -60,7 +112,10 @@ function isStepFinished(
     );
   }
   return records.some(
-    (r) => r.step === step.id && r.endedAt && r.outcome?.status === "done",
+    (r) =>
+      r.step === step.id &&
+      r.endedAt &&
+      deliveredComplete(step, runtime, r.outcome),
   );
 }
 

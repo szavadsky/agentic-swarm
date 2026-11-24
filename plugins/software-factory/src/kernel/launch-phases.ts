@@ -5,7 +5,7 @@
  */
 import { runBoundary } from "./boundary.js";
 import { formatCause, makeCause } from "./cause.js";
-import { derive } from "./derive.js";
+import { derive, hasArchitectDecision } from "./derive.js";
 import { postLaunchDigest } from "./digest.js";
 import { runDispatch } from "./dispatch.js";
 import { readFrontClass } from "./flow-context.js";
@@ -52,6 +52,12 @@ export async function prepareIteration(
     }
   }
   const iteration = resume ? before.iteration : before.iteration + 1;
+  // An iteration with no architect decision died in its front phase: the
+  // ingestion sequence still has to finish and the boundary to run.
+  const resumePhase =
+    resume && !hasArchitectDecision(recordsBefore, iteration)
+      ? "front"
+      : "work";
   if (resume) {
     const attempt =
       recordsBefore.filter(
@@ -74,6 +80,7 @@ export async function prepareIteration(
     before,
     recordsBefore,
     resume,
+    resumePhase,
     resumeHolds,
     iteration,
     digestSteer: null,
@@ -91,7 +98,9 @@ export async function prepareIteration(
  * delivered to the PM as a steer, and that one turn routes the evidence and
  * any repair it warrants before dispatch. A relaunch that recovered an
  * interrupted turn continues that turn instead, so it runs no digest and
- * posts nothing to the PM.
+ * posts nothing to the PM. A resume into an unfinished front phase has no
+ * iteration evidence to digest yet: the ingestion sequence finishes first and
+ * the boundary runs its own digest.
  */
 async function runResumeEvidence(it: IterationRun): Promise<void> {
   if (interruptedRelaunch(it.run)) return;
@@ -124,9 +133,10 @@ async function runResumeEvidence(it: IterationRun): Promise<void> {
 }
 
 /**
- * A resume has no front turn. The architect is the only consumer of an
- * architect route or an underivable finding, so that is the one case where
- * dispatch must not be forced: the boundary runs first in the same iteration.
+ * A resume of the decision phase has no front turn. The architect is the only
+ * consumer of an architect route or an underivable finding, so that is the one
+ * case where dispatch must not be forced: the boundary runs first in the same
+ * iteration.
  */
 async function resumeFront(it: IterationRun): Promise<FrontResult> {
   const boundaryWaiting =
@@ -255,8 +265,11 @@ async function resumeSeenSteers(it: IterationRun): Promise<string[]> {
 
 /** A front path that landed records its own stop; an upscope keeps the goal active. */
 async function finishFront(it: IterationRun): Promise<boolean> {
+  // A decision-phase resume has no front path to stop: its dispatch is the
+  // boundary's. A front-phase resume still owes the front's stop, and it is
+  // this iteration's decision or the goal would report a phantom next one.
   if (
-    it.resume ||
+    (it.resume && it.resumePhase === "work") ||
     it.front.action !== "dispatch" ||
     it.dispatched?.reason !== "boundary"
   )
@@ -369,9 +382,12 @@ async function settleIteration(
 export async function runIteration(
   it: IterationRun,
 ): Promise<"continue" | "stop" | "giveBack"> {
-  if (it.resume) await runResumeEvidence(it);
+  // The decision phase resumes straight into dispatch; the front phase still
+  // owes its ingestion sequence and its boundary, so it re-enters the front.
+  const decisionPhase = it.resume && it.resumePhase === "work";
+  if (decisionPhase) await runResumeEvidence(it);
   it.processedBefore = await processedSteers(it.run.store);
-  it.front = it.resume ? await resumeFront(it) : await runFrontTurn(it);
+  it.front = decisionPhase ? await resumeFront(it) : await runFrontTurn(it);
   if (it.front.action === "blocked" || it.front.action === "infra")
     return stopIteration(it);
   if (it.resume) it.seenSteers = await resumeSeenSteers(it);

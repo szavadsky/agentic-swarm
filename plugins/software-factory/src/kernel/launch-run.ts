@@ -36,6 +36,12 @@ export interface IterationRun {
   before: State;
   recordsBefore: StepRecord[];
   resume: boolean;
+  /**
+   * The half of the interrupted iteration this pass resumes: `front` when it
+   * died before its decision, so the ingestion sequence and the boundary still
+   * run; `work` when the architect already decided and only work was left.
+   */
+  resumePhase: "front" | "work";
   resumeHolds: Hold[];
   iteration: number;
   digestSteer: Steer | null;

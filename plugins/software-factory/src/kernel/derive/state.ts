@@ -2,15 +2,16 @@
 
 import { DEFAULT_FLOWS, reduceTask } from "../derive-task.js";
 import { isRecoveryCrash } from "../recovery-seal.js";
-import type {
-  EpicState,
-  FlowDefinition,
-  GoalDecision,
-  GoalStatus,
-  StepRecord,
-  TaskFile,
-  TaskState,
-  TaskStatus,
+import {
+  BUILTIN_INGESTION_IDS,
+  type EpicState,
+  type FlowDefinition,
+  type GoalDecision,
+  type GoalStatus,
+  type StepRecord,
+  type TaskFile,
+  type TaskState,
+  type TaskStatus,
 } from "../types.js";
 import {
   FRONT_STOP_STEP,
@@ -30,6 +31,33 @@ function recordedDecision(rec: StepRecord): GoalDecision | undefined {
   if (rec.actor === "script" && rec.step === FRONT_STOP_STEP)
     return rec.outcome.decision;
   return undefined;
+}
+
+/** The steps every goal records before its first decision: the branch, then the classifier. */
+const INGESTION_STEPS: ReadonlySet<string> = new Set(BUILTIN_INGESTION_IDS);
+
+/** A task turn: an agent turn on a slug; kernel and boundary steps name none. */
+function isTaskTurn(rec: StepRecord): boolean {
+  return rec.actor === "agent" && rec.slug !== undefined;
+}
+
+/**
+ * Whether the iteration died inside its ingestion phase: it recorded its branch
+ * or classifier step, no decision followed, and no task turn ran. A front path
+ * that dispatched keeps its own iteration — the next one runs the architect — so
+ * task work ends the front phase even before a decision.
+ */
+export function ingestionInterrupted(
+  sorted: readonly StepRecord[],
+  iteration: number,
+): boolean {
+  const inIteration = sorted.filter((rec) => rec.iteration === iteration);
+  if (inIteration.some((rec) => recordedDecision(rec) !== undefined))
+    return false;
+  if (inIteration.some(isTaskTurn)) return false;
+  return inIteration.some(
+    (rec) => rec.endedAt !== undefined && INGESTION_STEPS.has(rec.step),
+  );
 }
 
 /** The latest numbered iteration; a quarantine rides along without numbering one. */
