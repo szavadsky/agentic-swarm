@@ -1,6 +1,7 @@
 /** Worktree, merge-attempt and containment shapes. */
 
 import type { SetupResult } from "../../core/checks/setup.js";
+import type { StatusEntry } from "../../core/git/status.js";
 
 export type MergeAttempt = { ok: true } | { ok: false; paths: string[] };
 
@@ -33,7 +34,8 @@ export interface WorktreeCreation {
 export interface WorktreeState {
   branch: string;
   head: string;
-  status: string;
+  /** Unquoted porcelain entries; `-z` keeps unusual paths intact. */
+  entries: readonly StatusEntry[];
 }
 
 export interface ContainmentOptions {

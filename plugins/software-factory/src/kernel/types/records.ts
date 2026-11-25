@@ -81,6 +81,8 @@ export interface StepRecord {
   report?: string;
   /** Intent turn only: the unified diff the turn carried into the goal's intent. */
   diff?: string;
+  /** Goal-checkout paths this turn declared it may write; see `RecordStart`. */
+  checkoutWrites?: string[];
   /** UTF-8 bytes of the rendered prompt sent to the harness (agent steps only). */
   promptBytes?: number;
   /** Boundary roles only: UTF-8 bytes of the iteration context pack. */
@@ -140,6 +142,11 @@ export interface RecordStart {
   session?: SessionRef;
   /** Merge steps: the planned squash commit, written before the ref moves. */
   commit?: string;
+  /**
+   * Goal-checkout paths this turn writes, declared before it starts so a task
+   * settling beside it does not read the edit or its commit as its own.
+   */
+  checkoutWrites?: string[];
 }
 
 /** Settled fields written atomically as `end.yaml`. */

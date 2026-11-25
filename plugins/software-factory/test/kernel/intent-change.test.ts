@@ -11,6 +11,11 @@ import { runBoundary } from "../../src/kernel/boundary.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { holdsDir, postSteer } from "../../src/kernel/mailbox.js";
 import type { KernelRuntime } from "../../src/kernel/types.js";
+import {
+  containmentSnapshot,
+  containmentViolation,
+  ensureTaskWorktree,
+} from "../../src/kernel/worktree.js";
 import { task } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -379,6 +384,73 @@ async function doesNotBlameConcurrentTurn(): Promise<void> {
   }
 }
 
+/** A clean goal checkout with a named source, a task worktree and its snapshot. */
+async function quotedSourceCheckout(sourceRel: string) {
+  const { repo, goal } = setupFlowRepo();
+  repo.writeFile(sourceRel, "# Repo intent\n\nDrop the export requirement.\n");
+  repo.commit("add the repo intent", [sourceRel]);
+  const harness = new FakeHarness({ id: "fake" });
+  const runtime = await makeRuntime(repo, goal, { fake: harness });
+  const file = task("task", { scope: ["task.txt"] });
+  await writeTask(runtime, file);
+  const ensured = await ensureTaskWorktree(runtime, file);
+  const snapshot = await containmentSnapshot(runtime, ensured.path);
+  return {
+    repo,
+    runtime,
+    source: path.join(runtime.paths.goalCheckout, sourceRel),
+    worktree: ensured.path,
+    branch: ensured.branch,
+    snapshot,
+  };
+}
+
+/** The intent record a real intent turn opens before it touches its source. */
+function startIntentTurn(runtime: KernelRuntime, sourceRel: string) {
+  return runtime.store.startRecord({
+    iteration: 1,
+    slug: "s1",
+    step: "intent",
+    round: 1,
+    actor: "agent",
+    checkoutWrites: [sourceRel],
+  });
+}
+
+async function exemptsSpacedSourceEdit(): Promise<void> {
+  const sourceRel = "INTENT FILE.md";
+  const { repo, runtime, source, worktree, branch, snapshot } =
+    await quotedSourceCheckout(sourceRel);
+  try {
+    await startIntentTurn(runtime, sourceRel);
+    fs.writeFileSync(source, "changed\n", "utf8");
+    expect(
+      await containmentViolation(runtime, worktree, branch, snapshot),
+    ).toBeUndefined();
+  } finally {
+    cleanupFlowRepo(repo);
+  }
+}
+
+async function exemptsQuotedSourceCommit(): Promise<void> {
+  const sourceRel = 'INTENT"FILE.md';
+  const { repo, runtime, source, worktree, branch, snapshot } =
+    await quotedSourceCheckout(sourceRel);
+  try {
+    await startIntentTurn(runtime, sourceRel);
+    fs.writeFileSync(source, "changed\n", "utf8");
+    repo.git(["add", sourceRel], { cwd: runtime.paths.goalCheckout });
+    repo.git(["commit", "-m", "factory: s1 intent change"], {
+      cwd: runtime.paths.goalCheckout,
+    });
+    expect(
+      await containmentViolation(runtime, worktree, branch, snapshot),
+    ).toBeUndefined();
+  } finally {
+    cleanupFlowRepo(repo);
+  }
+}
+
 describe("intent-change steer", () => {
   it(
     "carries the steer into the intent and shows the architect the diff and the steer",
@@ -398,6 +470,16 @@ describe("intent-change steer", () => {
   it(
     "does not blame a concurrent task turn for the intent edit",
     doesNotBlameConcurrentTurn,
+    60_000,
+  );
+  it(
+    "does not blame a task settle for an open intent turn's spaced source edit",
+    exemptsSpacedSourceEdit,
+    60_000,
+  );
+  it(
+    "does not blame a task settle for an open intent turn's quoted source commit",
+    exemptsQuotedSourceCommit,
     60_000,
   );
 });

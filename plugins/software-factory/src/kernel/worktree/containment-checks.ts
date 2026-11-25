@@ -1,6 +1,7 @@
 /** Containment breaches: integration, store commits, outside writes and task branches. */
 
 import { git } from "../../core/git/exec.js";
+import type { StatusEntry } from "../../core/git/status.js";
 import { STORE_COMMIT_TRAILER } from "../store-backend.js";
 import { sealedRecordDirs } from "../store.js";
 import { makeCause } from "../cause.js";
@@ -14,8 +15,11 @@ import {
   appendContainmentIncident,
   artifactBreaches,
   artifactState,
+  checkoutWritesAt,
+  openCheckoutWrites,
   recordsInFlight,
   statusOutsideArtifacts,
+  statusWithoutPaths,
   steerTurnWroteDuring,
   summarizePaths,
   worktreeState,
@@ -75,6 +79,7 @@ async function integrationBreaches(
   mergeExplains: (commit: string) => boolean,
   explained: MoveExplained,
   goalCheckout: string,
+  writes: { before: ReadonlySet<string>; now: ReadonlySet<string> },
 ): Promise<string[]> {
   const breaches: string[] = [];
   if (checkout.branch !== snapshot.checkout.branch) {
@@ -83,11 +88,18 @@ async function integrationBreaches(
     );
     return breaches;
   }
+  // An intent turn's declared source is not the task's write, so both the
+  // before and after status drop that exact entry before they are compared.
+  const status = statusWithoutPaths(checkout.entries, writes.now);
+  const beforeStatus = statusWithoutPaths(
+    snapshot.checkout.entries,
+    writes.before,
+  );
   const moved = (commit: string) => mergeExplains(commit) || explained(commit);
   if (checkout.head !== snapshot.checkout.head) {
     const head = checkout.head.slice(0, 10);
     if (!(await moved(checkout.head))) {
-      if (checkout.status !== snapshot.checkout.status) {
+      if (!sameStatus(status, beforeStatus)) {
         breaches.push(
           `integration branch moved outside the merge queue in ${goalCheckout}: HEAD is ${head}`,
         );
@@ -111,10 +123,29 @@ async function integrationBreaches(
     }
     return breaches;
   }
-  if (checkout.status !== snapshot.checkout.status) {
+  if (!sameStatus(status, beforeStatus)) {
     breaches.push(`files changed outside the worktree in ${goalCheckout}`);
   }
   return breaches;
+}
+
+/** Two porcelain readings, compared entry for entry. */
+function sameStatus(
+  a: readonly StatusEntry[],
+  b: readonly StatusEntry[],
+): boolean {
+  return (
+    a.length === b.length &&
+    a.every((entry, i) => {
+      const other = b[i];
+      return (
+        other !== undefined &&
+        entry.code === other.code &&
+        entry.path === other.path &&
+        entry.from === other.from
+      );
+    })
+  );
 }
 
 /** True when a commit body carries the store's attribution trailer. */
@@ -123,16 +154,44 @@ function storeAuthored(message: string): boolean {
   return message.split("\n").some((line) => line.startsWith(marker));
 }
 
+/** True when the commit changes at least one path and every path is declared. */
+async function commitOnlyTouches(
+  goalCheckout: string,
+  commit: string,
+  paths: ReadonlySet<string>,
+): Promise<boolean> {
+  // `diff-tree -z` reports both sides of a rename and never C-quotes a path,
+  // so a quote or backslash in the name compares equal to the declared path.
+  const diff = await git(
+    goalCheckout,
+    [
+      "diff-tree",
+      "--root",
+      "-r",
+      "--name-only",
+      "-z",
+      "--no-commit-id",
+      commit,
+    ],
+    { allowFail: true },
+  );
+  if (diff.code !== 0) return false;
+  const changed = diff.stdout.split("\0").filter((file) => file !== "");
+  return changed.length > 0 && changed.every((file) => paths.has(file));
+}
+
 /**
  * True when every commit from the snapshot head to now is a recorded merge or
- * the store's own landing. A same-repo store replays its writes onto the goal
+ * intent commit, the store's own landing, or a commit that only writes a path
+ * an intent turn declared. A same-repo store replays its writes onto the goal
  * branch after a merge, so that head move is the store's, not the turn's.
  */
-async function storeLandingExplains(
+async function landingExplains(
   goalCheckout: string,
   from: string,
   to: string,
-  mergeRecords: ReadonlySet<string>,
+  recordedCommits: ReadonlySet<string>,
+  writes: ReadonlySet<string>,
 ): Promise<boolean> {
   if (from === "" || to === "" || from === to) return false;
   const reachable = await git(
@@ -153,7 +212,10 @@ async function storeLandingExplains(
     const sha = tokens[i]!.trim();
     if (sha === "") continue;
     seen += 1;
-    if (mergeRecords.has(sha) || storeAuthored(tokens[i + 1] ?? "")) continue;
+    if (recordedCommits.has(sha) || storeAuthored(tokens[i + 1] ?? ""))
+      continue;
+    if (writes.size > 0 && (await commitOnlyTouches(goalCheckout, sha, writes)))
+      continue;
     return false;
   }
   return seen > 0;
@@ -194,16 +256,16 @@ async function outsideBreaches(
   snapshot: ContainmentSnapshot,
   runtime: KernelRuntime,
 ): Promise<string[]> {
-  const statusKey = (status: string) =>
+  const outsideEntries = (state: WorktreeState) =>
     statusOutsideArtifacts(
-      status,
+      state.entries,
       runtime.paths.repoRoot,
       runtime.paths.artifacts.root,
     );
   // A same-repo artifact commit is the store's own write, not the operator's.
   const storeCommit =
     root.head !== snapshot.root.head &&
-    statusKey(root.status) === statusKey(snapshot.root.status) &&
+    sameStatus(outsideEntries(root), outsideEntries(snapshot.root)) &&
     (await storeCommitsOnly(
       runtime.paths.repoRoot,
       snapshot.root.head,
@@ -213,7 +275,7 @@ async function outsideBreaches(
   if (!storeCommit && root.head !== snapshot.root.head) {
     outside.push(`HEAD moved in ${runtime.paths.repoRoot}`);
   }
-  if (!storeCommit && root.status !== snapshot.root.status) {
+  if (!storeCommit && !sameStatus(root.entries, snapshot.root.entries)) {
     outside.push(`files changed in ${runtime.paths.repoRoot}`);
   }
   return outside;
@@ -285,34 +347,97 @@ async function recordOutsideChanges(
   );
 }
 
-/** The predicates that read a checkout move as the queue's or the store's. */
+/**
+ * The predicates that read a checkout move as the queue's, the store's or the
+ * intent turn's. An intent record's commit is the kernel landing the repo file
+ * the goal note names, so it explains its own head move like a merge does.
+ */
 function moveExplanations(
   runtime: KernelRuntime,
   records: StepRecord[] | undefined,
   snapshot: ContainmentSnapshot,
+  writes: ReadonlySet<string>,
 ): {
   mergeExplains: (commit: string) => boolean;
   explained: MoveExplained;
 } {
   const mergeExplains = (commit: string): boolean =>
     records?.some(
-      (r) => r.step === "merge" && r.ok !== false && r.commit === commit,
+      (r) =>
+        ((r.step === "merge" && r.ok !== false) || r.step === "intent") &&
+        r.commit === commit,
     ) ?? false;
-  const mergeRecords = new Set(
+  // A same-repo store landing can stack on a merge or an intent commit, so
+  // both are recorded landings the range walk may pass through.
+  const recordedCommits = new Set(
     records
-      ?.filter((r) => r.step === "merge" && r.ok !== false && r.commit)
+      ?.filter(
+        (r) =>
+          ((r.step === "merge" && r.ok !== false) || r.step === "intent") &&
+          r.commit,
+      )
       .map((r) => r.commit as string) ?? [],
   );
   return {
     mergeExplains,
     explained: (commit) =>
-      storeLandingExplains(
+      landingExplains(
         runtime.paths.goalCheckout,
         snapshot.checkout.head,
         commit,
-        mergeRecords,
+        recordedCommits,
+        writes,
       ),
   };
+}
+
+/**
+ * The goal checkout and artifact breaches a turn's records do not explain.
+ * The shared surfaces are read before the records, so a merge or intent record
+ * written as its owner moves the ref is seen and explains that move.
+ */
+async function goalSurfaceBreaches(
+  runtime: KernelRuntime,
+  snapshot: ContainmentSnapshot,
+  boundary: boolean,
+): Promise<{ breaches: string[]; records: StepRecord[] }> {
+  const checkout = await worktreeState(runtime.paths.goalCheckout);
+  const integration = await integrationHead(runtime);
+  const artifacts = boundary ? undefined : artifactState(runtime.paths.goalDir);
+  const records = await runtime.store.listRecords();
+  // A boundary turn holds the merge lock, so no merge can move the checkout
+  // while it runs: a move only its own merge or intent record explains is the
+  // turn's. Artifacts stay exempt there because the boundary owns them.
+  const writes = {
+    before: checkoutWritesAt(records, snapshot.at),
+    now: openCheckoutWrites(records, new Date().toISOString()),
+  };
+  const { mergeExplains, explained } = moveExplanations(
+    runtime,
+    records,
+    snapshot,
+    writes.now,
+  );
+  const breaches = await changedArtifactBreaches(
+    runtime,
+    snapshot,
+    boundary ? undefined : records,
+    artifacts,
+  );
+  // The merge queue moves this checkout's HEAD and resets it; a move recorded
+  // as a merge or the intent turn's commit is the queue's, not the turn's.
+  breaches.push(
+    ...(await integrationBreaches(
+      snapshot,
+      checkout,
+      integration,
+      mergeExplains,
+      explained,
+      runtime.paths.goalCheckout,
+      writes,
+    )),
+  );
+  return { breaches, records };
 }
 
 export async function containmentViolation(
@@ -330,39 +455,15 @@ export async function containmentViolation(
   );
   if (branchBreach) breaches.push(branchBreach);
 
-  // Read the shared surfaces before the records: a merge record or a PM record
-  // is written before its owner moves the ref, resets the checkout or edits the
-  // goal, so records read last explain every move those reads can see.
-  const checkout = await worktreeState(runtime.paths.goalCheckout);
-  const integration = await integrationHead(runtime);
   const boundary = opts.mode === "boundary";
-  const artifacts = boundary ? undefined : artifactState(runtime.paths.goalDir);
-  // A boundary turn holds the merge lock, so no merge can move the checkout
-  // while it runs: a move the lock did not explain is the turn's own.
-  const records = boundary ? undefined : await runtime.store.listRecords();
-  const { mergeExplains, explained } = moveExplanations(
+  const surface = await goalSurfaceBreaches(runtime, snapshot, boundary);
+  breaches.push(...surface.breaches);
+
+  await recordOutsideChanges(
     runtime,
-    records,
+    taskWorktree,
+    boundary ? undefined : surface.records,
     snapshot,
   );
-
-  breaches.push(
-    ...changedArtifactBreaches(runtime, snapshot, records, artifacts),
-  );
-
-  // The merge queue moves this checkout's HEAD and resets it; a move recorded
-  // as a merge is the queue's, not the turn's.
-  breaches.push(
-    ...(await integrationBreaches(
-      snapshot,
-      checkout,
-      integration,
-      mergeExplains,
-      explained,
-      runtime.paths.goalCheckout,
-    )),
-  );
-
-  await recordOutsideChanges(runtime, taskWorktree, records, snapshot);
   return breaches.length > 0 ? breaches.join("; ") : undefined;
 }

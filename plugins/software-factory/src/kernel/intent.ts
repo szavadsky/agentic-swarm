@@ -1,12 +1,20 @@
 import fs from "node:fs";
 import path from "node:path";
+import { commitAll } from "../core/git/commit.js";
+import { git } from "../core/git/exec.js";
+import { porcelainStatus } from "../core/git/status.js";
 import { runAgentTurn } from "./agent.js";
 import type { IntentChange } from "./context-pack.js";
 import { boundaryTarget } from "./flow-context.js";
 import { formatSteerTurn, type Steer } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { recordDirName } from "./store.js";
-import type { KernelRuntime, StepRecord, SteerRoute } from "./types.js";
+import type {
+  KernelRuntime,
+  RecordEnd,
+  StepRecord,
+  SteerRoute,
+} from "./types.js";
 
 /** The intent agent's record step; the steer id is its record slug. */
 const INTENT_STEP = "intent";
@@ -14,17 +22,117 @@ const INTENT_STEP = "intent";
 const INTENT_FILE = "intent.md";
 const DIFF_CONTEXT = 3;
 
+/**
+ * Phrases that make a path in the goal note the intent's source rather than a
+ * passing file reference. The note is prose, so the pointer is read from the
+ * line that names it, never guessed from a bare path.
+ */
+const SOURCE_MARKER =
+  /\b(source of truth|authoritative|binds?|as specified in|specified in|as per)\b/i;
+
 function intentPath(runtime: KernelRuntime): string {
   return path.join(runtime.store.goalDir, INTENT_FILE);
 }
 
-/** The goal's intent, or null when the turn removed it. */
-function readIntent(runtime: KernelRuntime): string | null {
+/** A repo-relative path inside the goal checkout, or undefined outside it. */
+function repoRel(checkout: string, abs: string): string | undefined {
+  const rel = path.relative(checkout, abs);
+  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel))
+    return undefined;
+  return rel.split(path.sep).join("/");
+}
+
+interface IntentSource {
+  /** Repo-relative file the note names as the source of truth. */
+  rel: string;
+  /** Absolute path of that file in the goal checkout. */
+  abs: string;
+}
+
+/** The tracked checkout file a backticked token names, or undefined. */
+async function trackedSource(
+  checkout: string,
+  token: string,
+): Promise<IntentSource | undefined> {
+  const rel = token.trim().replace(/^\.\//, "");
+  if (rel === "" || path.isAbsolute(rel)) return undefined;
+  const abs = path.resolve(checkout, rel);
+  if (repoRel(checkout, abs) === undefined) return undefined;
   try {
-    return fs.readFileSync(intentPath(runtime), "utf8");
+    if (!fs.statSync(abs).isFile()) return undefined;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw err;
+  }
+  const listed = await git(
+    checkout,
+    ["ls-files", "--error-unmatch", "--", rel],
+    { allowFail: true },
+  );
+  return listed.code === 0 ? { rel, abs } : undefined;
+}
+
+/**
+ * The repo file a pointer note names as the intent's source of truth, or
+ * undefined when the note is the intent itself. Only a backticked, tracked,
+ * checkout-relative path on a line that calls it the source counts: a plain
+ * mention of another repo file never redirects the intent turn.
+ */
+async function intentSource(
+  runtime: KernelRuntime,
+  note: string,
+): Promise<IntentSource | undefined> {
+  const checkout = path.resolve(runtime.paths.goalCheckout);
+  for (const line of note.split("\n")) {
+    if (!SOURCE_MARKER.test(line)) continue;
+    for (const match of line.matchAll(/`([^`\n]+)`/g)) {
+      const source = await trackedSource(checkout, match[1]!);
+      if (source !== undefined) return source;
+    }
+  }
+  return undefined;
+}
+
+function readFile(abs: string): string | null {
+  try {
+    return fs.readFileSync(abs, "utf8");
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw err;
+  }
+}
+
+/** Checkout entries besides the edited file and the goal note. */
+async function foreignChanges(
+  runtime: KernelRuntime,
+  turn: IntentTurn,
+): Promise<string[]> {
+  const entries = await porcelainStatus(runtime.paths.goalCheckout);
+  const kept = new Set<string>(turn.dirtyBefore);
+  if (turn.repoRel !== undefined) kept.add(turn.repoRel);
+  const noteRel = repoRel(runtime.paths.goalCheckout, turn.notePath);
+  if (noteRel !== undefined) kept.add(noteRel);
+  return entries.map((entry) => entry.path).filter((rel) => !kept.has(rel));
+}
+
+/** Puts a tracked path back to HEAD and removes the turn's untracked files. */
+async function revertForeignChanges(
+  runtime: KernelRuntime,
+  rels: readonly string[],
+): Promise<void> {
+  if (rels.length === 0) return;
+  const checkout = runtime.paths.goalCheckout;
+  const entries = (await porcelainStatus(checkout)).filter((entry) =>
+    rels.includes(entry.path),
+  );
+  const tracked = entries
+    .filter((entry) => !entry.code.startsWith("??"))
+    .map((entry) => entry.from ?? entry.path);
+  if (tracked.length > 0)
+    await git(checkout, ["checkout", "HEAD", "--", ...tracked]);
+  for (const entry of entries) {
+    if (!entry.code.startsWith("??")) continue;
+    fs.rmSync(path.join(checkout, entry.path), { force: true });
   }
 }
 
@@ -111,10 +219,10 @@ function hunkRanges(lines: readonly DiffLine[]): [number, number][] {
   return ranges;
 }
 
-/** A unified diff of the two intent texts, three context lines per hunk. */
-function unifiedDiff(before: string, after: string): string {
+/** A unified diff of two intent texts, three context lines per hunk. */
+function unifiedDiff(before: string, after: string, rel: string): string {
   const lines = diffLines(before.split("\n"), after.split("\n"));
-  const out: string[] = ["--- intent.md", "+++ intent.md"];
+  const out: string[] = [`--- ${rel}`, `+++ ${rel}`];
   for (const [start, end] of hunkRanges(lines)) {
     let oldBefore = 0;
     let newBefore = 0;
@@ -149,59 +257,144 @@ function latestIntentRecord(
     .at(-1);
 }
 
+interface IntentTurn {
+  /** The goal's pointer note; never edited when it names a repo source. */
+  notePath: string;
+  noteBefore: string;
+  /** The file the turn edits: the note itself, or the repo file it names. */
+  file: string;
+  /** Repo-relative name of `file` in the diff header. */
+  rel: string;
+  before: string;
+  /** The edited file's checkout-relative path; absent when it is the note. */
+  repoRel?: string;
+  /** Checkout paths already dirty before the turn; never blamed on it. */
+  dirtyBefore: readonly string[];
+  steer: string;
+}
+
 /**
  * The clause that lands the pre-turn intent. A delivered outcome (and only
- * one) keeps the edit and records its diff; every other end restores the
- * file, so a half-applied amendment never reaches the architect as fact.
+ * one) keeps the edit, records its diff and commits a repo source on the goal
+ * branch; every other end restores both files and any foreign edit, so a
+ * half-applied amendment never reaches the architect as fact.
  */
 async function settleIntent(
   runtime: KernelRuntime,
-  before: string,
+  turn: IntentTurn,
   outcome: { status: string } | undefined,
-): Promise<{ diff?: string }> {
-  const after = readIntent(runtime);
-  if (outcome?.status === "done" && after !== null && after !== before) {
-    return { diff: unifiedDiff(before, after) };
+): Promise<RecordEnd> {
+  const after = readFile(turn.file);
+  const noteChanged =
+    turn.repoRel !== undefined && readFile(turn.notePath) !== turn.noteBefore;
+  const foreign = await foreignChanges(runtime, turn);
+  const carried =
+    outcome?.status === "done" &&
+    after !== null &&
+    after !== turn.before &&
+    !noteChanged &&
+    foreign.length === 0;
+  if (!carried) {
+    if (after !== turn.before) fs.writeFileSync(turn.file, turn.before, "utf8");
+    if (noteChanged) fs.writeFileSync(turn.notePath, turn.noteBefore, "utf8");
+    await revertForeignChanges(runtime, foreign);
+    return {};
   }
-  if (after !== before) await runtime.store.writeFile(INTENT_FILE, before);
-  return {};
+  const diff = unifiedDiff(turn.before, after, turn.rel);
+  if (turn.repoRel === undefined) return { diff };
+  const commit = await commitAll(
+    runtime.repo,
+    runtime.paths.goalCheckout,
+    `factory: ${turn.steer} intent change`,
+    { paths: [turn.repoRel] },
+  );
+  return commit === null ? { diff } : { diff, commit };
+}
+
+/** Findings for a delivered intent edit that is missing, unchanged or foreign. */
+async function intentFindings(
+  runtime: KernelRuntime,
+  turn: IntentTurn,
+  outcome: { status: string },
+): Promise<string[]> {
+  if (outcome.status !== "done") return [];
+  const after = readFile(turn.file);
+  if (after === null)
+    return [
+      `the intent file ${turn.rel} is missing; restore it and carry the steer`,
+    ];
+  if (after === turn.before)
+    return [
+      `the intent ${turn.rel} is unchanged; carry the steer's words into it`,
+    ];
+  if (
+    turn.repoRel !== undefined &&
+    readFile(turn.notePath) !== turn.noteBefore
+  ) {
+    // The repair ask starts from the note the owner wrote, not the agent's
+    // stray edit; the source edit is left for the retry to keep or redo.
+    fs.writeFileSync(turn.notePath, turn.noteBefore, "utf8");
+    return [
+      "the goal note is a pointer; leave it untouched and edit the repo file it names",
+    ];
+  }
+  const foreign = await foreignChanges(runtime, turn);
+  return foreign.length === 0
+    ? []
+    : [`the intent turn changed ${foreign.join(", ")}; edit only ${turn.rel}`];
 }
 
 /**
  * Carries one routed steer into the goal's intent with the configured intent
  * agent: it preserves the owner's wording, consolidates superseded text and
- * adds no interpretation. A turn that delivers `done` must have changed the
- * file; the reminder asks it again, and a still-unchanged outcome fails.
+ * adds no interpretation. When the goal note points at a tracked repo file as
+ * the intent's source of truth, the turn edits that file and consolidates it
+ * on the goal branch; the note stays untouched. A turn that delivers `done`
+ * must have changed the intent; the reminder asks it again, and a still-
+ * unchanged outcome fails.
  */
 async function runIntentTurn(
   runtime: KernelRuntime,
   iteration: number,
   steer: Steer,
 ): Promise<void> {
-  const file = intentPath(runtime);
-  const before = fs.readFileSync(file, "utf8");
+  const notePath = intentPath(runtime);
+  const noteBefore = fs.readFileSync(notePath, "utf8");
+  const source = await intentSource(runtime, noteBefore);
+  const file = source?.abs ?? notePath;
+  const dirtyBefore = (await porcelainStatus(runtime.paths.goalCheckout)).map(
+    (entry) => entry.path,
+  );
+  const turn: IntentTurn = {
+    notePath,
+    noteBefore,
+    file,
+    rel: source?.rel ?? INTENT_FILE,
+    before: fs.readFileSync(file, "utf8"),
+    ...(source ? { repoRel: source.rel } : {}),
+    dirtyBefore,
+    steer: steer.id,
+  };
   await runAgentTurn(runtime, {
     target: boundaryTarget(runtime, INTENT_STEP, iteration),
     cwd: runtime.paths.goalCheckout,
-    meta: { iteration, slug: steer.id, step: INTENT_STEP, round: 1 },
+    meta: {
+      iteration,
+      slug: steer.id,
+      step: INTENT_STEP,
+      round: 1,
+      // The source path is declared before the turn so a task settling beside
+      // it reads the edit and its commit as the intent turn's, not its own.
+      ...(source ? { checkoutWrites: [source.rel] } : {}),
+    },
     vars: {
       iteration: String(iteration),
       intent_path: file,
       steer: formatSteerTurn([steer]),
     },
     expectation: KERNEL_TURN_STEPS.intent,
-    validate: (outcome) => {
-      if (outcome.status !== "done") return [];
-      const after = readIntent(runtime);
-      if (after === null)
-        return ["the intent file is missing; restore it and carry the steer"];
-      return after === before
-        ? [
-            "the intent is unchanged; carry the steer's words into the intent file",
-          ]
-        : [];
-    },
-    settle: async (_record, outcome) => settleIntent(runtime, before, outcome),
+    validate: (outcome) => intentFindings(runtime, turn, outcome),
+    settle: async (_record, outcome) => settleIntent(runtime, turn, outcome),
   });
 }
 
