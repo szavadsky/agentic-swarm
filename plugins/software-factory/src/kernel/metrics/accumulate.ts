@@ -8,6 +8,7 @@ import type { WasteAccounting } from "../waste.js";
 import type {
   AliasMetrics,
   ArchitectMetrics,
+  FrictionEntry,
   IncidentCounts,
   IterationMetrics,
   MetricsTotals,
@@ -50,6 +51,7 @@ interface TotalsAccumulator {
   planReviewMarks: PlanReviewMarkCounts;
   waste: WasteAccounting;
   qaCatches: QaCatches;
+  friction: FrictionEntry[];
 }
 
 /** The empty accumulator a totals run starts from. */
@@ -79,6 +81,7 @@ function emptyTotals(): TotalsAccumulator {
     planReviewMarks: { helpful: 0, unhelpful: 0 },
     waste: emptyWasteAccounting(),
     qaCatches: { total: 0, count: 0, byTask: {}, sample: [] },
+    friction: [],
   };
 }
 
@@ -118,6 +121,7 @@ function sumIterations(
         (totals.qaCatches.byTask[task] ?? 0) + count;
     }
     totals.qaCatches.sample.push(...iteration.qaCatches.sample);
+    totals.friction.push(...iteration.friction);
   }
 }
 
@@ -153,6 +157,7 @@ function totalsResult(
     planReviewMarks: totals.planReviewMarks,
     unpricedTurns: totals.unpricedTurns,
     waste: totals.waste,
+    friction: totals.friction,
     qaCatches: {
       total: totals.qaCatches.total,
       count: totals.qaCatches.count,

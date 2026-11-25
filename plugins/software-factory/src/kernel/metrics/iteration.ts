@@ -9,6 +9,7 @@ import type { SummaryStatus } from "../summary.js";
 import type { StepRecord, TaskFile } from "../types.js";
 import { wasteAccounting } from "../waste.js";
 import type { WasteAccounting } from "../waste.js";
+import { frictionEvents } from "./friction.js";
 import { parkMetrics } from "./parks.js";
 import { spikeSlugs, zeroEditCounts } from "./zero-edit.js";
 import { askRecoveryCounts, zeroEditParkMetrics } from "./zero-edit-parks.js";
@@ -16,6 +17,7 @@ import type {
   AliasMetrics,
   ArchitectMetrics,
   AskRecoveryCounts,
+  FrictionEntry,
   IncidentCounts,
   IterationMetrics,
   ModelMetrics,
@@ -240,6 +242,7 @@ interface IterationMetricsParts {
   zeroEdit: ZeroEditCounts;
   zeroEditParks: ZeroEditParkMetrics;
   askRecoveries: AskRecoveryCounts;
+  friction: FrictionEntry[];
 }
 
 /** The architect's share of the iteration's spend, tokens and turns. */
@@ -298,6 +301,7 @@ function iterationMetricsResult(
     zeroEdit: parts.zeroEdit,
     zeroEditParks: parts.zeroEditParks,
     askRecoveries: parts.askRecoveries,
+    friction: parts.friction,
     humanInterventions,
     operatorActs,
     gateWallMs,
@@ -367,5 +371,6 @@ export function iterationMetrics(
     planReviewMarks,
     qaCatches: qaCatches(all),
     ...iterationFriction(all, recs, tasks),
+    friction: frictionEvents(all, prices, priceIds, tasks),
   });
 }

@@ -9,6 +9,7 @@ import { costText, medianMs, worstMs } from "../metrics.js";
 import type { QaCatchSource, QaCatches } from "../qa.js";
 import type {
   AskRecoveryCounts,
+  FrictionEntry,
   GroupMetrics,
   IncidentCounts,
   ParkMetrics,
@@ -133,6 +134,15 @@ export function steerLines(steers: SteerLatency): string[] {
     steerLegText("drop to PM route", steers.route),
     steerLegText("drop to final answer", steers.answer),
   ];
+}
+
+/** The iteration's friction events, each with the record that proves it and its cost. */
+export function frictionLines(entries: readonly FrictionEntry[]): string[] {
+  if (entries.length === 0) return ["- none"];
+  return entries.map(
+    (entry) =>
+      `- ${entry.kind}: ${entry.record} — ${entry.detail}; cost ${sourceCostText(entry.costUsd, entry.unpricedTurns)}`,
+  );
 }
 
 /** Zero-edit turns split by what the turn owed. */

@@ -8,6 +8,7 @@ import {
   budgetLines,
   costByRoleLines,
   decisionLines,
+  frictionLines,
   incidentLines,
   launchTable,
   listLine,
@@ -102,6 +103,9 @@ function metricLines(render: SummaryRender): string[] {
     "",
     "## Steers",
     ...steerLines(render.steers),
+    "",
+    "## Friction",
+    ...frictionLines(computed.friction),
     "",
   ];
 }

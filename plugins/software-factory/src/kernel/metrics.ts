@@ -2,6 +2,7 @@
 
 export type {
   AskRecoveryCounts,
+  FrictionEntry,
   GoalMetrics,
   GroupMetrics,
   IncidentCounts,

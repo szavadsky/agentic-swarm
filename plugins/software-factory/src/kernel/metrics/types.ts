@@ -173,6 +173,29 @@ export interface AskRecoveryCounts {
   rescue: number;
 }
 
+/** The kinds of friction one iteration reports, each naming the event it was. */
+export type FrictionKind =
+  | "fallback chain"
+  | "stalled steer"
+  | "kept branch"
+  | "park"
+  | "merge"
+  | "dispatch";
+
+/**
+ * One friction event: the record that proves it and the priced cost of the
+ * work behind it. Cost is absent when no associated turn had a known price;
+ * `unpricedTurns` says how partial the sum is.
+ */
+export interface FrictionEntry {
+  kind: FrictionKind;
+  /** Goal-relative record directory that proves the friction. */
+  record: string;
+  detail: string;
+  costUsd?: number;
+  unpricedTurns: number;
+}
+
 export interface ArchitectMetrics {
   turns: number;
   launches: number;
@@ -227,6 +250,8 @@ export interface IterationMetrics {
   zeroEditParks: ZeroEditParkMetrics;
   /** Turns the unfinished ask and the rescue recovered. */
   askRecoveries: AskRecoveryCounts;
+  /** Record-derived friction events, each with its record and cost. */
+  friction: FrictionEntry[];
   /** Steers moved from inbox to processed during this iteration. */
   humanInterventions: number;
   /**
