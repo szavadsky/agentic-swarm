@@ -611,6 +611,18 @@ is not answered by the PM. Dispatch stops starting new work, in-flight tasks
 finish, and the next iteration's architect consult reads the steer with the
 flag shown as `[urgent]`. The frontmatter block is not part of the steer text.
 
+A steer whose frontmatter names `epic: <name>` belongs to that epic: only its
+epic's PM routes it, only its epic's architect reads it, and the top PM and
+architect never see it. The epic must be active in the architect register; a
+name outside it leaves the steer goal-level.
+
+```markdown
+---
+epic: auth
+---
+Keep the auth interface steady.
+```
+
 ```markdown
 ---
 urgent: true

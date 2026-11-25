@@ -107,10 +107,11 @@ relaunching; `end.yaml` names its stop and usage.
 
 Steering is the mailbox. The architect reads `mailbox/inbox/` at a boundary,
 moves the file to `mailbox/processed/` and writes its answer to
-`mailbox/outbox/steer-<id>.md`. `urgent: true` frontmatter drains new dispatch,
-lets in-flight tasks finish and surfaces the steer as `[urgent]` at the next
-consult. A hold file in `mailbox/holds/` parks the named task until it is
-resolved or removed.
+`mailbox/outbox/steer-<id>.md`. `epic: <name>` frontmatter scopes the steer to
+an active register epic: its PM routes it and its architect answers it, never
+the top's. `urgent: true` frontmatter drains new dispatch, lets in-flight tasks
+finish and surfaces the steer as `[urgent]` at the next consult. A hold file in
+`mailbox/holds/` parks the named task until it is resolved or removed.
 
 ## Exit codes and signals
 

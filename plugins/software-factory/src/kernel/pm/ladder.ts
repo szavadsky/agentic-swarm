@@ -1,15 +1,15 @@
+import type { LiveAgents, SessionRef } from "../../harness/types.js";
 import { type AgentTurnResult, runAgentTurn } from "../agent.js";
 import { formatStop, makeCause } from "../cause.js";
-import { resumableRef } from "../sessions.js";
 import {
   boundaryTarget,
   compactSession,
   type TurnTarget,
 } from "../flow-context.js";
-import type { LiveAgents, SessionRef } from "../../harness/types.js";
 import { KERNEL_TURN_STEPS } from "../outcome.js";
 import { formatPlanList } from "../plan-file.js";
 import { scriptMeta } from "../record.js";
+import { resumableRef } from "../sessions.js";
 import type {
   AliasConfig,
   KernelRuntime,
@@ -18,12 +18,12 @@ import type {
   StepRecord,
   TaskFile,
 } from "../types.js";
-import { planDiffPrompt, pmLadderNote, pmTurnVars } from "./prompts.js";
 import {
   openTaskTexts,
   previousPlanBaseline,
   storePlanBulletBaseline,
 } from "./plan-bullets.js";
+import { planDiffPrompt, pmLadderNote, pmTurnVars } from "./prompts.js";
 import {
   cancelPlanNamed,
   findingKey,
@@ -32,11 +32,14 @@ import {
   type PlanSnapshot,
   readTasks,
   restoreTurn,
+  scopeWriteFindings,
+  snapshotPlans,
   snapshotTurn,
   type TurnSnapshot,
   unfixedBaseline,
 } from "./reconcile.js";
-import type { PmMandate, PmRung, PmRun } from "./types.js";
+import { pmScopeKey, scopeEpic, scopePlanFile } from "./scope.js";
+import type { PmMandate, PmRun, PmRung, PmScope } from "./types.js";
 
 export interface PmRungStep {
   alias: string;
@@ -94,12 +97,16 @@ export function failureReasons(
 
 export interface PmTurnSetup {
   snapshot: TurnSnapshot;
+  /** Every plan on disk: the ownership snapshot a turn is rolled back against. */
   plansBefore: PlanSnapshot[];
+  /** The plan(s) this PM owns: the goal plan, or one epic's plan. */
+  scopePlans: PlanSnapshot[];
+  scope: PmScope;
   planList: string;
   planDiff: string;
   /** The current derive iteration; its own baseline is the previous one on a re-derive. */
   iteration: number;
-  /** That derive's compacted session, resumed when the target can. */
+  /** That scope's compacted session, resumed when the target can. */
   priorSession?: SessionRef;
   taskSnapshot: Map<string, string>;
   baseline: string[];
@@ -108,34 +115,51 @@ export interface PmTurnSetup {
 
 /**
  * What every PM ladder takes once, before rung 1: the turn snapshot, the plan
- * list and the untouched graph's baseline findings.
+ * list and the untouched graph's baseline findings. A saga's epic PM sees only
+ * its own plan and resume its own session; the top PM still sees the goal.
  */
 export async function setupPmTurn(
   runtime: KernelRuntime,
-  opts: { iteration: number; state: State },
+  opts: { iteration: number; state: State; scope?: PmScope },
 ): Promise<PmTurnSetup> {
-  const plans = runtime.store.plans.registered();
-  const snapshot = await snapshotTurn(runtime, plans);
-  const plansBefore = snapshot.plans;
+  const scope = opts.scope ?? { kind: "goal" };
+  const snapshot = await snapshotTurn(
+    runtime,
+    runtime.store.plans.filesOnDisk(),
+  );
+  const owned = scopePlanFile(runtime, scope);
+  const scopePlans = snapshot.plans.some(
+    (before) => before.plan.rel === owned.rel,
+  )
+    ? snapshot.plans.filter((before) => before.plan.rel === owned.rel)
+    : await snapshotPlans(runtime, [owned]);
   const planList = formatPlanList(
-    plansBefore.filter((before) => before.exists).map((before) => before.plan),
+    scopePlans.filter((before) => before.exists).map((before) => before.plan),
   );
   const previous = await previousPlanBaseline(runtime, opts.iteration);
-  const planDiff = planDiffPrompt(plansBefore, previous?.plans ?? null);
+  const previousScope = previous?.plans.filter((plan) =>
+    scopePlans.some((before) => before.plan.rel === plan.rel),
+  );
+  const planDiff = planDiffPrompt(scopePlans, previousScope ?? null);
   const taskSnapshot = snapshot.tasks;
   const baseline = await graphFindings(
     runtime,
     { iteration: opts.iteration, state: opts.state, round: 1 },
-    plansBefore,
+    snapshot.plans,
     taskSnapshot,
   );
+  const priorSession =
+    previous?.sessions?.[pmScopeKey(scope)] ??
+    (scope.kind === "goal" ? previous?.session : undefined);
   return {
     snapshot,
-    plansBefore,
+    plansBefore: snapshot.plans,
+    scopePlans,
+    scope,
     planList,
     planDiff,
     iteration: opts.iteration,
-    ...(previous?.session ? { priorSession: previous.session } : {}),
+    ...(priorSession ? { priorSession } : {}),
     taskSnapshot,
     baseline,
     baselineKeys: new Set(baseline.map(findingKey)),
@@ -158,7 +182,12 @@ export async function setupPmTurn(
  */
 export async function runPm(
   runtime: KernelRuntime,
-  opts: { iteration: number; state: State; cwd: string },
+  opts: {
+    iteration: number;
+    state: State;
+    cwd: string;
+    scope?: PmScope;
+  },
 ): Promise<PmRun> {
   const setup = await setupPmTurn(runtime, opts);
   const rungs: PmRung[] = [];
@@ -176,21 +205,14 @@ export async function runPm(
         failure,
       }),
     );
-    const findings = await graphFindings(
-      runtime,
-      { iteration: opts.iteration, state: opts.state, round: index + 1 },
-      setup.plansBefore,
-      setup.taskSnapshot,
-    );
+    const findings = await rungFindings(runtime, opts, setup, index + 1);
     const introduced = introducedFindings(findings, setup.baselineKeys);
     const outcome = result.outcome;
     if (outcome?.status === "done" && introduced.length === 0) {
       return acceptPmTurn(
         runtime,
         opts,
-        setup.plansBefore,
-        setup.taskSnapshot,
-        setup.baseline,
+        setup,
         findings,
         outcome,
         result.record.session,
@@ -214,6 +236,29 @@ export async function runPm(
   }
 
   return { status: "exhausted", rungs };
+}
+
+/** The graph findings after one rung, plus the scope's own task-write check. */
+async function rungFindings(
+  runtime: KernelRuntime,
+  opts: { iteration: number; state: State },
+  setup: PmTurnSetup,
+  round: number,
+): Promise<string[]> {
+  return [
+    ...(await graphFindings(
+      runtime,
+      { iteration: opts.iteration, state: opts.state, round },
+      setup.plansBefore,
+      setup.taskSnapshot,
+    )),
+    ...scopeWriteFindings(
+      setup.scope,
+      setup.taskSnapshot,
+      await runtime.store.tasks.texts(),
+      (await readTasks(runtime)).tasks,
+    ),
+  ];
 }
 
 /** One rung's prompt inputs: its plan diff, task files and de-novo retry note. */
@@ -268,7 +313,7 @@ async function priorPmSession(
  */
 async function endFailedRung(
   runtime: KernelRuntime,
-  opts: { iteration: number },
+  opts: { iteration: number; scope?: PmScope },
   snapshot: TurnSnapshot,
   target: TurnTarget,
   rung: PmRungStep,
@@ -298,26 +343,25 @@ async function endFailedRung(
  */
 async function acceptPmTurn(
   runtime: KernelRuntime,
-  opts: { iteration: number; state: State },
-  plansBefore: readonly PlanSnapshot[],
-  taskSnapshot: Map<string, string>,
-  baseline: string[],
+  opts: { iteration: number; state: State; scope?: PmScope },
+  setup: PmTurnSetup,
   findings: string[],
   outcome: Outcome,
   live: SessionRef | undefined,
   rungs: PmRung[],
 ): Promise<PmRun> {
-  await cancelPlanNamed(runtime, opts.state, plansBefore, opts.iteration);
+  await cancelPlanNamed(runtime, opts.state, setup.scopePlans, opts.iteration);
   await storePlanBulletBaseline(
     runtime,
     opts.iteration,
-    plansBefore
+    setup.scopePlans
       .filter((before) => before.exists)
       .map((before) => ({ rel: before.plan.rel, text: before.text })),
-    openTaskTexts(taskSnapshot, opts.state),
+    openTaskTexts(setup.taskSnapshot, opts.state),
     live,
+    setup.scope,
   );
-  const remaining = unfixedBaseline(baseline, findings);
+  const remaining = unfixedBaseline(setup.baseline, findings);
   if (remaining.length > 0) {
     return { status: "architect", findings: remaining, rungs };
   }
@@ -327,7 +371,7 @@ async function acceptPmTurn(
 /** Records the failed rung and rolls its writes back before the next one. */
 async function rejectPmRung(
   runtime: KernelRuntime,
-  opts: { iteration: number },
+  opts: { iteration: number; scope?: PmScope },
   snapshot: TurnSnapshot,
   target: TurnTarget,
   round: number,
@@ -340,7 +384,14 @@ async function rejectPmRung(
     model: target.model.id,
     failure: reasons.join("; "),
   });
-  await recordPmRejection(runtime, opts.iteration, round, reasons, snapshot);
+  await recordPmRejection(
+    runtime,
+    opts.iteration,
+    round,
+    reasons,
+    snapshot,
+    scopeEpic(opts.scope ?? { kind: "goal" }),
+  );
 }
 
 /** The failed-turn record every PM route writes before its rollback. */
@@ -350,9 +401,13 @@ export async function recordPmRejection(
   round: number,
   reasons: string[],
   snapshot: TurnSnapshot,
+  architect?: string,
 ): Promise<void> {
   await runtime.store.appendRecord(
-    scriptMeta(iteration, "pm-validate", { round }),
+    scriptMeta(iteration, "pm-validate", {
+      round,
+      ...(architect ? { architect } : {}),
+    }),
     { ok: false, cause: makeCause("invalid-outcome", reasons.join("; ")) },
   );
   await restoreTurn(runtime, snapshot);
@@ -403,14 +458,25 @@ async function compactPmTurn(
 /** Runs one PM rung on the shared prompt contract every route uses. */
 export async function runPmTurn(
   runtime: KernelRuntime,
-  opts: { iteration: number; state: State; cwd: string },
+  opts: {
+    iteration: number;
+    state: State;
+    cwd: string;
+    scope?: PmScope;
+  },
   target: TurnTarget,
   input: PmTurnInput,
 ): Promise<AgentTurnResult> {
+  const epic = scopeEpic(opts.scope ?? { kind: "goal" });
   return runAgentTurn(runtime, {
     target,
     cwd: opts.cwd,
-    meta: { iteration: opts.iteration, step: "pm", round: input.round },
+    meta: {
+      iteration: opts.iteration,
+      step: "pm",
+      round: input.round,
+      ...(epic ? { architect: epic } : {}),
+    },
     vars: pmTurnVars(runtime, opts, input),
     expectation: KERNEL_TURN_STEPS.pm,
     ...(input.session ? { session: input.session } : {}),

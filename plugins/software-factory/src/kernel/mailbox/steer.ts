@@ -28,11 +28,16 @@ const STEER_FRONTMATTER =
   /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)([\s\S]*)$/;
 
 /**
- * A steer is free text; its only script-level metadata is the urgency flag in
- * optional leading frontmatter. Malformed YAML is not metadata: the file is
- * read as plain text so a bad header can never wedge the inbox.
+ * A steer is free text; its only script-level metadata is the urgency flag and
+ * the epic scope in optional leading frontmatter. Malformed YAML is not
+ * metadata: the file is read as plain text so a bad header can never wedge the
+ * inbox. A header with neither recognized key is prose too.
  */
-function parseSteerText(raw: string): { urgent: boolean; text: string } {
+function parseSteerText(raw: string): {
+  urgent: boolean;
+  epic?: string;
+  text: string;
+} {
   const match = STEER_FRONTMATTER.exec(raw);
   if (!match) return { urgent: false, text: raw };
   let meta: unknown;
@@ -46,9 +51,20 @@ function parseSteerText(raw: string): { urgent: boolean; text: string } {
   if (typeof meta !== "object" || meta === null || Array.isArray(meta)) {
     return { urgent: false, text: raw };
   }
-  const urgent = (meta as { urgent?: unknown }).urgent;
-  if (typeof urgent !== "boolean") return { urgent: false, text: raw };
-  return { urgent, text: match[2] ?? "" };
+  const record = meta as { urgent?: unknown; epic?: unknown };
+  const urgent = typeof record.urgent === "boolean" ? record.urgent : undefined;
+  const epic =
+    typeof record.epic === "string" && record.epic.trim() !== ""
+      ? record.epic.trim()
+      : undefined;
+  if (urgent === undefined && epic === undefined) {
+    return { urgent: false, text: raw };
+  }
+  return {
+    urgent: urgent ?? false,
+    ...(epic ? { epic } : {}),
+    text: match[2] ?? "",
+  };
 }
 
 function hashSuffix(hash: string): string {
@@ -112,6 +128,7 @@ export async function scanInbox(
       text: parsed.text,
       hash,
       urgent: parsed.urgent,
+      ...(parsed.epic ? { epic: parsed.epic } : {}),
     };
     if (seen.has(file)) {
       // The same file name was already processed: a replay, not a new steer.

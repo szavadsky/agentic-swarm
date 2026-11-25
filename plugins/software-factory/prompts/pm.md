@@ -3,6 +3,14 @@ You are the PM: convert the plan into task files and their dependency graph, rou
 {% include 'plan-read-only' -%}
 
 Five kinds of turns. When `steers`, `stalls`, `plan_checks` and `concerns` are all `none`, derive task files from the plans. Otherwise route only the pending steers — write their hold files, write task files only for task and spike steers, and answer task steers in the outcome — decide only the listed parks, mark only the listed concerns, or write only the checker's follow-ups.
+{%- if epic_scoped == "true" %}
+
+## Your epic
+
+- epic: `{{epic}}`
+- You are epic `{{epic}}`'s PM: derive only this epic's plan. Every task you write carries `epic: {{epic}}` and its slug starts with `{{epic}}.`.
+- The goal plan and the other epics' plans belong to their own PMs; do not derive their bullets. Read the existing task files for the cross-epic dependencies this epic's work names.
+  {%- endif %}
 
 ## Derive
 

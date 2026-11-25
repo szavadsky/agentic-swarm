@@ -5,8 +5,8 @@ import yaml from "yaml";
 import { dispatch } from "../../src/cli/dispatch.js";
 import {
   FakeHarness,
-  fakeTurnIdentity,
   type FakeTurnHandler,
+  fakeTurnIdentity,
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
@@ -188,6 +188,18 @@ export function optOutOfGates(repo: TmpRepo): void {
   const file = path.join(repo.dir, ".factory/repo.yaml");
   const config = yaml.parse(fs.readFileSync(file, "utf8"));
   fs.writeFileSync(file, yaml.stringify({ ...config, requireGates: false }));
+}
+
+/**
+ * The PM scope a turn runs in: the epic's name for an epic PM, `goal` for the
+ * top PM, undefined for any other turn.
+ */
+export function pmScopeOf(
+  req: Parameters<FakeTurnHandler>[0],
+): string | undefined {
+  if (fakeTurnIdentity(req).step !== "pm") return undefined;
+  const match = /- epic: `([^`]+)`/.exec(req.prompt);
+  return match?.[1] ?? "goal";
 }
 
 export function cleanup(goal: E2EGoal): void {

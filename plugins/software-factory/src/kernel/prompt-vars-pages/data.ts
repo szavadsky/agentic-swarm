@@ -179,9 +179,11 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     prompt: "pm",
     variables: {
       iteration: "1-based iteration number of this launch",
+      epic: "the epic this PM derives for; empty for the top PM",
+      epic_scoped: "`true` for an epic's PM, `false` for the top",
       intent_path: "path to the goal's `intent.md`, for resolving wording only",
       plans:
-        "the active plans, one `- goal: <path>` or ``- epic `<epic>`: <path>`` line each; derive every bullet from the plan that carries it; read-only to the PM",
+        "the plan this PM owns, one `- goal: <path>` for the top PM or ``- epic `<epic>`: <path>`` for that epic's PM; derive every bullet from the plan that carries it; read-only to the PM",
       plan_diff:
         "diff of the plan keyed by task slug against the previous derived plan (`none` on the first iteration or when the previous plan is missing)",
       tasks_dir:

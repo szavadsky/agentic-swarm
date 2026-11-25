@@ -20,6 +20,8 @@ import type {
   TaskStatus,
   TaskTypeDefinition,
 } from "../types.js";
+import { scopeEpic } from "./scope.js";
+import type { PmScope } from "./types.js";
 
 /** One plan and its bytes before a turn; an absent plan is restored by deleting it. */
 export interface PlanSnapshot {
@@ -438,4 +440,28 @@ export async function reconcileTurn(
     ...validateTaskGraph(tasks, { status: taskStatuses(opts.state) }),
   );
   return { findings, texts, tasks, parseFindings };
+}
+
+/**
+ * A scoped PM writes only its own scope's tasks: an epic PM's new or edited
+ * task belongs to that epic, never another epic or the goal. The goal PM is
+ * not narrowed here; it owns the goal and sees every epic's tasks.
+ */
+export function scopeWriteFindings(
+  scope: PmScope,
+  before: ReadonlyMap<string, string>,
+  texts: ReadonlyMap<string, string>,
+  tasks: readonly TaskFile[],
+): string[] {
+  const epic = scopeEpic(scope);
+  if (epic === undefined) return [];
+  return tasks
+    .filter(
+      (task) =>
+        before.get(task.slug) !== texts.get(task.slug) && task.epic !== epic,
+    )
+    .map(
+      (task) =>
+        `task "${task.slug}" is ${task.epic ? `epic ${task.epic}'s` : "goal-level work"}; the PM for epic ${epic} writes only epic ${epic} tasks`,
+    );
 }

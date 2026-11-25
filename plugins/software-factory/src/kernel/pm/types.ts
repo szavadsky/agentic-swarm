@@ -7,6 +7,12 @@ export type PmMandate =
   | "escalated-first"
   | "escalated-retry";
 
+/**
+ * Whose plan and tasks one PM run owns: the goal's own plan, or one epic's.
+ * A saga launches one PM per epic plus the top; depth 1 has the goal only.
+ */
+export type PmScope = { kind: "goal" } | { kind: "epic"; epic: string };
+
 /** One attempted PM turn; the round is its 1-based position in the ladder. */
 export interface PmRung {
   round: number;

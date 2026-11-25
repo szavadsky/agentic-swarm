@@ -108,8 +108,11 @@ export function planCheckProvenance(source: string): string | undefined {
 /** Latest committed PM route per steer, from successful steer turns only; last record wins. */
 export function collectSteerRoutes(
   records: StepRecord[],
-): Map<string, { route: SteerRoute; answer?: string }> {
-  const out = new Map<string, { route: SteerRoute; answer?: string }>();
+): Map<string, { route: SteerRoute; answer?: string; architect?: string }> {
+  const out = new Map<
+    string,
+    { route: SteerRoute; answer?: string; architect?: string }
+  >();
   const sorted = [...records].sort(
     (a, b) => a.seq - b.seq || a.startedAt.localeCompare(b.startedAt),
   );
@@ -122,6 +125,7 @@ export function collectSteerRoutes(
       out.set(entry.steer, {
         route: entry.route,
         ...(answer ? { answer } : {}),
+        ...(record.architect ? { architect: record.architect } : {}),
       });
     }
   }
@@ -140,7 +144,10 @@ export function formatSteerRoute(route: SteerRoute): string {
 
 /** One line per PM-routed steer for the architect's pack; sorted by steer id. */
 export function formatPmAnswers(
-  routes: Map<string, { route: SteerRoute; answer?: string }>,
+  routes: Map<
+    string,
+    { route: SteerRoute; answer?: string; architect?: string }
+  >,
 ): string[] {
   return [...routes.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))

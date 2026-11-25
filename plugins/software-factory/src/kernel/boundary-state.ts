@@ -7,8 +7,8 @@
  */
 
 import type { EpicConsult } from "./boundary-consult.js";
-import type { IntentChange } from "./context-pack.js";
 import type { PackBrief } from "./context-pack/sections.js";
+import type { IntentChange } from "./context-pack.js";
 import type { Steer } from "./mailbox.js";
 import type { PlanFile } from "./plan-file.js";
 import type { PlanSnapshot } from "./pm.js";
@@ -68,6 +68,10 @@ export interface ConsultContext {
   steers: Steer[];
   seenSteers: string[];
   forArchitect: Steer[];
+  /** Epic-scoped steers waiting for their own architect, by epic. */
+  forEpicArchitect: Map<string, Steer[]>;
+  /** Epics whose steers this iteration's consult already presented or answered. */
+  epicSteersAnswered: Set<string>;
   pmAnswers: string[];
   /** Pending steers the intent agent carried (or failed to carry) before this pack. */
   intentChanges?: IntentChange[];

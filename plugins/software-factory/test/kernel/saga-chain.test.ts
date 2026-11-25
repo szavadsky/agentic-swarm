@@ -3,9 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   FakeHarness,
+  type FakeTurnHandler,
   fakeTurnIdentity,
   fakeTurnResult,
-  type FakeTurnHandler,
 } from "../../src/harness/fake/index.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import {
@@ -13,6 +13,7 @@ import {
   expectLaunch,
   makeGoal,
   outcome,
+  pmScopeOf,
   stateOf,
 } from "./e2e-helpers.js";
 
@@ -171,25 +172,39 @@ function scriptChainPlans(ctx: SagaChainCtx): void {
 
 /** The PM derives one task per epic plan from the all-plans brief. */
 function scriptChainPmI1(ctx: SagaChainCtx): void {
+  for (const [epic, slug, file] of [
+    ["alpha", "alpha.build", "alpha.txt"],
+    ["beta", "beta.build", "beta.txt"],
+  ] as const) {
+    ctx.harness.script(
+      (req, turnedCtx) => {
+        expect(req.prompt).toContain(`epics/${epic}.md`);
+        expect(req.prompt).not.toContain("- goal:");
+        fs.mkdirSync(ctx.goal.tasksDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(ctx.goal.tasksDir, `${slug}.md`),
+          epicTask(slug, epic, file),
+          "utf8",
+        );
+        turnedCtx.writeOutcome(outcome({ summary: `filed ${slug}` }));
+        return fakeTurnResult(req);
+      },
+      {
+        when: (req) =>
+          pmScopeOf(req) === epic && iterationOf(req).includes("-i1-"),
+      },
+    );
+  }
   ctx.harness.script(
     (req, turnedCtx) => {
-      expect(req.prompt).toContain("epics/alpha.md");
-      expect(req.prompt).toContain("epics/beta.md");
-      fs.mkdirSync(ctx.goal.tasksDir, { recursive: true });
-      fs.writeFileSync(
-        path.join(ctx.goal.tasksDir, "alpha.build.md"),
-        epicTask("alpha.build", "alpha", "alpha.txt"),
-        "utf8",
-      );
-      fs.writeFileSync(
-        path.join(ctx.goal.tasksDir, "beta.build.md"),
-        epicTask("beta.build", "beta", "beta.txt"),
-        "utf8",
-      );
-      turnedCtx.writeOutcome(outcome({ summary: "filed both epics' tasks" }));
+      expect(pmScopeOf(req)).toBe("goal");
+      turnedCtx.writeOutcome(outcome({ summary: "no goal-level tasks" }));
       return fakeTurnResult(req);
     },
-    { when: (req) => iterationOf(req).includes("-i1-pm-") },
+    {
+      when: (req) =>
+        pmScopeOf(req) === "goal" && iterationOf(req).includes("-i1-"),
+    },
   );
 }
 
@@ -307,7 +322,11 @@ function scriptChainPmI2(ctx: SagaChainCtx): void {
       turnedCtx.writeOutcome(outcome({ summary: "no new tasks" }));
       return fakeTurnResult(req);
     },
-    { when: (req) => iterationOf(req).includes("-i2-pm-") },
+    {
+      fallback: true,
+      when: (req) =>
+        pmScopeOf(req) !== undefined && iterationOf(req).includes("-i2-"),
+    },
   );
 }
 

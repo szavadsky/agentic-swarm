@@ -2,14 +2,14 @@ import { describe, expect, it } from "bun:test";
 import os from "node:os";
 import path from "node:path";
 import { packageRoot } from "../../src/kernel/config.js";
+import { outcomeExampleVar } from "../../src/kernel/outcome-example.js";
+import { packPreparerOutcomeSchemaVar } from "../../src/kernel/pack-prep.js";
 import {
   taskFrontmatterVar,
   tierNamesVar,
 } from "../../src/kernel/prompt-schema.js";
-import { outcomeExampleVar } from "../../src/kernel/outcome-example.js";
-import { packPreparerOutcomeSchemaVar } from "../../src/kernel/pack-prep.js";
-import { qaOutcomeSchema } from "../../src/kernel/qa.js";
 import { loadPromptLibrary, loadPrompts } from "../../src/kernel/prompts.js";
+import { qaOutcomeSchema } from "../../src/kernel/qa.js";
 import type { ProcessConfig, RunConfig } from "../../src/kernel/types.js";
 import {
   TEST_ARCHITECTURE,
@@ -99,6 +99,8 @@ const ROLES: Record<string, Record<string, string>> = {
   },
   pm: {
     iteration: "3",
+    epic: "",
+    epic_scoped: "false",
     intent_path: "/goal/intent.md",
     plans: "- goal: /goal/plan.md\n  - epic `auth`: /goal/epics/auth.md",
     plan_diff: "none",

@@ -12,20 +12,9 @@ import {
   writeOutbox,
 } from "../../mailbox.js";
 import { scriptMeta } from "../../record.js";
-import { LiveSteerSessions } from "../../sessions.js";
-import type {
-  KernelRuntime,
-  Outcome,
-  State,
-  SteerRoute,
-  TaskFile,
-} from "../../types.js";
-import {
-  architectHoldProblem,
-  ensureSteerHold,
-  selfHoldProblem,
-  stallHoldProblem,
-} from "../holds.js";
+import type { LiveSteerSessions } from "../../sessions.js";
+import type { KernelRuntime, Outcome, State, TaskFile } from "../../types.js";
+import { ensureSteerHold } from "../holds.js";
 import {
   failureReasons,
   NO_TURN_INPUTS,
@@ -39,16 +28,20 @@ import {
 import { steerLadderNote } from "../prompts.js";
 import {
   introducedFindings,
-  type PlanSnapshot,
   readTasks,
-  reconcileTurn,
   restoreTurn,
   type TurnSnapshot,
   unfixedBaseline,
 } from "../reconcile.js";
-import type { PmInfraStop, SteerRouteEntry } from "../types.js";
+import {
+  GOAL_PM_SCOPE,
+  pmScopeKey,
+  scopeEpic,
+  steerScopeOf,
+} from "../scope.js";
+import type { PmInfraStop, PmScope } from "../types.js";
 import { SteerClaim } from "./steer-claim.js";
-import { steerWriteFindings } from "./steer-writes.js";
+import { validateSteerTurn } from "./steer-validate.js";
 
 /**
  * A steer turn's result. `architect` is the outlet for anything the PM cannot
@@ -65,141 +58,6 @@ export type SteerPmRun =
     }
   | { status: "infra"; stop: PmInfraStop };
 
-async function validateSteerTurn(
-  runtime: KernelRuntime,
-  opts: {
-    iteration: number;
-    state: State;
-    round: number;
-    claim: Steer[];
-  },
-  plansBefore: readonly PlanSnapshot[],
-  taskSnapshot: Map<string, string>,
-  outcome: Outcome | undefined,
-): Promise<string[]> {
-  const { findings, texts, tasks, parseFindings } = await reconcileTurn(
-    runtime,
-    opts,
-    plansBefore,
-    taskSnapshot,
-  );
-  const routes = outcome?.steerRoutes ?? [];
-  const claimed = new Set(opts.claim.map((steer) => steer.id));
-  const scan = scanSteerRoutes(routes, claimed);
-  findings.push(...scan.findings);
-  findings.push(...unroutedSteerFindings(opts.claim, scan.routeOf));
-  findings.push(
-    ...(await steerRouteDetailFindings(runtime, routes, claimed, tasks)),
-  );
-  if (parseFindings.length === 0) {
-    findings.push(
-      ...steerWriteFindings(
-        routes,
-        claimed,
-        scan.routeOf,
-        taskSnapshot,
-        texts,
-        tasks,
-      ),
-    );
-  }
-  return [...new Set(findings)];
-}
-
-/** Each claimed steer is routed once, and only claimed steers are routed. */
-function scanSteerRoutes(
-  routes: readonly SteerRouteEntry[],
-  claimed: ReadonlySet<string>,
-): { routeOf: Map<string, SteerRoute>; findings: string[] } {
-  const seen = new Set<string>();
-  const routeOf = new Map<string, SteerRoute>();
-  const findings: string[] = [];
-  for (const entry of routes) {
-    if (seen.has(entry.steer)) {
-      findings.push(
-        `steer "${entry.steer}" is routed twice; route each claimed steer once`,
-      );
-      continue;
-    }
-    seen.add(entry.steer);
-    routeOf.set(entry.steer, entry.route);
-    if (!claimed.has(entry.steer)) {
-      findings.push(
-        `steer "${entry.steer}" was not claimed this turn; route only the pending steers from this turn`,
-      );
-    }
-  }
-  return { routeOf, findings };
-}
-
-function unroutedSteerFindings(
-  claim: readonly Steer[],
-  routeOf: ReadonlyMap<string, SteerRoute>,
-): string[] {
-  const findings: string[] = [];
-  for (const steer of claim) {
-    if (!routeOf.has(steer.id)) {
-      findings.push(
-        `steer "${steer.id}" has no route; route each claimed steer as task|spike|intent|architect|stall or {architect: id}`,
-      );
-    }
-  }
-  return findings;
-}
-
-/** The answer and hold each route must carry, and the self-hold guard. */
-async function steerRouteDetailFindings(
-  runtime: KernelRuntime,
-  routes: readonly SteerRouteEntry[],
-  claimed: ReadonlySet<string>,
-  tasks: readonly TaskFile[],
-): Promise<string[]> {
-  const findings: string[] = [];
-  for (const entry of routes) {
-    if (!claimed.has(entry.steer)) continue;
-    findings.push(...steerAnswerFindings(entry));
-    findings.push(...(await steerHoldFindings(runtime, entry, tasks)));
-  }
-  return findings;
-}
-
-/** Only a task route answers now; every other route carries no answer. */
-function steerAnswerFindings(entry: SteerRouteEntry): string[] {
-  const answer = entry.answer?.trim() ?? "";
-  if (entry.route === "task") {
-    return answer
-      ? []
-      : [
-          `steer "${entry.steer}" routed task needs an answer; the PM answers a task steer in the outbox now`,
-        ];
-  }
-  return answer
-    ? [
-        `steer "${entry.steer}" routed ${formatSteerRoute(entry.route)} must not carry an answer; only task answers now`,
-      ]
-    : [];
-}
-
-async function steerHoldFindings(
-  runtime: KernelRuntime,
-  entry: SteerRouteEntry,
-  tasks: readonly TaskFile[],
-): Promise<string[]> {
-  const findings: string[] = [];
-  if (entry.route === "stall") {
-    const problem = await stallHoldProblem(runtime, entry.steer);
-    if (problem) findings.push(problem);
-  }
-  if (entry.route === "intent" || isArchitectRoute(entry.route)) {
-    const label = entry.route === "intent" ? "intent" : "architect";
-    const problem = await architectHoldProblem(runtime, entry.steer, label);
-    if (problem) findings.push(problem);
-  }
-  const selfHeld = await selfHoldProblem(runtime, entry.steer, tasks);
-  if (selfHeld) findings.push(selfHeld);
-  return findings;
-}
-
 /** One steer PM run: the claimed batch, the snapshot's state and its cwd. */
 interface SteerPmOpts {
   iteration: number;
@@ -207,6 +65,8 @@ interface SteerPmOpts {
   tasks: TaskFile[];
   steers: Steer[];
   cwd: string;
+  /** The epic whose PM routes this batch; absent is the goal's top PM. */
+  scope?: PmScope;
   /** The dispatch watch's live session; the boundary has none and queues. */
   liveSteers?: LiveSteerSessions;
 }
@@ -229,9 +89,11 @@ interface SteerPmOpts {
  * it into the whole plan.
  *
  * A steer arriving while a rung is live is injected into that session when the
- * harness offers `steerSession`; it joins this turn's claim and is routed by
- * the same outcome, so no second PM starts. Without it, or at the boundary's
- * PM where no watch runs, the steer stays queued for its next PM turn.
+ * harness offers `steerSession` and the steer belongs to this PM's scope: it
+ * joins this turn's claim and is routed by the same outcome, so no second PM
+ * starts. A steer of another scope stays queued and the watch wakes the loop
+ * for its own PM turn. Without `steerSession`, or at the boundary's PM where
+ * no watch runs, the steer stays queued for its next PM turn.
  */
 export async function runSteerPm(
   runtime: KernelRuntime,
@@ -241,7 +103,11 @@ export async function runSteerPm(
     return { status: "architect", routes: [], findings: [] };
   }
   const setup = await setupPmTurn(runtime, opts);
-  const claim = new SteerClaim(opts.steers);
+  const scope = opts.scope ?? GOAL_PM_SCOPE;
+  const claim = new SteerClaim(
+    opts.steers,
+    (steer) => pmScopeKey(steerScopeOf(runtime, steer)) === pmScopeKey(scope),
+  );
   let failure: string[] = [];
 
   for (const [index, rung] of rungSteps(runtime).entries()) {
@@ -315,7 +181,7 @@ async function settleSteerRung(
   const reasons = failureReasons(outcome, introduced, result.record);
   const exit = await rejectSteerRung(
     runtime,
-    opts.iteration,
+    opts,
     round,
     reasons,
     setup.snapshot,
@@ -339,13 +205,20 @@ function steerExhausted(failure: string[]): SteerPmRun {
 /** Records a failed rung; an infra stop still ends the ladder. */
 async function rejectSteerRung(
   runtime: KernelRuntime,
-  iteration: number,
+  opts: { iteration: number; scope?: PmScope },
   round: number,
   reasons: string[],
   snapshot: TurnSnapshot,
   result: AgentTurnResult,
 ): Promise<SteerPmRun | undefined> {
-  await recordPmRejection(runtime, iteration, round, reasons, snapshot);
+  await recordPmRejection(
+    runtime,
+    opts.iteration,
+    round,
+    reasons,
+    snapshot,
+    scopeEpic(opts.scope ?? { kind: "goal" }),
+  );
   if (result.record.stop?.kind === "infra") {
     return { status: "infra", stop: result.record.stop };
   }
@@ -359,6 +232,7 @@ async function runSteerTurn(
     iteration: number;
     state: State;
     cwd: string;
+    scope?: PmScope;
     liveSteers?: LiveSteerSessions;
   },
   target: TurnTarget,
@@ -443,7 +317,7 @@ async function carryAcceptedIntents(
 /** Commits the accepted routes, applies their holds or answers, and exits. */
 async function acceptSteerRoutes(
   runtime: KernelRuntime,
-  opts: { iteration: number },
+  opts: { iteration: number; scope?: PmScope },
   claim: ReadonlyMap<string, Steer>,
   routes: NonNullable<Outcome["steerRoutes"]>,
   baseline: string[],
@@ -454,7 +328,12 @@ async function acceptSteerRoutes(
   // The boundary reads routes from this record only, never from the agent
   // rung outcomes: a failed rung's routes die with its rollback.
   await runtime.store.appendRecord(
-    scriptMeta(opts.iteration, "steer-routes", { round }),
+    scriptMeta(opts.iteration, "steer-routes", {
+      round,
+      ...(scopeEpic(opts.scope ?? { kind: "goal" })
+        ? { architect: scopeEpic(opts.scope ?? { kind: "goal" }) }
+        : {}),
+    }),
     {
       ok: true,
       outcome: {

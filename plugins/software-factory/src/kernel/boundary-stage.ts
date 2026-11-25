@@ -18,10 +18,8 @@ import {
   spikeFindings,
   unavailableAliases,
 } from "./boundary-context.js";
-import { contextCodeMap } from "./ingestion.js";
 import { runSpikeSteer } from "./boundary-spike.js";
-import type { BoundaryOptions } from "./boundary-state.js";
-import type { ConsultContext } from "./boundary-state.js";
+import type { BoundaryOptions, ConsultContext } from "./boundary-state.js";
 import { makeCause } from "./cause.js";
 import {
   type ContextPackInput,
@@ -36,6 +34,7 @@ import {
 import { derive, openDebts } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
 import { packGates } from "./infra.js";
+import { contextCodeMap } from "./ingestion.js";
 import { runKeptLand } from "./integrate.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import { carryIntentSteers, intentChanges } from "./intent.js";
@@ -59,7 +58,12 @@ import { PACK_PREP_STEP, runPackPreparer } from "./pack-prep.js";
 import { latestPlanCheck } from "./plan-check.js";
 import { goalPlan } from "./plan-file.js";
 import { latestPlanReview } from "./plan-review.js";
-import { planBulletEditFindings, runSteerPm } from "./pm.js";
+import {
+  planBulletEditFindings,
+  runSteerPm,
+  steerEpicOf,
+  steerScopeGroups,
+} from "./pm.js";
 import { scriptMeta } from "./record.js";
 import type { KernelRuntime } from "./types.js";
 import { integrationHead } from "./worktree.js";
@@ -93,6 +97,8 @@ export async function prepareBoundary(
     steers,
     seenSteers: [],
     forArchitect: [],
+    forEpicArchitect: new Map(),
+    epicSteersAnswered: new Set(),
     pmAnswers: [],
   };
 }
@@ -143,14 +149,19 @@ export async function routeUnroutedSteers(
   await runBoundaryTurn(
     context.runtime,
     { iteration: context.iteration, step: "pm" },
-    () =>
-      runSteerPm(context.runtime, {
-        iteration: context.iteration,
-        state: context.state,
-        tasks: context.tasks,
-        steers: claim,
-        cwd: context.runtime.paths.goalCheckout,
-      }),
+    async () => {
+      for (const group of steerScopeGroups(context.runtime, claim)) {
+        await runSteerPm(context.runtime, {
+          iteration: context.iteration,
+          state: context.state,
+          tasks: context.tasks,
+          steers: group.steers,
+          scope: group.scope,
+          cwd: context.runtime.paths.goalCheckout,
+        });
+      }
+      return undefined;
+    },
   );
   // A routed task or spike writes files the pack and the architect must see.
   context.records = await context.runtime.store.listRecords();
@@ -241,11 +252,25 @@ export async function partitionSteers(context: ConsultContext): Promise<void> {
     routes,
     recordsDir: context.runtime.store.recordsDir,
   });
+  const epicOf = steerEpicOf(context.runtime, context.steers);
   for (const steer of context.steers) {
     const action = await steerAction(context, routes, steer);
-    if (action === "architect") context.forArchitect.push(steer);
+    if (action !== "architect") continue;
+    const epic = epicOf.get(steer.id);
+    if (epic === undefined) {
+      context.forArchitect.push(steer);
+      continue;
+    }
+    const waiting = context.forEpicArchitect.get(epic) ?? [];
+    waiting.push(steer);
+    context.forEpicArchitect.set(epic, waiting);
   }
-  context.pmAnswers = formatPmAnswers(routes);
+  // The top pack reads the goal's own steer answers; an epic's answer is its
+  // architect's business, never the top's.
+  const goalAnswers = new Map(
+    [...routes].filter(([, route]) => route.architect === undefined),
+  );
+  context.pmAnswers = formatPmAnswers(goalAnswers);
 }
 
 /** Holds are advisory input; an unreadable file is logged, never fatal. */

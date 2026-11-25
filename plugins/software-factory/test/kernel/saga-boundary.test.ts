@@ -3,9 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   FakeHarness,
+  type FakeTurnHandler,
   fakeTurnIdentity,
   fakeTurnResult,
-  type FakeTurnHandler,
 } from "../../src/harness/fake/index.js";
 import { PLAN_REVIEW_STEP } from "../../src/kernel/plan-review.js";
 import { createFolderStore } from "../../src/kernel/store.js";
@@ -14,6 +14,7 @@ import {
   expectLaunch,
   makeGoal,
   outcome,
+  pmScopeOf,
   stateOf,
 } from "./e2e-helpers.js";
 import { causeText } from "./helpers.js";
@@ -171,30 +172,39 @@ function scriptBoundaryBetaPlan(ctx: SagaBoundaryCtx): void {
   );
 }
 
-/** The PM derives one task per epic plan from the all-plans brief. */
+/** Each PM derives only its own scope; the top files no goal task. */
 function scriptBoundaryPmI1(ctx: SagaBoundaryCtx): void {
-  ctx.harness.script(
-    (req, turnedCtx) => {
-      expect(req.prompt).toContain("epics/alpha.md");
-      expect(req.prompt).toContain("epics/beta.md");
-      fs.mkdirSync(ctx.goal.tasksDir, { recursive: true });
-      fs.writeFileSync(
-        path.join(ctx.goal.tasksDir, "alpha.build.md"),
-        epicTask("alpha.build", "alpha", "alpha.txt"),
-        "utf8",
-      );
-      fs.writeFileSync(
-        path.join(ctx.goal.tasksDir, "beta.build.md"),
-        epicTask("beta.build", "beta", "beta.txt"),
-        "utf8",
-      );
-      turnedCtx.writeOutcome(outcome({ summary: "filed both epics' tasks" }));
-      return fakeTurnResult(req);
-    },
-    { when: (req) => iterationOf(req).includes("-i1-pm-") },
-  );
+  for (const [epic, slug, file] of [
+    ["alpha", "alpha.build", "alpha.txt"],
+    ["beta", "beta.build", "beta.txt"],
+    [undefined, undefined, undefined],
+  ] as const) {
+    ctx.harness.script(
+      (req, turnedCtx) => {
+        expect(pmScopeOf(req)).toBe(epic ?? "goal");
+        if (epic === undefined) {
+          turnedCtx.writeOutcome(outcome({ summary: "no goal-level tasks" }));
+          return fakeTurnResult(req);
+        }
+        expect(req.prompt).toContain(`epics/${epic}.md`);
+        expect(req.prompt).not.toContain("- goal:");
+        fs.mkdirSync(ctx.goal.tasksDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(ctx.goal.tasksDir, `${slug}.md`),
+          epicTask(slug, epic, file),
+          "utf8",
+        );
+        turnedCtx.writeOutcome(outcome({ summary: `filed ${slug}` }));
+        return fakeTurnResult(req);
+      },
+      {
+        when: (req) =>
+          pmScopeOf(req) === (epic ?? "goal") &&
+          iterationOf(req).includes("-i1-"),
+      },
+    );
+  }
 }
-
 /** Both epics' task implement/approve turns. */
 function scriptBoundaryTasks(
   ctx: Pick<SagaBoundaryCtx, "goal" | "harness">,
@@ -317,7 +327,11 @@ function scriptBoundaryIteration2(ctx: SagaBoundaryCtx): void {
       turnedCtx.writeOutcome(outcome({ summary: "no new tasks" }));
       return fakeTurnResult(req);
     },
-    { when: (req) => iterationOf(req).includes("-i2-pm-") },
+    {
+      fallback: true,
+      when: (req) =>
+        pmScopeOf(req) !== undefined && iterationOf(req).includes("-i2-"),
+    },
   );
 }
 

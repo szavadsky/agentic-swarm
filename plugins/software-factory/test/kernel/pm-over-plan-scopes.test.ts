@@ -16,9 +16,13 @@ import type {
   RunConfig,
 } from "../../src/kernel/types.js";
 import { outcome } from "./e2e-helpers.js";
-import { causeText } from "./helpers.js";
 import { withKernelRoleFallbacks } from "./fake-defaults.js";
-import { TEST_ARCHITECTURE, TEST_BOUNDARY, task } from "./helpers.js";
+import {
+  causeText,
+  TEST_ARCHITECTURE,
+  TEST_BOUNDARY,
+  task,
+} from "./helpers.js";
 
 function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
   const process: ProcessConfig = {
@@ -113,43 +117,62 @@ function scopedRuntime(): {
   return { root, runtime, fake };
 }
 
+/** Runs the epic PMs, then the top PM, each in its own scope. */
+async function runScopedPms(
+  runtime: KernelRuntime,
+  root: string,
+): Promise<void> {
+  for (const scope of [
+    { kind: "epic", epic: "auth" },
+    { kind: "epic", epic: "billing" },
+    { kind: "goal" },
+  ] as const) {
+    const result = await runPm(runtime, {
+      iteration: 1,
+      state: derive(await runtime.store.listTasks(), []),
+      cwd: root,
+      scope,
+    });
+    expect(result.status).toBe("done");
+  }
+}
+
 function registerPMOverPlanScopesPart1(): void {
-  it("derives tasks from both epic plans and names each plan in the prompt", async () => {
+  it("derives each epic plan through that epic's PM and keeps the goal plan for the top", async () => {
     const { root, runtime, fake } = scopedRuntime();
     try {
       const authPlan = path.join(runtime.store.goalDir, "epics/auth.md");
       const billingPlan = path.join(runtime.store.goalDir, "epics/billing.md");
-      fake.script((req, ctx) => {
-        expect(req.prompt).toContain(`- epic \`auth\`: ${authPlan}`);
-        expect(req.prompt).toContain(`- epic \`billing\`: ${billingPlan}`);
-        for (const [epic, planPath] of [
-          ["auth", authPlan],
-          ["billing", billingPlan],
-        ] as const) {
+      for (const [epic, planPath] of [
+        ["auth", authPlan],
+        ["billing", billingPlan],
+      ] as const) {
+        fake.script((req, ctx) => {
+          expect(req.prompt).toContain(`- epic: \`${epic}\``);
+          expect(req.prompt).toContain(`- epic \`${epic}\`: ${planPath}`);
+          expect(req.prompt).not.toContain("- goal:");
           const plan = fs.readFileSync(planPath, "utf8");
           for (const match of plan.matchAll(/^- (\S+) —/gmu)) {
             const slug = match[1]!;
-            const taskFile = task(slug, {
-              epic,
-              source: "plan",
-            });
             fs.writeFileSync(
               path.join(runtime.store.tasksDir, `${slug}.md`),
-              renderTaskFile(taskFile),
+              renderTaskFile(task(slug, { epic, source: "plan" })),
               "utf8",
             );
           }
-        }
-        ctx.writeOutcome(outcome({ summary: "derived both epic plans" }));
+          ctx.writeOutcome(outcome({ summary: `derived epic ${epic}` }));
+          return fakeTurnResult(req);
+        });
+      }
+      fake.script((req, ctx) => {
+        expect(req.prompt).toContain("- goal:");
+        expect(req.prompt).not.toContain("- epic `auth`: ");
+        expect(req.prompt).not.toContain("- epic `billing`: ");
+        ctx.writeOutcome(outcome({ summary: "no goal-level tasks" }));
         return fakeTurnResult(req);
       });
 
-      const result = await runPm(runtime, {
-        iteration: 1,
-        state: derive([], []),
-        cwd: root,
-      });
-      expect(result.status).toBe("done");
+      await runScopedPms(runtime, root);
       const tasks = await runtime.store.listTasks();
       expect(tasks.map((entry) => [entry.slug, entry.epic])).toEqual([
         ["auth.login", "auth"],
@@ -231,16 +254,19 @@ function registerPMOverPlanScopesPart3(): void {
         "utf8",
       );
       fake.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "applied both plans" }));
+        ctx.writeOutcome(outcome({ summary: "applied the scoped plan" }));
+        return fakeTurnResult(req);
+      });
+      fake.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "applied the scoped plan" }));
+        return fakeTurnResult(req);
+      });
+      fake.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "no goal cancellations" }));
         return fakeTurnResult(req);
       });
 
-      const result = await runPm(runtime, {
-        iteration: 1,
-        state: derive(await runtime.store.listTasks(), []),
-        cwd: root,
-      });
-      expect(result.status).toBe("done");
+      await runScopedPms(runtime, root);
       const cancels = (await runtime.store.listRecords())
         .filter((record) => record.step === "cancel")
         .map((record) => [record.slug, causeText(record.cause)]);
@@ -254,10 +280,62 @@ function registerPMOverPlanScopesPart3(): void {
   });
 }
 
+function registerPMOverPlanScopesPart4(): void {
+  it("refuses a foreign epic task, restores it, and lets the next rung complete", async () => {
+    const { root, runtime, fake } = scopedRuntime();
+    try {
+      const foreign = path.join(runtime.store.tasksDir, "billing.invoice.md");
+      const own = path.join(runtime.store.tasksDir, "auth.login.md");
+      fake.script((req, ctx) => {
+        fs.writeFileSync(
+          foreign,
+          renderTaskFile(
+            task("billing.invoice", { epic: "billing", source: "plan" }),
+          ),
+          "utf8",
+        );
+        ctx.writeOutcome(outcome({ summary: "wrote another epic's task" }));
+        return fakeTurnResult(req);
+      });
+      fake.script((req, ctx) => {
+        expect(req.prompt).toContain(
+          `task "billing.invoice" is epic billing's; the PM for epic auth writes only epic auth tasks`,
+        );
+        fs.writeFileSync(
+          own,
+          renderTaskFile(task("auth.login", { epic: "auth", source: "plan" })),
+          "utf8",
+        );
+        ctx.writeOutcome(outcome({ summary: "wrote only auth's task" }));
+        return fakeTurnResult(req);
+      });
+
+      const result = await runPm(runtime, {
+        iteration: 1,
+        state: derive([], []),
+        cwd: root,
+        scope: { kind: "epic", epic: "auth" },
+      });
+      expect(result.status).toBe("done");
+      expect(result.rungs.map((rung) => rung.failure)).toEqual([
+        `task "billing.invoice" is epic billing's; the PM for epic auth writes only epic auth tasks`,
+      ]);
+      expect(fs.existsSync(foreign)).toBe(false);
+      expect(
+        (await runtime.store.listTasks()).map((entry) => entry.slug),
+      ).toEqual(["auth.login"]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
 describe("PM over plan scopes", () => {
   registerPMOverPlanScopesPart1();
 
   registerPMOverPlanScopesPart2();
 
   registerPMOverPlanScopesPart3();
+
+  registerPMOverPlanScopesPart4();
 });

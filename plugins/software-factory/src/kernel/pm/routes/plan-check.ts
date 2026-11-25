@@ -18,8 +18,8 @@ import {
   NO_TURN_INPUTS,
   type PmTurnSetup,
   recordPmRejection,
-  runPmTurn,
   rungSteps,
+  runPmTurn,
   setupPmTurn,
 } from "../ladder.js";
 import { planCheckLadderNote, planCheckPmBrief } from "../prompts.js";
@@ -28,20 +28,23 @@ import {
   type PlanSnapshot,
   readTasks,
   reconcileTurn,
+  scopeWriteFindings,
   unfixedBaseline,
 } from "../reconcile.js";
+import { scopeEpic } from "../scope.js";
 import { PLAN_CHECK_ROUTES_STEP } from "../steps.js";
-import {
-  addCredit,
-  depFixFindings,
-  depRewriteFindings,
-} from "./plan-check-deps.js";
+import type { PmScope } from "../types.js";
 import {
   amendsUsed,
   cancelRoutes,
   decisionFindings,
   planCheckDecision,
 } from "../validation.js";
+import {
+  addCredit,
+  depFixFindings,
+  depRewriteFindings,
+} from "./plan-check-deps.js";
 
 /**
  * Which follow-up slugs a plan-check turn resumed; a cancel spends its slug
@@ -69,6 +72,7 @@ async function validatePlanCheckTurn(
     state: State;
     round: number;
     followUps: PlanCheckFollowUp[];
+    scope?: PmScope;
   },
   plansBefore: readonly PlanSnapshot[],
   taskSnapshot: Map<string, string>,
@@ -81,6 +85,14 @@ async function validatePlanCheckTurn(
     taskSnapshot,
   );
   const used = amendsUsed(await runtime.store.listRecords(), opts.iteration);
+  findings.push(
+    ...scopeWriteFindings(
+      opts.scope ?? { kind: "goal" },
+      taskSnapshot,
+      texts,
+      tasks,
+    ),
+  );
 
   const routes = outcome?.planCheckRoutes;
   const slugs = [...new Set(opts.followUps.map((item) => item.slug))].sort();
@@ -273,6 +285,7 @@ export async function runPlanCheckPm(
     state: State;
     followUps: PlanCheckFollowUp[];
     cwd: string;
+    scope?: PmScope;
   },
 ): Promise<PlanCheckPmResult> {
   const slugs = [...new Set(opts.followUps.map((item) => item.slug))].sort();
@@ -331,7 +344,11 @@ export async function runPlanCheckPm(
 /** Records a failed rung; an infra stop still ends the ladder. */
 async function rejectPlanCheckRung(
   runtime: KernelRuntime,
-  opts: { iteration: number; followUps: PlanCheckFollowUp[] },
+  opts: {
+    iteration: number;
+    followUps: PlanCheckFollowUp[];
+    scope?: PmScope;
+  },
   round: number,
   reasons: string[],
   setup: PmTurnSetup,
@@ -343,6 +360,7 @@ async function rejectPlanCheckRung(
     round,
     reasons,
     setup.snapshot,
+    scopeEpic(opts.scope ?? { kind: "goal" }),
   );
   if (result.record.stop?.kind !== "infra") return undefined;
   await recordPlanCheckFailure(

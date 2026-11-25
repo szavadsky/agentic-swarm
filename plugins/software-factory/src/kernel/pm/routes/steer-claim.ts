@@ -8,13 +8,17 @@ import { steerInjectionNote } from "../prompts.js";
  * The batch the mailbox handed this PM turn plus every steer injected while a
  * rung was live. One map feeds the rung prompt, the validation and the commit,
  * so an injected steer is answered by the same turn and no second PM starts.
+ * Only this scope's steers are claimable: another epic's steer stays queued
+ * for its own PM turn even when this turn is the one live at the time.
  */
 export class SteerClaim {
   private readonly steers: Map<string, Steer>;
+  private readonly owns: (steer: Steer) => boolean;
   private release: (() => void) | undefined;
 
-  constructor(steers: readonly Steer[]) {
+  constructor(steers: readonly Steer[], owns: (steer: Steer) => boolean) {
     this.steers = new Map(steers.map((steer) => [steer.id, steer]));
+    this.owns = owns;
   }
 
   all(): Steer[] {
@@ -45,12 +49,16 @@ export class SteerClaim {
     this.release = undefined;
   }
 
-  /** Claims only a delivered steer: a refused injection stays queued. */
+  /**
+   * Claims only a steer this scope owns: a refused injection stays queued and
+   * the watch wakes the loop for that steer's own PM turn.
+   */
   private async inject(
     steerSession: (message: string) => Promise<void>,
     steer: Steer,
   ): Promise<boolean> {
     if (this.steers.has(steer.id)) return true;
+    if (!this.owns(steer)) return false;
     await steerSession(steerInjectionNote(steer));
     this.steers.set(steer.id, steer);
     return true;

@@ -39,17 +39,26 @@ import { compactSession, subarchitectTarget } from "./flow-context.js";
 import { packGates } from "./infra.js";
 import { contextCodeMap } from "./ingestion.js";
 import { runBoundaryTurn } from "./integration-lock.js";
+import type { Steer } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import type { PlanFile } from "./plan-file.js";
 import { type PlanSnapshot, snapshotPlans } from "./pm.js";
 import { scriptMeta } from "./record.js";
-import type { KernelRuntime, State, StepRecord, TaskFile } from "./types.js";
+import type {
+  KernelRuntime,
+  Outcome,
+  State,
+  StepRecord,
+  TaskFile,
+} from "./types.js";
 import { integrationHead } from "./worktree.js";
 
 export interface EpicConsult {
   epic: string;
   plan: PlanFile;
   changed: boolean;
+  /** The turn's outcome, so a steer it answered reaches the mailbox. */
+  outcome?: Outcome;
 }
 
 export interface ConsultFailure {
@@ -76,6 +85,8 @@ export interface EpicPackOptions extends Omit<EpicConsultOptions, "packRel"> {
   tasks: readonly TaskFile[];
   state: State;
   planText: string;
+  /** Only this epic's pending steers; another epic's never appear here. */
+  steers?: readonly Steer[];
   runConfigPath?: string;
 }
 
@@ -113,7 +124,7 @@ async function epicPackInput(
       [...epicTasks],
     ),
     codeMap: await contextCodeMap(runtime),
-    steers: [],
+    steers: [...(opts.steers ?? [])],
     setup: runtime.configs.repo.setup,
     gates: packGates(runtime.store.goalDir, runtime.configs.repo.gates),
     baseGates: recordedBaseGates([...opts.records]),
@@ -342,6 +353,7 @@ export async function runEpicConsult(
       epic: opts.epic,
       plan,
       changed: snapshotPlan(plan.path) !== setup.planBefore,
+      ...(result.outcome ? { outcome: result.outcome } : {}),
     },
   };
 }

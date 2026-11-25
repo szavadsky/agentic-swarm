@@ -3,15 +3,15 @@ import path from "node:path";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import { packageRoot } from "../../src/kernel/config.js";
 import { promptVars } from "../../src/kernel/flow-context.js";
+import { outcomeExampleVar } from "../../src/kernel/outcome-example.js";
+import { packPreparerOutcomeSchemaVar } from "../../src/kernel/pack-prep.js";
 import {
   taskFrontmatterVar,
   tierNamesVar,
 } from "../../src/kernel/prompt-schema.js";
-import { outcomeExampleVar } from "../../src/kernel/outcome-example.js";
-import { packPreparerOutcomeSchemaVar } from "../../src/kernel/pack-prep.js";
-import { qaOutcomeSchema } from "../../src/kernel/qa.js";
 import { loadPromptLibrary } from "../../src/kernel/prompts.js";
-import { rec, task, TEST_CLASS_TYPES, TEST_TASK_TYPES_VAR } from "./helpers.js";
+import { qaOutcomeSchema } from "../../src/kernel/qa.js";
+import { rec, TEST_CLASS_TYPES, TEST_TASK_TYPES_VAR, task } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -100,6 +100,8 @@ const ROLES: Record<string, Record<string, string>> = {
   },
   pm: {
     iteration: "3",
+    epic: "",
+    epic_scoped: "false",
     intent_path: "/goal/intent.md",
     plans: "- goal: /goal/plan.md\n  - epic `auth`: /goal/epics/auth.md",
     plan_diff: "none",

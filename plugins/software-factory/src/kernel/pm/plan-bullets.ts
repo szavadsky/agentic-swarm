@@ -14,6 +14,8 @@ import {
   type TaskFile,
   type TaskStatus,
 } from "../types.js";
+import { pmScopeKey } from "./scope.js";
+import type { PmScope } from "./types.js";
 
 /** The iteration file a derive turn writes its plan texts to. */
 const PLAN_BULLET_FILE = "plan-bullets.json";
@@ -29,7 +31,10 @@ export interface PlanText {
 interface BulletBaseline {
   plans: Record<string, Record<string, string>>;
   texts?: Record<string, string>;
+  /** The goal PM's session, kept for baselines written before per-scope sessions. */
   session?: SessionRef;
+  /** One compacted session per PM scope: the epic name, empty for the goal. */
+  sessions?: Record<string, SessionRef>;
 }
 
 /** A task file that exists; a terminal `status` makes its bullet history. */
@@ -294,6 +299,7 @@ export async function previousPlanBaseline(
   iteration: number;
   plans: PlanText[];
   session?: SessionRef;
+  sessions?: Record<string, SessionRef>;
 } | null> {
   for (const iteration of iterationNumbers(
     await runtime.store.listDir("iterations"),
@@ -309,6 +315,7 @@ export async function previousPlanBaseline(
       iteration,
       plans: baselinePlans(baseline),
       ...(baseline.session ? { session: baseline.session } : {}),
+      ...(baseline.sessions ? { sessions: baseline.sessions } : {}),
     };
   }
   return null;
@@ -366,6 +373,7 @@ export async function storePlanBulletBaseline(
   plans: readonly PlanText[],
   tasks: readonly OpenTask[],
   session?: SessionRef,
+  scope: PmScope = { kind: "goal" },
 ): Promise<void> {
   const previous = await latestBulletBaseline(runtime);
   const keep = new Map(
@@ -374,14 +382,54 @@ export async function storePlanBulletBaseline(
       { rel: edit.baselinePlan, text: edit.before },
     ]),
   );
-  const baseline = baselineOf(plans, keep, previous);
-  baseline.texts = Object.fromEntries(
-    plans.map((plan) => [plan.rel, plan.text]),
+  // One saga runs one PM per epic plus the top, so each PM updates only its
+  // own plan's bullets and session; the other scopes' entries are preserved.
+  const baseline = mergeBaseline(
+    runtime,
+    previous,
+    baselineOf(plans, keep, previous),
+    plans,
+    session,
+    scope,
   );
-  if (session) baseline.session = session;
   await runtime.store.iterations.write(
     iteration,
     PLAN_BULLET_FILE,
     `${JSON.stringify(baseline, null, 2)}\n`,
   );
+}
+
+/** This scope's fresh entries merged over the previous baseline, pruned to plans on disk. */
+function mergeBaseline(
+  runtime: KernelRuntime,
+  previous: BulletBaseline | null,
+  fresh: BulletBaseline,
+  plans: readonly PlanText[],
+  session: SessionRef | undefined,
+  scope: PmScope,
+): BulletBaseline {
+  const onDisk = new Set(
+    runtime.store.plans.filesOnDisk().map((plan) => plan.rel),
+  );
+  const kept = <T>(entries: Record<string, T>): Record<string, T> => {
+    const out: Record<string, T> = {};
+    for (const [rel, value] of Object.entries(entries)) {
+      if (onDisk.has(rel)) out[rel] = value;
+    }
+    return out;
+  };
+  const merged: BulletBaseline = {
+    plans: { ...kept(previous?.plans ?? {}), ...fresh.plans },
+  };
+  const texts = {
+    ...kept(previous?.texts ?? {}),
+    ...Object.fromEntries(plans.map((plan) => [plan.rel, plan.text])),
+  };
+  if (Object.keys(texts).length > 0) merged.texts = texts;
+  const sessions = { ...(previous?.sessions ?? {}) };
+  if (session) sessions[pmScopeKey(scope)] = session;
+  if (Object.keys(sessions).length > 0) merged.sessions = sessions;
+  const goalSession = sessions[""];
+  if (goalSession) merged.session = goalSession;
+  return merged;
 }

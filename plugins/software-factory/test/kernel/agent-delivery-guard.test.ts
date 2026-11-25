@@ -70,6 +70,8 @@ async function setup() {
 
 const pmVars = {
   iteration: "1",
+  epic: "",
+  epic_scoped: "false",
   intent_path: "/g/intent.md",
   plans: "- goal: /g/plan.md",
   plan_diff: "none",

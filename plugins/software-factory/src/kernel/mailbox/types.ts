@@ -11,6 +11,8 @@ export interface Steer {
   hash: string;
   /** Leading frontmatter `urgent: true`; the steer drains its iteration. */
   urgent: boolean;
+  /** Leading frontmatter `epic: <name>`; the epic whose PM and architect own it. */
+  epic?: string;
 }
 
 export interface ScanOptions {

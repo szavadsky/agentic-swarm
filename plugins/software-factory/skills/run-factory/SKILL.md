@@ -90,6 +90,9 @@ bun bin/factory.ts benchmark --repo "$REPO" --goal demo
 - `steer --repo … --goal … <file|->` drops a file into `mailbox/inbox/`
   atomically. The architect reads it at the next boundary and answers in
   `mailbox/outbox/steer-<id>.md`.
+- A steer whose file starts with `epic: <name>` frontmatter belongs to that
+  epic: its own PM routes it and its architect answers it; the top PM and
+  architect never see it.
 - A steer whose file starts with `urgent: true` frontmatter is not answered by
   the PM: dispatch stops starting new work, in-flight tasks finish, and the next
   consult reads it as `[urgent]`.

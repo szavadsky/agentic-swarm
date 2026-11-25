@@ -18,12 +18,13 @@ import {
   ownedPlanText,
   parseRegister,
 } from "./boundary-context.js";
+import { writePack } from "./boundary-stage.js";
 import {
   type BoundaryResult,
   boundaryResult,
   type ConsultContext,
 } from "./boundary-state.js";
-import { writePack } from "./boundary-stage.js";
+import { answerEpicSteers } from "./boundary-tail.js";
 import { derive } from "./derive.js";
 import { type EpicRow, subarchitectRows } from "./register.js";
 import type { StepRecord } from "./types.js";
@@ -60,6 +61,7 @@ async function consultEpic(
     tasks: context.tasks,
     state: context.state,
     planText,
+    steers: context.forEpicArchitect.get(epic) ?? [],
     ...(context.opts.runConfigPath
       ? { runConfigPath: context.opts.runConfigPath }
       : {}),
@@ -76,6 +78,7 @@ async function consultEpic(
   });
   if (consult.failure)
     return { result: consultFailureResult(context, consult.failure) };
+  await answerEpicSteers(context, epic, consult.consult?.outcome);
   return { consult: consult.consult! };
 }
 
@@ -119,11 +122,19 @@ export async function runReportPass(
     state: context.state,
     records: context.records,
   });
-  if (passPlan.reportEpics.length === 0) return undefined;
+  // A steer names its epic's architect even when the epic's job is done: its
+  // report is that architect's one chance to answer before the hold expires.
+  const pending = new Set(context.forEpicArchitect.keys());
+  const reportEpics = passPlan.checkerEpics.filter(
+    (row) =>
+      passPlan.reportEpics.some((chosen) => chosen.epic === row.epic) ||
+      pending.has(row.epic),
+  );
+  if (reportEpics.length === 0) return undefined;
   const records = await runtime.store.listRecords();
   const planText = await ownedPlanText(runtime);
   const consults: EpicConsult[] = [];
-  for (const row of passPlan.reportEpics) {
+  for (const row of reportEpics) {
     const step = await consultEpic(
       context,
       row.epic,
@@ -196,6 +207,7 @@ async function consultDirectionRows(
   const deliveredEpics = new Set<string>();
   for (const delivered of context.steeredDone?.values() ?? []) {
     if (deliveredEpics.has(delivered.epic)) continue;
+    await answerEpicSteers(context, delivered.epic, delivered.outcome);
     consults.push(delivered);
     deliveredEpics.add(delivered.epic);
   }
@@ -203,7 +215,11 @@ async function consultDirectionRows(
     // A steered child already ran this epic's consult inside the architect's
     // session; its record is on disk and its plan edit is the consult's.
     if (context.steeredDone?.has(row.epic)) continue;
-    if (epicJobDone(context.state, row.epic)) continue;
+    if (
+      epicJobDone(context.state, row.epic) &&
+      (context.forEpicArchitect.get(row.epic)?.length ?? 0) === 0
+    )
+      continue;
     const step = await consultEpic(
       context,
       row.epic,
@@ -241,18 +257,29 @@ export async function runConsults(
       outcome: context.architect?.outcome,
     });
   }
-  const subset = directionSubset(context, subarchitectRows(register.epics));
+  const rows = subarchitectRows(register.epics);
+  const subset = directionSubset(context, rows);
   if ("result" in subset) return subset.result;
+  // An epic with a pending steer is consulted even when the top left it out:
+  // the steer's owner answers it, not the top architect.
+  const pending = rows.filter(
+    (row) => (context.forEpicArchitect.get(row.epic)?.length ?? 0) > 0,
+  );
+  const selected = [
+    ...new Map(
+      [...subset.epics, ...pending].map((row) => [row.epic, row]),
+    ).values(),
+  ].sort((a, b) => a.epic.localeCompare(b.epic));
   const records = await runtime.store.listRecords();
   const planText = await ownedPlanText(runtime);
   const consulted = await consultDirectionRows(
     context,
-    subset.epics,
+    selected,
     records,
     planText,
   );
   if ("result" in consulted) return consulted.result;
-  const missing = missingEpicPlanResult(context, subset.epics);
+  const missing = missingEpicPlanResult(context, selected);
   if (missing) return missing;
   context.consults = consulted.consults;
   return undefined;

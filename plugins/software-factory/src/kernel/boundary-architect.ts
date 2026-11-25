@@ -10,14 +10,14 @@ import {
   resumableSession,
   snapshotPlan,
 } from "./architect-session.js";
-import { infraCause, taskSnapshot } from "./boundary-context.js";
+import { infraCause, ownedPlanText, taskSnapshot } from "./boundary-context.js";
+import { boundaryResult, type ConsultContext } from "./boundary-state.js";
 import {
   collectSteered,
   recordSteerFailures,
-  steeredHosting,
   type SteeredHosting,
+  steeredHosting,
 } from "./boundary-steer.js";
-import { boundaryResult, type ConsultContext } from "./boundary-state.js";
 import {
   boundaryTarget,
   compactSession,
@@ -125,12 +125,13 @@ async function hostSteered(
   return steeredHosting(runtime, {
     iteration: context.iteration,
     turn,
-    packRel: context.packRel!,
     goalPlanFile: context.plan,
+    planText: await ownedPlanText(runtime),
     ...(context.digestPath ? { digestPath: context.digestPath } : {}),
     tasks: context.tasks,
     state: context.state,
     records: context.records,
+    steers: context.forEpicArchitect,
   });
 }
 

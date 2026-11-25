@@ -3,13 +3,19 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   FakeHarness,
+  type FakeTurnHandler,
   fakeTurnIdentity,
   fakeTurnResult,
-  type FakeTurnHandler,
 } from "../../src/harness/fake/index.js";
 import { PLAN_REVIEW_STEP } from "../../src/kernel/plan-review.js";
 import { createFolderStore } from "../../src/kernel/store.js";
-import { cleanup, expectLaunch, makeGoal, outcome } from "./e2e-helpers.js";
+import {
+  cleanup,
+  expectLaunch,
+  makeGoal,
+  outcome,
+  pmScopeOf,
+} from "./e2e-helpers.js";
 
 const PROCESS = "hierarchy:\n  depth: 2\n";
 
@@ -75,6 +81,25 @@ function epicTurn(
   );
 }
 
+/** Every PM scope files no task in this iteration. */
+function scriptPmFallback(
+  ctx: SubsetCtx,
+  iteration: string,
+  summary: string,
+): void {
+  ctx.harness.script(
+    (req, turnedCtx) => {
+      turnedCtx.writeOutcome(outcome({ summary }));
+      return fakeTurnResult(req);
+    },
+    {
+      fallback: true,
+      when: (req) =>
+        pmScopeOf(req) !== undefined && iterationOf(req).includes(iteration),
+    },
+  );
+}
+
 /** Iteration 1: the top registers both epics; the direction pass plans them. */
 function scriptInitialIteration(ctx: SubsetCtx): void {
   ctx.harness.script(
@@ -104,13 +129,7 @@ function scriptInitialIteration(ctx: SubsetCtx): void {
       { when: (req) => epicTurn(req, "-i1-", epic, "direction") },
     );
   }
-  ctx.harness.script(
-    (req, turnedCtx) => {
-      turnedCtx.writeOutcome(outcome({ summary: "no tasks yet" }));
-      return fakeTurnResult(req);
-    },
-    { when: (req) => iterationOf(req).includes("-i1-pm-") },
-  );
+  scriptPmFallback(ctx, "-i1-", "no tasks yet");
 }
 
 /**
@@ -174,13 +193,7 @@ function scriptMiddleIteration(ctx: SubsetCtx): void {
     },
     { when: (req) => epicTurn(req, "-i2-", "alpha", "direction") },
   );
-  ctx.harness.script(
-    (req, turnedCtx) => {
-      turnedCtx.writeOutcome(outcome({ summary: "no new tasks" }));
-      return fakeTurnResult(req);
-    },
-    { when: (req) => iterationOf(req).includes("-i2-pm-") },
-  );
+  scriptPmFallback(ctx, "-i2-", "no new tasks");
 }
 
 /** The pass records of one iteration, in record order. */

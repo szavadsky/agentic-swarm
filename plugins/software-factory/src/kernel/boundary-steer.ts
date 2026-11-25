@@ -10,10 +10,15 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { LiveAgents, SessionRef, SubagentInfo } from "../harness/types.js";
 import { missingPlanFinding, snapshotPlan } from "./architect-session.js";
-import type { EpicConsult, ConsultFailure } from "./boundary-consult.js";
+import {
+  type ConsultFailure,
+  type EpicConsult,
+  writeEpicPack,
+} from "./boundary-consult.js";
 import { epicJobDone, parseRegister } from "./boundary-context.js";
 import { makeCause } from "./cause.js";
 import { compactSession, subarchitectTarget } from "./flow-context.js";
+import type { Steer } from "./mailbox.js";
 import {
   KERNEL_TURN_STEPS,
   OutcomeInvalidError,
@@ -106,12 +111,15 @@ async function monitorSteers(
 interface SteeredHostingOpts {
   iteration: number;
   turn: string;
-  packRel: string;
   goalPlanFile: PlanFile;
+  /** The shared plan text the epic packs render their debts from. */
+  planText: string;
   digestPath?: string;
   tasks: readonly TaskFile[];
   state: State;
   records: readonly StepRecord[];
+  /** Pending steers per epic: a child sees only its own epic's. */
+  steers: ReadonlyMap<string, readonly Steer[]>;
 }
 
 /** Epics with a finished subarchitect consult and no closed job yet. */
@@ -139,16 +147,31 @@ function steeredRows(opts: SteeredHostingOpts): EpicRow[] | undefined {
 }
 
 /** Builds one epic child's consult, prompt and snapshot before hosting. */
-function steeredConsult(
+async function steeredConsult(
   runtime: KernelRuntime,
   opts: SteeredHostingOpts,
   target: ReturnType<typeof subarchitectTarget>,
   outcomeDir: string,
   epic: string,
-): SteeredConsult {
+): Promise<SteeredConsult> {
   const plan = resolvePlan(runtime.store.goalDir, { kind: "epic", epic });
   const outcomePath = path.join(outcomeDir, `i${opts.iteration}-${epic}.yaml`);
   fs.rmSync(outcomePath, { force: true });
+  // A live child reads its own epic's pack, not the top pack: the steer that
+  // is this epic's must not travel through the goal's context.
+  const packRel = await writeEpicPack(runtime, {
+    iteration: opts.iteration,
+    epic,
+    goalPlanFile: opts.goalPlanFile,
+    records: opts.records,
+    turn: opts.turn,
+    pass: "direction",
+    tasks: opts.tasks,
+    state: opts.state,
+    planText: opts.planText,
+    steers: opts.steers.get(epic) ?? [],
+    ...(opts.digestPath ? { digestPath: opts.digestPath } : {}),
+  });
   const prompt = runtime.prompts.render(target.prompt, {
     turn: opts.turn,
     pass: "direction",
@@ -158,7 +181,7 @@ function steeredConsult(
     plan_path: plan.path,
     parent_plan_path: opts.goalPlanFile.path,
     checkout: runtime.paths.goalCheckout,
-    pack_path: runtime.store.pathOf({ area: "goal", rel: opts.packRel }),
+    pack_path: runtime.store.pathOf({ area: "goal", rel: packRel }),
     digest_path: opts.digestPath ?? "",
     outcome_path: outcomePath,
   });
@@ -205,8 +228,10 @@ export async function steeredHosting(
   const target = subarchitectTarget(runtime, opts.iteration);
   const outcomeDir = path.join(runtime.paths.sessionsDir, "subarchitect");
   fs.mkdirSync(outcomeDir, { recursive: true });
-  const consults = rows.map((row) =>
-    steeredConsult(runtime, opts, target, outcomeDir, row.epic),
+  const consults = await Promise.all(
+    rows.map((row) =>
+      steeredConsult(runtime, opts, target, outcomeDir, row.epic),
+    ),
   );
   let cancelled = false;
   let running: Promise<string[]> | undefined;
@@ -371,6 +396,7 @@ async function recordConsult(
     epic: consult.epic,
     plan: consult.plan,
     changed: snapshotPlan(consult.plan.path) !== consult.planBefore,
+    outcome: source.outcome,
   });
 }
 

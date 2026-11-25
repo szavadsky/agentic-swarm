@@ -13,8 +13,8 @@ import {
   type ConsultContext,
 } from "./boundary-state.js";
 import { makeCause } from "./cause.js";
-import { runBoundaryTurn } from "./integration-lock.js";
 import { openConcernIds } from "./context-pack/misc.js";
+import { runBoundaryTurn } from "./integration-lock.js";
 import {
   expireHold,
   markProcessed,
@@ -29,9 +29,14 @@ import {
   runArchitectReturn,
   runPlanReview,
 } from "./plan-review.js";
-import { planBulletEditFindings, runPmFlow } from "./pm.js";
+import {
+  epicPmScopes,
+  GOAL_PM_SCOPE,
+  planBulletEditFindings,
+  runScopedPmFlow,
+} from "./pm.js";
 import { scriptMeta } from "./record.js";
-import type { StepRecord } from "./types.js";
+import type { Outcome, StepRecord } from "./types.js";
 
 /** The architect's post-turn checks: ownership, steer answers, task files, decision, plan. */
 export async function settleArchitectStage(
@@ -115,9 +120,13 @@ async function deliverSteerAnswer(
 async function recordSteerPresented(
   context: ConsultContext,
   steer: Steer,
+  architect?: string,
 ): Promise<void> {
   await context.runtime.store.appendRecord(
-    scriptMeta(context.iteration, "steer-presented", { slug: steer.id }),
+    scriptMeta(context.iteration, "steer-presented", {
+      slug: steer.id,
+      ...(architect ? { architect } : {}),
+    }),
     {
       ok: false,
       cause: makeCause(
@@ -132,6 +141,7 @@ async function recordSteerPresented(
 async function expireUnansweredSteer(
   context: ConsultContext,
   steer: Steer,
+  architect?: string,
 ): Promise<void> {
   const { runtime } = context;
   await expireHold(runtime.store, steer.id);
@@ -142,7 +152,10 @@ async function expireUnansweredSteer(
     `# Steer ${steer.id}\n\n${reason}\n\nSource: ${steer.relPath}`,
   );
   await runtime.store.appendRecord(
-    scriptMeta(context.iteration, "steer-unanswered", { slug: steer.id }),
+    scriptMeta(context.iteration, "steer-unanswered", {
+      slug: steer.id,
+      ...(architect ? { architect } : {}),
+    }),
     {
       ok: false,
       cause: makeCause(
@@ -166,19 +179,29 @@ async function expireUnansweredSteer(
   );
 }
 
-/** A steer stays pending when unanswered; the first miss only records it. */
-async function answerSteers(context: ConsultContext): Promise<void> {
-  const result = context.architect!;
-  const responses = result.outcome
+/**
+ * A steer stays pending when unanswered; the first miss only records it, and
+ * the second expires its hold. Returns the steers still waiting, so an epic
+ * consult later in the same iteration does not present an answered steer again.
+ */
+async function answerSteersFor(
+  context: ConsultContext,
+  steers: readonly Steer[],
+  outcome: Outcome | undefined,
+  architect?: string,
+): Promise<Steer[]> {
+  if (steers.length === 0) return [];
+  const responses = outcome
     ? steerResponses(
-        result.outcome,
-        context.forArchitect.map((steer) => steer.id),
+        outcome,
+        steers.map((steer) => steer.id),
       )
     : new Map<string, string>();
   const prior = await context.runtime.store.listRecords();
   const presented = recordSlugs(prior, "steer-presented");
   const expired = recordSlugs(prior, "steer-unanswered");
-  for (const steer of context.forArchitect) {
+  const remaining: Steer[] = [];
+  for (const steer of steers) {
     const answer = responses.get(steer.id);
     if (answer) {
       await deliverSteerAnswer(context, steer, answer);
@@ -186,11 +209,45 @@ async function answerSteers(context: ConsultContext): Promise<void> {
     }
     if (expired.has(steer.id)) continue;
     if (!presented.has(steer.id)) {
-      await recordSteerPresented(context, steer);
+      await recordSteerPresented(context, steer, architect);
+      remaining.push(steer);
       continue;
     }
-    await expireUnansweredSteer(context, steer);
+    await expireUnansweredSteer(context, steer, architect);
   }
+  return remaining;
+}
+
+/** The top architect's steers, after its turn closed. */
+async function answerSteers(context: ConsultContext): Promise<void> {
+  await answerSteersFor(
+    context,
+    context.forArchitect,
+    context.architect?.outcome,
+  );
+}
+
+/**
+ * One epic's waiting steers, after its report or direction consult. The
+ * iteration's first consult presents or answers them; later passes skip the
+ * epic, so a steer presented in the report is not expired by the direction.
+ */
+export async function answerEpicSteers(
+  context: ConsultContext,
+  epic: string,
+  outcome: Outcome | undefined,
+): Promise<void> {
+  const waiting = context.forEpicArchitect.get(epic) ?? [];
+  // A later consult may still answer a steer the report pass only presented;
+  // that answer is delivered even though this iteration already showed it.
+  const answered =
+    outcome?.steerAnswers?.some((entry) =>
+      waiting.some((steer) => steer.id === entry.steer),
+    ) ?? false;
+  if (!answered && context.epicSteersAnswered.has(epic)) return;
+  context.epicSteersAnswered.add(epic);
+  const remaining = await answerSteersFor(context, waiting, outcome, epic);
+  context.forEpicArchitect.set(epic, remaining);
 }
 
 /**
@@ -274,11 +331,15 @@ export async function runPmStage(
     runtime,
     { iteration: context.iteration, step: "pm" },
     () =>
-      runPmFlow(runtime, {
-        iteration: context.iteration,
-        state: context.state,
-        cwd: runtime.paths.goalCheckout,
-      }),
+      runScopedPmFlow(
+        runtime,
+        {
+          iteration: context.iteration,
+          state: context.state,
+          cwd: runtime.paths.goalCheckout,
+        },
+        [...epicPmScopes(runtime), GOAL_PM_SCOPE],
+      ),
   );
   return pmResult(context, pm);
 }
@@ -313,7 +374,7 @@ async function releaseConcernMarks(context: ConsultContext): Promise<void> {
 
 function pmResult(
   context: ConsultContext,
-  pm: Awaited<ReturnType<typeof runPmFlow>>,
+  pm: Awaited<ReturnType<typeof runScopedPmFlow>>,
 ): BoundaryResult {
   const outcome = context.architect?.outcome;
   if (pm.status === "asked") {

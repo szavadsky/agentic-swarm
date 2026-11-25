@@ -11,7 +11,7 @@ import type { ActiveHolds, DispatchState } from "./dispatch-state.js";
 import type { SteerWatch } from "./dispatch-watch.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import { readHolds, type Steer, scanInbox } from "./mailbox.js";
-import { runSteerPm } from "./pm.js";
+import { runSteerPm, steerScopeGroups } from "./pm.js";
 import type { State, StepRecord, TaskFile } from "./types.js";
 
 export interface SteerPoll {
@@ -144,15 +144,20 @@ async function runSteerBatch(
   await runBoundaryTurn(
     state.runtime,
     { iteration: state.iteration, step: "pm" },
-    () =>
-      runSteerPm(state.runtime, {
-        iteration: state.iteration,
-        state: snapshot,
-        tasks,
-        steers: claim,
-        cwd: state.runtime.paths.goalCheckout,
-        liveSteers: state.liveSteers,
-      }),
+    async () => {
+      for (const group of steerScopeGroups(state.runtime, claim)) {
+        await runSteerPm(state.runtime, {
+          iteration: state.iteration,
+          state: snapshot,
+          tasks,
+          steers: group.steers,
+          scope: group.scope,
+          cwd: state.runtime.paths.goalCheckout,
+          liveSteers: state.liveSteers,
+        });
+      }
+      return undefined;
+    },
   );
   return reloadHolds(
     state,

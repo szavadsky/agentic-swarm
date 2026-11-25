@@ -24,7 +24,8 @@ import type {
 } from "../types.js";
 import { integrationHead, taskBranchName } from "../worktree.js";
 import { isFrozenStatus, type PlanSnapshot } from "./reconcile.js";
-import type { PmMandate } from "./types.js";
+import { scopeEpic } from "./scope.js";
+import type { PmMandate, PmScope } from "./types.js";
 import { amendsUsed } from "./validation.js";
 
 /** A cancelled slug is spent: reconcile restores it and the PM must not reuse it. */
@@ -57,11 +58,13 @@ export interface PmPromptInput {
 /** The variables a PM-role turn renders, whichever step of the PM flow runs it. */
 export function pmTurnVars(
   runtime: KernelRuntime,
-  opts: { iteration: number; state: State },
+  opts: { iteration: number; state: State; scope?: PmScope },
   input: PmPromptInput,
 ): Record<string, string> {
   return {
     iteration: String(opts.iteration),
+    epic: scopeEpic(opts.scope ?? { kind: "goal" }) ?? "",
+    epic_scoped: scopeEpic(opts.scope ?? { kind: "goal" }) ? "true" : "false",
     intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
     plans: input.planList,
     plan_diff: input.planDiff ?? "none",

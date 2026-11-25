@@ -25,8 +25,15 @@ export {
 export { runStallPm } from "./pm/routes/stall.js";
 export { runSteerPm, type SteerPmRun } from "./pm/routes/steer.js";
 export {
+  epicPmScopes,
+  GOAL_PM_SCOPE,
+  steerEpicOf,
+  steerScopeGroups,
+} from "./pm/scope.js";
+export {
   PLAN_CHECK_ROUTES_STEP,
   runPmFlow,
+  runScopedPmFlow,
   STALL_ROUTES_STEP,
 } from "./pm/steps.js";
 export type { PmRung } from "./pm/types.js";

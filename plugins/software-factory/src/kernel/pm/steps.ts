@@ -9,7 +9,8 @@ import { NO_TURN_INPUTS, runPm } from "./ladder.js";
 import { previousPlanBaseline } from "./plan-bullets.js";
 import { planDiffPrompt, pmTurnVars } from "./prompts.js";
 import { readTasks, snapshotPlans } from "./reconcile.js";
-import type { PmFlowRun, PmRun } from "./types.js";
+import { GOAL_PM_SCOPE, scopeEpic, scopePlanFile } from "./scope.js";
+import type { PmFlowRun, PmRun, PmScope } from "./types.js";
 
 /** Script step committing a stall turn's routes; one record per park-decision turn. */
 export const STALL_ROUTES_STEP = "stall-routes";
@@ -37,7 +38,12 @@ export function pmFlowSteps(runtime: KernelRuntime): readonly PmFlowStep[] {
  */
 export async function runPmFlow(
   runtime: KernelRuntime,
-  opts: { iteration: number; state: State; cwd: string },
+  opts: {
+    iteration: number;
+    state: State;
+    cwd: string;
+    scope?: PmScope;
+  },
 ): Promise<PmFlowRun> {
   let derived: PmRun | undefined;
   for (const step of pmFlowSteps(runtime)) {
@@ -65,15 +71,23 @@ export async function runPmFlow(
  */
 async function runPmFlowStep(
   runtime: KernelRuntime,
-  opts: { iteration: number; state: State; cwd: string },
+  opts: {
+    iteration: number;
+    state: State;
+    cwd: string;
+    scope?: PmScope;
+  },
   step: PmFlowStep,
 ): Promise<PmFlowRun | undefined> {
-  const plansBefore = await snapshotPlans(
-    runtime,
-    runtime.store.plans.registered(),
-  );
+  const scope = opts.scope ?? GOAL_PM_SCOPE;
+  const owned = scopePlanFile(runtime, scope);
+  const plansBefore = await snapshotPlans(runtime, [owned]);
   const previous = await previousPlanBaseline(runtime, opts.iteration);
+  const previousScope = previous?.plans.filter(
+    (plan) => plan.rel === owned.rel,
+  );
   const { tasks } = await readTasks(runtime);
+  const epic = scopeEpic(scope);
   const result = await runAgentTurn(runtime, {
     target: {
       ...resolveTurn(
@@ -86,14 +100,19 @@ async function runPmFlowStep(
       ...repairFields(step),
     },
     cwd: opts.cwd,
-    meta: { iteration: opts.iteration, step: step.id, round: 1 },
+    meta: {
+      iteration: opts.iteration,
+      step: step.id,
+      round: 1,
+      ...(epic ? { architect: epic } : {}),
+    },
     vars: pmTurnVars(runtime, opts, {
       planList: formatPlanList(
         plansBefore
           .filter((before) => before.exists)
           .map((before) => before.plan),
       ),
-      planDiff: planDiffPrompt(plansBefore, previous?.plans ?? null),
+      planDiff: planDiffPrompt(plansBefore, previousScope ?? null),
       tasks,
       repair: "",
       ...NO_TURN_INPUTS,
@@ -105,4 +124,41 @@ async function runPmFlowStep(
     return { status: "step-infra", step: step.id, stop };
   }
   return undefined;
+}
+
+/**
+ * One saga's PM stage: every epic's own PM, then the top PM. The top runs last
+ * so it sees the epic tasks and can wire the cross-epic DAG; a scope that
+ * blocks the consult ends the stage there, and an `architect` exit from any
+ * scope carries every unfixed finding to the boundary.
+ */
+export async function runScopedPmFlow(
+  runtime: KernelRuntime,
+  opts: { iteration: number; state: State; cwd: string },
+  scopes: readonly PmScope[],
+): Promise<PmFlowRun> {
+  const findings: string[] = [];
+  const rungs: PmRun["rungs"] = [];
+  let lastDone: Extract<PmRun, { status: "done" }> | undefined;
+  for (const scope of scopes) {
+    const run = await runPmFlow(runtime, { ...opts, scope });
+    if (run.status === "done") {
+      lastDone = run;
+      rungs.push(...run.rungs);
+      continue;
+    }
+    if (run.status === "architect") {
+      findings.push(...run.findings);
+      rungs.push(...run.rungs);
+      continue;
+    }
+    return run;
+  }
+  if (findings.length > 0) {
+    return { status: "architect", findings: [...new Set(findings)], rungs };
+  }
+  if (!lastDone) {
+    throw new Error("the PM stage ran no scope");
+  }
+  return { status: "done", outcome: lastDone.outcome, rungs };
 }

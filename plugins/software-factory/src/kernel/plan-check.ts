@@ -1,10 +1,10 @@
 import { runAgentTurn } from "./agent.js";
-import { makeCause } from "./cause.js";
-import { formatCause } from "./cause.js";
+import { formatCause, makeCause } from "./cause.js";
 import type { PlanCheckPack } from "./context-pack.js";
 import { formatOpenConcern, openConcerns } from "./context-pack.js";
 import { boundaryTarget } from "./flow-context.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
+import { formatPlanList, planBullets } from "./plan-file.js";
 import {
   existingTasks,
   type PlanCheckPmResult,
@@ -12,7 +12,6 @@ import {
   runPlanCheckPm,
   snapshotTurn,
 } from "./pm.js";
-import { formatPlanList, planBullets } from "./plan-file.js";
 import { scriptMeta } from "./record.js";
 import {
   type ArtifactStore,
@@ -435,6 +434,7 @@ export async function runPlanCheckRound(
     state: opts.state,
     followUps: turn.followUps,
     cwd: runtime.paths.goalCheckout,
+    ...(opts.epic ? { scope: { kind: "epic" as const, epic: opts.epic } } : {}),
   });
   return {
     turn,
