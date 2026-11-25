@@ -143,34 +143,6 @@ export function checkEffort(
   }
 }
 
-/** The registered-harness finding both alias and tier rows share. */
-export function registryMessage(ctx: AliasContext, harness: string): string {
-  return `harness "${harness}" is not registered (registered: ${[...ctx.harnesses.keys()].join(", ") || "none"})`;
-}
-
-/** Validates the alias's own harness and quota pool. */
-export function checkAliasIdentity(
-  ctx: AliasContext,
-  key: string,
-  alias: AliasConfig,
-): boolean {
-  if (!ctx.harnesses.has(alias.harness)) {
-    add(ctx, `${key}.harness`, registryMessage(ctx, alias.harness));
-    return false;
-  }
-  if (
-    alias.subscription !== undefined &&
-    !ctx.subscriptions.has(alias.subscription)
-  ) {
-    add(
-      ctx,
-      `${key}.subscription`,
-      `subscription "${alias.subscription}" names no limits.concurrency.perSubscription pool`,
-    );
-  }
-  return true;
-}
-
 /** Checks the alias's primary model and its configured effort. */
 export async function checkPrimaryModel(
   ctx: AliasContext,
@@ -204,7 +176,6 @@ async function checkRotationEntry(
   alias: AliasConfig,
 ): Promise<void> {
   if (!ctx.harnesses.has(entry.harness)) {
-    add(ctx, `${entryKey}.harness`, registryMessage(ctx, entry.harness));
     return;
   }
   if (ctx.unavailable.has(entry.harness)) return;

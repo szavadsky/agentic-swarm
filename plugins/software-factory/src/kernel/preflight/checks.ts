@@ -1,13 +1,20 @@
-/** Escalation, fallback, follow-up and tmp-headroom checks. */
+/** Escalation, fallback, pool, portability, registration, scout and tmp-headroom checks. */
 
 import fs from "node:fs";
+import { OMP_ID } from "../../harness/omp/types.js";
 import { formatFindings } from "../findings.js";
 import type { Finding } from "../findings.js";
+import {
+  fallbackChangesPrimary,
+  fallbackTierSubscription,
+} from "../flow-context-targets.js";
 import { FRONT_TRIVIAL_FLOW } from "../front.js";
 import { BOUNDARY_STEPS, BUILTIN_INGESTION_IDS } from "../types.js";
 import type {
   AliasConfig,
   BuiltinIngestionId,
+  ConfigBundle,
+  FallbackModelConfig,
   FlowDefinition,
   ProcessConfig,
 } from "../types.js";
@@ -247,4 +254,198 @@ export function trivialFollowUpFindings(
       key: `flows.${flowName}.steps.${step.id}.followUp`,
       message: `step "${step.id}" of flow "${flowName}" declares a follow-up, but a trivial task implements in the front's session and never follows up`,
     }));
+}
+
+function registeredMessage(
+  harness: string,
+  registered: ReadonlySet<string>,
+): string {
+  return `harness "${harness}" is not registered (registered: ${[...registered].join(", ") || "none"})`;
+}
+
+/**
+ * A portability edge names the harness a session may cross from and to. An
+ * endpoint no harness registers is a typo that would otherwise parse clean and
+ * mean "no edge", so the crossing it was declared to allow would restart de
+ * novo with no finding.
+ */
+export function portabilityFindings(
+  configs: ConfigBundle,
+  file: string,
+  registered: ReadonlySet<string>,
+): Finding[] {
+  const findings: Finding[] = [];
+  for (const [index, edge] of (configs.run.portability ?? []).entries()) {
+    for (const side of ["from", "to"] as const) {
+      const harness = edge[side];
+      if (registered.has(harness)) continue;
+      findings.push({
+        file,
+        key: `portability.${index}.${side}`,
+        message: registeredMessage(harness, registered),
+      });
+    }
+  }
+  return findings;
+}
+
+/**
+ * An alias, rotation entry or explicit fallback tier naming a harness a launch
+ * does not register can never run. The check reads only the run config and the
+ * registered ids, so `validate` reports it and pre-flight skips that branch's
+ * model probe.
+ */
+export function harnessRegistrationFindings(
+  configs: ConfigBundle,
+  file: string,
+  registered: ReadonlySet<string>,
+): Finding[] {
+  const findings: Finding[] = [];
+  const check = (key: string, harness: string): void => {
+    if (registered.has(harness)) return;
+    findings.push({
+      file,
+      key,
+      message: registeredMessage(harness, registered),
+    });
+  };
+  for (const [name, alias] of Object.entries(configs.run.aliases)) {
+    check(`aliases.${name}.harness`, alias.harness);
+    for (const [index, entry] of (alias.rotate ?? []).entries()) {
+      check(`aliases.${name}.rotate.${index}.harness`, entry.harness);
+    }
+    for (const [index, fallback] of (alias.fallbacks ?? []).entries()) {
+      if ("alias" in fallback || fallback.harness === undefined) continue;
+      check(`aliases.${name}.fallbacks.${index}.harness`, fallback.harness);
+    }
+  }
+  return findings;
+}
+
+/**
+ * Whether some alias, rotation entry or literal fallback tier runs on omp.
+ * `scouts` is a subagent pin only the omp adapter reads.
+ */
+export function runsOnOmp(aliases: Record<string, AliasConfig>): boolean {
+  for (const alias of Object.values(aliases)) {
+    const primaries =
+      alias.rotate && alias.rotate.length > 0
+        ? alias.rotate.map((entry) => entry.harness)
+        : [alias.harness];
+    if (primaries.includes(OMP_ID)) return true;
+    for (const fallback of alias.fallbacks ?? []) {
+      if ("model" in fallback && fallback.harness === OMP_ID) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * `scouts` configures a model no harness reads when no alias, rotation entry
+ * or fallback tier runs on omp: the pin would parse clean and start nothing.
+ */
+export function scoutsConsumerFindings(
+  configs: ConfigBundle,
+  file: string,
+): Finding[] {
+  if (!configs.run.scouts || runsOnOmp(configs.run.aliases)) return [];
+  return [
+    {
+      file,
+      key: "scouts",
+      message: `scouts configures a subagent model, but no harness consumes it: no alias or fallback runs on harness "${OMP_ID}"`,
+    },
+  ];
+}
+
+function poolMessage(subscription: string): string {
+  return `subscription "${subscription}" names no limits.concurrency.perSubscription pool`;
+}
+
+/** One literal fallback tier's pool declarations against the configured pools. */
+function fallbackPoolFindings(
+  fallback: FallbackModelConfig,
+  alias: AliasConfig,
+  rotation: readonly { harness: string; model: string }[],
+  known: ReadonlySet<string>,
+  file: string,
+  tierKey: string,
+): Finding[] {
+  const findings: Finding[] = [];
+  const changesPrimary = [alias, ...rotation].some((primary) =>
+    fallbackChangesPrimary(fallback, primary),
+  );
+  const sharesPool = fallback.sharesPool === true;
+  if (sharesPool && alias.subscription === undefined) {
+    findings.push({
+      file,
+      key: `${tierKey}.sharesPool`,
+      message: "sharesPool: true needs the alias to name a subscription",
+    });
+  }
+  if (
+    changesPrimary &&
+    alias.subscription !== undefined &&
+    fallback.subscription === undefined &&
+    !sharesPool
+  ) {
+    findings.push({
+      file,
+      key: `${tierKey}.subscription`,
+      message: `fallback changes harness or model from the alias primary, so it cannot inherit subscription "${alias.subscription}"; name its own subscription or set sharesPool: true`,
+    });
+  }
+  const subscription = fallbackTierSubscription(
+    fallback,
+    alias.subscription,
+    changesPrimary,
+  );
+  if (subscription !== undefined && !known.has(subscription)) {
+    findings.push({
+      file,
+      key: `${tierKey}.subscription`,
+      message: poolMessage(subscription),
+    });
+  }
+  return findings;
+}
+
+/**
+ * Every pool an alias or one of its literal fallback tiers draws on must exist
+ * in `limits.concurrency.perSubscription`; an unknown name would only fail
+ * while resolving a turn, after the plan spent. A tier that changes the
+ * primary's harness or model cannot inherit the alias's pool silently.
+ */
+export function subscriptionPoolFindings(
+  aliases: Record<string, AliasConfig>,
+  pools: Record<string, number>,
+  file: string,
+): Finding[] {
+  const findings: Finding[] = [];
+  const known = new Set(Object.keys(pools));
+  for (const [name, alias] of Object.entries(aliases)) {
+    const key = `aliases.${name}`;
+    if (alias.subscription !== undefined && !known.has(alias.subscription)) {
+      findings.push({
+        file,
+        key: `${key}.subscription`,
+        message: poolMessage(alias.subscription),
+      });
+    }
+    const rotation = alias.rotate ?? [];
+    for (const [index, fallback] of (alias.fallbacks ?? []).entries()) {
+      if (!("model" in fallback)) continue;
+      findings.push(
+        ...fallbackPoolFindings(
+          fallback,
+          alias,
+          rotation,
+          known,
+          file,
+          `${key}.fallbacks.${index}`,
+        ),
+      );
+    }
+  }
+  return findings;
 }

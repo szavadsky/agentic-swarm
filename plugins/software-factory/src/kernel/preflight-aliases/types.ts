@@ -13,8 +13,6 @@ export interface AliasContext {
   harnesses: ReadonlyMap<string, Harness>;
   catalog?: ModelCatalog;
   unavailable: ReadonlySet<string>;
-  /** Quota-pool names `limits.concurrency.perSubscription` caps. */
-  subscriptions: ReadonlySet<string>;
   modelCache: Map<string, Promise<boolean>>;
   probeCache: Map<string, Promise<ModelProbe>>;
 }

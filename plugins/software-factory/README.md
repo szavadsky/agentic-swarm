@@ -54,7 +54,9 @@ schema-enforced file with the gate's validators (tasks/*.md with its
 directory's dependency graph and flow existence against the merged process
 config, class.yaml, outcome.yaml keyed by the step in the sibling
 started.yaml or `--step`, mailbox/holds/*.yaml, repo.yaml, run.yaml,
-process.yaml, infra.yaml); exit 0 valid, 1 invalid or unknown kind. `schemas`
+process.yaml, infra.yaml) and, for a repo, process or run file, the non-model
+pre-flight checks without launching a harness or probing a model; exit 0 valid,
+1 invalid or unknown kind. `schemas`
 writes every kernel file schema as JSON Schema (`task`, `outcome`, `qa`, `hold`,
 `class`, `infra`, `repo`, `run`, `process`, `gate`) into `--out` for editors and
 the artifact LSP. `variables`

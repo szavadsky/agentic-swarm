@@ -125,6 +125,7 @@ export type {
   GateConfig,
   GatePattern,
   GoalPaths,
+  GoalRoots,
   HarnessConfig,
   KernelRuntime,
   ProcessConfig,

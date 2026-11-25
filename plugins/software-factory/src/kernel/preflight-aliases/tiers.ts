@@ -1,12 +1,8 @@
 /** Fallback tier checks. */
 
-import {
-  fallbackChangesPrimary,
-  fallbackTierSubscription,
-} from "../flow-context-targets.js";
 import type { AliasConfig, FallbackModelConfig } from "../types.js";
 import type { AliasContext } from "./types.js";
-import { add, checkEffort, checkedModel, registryMessage } from "./models.js";
+import { checkEffort, checkedModel } from "./models.js";
 
 /** A fallback without a harness runs on the rotated primary. */
 function fallbackHarnesses(
@@ -48,9 +44,8 @@ async function checkTierModel(
 }
 
 /**
- * Checks one fallback tier, its harness and its quota pool. A tier that
- * changes the primary's harness or model cannot inherit the alias's
- * subscription; it must name its own or declare `sharesPool`.
+ * Checks one fallback tier's harness and models. A tier on an unregistered
+ * harness can run nothing, so its models are not probed.
  */
 async function checkFallbackTier(
   ctx: AliasContext,
@@ -60,46 +55,7 @@ async function checkFallbackTier(
   rotation: readonly { harness: string; model: string }[],
 ): Promise<void> {
   if (fallback.harness !== undefined && !ctx.harnesses.has(fallback.harness)) {
-    add(ctx, `${tierKey}.harness`, registryMessage(ctx, fallback.harness));
     return;
-  }
-  const changesPrimary = [alias, ...rotation].some((primary) =>
-    fallbackChangesPrimary(fallback, primary),
-  );
-  const sharesPool = fallback.sharesPool === true;
-  if (sharesPool && alias.subscription === undefined) {
-    add(
-      ctx,
-      `${tierKey}.sharesPool`,
-      "sharesPool: true needs the alias to name a subscription",
-    );
-  }
-  if (
-    changesPrimary &&
-    alias.subscription !== undefined &&
-    fallback.subscription === undefined &&
-    !sharesPool
-  ) {
-    add(
-      ctx,
-      `${tierKey}.subscription`,
-      `fallback changes harness or model from the alias primary, so it cannot inherit subscription "${alias.subscription}"; name its own subscription or set sharesPool: true`,
-    );
-  }
-  const tierSubscription = fallbackTierSubscription(
-    fallback,
-    alias.subscription,
-    changesPrimary,
-  );
-  if (
-    tierSubscription !== undefined &&
-    !ctx.subscriptions.has(tierSubscription)
-  ) {
-    add(
-      ctx,
-      `${tierKey}.subscription`,
-      `subscription "${tierSubscription}" names no limits.concurrency.perSubscription pool`,
-    );
   }
   const tierHarnesses = fallbackHarnesses(fallback, rotation, alias);
   for (const tierHarness of tierHarnesses) {

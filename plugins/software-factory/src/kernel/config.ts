@@ -12,4 +12,9 @@ export {
 export { ConfigError, configFilePaths } from "./config/load.js";
 
 export { loadConfigs, loadProcessConfig, loadRunConfig } from "./config/run.js";
-export { repositoryId, resolveGoalPaths, toLimits } from "./config/paths.js";
+export {
+  repositoryId,
+  resolveGoalPaths,
+  resolveRoots,
+  toLimits,
+} from "./config/paths.js";

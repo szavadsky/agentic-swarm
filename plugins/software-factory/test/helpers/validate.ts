@@ -33,7 +33,7 @@ export function validRunConfig(): string {
     "steward",
   ]);
   const lines = [...names].map(
-    (name) => `  ${name}: { harness: fake, model: ${name}-model }`,
+    (name) => `  ${name}: { harness: omp, model: ${name}-model }`,
   );
   return `aliases:\n${lines.join("\n")}\n`;
 }

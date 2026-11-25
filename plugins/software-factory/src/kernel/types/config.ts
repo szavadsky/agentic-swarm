@@ -288,13 +288,20 @@ export interface ConfigBundle {
   files?: ConfigFiles;
 }
 
-export interface GoalPaths {
+/**
+ * The repository and its run-config roots, before a goal name adds the goal's
+ * own directories. Validation reads this without naming a goal.
+ */
+export interface GoalRoots {
   repoRoot: string;
+  worktreeRoot: string;
+  sessionsDir: string;
+}
+
+export interface GoalPaths extends GoalRoots {
   goalDir: string;
   goalCheckout: string;
   integrationBranch: string;
-  worktreeRoot: string;
-  sessionsDir: string;
   /** The resolved artifact backend and the root holding every goal. */
   artifacts: ArtifactLocation;
 }

@@ -24,7 +24,7 @@ Current build (`main` at `3865ec68`, factory-v3 merged) and runs `full` i1, `bui
 - *friction* — the plan grows into a ledger. `delta` reached 838 lines / 92.8 KB / 201 bullets with 146 task files; `full`'s 53 bullets became 76 tasks, 23 of them from stall or steer work. Intent asks for one directional plan, not a per-task register ([delta plan](/home/slava/aiexp/agentic-swarm.wt/v3/.factory/artifacts/delta/plan.md), [full plan](/home/slava/aiexp/agentic-swarm.wt/v3/.factory/artifacts/full/plan.md)).
 
 ### Config and harness
-- *deviates* — `factory validate` is not the consistency check intent promises. It checks required aliases, flows/schemas, pools and chains; binaries, live model/effort probes and roots run only in launch pre-flight ([`validate.ts:366-380`](plugins/software-factory/src/cli/commands/validate.ts), [`preflight/run.ts:55-72`](plugins/software-factory/src/kernel/preflight/run.ts), [`config.md:171-174`](plugins/software-factory/skills/run-factory/config.md)).
+- *deviates* — `factory validate` shares the non-model pre-flight checks; the base branch and the goal's task tiers still surface only at launch: those need the git checkout and the goal store ([`validate.ts`](plugins/software-factory/src/cli/commands/validate.ts), [`preflight/run.ts`](plugins/software-factory/src/kernel/preflight/run.ts), [`config.md`](plugins/software-factory/skills/run-factory/config.md)).
 - *deviates* — a pool at its concurrency cap waits; it does not fall back to an idle tier on another pool ([`dispatch-admit.ts:115-123`](plugins/software-factory/src/kernel/dispatch-admit.ts)).
 
 ### Context, status, gates, git

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
 import type { ZodType } from "zod";
+import { OMP_ID } from "../../harness/omp/types.js";
 import {
   ConfigError,
   configFilePaths,
@@ -11,6 +12,7 @@ import {
   loadRunConfig,
   processOverrideSchema,
   repoConfigSchema,
+  resolveRoots,
 } from "../../kernel/config.js";
 import { classSchema } from "../../kernel/flow-context.js";
 import { infraSchema } from "../../kernel/infra.js";
@@ -21,20 +23,12 @@ import {
   parseOutcome,
   validateExpectation,
 } from "../../kernel/outcome.js";
-import {
-  outcomeSchemaFor,
-  outcomeSchemaNames,
-} from "../../kernel/outcome-schemas.js";
 import { PLAN_CHECK_STEP } from "../../kernel/plan-check.js";
+import { nonModelFindings, usedHarnesses } from "../../kernel/preflight.js";
 import {
   PLAN_REVIEW_STEP,
   validatePlanReviewDelivery,
 } from "../../kernel/plan-review.js";
-import {
-  escalationFindings,
-  fallbackAliasFindings,
-  requiredAliases,
-} from "../../kernel/preflight.js";
 import { qaOutcomeSchema } from "../../kernel/qa.js";
 import {
   isAcceptanceStep,
@@ -47,8 +41,14 @@ import {
   validateTaskFlows,
   validateTaskGraph,
 } from "../../kernel/tasks.js";
-import type { ProcessConfig } from "../../kernel/types.js";
+import type {
+  ConfigBundle,
+  ConfigFiles,
+  GoalRoots,
+  ProcessConfig,
+} from "../../kernel/types.js";
 import { outcomeSchema } from "../../kernel/types.js";
+import { resolveHarnessBinaries } from "../harnesses.js";
 import type { ValidateFileOptions, ValidateResult } from "./types.js";
 import {
   inferValidateKind,
@@ -315,21 +315,19 @@ async function taskFindings(
 }
 
 /**
- * Cross-layer consistency for a repo/process/run file: aliases required by
- * process config exist in run config, task types name a configured flow and a
- * kernel outcome schema, and quota pools named on aliases exist in
- * `limits.concurrency.perSubscription`. Static only: no harness, model or pool
- * call. Findings name the owning file and key.
+ * Cross-layer consistency for a repo/process/run file, in one pass with the
+ * non-model pre-flight checks: required aliases, escalating and fallback
+ * chains, quota pools, task types, trivial-flow follow-ups, configured
+ * executables and the repository roots. Static only: no harness is built, no
+ * model list or pool is called, and findings name the owning file and key.
  */
 interface CrossLayerBundle {
+  configs: ConfigBundle;
+  files: ConfigFiles;
   process: ProcessConfig;
-  runAliases: Record<string, { subscription?: string }>;
-  perSubscription: Record<string, number>;
-  escalation: { file: string; key: string; message: string }[];
-  fallback: { file: string; key: string; message: string }[];
-  runFile: string;
   processFile: string;
   root: string;
+  roots?: GoalRoots;
 }
 
 function crossLayerBundle(
@@ -338,13 +336,11 @@ function crossLayerBundle(
   opts: ValidateFileOptions,
 ): CrossLayerBundle | string[] {
   const dir = path.dirname(abs);
-  const root =
+  const fileRepoRoot =
     findRepoRoot(dir) ??
-    (path.basename(dir) === ".factory"
-      ? path.dirname(dir)
-      : opts.repo
-        ? path.resolve(opts.repo)
-        : process.cwd());
+    (path.basename(dir) === ".factory" ? path.dirname(dir) : undefined) ??
+    (opts.repo ? path.resolve(opts.repo) : undefined);
+  const root = fileRepoRoot ?? process.cwd();
   const files = configFilePaths(root);
   let bundle: ReturnType<typeof loadConfigs>;
   try {
@@ -354,92 +350,75 @@ function crossLayerBundle(
   } catch (err) {
     return [`${abs}: ${(err as Error).message}`];
   }
-  const bundleFiles = bundle.files as ReturnType<typeof configFilePaths>;
-  const runFile = bundleFiles.run ?? files.run;
+  const bundleFiles = bundle.files ?? files;
   const processFile = fs.existsSync(bundleFiles.processOverride)
     ? bundleFiles.processOverride
     : bundleFiles.processDefault;
   return {
+    configs: bundle,
+    files: bundleFiles,
     process: bundle.process,
-    runAliases: bundle.run.aliases,
-    perSubscription: bundle.run.limits.concurrency.perSubscription,
-    escalation: escalationFindings(bundle.run.aliases, runFile),
-    fallback: fallbackAliasFindings(bundle.run.aliases, runFile),
-    runFile,
     processFile,
     root,
+    ...(fileRepoRoot ? { roots: resolveRoots(bundle, fileRepoRoot) } : {}),
   };
 }
 
-function crossLayerFindings(
+/**
+ * The harness ids a launch registers from a run config: omp always, plus each
+ * declared acpx adapter. A bare alias harness has no entry, so it stays a
+ * launch check.
+ */
+function registeredHarnesses(configs: ConfigBundle): ReadonlySet<string> {
+  const ids = new Set([OMP_ID]);
+  for (const [id, entry] of Object.entries(configs.run.harnesses ?? {})) {
+    if (entry.acpx) ids.add(id);
+  }
+  return ids;
+}
+
+/**
+ * The executables a run config names without building a harness: a declared
+ * harness entry binds one, and omp resolves through PATH. A bare alias harness
+ * has no adapter `validate` can resolve, so its executable stays a launch
+ * check; the map's keys scope the shared check to what the config declares.
+ */
+function configuredBinaries(
+  configs: ConfigBundle,
+): Record<string, string | undefined> | undefined {
+  const declared = registeredHarnesses(configs);
+  const used = [...usedHarnesses(configs.run.aliases)].filter((harness) =>
+    declared.has(harness),
+  );
+  if (used.length === 0) return undefined;
+  const resolved = resolveHarnessBinaries(configs.run.harnesses);
+  return Object.fromEntries(
+    used.map((harness) => [harness, resolved[harness]]),
+  );
+}
+
+async function crossLayerFindings(
   abs: string,
   kind: ValidateKind,
   opts: ValidateFileOptions = {},
-): string[] {
+): Promise<string[]> {
   if (kind !== "repo" && kind !== "process" && kind !== "run") return [];
   const bundleOrError = crossLayerBundle(abs, kind, opts);
   if (Array.isArray(bundleOrError)) return bundleOrError;
+  const bundle = bundleOrError;
+  const nonModel = await nonModelFindings({
+    configs: bundle.configs,
+    files: bundle.files,
+    binaries: configuredBinaries(bundle.configs),
+    harnesses: registeredHarnesses(bundle.configs),
+    ...(bundle.roots ? { roots: bundle.roots } : {}),
+  });
   return [
-    ...crossLayerAliasFindings(bundleOrError),
-    ...crossLayerTaskTypeFindings(bundleOrError),
-    ...crossLayerPoolFindings(bundleOrError),
-    ...crossLayerChainFindings(bundleOrError),
-    ...flowPromptFindings(
-      bundleOrError.process,
-      bundleOrError.processFile,
-      bundleOrError.root,
+    ...nonModel.findings.map(
+      (finding) => `${finding.file}: ${finding.key}: ${finding.message}`,
     ),
+    ...flowPromptFindings(bundle.process, bundle.processFile, bundle.root),
   ];
-}
-
-function crossLayerAliasFindings(bundle: CrossLayerBundle): string[] {
-  const findings: string[] = [];
-  for (const [alias, ref] of requiredAliases(bundle.process)) {
-    if (!bundle.runAliases[alias]) {
-      findings.push(
-        `${bundle.runFile}: aliases.${alias}: required by ${ref} but missing`,
-      );
-    }
-  }
-  return findings;
-}
-
-function crossLayerTaskTypeFindings(bundle: CrossLayerBundle): string[] {
-  const findings: string[] = [];
-  for (const [name, definition] of Object.entries(bundle.process.taskTypes)) {
-    if (!Object.hasOwn(bundle.process.flows, definition.flow)) {
-      findings.push(
-        `${bundle.processFile}: taskTypes.${name}.flow: flow "${definition.flow}" is not configured`,
-      );
-    }
-    if (!outcomeSchemaFor(definition.schema)) {
-      findings.push(
-        `${bundle.processFile}: taskTypes.${name}.schema: schema "${definition.schema}" is not a kernel outcome schema (${outcomeSchemaNames()})`,
-      );
-    }
-  }
-  return findings;
-}
-
-function crossLayerPoolFindings(bundle: CrossLayerBundle): string[] {
-  const findings: string[] = [];
-  for (const [name, alias] of Object.entries(bundle.runAliases)) {
-    if (
-      alias.subscription !== undefined &&
-      !Object.hasOwn(bundle.perSubscription, alias.subscription)
-    ) {
-      findings.push(
-        `${bundle.runFile}: aliases.${name}.subscription: subscription "${alias.subscription}" names no limits.concurrency.perSubscription pool`,
-      );
-    }
-  }
-  return findings;
-}
-
-function crossLayerChainFindings(bundle: CrossLayerBundle): string[] {
-  return [...bundle.escalation, ...bundle.fallback].map(
-    (finding) => `${finding.file}: ${finding.key}: ${finding.message}`,
-  );
 }
 
 /**
@@ -489,6 +468,8 @@ export async function validateFile(
       findings = zodFindings(text, abs, infraSchema);
       break;
   }
-  findings.push(...crossLayerFindings(abs, kind, { ...opts, runConfig }));
+  findings.push(
+    ...(await crossLayerFindings(abs, kind, { ...opts, runConfig })),
+  );
   return { findings };
 }

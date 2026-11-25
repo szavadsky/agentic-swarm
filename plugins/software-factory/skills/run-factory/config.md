@@ -216,15 +216,31 @@ file and key:
   reviewers, flow steps, alternates, different-model follow-ups) that the run
   layer does not define;
 - every task type that names a flow or a kernel outcome schema the process
-  layer does not define;
-- every quota pool named by `aliases.<name>.subscription` that
-  `limits.concurrency.perSubscription` does not define;
+  layer does not define, and every follow-up declared on the trivial flow,
+  which never follows up;
+- every quota pool an alias or a literal fallback tier draws on that
+  `limits.concurrency.perSubscription` does not define, a tier that changes
+  the primary without naming its pool or `sharesPool`, and a `sharesPool` with
+  no alias subscription to share;
 - `aliases.<name>.escalateTo` and `aliases.<name>.fallbacks[<n>].alias` that
   name a run-config alias that does not exist, and escalation and fallback
-  chains that cycle.
+  chains that cycle;
+- `scouts` while no alias or fallback tier runs on omp;
+- an alias, rotation entry or explicit fallback tier on a harness the launch
+  does not register;
+- a `portability` edge whose endpoint no harness registers;
+- malformed acpx `options.args`/`options.env`;
+- every executable a registered harness declares (a harness entry's `binary`,
+  a raw acpx `agent`, omp and its YAML server) that is not executable; a bare
+  alias, rotation or fallback harness with no declaration is the registration
+  finding, not a missing executable;
+- a `worktreeRoot` or `sessions.dir` inside the repository, or a configured
+  root that is not writable.
 
 A scratch run file outside a repo is checked against the process defaults and
 an optional `--repo` fallback; a file inside a repo is checked against that
-repo's process override. The pre-flight that runs at launch still does the
-live checks (model lists, effort probe, binaries, writable roots, base
-gates); this command is the offline subset that shares its static checks.
+repo's process override. A scratch file has no repository roots to judge, so
+those checks need a repo file or `--repo`. The checks are the launch
+pre-flight's non-model list; the pre-flight also does the live checks (model
+lists, effort probe, base branch, base gates), while this command launches
+nothing and probes no model.
