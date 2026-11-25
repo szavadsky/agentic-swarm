@@ -28,6 +28,7 @@ export const PROMOTE_TREE_PATHS: readonly string[] = [
   "bootstrap/run",
   "bootstrap/promote.sh",
   "bootstrap/dispatch.sh",
+  "plugins/self-improve",
 ];
 
 /** A hard promote failure; the entry maps it to this exit code. */

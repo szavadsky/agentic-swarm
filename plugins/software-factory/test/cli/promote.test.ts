@@ -15,6 +15,22 @@ import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 const OK_TEST =
   'import { expect, it } from "bun:test";\nit("ok", () => { expect(1).toBe(1); });\n';
 
+/**
+ * A gate test that only passes when the promote exports the tree root, so a
+ * gate can read a sibling plugin straight out of the source tree.
+ */
+const TREE_ROOT_TEST = `import { expect, it } from "bun:test";
+import fs from "node:fs";
+import path from "node:path";
+it("reads a sibling plugin through FACTORY_TREE_ROOT", () => {
+  const root = process.env.FACTORY_TREE_ROOT;
+  expect(root).toBeTruthy();
+  expect(
+    fs.existsSync(path.join(root as string, "plugins/self-improve/plugin.json")),
+  ).toBe(true);
+});
+`;
+
 /** The fake package's gate scripts; every gate is green unless overridden. */
 const GREEN_SCRIPTS: Record<string, string> = {
   typecheck: "true",
@@ -107,6 +123,29 @@ describe("promote gates a clean export", () => {
       expect(fs.realpathSync(path.join(pins, "current"))).toBe(
         fs.realpathSync(build),
       );
+    } finally {
+      repo.cleanup();
+      fs.rmSync(pins, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("exports the tree root so a gate can read a sibling plugin", async () => {
+    const repo = fakeRepo();
+    const pins = fs.mkdtempSync(path.join(os.tmpdir(), "factory-promote-"));
+    try {
+      repo.writeFile(
+        "plugins/self-improve/plugin.json",
+        `${JSON.stringify({ name: "self-improve" }, null, 2)}\n`,
+      );
+      repo.writeFile(
+        "plugins/software-factory/test/tree-root.test.ts",
+        TREE_ROOT_TEST,
+      );
+      repo.commit("self-improve plugin for the tree root gate");
+      // Green only if FACTORY_TREE_ROOT points at the source tree during gates.
+      expect(await runPromote(repo, pins)).toBe(0);
+      const rev = repo.git(["rev-parse", "--short=12", "HEAD"]).stdout.trim();
+      expect(gateAt(path.join(pins, rev)).tests).toBe("pass");
     } finally {
       repo.cleanup();
       fs.rmSync(pins, { recursive: true, force: true });
