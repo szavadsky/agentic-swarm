@@ -659,8 +659,9 @@ incidents), wasted turns by reason and by role and alias (complete implementer
 failure; structure: protocol, containment, outcome channel, infra; flaky-test
 rejection), quota stops that landed no work reported apart from waste (a
 failed launch that landed work still counts), rebutted review turns counted
-apart as accepted tax, QA-only catches per task (findings no earlier gate
-failure or reviewer finding matched),
+apart as accepted tax, QA-only catches per task (findings no gate failure or
+reviewer finding carried, before or — since the reviewer runs after QA — after
+the QA turn) with a sampled catch naming its record and who else carried it,
 human interventions (processed steers) and the observable
 operator-act counter (steers plus containment outside-changes and
 integration-moved merges), gate and commit wall time, and turns, tokens, cost

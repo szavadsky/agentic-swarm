@@ -6,7 +6,7 @@ import { recordedBaseGates } from "../baseline.js";
 import { formatCause } from "../cause.js";
 import { materialOpenDebts } from "../derive.js";
 import { costText, medianMs, worstMs } from "../metrics.js";
-import type { QaOnlyCatches } from "../qa.js";
+import type { QaCatchSource, QaCatches } from "../qa.js";
 import type {
   AskRecoveryCounts,
   GroupMetrics,
@@ -333,13 +333,39 @@ export function costByRoleLines(
   ];
 }
 
-export function qaCatchLine(catches: QaOnlyCatches): string {
+const QA_CATCH_SOURCE: Record<QaCatchSource, string> = {
+  none: "QA only",
+  gate: "also a gate failure",
+  reviewer: "also an earlier reviewer finding",
+  "reviewer-after": "repeated by the reviewer after QA",
+};
+
+/**
+ * The QA-only count with its per-task split, then one line per sampled catch
+ * naming its record and who else carried the finding.
+ */
+export function qaCatchLines(catches: QaCatches): string[] {
   const perTask = Object.entries(catches.byTask).sort(([a], [b]) =>
     a.localeCompare(b),
   );
-  if (perTask.length === 0) return `- QA-only catches: ${catches.count}`;
-  const detail = perTask.map(([task, count]) => `${task}: ${count}`).join(", ");
-  return `- QA-only catches: ${catches.count} (${detail})`;
+  const detail =
+    perTask.length > 0
+      ? ` (${perTask.map(([task, count]) => `${task}: ${count}`).join(", ")})`
+      : "";
+  const head = `- QA-only catches: ${catches.count} of ${catches.total} QA findings${detail}`;
+  if (catches.sample.length === 0) return [head];
+  const sampleHead =
+    catches.sample.length < catches.total
+      ? `- QA catch sample: first ${catches.sample.length} of ${catches.total}`
+      : "- QA catch sample:";
+  return [
+    head,
+    sampleHead,
+    ...catches.sample.map(
+      (entry) =>
+        `  - ${entry.task} ${entry.record}: ${entry.finding} (${QA_CATCH_SOURCE[entry.alsoCaughtBy]})`,
+    ),
+  ];
 }
 
 export function perMergedCost(

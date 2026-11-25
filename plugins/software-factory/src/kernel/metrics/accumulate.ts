@@ -2,7 +2,7 @@
 
 import type { Usage } from "../../harness/types.js";
 import { addUsage, zeroUsage } from "../../harness/usage.js";
-import { MAX_QA_CATCH_SAMPLES, type QaOnlyCatches } from "../qa.js";
+import { MAX_QA_CATCH_SAMPLES, type QaCatches } from "../qa.js";
 import { emptyWasteAccounting } from "../waste.js";
 import type { WasteAccounting } from "../waste.js";
 import type {
@@ -49,7 +49,7 @@ interface TotalsAccumulator {
   architect: ArchitectMetrics;
   planReviewMarks: PlanReviewMarkCounts;
   waste: WasteAccounting;
-  qaOnlyCatches: QaOnlyCatches;
+  qaCatches: QaCatches;
 }
 
 /** The empty accumulator a totals run starts from. */
@@ -78,7 +78,7 @@ function emptyTotals(): TotalsAccumulator {
     architect: emptyArchitect(),
     planReviewMarks: { helpful: 0, unhelpful: 0 },
     waste: emptyWasteAccounting(),
-    qaOnlyCatches: { count: 0, byTask: {}, sample: [] },
+    qaCatches: { total: 0, count: 0, byTask: {}, sample: [] },
   };
 }
 
@@ -111,14 +111,13 @@ function sumIterations(
     totals.planReviewMarks.unhelpful +=
       iteration.planReviewMarks?.unhelpful ?? 0;
     sumWaste(totals.waste, iteration.waste);
-    totals.qaOnlyCatches.count += iteration.qaOnlyCatches.count;
-    for (const [task, count] of Object.entries(
-      iteration.qaOnlyCatches.byTask,
-    )) {
-      totals.qaOnlyCatches.byTask[task] =
-        (totals.qaOnlyCatches.byTask[task] ?? 0) + count;
+    totals.qaCatches.total += iteration.qaCatches.total;
+    totals.qaCatches.count += iteration.qaCatches.count;
+    for (const [task, count] of Object.entries(iteration.qaCatches.byTask)) {
+      totals.qaCatches.byTask[task] =
+        (totals.qaCatches.byTask[task] ?? 0) + count;
     }
-    totals.qaOnlyCatches.sample.push(...iteration.qaOnlyCatches.sample);
+    totals.qaCatches.sample.push(...iteration.qaCatches.sample);
   }
 }
 
@@ -154,14 +153,15 @@ function totalsResult(
     planReviewMarks: totals.planReviewMarks,
     unpricedTurns: totals.unpricedTurns,
     waste: totals.waste,
-    qaOnlyCatches: {
-      count: totals.qaOnlyCatches.count,
+    qaCatches: {
+      total: totals.qaCatches.total,
+      count: totals.qaCatches.count,
       byTask: Object.fromEntries(
-        Object.entries(totals.qaOnlyCatches.byTask).sort(([a], [b]) =>
+        Object.entries(totals.qaCatches.byTask).sort(([a], [b]) =>
           a.localeCompare(b),
         ),
       ),
-      sample: totals.qaOnlyCatches.sample.slice(0, MAX_QA_CATCH_SAMPLES),
+      sample: totals.qaCatches.sample.slice(0, MAX_QA_CATCH_SAMPLES),
     },
     incidents: totals.incidents,
     loopIncidents: totals.loopIncidents,

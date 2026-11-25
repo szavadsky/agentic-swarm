@@ -3,24 +3,33 @@ import { recordDirName } from "./store.js";
 import { quotes as sameFinding } from "./text-match.js";
 import { type Outcome, outcomeSchema, type StepRecord } from "./types.js";
 
-/** Maximum number of QA-only catch findings sampled in metrics and totals. */
+/** Maximum number of QA findings sampled in metrics and totals. */
 export const MAX_QA_CATCH_SAMPLES = 20;
 
-/** One QA finding that no earlier gate failure or reviewer finding matched. */
-export interface QaOnlyCatch {
+/** Who else carried a QA finding, so a QA-only count never credits QA alone with it. */
+export type QaCatchSource = "gate" | "reviewer" | "reviewer-after" | "none";
+
+/** One QA finding with the record that raised it and who else carried it. */
+export interface QaCatch {
   task: string;
   finding: string;
   /** Goal-relative record directory, for evidence. */
   record: string;
   round: number;
+  /** `none` makes it a QA-only catch: no gate or reviewer, before or after, carried it. */
+  alsoCaughtBy: QaCatchSource;
 }
 
-/** The iteration's QA-only catches, counted per task. */
-export interface QaOnlyCatches {
+/** The iteration's QA findings: the QA-only count per task, and a sample of all. */
+export interface QaCatches {
+  /** Every distinct QA finding, whatever else carried it. */
+  total: number;
+  /** The QA-only catches; a finding a later reviewer repeats is not one. */
   count: number;
-  /** Every task with a QA record, including zeros. Sorted by task. */
+  /** QA-only catches per task. Every task with a QA record, zeros included. */
   byTask: Record<string, number>;
-  sample: QaOnlyCatch[];
+  /** The first `limit` distinct QA findings in record order, each with its source. */
+  sample: QaCatch[];
 }
 
 /**
@@ -132,30 +141,62 @@ function isQaRecord(rec: StepRecord): boolean {
   );
 }
 
-function matchedEarlier(
+function quotedBefore(
   evidence: readonly FindingEvidence[],
+  task: string,
+  finding: string,
+  seq: number,
+): boolean {
+  const text = normalizeFinding(finding);
+  return evidence.some(
+    (entry) =>
+      entry.task === task && entry.seq < seq && sameFinding(entry.text, text),
+  );
+}
+
+function quotedAfter(
+  evidence: readonly FindingEvidence[],
+  task: string,
+  finding: string,
+  seq: number,
+): boolean {
+  const text = normalizeFinding(finding);
+  return evidence.some(
+    (entry) =>
+      entry.task === task && entry.seq > seq && sameFinding(entry.text, text),
+  );
+}
+
+/**
+ * Who else carried a QA finding: a gate failure or reviewer finding from an
+ * earlier turn, or a reviewer repeat after the QA turn. The reviewer runs after
+ * QA, so only its later repeat can settle whether QA was alone.
+ */
+function alsoCaughtBy(
+  gates: readonly FindingEvidence[],
+  reviewers: readonly FindingEvidence[],
   task: string,
   seq: number,
   finding: string,
-): boolean {
-  return evidence.some(
-    (entry) =>
-      entry.task === task &&
-      entry.seq < seq &&
-      sameFinding(entry.text, normalizeFinding(finding)),
-  );
+): QaCatchSource {
+  if (quotedBefore(gates, task, finding, seq)) return "gate";
+  if (quotedBefore(reviewers, task, finding, seq)) return "reviewer";
+  if (quotedAfter(reviewers, task, finding, seq)) return "reviewer-after";
+  return "none";
 }
 
 interface QaCatchAccumulator {
   seen: Set<string>;
   byTask: Record<string, number>;
-  sample: QaOnlyCatch[];
+  sample: QaCatch[];
   count: number;
+  total: number;
 }
 
-function addQaFinding(
+function addQaCatch(
   acc: QaCatchAccumulator,
-  evidence: readonly FindingEvidence[],
+  gates: readonly FindingEvidence[],
+  reviewers: readonly FindingEvidence[],
   rec: StepRecord,
   finding: string,
   limit: number,
@@ -164,47 +205,59 @@ function addQaFinding(
   const key = `${task}\u0000${normalizeFinding(finding)}`;
   if (acc.seen.has(key)) return;
   acc.seen.add(key);
-  if (matchedEarlier(evidence, task, rec.seq, finding)) return;
-  acc.byTask[task] = (acc.byTask[task] ?? 0) + 1;
-  acc.count += 1;
+  acc.total += 1;
+  const source = alsoCaughtBy(gates, reviewers, task, rec.seq, finding);
+  if (source === "none") {
+    acc.byTask[task] = (acc.byTask[task] ?? 0) + 1;
+    acc.count += 1;
+  }
   if (acc.sample.length < limit) {
     acc.sample.push({
       task,
       finding,
       record: `records/${recordDirName(rec.seq, rec)}`,
       round: rec.round,
+      alsoCaughtBy: source,
     });
   }
 }
 
 /**
- * Tags each QA finding QA-only unless a gate failure or reviewer finding
- * already matches it in the same task. A QA finding the reviewer repeats later
- * stays one catch: the first QA occurrence is counted and later duplicates are
- * dropped. Every task with a QA record is present in `byTask`, zero included.
+ * Classifies each distinct QA finding by who else carried it: a gate failure or
+ * reviewer finding before the QA turn, or a reviewer repeat after it. Only a
+ * finding nobody else carried is QA-only. A finding raised in several QA rounds
+ * stays one catch: its first QA occurrence is the one classified, and later
+ * duplicates are dropped. Every task with a QA record is in `byTask`, zero included.
  */
-export function qaOnlyCatches(
+export function qaCatches(
   records: readonly StepRecord[],
   limit = MAX_QA_CATCH_SAMPLES,
-): QaOnlyCatches {
+): QaCatches {
   const qaRecords = records.filter(isQaRecord).sort((a, b) => a.seq - b.seq);
   const acc: QaCatchAccumulator = {
     seen: new Set<string>(),
     byTask: {},
     sample: [],
     count: 0,
+    total: 0,
   };
   for (const task of [...new Set(qaRecords.map((rec) => rec.slug!))].sort())
     acc.byTask[task] = 0;
 
-  const evidence = [...gateFailures(records), ...reviewerFindings(records)];
+  const gates = gateFailures(records);
+  const reviewers = reviewerFindings(records);
   for (const rec of qaRecords) {
     const report = qaReportOf(rec.outcome);
     if (!report) continue;
     for (const finding of report.findings) {
-      addQaFinding(acc, evidence, rec, finding, limit);
+      addQaCatch(acc, gates, reviewers, rec, finding, limit);
     }
   }
 
-  return { count: acc.count, byTask: acc.byTask, sample: acc.sample };
+  return {
+    total: acc.total,
+    count: acc.count,
+    byTask: acc.byTask,
+    sample: acc.sample,
+  };
 }

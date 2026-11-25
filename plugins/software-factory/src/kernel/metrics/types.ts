@@ -2,7 +2,7 @@
 
 import type { Usage } from "../../harness/types.js";
 import type { PriceTable } from "../pricing.js";
-import type { QaOnlyCatches } from "../qa.js";
+import type { QaCatches } from "../qa.js";
 import type { SummaryStatus } from "../summary.js";
 import type { State, StepRecord } from "../types.js";
 import type { WasteAccounting, WasteCounts } from "../waste.js";
@@ -211,8 +211,8 @@ export interface IterationMetrics {
   architect: ArchitectMetrics;
   /** Architect marks on plan-review findings in this iteration. */
   planReviewMarks: PlanReviewMarkCounts;
-  /** QA findings no earlier gate or reviewer finding matched, counted per task. */
-  qaOnlyCatches: QaOnlyCatches;
+  /** QA findings no gate or reviewer carried, and a sample of all with their source. */
+  qaCatches: QaCatches;
   unpricedTurns: number;
   /** Wasted turns, each naming its record; rebutted reviews counted apart. */
   waste: WasteAccounting;

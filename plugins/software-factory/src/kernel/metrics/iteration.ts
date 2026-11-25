@@ -4,7 +4,7 @@ import type { Usage } from "../../harness/types.js";
 import { addUsage, tokenTotal, zeroUsage } from "../../harness/usage.js";
 import { pricedRecord } from "../pricing.js";
 import type { PriceTable } from "../pricing.js";
-import { qaOnlyCatches, type QaOnlyCatches } from "../qa.js";
+import { qaCatches, type QaCatches } from "../qa.js";
 import type { SummaryStatus } from "../summary.js";
 import type { StepRecord, TaskFile } from "../types.js";
 import { wasteAccounting } from "../waste.js";
@@ -235,7 +235,7 @@ interface IterationMetricsParts {
   incidents: IncidentCounts;
   waste: WasteAccounting;
   planReviewMarks: PlanReviewMarkCounts;
-  qaOnlyCatches: QaOnlyCatches;
+  qaCatches: QaCatches;
   parks: ParkMetrics;
   zeroEdit: ZeroEditCounts;
   zeroEditParks: ZeroEditParkMetrics;
@@ -289,7 +289,7 @@ function iterationMetricsResult(
     models: acc.models,
     architect: acc.architect,
     planReviewMarks: parts.planReviewMarks,
-    qaOnlyCatches: parts.qaOnlyCatches,
+    qaCatches: parts.qaCatches,
     unpricedTurns,
     waste: parts.waste,
     incidents,
@@ -365,7 +365,7 @@ export function iterationMetrics(
     incidents,
     waste,
     planReviewMarks,
-    qaOnlyCatches: qaOnlyCatches(all),
+    qaCatches: qaCatches(all),
     ...iterationFriction(all, recs, tasks),
   });
 }
