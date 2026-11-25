@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
 import { z } from "zod";
+import { issueText } from "./findings.js";
 import type { GateConfig, KernelRuntime } from "./types.js";
 
 /** Goal-relative path of the infra turn's output. */
@@ -67,9 +68,7 @@ export function readInfra(goalDir: string): InfraReport | undefined {
   const parsed = infraSchema.safeParse(raw ?? {});
   if (!parsed.success) {
     const issue = parsed.error.issues[0]!;
-    throw new InfraError(
-      `${file}: ${issue.path.join(".") || "(root)"}: ${issue.message}`,
-    );
+    throw new InfraError(`${file}: ${issueText(issue)}`);
   }
   return parsed.data;
 }

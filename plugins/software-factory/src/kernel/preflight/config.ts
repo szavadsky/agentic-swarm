@@ -24,6 +24,7 @@ import type {
 import {
   escalationFindings,
   fallbackAliasFindings,
+  isExecutable,
   requiredAliases,
   scoutsConsumerFindings,
   subscriptionPoolFindings,
@@ -68,17 +69,6 @@ function inside(child: string, parent: string): boolean {
  */
 const ACPX_ON_DEMAND_BINARY = "bunx";
 
-function executable(value: string | undefined): boolean {
-  if (!value) return false;
-  if (!value.includes(path.sep)) return Bun.which(value) !== null;
-  try {
-    fs.accessSync(value, fs.constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * One harness executable that pre-flight must find; the key is the run-config
  * path the operator sets to point at it.
@@ -91,7 +81,7 @@ function binaryFinding(
   key: string,
   unavailable: Set<string>,
 ): void {
-  if (executable(binary)) return;
+  if (isExecutable(binary)) return;
   unavailable.add(harness);
   // resolveAcpxCommand reports `bunx` when acpx is absent; naming only the
   // shim would hide the dispatcher and the route the operator must provide.
@@ -258,7 +248,7 @@ export function harnessBinaries(
   if (
     configs.run.lsp &&
     Object.hasOwn(binaries, OMP_ID) &&
-    !executable(yamlLspBinary())
+    !isExecutable(yamlLspBinary())
   ) {
     findings.push({
       file: files.run,

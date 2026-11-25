@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { runValidate } from "../helpers/validate.js";
 
 const PACKAGE_ROOT = path.join(import.meta.dir, "..", "..");
 const SCRIPT = path.join(PACKAGE_ROOT, "src", "schema-check.ts");
@@ -125,6 +126,37 @@ describe("schema validation", () => {
   schemaValidationPart3();
   schemaValidationInfra();
   schemaValidationPart4();
+});
+
+describe("schema validation: one check list", () => {
+  it("reports a task exactly as factory validate does", async () => {
+    freshCase(() => {
+      write(
+        ".factory/artifacts/demo/tasks/demo.task.md",
+        VALID_TASK.replace("deps: []", "deps:\n  - demo.other"),
+      );
+      write(
+        ".factory/artifacts/demo/tasks/demo.other.md",
+        VALID_TASK.replace("demo.task", "demo.other").replace(
+          "deps: []",
+          "deps:\n  - demo.task",
+        ),
+      );
+    });
+    const gate = validRun();
+    expect(gate.code).toBe(1);
+    const gateFinding = gate.output
+      .split("\n")
+      .find((line) => line.includes("dependency cycle"));
+    expect(gateFinding).toBeDefined();
+    if (gateFinding === undefined) throw new Error("no cycle finding");
+
+    const validated = await runValidate(
+      path.join(root, ".factory/artifacts/demo/tasks/demo.task.md"),
+    );
+    expect(validated.code).toBe(1);
+    expect(validated.err.split("\n")).toContain(gateFinding);
+  });
 });
 
 /**

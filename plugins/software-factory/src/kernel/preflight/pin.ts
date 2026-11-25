@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import yaml from "yaml";
 import { z } from "zod";
+import { issueText } from "../findings.js";
 
 /** The record promote writes at the pin build's root. */
 export const PIN_GATE_FILE = "gate.yaml";
@@ -78,9 +79,7 @@ export function pinBuildOf(
 type GateRead = { ok: true; gate: PinGate } | { ok: false; problem: string };
 
 function describeIssues(error: z.ZodError): string {
-  return error.issues
-    .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
-    .join("; ");
+  return error.issues.map((issue) => issueText(issue)).join("; ");
 }
 
 /** One pin's recorded gate, or why the file cannot be trusted. */

@@ -6,6 +6,14 @@ export interface Finding {
   message: string;
 }
 
+/** One zod issue as `path: message`; `fallback` names an unrooted issue. */
+export function issueText(
+  issue: { path: readonly PropertyKey[]; message: string },
+  fallback = "(root)",
+): string {
+  return `${issue.path.join(".") || fallback}: ${issue.message}`;
+}
+
 /** Renders every violation as one report, so an operator repairs them in one pass. */
 export function formatFindings(
   title: string,

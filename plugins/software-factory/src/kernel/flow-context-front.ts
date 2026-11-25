@@ -5,6 +5,7 @@
 import fs from "node:fs";
 import yaml from "yaml";
 import { z } from "zod";
+import { issueText } from "./findings.js";
 import { bySeq } from "./flow-context-history.js";
 import { boundaryTarget, type TurnTarget } from "./flow-context-targets.js";
 import type { KernelRuntime, StepRecord, TaskFile } from "./types.js";
@@ -42,9 +43,7 @@ export function readFrontClass(runtime: KernelRuntime): FrontClass | null {
   }
   const parsed = classSchema.safeParse(raw);
   if (!parsed.success) {
-    const findings = parsed.error.issues.map(
-      (issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`,
-    );
+    const findings = parsed.error.issues.map((issue) => issueText(issue));
     throw new FrontClassError(`class.yaml is invalid: ${findings.join("; ")}`);
   }
   if (parsed.data.class !== "bigger" && !parsed.data.slug) {

@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
 import { z } from "zod";
+import { issueText } from "./findings.js";
 import { writeYamlAtomic } from "../core/records/io.js";
 import type { GoalPaths } from "./types.js";
 
@@ -77,9 +78,7 @@ export async function loadCanaryProven(
   }
   const parsed = provenFileSchema.safeParse(raw);
   if (!parsed.success) {
-    const findings = parsed.error.issues.map(
-      (issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`,
-    );
+    const findings = parsed.error.issues.map((issue) => issueText(issue));
     throw new CanaryError(`${file} is invalid: ${findings.join("; ")}`);
   }
   const proven = new Set<string>();

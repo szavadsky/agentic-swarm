@@ -1,6 +1,7 @@
 /** Escalation, fallback, pool, portability, registration, scout and tmp-headroom checks. */
 
 import fs from "node:fs";
+import path from "node:path";
 import { OMP_ID } from "../../harness/omp/types.js";
 import { formatFindings } from "../findings.js";
 import type { Finding } from "../findings.js";
@@ -263,6 +264,18 @@ function registeredMessage(
   return `harness "${harness}" is not registered (registered: ${[...registered].join(", ") || "none"})`;
 }
 
+/** Whether a binary is executable, by absolute path or through PATH. */
+export function isExecutable(value: string | undefined): boolean {
+  if (!value) return false;
+  if (!value.includes(path.sep)) return Bun.which(value) !== null;
+  try {
+    fs.accessSync(value, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * A configured sandbox must be present on the machine before any child can
  * start: a missing wrapper would otherwise surface mid-turn, after pre-flight.
@@ -272,18 +285,7 @@ export function sandboxFindings(
   file: string,
 ): Finding[] {
   const sandbox = configs.run.sandbox;
-  if (!sandbox) return [];
-  const present = sandbox.binary.includes("/")
-    ? (() => {
-        try {
-          fs.accessSync(sandbox.binary, fs.constants.X_OK);
-          return true;
-        } catch {
-          return false;
-        }
-      })()
-    : Bun.which(sandbox.binary) !== null;
-  if (present) return [];
+  if (!sandbox || isExecutable(sandbox.binary)) return [];
   return [
     {
       file,

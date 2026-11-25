@@ -3,20 +3,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "yaml";
-import type { ZodType } from "zod";
 import { OMP_ID } from "../../harness/omp/types.js";
 import {
-  ConfigError,
   configFilePaths,
   loadConfigs,
-  loadRunConfig,
-  processOverrideSchema,
-  repoConfigSchema,
   resolveRoots,
 } from "../../kernel/config.js";
-import { classSchema } from "../../kernel/flow-context.js";
-import { infraSchema } from "../../kernel/infra.js";
-import { holdFileSchema } from "../../kernel/mailbox.js";
 import {
   expectationForStep,
   flowStepFor,
@@ -36,11 +28,6 @@ import {
   launchesBefore,
 } from "../../kernel/review.js";
 import { createFolderStore } from "../../kernel/store.js";
-import {
-  parseTaskFile,
-  validateTaskFlows,
-  validateTaskGraph,
-} from "../../kernel/tasks.js";
 import type {
   ConfigBundle,
   ConfigFiles,
@@ -49,68 +36,18 @@ import type {
 } from "../../kernel/types.js";
 import { outcomeSchema } from "../../kernel/types.js";
 import { resolveHarnessBinaries } from "../harnesses.js";
-import type { ValidateFileOptions, ValidateResult } from "./types.js";
+import type {
+  ValidateFileOptions,
+  ValidateKind,
+  ValidateResult,
+} from "./types.js";
 import {
-  inferValidateKind,
   KNOWN_VALIDATE_KINDS,
-  type ValidateKind,
-} from "./validate-kind.js";
+  fileFindings,
+  inferValidateKind,
+} from "./validate-files.js";
 import { planCheckFindings } from "./validate-plan-check.js";
 import { flowPromptFindings } from "./validate-prompt-findings.js";
-
-/**
- * A run config through its `extends` chain: its findings already name the
- * file that owns each key, base included.
- */
-function runFindings(file: string): string[] {
-  try {
-    loadRunConfig(file);
-    return [];
-  } catch (err) {
-    if (err instanceof ConfigError) {
-      return err.findings.map(
-        (finding) => `${finding.file}: ${finding.key}: ${finding.message}`,
-      );
-    }
-    return [`${file}: ${(err as Error).message}`];
-  }
-}
-
-/** Same report shape as the schema-validation gate: `file: key: message`. */
-function zodFindings(
-  text: string,
-  file: string,
-  schema: ZodType<unknown>,
-): string[] {
-  let raw: unknown;
-  try {
-    raw = yaml.parse(text);
-  } catch (err) {
-    return [`${file}: invalid YAML: ${(err as Error).message}`];
-  }
-  const result = schema.safeParse(raw ?? {});
-  if (!result.success) {
-    return result.error.issues.map(
-      (issue) =>
-        `${file}: ${issue.path.join(".") || "(root)"}: ${issue.message}`,
-    );
-  }
-  return [];
-}
-
-/** One hold file with the kernel's exported hold schema and its messages. */
-function holdFindings(text: string, file: string): string[] {
-  let raw: unknown;
-  try {
-    raw = yaml.parse(text);
-  } catch (err) {
-    return [`${file}: not valid YAML: ${(err as Error).message}`];
-  }
-  const result = holdFileSchema.safeParse(raw);
-  return result.success
-    ? []
-    : [`${file}: must be { slugs: string[], goal: boolean }`];
-}
 
 /** Nearest repo root above `fromDir`; null for a file outside any repo. */
 function findRepoRoot(fromDir: string): string | null {
@@ -239,12 +176,17 @@ async function outcomeResult(
   opts: ValidateFileOptions,
 ): Promise<ValidateResult> {
   try {
+    const findings = await fileFindings({
+      file: abs,
+      text,
+      kind: "outcome",
+      process: () => processForValidation(path.dirname(abs), opts.repo),
+      flows: false,
+    });
+    if (findings.length > 0) return { findings };
     const started = startedMeta(abs);
     const step = opts.step ?? started?.step;
-    if (!step) {
-      parseOutcome(text);
-      return { findings: [], stepIndependent: true };
-    }
+    if (!step) return { findings, stepIndependent: true };
     const process = processForValidation(path.dirname(abs), opts.repo);
     const stepConfig = flowStepFor(step, process.flows);
     const outcome = parseOutcome(
@@ -260,58 +202,20 @@ async function outcomeResult(
       Boolean(outcome.debtClosed?.length),
       process,
     );
-    const findings = validateExpectation(outcome, expectation, {
+    const delivery = validateExpectation(outcome, expectation, {
       lastCall,
       ...(records ? { records, excludeRecordId: recordId } : {}),
     });
     if (step === PLAN_REVIEW_STEP) {
-      findings.push(...validatePlanReviewDelivery(outcome));
+      delivery.push(...validatePlanReviewDelivery(outcome));
     }
     if (step === PLAN_CHECK_STEP) {
-      findings.push(...(await planCheckFindings(abs, outcome, process)));
+      delivery.push(...(await planCheckFindings(abs, outcome, process)));
     }
-    return { findings: findings.map((finding) => `${abs}: ${finding}`) };
+    return { findings: delivery.map((finding) => `${abs}: ${finding}`) };
   } catch (err) {
     return { findings: [`${abs}: ${(err as Error).message}`] };
   }
-}
-
-/**
- * One task file plus its directory's graph, as the gate groups them: sibling
- * tasks load together so a missing dependency reads as a finding, not a crash.
- */
-async function taskFindings(
-  absPath: string,
-  opts: ValidateFileOptions = {},
-): Promise<string[]> {
-  const dir = path.dirname(absPath);
-  const names = (await fs.promises.readdir(dir))
-    .filter((name) => name.endsWith(".md"))
-    .sort();
-  const tasks: Parameters<typeof validateTaskGraph>[0] = [];
-  const findings: string[] = [];
-  const processConfig = processForValidation(dir, opts.repo);
-  for (const name of names) {
-    const file = path.join(dir, name);
-    try {
-      tasks.push(
-        parseTaskFile(
-          await fs.promises.readFile(file, "utf8"),
-          path.basename(name, ".md"),
-          processConfig.taskTypes,
-        ),
-      );
-    } catch (err) {
-      findings.push(`${file}: ${(err as Error).message}`);
-    }
-  }
-  for (const finding of validateTaskGraph(tasks)) {
-    findings.push(`${dir}: ${finding}`);
-  }
-  for (const finding of validateTaskFlows(tasks, processConfig.flows)) {
-    findings.push(`${dir}: ${finding}`);
-  }
-  return findings;
 }
 
 /**
@@ -442,32 +346,14 @@ export async function validateFile(
     );
   }
   const text = await fs.promises.readFile(abs, "utf8");
-  let findings: string[] = [];
-  switch (kind) {
-    case "task":
-      findings = await taskFindings(abs, opts);
-      break;
-    case "class":
-      findings = zodFindings(text, abs, classSchema);
-      break;
-    case "outcome":
-      return await outcomeResult(abs, text, opts);
-    case "hold":
-      findings = holdFindings(text, abs);
-      break;
-    case "repo":
-      findings = zodFindings(text, abs, repoConfigSchema);
-      break;
-    case "run":
-      findings = runFindings(abs);
-      break;
-    case "process":
-      findings = zodFindings(text, abs, processOverrideSchema);
-      break;
-    case "infra":
-      findings = zodFindings(text, abs, infraSchema);
-      break;
-  }
+  if (kind === "outcome") return await outcomeResult(abs, text, opts);
+  const findings = await fileFindings({
+    file: abs,
+    text,
+    kind,
+    process: () => processForValidation(path.dirname(abs), opts.repo),
+    flows: true,
+  });
   findings.push(
     ...(await crossLayerFindings(abs, kind, { ...opts, runConfig })),
   );

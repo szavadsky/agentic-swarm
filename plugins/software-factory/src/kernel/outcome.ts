@@ -2,6 +2,7 @@ import fs from "node:fs";
 import yaml from "yaml";
 import type { z } from "zod";
 import { knownDebtIds } from "./derive.js";
+import { issueText } from "./findings.js";
 import { DECIDE_STEP } from "./pending-signal.js";
 import { qaReportOf } from "./qa.js";
 import {
@@ -27,9 +28,7 @@ function zodFindings(error: unknown): string[] {
     error as { issues?: { path: (string | number)[]; message: string }[] }
   ).issues;
   if (!issues) return [(error as Error).message];
-  return issues.map(
-    (issue) => `${issue.path.join(".") || "outcome"}: ${issue.message}`,
-  );
+  return issues.map((issue) => issueText(issue, "outcome"));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

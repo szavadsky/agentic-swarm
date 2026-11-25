@@ -4,6 +4,7 @@ import yaml from "yaml";
 import { z } from "zod";
 import { KeyedMutex } from "../core/mutex.js";
 import { writeYamlAtomic } from "../core/records/io.js";
+import { issueText } from "./findings.js";
 import { statedWaitMs } from "../harness/stated-wait.js";
 import type { GoalPaths, RunConfig } from "./types.js";
 
@@ -85,9 +86,7 @@ export async function loadPoolResets(
   }
   const parsed = poolsFileSchema.safeParse(raw);
   if (!parsed.success) {
-    const findings = parsed.error.issues.map(
-      (issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`,
-    );
+    const findings = parsed.error.issues.map((issue) => issueText(issue));
     throw new QuotaPoolsError(`${file} is invalid: ${findings.join("; ")}`);
   }
   const pools: PoolResets = new Map();
