@@ -180,7 +180,9 @@ command, `speed: fast | slow`, the `status` the turn observed (`green`,
 repo config only; a configured gate is never replaced by a discovered one. The
 observed status is advisory — the kernel still runs the command and judges the
 tree — and reaches the context pack on the first iteration, before the
-architect's turn.
+architect's turn. A launch that resolves no gate stops before dispatch with
+that cause; a repository that intentionally runs none sets `requireGates: false`
+on the repo layer.
 
 **Process** — package `config/process.yaml`, optionally overridden by
 `.factory/process.yaml`:

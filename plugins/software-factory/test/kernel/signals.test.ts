@@ -22,7 +22,7 @@ function setupRepo(): { repo: TmpRepo; goalDir: string; taskDir: string } {
   const repo = createTmpRepo();
   repo.writeFile(
     ".factory/repo.yaml",
-    "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n",
+    "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\nrequireGates: false\n",
   );
   const base = path.basename(repo.dir);
   repo.writeFile(

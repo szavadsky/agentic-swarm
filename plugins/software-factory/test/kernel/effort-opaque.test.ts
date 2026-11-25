@@ -92,7 +92,7 @@ async function fixture(
     .replaceAll("SESSIONS_DIR", `../${base}-sessions`);
   repo.writeFile(
     ".factory/repo.yaml",
-    "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\n",
+    "baseBranch: main\nartifactRoot: .factory/artifacts\nsetup: []\ngates: []\nrequireGates: false\n",
   );
   repo.writeFile(".factory/run.yaml", run);
   repo.commit("factory config");

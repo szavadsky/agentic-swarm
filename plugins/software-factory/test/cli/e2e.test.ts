@@ -221,6 +221,11 @@ async function initializesSteersRunsReportsClosesPart2(
   );
 
   repo.writeFile(".factory/run.yaml", runYaml(repo));
+  // The operator declares the repo's gates; init only writes the empty shape.
+  const repoConfigPath = path.join(repo.dir, ".factory/repo.yaml");
+  const repoConfig = yaml.parse(fs.readFileSync(repoConfigPath, "utf8"));
+  repoConfig.gates = [{ id: "alpha", command: "true", serial: [] }];
+  fs.writeFileSync(repoConfigPath, yaml.stringify(repoConfig));
   expect(
     await dispatch([
       "steer",

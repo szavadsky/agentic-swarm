@@ -453,6 +453,30 @@ function registersShippedDefaults(): void {
   });
 }
 
+function registersMissingGates(): void {
+  it("stops a launch that ends ingestion with no gate", async () => {
+    const { repo, goalDir, goal } = setupFlowRepo({
+      gates: [],
+      classYaml: null,
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script(trivialFront(goalDir, "demo-task"), {
+        when: whenTurn({ step: "front" }),
+      });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const result = await runFront(runtime, {
+        iteration: 1,
+        state: await emptyState(runtime),
+      });
+      expect(result.action).toBe("infra");
+      expect(result.cause).toContain("no gate");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  });
+}
+
 describe("configured ingestion", () => {
   registersConfiguredStep();
   registersBranchStep();
@@ -462,4 +486,5 @@ describe("configured ingestion", () => {
   registersRemovedScout();
   registersShippedDefaults();
   registersBlockedScout();
+  registersMissingGates();
 });

@@ -94,6 +94,8 @@ export interface RepoConfig {
   identity?: { name: string; email: string };
   setup: string[];
   gates: GateConfig[];
+  /** Absent reads as required; false is the explicit no-gate opt-out. */
+  requireGates?: boolean;
   /** Repo-relative rule file replacing the factory default coding rules; absent uses the factory default. */
   codingRules?: string;
   cleanliness?: {

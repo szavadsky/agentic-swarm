@@ -1,6 +1,7 @@
 import { expect } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import yaml from "yaml";
 import { dispatch } from "../../src/cli/dispatch.js";
 import {
   FakeHarness,
@@ -56,6 +57,8 @@ const DEFAULT_REPO_YAML = [
   "artifactRoot: .factory/artifacts",
   "setup: []",
   "gates: []",
+  // These launches test other kernel phases and run no gate on purpose.
+  "requireGates: false",
   "",
 ].join("\n");
 
@@ -178,6 +181,13 @@ export async function expectLaunch(
   await expectDispatch(expected, launchArgs(repo, iterations), {
     harnesses: { fake: harness },
   });
+}
+
+/** The repo layer's explicit no-gate opt-out, for fixtures that run none. */
+export function optOutOfGates(repo: TmpRepo): void {
+  const file = path.join(repo.dir, ".factory/repo.yaml");
+  const config = yaml.parse(fs.readFileSync(file, "utf8"));
+  fs.writeFileSync(file, yaml.stringify({ ...config, requireGates: false }));
 }
 
 export function cleanup(goal: E2EGoal): void {

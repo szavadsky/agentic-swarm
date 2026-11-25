@@ -97,6 +97,18 @@ export function resolveGates(
   return report ? discoveredGates(report) : [];
 }
 
+/**
+ * Why this launch must stop for having no gate, or undefined when it may run.
+ * A gate configured in the repo or discovered by the infra step counts; the
+ * repo layer's `requireGates: false` is the only way to run none.
+ */
+export function missingGateCause(runtime: KernelRuntime): string | undefined {
+  if (runtime.configs.repo.requireGates === false) return undefined;
+  const gates = resolveGates(runtime.store.goalDir, runtime.configs.repo.gates);
+  if (gates.length > 0) return undefined;
+  return "no gate: .factory/repo.yaml configures none and the infra step discovered none; declare a gate or set requireGates: false";
+}
+
 /** The configured and discovered gates with the observed status merged in. */
 export function packGates(
   goalDir: string,

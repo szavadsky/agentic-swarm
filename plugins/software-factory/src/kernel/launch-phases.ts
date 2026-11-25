@@ -10,6 +10,7 @@ import { postLaunchDigest } from "./digest.js";
 import { runDispatch } from "./dispatch.js";
 import { readFrontClass } from "./flow-context.js";
 import { type FrontResult, runFront } from "./front.js";
+import { InfraError, missingGateCause } from "./infra.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import {
   infraCause,
@@ -229,6 +230,25 @@ async function runDispatchStage(it: IterationRun): Promise<void> {
     it.run.signals.shouldStop()
   )
     return;
+  // A plan or pending steer sends the front straight to the boundary, and a
+  // decision-phase resume skips it too; none of those paths runs ingestion.
+  // Check the gate here, where every path commits to starting work.
+  let missingGate: string | undefined;
+  try {
+    missingGate = missingGateCause(it.run.runtime);
+  } catch (err) {
+    if (!(err instanceof InfraError)) throw err;
+    missingGate = err.message;
+  }
+  if (missingGate !== undefined) {
+    it.ended = "infra";
+    it.dispatchCause = makeCause(
+      "boundary",
+      `launch ended before dispatch as infra: ${missingGate}; relaunch to retry`,
+    );
+    it.stopCause = it.dispatchCause;
+    return;
+  }
   it.dispatched = await runDispatch(it.run.runtime, {
     iteration: it.iteration,
     seenSteers: it.seenSteers,

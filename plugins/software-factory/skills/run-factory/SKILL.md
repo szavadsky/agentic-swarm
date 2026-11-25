@@ -42,6 +42,10 @@ Run from `plugins/software-factory` and set `REPO` to the target checkout. The
 block below is the operator walkthrough; an automated walkthrough test runs the
 same lines on the fake harness.
 
+- Before the first `run`, declare the repository's gates in `.factory/repo.yaml`
+  or set `requireGates: false` when it intentionally runs none. `init` writes an
+  empty gate list, so a launch with no gate stops as infrastructure.
+
 ```bash run-factory-walkthrough
 bun bin/factory.ts init --repo "$REPO" --goal demo --intent "$REPO/INTENT.md"
 bun bin/factory.ts steer --repo "$REPO" --goal demo "$REPO/notes.md"

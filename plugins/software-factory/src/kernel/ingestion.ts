@@ -17,6 +17,7 @@ import {
   INFRA_FILE,
   InfraError,
   infraPath,
+  missingGateCause,
   readInfra,
 } from "./infra.js";
 import { runBoundaryTurn } from "./integration-lock.js";
@@ -360,6 +361,17 @@ async function runStepList(
 }
 
 /**
+ * A launch that ends ingestion with no runnable gate merges unverified code,
+ * so it stops unless the repo config opts out. The same requirement is checked
+ * by the launch before dispatch, where a plan or pending steer skips this
+ * ingestion sequence entirely.
+ */
+function gateAbsence(runtime: KernelRuntime): IngestionResult {
+  const cause = missingGateCause(runtime);
+  return cause === undefined ? {} : { cause };
+}
+
+/**
  * Runs the configured steps in list order, skipping the ones a previous pass
  * already finished and the class-gated ones this goal skips. The classifier
  * names the class the later gates read; the infra step writes the gates and
@@ -412,5 +424,5 @@ export async function runIngestionSteps(
       .filter((step) => !shouldSkipStep(step, goalClass)),
     before.records,
   );
-  return after.failure ?? {};
+  return after.failure ?? gateAbsence(runtime);
 }

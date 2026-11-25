@@ -249,6 +249,20 @@ describe("run-factory skill", () => {
       "utf8",
     );
     repo.writeFile(".factory/run.yaml", runYaml(repo));
+    // The walkthrough supplies the repo layer the operator owns: a real gate
+    // (init never invents one), so the launch runs with verification.
+    repo.writeFile(
+      ".factory/repo.yaml",
+      [
+        "baseBranch: main",
+        "artifactRoot: .factory/artifacts",
+        "setup: []",
+        "gates:",
+        "  - id: alpha",
+        '    command: "true"',
+        "",
+      ].join("\n"),
+    );
     const deps = (): CliDeps => ({
       harnesses: { fake: alphaRun(goalDir, taskDir) },
       priceSource: testPriceSource(repo.dir),

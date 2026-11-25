@@ -76,6 +76,8 @@ export const repoConfigSchema = z
     identity: identitySchema.optional(),
     setup: z.array(z.string().min(1)).default([]),
     gates: z.array(gateSchema).default([]),
+    /** A launch that resolves no gate stops before dispatch unless this is false. */
+    requireGates: z.boolean().default(true),
     codingRules: codingRulesPathSchema.optional(),
     cleanliness: z
       .object({

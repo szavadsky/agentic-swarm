@@ -10,6 +10,7 @@ import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import {
   cleanup,
   expectDispatch,
+  optOutOfGates,
   outcome,
   scriptDigest,
   scriptSteerRoutes,
@@ -189,6 +190,8 @@ async function e2eInit(ctx: E2ECtx): Promise<void> {
   expect(fs.existsSync(path.join(ctx.repo.dir, ".factory/repo.yaml"))).toBe(
     true,
   );
+  // This fixture runs no gate on purpose, so it opts out the way an operator would.
+  optOutOfGates(ctx.repo);
   expect(
     fs.readFileSync(path.join(ctx.goalDir, "intent.md"), "utf8"),
   ).toContain("Build alpha");

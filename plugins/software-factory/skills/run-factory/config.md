@@ -41,6 +41,9 @@ codingRules: .factory/prompts/coding-rules.md  # optional; replaces the factory 
 - With no `gates` configured, the goal's `infra.yaml` (written by the shipped
   `infra` ingestion step) supplies the commands the task runs; a configured gate
   always wins, and the infra turn's observed red/flaky status is advisory.
+- A launch that resolves no gate stops before dispatch with that cause; set
+  `requireGates: false` on the repo layer when the repository intentionally runs
+  none.
 - The tracked layer names no worktree root: checkouts and sessions belong to
   the run layer.
 - `artifacts` selects the store by backend name, not by path:
