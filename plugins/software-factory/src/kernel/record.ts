@@ -16,6 +16,7 @@ import type {
   TaskFile,
   WorkEdits,
 } from "./types.js";
+import type { GateFlake } from "./record-types.js";
 
 export function scriptMeta(
   iteration: number,
@@ -78,12 +79,6 @@ export async function finishChecks(
     wallMs,
     ...(opts.tree !== undefined ? { tree: opts.tree } : {}),
   });
-}
-
-/** One gate that went red, then green on the same tree: its red-run failures. */
-export interface GateFlake {
-  gate: string;
-  tests: string[];
 }
 
 /**

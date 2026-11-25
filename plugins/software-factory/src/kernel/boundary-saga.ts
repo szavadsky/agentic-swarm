@@ -5,12 +5,8 @@
  * goal's last iteration reports upward and takes no direction.
  */
 import fs from "node:fs";
-import {
-  type ConsultFailure,
-  type EpicConsult,
-  runEpicConsult,
-  writeEpicPack,
-} from "./boundary-consult.js";
+import { runEpicConsult, writeEpicPack } from "./boundary-consult.js";
+import type { ConsultFailure, EpicConsult } from "./boundary-types.js";
 import {
   boundaryPassPlan,
   epicJobDone,
@@ -19,11 +15,8 @@ import {
   parseRegister,
 } from "./boundary-context.js";
 import { writePack } from "./boundary-stage.js";
-import {
-  type BoundaryResult,
-  boundaryResult,
-  type ConsultContext,
-} from "./boundary-state.js";
+import { boundaryResult } from "./boundary-state.js";
+import type { BoundaryResult, ConsultContext } from "./boundary-types.js";
 import { answerEpicSteers } from "./boundary-tail.js";
 import { derive } from "./derive.js";
 import { type EpicRow, subarchitectRows } from "./register.js";

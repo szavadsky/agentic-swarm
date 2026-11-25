@@ -4,42 +4,17 @@
  * the pure parser and validator; the boundary is the only caller, so nothing
  * here reads a goal directory except through the supplied `exists`.
  */
-export interface EpicRow {
-  epic: string;
-  architect: "main" | "subarchitect";
-  /** Goal-relative plan path: `plan.md` for main, `epics/<epic>.md` otherwise. */
-  plan: string;
-  /** One advisory glob for the epic, used for the main pack row and conflict awareness. */
-  scope: string;
-  opened: number;
-  /** Closed rows are history: parsed, validated for grammar, never consulted. */
-  closed?: { iteration: number; reason: string };
-}
-
-export interface RegisterContext {
-  depth: 1 | 2;
-  tasks: readonly { slug: string; epic?: string }[];
-  exists(rel: string): boolean;
-}
-
-export interface ArchitectRegister {
-  epics: EpicRow[];
-  findings: string[];
-}
-
-/** Which pass shape one iteration runs: the top's first turn, a middle iteration, or the goal's last. */
-export type SagaIterationKind = "first" | "middle" | "done";
-
-/** One iteration's saga pass order, computed from the register before the top turn. */
-export interface SagaPassPlan {
-  kind: SagaIterationKind;
-  /** Epics the checker pass visits bottom-to-top before the goal check. */
-  checkerEpics: EpicRow[];
-  /** Epics the bottom-up report pass consults bottom-to-top. */
-  reportEpics: EpicRow[];
-  /** Whether a top-down direction pass runs after the top turn. */
-  direction: boolean;
-}
+import type {
+  ArchitectRegister,
+  EpicRow,
+  RegisterContext,
+  SagaPassPlan,
+} from "./register-types.js";
+export type {
+  EpicRow,
+  RegisterContext,
+  SagaPassPlan,
+} from "./register-types.js";
 
 /** Active epics owned by a subarchitect, bottom-to-top (epic order). */
 export function subarchitectRows(epics: readonly EpicRow[]): EpicRow[] {

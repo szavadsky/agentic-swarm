@@ -8,13 +8,17 @@ import { qaReportOf } from "./qa.js";
 import {
   type FlowDefinition,
   type FlowStep,
-  type KernelStep,
   type Outcome,
   outcomeSchema,
-  type StepRecord,
 } from "./types.js";
-
-export type OutcomeExpectation = "any" | "review" | "qa" | "architect";
+import {
+  type ExpectationOptions,
+  KERNEL_TURN_STEPS,
+  type KernelTurnStep,
+  type OutcomeExpectation,
+  type OutcomeSource,
+} from "./outcome-types.js";
+export type { OutcomeExpectation, OutcomeSource } from "./outcome-types.js";
 
 export class OutcomeInvalidError extends Error {
   constructor(public readonly findings: string[]) {
@@ -80,12 +84,6 @@ export function fencedOutcome(text: string): string | null {
   return last?.[1] ?? null;
 }
 
-export interface OutcomeSource {
-  outcome: Outcome;
-  /** Where it came from; `file` is the prompt-named path. */
-  source: "file" | "fenced";
-}
-
 /**
  * Reads the outcome the agent wrote at `outcomePath`, then the final message's
  * fenced block. Throws OutcomeInvalidError only when a block was found but is
@@ -131,25 +129,7 @@ export function expectationField(
   return undefined;
 }
 
-/**
- * Kernel turn steps that run outside any configured flow, mapped to the outcome
- * expectation they enforce.
- */
-export const KERNEL_TURN_STEPS = {
-  architect: "architect",
-  digest: "any",
-  front: "any",
-  intent: "any",
-  packprep: "any",
-  plancheck: "any",
-  planreturn: "any",
-  planreview: "any",
-  pm: "any",
-  steward: "any",
-  subarchitect: "architect",
-} as const satisfies Record<KernelStep, OutcomeExpectation>;
-
-export type KernelTurnStep = keyof typeof KERNEL_TURN_STEPS;
+export { KERNEL_TURN_STEPS } from "./outcome-types.js";
 
 /**
  * Maps a flow step id or kernel turn step to its outcome expectation: the
@@ -187,23 +167,6 @@ export function flowStepFor(
     if (found) return found;
   }
   return undefined;
-}
-
-export interface ExpectationOptions {
-  /** A review's or QA's last call: a change request is not accepted then. */
-  lastCall?: boolean;
-  /**
-   * Records read before this turn, so a `debtClosed` id can be checked against
-   * the ids ingest assigned. Absent when no record tree is reachable (a
-   * standalone outcome file): the id check cannot run then.
-   */
-  records?: readonly StepRecord[];
-  /**
-   * The record this outcome belongs to, when `records` contains it: its
-   * concerns are ingested only when the turn seals it, so its own ids are not
-   * closable from this outcome.
-   */
-  excludeRecordId?: string;
 }
 
 /** A decision turn must decide. */

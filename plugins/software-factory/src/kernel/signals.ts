@@ -1,19 +1,10 @@
 import { terminateAllChildGroups } from "../core/shutdown.js";
-
-export type DrainSignal = "SIGINT" | "SIGTERM";
-export type Terminator = (graceMs?: number) => Promise<void>;
-
-export interface DrainController {
-  /** First signal: stop dispatching, let in-flight turns finish. */
-  readonly draining: boolean;
-  /** Second signal: kill child process groups; harnesses return partial usage. */
-  readonly aborted: boolean;
-  readonly interruptedBy?: DrainSignal;
-  shouldStop(): boolean;
-  /** Signal entrypoint, public so the drain contract is testable without OS signals. */
-  handleSignal(signal: DrainSignal): void;
-  install(): () => void;
-}
+import type {
+  DrainSignal,
+  Terminator,
+  DrainController,
+} from "./signals-types.js";
+export type { DrainController, DrainSignal } from "./signals-types.js";
 
 /**
  * SIGINT/SIGTERM policy: first drains, second aborts and lets the in-flight

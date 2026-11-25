@@ -7,6 +7,7 @@ import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { outcomeExampleVar } from "./outcome-example.js";
 import type { KernelRuntime, Outcome } from "./types.js";
 import { outcomeSchema } from "./types.js";
+import type { PackPreparerReport } from "./pack-prep-types.js";
 
 /** Agent step of the pack-preparer boundary turn; slug-less, outside task turn counts. */
 export const PACK_PREP_STEP = "packprep";
@@ -29,9 +30,6 @@ export const packPreparerOutcomeSchema = outcomeSchema.extend({
 export function packPreparerOutcomeSchemaVar(): string {
   return outcomeExampleVar("pack-preparer", "any", packPreparerOutcomeSchema);
 }
-
-/** What one preparer turn delivered, or why the boundary must render whole. */
-export type PackPreparerReport = { briefs: PackBrief[] } | { failure: string };
 
 /** The preparer's briefs; the agent's outcome was parsed with the extended schema. */
 function briefsOf(outcome: Outcome): PackBrief[] {

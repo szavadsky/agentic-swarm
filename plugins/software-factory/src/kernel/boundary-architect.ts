@@ -11,13 +11,13 @@ import {
   snapshotPlan,
 } from "./architect-session.js";
 import { infraCause, ownedPlanText, taskSnapshot } from "./boundary-context.js";
-import { boundaryResult, type ConsultContext } from "./boundary-state.js";
+import { boundaryResult } from "./boundary-state.js";
 import {
   collectSteered,
   recordSteerFailures,
-  type SteeredHosting,
   steeredHosting,
 } from "./boundary-steer.js";
+import type { ConsultContext, SteeredHosting } from "./boundary-types.js";
 import {
   boundaryTarget,
   compactSession,

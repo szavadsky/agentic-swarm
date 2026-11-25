@@ -10,12 +10,14 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { LiveAgents, SessionRef, SubagentInfo } from "../harness/types.js";
 import { missingPlanFinding, snapshotPlan } from "./architect-session.js";
-import {
-  type ConsultFailure,
-  type EpicConsult,
-  writeEpicPack,
-} from "./boundary-consult.js";
+import { writeEpicPack } from "./boundary-consult.js";
 import { epicJobDone, parseRegister } from "./boundary-context.js";
+import type {
+  ConsultFailure,
+  EpicConsult,
+  SteeredConsult,
+  SteeredHosting,
+} from "./boundary-types.js";
 import { makeCause } from "./cause.js";
 import { compactSession, subarchitectTarget } from "./flow-context.js";
 import type { Steer } from "./mailbox.js";
@@ -36,35 +38,6 @@ const SUBARCHITECT_AGENT = "subarchitect";
 /** The name the architect and the script address one epic's child by. */
 function subarchitectName(epic: string): string {
   return `epic-${epic.replace(/[^a-zA-Z0-9_-]+/g, "-")}`;
-}
-
-/** One epic's consult, handed to a live child of the architect's session. */
-interface SteeredConsult {
-  epic: string;
-  plan: PlanFile;
-  planBefore: string | null;
-  name: string;
-  outcomePath: string;
-  /** The full consult the script steers over IRC. */
-  prompt: string;
-  promptBytes: number;
-  child?: SubagentInfo;
-}
-
-/**
- * The live host's contract: one named child per epic that already has a plan to
- * review, the architect prompt's launch block and the agent definition, and the
- * start/stop pairing around the owning turn.
- */
-export interface SteeredHosting {
-  consults: SteeredConsult[];
-  agents: { name: string; markdown: string }[];
-  /** The architect prompt's block: one launch row per child, empty without children. */
-  block: string;
-  /** Starts the IRC monitor; a child is steered when the registry admits it. */
-  start(agents: LiveAgents): void;
-  /** Ends the monitor after the owning turn closes and reports why a child was not steered. */
-  stop(): Promise<string[]>;
 }
 
 /** Steers each expected child once, retrying until the registry admits it or the turn closes. */

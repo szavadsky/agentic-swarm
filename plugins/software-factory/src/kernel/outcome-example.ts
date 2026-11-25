@@ -9,6 +9,7 @@ import { z } from "zod";
 import { type JsonNode, resolveNode } from "./json-schema.js";
 import { expectationField, type OutcomeExpectation } from "./outcome.js";
 import { type Outcome, outcomeSchema } from "./types.js";
+import type { OutcomeExamples } from "./outcome-example-types.js";
 
 /** The unconditional outcome fields every turn delivers. */
 const BASE_OUTCOME_FIELDS = [
@@ -186,11 +187,6 @@ function sampleOutcome(
     sample.qa = { verdict: "accept", findings: [] };
   }
   return sample;
-}
-
-export interface OutcomeExamples {
-  primary: Outcome;
-  alternative: Outcome;
 }
 
 /**

@@ -6,79 +6,30 @@
 import path from "node:path";
 import { recordedConcernId } from "../core/concerns.js";
 import { openConcerns } from "./context-pack/misc.js";
-import type { LaunchStop } from "./launch-types.js";
 import { steerResponses } from "./mailbox/routes.js";
-import type { DrainSignal } from "./signals.js";
 import { recordDirName } from "./store.js";
 import type {
   ArtifactStore,
   Concern,
-  ConcernId,
   ReportDebt,
   StepRecord,
   SteerRoute,
 } from "./types.js";
-
-/** One concern a record delivered, with its source record. */
-export interface StatusConcern {
-  id?: ConcernId;
-  slug?: string;
-  step: string;
-  round: number;
-  kind: Concern["kind"];
-  calibration: Concern["calibration"];
-  text: string;
-  evidence?: string;
-  /** `records/<dir>` of the record that raised it. */
-  record: string;
-}
-
-/**
- * One open concern the default view lists: no FYI notes, no debt the kernel
- * closed or the plan owns, and no concern a checker or merged follow-up
- * answered. Debt entries keep the id a `debtClosed` names.
- */
-export interface StatusOpenConcern {
-  id?: ConcernId;
-  kind: Concern["kind"];
-  calibration: Concern["calibration"];
-  text: string;
-  evidence?: string;
-  /** `slug step rN` of the record that raised it. */
-  source: string;
-  /** `records/<dir>` of the record that raised it. */
-  record?: string;
-}
-
-/** Where one steer stands between the mailbox and its answer. */
-export type SteerState = "waiting" | "routed" | "answered" | "processed";
-
-/** One steer as the dashboard panel lists it. */
-export interface StatusSteer {
-  id: string;
-  state: SteerState;
-  /** The PM's route, once one is recorded. */
-  route?: SteerRoute;
-  /** The latest answer this steer received. */
-  answer?: string;
-  /** `records/<dir>` of the record that routed or answered it. */
-  record?: string;
-}
-
-/** How the last launch stopped, so the dashboard's badge follows the stop. */
-export interface StatusStop {
-  reason: LaunchStop;
-  /** The formatted cause the launch printed, when it had one. */
-  cause?: string;
-  /** The signal that interrupted the launch, when one did. */
-  interruptedBy?: DrainSignal;
-}
-
-/** The mailbox queues a status snapshot reads, as file names. */
-export interface StatusMailbox {
-  inbox: readonly string[];
-  processed: readonly string[];
-}
+import type {
+  StatusConcern,
+  StatusMailbox,
+  StatusOpenConcern,
+  StatusSteer,
+  SteerState,
+} from "./status-triage-types.js";
+export type {
+  StatusConcern,
+  StatusMailbox,
+  StatusOpenConcern,
+  StatusSteer,
+  StatusStop,
+  SteerState,
+} from "./status-triage-types.js";
 
 function recordPath(record: StepRecord): string {
   return `records/${recordDirName(record.seq, record)}`;

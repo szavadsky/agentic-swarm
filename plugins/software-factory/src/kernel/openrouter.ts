@@ -2,6 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { ModelPrice, PriceTable } from "./pricing.js";
+import type { PriceCache, PriceSource } from "./openrouter-types.js";
+export type { PriceSource } from "./openrouter-types.js";
 
 /** Public OpenRouter model list; `pricing` rates are USD-per-token strings. */
 export const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
@@ -64,11 +66,6 @@ export function parseOpenRouterModels(payload: unknown): PriceTable {
     if (parsed) table[parsed.id] = parsed.price;
   }
   return table;
-}
-
-export interface PriceCache {
-  fetchedAt: string;
-  prices: PriceTable;
 }
 
 function isModelPrice(value: unknown): value is ModelPrice {
@@ -135,21 +132,12 @@ function isFresh(fetchedAt: string): boolean {
   return Number.isFinite(at) && Date.now() - at < PRICE_CACHE_TTL_MS;
 }
 
-/** Returns the parsed model-list payload; tests inject a fake, never network. */
-export type ModelListFetcher = () => Promise<unknown>;
-
 export async function fetchOpenRouterModels(): Promise<unknown> {
   const res = await fetch(OPENROUTER_MODELS_URL);
   if (!res.ok) {
     throw new Error(`OpenRouter models list failed: HTTP ${res.status}`);
   }
   return res.json();
-}
-
-/** Where the price table comes from; both fields default to the shared cache. */
-export interface PriceSource {
-  cachePath?: string;
-  fetchModels?: ModelListFetcher;
 }
 
 /**

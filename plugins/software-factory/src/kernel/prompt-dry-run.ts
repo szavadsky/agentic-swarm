@@ -14,12 +14,7 @@ import { loadPrompts } from "./prompts.js";
 import { sagaReminderVar } from "./saga-reminder.js";
 import { outcomeSchema } from "./types.js";
 import type { ArchitectureFlow, ConfigBundle, PmFlowStep } from "./types.js";
-
-export interface PromptRender {
-  /** Prompt template name the kernel renders. */
-  name: string;
-  text: string;
-}
+import type { PromptRender } from "./prompt-types.js";
 
 /** Adds a step's prompt, repair ask and unfinished-turn ask; script-only steps name none. */
 function addPrompt(

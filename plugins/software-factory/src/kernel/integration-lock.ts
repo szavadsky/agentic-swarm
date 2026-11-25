@@ -1,4 +1,5 @@
 import { KeyedMutex } from "../core/mutex.js";
+import type { BoundaryTurnMeta } from "./boundary-types.js";
 import { scriptMeta } from "./record.js";
 import { makeCause } from "./cause.js";
 import type { KernelRuntime } from "./types.js";
@@ -17,12 +18,6 @@ export async function integrationExclusive<T>(
   work: () => Promise<T>,
 ): Promise<T> {
   return integrationQueues.runExclusive(runtime.paths.goalDir, work);
-}
-
-export interface BoundaryTurnMeta {
-  iteration: number;
-  /** The boundary step a containment incident names, e.g. `architect`. */
-  step: string;
 }
 
 /**

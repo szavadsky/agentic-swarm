@@ -1,50 +1,13 @@
 /**
  * Interface lint: a type or interface declaration belongs in a type module, so
  * an implementation module never carries the public shape it implements. The
- * scope names only paths that are already clean; a migration task adds its own
- * as it lands, so the check needs no allowlist.
+ * whole of `src` is held to the rule, with no scope and no allowlist.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { walkFiles } from "./files.js";
-
-/**
- * Paths under `src` held to the rule, relative to `src`. A folder entry covers
- * everything below it; an entry with a `*` is a file pattern matched against
- * one path (the `*` never crosses a `/`). Widen by what a migration task has
- * made clean, never by an allowlist.
- */
-export const SCOPE = [
-  "cli",
-  "core",
-  "harness",
-  "kernel/agent",
-  "kernel/config",
-  "kernel/context-pack",
-  "kernel/derive",
-  "kernel/integrate",
-  "kernel/mailbox",
-  "kernel/metrics",
-  "kernel/pm",
-  "kernel/preflight",
-  "kernel/preflight-aliases",
-  "kernel/prompt-vars-pages",
-  "kernel/steward",
-  "kernel/store",
-  "kernel/summary",
-  "kernel/types",
-  "kernel/worktree",
-  // The task side of the kernel's direct files. They sit beside files the
-  // remaining kernel migration owns, so they are named by pattern, not folder.
-  "kernel/flow*.ts",
-  "kernel/derive.ts",
-  "kernel/derive-*.ts",
-  "kernel/dispatch*.ts",
-  "kernel/next.ts",
-  "kernel/gates*.ts",
-] as const;
 
 /** One exported type declaration: where it starts and what it declares. */
 interface TypeDeclaration {
@@ -62,24 +25,6 @@ function isTypeModule(rel: string): boolean {
     base.endsWith("-types.ts") ||
     segments.slice(0, -1).includes("types")
   );
-}
-
-/** Whether a `src`-relative path is held to the rule by one scope entry. */
-function inScope(rel: string): boolean {
-  return SCOPE.some((entry) =>
-    entry.includes("*")
-      ? patternMatch(entry, rel)
-      : rel === entry || rel.startsWith(`${entry}/`),
-  );
-}
-
-/** A scope pattern anchored to the whole path; `*` stays inside one segment. */
-function patternMatch(pattern: string, rel: string): boolean {
-  const source = pattern
-    .split("*")
-    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    .join("[^/]*");
-  return new RegExp(`^${source}$`).test(rel);
 }
 
 function isExported(statement: ts.Statement): boolean {
@@ -121,7 +66,7 @@ function declaredTypes(file: string): TypeDeclaration[] {
   });
 }
 
-/** Every exported type declared in an implementation module inside the scope. */
+/** Every exported type declared in an implementation module under `src`. */
 export function interfaceLintProblems(root: string): string[] {
   const problems: string[] = [];
   const files = walkFiles(
@@ -130,8 +75,6 @@ export function interfaceLintProblems(root: string): string[] {
   );
   for (const file of files) {
     const rel = path.relative(root, file).split(path.sep).join("/");
-    const scoped = rel.startsWith("src/") ? rel.slice("src/".length) : rel;
-    if (!inScope(scoped)) continue;
     if (isTypeModule(rel)) continue;
     for (const { line, keyword, name } of declaredTypes(file)) {
       problems.push(

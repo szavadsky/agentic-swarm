@@ -16,9 +16,8 @@ import {
   type Steer,
   writeOutbox,
 } from "./mailbox.js";
+import type { SpikeSteerAction } from "./boundary-types.js";
 import type { KernelRuntime, State, StepRecord, TaskFile } from "./types.js";
-
-export type SpikeSteerAction = "architect" | "handled" | "skip";
 
 export async function runSpikeSteer(
   runtime: KernelRuntime,

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { GATE_OUTPUT_CAP } from "../../src/kernel/gates.js";
-import { interfaceLintProblems, SCOPE } from "../../scripts/interface-lint.js";
+import { interfaceLintProblems } from "../../scripts/interface-lint.js";
 import { MANIFEST } from "../../scripts/plugin-manifest.js";
 
 const PACKAGE = path.join(import.meta.dir, "..", "..");
@@ -101,7 +101,7 @@ describe("lint ratchet", () => {
   });
 });
 
-/** A scoped folder the fixtures use; its membership pins the check's reach. */
+/** An implementation module the fixtures use; the check holds all of `src`. */
 const SCOPED_DIR = "kernel/agent";
 
 let root: string;
@@ -243,8 +243,7 @@ describe("interface lint", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it("fails an exported type declared in a scoped implementation module", () => {
-    expect(SCOPE).toContain(SCOPED_DIR);
+  it("fails an exported type declared in an implementation module", () => {
     writeFixture(
       `src/${SCOPED_DIR}/run.ts`,
       [
@@ -281,29 +280,31 @@ describe("interface lint", () => {
 
     expect(interfaceLintProblems(root)).toEqual([]);
   });
-
-  it("ignores an exported type in a folder outside the scope", () => {
-    writeFixture(
-      "src/kernel/run.ts",
-      ["export interface Handle {", "  id: string;", "}", ""].join("\n"),
-    );
-
-    expect(interfaceLintProblems(root)).toEqual([]);
-  });
 });
 
-describe("interface lint scope", () => {
+describe("interface lint reach", () => {
   beforeEach(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), "interface-lint-scope-"));
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "interface-lint-reach-"));
   });
 
   afterEach(() => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it("covers core, cli and harness without exclusions", () => {
+  it("reaches a kernel direct file that no scope list would name", () => {
+    // The rule covers all of `src`: a file at the kernel root is held too.
+    writeFixture(
+      "src/kernel/run.ts",
+      ["export interface Handle {", "  id: string;", "}", ""].join("\n"),
+    );
+
+    expect(interfaceLintProblems(root)).toEqual([
+      'interface lint: src/kernel/run.ts:1 exports interface "Handle"; a type module carries the declaration',
+    ]);
+  });
+
+  it("covers core, cli and harness", () => {
     for (const dir of ["core", "cli", "harness"] as const) {
-      expect(SCOPE).toContain(dir);
       writeFixture(
         `src/${dir}/run.ts`,
         ["export interface Handle {", "  id: string;", "}", ""].join("\n"),
@@ -356,23 +357,24 @@ function nestedDirs(dir: string): string[] {
     });
 }
 
-describe("interface lint scope widening", () => {
+describe("interface lint across the kernel's direct files", () => {
   beforeEach(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), "interface-lint-scope-"));
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "interface-lint-direct-"));
   });
 
   afterEach(() => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it("covers the task-side kernel direct files by pattern", () => {
-    // Each migrated file, one exported type apiece: the pattern must reach all.
+  it("holds every migrated kernel direct file, task side and the rest alike", () => {
     const files = [
       "src/kernel/flow-context-front.ts",
       "src/kernel/derive-task-facts.ts",
       "src/kernel/dispatch-state.ts",
       "src/kernel/next.ts",
       "src/kernel/gates-normalise.ts",
+      "src/kernel/baseline.ts",
+      "src/kernel/status.ts",
     ];
     for (const file of files) {
       writeFixture(
@@ -391,37 +393,56 @@ describe("interface lint scope widening", () => {
     );
   });
 
-  it("leaves the remaining kernel direct files and the migrated type modules alone", () => {
-    // A pattern covers its own files only: a sibling the rest of the migration
-    // owns is not pulled in, and the `-types.ts` modules stay clean.
-    writeFixture(
-      "src/kernel/baseline.ts",
-      ["export interface Handle {", "  id: string;", "}", ""].join("\n"),
-    );
-    writeFixture(
+  it("leaves the types modules alone", () => {
+    for (const file of [
+      "src/kernel/baseline-types.ts",
       "src/kernel/flow-types.ts",
-      ["export interface Handle {", "  id: string;", "}", ""].join("\n"),
-    );
+      "src/kernel/types/records.ts",
+    ]) {
+      writeFixture(
+        file,
+        ["export interface Handle {", "  id: string;", "}", ""].join("\n"),
+      );
+    }
 
     expect(interfaceLintProblems(root)).toEqual([]);
   });
 });
 
 describe("interface lint on the package", () => {
-  it("holds every kernel subfolder in scope with no exclusion", () => {
-    const kernelDirs = fs
-      .readdirSync(path.join(PACKAGE, "src", "kernel"), {
-        withFileTypes: true,
-      })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => `kernel/${entry.name}`);
-
-    expect(kernelDirs.length).toBeGreaterThan(0);
-    const scope: readonly string[] = SCOPE;
-    for (const dir of kernelDirs) expect(scope).toContain(dir);
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "interface-lint-package-"));
   });
 
-  it("holds the whole scope clean, the task-side kernel files included", () => {
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("holds every directory under src with no exclusion", () => {
+    // A `types` directory is a type module, so it is the one path held clean.
+    const files = nestedDirs(path.join(PACKAGE, "src"))
+      .map((dir) => `src/${dir}/run.ts`)
+      .filter((file) => !file.split("/").slice(1, -1).includes("types"));
+
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) {
+      writeFixture(
+        file,
+        ["export interface Handle {", "  id: string;", "}", ""].join("\n"),
+      );
+    }
+
+    expect(interfaceLintProblems(root)).toEqual(
+      [...files]
+        .sort()
+        .map(
+          (file) =>
+            `interface lint: ${file}:1 exports interface "Handle"; a type module carries the declaration`,
+        ),
+    );
+  });
+
+  it("holds the whole of src clean", () => {
     expect(interfaceLintProblems(PACKAGE)).toEqual([]);
   }, 30_000);
 });
@@ -460,7 +481,7 @@ describe("interface lint in the lint gate", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it("passes a clean scoped folder and rejects a new exported type in it", () => {
+  it("passes a clean src and rejects a new exported type in it", () => {
     stubLintGate();
     expect(lintGate().code).toBe(0);
 

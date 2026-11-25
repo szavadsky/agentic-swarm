@@ -46,12 +46,8 @@ import { createDrainController, type DrainController } from "./signals.js";
 import { createArtifactStore } from "./store-backend.js";
 import type { KernelRuntime } from "./types.js";
 import { BaseFollowConflictError } from "./worktree.js";
-
-interface LaunchSetup {
-  repoRoot: string;
-  configs: KernelRuntime["configs"];
-  paths: KernelRuntime["paths"];
-}
+import type { LaunchSetup, PreparedLaunch } from "./launch-setup-types.js";
+export type { PreparedLaunch } from "./launch-setup-types.js";
 
 /** The pin gate this launch runs under: the named build, or the running package when it is a pin. */
 function pinRefusalFor(opts: RunGoalOptions): string | undefined {
@@ -228,17 +224,6 @@ export async function recoverOrInfra(
       recoveredRecords: interrupted,
     };
   }
-}
-
-export interface PreparedLaunch {
-  setup: LaunchSetup;
-  store: KernelRuntime["store"];
-  runtime: KernelRuntime;
-  signals: DrainController;
-  uninstall: (() => void) | undefined;
-  lock: RunLockHandle;
-  /** Stops copying console lines into this launch's file. */
-  closeRunLog: () => void;
 }
 
 /** Everything a launch needs before its first turn, including the goal lock. */

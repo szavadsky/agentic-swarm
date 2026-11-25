@@ -1,10 +1,6 @@
-/** One configuration/pre-flight violation, always attributed to a file and key. */
-export interface Finding {
-  file: string;
-  /** Dotted config path; `(root)`, `(file)` and `(yaml)` for non-key failures. */
-  key: string;
-  message: string;
-}
+import type { Finding } from "./findings-types.js";
+
+export type { Finding } from "./findings-types.js";
 
 /** One zod issue as `path: message`; `fallback` names an unrooted issue. */
 export function issueText(

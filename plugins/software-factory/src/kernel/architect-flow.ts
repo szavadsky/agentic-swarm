@@ -7,11 +7,8 @@
 import { runAgentTurn } from "./agent.js";
 import { runArchitectStage } from "./boundary-architect.js";
 import { boundaryPassPlan, infraCause } from "./boundary-context.js";
-import {
-  boundaryResult,
-  type BoundaryResult,
-  type ConsultContext,
-} from "./boundary-state.js";
+import { boundaryResult } from "./boundary-state.js";
+import type { BoundaryResult, ConsultContext } from "./boundary-types.js";
 import {
   reviewChangedPlans,
   runPmStage,

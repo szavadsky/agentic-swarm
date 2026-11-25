@@ -1,15 +1,6 @@
-/** The small JSON-schema surface the prompt renderers walk. */
+import type { JsonNode } from "./json-schema-types.js";
 
-export interface JsonNode {
-  type?: string;
-  enum?: unknown[];
-  anyOf?: JsonNode[];
-  description?: string;
-  properties?: Record<string, JsonNode>;
-  required?: string[];
-  items?: JsonNode;
-  $ref?: string;
-}
+export type { JsonNode } from "./json-schema-types.js";
 
 /** A local `$ref` resolved against the schema's definitions. */
 export function resolveNode(

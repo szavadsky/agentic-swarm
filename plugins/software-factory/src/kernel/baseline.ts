@@ -30,25 +30,12 @@ import type {
   StepRecord,
 } from "./types.js";
 
+import type { BaselineResult, BaseGateState } from "./baseline-types.js";
+
+export type { BaselineResult, BaseGateState } from "./baseline-types.js";
+
 /** Record step for a baseline that could not run: infra, never a red verdict. */
 const BASELINE_INFRA_STEP = "baseline-infra";
-
-export interface BaselineResult {
-  commit: string;
-  ok: boolean;
-  checks: CheckResult[];
-  /** False when an identical base commit was already checked (reported once). */
-  fresh: boolean;
-  /** The baseline could not run; it is journaled as infra, never red, and retried next launch. */
-  infra?: boolean;
-}
-
-/** The last recorded base-gate run; absent before pre-flight has checked a base. */
-export interface BaseGateState {
-  commit: string;
-  ok: boolean;
-  checks: CheckResult[];
-}
 
 /**
  * Pre-flight records one base run per commit. Everything that judges a task's

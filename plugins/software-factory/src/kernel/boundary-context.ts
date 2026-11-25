@@ -18,6 +18,7 @@ import {
   selfHeldSlugs,
   steerProvenance,
 } from "./mailbox.js";
+import type { RecordedPackHashes } from "./boundary-types.js";
 import { next } from "./next.js";
 import { type PlanFile, resolvePlan } from "./plan-file.js";
 import { type PlanSnapshot, type PmRung, restorePlans } from "./pm.js";
@@ -79,12 +80,6 @@ export async function recordedIterationHead(
   const headHash = (parsed as { paths?: { headHash?: unknown } } | null)?.paths
     ?.headHash;
   return typeof headHash === "string" ? headHash : undefined;
-}
-
-/** The pack's historical hashes: where the goal started and where its last iteration started. */
-export interface RecordedPackHashes {
-  goalStartHash: string | undefined;
-  lastIterationHash: string | undefined;
 }
 
 /**

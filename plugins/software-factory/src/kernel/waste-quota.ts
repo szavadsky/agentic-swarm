@@ -1,20 +1,8 @@
 /** Quota stops: the pool stopped the turn, so it is reported apart from waste. */
 
 import type { StepRecord } from "./types.js";
-
-/**
- * A turn the provider stopped on quota before it landed anything. The pool is
- * the cause, not the turn: reported apart from waste, never counted in it.
- */
-export interface QuotaStop {
-  record: string;
-  role: string;
-  alias: string;
-  slug?: string;
-  step: string;
-  round: number;
-  detail: string;
-}
+import type { QuotaStop } from "./waste-quota-types.js";
+export type { QuotaStop } from "./waste-quota-types.js";
 
 /**
  * A quota exhaustion a harness reports as a crash: "You've hit your session

@@ -4,30 +4,20 @@ import { isGlitchTurn } from "./glitch.js";
 import { recordDirName } from "./store.js";
 import { KERNEL_STEPS } from "./types.js";
 import type { Cause, CauseKind, StepRecord } from "./types.js";
-import { type QuotaStop, isQuotaStop, quotaStopsOf } from "./waste-quota.js";
-import { type RebuttedReview, rebuttedReviewsOf } from "./waste-rebutted.js";
-
-/**
- * Why a turn was wasted. Rebutted reviews are not a reason: a change request
- * the author answered with replies alone, which the next review accepted, is
- * the accepted tax, counted apart from waste.
- */
-export interface WasteCounts {
-  /** The implementer spent tokens and landed nothing. */
-  implementerFailure: number;
-  /** The outcome/verdict protocol failed: refusal, truncation, invalid outcome. */
-  structureProtocol: number;
-  /** A containment breach refused the turn's work. */
-  structureContainment: number;
-  /** Outcome-repair calls were needed before the turn delivered. */
-  structureOutcomeChannel: number;
-  /** Infra stopped the turn or a gate could not run. */
-  structureInfra: number;
-  /** A gate red rejected the turn, the same tree then passed. */
-  flakyTestRejection: number;
-}
-
-export type WasteReason = keyof WasteCounts;
+import { isQuotaStop, quotaStopsOf } from "./waste-quota.js";
+import { rebuttedReviewsOf } from "./waste-rebutted.js";
+import type {
+  WasteCounts,
+  WasteReason,
+  WasteEntry,
+  WasteAccounting,
+  WasteInput,
+} from "./waste-types.js";
+export type {
+  WasteAccounting,
+  WasteCounts,
+  WasteReason,
+} from "./waste-types.js";
 
 /** Stable reason order for every table, line and metric. */
 export const WASTE_REASONS: readonly WasteReason[] = [
@@ -59,32 +49,6 @@ export function emptyWasteCounts(): WasteCounts {
   };
 }
 
-/** One wasted turn; the record names the turn and the evidence names its proof. */
-export interface WasteEntry {
-  reason: WasteReason;
-  /** Goal-relative record directory of the wasted turn. */
-  record: string;
-  role: string;
-  alias: string;
-  slug?: string;
-  step: string;
-  round: number;
-  /** Goal-relative record directory that proves the classification. */
-  evidence: string;
-  detail: string;
-}
-
-export interface WasteAccounting {
-  /** Wasted turns in this iteration: one entry per turn. */
-  turns: number;
-  counts: WasteCounts;
-  entries: WasteEntry[];
-  /** Quota stops that landed no work; reported apart from waste. */
-  quotaStops: QuotaStop[];
-  /** Review turns rebutted by replies alone and then accepted; counted apart from waste. */
-  rebuttedReviews: RebuttedReview[];
-}
-
 export function emptyWasteAccounting(): WasteAccounting {
   return {
     turns: 0,
@@ -93,13 +57,6 @@ export function emptyWasteAccounting(): WasteAccounting {
     quotaStops: [],
     rebuttedReviews: [],
   };
-}
-
-export interface WasteInput {
-  /** The iteration's records, in any order. */
-  records: readonly StepRecord[];
-  /** The role a step's prompt names, for the per-role counts. */
-  roleOf(step: string): string;
 }
 
 interface Candidate {

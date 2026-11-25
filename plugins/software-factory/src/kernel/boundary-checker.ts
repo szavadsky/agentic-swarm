@@ -4,7 +4,8 @@
  * dispatch through its follow-up PM or leaves the consult to the architect.
  */
 import { boundaryPassPlan } from "./boundary-context.js";
-import { boundaryResult, type ConsultContext } from "./boundary-state.js";
+import { boundaryResult } from "./boundary-state.js";
+import type { ConsultContext } from "./boundary-types.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import {
   consultGate,

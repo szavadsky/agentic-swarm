@@ -1,21 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { type EpicRow, parseArchitectRegister } from "./register.js";
-
-/**
- * One architect's plan scope: the goal's own plan, or one epic's. The register
- * maps every active epic to a plan; this module is the only place a plan path
- * is built, so no consumer hardcodes `plan.md`.
- */
-export type PlanScope = { kind: "goal" } | { kind: "epic"; epic: string };
-
-export interface PlanFile {
-  scope: PlanScope;
-  /** Goal-relative path: `plan.md` for the goal, `epics/<epic>.md` for an epic. */
-  rel: string;
-  /** Absolute path under the goal directory. */
-  path: string;
-}
+import type {
+  PlanScope,
+  PlanFile,
+  PlanBullet,
+  PlanDocument,
+} from "./plan-file-types.js";
+export type { PlanDocument, PlanFile, PlanScope } from "./plan-file-types.js";
 
 /** The goal's own plan, relative path and absolute path. */
 export function goalPlan(goalDir: string): PlanFile {
@@ -94,17 +86,6 @@ export function isPlanPath(rel: string): boolean {
 /** A top-level task bullet: `- <slug> — ...`; the em dash is the plan's. */
 const TASK_BULLET = /^-\s+(\S+)\s+—/u;
 
-export interface PlanBullet {
-  slug: string;
-  /** 1-based line of the bullet's first line. */
-  line: number;
-  /**
-   * The bullet's own lines as written: its top-level line plus every indented
-   * line that follows it. Prose, headings and the next top-level line end it.
-   */
-  text: string;
-}
-
 /**
  * The task bullets one plan carries, by slug. Prose mentions and nested
  * bullets (`  - done: …`) name no task, so a rule about "the bullet" reads the
@@ -169,12 +150,6 @@ export function formatPlanList(plans: readonly PlanFile[]): string {
         : `- epic \`${plan.scope.epic}\`: ${plan.path}`,
     )
     .join("\n  ");
-}
-
-/** A plan's text, keyed by its goal-relative path. */
-export interface PlanDocument {
-  rel: string;
-  text: string;
 }
 
 interface PlanDiffBullet {

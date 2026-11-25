@@ -10,6 +10,11 @@ import { gateCommandsText } from "./infra.js";
 import { commitEdits, scriptMeta } from "./record.js";
 import type { KernelRuntime, RecordEnd, StepRecord } from "./types.js";
 import { headSha, integrationHead, mergeRef, treeSha } from "./worktree.js";
+import type {
+  ConflictSnapshot,
+  ResolvePreparation,
+} from "./merge-conflict-types.js";
+export type { ConflictSnapshot } from "./merge-conflict-types.js";
 
 /**
  * The one resolve ask for a task branch that conflicts with the integration
@@ -105,18 +110,6 @@ export async function settleMergeTurn(
   return { commit: committed ?? head, tree, edits };
 }
 
-/**
- * What the resolve turn must not touch beyond its conflict set. `touched` is
- * every path the in-progress merge changed; `baseline` hashes the cleanly
- * merged half so the turn's edits of them are distinguishable from the merge's
- * own content after the merge commit hides the worktree diff.
- */
-export interface ConflictSnapshot {
-  baseHead: string;
-  touched: readonly string[];
-  baseline: ReadonlyMap<string, string>;
-}
-
 function fileHash(file: string): string {
   try {
     return createHash("sha256").update(fs.readFileSync(file)).digest("hex");
@@ -177,16 +170,6 @@ export async function outsideConflictChanges(
   }
   return [...outside].sort();
 }
-
-export type ResolvePreparation =
-  | {
-      kind: "conflict";
-      head: string;
-      conflicts: string[];
-      snapshot: ConflictSnapshot;
-    }
-  | { kind: "clean" }
-  | { kind: "error"; cause: string };
 
 interface PendingMerge {
   kind: "pending";

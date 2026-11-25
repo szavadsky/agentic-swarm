@@ -15,16 +15,10 @@ import type {
 } from "./status.js";
 import type { IntentStatusArtifact } from "./summary/types.js";
 import type { ArtifactStore, IntentStatusEntry } from "./types.js";
+import type { DashboardAsset } from "./dashboard-types.js";
 
 /** Goal-relative path of the static dashboard written beside status.json. */
 export const DASHBOARD_REL_PATH = "dashboard.html";
-
-export interface DashboardAsset {
-  /** Goal-relative path the page links. */
-  rel: string;
-  /** Plugin-relative source checked into the factory. */
-  source: string;
-}
 
 /**
  * The page's only external loads. Both are MIT-licensed browser bundles kept in

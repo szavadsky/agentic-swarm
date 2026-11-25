@@ -11,11 +11,7 @@ import {
 import { writeYamlAtomic } from "../core/records/io.js";
 import type { Steer } from "./mailbox.js";
 import type { KernelRuntime } from "./types.js";
-
-export interface LaunchSessions {
-  launchId: string;
-  dir: string;
-}
+import type { LaunchSessions, LiveSteerSink } from "./sessions-types.js";
 
 function stamp(now: Date): string {
   return now.toISOString().replace(/[-:.]/g, "");
@@ -129,12 +125,6 @@ export async function createLaunchSessions(
     });
   }
   return { launchId, dir };
-}
-
-/** A live PM turn that can take a steer mid-flight. */
-export interface LiveSteerSink {
-  /** Delivers and claims one steer; false leaves it queued for a later turn. */
-  inject(steer: Steer): Promise<boolean>;
 }
 
 /**

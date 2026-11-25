@@ -10,6 +10,8 @@ import {
   tierNamesVar,
 } from "./prompt-schema.js";
 import type { ProcessConfig, RepoConfig, RunConfig } from "./types.js";
+import type { PromptLibrary } from "./prompts-types.js";
+export type { PromptLibrary } from "./prompts-types.js";
 
 /**
  * Prompt templates render through LiquidJS in strict mode: an unknown variable
@@ -17,17 +19,6 @@ import type { ProcessConfig, RepoConfig, RunConfig } from "./types.js";
  * repo may shadow any template under `.factory/prompts/` and replace the
  * calibration partial with process-config text.
  */
-
-export interface PromptLibrary {
-  render(fragment: string, vars: Record<string, string>): string;
-  /** Variables the library supplies to every render; a caller never passes them. */
-  readonly defaults: Readonly<Record<string, string>>;
-  /**
-   * Variables a render needs; `vars` resolves a template's dynamic include
-   * (the reviewer's author body) that static analysis cannot name.
-   */
-  placeholders(fragment: string, vars?: Record<string, string>): string[];
-}
 
 function resolveWithExt(dir: string, file: string, ext: string): string {
   return path.resolve(dir, path.extname(file) ? file : file + ext);

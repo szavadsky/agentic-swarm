@@ -5,7 +5,7 @@
  * `boundary-architect.ts` and `boundary-tail.ts`; this module is the ordered
  * composition and the public result/option types.
  */
-export type { BoundaryOptions, BoundaryResult } from "./boundary-state.js";
+export type { BoundaryOptions, BoundaryResult } from "./boundary-types.js";
 
 import { runArchitectureFlow } from "./architect-flow.js";
 import { runChecker } from "./boundary-checker.js";
@@ -17,7 +17,7 @@ import {
   writeDigest,
   writePack,
 } from "./boundary-stage.js";
-import type { BoundaryOptions, BoundaryResult } from "./boundary-state.js";
+import type { BoundaryOptions, BoundaryResult } from "./boundary-types.js";
 import type { KernelRuntime } from "./types.js";
 
 /**

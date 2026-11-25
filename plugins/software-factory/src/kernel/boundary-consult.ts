@@ -25,6 +25,12 @@ import {
   spikeFindings,
   taskSnapshot,
 } from "./boundary-context.js";
+import type {
+  ConsultFailure,
+  EpicConsult,
+  EpicConsultOptions,
+  EpicPackOptions,
+} from "./boundary-types.js";
 import { makeCause } from "./cause.js";
 import {
   type ConcernAudience,
@@ -39,56 +45,12 @@ import { compactSession, subarchitectTarget } from "./flow-context.js";
 import { packGates } from "./infra.js";
 import { contextCodeMap } from "./ingestion.js";
 import { runBoundaryTurn } from "./integration-lock.js";
-import type { Steer } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import type { PlanFile } from "./plan-file.js";
 import { type PlanSnapshot, snapshotPlans } from "./pm.js";
 import { scriptMeta } from "./record.js";
-import type {
-  KernelRuntime,
-  Outcome,
-  State,
-  StepRecord,
-  TaskFile,
-} from "./types.js";
+import type { KernelRuntime, StepRecord, TaskFile } from "./types.js";
 import { integrationHead } from "./worktree.js";
-
-export interface EpicConsult {
-  epic: string;
-  plan: PlanFile;
-  changed: boolean;
-  /** The turn's outcome, so a steer it answered reaches the mailbox. */
-  outcome?: Outcome;
-}
-
-export interface ConsultFailure {
-  cause: string;
-  stop?: { cause: string; details?: string };
-}
-
-export interface EpicConsultOptions {
-  iteration: number;
-  epic: string;
-  packRel: string;
-  goalPlanFile: PlanFile;
-  digestPath?: string;
-  records: readonly StepRecord[];
-  turn: string;
-  /**
-   * `report` is the bottom-up pass: the epic reports upward and leaves its plan
-   * to the top's direction pass. `direction` is the top-down consult.
-   */
-  pass: "report" | "direction";
-}
-
-export interface EpicPackOptions extends Omit<EpicConsultOptions, "packRel"> {
-  tasks: readonly TaskFile[];
-  state: State;
-  planText: string;
-  /** Only this epic's pending steers; another epic's never appear here. */
-  steers?: readonly Steer[];
-  runConfigPath?: string;
-}
 
 /** The epic's pack input: its tasks, its plan, and the goal's shared facts. */
 async function epicPackInput(

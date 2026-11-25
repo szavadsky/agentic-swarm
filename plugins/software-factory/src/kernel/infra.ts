@@ -8,21 +8,15 @@ import path from "node:path";
 import yaml from "yaml";
 import { z } from "zod";
 import { issueText } from "./findings.js";
+import {
+  infraGateSchema,
+  type InfraReport,
+  type PackGate,
+} from "./infra-types.js";
 import type { GateConfig, KernelRuntime } from "./types.js";
 
 /** Goal-relative path of the infra turn's output. */
 export const INFRA_FILE = "infra.yaml";
-
-export const infraGateSchema = z
-  .object({
-    name: z.string().min(1),
-    command: z.string().min(1),
-    speed: z.enum(["fast", "slow"]),
-    status: z.enum(["green", "yellow", "red"]),
-    flaky: z.boolean().optional(),
-    notes: z.string().min(1).optional(),
-  })
-  .strict();
 
 /** The infra turn's output shape; `factory schemas` exports it for editors. */
 export const infraSchema = z
@@ -35,18 +29,7 @@ export const infraSchema = z
     "gate names must not repeat",
   );
 
-export type InfraGate = z.infer<typeof infraGateSchema>;
-export type InfraReport = { gates: InfraGate[] };
-
-/** A pack gate: the runnable command plus the status the infra turn observed. */
-export interface PackGate {
-  id: string;
-  command: string;
-  speed?: InfraGate["speed"];
-  status?: InfraGate["status"];
-  flaky?: boolean;
-  notes?: string;
-}
+export type { InfraReport, PackGate } from "./infra-types.js";
 
 /** An infra artifact that does not parse as `infra.yaml`; the path names it. */
 export class InfraError extends Error {}

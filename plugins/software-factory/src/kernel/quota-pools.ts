@@ -7,17 +7,8 @@ import { writeYamlAtomic } from "../core/records/io.js";
 import { issueText } from "./findings.js";
 import { statedWaitMs } from "../harness/stated-wait.js";
 import type { GoalPaths, RunConfig } from "./types.js";
-
-/** One pool's stored latch: when it may serve again, and a probe in flight. */
-export interface PoolReset {
-  /** Epoch ms at which the pool may serve again; a past time leaves a probe due. */
-  resetAt: number;
-  /** An admitted probe has not reported yet: the pool serves no one until it does. */
-  probing?: true;
-}
-
-/** Pool key -> its stored latch. */
-export type PoolResets = Map<string, PoolReset>;
+import type { PoolReset, PoolResets, PoolCall } from "./quota-pools-types.js";
+export type { PoolCall, PoolReset } from "./quota-pools-types.js";
 
 /**
  * Minutes a pool stays skipped after a quota stop when neither the stop's
@@ -116,12 +107,6 @@ export function poolExhausted(
     stored !== undefined && (stored.probing === true || stored.resetAt > now)
   );
 }
-
-/** What one tier call may do with its pool. */
-export type PoolCall =
-  | { kind: "free" }
-  | { kind: "latched" }
-  | { kind: "probe"; claim: PoolReset };
 
 /**
  * Decides one tier call for `pool`: a latch refuses it, and a latch whose

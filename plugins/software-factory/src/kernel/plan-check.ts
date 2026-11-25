@@ -7,7 +7,6 @@ import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { formatPlanList, planBullets } from "./plan-file.js";
 import {
   existingTasks,
-  type PlanCheckPmResult,
   restoreTurn,
   runPlanCheckPm,
   snapshotTurn,
@@ -21,14 +20,13 @@ import {
   type Outcome,
   type PlanCheck,
   type PlanCheckConcern,
-  type PlanCheckEvidence,
-  type PlanCheckFollowUp,
-  type PlanCheckVerdict,
   type State,
   type StepRecord,
   type TaskFile,
   type TaskStatus,
 } from "./types.js";
+import type { PlanCheckTurn, PlanCheckRound } from "./plan-check-types.js";
+export type { PlanCheckTurn } from "./plan-check-types.js";
 
 /** Agent step of a plan-checker turn; slug-less, so it stays out of the item's turn count. */
 export const PLAN_CHECK_STEP = "plancheck";
@@ -249,15 +247,6 @@ export function planCheckBrief(
   return lines.join("\n");
 }
 
-export interface PlanCheckTurn {
-  verdict: PlanCheckVerdict;
-  evidence: PlanCheckEvidence[];
-  followUps: PlanCheckFollowUp[];
-  outcome?: Outcome;
-  /** An infrastructure stop: the iteration falls through to the boundary. */
-  infra?: { cause: string };
-}
-
 /** The open concerns the checker judges, one line per concern, or `none`. */
 function openConcernLines(records: readonly StepRecord[]): string {
   const open = openConcerns(records);
@@ -397,16 +386,6 @@ export async function runPlanCheck(
     await restoreTurn(runtime, snapshot),
   );
   return planCheckTurnResult(result);
-}
-
-export interface PlanCheckRound {
-  turn: PlanCheckTurn;
-  /** Follow-up slugs the PM continued; non-empty means dispatch has work. */
-  continued: string[];
-  /** `checked` when no follow-up PM turn ran; otherwise that ladder's exit. */
-  status: PlanCheckPmResult["status"] | "checked";
-  /** Baseline findings the PM could not fix; `architect` only. */
-  findings: string[];
 }
 
 /**

@@ -4,13 +4,7 @@ import {
   type WasteAccounting,
   type WasteCounts,
 } from "./waste.js";
-
-/** The waste fields a role/alias row carries; GroupMetrics satisfies this. */
-export interface WasteGroupRow {
-  name: string;
-  waste: WasteCounts;
-  rebuttedReviews: number;
-}
+import type { WasteGroupRow } from "./waste-summary-types.js";
 
 function wasteTotal(counts: WasteCounts): number {
   return WASTE_REASONS.reduce((sum, reason) => sum + counts[reason], 0);

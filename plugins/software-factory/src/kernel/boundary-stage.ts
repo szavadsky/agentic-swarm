@@ -19,7 +19,7 @@ import {
   unavailableAliases,
 } from "./boundary-context.js";
 import { runSpikeSteer } from "./boundary-spike.js";
-import type { BoundaryOptions, ConsultContext } from "./boundary-state.js";
+import type { BoundaryOptions, ConsultContext } from "./boundary-types.js";
 import { makeCause } from "./cause.js";
 import {
   type ContextPackInput,

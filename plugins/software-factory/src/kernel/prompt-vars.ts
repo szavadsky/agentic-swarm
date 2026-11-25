@@ -6,6 +6,7 @@ import {
   PROMPT_VARIABLES,
   pageVariables,
 } from "./prompt-vars-pages.js";
+import type { PromptComposition } from "./prompt-types.js";
 
 /**
  * The prompt-variable reference: one typed descriptor per prompt template and
@@ -13,12 +14,6 @@ import {
  * descriptor line plus a regenerated file; the prompt tests fail when this
  * descriptor and the templates' placeholders disagree.
  */
-
-/** A prompt and the partials it composes, in the reference's order. */
-export interface PromptComposition {
-  prompt: string;
-  partials: readonly string[];
-}
 
 /** The template-syntax paragraph every page sits under. */
 export const TEMPLATE_SYNTAX =

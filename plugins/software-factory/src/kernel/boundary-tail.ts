@@ -7,11 +7,8 @@
 import { missingPlanFinding, snapshotPlan } from "./architect-session.js";
 import { reconcileForeignPlans } from "./boundary-consult.js";
 import { rungTrace, snapshotDiff, taskSnapshot } from "./boundary-context.js";
-import {
-  type BoundaryResult,
-  boundaryResult,
-  type ConsultContext,
-} from "./boundary-state.js";
+import { boundaryResult } from "./boundary-state.js";
+import type { BoundaryResult, ConsultContext } from "./boundary-types.js";
 import { makeCause } from "./cause.js";
 import { openConcernIds } from "./context-pack/misc.js";
 import { runBoundaryTurn } from "./integration-lock.js";
