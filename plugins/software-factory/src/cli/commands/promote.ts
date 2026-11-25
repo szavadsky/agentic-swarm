@@ -5,18 +5,23 @@
  * and a red pin is still recorded (and kept off `current`) so `pinRefusal`
  * bars a launch from it.
  *
+ * The gate is every gate the repo declares: typecheck, the suite, format,
+ * lint and schema-validation. They are the package scripts `gates.sh all`
+ * runs, so a branch that passes its task gate passes promote.
+ *
  * Runtime imports are node builtins only: a promotion whose install failed
  * must still record its red gate, before zod or yaml exist in the pin.
  */
 
-import fs from "node:fs";
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { PinGate } from "../../kernel/preflight/pin.js";
 
-/** Tree paths the suite reads: the rev's copy, never the operator's. */
+/** Tree paths the suite and the schema gate read: the rev's copy, never the operator's. */
 export const PROMOTE_TREE_PATHS: readonly string[] = [
+  ".factory/repo.yaml",
   "bootstrap/run",
   "bootstrap/promote.sh",
   "bootstrap/dispatch.sh",
@@ -214,29 +219,48 @@ function prunePins(
 }
 
 /**
- * Writes one pin's `gate.yaml`: the rev plus the typecheck and suite verdicts
- * promote measured on the clean export. The record's shape is the kernel's
- * pinGateSchema, imported here as a type; the launch check reads it with that
- * schema. Serialised as JSON, which is YAML.
+ * The repo's declared gates, as the package script each runs. The ids are the
+ * pin record's verdict keys; `schemaValidation` is the repo config's
+ * `schema-validation` gate. They are listed here rather than read from
+ * `.factory/repo.yaml` because promote must keep running on node builtins
+ * alone: a failed install still has to record its red gate, before a YAML
+ * parser exists.
+ */
+const GATE_SCRIPTS = [
+  { key: "typecheck", script: "typecheck" },
+  { key: "tests", script: "test:gate" },
+  { key: "format", script: "format" },
+  { key: "lint", script: "lint" },
+  { key: "schemaValidation", script: "schema-validation" },
+] as const satisfies readonly {
+  key: Exclude<keyof PinGate, "rev" | "at">;
+  script: string;
+}[];
+
+/** One verdict per declared gate, in the pin record's shape. */
+export type GateVerdicts = Record<
+  (typeof GATE_SCRIPTS)[number]["key"],
+  PinGate["typecheck"]
+>;
+
+/**
+ * Writes one pin's `gate.yaml`: the rev plus the verdicts promote measured on
+ * the clean export. The record's shape is the kernel's pinGateSchema, imported
+ * here as a type; the launch check reads it with that schema. Serialised as
+ * JSON, which is YAML.
  */
 export function writePinGate(
   dir: string,
   rev: string,
-  typecheck: PinGate["typecheck"],
-  tests: PinGate["tests"],
+  verdicts: GateVerdicts,
 ): void {
-  if (typecheck !== "pass" && typecheck !== "fail") {
-    throw new Error(`--typecheck must be pass or fail, got "${typecheck}"`);
+  for (const { key } of GATE_SCRIPTS) {
+    const verdict = verdicts[key];
+    if (verdict !== "pass" && verdict !== "fail") {
+      throw new Error(`${key} must be pass or fail, got "${verdict}"`);
+    }
   }
-  if (tests !== "pass" && tests !== "fail") {
-    throw new Error(`--tests must be pass or fail, got "${tests}"`);
-  }
-  const gate: PinGate = {
-    rev,
-    typecheck,
-    tests,
-    at: new Date().toISOString(),
-  };
+  const gate: PinGate = { rev, ...verdicts, at: new Date().toISOString() };
   fs.writeFileSync(
     path.join(dir, "gate.yaml"),
     `${JSON.stringify(gate, null, 2)}\n`,
@@ -252,27 +276,33 @@ export interface PromoteOptions {
   env?: NodeJS.ProcessEnv;
 }
 
-/** Gates one package: install, the typecheck and the no-model suite. */
-function gatePkg(
-  pkg: string,
-  env: NodeJS.ProcessEnv,
-): Pick<PinGate, "typecheck" | "tests"> {
+/** Gates one package: install, then every declared gate. */
+function gatePkg(pkg: string, env: NodeJS.ProcessEnv): GateVerdicts {
   if (runGate("bun", ["install", "--frozen-lockfile", "--silent"], pkg, env)) {
     console.error(`install failed in ${pkg}; the gate records what it can`);
   }
-  let typecheck: PinGate["typecheck"] = "pass";
-  if (runGate("bun", ["run", "typecheck"], pkg, env)) typecheck = "fail";
-  let tests: PinGate["tests"] = "pass";
-  if (runGate("bun", ["test"], pkg, env)) tests = "fail";
-  return { typecheck, tests };
+  const verdicts: GateVerdicts = {
+    typecheck: "pass",
+    tests: "pass",
+    format: "pass",
+    lint: "pass",
+    schemaValidation: "pass",
+  };
+  for (const { key, script } of GATE_SCRIPTS) {
+    if (runGate("bun", ["run", script], pkg, env)) verdicts[key] = "fail";
+  }
+  return verdicts;
 }
 
 /** Links or reports the build by its gate verdict; true when green. */
 function linkByGate(gate: PinGate, pins: string, build: string): boolean {
-  const green = gate.typecheck === "pass" && gate.tests === "pass";
-  if (!green) {
+  const red = GATE_SCRIPTS.filter(({ key }) => gate[key] === "fail");
+  if (red.length > 0) {
+    const recorded = GATE_SCRIPTS.map(({ key }) => `${key}: ${gate[key]}`).join(
+      ", ",
+    );
     console.error(
-      `pin gate red: ${build} (typecheck: ${gate.typecheck}, tests: ${gate.tests}); not linked as current`,
+      `pin gate red: ${build} (${recorded}); not linked as current`,
     );
     if (currentBuild(pins) === build) {
       console.error(
@@ -320,12 +350,12 @@ export function promotePin(opts: PromoteOptions): number {
     }
     const { pkg, fresh } = resolvePkg(repo, rev, build, tmp);
 
-    const gate = { ...gatePkg(pkg, gateEnv), rev };
-    writePinGate(pkg, rev, gate.typecheck, gate.tests);
+    const verdicts = gatePkg(pkg, gateEnv);
+    writePinGate(pkg, rev, verdicts);
     if (fresh) fs.renameSync(pkg, build);
 
     const green = linkByGate(
-      { ...gate, at: new Date().toISOString() },
+      { ...verdicts, rev, at: new Date().toISOString() },
       pins,
       build,
     );

@@ -19,17 +19,35 @@ const verdictSchema = z.enum(["pass", "fail"]);
 /**
  * One pin's gate result. The writer serialises JSON, which is YAML, so the
  * reader parses it with the same parser as every other artifact.
+ *
+ * `typecheck` and `tests` are the original two gates; `format`, `lint` and
+ * `schemaValidation` were added when promote began running every declared
+ * gate. They are optional so a pin built before them still reads as a record
+ * of the gates it did run rather than as a malformed file.
  */
 export const pinGateSchema = z
   .object({
     rev: z.string().min(1),
     typecheck: verdictSchema,
     tests: verdictSchema,
+    format: verdictSchema.optional(),
+    lint: verdictSchema.optional(),
+    schemaValidation: verdictSchema.optional(),
     at: z.iso.datetime(),
   })
   .strict();
 
 export type PinGate = z.infer<typeof pinGateSchema>;
+
+/** Every verdict key, in the order a red gate names them. */
+type PinGateVerdictKey = Exclude<keyof PinGate, "rev" | "at">;
+const VERDICT_KEYS: readonly PinGateVerdictKey[] = [
+  "typecheck",
+  "tests",
+  "format",
+  "lint",
+  "schemaValidation",
+];
 
 /** The pins root promote writes under; a relocated root names it in FACTORY_PIN_ROOT. */
 export function pinsRoot(env: NodeJS.ProcessEnv = process.env): string {
@@ -119,9 +137,7 @@ export function pinRefusal(build: string): string | undefined {
   const read = readGate(build);
   if (!read.ok) return `pin ${build} cannot launch: ${read.problem}. ${REMEDY}`;
   const gate = read.gate;
-  const red = (["typecheck", "tests"] as const).filter(
-    (key) => gate[key] === "fail",
-  );
+  const red = VERDICT_KEYS.filter((key) => gate[key] === "fail");
   if (red.length === 0) return undefined;
   const failed = red.map((key) => `${key} fail`).join(", ");
   const recorded = `recorded ${gate.at}, rev ${gate.rev}`;

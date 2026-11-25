@@ -18,7 +18,8 @@ bun install --cwd plugins/software-factory --frozen-lockfile --silent
 
 There is no compile step — the factory runs from source with Bun.
 Self-build stays pinned: promote one commit to the pin the runs execute from
-(typecheck + the no-model suite, on a clean export; the result is written to
+(every declared gate — typecheck, the no-model suite, format, lint and
+schema-validation — on a clean export; the result is written to
 `<pin>/gate.yaml`, and only an all-pass pin becomes `current`):
 
 ```bash
@@ -40,7 +41,8 @@ the reason in the run's records (see `bootstrap/RUN-SELF.md`).
 ## Gates
 
 Run from the repository root; the wrapper copies the package to a bare temp
-dir, installs, and runs the named gate, so what passes here passes at promote:
+dir, installs, and runs the named gate, so what passes here passes at promote
+(promote runs the same declared gates):
 
 ```bash
 plugins/software-factory/scripts/gates.sh plugins/software-factory all

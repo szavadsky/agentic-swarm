@@ -6,9 +6,9 @@ import path from "node:path";
 import yaml from "yaml";
 import {
   PIN_GATE_FILE,
+  type PinGate,
   pinGateSchema,
   pinRefusal,
-  type PinGate,
 } from "../../src/kernel/preflight/pin.js";
 import { treeFile } from "../helpers/run-configs.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
@@ -49,7 +49,13 @@ function fakeRepo(): TmpRepo {
         name: "fake-pin",
         private: true,
         type: "module",
-        scripts: { typecheck: "true" },
+        scripts: {
+          typecheck: "true",
+          "test:gate": "bun test",
+          format: "true",
+          lint: "true",
+          "schema-validation": "true",
+        },
       },
       null,
       2,
