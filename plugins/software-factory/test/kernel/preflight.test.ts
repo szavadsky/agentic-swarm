@@ -135,6 +135,7 @@ function registerPreFlightPart2(): void {
     const runYaml = `${RUN_HEAD_NO_HIGHEST}harnesses:
   agent-c:
     acpx: { agent: agent-c }
+    compaction: { enabled: false, reason: test harness has no compact command }
     options:
       args: "--approve-all"
       env: { TOKEN: 1 }
@@ -172,6 +173,7 @@ sessions: { dir: SESSIONS_DIR, retention: short }
 harnesses:
   agent-c:
     acpx: { agent: agent-c }
+    compaction: { enabled: false, reason: test harness has no compact command }
     options: { args: "--approve-all" }
 `;
     const f = await fixture(runYaml);
@@ -200,6 +202,7 @@ function registerPreFlightPart4(): void {
     const runYaml = `${RUN_HEAD_NO_HIGHEST}harnesses:
   agent-c:
     acpx: { agent: agent-c }
+    compaction: { enabled: false, reason: test harness has no compact command }
     options:
       args: ["--approve-all"]
       env: { TOKEN: "value" }

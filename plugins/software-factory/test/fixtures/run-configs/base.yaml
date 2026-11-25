@@ -64,16 +64,19 @@ aliases:
 harnesses:
   fake-native:
     binary: fake-native
+    compaction: { enabled: true }
   # A raw acpx route: the test names the dispatcher binary and the stub
   # advertises the models and effort levels below.
   fake-acpx:
     acpx:
       agent: fake-acpx acp
       raw: true
+      compact: true
       effort:
         configId: fake_effort
       usage:
         cache: true
+    compaction: { enabled: true }
 priceIds:
   fake-route/primary: fake/model-a
   fake-route/secondary: fake/model-b

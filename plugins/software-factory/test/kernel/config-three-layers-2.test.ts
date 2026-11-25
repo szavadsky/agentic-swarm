@@ -166,6 +166,7 @@ function threeConfigLayersPart27() {
         "  omp:",
         "    options:",
         "      memory: { backend: off }",
+        "    compaction: { enabled: true }",
         "",
       ].join("\n"),
     );
@@ -180,7 +181,9 @@ function threeConfigLayersPart27() {
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
     fs.writeFileSync(
       path.join(root, ".factory/run.yaml"),
-      ["harnesses:", "  omp: {}", ""].join("\n"),
+      ["harnesses:", "  omp:", "    compaction: { enabled: true }", ""].join(
+        "\n",
+      ),
     );
     let error: unknown;
     try {
@@ -208,6 +211,7 @@ function threeConfigLayersPart28() {
         "    acpx:",
         "      agent: agent-a",
         `      usage: { command: "${command}" }`,
+        "    compaction: { enabled: false, reason: no compact command }",
         "",
       ].join("\n");
 

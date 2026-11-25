@@ -175,7 +175,7 @@ describe("factory prompts harness condition", () => {
   const ACPX = `aliases:
   architect: { harness: acpx-arch, model: test-model }
 harnesses:
-  acpx-arch: { acpx: { agent: test-agent } }
+  acpx-arch: { acpx: { agent: test-agent }, compaction: { enabled: false, reason: test prompt only } }
 `;
 
   const NATIVE = `aliases:

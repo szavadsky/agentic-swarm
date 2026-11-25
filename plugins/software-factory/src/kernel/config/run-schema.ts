@@ -147,9 +147,10 @@ export const aliasSchema = z
   .strict();
 
 /**
- * A harness entry's compaction policy. Disabling it needs a recorded reason:
- * the run config says why a harness's sessions stay uncompacted instead of
- * leaving a YAML comment to explain the absence.
+ * A harness entry's compaction policy. Every entry declares one, so an absent
+ * policy never silently means on. Disabling it needs a recorded reason: the run
+ * config says why a harness's sessions stay uncompacted instead of leaving a
+ * YAML comment to explain the absence.
  */
 export const compactionSchema = z
   .object({
@@ -183,7 +184,8 @@ export const harnessEntrySchema = z
      * Absent resolves through PATH.
      */
     binary: z.string().min(1).optional(),
-    compaction: compactionSchema.optional(),
+    /** Required: an absent policy would otherwise silently mean on. */
+    compaction: compactionSchema,
     /**
      * Adapter-specific keys, opaque to the kernel except pre-flight's shape
      * check of the acpx `args`/`env`; omp merges the rest into its launch

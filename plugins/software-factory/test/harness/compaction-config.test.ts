@@ -177,6 +177,29 @@ function compactionSchemaTests(): void {
   });
 }
 
+function compactionRequiredTests(): void {
+  it("requires every harness entry to declare a compaction policy", () => {
+    expect(harnessEntrySchema.safeParse({ binary: "omp" }).success).toBe(false);
+    expect(
+      harnessEntrySchema.safeParse({
+        binary: "omp",
+        compaction: { enabled: true },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects a run config whose harness entry omits compaction", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-compaction-"));
+    try {
+      const file = path.join(dir, "run.yaml");
+      fs.writeFileSync(file, "harnesses:\n  omp:\n    binary: omp\n", "utf8");
+      expect(() => loadRunConfig(file)).toThrow(/harnesses\.omp\.compaction/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
+
 function compactionRuntimeTests(): void {
   it("skips compaction when the harness entry disables it", async () => {
     const harness = new FakeHarness({ id: "fake" });
@@ -240,6 +263,7 @@ function compactionRuntimeTests(): void {
 
 describe("harness compaction policy", () => {
   compactionSchemaTests();
+  compactionRequiredTests();
   compactionRuntimeTests();
 });
 

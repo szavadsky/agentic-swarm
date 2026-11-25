@@ -212,8 +212,8 @@ export interface HarnessConfig {
   acpx?: import("../../harness/acpx/config.js").AcpxConfig;
   /** Executable override; absent resolves through PATH. */
   binary?: string;
-  /** Compaction configuration for this harness; absent means the adapter's capability. */
-  compaction?: HarnessCompactionConfig;
+  /** Compaction policy for this harness; every entry declares one. */
+  compaction: HarnessCompactionConfig;
   /** Opaque adapter options: acpx `args`/`env`, omp overlay keys. */
   options?: Record<string, unknown>;
 }

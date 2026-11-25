@@ -160,10 +160,11 @@ envAllowlist: [ANTHROPIC_API_KEY]
   crash), `rotate` (per-iteration primary), `escalateTo` (PM ladder) and
   `timeouts`; a fallback may name another alias.
 - `harnesses.<id>` binds an `acpx:` adapter or an executable and passes
-  `options` untouched. `compaction.enabled` turns session compaction on or off
-  for that harness; disabling it requires a `reason`, an acpx harness that
-  enables it needs `acpx.compact: true`, and `reviewIterations: [1, 2]` limits
-  review compaction to those 1-based rounds. `sessions.retention` is the
+  `options` untouched. Every harness entry must declare `compaction`; its
+  `enabled` flag turns session compaction on or off for that harness; disabling
+  it requires a `reason`, an acpx harness that enables it needs
+  `acpx.compact: true`, and `reviewIterations: [1, 2]` limits review compaction
+  to those 1-based rounds. `sessions.retention` is the
   provider cache TTL (`auto|short|long|none`, required in a declared `sessions`
   block); only `short`/`long` give a hot window, so `auto` and `none` do not
   compact. The factory repository's `bootstrap/run/base.yaml` and

@@ -399,12 +399,13 @@ overlay.
 enum (`auto|short|long|none`) and is required in a declared `sessions` block.
 `short` and `long` bound a compaction to the hot window (5 minutes and one hour);
 `none` disables caching and `auto` leaves the window to the provider, so neither
-compacts — set `short` to compact. A harness entry's `compaction.enabled` decides
-whether its sessions compact at all; disabling it requires a `reason`, and an
-`acpx` harness that enables it must also declare `acpx.compact: true`. A review
-step's harness may add `reviewIterations: [1, 2]`: only those 1-based review
-rounds compact, while every other step ignores the rule. Absent means every
-review round compacts.
+compacts. Every harness entry must declare `compaction`: `enabled` decides
+whether its sessions compact at all; disabling it requires a `reason` recorded
+in the config itself (the shipped `agy` entry says the agent forwards `/compact`
+to the model and compacts nothing), and an `acpx` harness that enables it must
+also declare `acpx.compact: true`. A review step's harness may add
+`reviewIterations: [1, 2]`: only those 1-based review rounds compact, while every
+other step ignores the rule. Absent means every review round compacts.
 
 A task session resumes on the harness that recorded it. `portability: [{from, to}]`
 declares further directional edges: a session recorded on `from` may resume on
@@ -542,9 +543,9 @@ levels plus `auto`.
 `options` passed untouched: acpx reads `args`/`env` (pre-flight refuses an
 `args` that is not a string array or an `env` that is not a string-to-string
 map), omp merges the keys into its launch overlay (`sessions.retention` owns
-`providers.cacheRetention`). Each entry's `compaction` block records whether its
-sessions compact and, when disabled, why (the `agy` entry: `/compact` reaches
-the model as a prompt and compacts nothing). The shipped
+`providers.cacheRetention`). Each entry must declare a `compaction` block that
+records whether its sessions compact and, when disabled, why (the `agy` entry:
+`/compact` reaches the model as a prompt and compacts nothing). The shipped
 `bootstrap/run/base.yaml` keeps the unattended omp policy there —
 memory/auto-learn/skills off, approval, disabled providers, retry — so no policy
 is compiled in.
