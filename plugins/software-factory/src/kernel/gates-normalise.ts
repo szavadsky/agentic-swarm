@@ -148,6 +148,11 @@ export interface GateInfra {
   cause: string;
 }
 
+/** A red the task is shown but never charged: an advisory gate or task. */
+export function isAdvisoryCheck(check: CheckResult): boolean {
+  return check.advisory === true;
+}
+
 export function isInfraCheck(check: CheckResult): boolean {
   const details = check.details;
   if (

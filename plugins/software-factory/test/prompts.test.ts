@@ -307,6 +307,7 @@ function promptsSchemaSkeletonsPart4() {
       "envNotes",
       "repairTurns",
       "turnMinutes",
+      "advisory",
     ]);
   });
 }
@@ -328,6 +329,7 @@ function promptsSchemaSkeletonsPart5() {
         "envNotes: [one environment fact, flake or workaround]  # optional; infra facts, known flakes and workarounds for this task's implementer turns",
         "repairTurns: outcome-repair turns for this task's turns  # optional",
         "turnMinutes: per-turn wall bound in minutes  # optional",
+        "advisory: this task's checks are advisory: recorded and shown, never blocking  # optional",
         "```",
       ].join("\n"),
     );
@@ -352,6 +354,7 @@ function promptsSchemaSkeletonsPart6() {
       "  - bun install needs the network",
       "repairTurns: 1",
       "turnMinutes: 45",
+      "advisory: true",
       "---",
       "",
       "Why: rotate without a re-login.",

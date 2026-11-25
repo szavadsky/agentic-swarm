@@ -23,6 +23,7 @@ describe("task files", () => {
   taskFilesPart9();
   taskFilesPart10();
   taskFilesPart11();
+  taskFilesPart12();
 });
 
 function taskFilesPart1() {
@@ -463,5 +464,28 @@ function taskFilesPart11() {
     expect(() => parseTaskFile(bad, "auth.token-refresh")).toThrow(
       'frontmatter "envNotes" must be a list of non-empty strings',
     );
+  });
+}
+
+function taskFilesPart12() {
+  it("parses an optional advisory flag and round-trips it", () => {
+    const withAdvisory = TEXT.replace(
+      "source: Milestone auth / refresh",
+      "source: Milestone auth / refresh\nadvisory: true",
+    );
+    const parsed = parseTaskFile(withAdvisory, "auth.token-refresh");
+    expect(parsed.advisory).toBe(true);
+    const round = parseTaskFile(renderTaskFile(parsed), parsed.slug);
+    expect(round.advisory).toBe(true);
+    expect(parseTaskFile(TEXT, "auth.token-refresh").advisory).toBeUndefined();
+    expect(materialHash({ ...parsed, advisory: false })).not.toBe(
+      materialHash(parsed),
+    );
+
+    const bad = TEXT.replace(
+      "source: Milestone auth / refresh",
+      "source: Milestone auth / refresh\nadvisory: sometimes",
+    );
+    expect(() => parseTaskFile(bad, "auth.token-refresh")).toThrow(/advisory/);
   });
 }

@@ -112,6 +112,9 @@ gates:
     format: { pattern: jest }                    # runner whose output it parses
     serial: [database]                          # same-named gates in one repo never overlap
     env: { TMPDIR: .cache/gate }                # per-worktree scratch directory
+  - id: lint-strict
+    command: bun run lint:strict
+    advisory: true                              # red is recorded and shown, never blocking
 cleanliness:                                    # optional; default rules active without it
   maxFileSizeBytes: 1048576                     # default: 1048576 (1 MB)
   allowedExtensions: [ts, json, md]             # default: extensions present in base tree
@@ -172,6 +175,12 @@ and timings, so a red inherited from the base is not blamed on the task:
 A JUnit red's summary names its failing cases, and a missing, empty or
 unreadable report is red rather than a silent pass. Records written before
 `details.junit` existed still classify by their output lines.
+
+`advisory: true` on a gate records and shows its red with its log but never
+blocks: it opens no fix round, parks nothing and leaves the merge and goal head
+green. A task file's `advisory: true` makes every check of that task advisory
+the same way. The reviewer and steward still read the red; only the kernel's
+blocking rules skip it.
 
 With no `gates` configured, the gates the kernel runs come from the goal's
 `infra.yaml`, written by the shipped `infra` ingestion step: each gate names a

@@ -68,6 +68,11 @@ export interface TaskFile {
    * wall, still capped by the run's `limits.turnMinutes`. Owner ruling 2.
    */
   turnMinutes?: number;
+  /**
+   * This task's checks are advisory: their reds are recorded and shown to the
+   * reviewer and steward, but never open a fix round, park or merge block.
+   */
+  advisory?: boolean;
   /** Plan-checker re-runs per iteration; exhausted rounds consult the architect. */
 }
 

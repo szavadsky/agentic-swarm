@@ -106,6 +106,12 @@ export const taskFrontmatterSchema = z
       .positive()
       .optional()
       .describe("per-turn wall bound in minutes"),
+    advisory: z
+      .boolean()
+      .optional()
+      .describe(
+        "this task's checks are advisory: recorded and shown, never blocking",
+      ),
   })
   .strict();
 
@@ -170,6 +176,7 @@ function frontmatterIssue(
     envNotes: "a list of non-empty strings",
     repairTurns: "a non-negative integer",
     turnMinutes: "a positive number",
+    advisory: "a boolean",
   };
   return expected[field]
     ? `frontmatter "${field}" must be ${expected[field]}`
@@ -310,6 +317,7 @@ export function renderTaskFile(task: TaskFile): string {
     front.envNotes = task.envNotes;
   if (task.repairTurns !== undefined) front.repairTurns = task.repairTurns;
   if (task.turnMinutes !== undefined) front.turnMinutes = task.turnMinutes;
+  if (task.advisory !== undefined) front.advisory = task.advisory;
   return `---\n${yaml.stringify(front).trimEnd()}\n---\n\n${task.body.trim()}\n`;
 }
 

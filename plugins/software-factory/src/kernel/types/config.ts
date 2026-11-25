@@ -46,6 +46,11 @@ export interface GateConfig {
    * number falls back to `GATE_TIMEOUT_SEC`; it never disables the timeout.
    */
   timeoutSec?: number;
+  /**
+   * A red from this gate is recorded and shown, never blocking. Absent or
+   * false gates the tree.
+   */
+  advisory?: boolean;
 }
 
 /**

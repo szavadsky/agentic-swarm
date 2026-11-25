@@ -439,6 +439,7 @@ source: plan heading, front, steer, stall or plan-check turn
 envNotes: [one environment fact, flake or workaround]  # optional; infra facts, known flakes and workarounds for this task's implementer turns
 repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
+advisory: this task's checks are advisory: recorded and shown, never blocking  # optional
 \`\`\`
 
 Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). A \`nogit: true\` type delivers its product outside git: it finishes without a committed report and never merges. A \`promote: true\` type is an operator barrier: it runs no flow, its readiness drains the launch and stops it so the operator promotes the build, and the work that must run on the promoted build depends on it. Configured tiers: implementer, escalation.
@@ -561,6 +562,7 @@ source: plan heading, front, steer, stall or plan-check turn
 envNotes: [one environment fact, flake or workaround]  # optional; infra facts, known flakes and workarounds for this task's implementer turns
 repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
+advisory: this task's checks are advisory: recorded and shown, never blocking  # optional
 \`\`\`
 
 Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). A \`nogit: true\` type delivers its product outside git: it finishes without a committed report and never merges. A \`promote: true\` type is an operator barrier: it runs no flow, its readiness drains the launch and stops it so the operator promotes the build, and the work that must run on the promoted build depends on it. Configured tiers: implementer, escalation.
@@ -2531,6 +2533,7 @@ source: plan heading, front, steer, stall or plan-check turn
 envNotes: [one environment fact, flake or workaround]  # optional; infra facts, known flakes and workarounds for this task's implementer turns
 repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
+advisory: this task's checks are advisory: recorded and shown, never blocking  # optional
 \`\`\`
 
 Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). A \`nogit: true\` type delivers its product outside git: it finishes without a committed report and never merges. A \`promote: true\` type is an operator barrier: it runs no flow, its readiness drains the launch and stops it so the operator promotes the build, and the work that must run on the promoted build depends on it. Configured tiers: implementer, escalation.
@@ -3139,6 +3142,7 @@ source: plan heading, front, steer, stall or plan-check turn
 envNotes: [one environment fact, flake or workaround]  # optional; infra facts, known flakes and workarounds for this task's implementer turns
 repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
+advisory: this task's checks are advisory: recorded and shown, never blocking  # optional
 \`\`\`
 
 Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). A \`nogit: true\` type delivers its product outside git: it finishes without a committed report and never merges. A \`promote: true\` type is an operator barrier: it runs no flow, its readiness drains the launch and stops it so the operator promotes the build, and the work that must run on the promoted build depends on it. Configured tiers: implementer, escalation.
@@ -3747,6 +3751,7 @@ source: plan heading, front, steer, stall or plan-check turn
 envNotes: [one environment fact, flake or workaround]  # optional; infra facts, known flakes and workarounds for this task's implementer turns
 repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
+advisory: this task's checks are advisory: recorded and shown, never blocking  # optional
 \`\`\`
 
 Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). A \`nogit: true\` type delivers its product outside git: it finishes without a committed report and never merges. A \`promote: true\` type is an operator barrier: it runs no flow, its readiness drains the launch and stops it so the operator promotes the build, and the work that must run on the promoted build depends on it. Configured tiers: implementer, escalation.

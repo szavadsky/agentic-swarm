@@ -36,6 +36,8 @@ const gateSchema = z
     serial: z.array(z.string().min(1)).default([]),
     /** Per-gate wall in seconds; non-positive falls back to the 900 s default. */
     timeoutSec: z.number().optional(),
+    /** A red from this gate is recorded and shown, never blocking. */
+    advisory: z.boolean().optional(),
     env: z
       .record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), gateEnvDirSchema)
       .optional(),

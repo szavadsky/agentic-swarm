@@ -6,6 +6,7 @@ import { git } from "../../core/git/exec.js";
 import { preexistingRed, recordedBaseGates } from "../baseline.js";
 import { makeCause } from "../cause.js";
 import {
+  advisoryChecks,
   gateFlakeTests,
   isInfraCheck,
   newGateFailures,
@@ -115,6 +116,7 @@ async function mergeChecks(
     { step: "merge-checks" },
   );
   let ran = await runGates(runtime, scratch);
+  if (task.advisory) ran = advisoryChecks(ran);
   if (keptLand) {
     ran = await rerunRedKeptGates(
       runtime,

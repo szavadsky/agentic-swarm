@@ -9,6 +9,7 @@ import { makeCause } from "./cause.js";
 import { runCleanlinessCheck } from "./cleanliness.js";
 import { firstBase, revisionBase } from "./flow-context.js";
 import {
+  advisoryChecks,
   gateFlakeTests,
   isInfraCheck,
   newGateFailures,
@@ -174,6 +175,7 @@ export async function runTaskGates(
       await checkSpikeReport(worktree, task.slug, await headSha(worktree)),
     );
   }
+  if (task.advisory) checks = advisoryChecks(checks);
   await finishChecks(gate, checks, { preexisting, tree });
   return checks;
 }

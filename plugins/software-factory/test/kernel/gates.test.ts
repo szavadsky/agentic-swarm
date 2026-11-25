@@ -5,13 +5,26 @@ import path from "node:path";
 import type { CheckResult } from "../../src/core/checks/types.js";
 import { repoConfigSchema } from "../../src/kernel/config.js";
 import {
+  formatFailingChecks,
   GATE_TIMEOUT_SEC,
   gateSignatures,
   gateTimeoutSec,
   isInfraCheck,
+  newGateFailures,
   runGates,
 } from "../../src/kernel/gates.js";
+import { runDispatch } from "../../src/kernel/dispatch.js";
 import type { GateConfig, KernelRuntime } from "../../src/kernel/types.js";
+import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
+import { task } from "./helpers.js";
+import {
+  cleanupFlowRepo,
+  makeRuntime,
+  outcome,
+  setupFlowRepo,
+  whenTurn,
+  writeTask,
+} from "./s2-helpers.js";
 
 function check(patch: Partial<CheckResult> = {}): CheckResult {
   return {
@@ -37,6 +50,25 @@ function runtimeWith(
     store: { goalDir: root },
     configs: { repo: { gates } },
   } as unknown as KernelRuntime;
+}
+
+/** Scripts the implement and review turns an advisory task runs. */
+function scriptAdvisoryTask(harness: FakeHarness): void {
+  harness.script(
+    (req, ctx) => {
+      fs.writeFileSync(path.join(req.cwd!, "feature.txt"), "ok\n");
+      ctx.writeOutcome(outcome({ summary: "added the feature" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "implement" }) },
+  );
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(outcome({ summary: "approved", verdict: "approve" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "review" }) },
+  );
 }
 
 /** What pytest writes: no file attribute; the classname names the module. */
@@ -332,6 +364,89 @@ describe("per-gate walls", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+});
+
+describe("advisory gates", () => {
+  it("parses a per-gate advisory flag", () => {
+    const repo = repoConfigSchema.parse({
+      gates: [
+        { id: "lint", command: "true", advisory: true },
+        { id: "tests", command: "true" },
+      ],
+    });
+    expect(repo.gates.map((gate) => gate.advisory)).toEqual([true, undefined]);
+  });
+
+  it("records an advisory red with its output and leaves a gating red blocking", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gate-advisory-"));
+    try {
+      const [advisory] = await runGates(
+        runtimeWith(root, [
+          declaredGate({
+            id: "lint",
+            command: "echo lint-output; exit 1",
+            advisory: true,
+          }),
+        ]),
+        root,
+      );
+      expect(advisory).toMatchObject({
+        ok: false,
+        advisory: true,
+        summary: "exit 1",
+      });
+      expect(newGateFailures([advisory!], new Set())).toEqual([]);
+      expect(formatFailingChecks([advisory!])).toBe(
+        "### lint (advisory): exit 1\nlint-output",
+      );
+
+      const [gating] = await runGates(
+        runtimeWith(root, [declaredGate({ id: "tests", command: "exit 1" })]),
+        root,
+      );
+      expect(newGateFailures([gating!], new Set())).toEqual([gating!]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("advisory task checks", () => {
+  it("lets an advisory task's red check reach merge", async () => {
+    const { repo, goal } = setupFlowRepo({
+      gates: [{ id: "unit", command: "test -f fixed.txt" }],
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      scriptAdvisoryTask(harness);
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeTask(runtime, task("task", { advisory: true }));
+
+      await runDispatch(runtime, { iteration: 1 });
+
+      const records = await runtime.store.listRecords();
+      const checks = records
+        .filter(
+          (candidate) =>
+            candidate.slug === "task" && candidate.step === "checks",
+        )
+        .at(-1)!;
+      expect(checks.ok).toBe(true);
+      expect(
+        checks.checks?.find((check) => check.name === "unit"),
+      ).toMatchObject({ ok: false, advisory: true });
+      expect(
+        records
+          .filter(
+            (candidate) =>
+              candidate.slug === "task" && candidate.step === "merge",
+          )
+          .at(-1)?.ok,
+      ).toBe(true);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
 });
 
 describe("isInfraCheck", () => {

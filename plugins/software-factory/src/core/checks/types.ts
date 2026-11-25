@@ -16,6 +16,11 @@ export interface CheckResult {
    * written before the stamp carry none.
    */
   attribution?: CheckAttribution;
+  /**
+   * A red kept for the reviewer and steward but never blocking: a gate or a
+   * task declared advisory. The check still carries its output and summary.
+   */
+  advisory?: boolean;
   details?: unknown;
   flaky?: string[];
   skipped?: boolean;

@@ -14,6 +14,7 @@ import {
   gateSignatureKey,
   gateSignatures,
   gateTimeoutSec,
+  isAdvisoryCheck,
   isInfraCheck,
   isStaleGateCheck,
   reapGateProcesses,
@@ -124,7 +125,13 @@ export function formatBaseGates(base: BaseGateState | undefined): string {
 export function preexistingRed(base: BaseGateState | undefined): Set<string> {
   const inherited = new Set<string>();
   for (const check of base?.checks ?? []) {
-    if (check.ok || isInfraCheck(check) || isStaleGateCheck(check)) continue;
+    if (
+      check.ok ||
+      isInfraCheck(check) ||
+      isAdvisoryCheck(check) ||
+      isStaleGateCheck(check)
+    )
+      continue;
     const signatures = gateSignatures(check);
     if (signatures.size === 0) {
       inherited.add(gateSignatureKey(check.name, UNIDENTIFIED_GATE_FAILURE));
@@ -374,7 +381,7 @@ async function recordBaseResult(
   described: string,
   checks: CheckResult[],
 ): Promise<boolean> {
-  const ok = checks.every((c) => c.ok);
+  const ok = checks.every((c) => c.ok || isAdvisoryCheck(c));
   const meta: RecordStart = {
     iteration: 0,
     step: "baseline",
@@ -384,7 +391,7 @@ async function recordBaseResult(
   };
   await store.appendRecord(meta, { ok, checks });
   if (!ok) {
-    const red = checks.filter((c) => !c.ok);
+    const red = checks.filter((c) => !c.ok && !isAdvisoryCheck(c));
     console.warn(
       [
         `[factory] ${described} is red; recorded once, continuing.`,

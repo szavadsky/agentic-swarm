@@ -15,6 +15,7 @@ import {
   capGateOutput,
   caseLabel,
   GATE_OUTPUT_CAP,
+  isAdvisoryCheck,
   isInfraCheck,
 } from "./gates-normalise.js";
 import {
@@ -45,6 +46,7 @@ export {
   capGateOutput,
   GATE_OUTPUT_CAP,
   type GateInfra,
+  isAdvisoryCheck,
   isInfraCheck,
   isStaleGateCheck,
 } from "./gates-normalise.js";
@@ -300,6 +302,7 @@ export async function runDeclaredGate(
         `${gate.id}:${junitIdentity(parsed) || capped.output}`,
         { lowercase: false },
       ),
+      ...(gate.advisory && !ok ? { advisory: true } : {}),
       details: gateDetails(gate, cwd, capped, parsed, junitError, res),
     },
   };
@@ -338,6 +341,21 @@ export function failingChecks(checks: readonly CheckResult[]): CheckResult[] {
   return checks.filter((c) => !c.ok);
 }
 
+/** The reds that block: every failure except an advisory one. */
+function blockingFailures(checks: readonly CheckResult[]): CheckResult[] {
+  return failingChecks(checks).filter((c) => !isAdvisoryCheck(c));
+}
+
+/**
+ * Marks every red of a task's run advisory. The task still records and shows
+ * the output; no gate, fix round or merge charges it.
+ */
+export function advisoryChecks(checks: readonly CheckResult[]): CheckResult[] {
+  return checks.map((check) =>
+    check.ok || isAdvisoryCheck(check) ? check : { ...check, advisory: true },
+  );
+}
+
 /**
  * Stamps each failing check with its owner, from the `preexisting` set the run
  * was judged by, so derive reads the attribution instead of looking the
@@ -350,7 +368,7 @@ export function stampAttribution(
 ): CheckResult[] {
   const own = new Set(newGateFailures(checks, preexisting));
   return checks.map((check) => {
-    if (check.ok || isInfraCheck(check)) return check;
+    if (check.ok || isInfraCheck(check) || isAdvisoryCheck(check)) return check;
     const attribution: CheckAttribution = own.has(check) ? "new" : "inherited";
     return { ...check, attribution };
   });
@@ -364,7 +382,7 @@ export function stampAttribution(
 export function attributedFailures(
   checks: readonly CheckResult[] | undefined,
 ): CheckResult[] {
-  return failingChecks(checks ?? []).filter(
+  return blockingFailures(checks ?? []).filter(
     (check) => check.attribution !== "inherited",
   );
 }
@@ -382,7 +400,10 @@ export function formatFailingChecks(
 ): string {
   if (!checks || checks.length === 0) return "";
   return failingChecks(checks)
-    .map((c) => `### ${c.name}: ${c.summary}\n${c.output}`)
+    .map(
+      (c) =>
+        `### ${c.name}${isAdvisoryCheck(c) ? " (advisory)" : ""}: ${c.summary}\n${c.output}`,
+    )
     .join("\n\n");
 }
 
@@ -396,7 +417,7 @@ export function newGateFailures(
   checks: readonly CheckResult[],
   preexisting: ReadonlySet<string>,
 ): CheckResult[] {
-  return failingChecks(checks).filter((check) => {
+  return blockingFailures(checks).filter((check) => {
     const signatures = gateSignatures(check);
     // A silent red gate offers only its name, exactly as before signature
     // matching: there is no evidence that this run's failure is a new one.
