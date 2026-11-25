@@ -204,7 +204,7 @@ flowchart TD
         - documentation only
         - e.g. backend dev vs dev with computer use (a separate task type is required, e.g. for a dashboard: an extra QA agent in the flow tests the integration)
     - Task types come from config, which supplies the file names of their prompts. Schemas are the demarcation between tasks and kernel code: the kernel supports a fixed number of schemas, and every output that has to be verified or ingested by the kernel follows one of them. A task type names which of these schemas its output follows; it never supplies its own.
-- [[ctxOnly:StewardCheckerTriageSummary]] Supporting orchestration roles (detailed below):
+- [[StewardCheckerTriageSummary]] Supporting orchestration roles (detailed below):
     - Steward (merge agent): the script merges each task as soon as it passes, one at a time; at wave end the steward is involved only when a merge conflicted or the goal branch is red; unmerged tasks are then relaunched to port onto the new state (see Iteration).
     - Plan checker: a specialized agent that checks whether the current plan (architect output) can still be progressed with net positive gain before the architect is involved — a task-level gatekeeper for the architect. It can formulate follow-up tasks, and is instructed to stay within the overall technical direction of the tasks.
     - Triage: see Escalation ladder.
@@ -219,7 +219,7 @@ flowchart TD
     - Before any iteration finishes, a plan checker verifies the plan's status against the repo, with bounded repeats — it may name things to do before the architect is involved; its findings go back to execution, and the iteration keeps progressing, before the architect is consulted.
 - [[IdempotentCrashResume]] A launch after an interrupt (mid-iteration stop, quota, computer reboot) is a script relaunch: no architect, so no architect flow (no previous-run assessment, see bootstrap); operator steers reach the PM as usual. If the resumed state is problematic, the script repairs it with an agentic PM turn and/or the plan checker, with a budget for extra retry.
     - Relaunch/restart is idempotent by the script: no agentic work moves files around between restarts. Agents stopped mid-flight are relaunched by the script in their worktree with an extra prompt: "you were working on the task below, we had an unrelated technical problem, finish the task". The PM repairs artifacts the script cannot read (e.g. broken YAML).
-- [[ctxOnly:WaveScopeGuidance]] Scope: the architect predicts a reasonable scope per task — a prediction, not a fence. He does not prescribe which files to edit or LOC — a waste of his time, and the exact implementation may differ (upstream/downstream touch-ups). Specific references — a class, file, requirement, problem — are welcome when formulating the plan. Within a wave, tasks have no logical dependencies and can reasonably run in parallel without likely substantial conflicts: it is fine if they add to the same file (the steward sorts it out), but logical overlaps are undesirable. Between waves, tasks may depend on each other logically. Nothing enforces which files a task touches. Normal development.
+- [[WaveScopeGuidance]] Scope: the architect predicts a reasonable scope per task — a prediction, not a fence. He does not prescribe which files to edit or LOC — a waste of his time, and the exact implementation may differ (upstream/downstream touch-ups). Specific references — a class, file, requirement, problem — are welcome when formulating the plan. Within a wave, tasks have no logical dependencies and can reasonably run in parallel without likely substantial conflicts: it is fine if they add to the same file (the steward sorts it out), but logical overlaps are undesirable. Between waves, tasks may depend on each other logically. Nothing enforces which files a task touches. Normal development.
 - [[StewardMergeLadder]] The steward leaves the wave clean: merge, resolve conflicts, run CI/CD, fix the obvious, record concerns for the non-obvious, decide what to hold. DoD: branch state ready for the next wave; task status revised if unmerged. Tasks that did not merge are relaunched to port on top of the new branch state. Conflicts are normal during development, sometimes logical (test failures). The steward is compacted at the end and relaunched as needed. Merge ladder: the task-tier steward resolves trivial conflicts → unresolvable goes to the architect with a pointer to the overall status plus the worktree and branch of the problematic item.
     - Pre-existing feature-branch concerns (CI/CD, etc.) are recorded by infra, steward, implementer.
 - [[ctxOnly:IterationRationale]] Why: too-tight scopes, no end-of-wave merging with repeat, and no plan status check before the architect cause rework and conflicts.
@@ -284,7 +284,7 @@ flowchart TD
 - [[PromptDebloatCompliance]] All prompts follow the prompt-debloat principles (`/home/slava/aiexp/software-builder.dev/plugins/prompt-engineering/skills/prompt-debloat`).
 
 ### Stack [[TypeScriptStackAndLint]]
-- TypeScript: linted, autoformatted. Code complexity, file size and separation of interface from implementation are enforced by lint for the factory's own code, with thresholds in the lint config; for target repos separate files stay a preference.
+- TypeScript (bun): linted, autoformatted. Code complexity, file size and separation of interface from implementation are enforced by lint for the factory's own code, with thresholds in the lint config; for target repos separate files stay a preference.
 - `.sh`: minimize; ZERO real logic in sh.
 
 ### Harness agnosticism
@@ -323,6 +323,7 @@ flowchart TD
     - When the kernel mechanically runs CI/CD and it fails, it must be retried/adjudicated agentically (dedicated agent) — maybe it got broken (trivial fix in place), or it is pre-existing.
     - Noted failures are brought through the concern funnel.
 - [[TestRuntimeTracking]] All test runs by KERNEL are timed, and runtimes of successful tests are tracked. Numbers (current vs start of goal) are on the architect's table; his prompt includes an invitation to reduce test times while keeping tests on their merits.
+- [[Infra]] - infra failes shall not create a loop. If kernel blocked by infra failure, or persistent issue, kernl launch a dedicated agent to either fix failure (config, settings, alter script) and output succcess, or prescrive handling in structural outout (ignore, fallback m stop specific task types, stop all together, architect escalation etc)
 
 ### Structured output
 - [[StructuredOutputChannels]] Strict schema (tool/yield) only for small, simple outputs. The plan is markdown; the PM derives task files from it.
