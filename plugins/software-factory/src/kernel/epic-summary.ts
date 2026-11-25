@@ -1,4 +1,5 @@
 import { epicSummaryRelPath } from "./context-pack.js";
+import { reportView } from "./report-view.js";
 import type {
   ArtifactStore,
   GoalDecision,
@@ -45,17 +46,13 @@ function epicSummaryText(
   record: StepRecord,
   state: State,
 ): string {
-  const tasks = Object.entries(state.tasks)
-    .filter(([, task]) => task.epic === epic)
-    .sort(([a], [b]) => a.localeCompare(b));
-  const byStatus = new Map<TaskStatus, string[]>();
-  for (const [slug, task] of tasks) {
-    const group = byStatus.get(task.status) ?? [];
-    group.push(slug);
-    byStatus.set(task.status, group);
-  }
+  const tasks = reportView({ state }).tasks.filter(
+    (task) => task.epic === epic,
+  );
   const statusLine = (status: TaskStatus): string => {
-    const slugs = byStatus.get(status) ?? [];
+    const slugs = tasks
+      .filter((task) => task.status === status)
+      .map((task) => task.slug);
     return `- ${status} (${slugs.length}): ${slugs.length ? slugs.join(", ") : "none"}`;
   };
   const concerns = epicConcernLines(record);

@@ -12,10 +12,10 @@ import {
   runPlanCheckPm,
   snapshotTurn,
 } from "./pm.js";
+import { reportView } from "./report-view.js";
 import { scriptMeta } from "./record.js";
 import {
   type ArtifactStore,
-  type Cause,
   type KernelRuntime,
   normalizeSlug,
   type Outcome,
@@ -223,11 +223,6 @@ export function lastGateRecord(
   return last ? store.records.file(last, "end.yaml") : undefined;
 }
 
-/** One parked task's cause as the brief reads it. */
-function parkedCauseText(cause: Cause | undefined): string {
-  return cause ? formatCause(cause) : "no recorded cause";
-}
-
 /**
  * The checker's brief: every task file with status, then parked slugs with
  * the cause that parked them. The causes let the checker tell a mechanical
@@ -242,13 +237,14 @@ export function planCheckBrief(
   const scoped =
     epic === undefined ? tasks : tasks.filter((task) => task.epic === epic);
   const lines = [existingTasks(state, scoped)];
-  const parked = scoped
-    .filter((task) => state.tasks[task.slug]?.status === "parked")
-    .sort((a, b) => a.slug.localeCompare(b.slug))
-    .map(
-      (task) =>
-        `- ${task.slug}: ${parkedCauseText(state.tasks[task.slug]?.cause)}`,
-    );
+  const parked = reportView({
+    state,
+    tasks: scoped,
+    slugs: scoped.map((task) => task.slug),
+  }).groups.allParked.map(
+    (task) =>
+      `- ${task.slug}: ${task.cause ? formatCause(task.cause) : "no recorded cause"}`,
+  );
   if (parked.length > 0) lines.push("", "Parked by cause:", ...parked);
   return lines.join("\n");
 }

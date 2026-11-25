@@ -4,7 +4,7 @@ import {
   renderDashboard,
   writeDashboardAssets,
 } from "./dashboard.js";
-import { derive, materialOpenDebts } from "./derive.js";
+import { derive } from "./derive.js";
 import {
   DEFAULT_ROLE_BY_STEP,
   type GroupMetrics,
@@ -16,9 +16,8 @@ import {
 import { loadPriceTable, type PriceSource } from "./openrouter.js";
 import type { PriceTable } from "./pricing.js";
 import { latestRunLog } from "./run-log.js";
-import { recordDirName } from "./store.js";
+import { reportView } from "./report-view.js";
 import {
-  debtEntry,
   openConcernEntries,
   readStatusMailbox,
   statusConcerns,
@@ -26,7 +25,6 @@ import {
 } from "./status-triage.js";
 import type {
   StatusConcern,
-  StatusDebt,
   StatusMailbox,
   StatusOpenConcern,
   StatusSteer,
@@ -44,24 +42,22 @@ import {
 } from "./summary/intent-status.js";
 import type {
   ArtifactStore,
-  Cause,
   FlowDefinition,
   GoalStatus,
   KernelRuntime,
+  ReportDebt as StatusDebt,
+  ReportTask,
   State,
   StepRecord,
   TaskFile,
-  TaskKind,
-  TaskState,
-  TaskStatus,
 } from "./types.js";
 
 /** Goal-relative path of the machine-readable status snapshot. */
 export const STATUS_REL_PATH = "status.json";
 
+export type { ReportDebt as StatusDebt } from "./types.js";
 export type {
   StatusConcern,
-  StatusDebt,
   StatusMailbox,
   StatusOpenConcern,
   StatusSteer,
@@ -70,24 +66,7 @@ export type {
 } from "./status-triage.js";
 
 /** One task as status.json names it, with the record a dashboard can link. */
-export interface StatusTask {
-  slug: string;
-  title: string;
-  status: TaskStatus;
-  kind: TaskKind;
-  epic?: string;
-  round: number;
-  turns: number;
-  commit?: string;
-  cause?: Cause;
-  /**
-   * A parked task whose work landed through a base continuation; not counted
-   * as live work.
-   */
-  supersededBy?: string;
-  /** `records/<dir>` of the slug's latest record. */
-  record?: string;
-}
+export type StatusTask = ReportTask;
 
 export interface StatusCost {
   turns: number;
@@ -195,64 +174,6 @@ export interface StatusInput {
   updatedAt?: string;
 }
 
-const OPEN: ReadonlySet<TaskStatus> = new Set(["pending", "ready", "running"]);
-
-function recordPath(record: StepRecord): string {
-  return `records/${recordDirName(record.seq, record)}`;
-}
-
-function latestRecords(
-  records: readonly StepRecord[],
-): Map<string, StepRecord> {
-  const latest = new Map<string, StepRecord>();
-  for (const record of [...records].sort((a, b) => a.seq - b.seq)) {
-    if (record.slug) latest.set(record.slug, record);
-  }
-  return latest;
-}
-
-function statusTask(
-  slug: string,
-  state: TaskState,
-  titles: ReadonlyMap<string, string>,
-  latest: ReadonlyMap<string, StepRecord>,
-): StatusTask {
-  const record = latest.get(slug);
-  return {
-    slug,
-    title: titles.get(slug) ?? slug,
-    status: state.status,
-    kind: state.kind,
-    ...(state.epic ? { epic: state.epic } : {}),
-    round: state.round,
-    turns: state.turns,
-    ...(state.commit ? { commit: state.commit } : {}),
-    ...(state.cause ? { cause: state.cause } : {}),
-    ...(state.supersededBy ? { supersededBy: state.supersededBy } : {}),
-    ...(record ? { record: recordPath(record) } : {}),
-  };
-}
-
-function groupTasks(tasks: StatusTask[]): StatusDocument["tasks"] {
-  const parked = tasks.filter((task) => task.status === "parked");
-  return {
-    open: tasks.filter((task) => OPEN.has(task.status)),
-    merged: tasks.filter((task) => task.status === "merged"),
-    finished: tasks.filter((task) => task.status === "finished"),
-    parked: parked.filter((task) => !task.supersededBy),
-    superseded: parked.filter((task) => task.supersededBy),
-    cancelled: tasks.filter((task) => task.status === "cancelled"),
-  };
-}
-
-function statusTasks(input: StatusInput): StatusTask[] {
-  const titles = new Map(input.tasks.map((task) => [task.slug, task.title]));
-  const latest = latestRecords(input.records);
-  return Object.entries(input.state.tasks)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([slug, state]) => statusTask(slug, state, titles, latest));
-}
-
 /** The counts the mechanical account names, from the grouped tasks. */
 function taskCounts(tasks: StatusDocument["tasks"]): StatusTaskCounts {
   const landed = tasks.merged.length + tasks.finished.length;
@@ -288,38 +209,40 @@ function goalTotals(
   return totalsOf(iterations);
 }
 
+/** One projection per group, keyed by name in sorted order. */
+function byName<T>(
+  groups: Record<string, GroupMetrics>,
+  pick: (entry: GroupMetrics) => T,
+): Record<string, T> {
+  return Object.fromEntries(
+    Object.keys(groups)
+      .sort()
+      .map((name) => [name, pick(groups[name]!)]),
+  );
+}
+
 function costOf(
   groups: Record<string, GroupMetrics>,
 ): Record<string, StatusCost> {
-  const out: Record<string, StatusCost> = {};
-  for (const name of Object.keys(groups).sort()) {
-    const entry = groups[name]!;
-    out[name] = {
-      turns: entry.turns,
-      tokens: entry.tokens,
-      harnessCostUsd: entry.usage.harnessCostUsd ?? null,
-      listCostUsd: entry.usage.listCostUsd ?? null,
-      unpricedTurns: entry.unpricedTurns,
-    };
-  }
-  return out;
+  return byName(groups, (entry) => ({
+    turns: entry.turns,
+    tokens: entry.tokens,
+    harnessCostUsd: entry.usage.harnessCostUsd ?? null,
+    listCostUsd: entry.usage.listCostUsd ?? null,
+    unpricedTurns: entry.unpricedTurns,
+  }));
 }
 
 function workOf(
   groups: Record<string, GroupMetrics>,
 ): Record<string, StatusWork> {
-  const out: Record<string, StatusWork> = {};
-  for (const name of Object.keys(groups).sort()) {
-    const entry = groups[name]!;
-    out[name] = {
-      turns: entry.turns,
-      edits: entry.edits,
-      addedLines: entry.addedLines,
-      removedLines: entry.removedLines,
-      testRuns: entry.testRuns,
-    };
-  }
-  return out;
+  return byName(groups, (entry) => ({
+    turns: entry.turns,
+    edits: entry.edits,
+    addedLines: entry.addedLines,
+    removedLines: entry.removedLines,
+    testRuns: entry.testRuns,
+  }));
 }
 
 function workView(totals: MetricsTotals): StatusDocument["work"] {
@@ -348,8 +271,13 @@ function costView(totals: MetricsTotals): StatusDocument["cost"] {
 
 /** The snapshot as one data object; every field derives from task files and records. */
 export function buildStatus(input: StatusInput): StatusDocument {
-  const tasks = statusTasks(input);
-  const groups = groupTasks(tasks);
+  const view = reportView({
+    state: input.state,
+    tasks: input.tasks,
+    records: input.records,
+  });
+  const { open, merged, finished, parked, superseded, cancelled } = view.groups;
+  const tasks = { open, merged, finished, parked, superseded, cancelled };
   const roleByStep = { ...DEFAULT_ROLE_BY_STEP, ...(input.roleByStep ?? {}) };
   const totals = goalTotals(
     input.records,
@@ -377,18 +305,12 @@ export function buildStatus(input: StatusInput): StatusDocument {
       mechanicalSummary(
         input.state.goal,
         input.state.iteration,
-        taskCounts(groups),
+        taskCounts(tasks),
       ),
-    tasks: groups,
-    distance: {
-      pending: groups.open
-        .filter((task) => task.status !== "running")
-        .map((task) => task.slug),
-      parks: groups.parked.map((task) => task.slug),
-      openDebt: materialOpenDebts([...input.records]).map(debtEntry),
-    },
+    tasks,
+    distance: view.distance,
     concerns: statusConcerns(input.records),
-    openConcerns: openConcernEntries(input.records),
+    openConcerns: openConcernEntries(input.records, view.distance.openDebt),
     steers: statusSteers(input.records, input.mailbox),
     cost: costView(totals),
     work: workView(totals),

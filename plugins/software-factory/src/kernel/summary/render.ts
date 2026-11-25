@@ -35,7 +35,7 @@ export function summaryHeadLines(render: SummaryRender): string[] {
     "",
     "## Distance",
     listLine(`pending (${facts.pending.length})`, facts.pending),
-    listLine(`parks (${facts.parkedAll.length})`, facts.parkedAll),
+    listLine(`parks (${facts.parks.length})`, facts.parks),
     ...render.distanceDebt,
     "",
     ...architectLines(render.architect, computed.planReviewMarks),

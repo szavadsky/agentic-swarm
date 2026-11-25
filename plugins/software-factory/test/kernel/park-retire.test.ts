@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { renderDashboard } from "../../src/kernel/dashboard.js";
 import { derive } from "../../src/kernel/derive.js";
+import { reportView } from "../../src/kernel/report-view.js";
 import { buildStatus } from "../../src/kernel/status.js";
-import { summaryTaskLists } from "../../src/kernel/summary/tables.js";
 import type { StepRecord } from "../../src/kernel/types.js";
 import { cause, rec, script, task } from "./helpers.js";
 
@@ -146,7 +146,7 @@ describe("status distance and dashboard", () => {
     ]);
     expect(status.tasks.superseded[0]!.supersededBy).toBe("base-next");
     expect(status.distance.parks).toEqual(["live"]);
-    expect(summaryTaskLists(state).parked).toEqual(["live"]);
+    expect(reportView({ state }).distance.parks).toEqual(["live"]);
 
     const html = renderDashboard(status);
     expect(html).toContain("1 merged");

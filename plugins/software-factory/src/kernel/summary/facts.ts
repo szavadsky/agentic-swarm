@@ -1,6 +1,6 @@
 /** Task and remark facts the head and metrics lines derive from. */
 
-import { materialOpenDebts } from "../derive.js";
+import { reportView } from "../report-view.js";
 import type { IterationMetrics } from "../metrics.js";
 import type { ArtifactStore, State, StepRecord } from "../types.js";
 import type {
@@ -14,7 +14,6 @@ import {
   ownerRemarkableLines,
   summaryParkedByKind,
   summaryRemarks,
-  summaryTaskLists,
   unansweredSteerLines,
 } from "./tables.js";
 
@@ -24,26 +23,23 @@ export function summaryTaskFacts(
   state: State,
   allRecords: StepRecord[],
 ): SummaryTaskFacts {
-  const merged = recs
-    .filter((r) => r.step === "merge" && r.ok === true)
-    .map((r) => r.slug!);
-  const finished = recs
-    .filter((r) => r.step === "finish" && r.ok === true)
-    .map((r) => r.slug!);
+  const landed = (step: string) =>
+    recs.filter((r) => r.step === step && r.ok === true).map((r) => r.slug!);
+  const merged = landed("merge");
+  const finished = landed("finish");
   // Root causes group by kind: rewording a park's detail never splits a group.
   const parkedByKind = summaryParkedByKind(recs);
-  const { pending, parked: parkedAll, cancelled } = summaryTaskLists(state);
-  // Distance reports the goal's remaining obligations: material debt left
-  // open after every recorded closure, even when the architect settled done.
-  const open = materialOpenDebts(allRecords);
+  // Distance reads the view's task groups and open debt, the same facts status
+  // and the pack list; merged and finished stay this iteration's records.
+  const view = reportView({ state, records: allRecords });
   return {
     merged,
     finished,
     parkedByKind,
-    pending,
-    parkedAll,
-    cancelled,
-    open,
+    pending: view.groups.pending.map((task) => task.slug),
+    parks: view.groups.parked.map((task) => task.slug),
+    cancelled: view.groups.cancelled.map((task) => task.slug),
+    open: view.distance.openDebt,
   };
 }
 

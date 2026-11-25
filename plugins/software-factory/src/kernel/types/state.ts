@@ -8,7 +8,7 @@ import type {
   TaskPhase,
   TaskStatus,
 } from "./tasks.js";
-import type { ReviewVerdict } from "./outcome.js";
+import type { Concern, ConcernId, ReviewVerdict } from "./outcome.js";
 
 /**
  * A park or failure cause, closed by `kind`: the kernel switches on it and
@@ -121,6 +121,63 @@ export interface TaskState {
 }
 
 export type GoalStatus = "active" | "done" | "blocked";
+
+/** One task row a report lists: the shape status.json writes and the pack lists. */
+export interface ReportTask {
+  slug: string;
+  title: string;
+  status: TaskStatus;
+  kind: TaskKind;
+  epic?: string;
+  round: number;
+  turns: number;
+  commit?: string;
+  cause?: Cause;
+  /** Set on a park whose kept work landed through a base continuation. */
+  supersededBy?: string;
+  /** `records/<dir>` of the slug's latest record; absent without records. */
+  record?: string;
+}
+
+/**
+ * The task rows grouped once. `parked` is the live set the goal still counts;
+ * `allParked` keeps every park, including the base continuations.
+ */
+export interface ReportTaskGroups {
+  open: ReportTask[];
+  /** `pending` and `ready`: a boundary's waiting list. */
+  pending: ReportTask[];
+  merged: ReportTask[];
+  finished: ReportTask[];
+  parked: ReportTask[];
+  allParked: ReportTask[];
+  superseded: ReportTask[];
+  cancelled: ReportTask[];
+}
+
+/** One open debt with the record that raised it. */
+export interface ReportDebt {
+  id?: ConcernId;
+  text: string;
+  evidence?: string;
+  calibration: Concern["calibration"];
+  /** `slug step rN` of the record that raised it. */
+  source: string;
+  iteration: number;
+  record?: string;
+}
+
+/** The one derived view summary, status, dashboard and pack read. */
+export interface ReportView {
+  tasks: ReportTask[];
+  groups: ReportTaskGroups;
+  /** The goal's distance: what waits, what parked, what debt stays open. */
+  distance: {
+    pending: string[];
+    parks: string[];
+    openDebt: ReportDebt[];
+  };
+}
 
 /**
  * One epic's derived state. The epic's last completed subarchitect record owns

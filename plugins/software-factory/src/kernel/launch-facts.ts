@@ -8,6 +8,7 @@ import { derive, FRONT_STOP_STEP } from "./derive.js";
 import { writeEpicSummaries } from "./epic-summary.js";
 import { rolesByStep, writeMetrics } from "./metrics.js";
 import { loadPriceTable } from "./openrouter.js";
+import { reportView } from "./report-view.js";
 import { scriptMeta } from "./record.js";
 import { statusSource, writeStatus } from "./status.js";
 import { writeIterationSummary } from "./summary.js";
@@ -24,10 +25,9 @@ export function unfinishedTasks(state: State): string[] {
 
 /** Non-terminal tasks, as `slug status`: work the goal still owes. */
 export function openTasks(state: State): string[] {
-  return Object.entries(state.tasks)
-    .filter(([, task]) => task.status === "pending" || task.status === "ready")
-    .map(([slug, task]) => `${slug} ${task.status}`)
-    .sort();
+  return reportView({ state }).groups.pending.map(
+    (task) => `${task.slug} ${task.status}`,
+  );
 }
 
 /**

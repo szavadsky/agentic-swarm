@@ -4,7 +4,6 @@ import path from "node:path";
 import type { Usage } from "../../harness/types.js";
 import { recordedBaseGates } from "../baseline.js";
 import { formatCause } from "../cause.js";
-import { materialOpenDebts } from "../derive.js";
 import { costText, medianMs, worstMs } from "../metrics.js";
 import type { QaCatchSource, QaCatches } from "../qa.js";
 import type {
@@ -22,10 +21,12 @@ import type {
 import type {
   ArtifactStore,
   CauseKind,
+  Concern,
   GoalDecision,
+  ReportDebt,
   StepRecord,
 } from "../types.js";
-import type { SummaryInput, SummaryStatus, SummaryTaskLists } from "./types.js";
+import type { SummaryInput, SummaryStatus } from "./types.js";
 
 export function defaultStatus(
   decision: GoalDecision | undefined,
@@ -163,16 +164,18 @@ export function askRecoveryLine(recoveries: AskRecoveryCounts): string {
   return `- ask recoveries: unfinished ${recoveries.unfinished}, rescue ${recoveries.rescue}`;
 }
 
+/** One concern line, prefixed by its record's slug when it has one. */
+function concernLine(rec: StepRecord, concern: Concern, prefix = ""): string {
+  return `- ${prefix}${rec.slug ? `${rec.slug}: ` : ""}${concern.text}${
+    concern.evidence ? ` (${concern.evidence})` : ""
+  }`;
+}
+
 export function concernLines(recs: StepRecord[], kind?: string): string[] {
   return recs.flatMap((rec) =>
     (rec.outcome?.concerns ?? [])
       .filter((concern) => !kind || concern.kind === kind)
-      .map(
-        (concern) =>
-          `- ${rec.slug ? `${rec.slug}: ` : ""}${concern.text}${
-            concern.evidence ? ` (${concern.evidence})` : ""
-          }`,
-      ),
+      .map((concern) => concernLine(rec, concern)),
   );
 }
 
@@ -193,35 +196,11 @@ export function summaryParkedByKind(
   return parkedByKind;
 }
 
-export function summaryTaskLists(
-  state: SummaryInput["state"],
-): SummaryTaskLists {
-  const pending: string[] = [];
-  const parked: string[] = [];
-  const cancelled: string[] = [];
-  for (const slug of Object.keys(state.tasks).sort()) {
-    const status = state.tasks[slug]!.status;
-    if (status === "parked" && state.tasks[slug]!.supersededBy === undefined) {
-      parked.push(slug);
-    } else if (status === "pending" || status === "ready") {
-      pending.push(slug);
-    } else if (status === "cancelled") {
-      cancelled.push(slug);
-    }
-  }
-  return { pending, parked, cancelled };
-}
-
 export function ownerRemarkableLines(recs: StepRecord[]): string[] {
   return recs.flatMap((rec) =>
     (rec.outcome?.concerns ?? [])
       .filter((concern) => concern.calibration === "owner")
-      .map(
-        (concern) =>
-          `- [${concern.kind}] ${rec.slug ? `${rec.slug}: ` : ""}${concern.text}${
-            concern.evidence ? ` (${concern.evidence})` : ""
-          }`,
-      ),
+      .map((concern) => concernLine(rec, concern, `[${concern.kind}] `)),
   );
 }
 
@@ -286,9 +265,7 @@ export function baseGateLines(
   ];
 }
 
-export function distanceDebtLines(
-  open: ReturnType<typeof materialOpenDebts>,
-): string[] {
+export function distanceDebtLines(open: readonly ReportDebt[]): string[] {
   if (open.length === 0) return ["- open debt (0): none"];
   return [
     `- open debt (${open.length}):`,

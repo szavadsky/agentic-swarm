@@ -1,8 +1,10 @@
 /** Pack paths and the two renderers. */
 
 import { makeCause } from "../cause.js";
+import { reportView } from "../report-view.js";
 import type { ContextPackInput } from "./types.js";
 import type { PackSection } from "./sections.js";
+import type { ReportView, TaskFile } from "../types.js";
 import {
   appendAgedReady,
   appendBaseGates,
@@ -115,6 +117,8 @@ function appendWholeOrBrief(
  * brief replaces them, and a capped summary never drops its pointer.
  */
 export function renderContextPack(input: ContextPackInput): string {
+  const view = packView(input);
+  const deps = taskDeps(input.tasks);
   const epicScope = input.epic ? `, epic \`${input.epic}\`` : "";
   const lines: string[] = [
     `# Context pack — goal ${input.goal}${epicScope}, iteration ${input.iteration}`,
@@ -133,15 +137,34 @@ export function renderContextPack(input: ContextPackInput): string {
     "| slug | status | kind | round | turns | deps | commit |",
     "|---|---|---|---|---|---|---|",
   ];
-  appendTaskStatus(lines, input);
+  appendTaskStatus(lines, input, view.tasks, deps);
   appendSection(
     lines,
     "## Parked by cause (terminal; continue via a new slug)",
-    parkedLines(input),
+    parkedLines(view.groups.allParked),
   );
-  appendSection(lines, "## Pending", pendingLines(input));
+  appendSection(
+    lines,
+    "## Pending",
+    pendingLines(input.state, view.groups.pending, deps),
+  );
   appendIndexBody(lines, input);
   return `${lines.join("\n")}\n`;
+}
+
+/** The one view the pack's markdown and its data both read. */
+function packView(input: ContextPackInput): ReportView {
+  return reportView({
+    state: input.state,
+    tasks: input.tasks,
+    slugs: input.tasks.map((task) => task.slug),
+    ...(input.running ? { running: input.running } : {}),
+  });
+}
+
+/** Task deps by slug: the row carries the status, the file carries what it waits on. */
+function taskDeps(tasks: readonly TaskFile[]): Map<string, readonly string[]> {
+  return new Map(tasks.map((task) => [task.slug, task.deps]));
 }
 
 /** Everything after the status table: whole unless the preparer briefed it. */
@@ -174,60 +197,6 @@ function appendIndexBody(lines: string[], input: ContextPackInput): void {
     appendSpikeFindings(out, input),
   );
   appendTaskFiles(lines, input);
-}
-
-/**
- * The derived state behind the pack as JSON: every task, hold, debt and
- * pointer, with no cap. The pack preparer reads it and returns the sections it
- * judges better as a brief; the render above places them and consumes the same
- * input. Every brief's pointer names this file and its section.
- */
-/** Every task with its derived run-state, sorted by slug. */
-function contextTaskStatuses(input: ContextPackInput) {
-  return [...input.tasks]
-    .sort((a, b) => a.slug.localeCompare(b.slug))
-    .map((task) => {
-      const state = input.state.tasks[task.slug];
-      return {
-        slug: task.slug,
-        title: task.title,
-        status: input.running?.includes(task.slug)
-          ? "running"
-          : (state?.status ?? "unknown"),
-        kind: task.kind,
-        round: state?.round ?? 1,
-        turns: state?.turns ?? 0,
-        deps: task.deps,
-        commit: state?.commit ?? null,
-        cause: state?.cause ?? null,
-      };
-    });
-}
-
-/** Parked tasks with the cause a reader needs, defaulted when none recorded. */
-function contextParked(statuses: ReturnType<typeof contextTaskStatuses>) {
-  return statuses
-    .filter((task) => task.status === "parked")
-    .map((task) => ({
-      slug: task.slug,
-      cause: task.cause ?? makeCause("unknown", "no recorded cause"),
-    }));
-}
-
-/** Pending/ready tasks and the deps still keeping them waiting. */
-function contextPending(
-  input: ContextPackInput,
-  statuses: ReturnType<typeof contextTaskStatuses>,
-) {
-  return statuses
-    .filter((task) => task.status === "pending" || task.status === "ready")
-    .map((task) => {
-      const waitsOn = task.deps.filter((dep) => {
-        const status = input.state.tasks[dep]?.status;
-        return status !== "merged" && status !== "finished";
-      });
-      return { slug: task.slug, waitsOn };
-    });
 }
 
 /** Steers with the hold that blocks them, when one does. */
@@ -265,37 +234,44 @@ function contextPaths(input: ContextPackInput) {
   };
 }
 
-/** Spike findings sorted by slug. */
-function contextSpikeFindings(input: ContextPackInput) {
-  return [...(input.spikeFindings ?? [])].sort((a, b) =>
-    a.slug.localeCompare(b.slug),
-  );
-}
-
-/** Task files sorted by slug, each at its goal-relative path. */
-function contextTaskFiles(input: ContextPackInput) {
-  return [...input.tasks]
-    .sort((a, b) => a.slug.localeCompare(b.slug))
-    .map((task) => ({
-      slug: task.slug,
-      path: `${input.tasksDir}/${task.slug}.md`,
-    }));
-}
-
+/**
+ * The derived state behind the pack as JSON: every task, hold, debt and
+ * pointer, with no cap. The pack preparer reads it and returns the sections it
+ * judges better as a brief; the render above places them and consumes the same
+ * input. Every brief's pointer names this file and its section.
+ */
 export function renderContextData(input: ContextPackInput): string {
-  const statuses = contextTaskStatuses(input);
-  const parked = contextParked(statuses);
-  const pending = contextPending(input, statuses);
+  const view = packView(input);
+  const deps = taskDeps(input.tasks);
   const steers = contextSteers(input);
   const data = {
     goal: input.goal,
     iteration: input.iteration,
     epic: input.epic ?? null,
     paths: contextPaths(input),
-    tasks: statuses,
+    tasks: view.tasks.map((task) => ({
+      slug: task.slug,
+      title: task.title,
+      status: task.status,
+      kind: task.kind,
+      round: task.round,
+      turns: task.turns,
+      deps: deps.get(task.slug) ?? [],
+      commit: task.commit ?? null,
+      cause: task.cause ?? null,
+    })),
     epics: input.state.epics,
-    parked,
-    pending,
+    parked: view.groups.allParked.map((task) => ({
+      slug: task.slug,
+      cause: task.cause ?? makeCause("unknown", "no recorded cause"),
+    })),
+    pending: view.groups.pending.map((task) => ({
+      slug: task.slug,
+      waitsOn: (deps.get(task.slug) ?? []).filter((dep) => {
+        const status = input.state.tasks[dep]?.status;
+        return status !== "merged" && status !== "finished";
+      }),
+    })),
     agedReady: input.agedReady ?? null,
     planCheck: input.planCheck ?? null,
     planReview: input.planReview ?? null,
@@ -308,8 +284,15 @@ export function renderContextData(input: ContextPackInput): string {
     baseGates: input.baseGates ?? null,
     steers,
     pmAnswers: input.pmAnswers ?? [],
-    spikeFindings: contextSpikeFindings(input),
-    taskFiles: contextTaskFiles(input),
+    spikeFindings: [...(input.spikeFindings ?? [])].sort((a, b) =>
+      a.slug.localeCompare(b.slug),
+    ),
+    taskFiles: [...input.tasks]
+      .sort((a, b) => a.slug.localeCompare(b.slug))
+      .map((task) => ({
+        slug: task.slug,
+        path: `${input.tasksDir}/${task.slug}.md`,
+      })),
   };
   return `${JSON.stringify(data, null, 2)}\n`;
 }

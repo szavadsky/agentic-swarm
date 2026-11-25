@@ -6,7 +6,7 @@ import type { OpenDebt } from "../derive.js";
 import { renderInfraSection } from "../infra.js";
 import { spikeReportPath } from "../spike-report.js";
 import type { WasteSpikeProposal } from "../metrics/recurring.js";
-import type { Cause, TaskFile } from "../types.js";
+import type { ReportTask, State } from "../types.js";
 import type { ContextPackInput, ForwardedConcern } from "./types.js";
 import type { PackSection } from "./sections.js";
 import { formatPlanFinding, numberedPlanFindings } from "./plan-findings.js";
@@ -21,11 +21,6 @@ export const SECTION_HEADINGS = {
   pmAnswers: "## PM steer answers",
   codeMap: "## Code map (shallow; read paths directly)",
 } as const satisfies Record<PackSection, string>;
-
-/** One parked task's cause as the pack reads it. */
-function parkedCauseText(cause: Cause | undefined): string {
-  return cause ? formatCause(cause) : "no recorded cause";
-}
 
 export function short(hash: string | undefined): string {
   return hash ? hash.slice(0, 10) : "-";
@@ -64,17 +59,6 @@ export function appendSection(
   lines.push("", title, ...entries);
 }
 
-/** One task's status-table row. */
-function taskStatusRow(task: TaskFile, input: ContextPackInput): string {
-  const state = input.state.tasks[task.slug];
-  const status = input.running?.includes(task.slug)
-    ? "running"
-    : (state?.status ?? "unknown");
-  return `| ${task.slug} | ${status} | ${task.kind} | ${state?.round ?? 1} | ${state?.turns ?? 0} | ${
-    task.deps.join(",") || "-"
-  } | ${short(state?.commit)} |`;
-}
-
 /** One epic's rollup line. */
 function epicStatusLine(name: string, input: ContextPackInput): string {
   const epic = input.state.epics[name]!;
@@ -89,10 +73,14 @@ function epicStatusLine(name: string, input: ContextPackInput): string {
 export function appendTaskStatus(
   lines: string[],
   input: ContextPackInput,
+  rows: readonly ReportTask[],
+  deps: ReadonlyMap<string, readonly string[]>,
 ): void {
-  const tasks = [...input.tasks].sort((a, b) => a.slug.localeCompare(b.slug));
-  for (const task of tasks) lines.push(taskStatusRow(task, input));
-  if (tasks.length === 0) lines.push("| (none yet) | | | | | | |");
+  for (const row of rows)
+    lines.push(
+      `| ${row.slug} | ${row.status} | ${row.kind} | ${row.round} | ${row.turns} | ${(deps.get(row.slug) ?? []).join(",") || "-"} | ${short(row.commit)} |`,
+    );
+  if (rows.length === 0) lines.push("| (none yet) | | | | | | |");
 
   const epicNames = Object.keys(input.state.epics)
     .filter((name) => input.epic === undefined || name === input.epic)
@@ -103,29 +91,26 @@ export function appendTaskStatus(
 }
 
 /** Parked tasks with their terminal cause. */
-export function parkedLines(input: ContextPackInput): string[] {
-  return input.tasks
-    .filter((t) => input.state.tasks[t.slug]?.status === "parked")
-    .map(
-      (t) =>
-        `- ${t.slug}: ${parkedCauseText(input.state.tasks[t.slug]?.cause)}`,
-    );
+export function parkedLines(parked: readonly ReportTask[]): string[] {
+  return parked.map(
+    (task) =>
+      `- ${task.slug}: ${task.cause ? formatCause(task.cause) : "no recorded cause"}`,
+  );
 }
 
 /** Pending/ready tasks and the deps each still waits on. */
-export function pendingLines(input: ContextPackInput): string[] {
-  return input.tasks
-    .filter((t) => {
-      const status = input.state.tasks[t.slug]?.status;
-      return status === "pending" || status === "ready";
-    })
-    .map((t) => {
-      const waiting = t.deps.filter((dep) => {
-        const status = input.state.tasks[dep]?.status;
-        return status !== "merged" && status !== "finished";
-      });
-      return `- ${t.slug}: ${waiting.length > 0 ? `waits on ${waiting.join(", ")}` : "ready"}`;
+export function pendingLines(
+  state: State,
+  pending: readonly ReportTask[],
+  deps: ReadonlyMap<string, readonly string[]>,
+): string[] {
+  return pending.map((task) => {
+    const waiting = (deps.get(task.slug) ?? []).filter((dep) => {
+      const status = state.tasks[dep]?.status;
+      return status !== "merged" && status !== "finished";
     });
+    return `- ${task.slug}: ${waiting.length > 0 ? `waits on ${waiting.join(", ")}` : "ready"}`;
+  });
 }
 
 /** Ready tasks with no turn in the last segment and why they sat. */

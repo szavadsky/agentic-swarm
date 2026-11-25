@@ -6,7 +6,6 @@
 import path from "node:path";
 import { recordedConcernId } from "../core/concerns.js";
 import { openConcerns } from "./context-pack/misc.js";
-import { materialOpenDebts, type OpenDebt } from "./derive.js";
 import type { LaunchStop } from "./launch-types.js";
 import { steerResponses } from "./mailbox/routes.js";
 import type { DrainSignal } from "./signals.js";
@@ -15,21 +14,10 @@ import type {
   ArtifactStore,
   Concern,
   ConcernId,
+  ReportDebt,
   StepRecord,
   SteerRoute,
 } from "./types.js";
-
-/** One open debt, with the record that raised it. */
-export interface StatusDebt {
-  id?: ConcernId;
-  text: string;
-  evidence?: string;
-  calibration: Concern["calibration"];
-  /** `slug step rN` of the record that raised it. */
-  source: string;
-  iteration: number;
-  record?: string;
-}
 
 /** One concern a record delivered, with its source record. */
 export interface StatusConcern {
@@ -96,13 +84,6 @@ function recordPath(record: StepRecord): string {
   return `records/${recordDirName(record.seq, record)}`;
 }
 
-/** The record directory a concern id names: `<recordId>#<n>`. */
-function concernRecord(id: ConcernId | undefined): string | undefined {
-  if (!id) return undefined;
-  const dir = id.slice(0, id.indexOf("#"));
-  return dir ? `records/${dir}` : undefined;
-}
-
 /** Every concern a record delivered, unfiltered: the count the page reports. */
 export function statusConcerns(
   records: readonly StepRecord[],
@@ -122,17 +103,16 @@ export function statusConcerns(
   );
 }
 
-/** One open debt as the distance view names it. */
-export function debtEntry(debt: OpenDebt): StatusDebt {
-  const record = concernRecord(debt.id);
+/** One open debt as the triage panel lists it. */
+function debtEntry(debt: ReportDebt): StatusOpenConcern {
   return {
     ...(debt.id ? { id: debt.id } : {}),
+    kind: "debt",
+    calibration: debt.calibration,
     text: debt.text,
     ...(debt.evidence ? { evidence: debt.evidence } : {}),
-    calibration: debt.calibration,
     source: debt.source,
-    iteration: debt.iteration,
-    ...(record ? { record } : {}),
+    ...(debt.record ? { record: debt.record } : {}),
   };
 }
 
@@ -149,11 +129,12 @@ function concernRecords(records: readonly StepRecord[]): Map<string, string> {
 
 /**
  * Open, non-FYI concerns: the forwarded set the checker did not answer plus
- * the debt register's non-FYI entries. Debt also appears in the distance view;
- * this panel lists every open concern so the page has one triage list.
+ * the view's open debt. Debt also appears in the distance view; this panel
+ * lists every open concern so the page has one triage list.
  */
 export function openConcernEntries(
   records: readonly StepRecord[],
+  debts: readonly ReportDebt[],
 ): StatusOpenConcern[] {
   const recordsById = concernRecords(records);
   const forwarded: StatusOpenConcern[] = openConcerns(records).map(
@@ -169,19 +150,7 @@ export function openConcernEntries(
         : {}),
     }),
   );
-  const debts: StatusOpenConcern[] = materialOpenDebts(records).map((debt) => {
-    const record = concernRecord(debt.id);
-    return {
-      ...(debt.id ? { id: debt.id } : {}),
-      kind: "debt",
-      calibration: debt.calibration,
-      text: debt.text,
-      ...(debt.evidence ? { evidence: debt.evidence } : {}),
-      source: debt.source,
-      ...(record ? { record } : {}),
-    };
-  });
-  return [...forwarded, ...debts].sort(
+  return [...forwarded, ...debts.map(debtEntry)].sort(
     (a, b) =>
       (a.record ?? "").localeCompare(b.record ?? "") ||
       a.text.localeCompare(b.text),
