@@ -184,7 +184,7 @@ function resolveTaskType(
   fileSlug: string,
   type: string,
   taskTypes: Record<string, TaskTypeDefinition>,
-): { kind: TaskKind; flow: string } {
+): { kind: TaskKind; flow: string; nogit?: boolean } {
   const definition = Object.hasOwn(taskTypes, type)
     ? taskTypes[type]
     : undefined;
@@ -194,7 +194,11 @@ function resolveTaskType(
       "unconfigured-type",
     );
   }
-  return { kind: definition.kind, flow: definition.flow };
+  return {
+    kind: definition.kind,
+    flow: definition.flow,
+    ...(definition.nogit ? { nogit: true } : {}),
+  };
 }
 
 /**
@@ -275,6 +279,7 @@ export function parseTaskFile(
             ? "spike"
             : "development") as TaskKind,
           flow: result.data.flow ?? DEFAULT_FLOW,
+          nogit: false,
         };
   return {
     ...result.data,

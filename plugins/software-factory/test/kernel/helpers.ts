@@ -69,6 +69,57 @@ export const TEST_ARCHITECTURE: ArchitectureConfig = {
   planReturn: { prompt: "architect-review-return" },
 };
 
+/** The package-default task types: what `config/process.yaml` ships. */
+export const SHIPPED_TASK_TYPES: Record<string, TaskTypeDefinition> = {
+  development: {
+    flow: "implement-review",
+    kind: "development",
+    schema: "outcome",
+    nogit: false,
+    useWhen: "change meant to land in the repo and merge after QA and review",
+  },
+  spike: {
+    flow: "spike",
+    kind: "spike",
+    schema: "outcome",
+    nogit: false,
+    useWhen:
+      "question only evidence answers — finished with findings and never merged",
+  },
+  "fact-finder": {
+    flow: "fact-find",
+    kind: "spike",
+    schema: "outcome",
+    nogit: true,
+    useWhen:
+      "document behavior or research libraries and best practices — one researcher turn, its file may live outside git",
+  },
+  poc: {
+    flow: "poc",
+    kind: "spike",
+    schema: "outcome",
+    nogit: true,
+    useWhen:
+      "explore an approach without production intent — implementer and reviewer, its product may live outside git",
+  },
+  "computer-use": {
+    flow: "computer-use",
+    kind: "development",
+    schema: "outcome",
+    nogit: false,
+    useWhen:
+      "a delivery that needs browser tests — implementer, a browser acceptance turn, then QA and review",
+  },
+  trivial: {
+    flow: "just-implement",
+    kind: "development",
+    schema: "outcome",
+    nogit: false,
+    useWhen:
+      "small fully understood change with one implement turn and no acceptance step",
+  },
+};
+
 /** The task types the prompt snapshots configure and render. */
 export const TEST_TASK_TYPES: Record<string, TaskTypeDefinition> = {
   development: {

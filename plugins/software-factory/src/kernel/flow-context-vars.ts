@@ -141,8 +141,10 @@ function commonVars(
     task_path: runtime.store.tasks.path(task.slug),
     cleanliness_revision: state?.cleanlinessRevision ? "true" : "false",
     worktree,
-    // Where a spike commits its finding; empty for every other task.
-    report_path: task.kind === "spike" ? spikeReportPath(task.slug) : "",
+    // Where a spike commits its finding; empty for a development task and a
+    // `nogit` task, whose product lives outside git.
+    report_path:
+      task.kind === "spike" && !task.nogit ? spikeReportPath(task.slug) : "",
     env_notes: formatEnvNotes(task.envNotes),
     setup_command: runtime.configs.repo.setup.join(" && ") || "none",
     gate_commands: gateCommandsText(

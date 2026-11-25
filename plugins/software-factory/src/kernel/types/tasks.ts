@@ -12,6 +12,11 @@ export interface TaskTypeDefinition {
   kind: TaskKind;
   /** A kernel outcome schema name; a task type never supplies its own. */
   schema: string;
+  /**
+   * The type's product may live outside git: the task finishes without a
+   * committed report and never merges. Absent reads as false.
+   */
+  nogit?: boolean;
   /** One line naming the work this type fits, so a planner never picks by name. */
   useWhen: string;
 }
@@ -25,6 +30,8 @@ export interface TaskFile {
   kind: TaskKind;
   /** Resolved from `type`; a legacy file declares it directly. */
   flow: string;
+  /** The type's product may live outside git; absent reads as false. */
+  nogit?: boolean;
   deps: string[];
   /** The epic that owns this task; absent means goal-level work. */
   epic?: string;

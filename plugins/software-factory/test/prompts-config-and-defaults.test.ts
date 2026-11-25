@@ -39,6 +39,22 @@ describe("prompts: config names", () => {
     expect(taskTypesVar(undefined)).toBe("none");
   });
 
+  it("marks a nogit type in the rendered catalog", () => {
+    expect(
+      taskTypesVar({
+        "fact-finder": {
+          flow: "fact-find",
+          kind: "spike",
+          schema: "outcome",
+          nogit: true,
+          useWhen: "research a library",
+        },
+      }),
+    ).toBe(
+      "fact-finder (flow: fact-find, kind: spike, schema: outcome, nogit: true, use when: research a library)",
+    );
+  });
+
   it("lists run-config aliases in config order", () => {
     expect(tierNamesVar({ implementer: {}, escalation: {} })).toBe(
       "implementer, escalation",

@@ -357,7 +357,7 @@ function crossFragmentRepeats(
 
 function promptSingleDefinitionsPart1() {
   const ALLOWED_REPEATS: Record<string, string[]> = {
-    qa: [
+    "qa-turn": [
       "round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty",
     ],
   };

@@ -69,6 +69,60 @@ flows:
         review: true
         changeRequests: 0
         deliverable: verdict
+  # A fact finder is one researcher turn: it may deliver its finding outside
+  # git and never needs a review or a merge.
+  fact-find:
+    steps:
+      - id: implement
+        prompt: implementer
+        alias: researcher
+        alternates: [implementer, reviewer]
+        unfinishedPrompt: unfinished-turn
+  # A PoC keeps the spike's two-agent acceptance but has no committed report
+  # and no merge: its product may live outside git.
+  poc:
+    steps:
+      - id: implement
+        prompt: implementer
+        alias: implementer
+        alternates: [implementer-b]
+        unfinishedPrompt: unfinished-turn
+      - id: review
+        prompt: reviewer
+        alias: reviewer
+        review: true
+        changeRequests: 2
+        deliverable: verdict
+  # The normal delivery flow with one extra QA acceptance turn for browser
+  # tests: the browser agent judges the running product before the code QA.
+  computer-use:
+    steps:
+      - id: implement
+        prompt: implementer
+        alias: implementer
+        alternates: [implementer-b]
+        unfinishedPrompt: unfinished-turn
+      - id: browser
+        prompt: browser-qa
+        alias: qa
+        qa: true
+        changeRequests: 2
+        deliverable: verdict
+      - id: qa
+        prompt: qa
+        alias: qa
+        qa: true
+        changeRequests: 2
+        deliverable: verdict
+      - id: review
+        prompt: reviewer
+        alias: reviewer
+        review: true
+        changeRequests: 2
+        deliverable: verdict
+      - id: resolve
+        prompt: steward
+        alias: steward
 # The goal-start ingestion sequence: `branch` first, then the `front`
 # classifier, then extra prompt steps (e.g. a requirements agent) in list
 # order. `branch` and `front` take only their id; the front's prompt and alias
@@ -141,7 +195,8 @@ hierarchy:
 # A task file names one type; the type owns its flow, kind, output schema and
 # the `useWhen` line that tells a planner which work fits it. `development`
 # merges, `spike` finishes with findings, `trivial` runs the front's
-# single-step path.
+# single-step path, and `nogit` marks a spike type whose product may live
+# outside git: it finishes without a committed report and never merges.
 taskTypes:
   development:
     flow: implement-review
@@ -153,6 +208,23 @@ taskTypes:
     kind: spike
     schema: outcome
     useWhen: question only evidence answers — finished with findings and never merged
+  fact-finder:
+    flow: fact-find
+    kind: spike
+    schema: outcome
+    nogit: true
+    useWhen: document behavior or research libraries and best practices — one researcher turn, its file may live outside git
+  poc:
+    flow: poc
+    kind: spike
+    schema: outcome
+    nogit: true
+    useWhen: explore an approach without production intent — implementer and reviewer, its product may live outside git
+  computer-use:
+    flow: computer-use
+    kind: development
+    schema: outcome
+    useWhen: a delivery that needs browser tests — implementer, a browser acceptance turn, then QA and review
   trivial:
     flow: just-implement
     kind: development

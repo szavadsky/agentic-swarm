@@ -6,6 +6,39 @@ import { PLAN_CHECKER_PAGE } from "./data-plan-checker.js";
 import { REPAIR_PROMPT_VARIABLES } from "./data-repair.js";
 import type { PromptVariablesPage } from "./types.js";
 
+/** The acceptance variables both QA prompts read: the code QA and browser QA. */
+const QA_VARIABLES: Record<string, string> = {
+  task_path: "path to the task file whose done-when this turn accepts",
+  worktree: "path to the task worktree holding the gated tree",
+  base_hash:
+    "commit hash before this task's first turn; the range spans every round",
+  head_hash: "commit hash after the latest turn",
+  round: "1-based shared acceptance round",
+  max_rounds:
+    "this QA step's total acceptance calls: its change-request bound plus the last call",
+  last_call:
+    "`true` when this QA turn is the step's last call: `qa.verdict changes` is refused",
+  base_gates:
+    "the base tree's recorded gate result: commit plus `green`, the pre-existing failing checks, or `not recorded`",
+  checks_result:
+    "latest checks record's failing-check text, or `pass` when green; `no checks run` without a checks record",
+  checks_tree: "the checked tree's hash; `unknown` without a checks record",
+  checks_log:
+    "the checks record's directory; `unknown` without a checks record",
+  gate_commands:
+    "configured compile/lint/test commands as `- id: command` lines; `none` when empty",
+  prior_findings:
+    "the last acceptance's findings (QA or review), numbered; empty before the first acceptance",
+  fix_dispositions:
+    "the current fix round's summary plus one numbered reply per prior finding; round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; renderer default",
+  outcome_path:
+    "path where the outcome file must be written when the harness asks for a file",
+  validate_cmd:
+    "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
+  outcome_schema:
+    "outcome examples narrowed to the base fields and `qa`; supplied by the turn",
+};
+
 /** One page per prompt template; the renderer emits them in this order. */
 export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
   {
@@ -190,7 +223,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       resume_note:
         "follow-up notice for a relaunched or trivial turn: the task branch and the resume fragment; empty string on a de-novo turn",
       report_path:
-        "repo-relative path a spike commits its finding to (`.factory/spikes/<slug>.md`); empty string on a development task; when set, it also opens the prompt with the commit-first sentence",
+        "repo-relative path a spike commits its finding to (`.factory/spikes/<slug>.md`); empty on a development task and on a `nogit` task, whose product lives outside git; when set, it also opens the prompt with the commit-first sentence",
       env_notes:
         "the task file's environment notes as `- ` bullet lines (infra facts, known flakes, workarounds); empty string when the task has none",
       setup_command:
@@ -220,37 +253,14 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     prompt: "qa",
     intro:
       "The QA step's acceptance prompt: the implementer's Work, Bounds and Code standard, then the acceptance focus, its own `qa` verdict, and the checks handoff. QA sends actionable findings back to the author or accepts the work; its own test and script edits are gated again before review.",
-    variables: {
-      task_path: "path to the task file whose done-when this turn accepts",
-      worktree: "path to the task worktree holding the gated tree",
-      base_hash:
-        "commit hash before this task's first turn; the range spans every round",
-      head_hash: "commit hash after the latest turn",
-      round: "1-based shared acceptance round",
-      max_rounds:
-        "this QA step's total acceptance calls: its change-request bound plus the last call",
-      last_call:
-        "`true` when this QA turn is the step's last call: `qa.verdict changes` is refused",
-      base_gates:
-        "the base tree's recorded gate result: commit plus `green`, the pre-existing failing checks, or `not recorded`",
-      checks_result:
-        "latest checks record's failing-check text, or `pass` when green; `no checks run` without a checks record",
-      checks_tree: "the checked tree's hash; `unknown` without a checks record",
-      checks_log:
-        "the checks record's directory; `unknown` without a checks record",
-      gate_commands:
-        "configured compile/lint/test commands as `- id: command` lines; `none` when empty",
-      prior_findings:
-        "the last acceptance's findings (QA or review), numbered; empty before the first acceptance",
-      fix_dispositions:
-        "the current fix round's summary plus one numbered reply per prior finding; round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; renderer default",
-      outcome_path:
-        "path where the outcome file must be written when the harness asks for a file",
-      validate_cmd:
-        "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
-      outcome_schema:
-        "outcome examples narrowed to the base fields and `qa`; supplied by the turn",
-    },
+    variables: QA_VARIABLES,
+  },
+  {
+    file: "browser-qa.md",
+    prompt: "browser-qa",
+    intro:
+      "The browser-test acceptance prompt: the QA body plus one browser-surface turn before the code QA, with the same `qa` verdict and the same checks handoff.",
+    variables: QA_VARIABLES,
   },
   DECIDER_PAGE,
   {

@@ -48,6 +48,7 @@ const CONFIGURED_PROMPTS = [
   "architect-repair",
   "architect-review-return",
   "architect-subarchitects",
+  "browser-qa",
   "delivery-repair",
   "digest",
   "front",

@@ -167,8 +167,9 @@ export async function runTaskGates(
     });
   }
   // A spike's product is its committed report, gated like a repo gate but
-  // never re-run: it reads the commit, which a re-run cannot change.
-  if (task.kind === "spike") {
+  // never re-run: it reads the commit, which a re-run cannot change. A
+  // `nogit` type delivers outside git, so it has no report to gate.
+  if (task.kind === "spike" && !task.nogit) {
     checks.push(
       await checkSpikeReport(worktree, task.slug, await headSha(worktree)),
     );

@@ -254,6 +254,45 @@ function library() {
   return loadPromptLibrary({ builtinDir: path.join(packageRoot, "prompts") });
 }
 
+/** The first fragment in a role's static include chain that carries the turn block. */
+function turnSource(
+  dir: string,
+  file: string,
+  seen = new Set<string>(),
+): string | undefined {
+  if (seen.has(file)) return undefined;
+  seen.add(file);
+  const text = fs.readFileSync(path.join(dir, file), "utf8");
+  if (text.split("\n").some((line) => line.startsWith("## This turn")))
+    return text;
+  for (const match of text.matchAll(/\{%-?\s*include\s+['"]([^'"]+)['"]/g)) {
+    const found = turnSource(dir, `${match[1]}.md`, seen);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+/** The fragment that owns the turn block has no prose after it. */
+function expectAtTurnSource(promptsDir: string, role: string): void {
+  const source = turnSource(promptsDir, `${role}.md`);
+  if (source === undefined)
+    throw new Error(`${role} source chain has no ## This turn`);
+  const turnLine = source
+    .split("\n")
+    .findIndex((l) => l.startsWith("## This turn"));
+  expect(turnLine, `${role} source has no ## This turn`).toBeGreaterThanOrEqual(
+    0,
+  );
+  const stray = source
+    .split("\n")
+    .slice(turnLine + 1)
+    .filter((l) => l.trim() !== "" && !/^(\s|-|\{%|\{\{)/.test(l));
+  expect(
+    stray,
+    `${role} has non-variable content after ## This turn: ${stray.join(" | ")}`,
+  ).toEqual([]);
+}
+
 describe("prompt structure", () => {
   it("gives every role one H1, ordered headings, and nothing after the turn block", () => {
     const promptsDir = path.join(packageRoot, "prompts");
@@ -283,25 +322,7 @@ describe("prompt structure", () => {
         turnAt,
         `${role} has text after ## This turn: ${headings.slice(turnAt + 1).join(" | ")}`,
       ).toBe(headings.length - 1);
-      const source = fs.readFileSync(
-        path.join(promptsDir, `${role}.md`),
-        "utf8",
-      );
-      const turnLine = source
-        .split("\n")
-        .findIndex((l) => l.startsWith("## This turn"));
-      expect(
-        turnLine,
-        `${role} source has no ## This turn`,
-      ).toBeGreaterThanOrEqual(0);
-      const stray = source
-        .split("\n")
-        .slice(turnLine + 1)
-        .filter((l) => l.trim() !== "" && !/^(\s|-|\{%|\{\{)/.test(l));
-      expect(
-        stray,
-        `${role} has non-variable content after ## This turn: ${stray.join(" | ")}`,
-      ).toEqual([]);
+      expectAtTurnSource(promptsDir, role);
     }
   });
 });

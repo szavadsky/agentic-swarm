@@ -97,7 +97,7 @@ Every other line of that bullet goes: its what, why, done-when, interface and un
 ## Granularity and dispatch
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
-A spike's done-when is "the report answers <question>", never a records path.
+A spike's done-when is "the report answers <question>", never a records path. A \`nogit\` spike delivers its file outside git and finishes without that commit.
 - Order by risk, uncertainty, complexity — not by file order. Issue what you can direct now plus the spikes; plan unblocked work in parallel with each spike.
 - A spike's product is knowledge, optionally a PoC; it unblocks other tasks and is not merged by default.
 - Deferred milestone: a placeholder whose detail waits for a spike — \`awaits: <spike>\` and no tasks. Unblocked work proceeds in parallel with the spike. It is an open item in every completeness check and blocks \`done\` until it holds real tasks or is retired with a reason. Where a detail cannot be settled yet, say so explicitly — defer it until a named spike or task lands ("details after spike X / task Y lands").
@@ -294,7 +294,7 @@ Every other line of that bullet goes: its what, why, done-when, interface and un
 ## Granularity and dispatch
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
-A spike's done-when is "the report answers <question>", never a records path.
+A spike's done-when is "the report answers <question>", never a records path. A \`nogit\` spike delivers its file outside git and finishes without that commit.
 - Order by risk, uncertainty, complexity — not by file order. Issue what you can direct now plus the spikes; plan unblocked work in parallel with each spike.
 - A spike's product is knowledge, optionally a PoC; it unblocks other tasks and is not merged by default.
 - Deferred milestone: a placeholder whose detail waits for a spike — \`awaits: <spike>\` and no tasks. Unblocked work proceeds in parallel with the spike. It is an open item in every completeness check and blocks \`done\` until it holds real tasks or is retired with a reason. Where a detail cannot be settled yet, say so explicitly — defer it until a named spike or task lands ("details after spike X / task Y lands").
@@ -434,7 +434,7 @@ repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
 \`\`\`
 
-Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). Configured tiers: implementer, escalation.
+Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). A \`nogit: true\` type delivers its product outside git: it finishes without a committed report and never merges. Configured tiers: implementer, escalation.
 
 
 For the front's file: \`type\` (\`trivial\` for trivial, \`development\` for task; a class with no configured type is \`bigger\`), \`deps: []\`, \`source: front\`, a unique slug, no missing dependency, and a \`tier\` naming \`default\` or a configured alias. Body: the brief with a \`Done when:\` line.
@@ -556,7 +556,7 @@ repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
 \`\`\`
 
-Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). Configured tiers: implementer, escalation.
+Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). A \`nogit: true\` type delivers its product outside git: it finishes without a committed report and never merges. Configured tiers: implementer, escalation.
 
 
 - \`slug\` — keep the architect's slug; assign a short kebab-case one only when the bullet has none. Immutable, never reused, safe as a branch and file name, unique across the goal including dropped tasks.
@@ -636,7 +636,7 @@ On a plan-check turn, \`plan_checks\` lists the checker's follow-ups with their 
 
 ## Rules
 
-A spike's done-when is "the report answers <question>", never a records path.
+A spike's done-when is "the report answers <question>", never a records path. A \`nogit\` spike delivers its file outside git and finishes without that commit.
 
 
 - \`revision\` is an amend's only signal: bump it by one when you rewrite a parked task's own file, never otherwise. Dispatch resumes an amended slug on its kept branch with its records, and its turn and review counts reset; its next attempt runs on the step's next alternate after the failure class that parked it.
@@ -872,7 +872,7 @@ replies:
 - task: \`/goal/tasks/alpha.md\`
 - front pack: \`/goal/iterations/3/context-pack.md\` — read before the task when not empty
 - worktree: \`/worktrees/demo-tasks/alpha\`
-- spike report: \`.factory/spikes/alpha.md\` — a spike commits its finding here; the spike-report check is red until the commit carries it non-empty. Empty on any other task
+- spike report: \`.factory/spikes/alpha.md\` — a spike commits its finding here; the spike-report check is red until the commit carries it non-empty. Empty on a development task and on a \`nogit\` task, whose product lives outside git
 - setup command: \`bun install\`
 - gate commands: \`- test: bun test
 - typecheck: bun run typecheck\`
@@ -1008,6 +1008,7 @@ Record every blocking gap as a finding in \`qa.findings\`: the file and line, wh
 No praise, no restating, no taste without a rule or an observable consequence.
 
 
+
 ## This turn
 
 - task: \`/goal/tasks/alpha.md\`
@@ -1023,6 +1024,7 @@ No praise, no restating, no taste without a rule or an observable consequence.
 - prior findings: \`\` — the last acceptance's numbered findings; empty before the first acceptance
 - fix dispositions: \`\` — round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; each prior finding is judged on its change or reply
 - outcome path: \`/worktrees/demo-tasks/alpha/outcome.yaml\`
+
 "
 `;
 
@@ -1877,7 +1879,7 @@ Every other line of that bullet goes: its what, why, done-when, interface and un
 ## Granularity and dispatch
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
-A spike's done-when is "the report answers <question>", never a records path.
+A spike's done-when is "the report answers <question>", never a records path. A \`nogit\` spike delivers its file outside git and finishes without that commit.
 - Order by risk, uncertainty, complexity — not by file order. Issue what you can direct now plus the spikes; plan unblocked work in parallel with each spike.
 - A spike's product is knowledge, optionally a PoC; it unblocks other tasks and is not merged by default.
 - Deferred milestone: a placeholder whose detail waits for a spike — \`awaits: <spike>\` and no tasks. Unblocked work proceeds in parallel with the spike. It is an open item in every completeness check and blocks \`done\` until it holds real tasks or is retired with a reason. Where a detail cannot be settled yet, say so explicitly — defer it until a named spike or task lands ("details after spike X / task Y lands").
@@ -2212,7 +2214,7 @@ Every other line of that bullet goes: its what, why, done-when, interface and un
 ## Granularity and dispatch
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
-A spike's done-when is "the report answers <question>", never a records path.
+A spike's done-when is "the report answers <question>", never a records path. A \`nogit\` spike delivers its file outside git and finishes without that commit.
 - Order by risk, uncertainty, complexity — not by file order. Issue what you can direct now plus the spikes; plan unblocked work in parallel with each spike.
 - A spike's product is knowledge, optionally a PoC; it unblocks other tasks and is not merged by default.
 - Deferred milestone: a placeholder whose detail waits for a spike — \`awaits: <spike>\` and no tasks. Unblocked work proceeds in parallel with the spike. It is an open item in every completeness check and blocks \`done\` until it holds real tasks or is retired with a reason. Where a detail cannot be settled yet, say so explicitly — defer it until a named spike or task lands ("details after spike X / task Y lands").
@@ -2397,7 +2399,7 @@ Every other line of that bullet goes: its what, why, done-when, interface and un
 ## Granularity and dispatch
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
-A spike's done-when is "the report answers <question>", never a records path.
+A spike's done-when is "the report answers <question>", never a records path. A \`nogit\` spike delivers its file outside git and finishes without that commit.
 - Order by risk, uncertainty, complexity — not by file order. Issue what you can direct now plus the spikes; plan unblocked work in parallel with each spike.
 - A spike's product is knowledge, optionally a PoC; it unblocks other tasks and is not merged by default.
 - Deferred milestone: a placeholder whose detail waits for a spike — \`awaits: <spike>\` and no tasks. Unblocked work proceeds in parallel with the spike. It is an open item in every completeness check and blocks \`done\` until it holds real tasks or is retired with a reason. Where a detail cannot be settled yet, say so explicitly — defer it until a named spike or task lands ("details after spike X / task Y lands").
@@ -2517,7 +2519,7 @@ repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
 \`\`\`
 
-Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). Configured tiers: implementer, escalation.
+Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). A \`nogit: true\` type delivers its product outside git: it finishes without a committed report and never merges. Configured tiers: implementer, escalation.
 
 
 - \`slug\` — keep the architect's slug; assign a short kebab-case one only when the bullet has none. Immutable, never reused, safe as a branch and file name, unique across the goal including dropped tasks.
@@ -2597,7 +2599,7 @@ On a plan-check turn, \`plan_checks\` lists the checker's follow-ups with their 
 
 ## Rules
 
-A spike's done-when is "the report answers <question>", never a records path.
+A spike's done-when is "the report answers <question>", never a records path. A \`nogit\` spike delivers its file outside git and finishes without that commit.
 
 
 - \`revision\` is an amend's only signal: bump it by one when you rewrite a parked task's own file, never otherwise. Dispatch resumes an amended slug on its kept branch with its records, and its turn and review counts reset; its next attempt runs on the step's next alternate after the failure class that parked it.
@@ -2813,7 +2815,7 @@ Every other line of that bullet goes: its what, why, done-when, interface and un
 ## Granularity and dispatch
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
-A spike's done-when is "the report answers <question>", never a records path.
+A spike's done-when is "the report answers <question>", never a records path. A \`nogit\` spike delivers its file outside git and finishes without that commit.
 - Order by risk, uncertainty, complexity — not by file order. Issue what you can direct now plus the spikes; plan unblocked work in parallel with each spike.
 - A spike's product is knowledge, optionally a PoC; it unblocks other tasks and is not merged by default.
 - Deferred milestone: a placeholder whose detail waits for a spike — \`awaits: <spike>\` and no tasks. Unblocked work proceeds in parallel with the spike. It is an open item in every completeness check and blocks \`done\` until it holds real tasks or is retired with a reason. Where a detail cannot be settled yet, say so explicitly — defer it until a named spike or task lands ("details after spike X / task Y lands").
@@ -2998,7 +3000,7 @@ Every other line of that bullet goes: its what, why, done-when, interface and un
 ## Granularity and dispatch
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
-A spike's done-when is "the report answers <question>", never a records path.
+A spike's done-when is "the report answers <question>", never a records path. A \`nogit\` spike delivers its file outside git and finishes without that commit.
 - Order by risk, uncertainty, complexity — not by file order. Issue what you can direct now plus the spikes; plan unblocked work in parallel with each spike.
 - A spike's product is knowledge, optionally a PoC; it unblocks other tasks and is not merged by default.
 - Deferred milestone: a placeholder whose detail waits for a spike — \`awaits: <spike>\` and no tasks. Unblocked work proceeds in parallel with the spike. It is an open item in every completeness check and blocks \`done\` until it holds real tasks or is retired with a reason. Where a detail cannot be settled yet, say so explicitly — defer it until a named spike or task lands ("details after spike X / task Y lands").
@@ -3118,7 +3120,7 @@ repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
 \`\`\`
 
-Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). Configured tiers: implementer, escalation.
+Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). A \`nogit: true\` type delivers its product outside git: it finishes without a committed report and never merges. Configured tiers: implementer, escalation.
 
 
 - \`slug\` — keep the architect's slug; assign a short kebab-case one only when the bullet has none. Immutable, never reused, safe as a branch and file name, unique across the goal including dropped tasks.
@@ -3198,7 +3200,7 @@ On a plan-check turn, \`plan_checks\` lists the checker's follow-ups with their 
 
 ## Rules
 
-A spike's done-when is "the report answers <question>", never a records path.
+A spike's done-when is "the report answers <question>", never a records path. A \`nogit\` spike delivers its file outside git and finishes without that commit.
 
 
 - \`revision\` is an amend's only signal: bump it by one when you rewrite a parked task's own file, never otherwise. Dispatch resumes an amended slug on its kept branch with its records, and its turn and review counts reset; its next attempt runs on the step's next alternate after the failure class that parked it.
@@ -3414,7 +3416,7 @@ Every other line of that bullet goes: its what, why, done-when, interface and un
 ## Granularity and dispatch
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
-A spike's done-when is "the report answers <question>", never a records path.
+A spike's done-when is "the report answers <question>", never a records path. A \`nogit\` spike delivers its file outside git and finishes without that commit.
 - Order by risk, uncertainty, complexity — not by file order. Issue what you can direct now plus the spikes; plan unblocked work in parallel with each spike.
 - A spike's product is knowledge, optionally a PoC; it unblocks other tasks and is not merged by default.
 - Deferred milestone: a placeholder whose detail waits for a spike — \`awaits: <spike>\` and no tasks. Unblocked work proceeds in parallel with the spike. It is an open item in every completeness check and blocks \`done\` until it holds real tasks or is retired with a reason. Where a detail cannot be settled yet, say so explicitly — defer it until a named spike or task lands ("details after spike X / task Y lands").
@@ -3599,7 +3601,7 @@ Every other line of that bullet goes: its what, why, done-when, interface and un
 ## Granularity and dispatch
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
-A spike's done-when is "the report answers <question>", never a records path.
+A spike's done-when is "the report answers <question>", never a records path. A \`nogit\` spike delivers its file outside git and finishes without that commit.
 - Order by risk, uncertainty, complexity — not by file order. Issue what you can direct now plus the spikes; plan unblocked work in parallel with each spike.
 - A spike's product is knowledge, optionally a PoC; it unblocks other tasks and is not merged by default.
 - Deferred milestone: a placeholder whose detail waits for a spike — \`awaits: <spike>\` and no tasks. Unblocked work proceeds in parallel with the spike. It is an open item in every completeness check and blocks \`done\` until it holds real tasks or is retired with a reason. Where a detail cannot be settled yet, say so explicitly — defer it until a named spike or task lands ("details after spike X / task Y lands").
@@ -3719,7 +3721,7 @@ repairTurns: outcome-repair turns for this task's turns  # optional
 turnMinutes: per-turn wall bound in minutes  # optional
 \`\`\`
 
-Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). Configured tiers: implementer, escalation.
+Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an old file may still carry. Configured task types: development (flow: implement-review, kind: development, schema: outcome, use when: work that lands after review), spike (flow: spike, kind: spike, schema: outcome, use when: a question only evidence answers), trivial (flow: just-implement, kind: development, schema: outcome, use when: a small fully understood change). A \`nogit: true\` type delivers its product outside git: it finishes without a committed report and never merges. Configured tiers: implementer, escalation.
 
 
 - \`slug\` — keep the architect's slug; assign a short kebab-case one only when the bullet has none. Immutable, never reused, safe as a branch and file name, unique across the goal including dropped tasks.
@@ -3799,7 +3801,7 @@ On a plan-check turn, \`plan_checks\` lists the checker's follow-ups with their 
 
 ## Rules
 
-A spike's done-when is "the report answers <question>", never a records path.
+A spike's done-when is "the report answers <question>", never a records path. A \`nogit\` spike delivers its file outside git and finishes without that commit.
 
 
 - \`revision\` is an amend's only signal: bump it by one when you rewrite a parked task's own file, never otherwise. Dispatch resumes an amended slug on its kept branch with its records, and its turn and review counts reset; its next attempt runs on the step's next alternate after the failure class that parked it.

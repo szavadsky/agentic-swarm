@@ -93,6 +93,10 @@ architecture:                    # plan review, before the PM derives tasks
 - `qa: true` makes the step an acceptance turn with its own verdict schema;
   `review: true` makes it a review turn. A `resolve` step runs only after a
   squash merge conflicts.
+- `nogit: true` on a spike task type marks work whose product may live outside
+  git: the task finishes without a committed report and never merges. The shipped
+  `fact-finder` and `poc` types use it; `computer-use` is a development type
+  with an extra browser acceptance turn before QA.
 - `boundary` and `architecture` name the kernel turns. Every boundary step is
   required in the merged layer; the package default supplies them.
 - `ingestion` names the goal-start sequence: `branch` first, exactly one

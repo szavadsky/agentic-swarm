@@ -321,10 +321,19 @@ export const taskTypeSchema = z
     flow: z.string().min(1),
     kind: z.enum(["spike", "development"]),
     schema: z.string().min(1),
+    /**
+     * The type's product may live outside git: the task finishes without a
+     * committed report and never merges. A normal type defaults to false.
+     */
+    nogit: z.boolean().default(false),
     /** One line naming the work this type fits; rendered to every planner. */
     useWhen: z.string().min(1),
   })
-  .strict();
+  .strict()
+  .refine((type) => !type.nogit || type.kind === "spike", {
+    message: "a nogit task type needs kind spike: it finishes without a merge",
+    path: ["nogit"],
+  });
 
 /** Every boundary step names its prompt and alias; unknown steps are refused. */
 export const boundarySchema = z

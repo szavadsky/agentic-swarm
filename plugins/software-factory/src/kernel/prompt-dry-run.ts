@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { frontClassTypesVar } from "./front.js";
 import { outcomeExampleVar } from "./outcome-example.js";
 import {
   expectationForStep,
@@ -277,7 +278,7 @@ function recordVars(
     goal_dir: goal,
     records_dir: path.join(goal, "records"),
     transcripts_dir: path.join(goal, "transcripts"),
-    class_types: "`trivial` for trivial, `development` for task",
+    class_types: frontClassTypesVar(configs.process.taskTypes),
     tasks_dir: path.join(goal, "tasks"),
     class_path: path.join(goal, "class.yaml"),
     plans: `- goal: ${path.join(goal, "plan.md")}`,

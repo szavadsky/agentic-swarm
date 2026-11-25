@@ -623,9 +623,9 @@ aggregates as rows.
 ## Loop-based optimization
 
 Loop-based optimization goals (such as algorithmic speedups, throughput tuning,
-cache optimization, or memory reduction) run entirely on the shipped task types
-(`spike`, `development`, `trivial`) and the standard boundary iteration loop with
-no new configuration keys or custom flows:
+cache optimization, or memory reduction) run entirely on the shipped
+`spike`, `development` and `trivial` types and the standard boundary iteration
+loop with no new configuration keys or custom flows:
 
 - **Candidate spikes (`type: spike`)**: When exploring multiple or uncertain
   optimization approaches (e.g. SIMD vectorization vs. arena allocation vs.

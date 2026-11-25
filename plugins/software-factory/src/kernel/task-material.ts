@@ -19,6 +19,7 @@ export function materialHash(task: TaskFile): string {
     task.slug,
     task.kind,
     task.flow,
+    task.nogit === true,
     task.type ?? "",
     [...task.deps].sort(),
     task.epic ?? "",
