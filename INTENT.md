@@ -306,6 +306,12 @@ flowchart TD
 - Harness adapters: a custom adapter only when the harness offers substantially more than ACP exposes (omp is that case: RPC, yield, compaction, overlays). Otherwise drive the harness through acpx (OpenCode included), or at worst plain ACP — never a bespoke CLI wrapper for what the protocol already covers. No code: the config uses acpx naming (and opaque config), and that is it. Where acpx already supports a harness through a built-in adapter, an existing custom adapter needs a solid recorded justification — what improvements the bespoke adapter provides that acpx does not — or the harness moves to the generic acpx path.
 - acpx is the enabler of agnosticism: an acpx-compatible harness is expected to be added by configuration alone, with no code change. A direct layer for such a harness is allowed later only on measured evidence that ACP loses something needed.
 
+### Traceability 
+ - INTENT provided to kernel is an md file
+ - For "Bigger" tasks Each separately analyzeable slice is marked with unique slice slug [[SliceSlug]] or [[ctxOnly:SliceSlug]] in subsection or beginning of paragraph
+ - If annotation is missing, it is noted during triage and intent edited in place (dedicated agent)
+ - It responsibility of architect flow -eg. output of architect, reviewer, or dedicated agents -  (supported by determenistic check/reminder ) to review delivery vs what is required, and provide output with status or plan to address it with tasks.  This "status footnote to the plan" of the plan. It shall explain, for each slug, either key user inspectable artefacts (front facing interfaces, config files, test  case links with explanation), or telegraphically explain how.what tasks (reminder - many to many relatioship between intent slugs  and tasks: non triviil relatiship, foudnational layers, platform coden traces many reqs) would adress it, or say TBD (spikes, foundational layers)
+ 
 ### Sandbox
   - The sandbox is one predefined process-level wrapper for the whole run (e.g. bwrap, sandbox-runtime), shipped as config. A configured sandbox must be present on the machine. Configurations with and without sandbox are both tested.
   - Per-flow or per-agent overrides only on evidence: each harness may need extra ro/rw folders configured separately, which is not trivial.
@@ -329,6 +335,12 @@ flowchart TD
 - Over-prescription and mechanical checks on agent output (e.g. which files changed) create loops and no value. A turn is judged by what the agent delivers, the gates and the review; a check on agent output stays only on evidence that it prevents real defects. What we do not want, e.g.: an early build required the architect to name every file and LOC change per task, and parked a task deterministically when its diff did not match.
 - A turn with no usage and no output is a technical glitch — retried or failed over; it spends no reminder and is never the task's failure.
 
+### CI/CD failure, flakiness, speed
+  - Failures/flakiness on current feature branched are traced
+  - When kernel mechnically run ci/cd and it fails, it must be retried/adjuducated agentically (dedicated agent) - may be it got broken, trivial fix in place; or pre-exisiting
+  - Noted failures are brought trhough concern funnel
+  - all tests runs by KERNEL are timed. runtime of succesfull tests are tracked. Numbers (current vs start of goal) are on architect table. his prompt include invitation to reduce test times while keeping tests on merits here
+
 ### Structured output
 - Strict schema (tool/yield) only for small, simple outputs. The plan is markdown; the PM derives task files from it.
 - Every agent that produces a schema-controlled file (PM, task reviewers, QA) has a validation command in its prompt (bun/npx, whatever) and, where the harness supports it, LSP. The factory artifact folder must have a config file — preferably harness agnostic — that enables LSP for the artifact schemas. Test at least for omp.
@@ -342,6 +354,12 @@ flowchart TD
 - Diffing library choice is the implementer's (id-keyed matching if arrays are compared; microdiff is index-based and fails that).
 - The bullet carries what only the architect can say — what, why, done-when, plus interface or approach where he has a direction; the PM writes the rest.
 - A task leaves only by an explicit decision of its owner (amend, cancel, replace, split); the plan carries open work; history stays in records and summaries.
+
+### KERNEL CLI
+  - kernel cli self documented, include options to query status of project with schema defined output (json/yaml), artefacts cleanup, stats and cost extraction, log level , etc - whatever is required for efficient implementation
+  - Core KERNEL journal is jsonl with documented schema, can be easily queries
+  - Generate prompts (so user can see entire collection of promts for given config)
+  - CLI re-reads factory configs frequently (on each launch, etc)
 
 ### Boundary: plan review and plan checker
 - Plan review is the architecture flow of the factory config — its reviewers, its findings schema, the architect's turns on technical concerns — and it completes before the PM derives tasks.
@@ -414,6 +432,10 @@ nogit - means that task  MIGHT specified to produce file outside of git
   - "PoC"* nogit - develop something without production intent (one of many options), implementer -> reviewer
   - Normal* : implementer (implement, automated test) -> QA (might request changes up to 2x): ensure no regressions in automated tests, simplify/reduce code size  tests, add tests for edge cases as needed, ensure interface separate and have right amount of doc -> reviewer (correctness, scope, plan adherence (or reasons to diverge)) 
   - ComputerUse: Same as above, but extra agent for browser tests 
+  - trivial - one off assigment requiring no review, eg rollback
+  - noqa* - implementer + reviewer (docs only, no func changes)
+## architect flows
+  - rotate between options when architect owns overall status, and when separate dedicated agent (stil architect level) adversarially review status and architect take it as inouyt and adjudicare 
 
 #### Bootstrap subscription models/harness
  (config shall eventually be able to express it as fallbacks)
