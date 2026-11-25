@@ -236,11 +236,11 @@ export interface IterationMetrics {
    * artifacts stay in the journal; this is the lower bound the records show.
    */
   operatorActs: number;
-  /** Wall ms in checks/merge-checks records; wallMs falls back to timestamps. */
+  /** Wall ms in checks/merge-checks/baseline records; wallMs falls back to timestamps. */
   gateWallMs: number;
   /** Wall ms in commit records. */
   commitWallMs: number;
-  /** Checks/merge-checks records in this iteration. */
+  /** Checks/merge-checks/baseline records in this iteration. */
   gateRuns: number;
   /** Gates run across those records. */
   testRuns: number;

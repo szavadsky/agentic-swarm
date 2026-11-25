@@ -346,6 +346,12 @@ async function reusableBaseline(
     : found;
 }
 
+/** The wall a base-gate run occupied, stamped onto its record. */
+interface BaselineWall {
+  startedAt: string;
+  wallMs: number;
+}
+
 /** Records a baseline that could not run as infra and warns, never red. */
 async function recordInfraBase(
   store: ArtifactStore,
@@ -353,6 +359,7 @@ async function recordInfraBase(
   described: string,
   checks: CheckResult[],
   infraChecks: CheckResult[],
+  wall: BaselineWall,
 ): Promise<BaselineResult> {
   await store.appendRecord(
     {
@@ -361,8 +368,9 @@ async function recordInfraBase(
       round: 1,
       actor: "script",
       base: target,
+      startedAt: wall.startedAt,
     },
-    { ok: false, checks },
+    { ok: false, checks, wallMs: wall.wallMs },
   );
   console.warn(
     [
@@ -379,6 +387,7 @@ async function recordBaseResult(
   target: string,
   described: string,
   checks: CheckResult[],
+  wall: BaselineWall,
 ): Promise<boolean> {
   const ok = checks.every((c) => c.ok || isAdvisoryCheck(c));
   const meta: RecordStart = {
@@ -387,8 +396,9 @@ async function recordBaseResult(
     round: 1,
     actor: "script",
     base: target,
+    startedAt: wall.startedAt,
   };
-  await store.appendRecord(meta, { ok, checks });
+  await store.appendRecord(meta, { ok, checks, wallMs: wall.wallMs });
   if (!ok) {
     const red = checks.filter((c) => !c.ok && !isAdvisoryCheck(c));
     console.warn(
@@ -440,6 +450,8 @@ export async function checkBase(
     ? `base "${targetBranch}" at ${target.slice(0, 8)} with "${baseBranch}" merged`
     : `base "${targetBranch}" at ${target.slice(0, 8)}`;
   const gates = resolveGates(store.goalDir, configs.repo.gates);
+  const startedAt = new Date().toISOString();
+  const startedMs = Date.now();
   const checks = await runBaseGates(
     configs,
     gates,
@@ -447,10 +459,18 @@ export async function checkBase(
     target,
     mergeFrom,
   );
+  const wall = { startedAt, wallMs: Math.max(0, Date.now() - startedMs) };
   const infraChecks = checks.filter(isInfraCheck);
   if (infraChecks.length > 0)
-    return await recordInfraBase(store, target, described, checks, infraChecks);
-  const ok = await recordBaseResult(store, target, described, checks);
+    return await recordInfraBase(
+      store,
+      target,
+      described,
+      checks,
+      infraChecks,
+      wall,
+    );
+  const ok = await recordBaseResult(store, target, described, checks, wall);
   return { commit: target, ok, checks, fresh: true };
 }
 

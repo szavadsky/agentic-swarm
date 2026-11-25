@@ -272,7 +272,7 @@ export class FolderRecordStore extends FolderStoreCore {
       const record: StepRecord = {
         ...meta,
         seq,
-        startedAt: new Date().toISOString(),
+        startedAt: meta.startedAt ?? new Date().toISOString(),
       };
       const recordDir = path.join(this.recordsDir, recordDirName(seq, meta));
       await fs.promises.mkdir(recordDir, { recursive: true });

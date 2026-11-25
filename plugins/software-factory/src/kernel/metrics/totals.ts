@@ -22,6 +22,16 @@ interface ScriptTotals {
   testRuns: number;
 }
 
+/** Steps whose record is one gate run: pre-flight base, task and merge gates. */
+function isGateRecord(rec: StepRecord): boolean {
+  return (
+    rec.step === "checks" ||
+    rec.step === "merge-checks" ||
+    rec.step === "baseline" ||
+    rec.step === "baseline-infra"
+  );
+}
+
 /** Gate/commit wall and test runs from the script records' own stamps. */
 export function scriptTotals(
   all: StepRecord[],
@@ -35,7 +45,7 @@ export function scriptTotals(
   };
   for (const rec of all) {
     if (!rec.endedAt) continue;
-    if (rec.step !== "checks" && rec.step !== "merge-checks") {
+    if (!isGateRecord(rec)) {
       if (rec.step === "commit") totals.commitWallMs += wallMsOf(rec);
       continue;
     }

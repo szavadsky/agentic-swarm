@@ -130,6 +130,12 @@ export interface RecordStart {
   step: string;
   round: number;
   actor: StepActor;
+  /**
+   * When the work actually began. A live turn omits it and the store stamps
+   * now; an append that records work already run passes it so `startedAt`,
+   * `endedAt` and `wallMs` span the real window.
+   */
+  startedAt?: string;
   /** The architect that owns this record's work; see `StepRecord.architect`. */
   architect?: string;
   alias?: string;

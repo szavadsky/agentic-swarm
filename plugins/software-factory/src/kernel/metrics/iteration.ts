@@ -175,12 +175,60 @@ function iterationSlugs(all: StepRecord[]): {
   };
 }
 
+/** Pre-flight records whose gate wall belongs to the iteration they open. */
+function isBaselineRecord(rec: StepRecord): boolean {
+  return rec.step === "baseline" || rec.step === "baseline-infra";
+}
+
+/**
+ * The baseline runs whose gate wall belongs to iteration n. A pre-flight run
+ * before the iteration's first record is this launch's setup; one recorded
+ * inside the iteration is a resumed launch's setup. A run after the iteration's
+ * last record belongs to the next launch and is left for its summary.
+ */
+function launchBaselines(
+  records: readonly StepRecord[],
+  iteration: number,
+): StepRecord[] {
+  const own = records.filter((r) => r.iteration === iteration);
+  if (own.length === 0) return [];
+  const lastAt = Math.max(
+    ...own
+      .map((r) => Date.parse(r.endedAt ?? r.startedAt))
+      .filter(Number.isFinite),
+  );
+  const nextFirst = records
+    .filter((r) => r.iteration > iteration)
+    .reduce<number | undefined>(
+      (min, r) => (min === undefined || r.seq < min ? r.seq : min),
+      undefined,
+    );
+  let previousLast = 0;
+  for (const rec of records) {
+    if (rec.iteration > 0 && rec.iteration < iteration)
+      previousLast = Math.max(previousLast, rec.seq);
+  }
+  return records.filter((rec) => {
+    if (
+      !isBaselineRecord(rec) ||
+      rec.actor !== "script" ||
+      rec.endedAt === undefined ||
+      rec.seq <= previousLast
+    )
+      return false;
+    if (nextFirst !== undefined) return rec.seq < nextFirst;
+    const started = Date.parse(rec.startedAt);
+    return Number.isFinite(started) && started <= lastAt;
+  });
+}
+
 /** The inputs one iteration's final metrics object is built from. */
 interface IterationMetricsParts {
   n: number;
   status: SummaryStatus;
   recs: StepRecord[];
   all: StepRecord[];
+  gateRecords: StepRecord[];
   acc: TurnAccumulator;
   slugs: ReturnType<typeof iterationSlugs>;
   humanInterventions: number;
@@ -215,7 +263,7 @@ function iterationMetricsResult(
   // Gate/commit wall and test runs come from the script records' own stamps;
   // a gate's test runs are the script's work, not the agent turn it verifies.
   const { gateWallMs, commitWallMs, gateRuns, testRuns } = scriptTotals(
-    all,
+    parts.gateRecords,
     acc.roles,
   );
   const operatorActs = humanInterventions + all.filter(isOutsideAct).length;
@@ -297,6 +345,7 @@ export function iterationMetrics(
   );
   const acc = accumulateTurns(recs, roleByStep, prices, priceIds);
   const all = records.filter((r) => r.iteration === n);
+  const gateRecords = [...all, ...launchBaselines(records, n)];
   const { incidents, waste, planReviewMarks } = iterationIncidents(
     all,
     recs,
@@ -309,6 +358,7 @@ export function iterationMetrics(
     status,
     recs,
     all,
+    gateRecords,
     acc,
     slugs: iterationSlugs(all),
     humanInterventions,
