@@ -76,6 +76,7 @@ export const SHIPPED_TASK_TYPES: Record<string, TaskTypeDefinition> = {
     kind: "development",
     schema: "outcome",
     nogit: false,
+    promote: false,
     useWhen: "change meant to land in the repo and merge after QA and review",
   },
   spike: {
@@ -83,6 +84,7 @@ export const SHIPPED_TASK_TYPES: Record<string, TaskTypeDefinition> = {
     kind: "spike",
     schema: "outcome",
     nogit: false,
+    promote: false,
     useWhen:
       "question only evidence answers — finished with findings and never merged",
   },
@@ -91,6 +93,7 @@ export const SHIPPED_TASK_TYPES: Record<string, TaskTypeDefinition> = {
     kind: "spike",
     schema: "outcome",
     nogit: true,
+    promote: false,
     useWhen:
       "document behavior or research libraries and best practices — one researcher turn, its file may live outside git",
   },
@@ -99,6 +102,7 @@ export const SHIPPED_TASK_TYPES: Record<string, TaskTypeDefinition> = {
     kind: "spike",
     schema: "outcome",
     nogit: true,
+    promote: false,
     useWhen:
       "explore an approach without production intent — implementer and reviewer, its product may live outside git",
   },
@@ -107,14 +111,25 @@ export const SHIPPED_TASK_TYPES: Record<string, TaskTypeDefinition> = {
     kind: "development",
     schema: "outcome",
     nogit: false,
+    promote: false,
     useWhen:
       "a delivery that needs browser tests — implementer, a browser acceptance turn, then QA and review",
+  },
+  promote: {
+    flow: "spike",
+    kind: "spike",
+    schema: "outcome",
+    nogit: true,
+    promote: true,
+    useWhen:
+      "an operator barrier — landing this batch needs a build promotion before the work depending on it starts; the launch drains and stops so the operator promotes, then a relaunch continues",
   },
   trivial: {
     flow: "just-implement",
     kind: "development",
     schema: "outcome",
     nogit: false,
+    promote: false,
     useWhen:
       "small fully understood change with one implement turn and no acceptance step",
   },

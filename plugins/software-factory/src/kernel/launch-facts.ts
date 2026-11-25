@@ -66,12 +66,15 @@ export function infraCause(stop: { cause: string; details?: string }): string {
  */
 export function statusForIteration(opts: {
   decision: GoalDecision;
-  ended: "infra" | "cancelled" | undefined;
+  ended: "infra" | "cancelled" | "promote" | undefined;
   stopped: boolean;
   signalsStopped: boolean;
   goal: State["goal"];
 }): "goal-met" | "in-progress" | "blocked-by-user" | "stopped-with-debt" {
   if (opts.ended === "infra") return "stopped-with-debt";
+  // A promote stop hands the build to the operator; it is neither debt nor a
+  // signal, and the goal continues once the operator promotes and relaunches.
+  if (opts.ended === "promote") return "in-progress";
   if (opts.signalsStopped || opts.stopped) return "stopped-with-debt";
   if (opts.decision === "done")
     return opts.goal === "done" ? "goal-met" : "in-progress";

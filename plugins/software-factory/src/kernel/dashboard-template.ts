@@ -84,7 +84,7 @@ p { margin: .3rem 0; }
 .badge-parked, .goal-blocked, .cal-owner, .kind-risk, .intent-friction { --tone: var(--bad); }
 .badge-cancelled { --tone: var(--pico-muted-color); }
 .goal-active, .kind-choice { --tone: var(--pico-primary); }
-.stop-iteration-limit, .steer-routed { --tone: var(--info); }
+.stop-iteration-limit, .stop-promote, .steer-routed { --tone: var(--info); }
 .stop-interrupted, .stop-infra { --tone: var(--bad); }
 .steer-waiting { --tone: var(--warn); }
 .steer-answered { --tone: var(--good); }

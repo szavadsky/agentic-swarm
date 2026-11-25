@@ -76,6 +76,9 @@ flows:
 taskTypes:
   development: { flow: implement-review, kind: development, schema: outcome, useWhen: "change meant to land in the repo and merge after QA and review" }
   spike: { flow: spike, kind: spike, schema: outcome, useWhen: "question only evidence answers — finished with findings and never merged" }
+  # An operator barrier: no flow turn runs; its readiness drains the launch and
+  # stops it so the operator promotes the build before dependent work starts.
+  promote: { flow: spike, kind: spike, schema: outcome, nogit: true, promote: true, useWhen: "a landed batch needs a build promotion before the work depending on it starts" }
 boundary:                        # kernel turns outside any task flow
   architect: { prompt: architect, alias: architect, repairPrompt: architect-repair, deliverable: "plan edit or stop decision" }
   front: { prompt: front, alias: pm, deliverable: "class, task, and pack" }
@@ -97,6 +100,12 @@ architecture:                    # plan review, before the PM derives tasks
   git: the task finishes without a committed report and never merges. The shipped
   `fact-finder` and `poc` types use it; `computer-use` is a development type
   with an extra browser acceptance turn before QA.
+- `promote: true` on a spike task type makes it an operator barrier: no flow
+  turn runs, the task's readiness drains the launch (in-flight turns finish,
+  nothing new starts) and stops it so the operator promotes the goal build,
+  then relaunches. The stop records the task finished, so the relaunch
+  continues with the work depending on it. A promote type must be a spike: it
+  never merges.
 - `boundary` and `architecture` name the kernel turns. Every boundary step is
   required in the merged layer; the package default supplies them.
 - `ingestion` names the goal-start sequence: `branch` first, exactly one

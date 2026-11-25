@@ -114,11 +114,12 @@ resolved or removed.
 
 ## Exit codes and signals
 
-`run` exits `0` goal done, `1` failure, `2` blocked, `3` iteration limit,
-`130`/`143` interrupted by SIGINT/SIGTERM. The first signal drains: no new
-dispatch, in-flight turns finish. The second aborts in-flight turns and records
-their partial usage. A bounded launch ending in `3` is normal; relaunch the
-same command to continue.
+`run` exits `0` goal done, `1` failure, `2` blocked, `3` iteration limit or a
+promote stop, `130`/`143` interrupted by SIGINT/SIGTERM. The first signal
+drains: no new dispatch, in-flight turns finish. The second aborts in-flight
+turns and records their partial usage. A bounded launch ending in `3` is
+normal; relaunch the same command to continue. A promote stop names the goal
+build to promote: promote it, then relaunch the same command to continue.
 
 See [config.md](config.md) for the layers and [SKILL.md](SKILL.md) for the
 walkthrough.

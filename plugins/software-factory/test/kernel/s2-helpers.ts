@@ -204,7 +204,7 @@ export async function makeRuntime(
     configs.run.aliases.qa = configs.run.aliases.reviewer;
   }
   const paths = resolveGoalPaths(configs, repo.dir, goal);
-  const store = createArtifactStore(paths, {});
+  const store = createArtifactStore(paths, configs.process.taskTypes);
   await store.ensureLayout();
   const runtime: KernelRuntime = {
     paths,

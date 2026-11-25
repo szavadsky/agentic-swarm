@@ -7,7 +7,7 @@ import { answerSettledSpikeSteers } from "./boundary-spike.js";
 import { makeCause } from "./cause.js";
 import { derive } from "./derive.js";
 import { admitAction, updateDrain } from "./dispatch-admit.js";
-import { waveEnd } from "./dispatch-end.js";
+import { drainForPromote, waveEnd } from "./dispatch-end.js";
 import { pollSteers } from "./dispatch-poll.js";
 import type {
   DispatchOptions,
@@ -247,6 +247,9 @@ export async function runDispatch(
       }
       const stage = await pollStage(state, read, watch);
       if ("reason" in stage) return stage;
+      // A ready promote task drains before admission: started turns finish, no
+      // unstarted work begins, and the wave end stops the launch.
+      drainForPromote(state, stage.snapshot);
       await admitWave(state, stage, read.runningAtRead);
       if (state.running.size > 0) {
         // The watch's wake breaks the wait when a steer has sat long enough:

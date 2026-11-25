@@ -235,6 +235,13 @@ async function runDispatchStage(it: IterationRun): Promise<void> {
     signals: it.run.signals,
   });
   it.dispatchCause = it.dispatched.cause;
+  if (it.dispatched.reason === "promote") {
+    // The promote tasks were recorded finished and the operator promotes the
+    // goal build before the relaunch; nothing else in this launch runs.
+    it.ended = "promote";
+    it.stopCause = it.dispatched.cause;
+    return;
+  }
   if (it.dispatched.reason !== "infra" && it.dispatched.reason !== "cancelled")
     return;
   it.ended = it.dispatched.reason;

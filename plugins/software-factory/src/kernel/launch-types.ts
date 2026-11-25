@@ -59,6 +59,7 @@ export type LaunchStop =
   | "done"
   | "blocked"
   | "iteration-limit"
+  | "promote"
   | "interrupted"
   | "infra";
 

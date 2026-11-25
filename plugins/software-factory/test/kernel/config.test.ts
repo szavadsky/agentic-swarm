@@ -166,6 +166,33 @@ function catalogueTypesPart1(): void {
   });
 }
 
+function promoteTaskType(): void {
+  it("ships the promote barrier type and refuses one that would merge", () => {
+    const root = tmpRepo();
+    const configs = loadConfigs(root);
+    expect(configs.process.taskTypes.promote).toMatchObject({
+      kind: "spike",
+      nogit: true,
+      promote: true,
+    });
+    expect(
+      configs.process.flows[configs.process.taskTypes.promote!.flow],
+    ).toBeDefined();
+    fs.rmSync(root, { recursive: true, force: true });
+
+    const odd = tmpRepo();
+    fs.mkdirSync(path.join(odd, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(odd, ".factory/process.yaml"),
+      "taskTypes:\n  odd: { flow: implement-review, kind: development, schema: outcome, promote: true, useWhen: odd work }\n",
+    );
+    expect(() => loadConfigs(odd)).toThrow(
+      /promote task type needs kind spike/,
+    );
+    fs.rmSync(odd, { recursive: true, force: true });
+  });
+}
+
 function threeConfigLayersPart4() {
   it("puts the QA acceptance step between implement and review", () => {
     const root = tmpRepo();
@@ -448,6 +475,8 @@ describe("three config layers", () => {
   threeConfigLayersPart3();
 
   catalogueTypesPart1();
+
+  promoteTaskType();
 
   threeConfigLayersPart4();
 

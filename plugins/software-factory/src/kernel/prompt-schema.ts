@@ -200,7 +200,7 @@ export function taskTypesVar(
   return entries
     .map(
       ([name, definition]) =>
-        `${name} (flow: ${definition.flow}, kind: ${definition.kind}, schema: ${definition.schema}${definition.nogit ? ", nogit: true" : ""}, use when: ${definition.useWhen})`,
+        `${name} (flow: ${definition.flow}, kind: ${definition.kind}, schema: ${definition.schema}${definition.nogit ? ", nogit: true" : ""}${definition.promote ? ", promote: true" : ""}, use when: ${definition.useWhen})`,
     )
     .join(", ");
 }

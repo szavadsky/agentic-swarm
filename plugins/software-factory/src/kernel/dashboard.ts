@@ -193,6 +193,7 @@ const STOP_LABEL: Record<string, string> = {
   done: "done",
   blocked: "blocked",
   "iteration-limit": "iteration limit",
+  promote: "awaiting promotion",
   interrupted: "interrupted",
   infra: "infrastructure stop",
 };

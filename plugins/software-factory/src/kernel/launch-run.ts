@@ -26,7 +26,7 @@ export interface GoalRun {
   loopIndex: number;
   resumeForcedOff: boolean;
   lastSummary?: string;
-  ended?: "infra" | "cancelled";
+  ended?: "infra" | "cancelled" | "promote";
   stopCause?: Cause;
   recoveredRecords: number;
 }
@@ -56,6 +56,6 @@ export interface IterationRun {
   humanInterventions: number;
   frontFinished: boolean;
   lastSummary?: string;
-  ended?: "infra" | "cancelled";
+  ended?: "infra" | "cancelled" | "promote";
   stopCause?: Cause;
 }

@@ -24,6 +24,6 @@ export const PLAN_CHECKER_PAGE: PromptVariablesPage = {
       "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
     outcome_schema: "outcome examples from the kernel schema; renderer default",
     task_types:
-      "configured task types with their flow, kind, output schema and use-when; renderer default",
+      "configured task types with their flow, kind, output schema, nogit/promote flags and use-when; renderer default",
   },
 };

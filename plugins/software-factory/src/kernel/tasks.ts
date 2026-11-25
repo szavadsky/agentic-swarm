@@ -184,7 +184,7 @@ function resolveTaskType(
   fileSlug: string,
   type: string,
   taskTypes: Record<string, TaskTypeDefinition>,
-): { kind: TaskKind; flow: string; nogit?: boolean } {
+): { kind: TaskKind; flow: string; nogit?: boolean; promote?: boolean } {
   const definition = Object.hasOwn(taskTypes, type)
     ? taskTypes[type]
     : undefined;
@@ -198,6 +198,7 @@ function resolveTaskType(
     kind: definition.kind,
     flow: definition.flow,
     ...(definition.nogit ? { nogit: true } : {}),
+    ...(definition.promote ? { promote: true } : {}),
   };
 }
 

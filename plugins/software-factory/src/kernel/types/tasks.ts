@@ -17,6 +17,12 @@ export interface TaskTypeDefinition {
    * committed report and never merges. Absent reads as false.
    */
   nogit?: boolean;
+  /**
+   * The type is an operator barrier: the task runs no flow, its readiness drains
+   * the launch and stops it so the operator promotes the build, and it is
+   * recorded finished at that stop so a relaunch continues. Absent reads as false.
+   */
+  promote?: boolean;
   /** One line naming the work this type fits, so a planner never picks by name. */
   useWhen: string;
 }
@@ -32,6 +38,8 @@ export interface TaskFile {
   flow: string;
   /** The type's product may live outside git; absent reads as false. */
   nogit?: boolean;
+  /** The type stops the launch for operator promotion; absent reads as false. */
+  promote?: boolean;
   deps: string[];
   /** The epic that owns this task; absent means goal-level work. */
   epic?: string;

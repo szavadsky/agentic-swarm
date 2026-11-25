@@ -225,6 +225,16 @@ taskTypes:
     kind: development
     schema: outcome
     useWhen: a delivery that needs browser tests — implementer, a browser acceptance turn, then QA and review
+  # A promote task is an operator barrier, not work: the kernel never runs its
+  # flow, drains the launch when it becomes ready and stops for the operator.
+  # The stop marks it finished, so a relaunch after promotion continues.
+  promote:
+    flow: spike
+    kind: spike
+    schema: outcome
+    nogit: true
+    promote: true
+    useWhen: an operator barrier — landing this batch needs a build promotion before the work depending on it starts; the launch drains and stops so the operator promotes, then a relaunch continues
   trivial:
     flow: just-implement
     kind: development

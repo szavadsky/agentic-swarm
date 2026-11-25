@@ -81,6 +81,8 @@ export interface TaskState {
   round: number;
   kind: TaskKind;
   flow: string;
+  /** The type stops the launch for operator promotion instead of running. */
+  promote?: boolean;
   phase: TaskPhase;
   commit?: string;
   verdict?: ReviewVerdict;

@@ -326,6 +326,11 @@ export const taskTypeSchema = z
      * committed report and never merges. A normal type defaults to false.
      */
     nogit: z.boolean().default(false),
+    /**
+     * An operator barrier: the task runs no flow; its readiness stops the
+     * launch for promotion, and the stop marks it finished for the relaunch.
+     */
+    promote: z.boolean().default(false),
     /** One line naming the work this type fits; rendered to every planner. */
     useWhen: z.string().min(1),
   })
@@ -333,6 +338,10 @@ export const taskTypeSchema = z
   .refine((type) => !type.nogit || type.kind === "spike", {
     message: "a nogit task type needs kind spike: it finishes without a merge",
     path: ["nogit"],
+  })
+  .refine((type) => !type.promote || type.kind === "spike", {
+    message: "a promote task type needs kind spike: it never merges",
+    path: ["promote"],
   });
 
 /** Every boundary step names its prompt and alias; unknown steps are refused. */

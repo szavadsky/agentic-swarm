@@ -55,6 +55,9 @@ async function runIterations(run: GoalRun): Promise<void> {
 function launchStop(run: GoalRun, state: State): LaunchResult["stop"] {
   if (run.signals.interruptedBy || run.ended === "cancelled")
     return "interrupted";
+  // The promote barrier outranks the derived goal: the launch stopped for the
+  // operator even when the promote task was the last open work.
+  if (run.ended === "promote") return "promote";
   if (state.goal === "done") return "done";
   if (state.goal === "blocked") return "blocked";
   return run.ended === "infra" ? "infra" : "iteration-limit";

@@ -57,8 +57,9 @@ bun bin/factory.ts benchmark --repo "$REPO" --goal demo
   takes the goal lock, recovers interrupted records and stale worktrees, then
   alternates boundary consults with task dispatch.
 - `--iterations N` bounds the launch; exit `0` done, `1` failure, `2` blocked,
-  `3` iteration limit, `130`/`143` signal. Exit `3` is normal for a bounded
-  launch: relaunch the same command to continue.
+  `3` iteration limit or a promote stop, `130`/`143` signal. Exit `3` is normal
+  for a bounded launch: relaunch the same command to continue (a promote stop
+  first needs the named build promoted).
 - One launch can run minutes to hours; redirect its output to a file.
 
 ## 4. Dashboard location

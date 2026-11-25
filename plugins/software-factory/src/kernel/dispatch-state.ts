@@ -13,7 +13,13 @@ import type { DrainController } from "./signals.js";
 import type { Cause, KernelRuntime, StepRecord } from "./types.js";
 
 export interface DispatchResult {
-  reason: "boundary" | "drained" | "terminal" | "infra" | "cancelled";
+  reason:
+    | "boundary"
+    | "drained"
+    | "promote"
+    | "terminal"
+    | "infra"
+    | "cancelled";
   cause?: Cause;
   /** Completed agent turns in this iteration. */
   turns: number;

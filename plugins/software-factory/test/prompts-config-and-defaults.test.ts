@@ -39,6 +39,21 @@ describe("prompts: config names", () => {
     expect(taskTypesVar(undefined)).toBe("none");
   });
 
+  it("lists run-config aliases in config order", () => {
+    expect(tierNamesVar({ implementer: {}, escalation: {} })).toBe(
+      "implementer, escalation",
+    );
+    expect(tierNamesVar({})).toBe("none");
+    expect(tierNamesVar(undefined)).toBe("none");
+  });
+
+  registerTypeFlags();
+
+  registerFrontClassTypes();
+});
+
+/** A type's marker flags are part of the catalog planners read. */
+function registerTypeFlags(): void {
   it("marks a nogit type in the rendered catalog", () => {
     expect(
       taskTypesVar({
@@ -55,16 +70,23 @@ describe("prompts: config names", () => {
     );
   });
 
-  it("lists run-config aliases in config order", () => {
-    expect(tierNamesVar({ implementer: {}, escalation: {} })).toBe(
-      "implementer, escalation",
+  it("marks a promote type in the rendered catalog", () => {
+    expect(
+      taskTypesVar({
+        promote: {
+          flow: "spike",
+          kind: "spike",
+          schema: "outcome",
+          nogit: true,
+          promote: true,
+          useWhen: "a build must be promoted",
+        },
+      }),
+    ).toBe(
+      "promote (flow: spike, kind: spike, schema: outcome, nogit: true, promote: true, use when: a build must be promoted)",
     );
-    expect(tierNamesVar({})).toBe("none");
-    expect(tierNamesVar(undefined)).toBe("none");
   });
-
-  registerFrontClassTypes();
-});
+}
 
 function registerFrontClassTypes(): void {
   it("renders every configured development type a front class may write", () => {

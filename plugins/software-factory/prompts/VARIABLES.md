@@ -28,7 +28,7 @@ The architect's body is assembled from fragments so a reviewer and a subarchitec
 
 `calibration` is the default calibration partial. The process config may replace its content per repo; the prompt template does not change.
 
-Renderer defaults live outside any `This turn` block and the renderer supplies them, so turn code does not pass them: `validate_cmd` (the running build's absolute `bun <build>/bin/factory.ts validate`, stable only within one checkout), `outcome_schema` (a filled outcome YAML example and its alternative rendered from the task type's kernel output schema, or the QA step's own schema, and narrowed to the fields the step delivers, in the `outcome` partial), `task_frontmatter` (the frontmatter YAML skeleton rendered from the kernel task schema, in the `task-frontmatter` partial), `task_types` (configured task type names in config order with the flow, kind, output schema and use-when each supplies, from the process config), `tiers` (run-config alias names in config order; `default` is kernel vocabulary for no tier override and stays literal), `depth` (`1` until the hierarchy config names `2`), `subagents` (the architect alias harness's `Caps.subagents`; `none` is the harness-generic default, and the steered hierarchy passes `steer` so only a steering harness renders the omp tool instructions), `author` (the reviewer's author role; it selects the `<role>-body` and `review-<role>` fragments) and `checks_result`/`checks_tree`/`checks_log` (the latest checks record's result, tree and log; a render with no checks record gets `no checks run`, `unknown` and `unknown`), and `base_gates` (the base tree's recorded gate result; a render with no base record gets `not recorded`, never a clean base). `author` defaults to `implementer`; the plan-review turn overrides it with `architect`. `class_types` is a turn-supplied variable above the block: the front turn renders the development types each class may write from the process config, the same types the validator enforces. The turn code supplies its own narrowed `outcome_schema` from the step's prompt, expectation and schema, so the role prompt and its repair ask show the same examples.
+Renderer defaults live outside any `This turn` block and the renderer supplies them, so turn code does not pass them: `validate_cmd` (the running build's absolute `bun <build>/bin/factory.ts validate`, stable only within one checkout), `outcome_schema` (a filled outcome YAML example and its alternative rendered from the task type's kernel output schema, or the QA step's own schema, and narrowed to the fields the step delivers, in the `outcome` partial), `task_frontmatter` (the frontmatter YAML skeleton rendered from the kernel task schema, in the `task-frontmatter` partial), `task_types` (configured task type names in config order with the flow, kind, output schema, nogit/promote flags and use-when each supplies, from the process config), `tiers` (run-config alias names in config order; `default` is kernel vocabulary for no tier override and stays literal), `depth` (`1` until the hierarchy config names `2`), `subagents` (the architect alias harness's `Caps.subagents`; `none` is the harness-generic default, and the steered hierarchy passes `steer` so only a steering harness renders the omp tool instructions), `author` (the reviewer's author role; it selects the `<role>-body` and `review-<role>` fragments) and `checks_result`/`checks_tree`/`checks_log` (the latest checks record's result, tree and log; a render with no checks record gets `no checks run`, `unknown` and `unknown`), and `base_gates` (the base tree's recorded gate result; a render with no base record gets `not recorded`, never a clean base). `author` defaults to `implementer`; the plan-review turn overrides it with `architect`. `class_types` is a turn-supplied variable above the block: the front turn renders the development types each class may write from the process config, the same types the validator enforces. The turn code supplies its own narrowed `outcome_schema` from the step's prompt, expectation and schema, so the role prompt and its repair ask show the same examples.
 
 ## architect.md
 
@@ -43,7 +43,7 @@ Renderer defaults live outside any `This turn` block and the renderer supplies t
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome examples from the kernel schema; renderer default
-- `task_types` — configured task types with their flow, kind, output schema and use-when; renderer default
+- `task_types` — configured task types with their flow, kind, output schema, nogit/promote flags and use-when; renderer default
 - `tiers` — run-config alias names; renderer default
 - `depth` — `2` renders the architect register; `1` (renderer default) leaves it out
 - `subarchitect_block` — the rendered launch block naming each live subarchitect with its agent id and spawn name; empty when the harness cannot steer or no epic has a plan to review
@@ -80,7 +80,7 @@ One epic's architect, below the top architect: the same bounds, turn order, plan
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome examples from the kernel schema; renderer default
-- `task_types` — configured task types with their flow, kind, output schema and use-when; renderer default
+- `task_types` — configured task types with their flow, kind, output schema, nogit/promote flags and use-when; renderer default
 - `tiers` — run-config alias names; renderer default
 
 ## front.md
@@ -98,7 +98,7 @@ One epic's architect, below the top architect: the same bounds, turn order, plan
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome examples from the kernel schema; renderer default
 - `task_frontmatter` — frontmatter YAML skeleton from the kernel schema; renderer default
-- `task_types` — configured task types with their flow, kind, output schema and use-when; renderer default
+- `task_types` — configured task types with their flow, kind, output schema, nogit/promote flags and use-when; renderer default
 - `tiers` — run-config alias names; renderer default
 - `class_types` — the configured development types each front class may write, rendered by the front turn
 - `code_map_path` — path of the code map a `when: [bigger]` scout step wrote; `none` when no scout ran
@@ -132,7 +132,7 @@ The turn's record carries the unified diff of the edit; the next architect pack 
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome examples from the kernel schema; renderer default
 - `task_frontmatter` — frontmatter YAML skeleton from the kernel schema; renderer default
-- `task_types` — configured task types with their flow, kind, output schema and use-when; renderer default
+- `task_types` — configured task types with their flow, kind, output schema, nogit/promote flags and use-when; renderer default
 - `tiers` — run-config alias names; renderer default
 
 ## implementer.md
@@ -283,7 +283,7 @@ The plan-review prompt the architecture flow renders on each reviewer alias. It 
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome examples narrowed to `status`, `summary`, `concerns`, `steerAnswers`, `debtClosed` and `planReview`; supplied by the turn
-- `task_types` — configured task types with their flow, kind, output schema and use-when, read by the included plan standard; renderer default
+- `task_types` — configured task types with their flow, kind, output schema, nogit/promote flags and use-when, read by the included plan standard; renderer default
 - `tiers` — run-config alias names, read by the included architect scope; renderer default
 
 ## architect-review-return.md
@@ -343,7 +343,7 @@ The flow's `resolve` step renders this same prompt with the same variables: the 
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome examples from the kernel schema; renderer default
-- `task_types` — configured task types with their flow, kind, output schema and use-when; renderer default
+- `task_types` — configured task types with their flow, kind, output schema, nogit/promote flags and use-when; renderer default
 
 ## pack-preparer.md
 

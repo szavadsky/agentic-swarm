@@ -194,6 +194,7 @@ function taskStateFor(
     round: reduction.round,
     kind: task.kind,
     flow: task.flow,
+    ...(task.promote ? { promote: true } : {}),
     ...(supersededBy !== undefined ? { supersededBy } : {}),
     phase: terminal ? "done" : reduction.phase,
     commit: terminal?.commit ?? reduction.commit,
