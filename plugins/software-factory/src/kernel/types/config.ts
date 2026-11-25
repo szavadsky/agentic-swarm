@@ -1,6 +1,7 @@
 /** Repository, run and fallback configuration shapes. */
 
 import type { Repo } from "../../core/git/repo.js";
+import type { FindingSeverity } from "../../core/checks/findings.js";
 import type { SandboxCommand } from "../../core/sandbox.js";
 import type { CacheTtl, Harness } from "../../harness/types.js";
 import type { PriceSource } from "../openrouter.js";
@@ -20,8 +21,13 @@ import type {
 import type { TaskTypeDefinition } from "./tasks.js";
 import type { ArtifactStore } from "./records.js";
 
-/** A runner whose printed failure report the kernel parses by name. */
-export type GatePattern = "pytest" | "jest" | "cargo";
+/** A repo-declared regex over a gate log for a tool that emits no report. */
+export interface GateRegex {
+  pattern: string;
+  tool?: string;
+  rule?: string;
+  severity?: FindingSeverity;
+}
 
 /** One repo gate command and the shared resources it needs to itself. */
 export interface GateConfig {
@@ -39,10 +45,16 @@ export interface GateConfig {
    */
   env?: Record<string, string>;
   /**
-   * `junit` names the worktree-relative report the command writes before it
-   * exits; `pattern` names a runner whose printed failures the kernel reads.
+   * Report paths the command writes before it exits, or the log regexes that
+   * name its findings when it writes no report. `junit` is converted to CTRF
+   * with `junit-to-ctrf`; `ctrf` and `sarif` are read natively.
    */
-  format?: { junit?: string; pattern?: GatePattern };
+  format?: {
+    junit?: string;
+    ctrf?: string;
+    sarif?: string;
+    regex?: GateRegex[];
+  };
   /**
    * Wall for this gate's command, in seconds. Absent or not a positive finite
    * number falls back to `GATE_TIMEOUT_SEC`; it never disables the timeout.

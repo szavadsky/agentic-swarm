@@ -83,7 +83,14 @@ function doneHarness(): FakeHarness {
 function fakePin(pins: string, rev: string): string {
   const pin = path.join(pins, rev);
   fs.mkdirSync(pin, { recursive: true });
-  for (const entry of ["bin", "src", "config", "prompts", "package.json"]) {
+  for (const entry of [
+    "bin",
+    "src",
+    "config",
+    "prompts",
+    "schemas",
+    "package.json",
+  ]) {
     fs.cpSync(path.join(PACKAGE_ROOT, entry), path.join(pin, entry), {
       recursive: true,
     });

@@ -1,6 +1,13 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { CheckResult } from "../core/checks/types.js";
 import type { ParsedCase, ParsedJunit } from "../core/checks/junit.js";
-import type { GatePattern } from "./types.js";
+import { ctrfFindings, parseCtrfReport } from "../core/checks/ctrf.js";
+import { capFindings, type Finding } from "../core/checks/findings.js";
+import { junitFindings } from "../core/checks/junit-findings.js";
+import { logFindings, regexFindings } from "../core/checks/log-findings.js";
+import { parseSarifLog, sarifFindings } from "../core/checks/sarif.js";
+import type { GateConfig } from "./types.js";
 
 /** Characters of gate output a fix turn gets to read. */
 export const GATE_OUTPUT_CAP = 4000;
@@ -77,27 +84,18 @@ export interface GateCheckMeta {
   roots: string[];
   /** The output is the tail of a longer report; its head is gone. */
   truncated: boolean;
-  /** The runner whose printed failure report the output carries. */
-  pattern?: GatePattern;
 }
-
-const GATE_PATTERNS: readonly GatePattern[] = ["pytest", "jest", "cargo"];
 
 export function gateCheckMeta(check: CheckResult): GateCheckMeta {
   const details = check.details;
   if (typeof details !== "object" || details === null)
     return { roots: [], truncated: false };
-  const meta = details as {
-    roots?: unknown;
-    truncated?: unknown;
-    pattern?: unknown;
-  };
+  const meta = details as { roots?: unknown; truncated?: unknown };
   return {
     roots: Array.isArray(meta.roots)
       ? meta.roots.filter((root): root is string => typeof root === "string")
       : [],
     truncated: meta.truncated === true,
-    pattern: GATE_PATTERNS.find((pattern) => pattern === meta.pattern),
   };
 }
 
@@ -201,4 +199,133 @@ export function junitDetails(check: CheckResult): ParsedJunit | undefined {
 /** A case's identity within its gate: the report's file, then its name. */
 export function caseLabel(c: ParsedCase): string {
   return c.file ? `${c.file} > ${c.name}` : c.name;
+}
+
+/** One gate's declared artifacts, already read and root-normalised by the caller. */
+export interface GateArtifacts {
+  /** The gate's exit code; null when it was killed or timed out. */
+  exitCode: number | null;
+  /** The raw report texts the gate declared and wrote, keyed by format. */
+  junit?: string;
+  ctrf?: string;
+  sarif?: string;
+  /** The capped, root-normalised gate output. */
+  log: string;
+}
+
+/**
+ * One model for a gate's findings. A native CTRF report wins, a JUnit report
+ * is converted to CTRF, and a SARIF log is validated against the OASIS 2.1.0
+ * schema. With no report, the repo-declared log regexes are the escape hatch;
+ * when they match nothing the red log itself names the findings by exit code.
+ * A declared report that cannot be read throws: the caller records a red check
+ * rather than pretending the gate printed no failure.
+ */
+export async function normaliseFindings(
+  gate: GateConfig,
+  artifacts: GateArtifacts,
+): Promise<Finding[]> {
+  if (artifacts.ctrf) {
+    const findings = ctrfFindings(gate.id, parseCtrfReport(artifacts.ctrf));
+    if (findings.length > 0) return capFindings(findings);
+  }
+  if (artifacts.junit) {
+    const findings = await junitFindings(gate.id, artifacts.junit);
+    if (findings.length > 0) return capFindings(findings);
+  }
+  if (artifacts.sarif) {
+    const findings = sarifFindings(gate.id, parseSarifLog(artifacts.sarif));
+    if (findings.length > 0) return capFindings(findings);
+  }
+  const fromRegex = regexFindings(
+    gate.id,
+    artifacts.log,
+    gate.format?.regex ?? [],
+  );
+  if (fromRegex.length > 0) return capFindings(fromRegex);
+  return capFindings(logFindings(gate.id, artifacts.log, artifacts.exitCode));
+}
+
+/** Findings a check record keeps, when it carries the new model. */
+export function findingDetails(check: CheckResult): Finding[] | undefined {
+  const details = check.details;
+  if (typeof details !== "object" || details === null) return undefined;
+  const findings = (details as { findings?: unknown }).findings;
+  if (!Array.isArray(findings)) return undefined;
+  return findings.filter(isFinding);
+}
+
+function isFinding(value: unknown): value is Finding {
+  if (typeof value !== "object" || value === null) return false;
+  const finding = value as Partial<Finding>;
+  return (
+    typeof finding.check === "string" &&
+    typeof finding.tool === "string" &&
+    typeof finding.message === "string" &&
+    typeof finding.fingerprint === "string" &&
+    (finding.severity === "error" ||
+      finding.severity === "warning" ||
+      finding.severity === "info")
+  );
+}
+
+/** The worktree-relative report paths a gate declares, resolved against its cwd. */
+export function gateReportPaths(gate: GateConfig, cwd: string) {
+  return {
+    junit: gate.format?.junit
+      ? path.resolve(cwd, gate.format.junit)
+      : undefined,
+    ctrf: gate.format?.ctrf ? path.resolve(cwd, gate.format.ctrf) : undefined,
+    sarif: gate.format?.sarif
+      ? path.resolve(cwd, gate.format.sarif)
+      : undefined,
+  };
+}
+
+export interface GateReports {
+  contents: Pick<GateArtifacts, "junit" | "ctrf" | "sarif">;
+  error?: string;
+  /** A test report's failing cases are part of the verdict; SARIF is not. */
+  testReport: boolean;
+}
+
+function readReport(
+  file: string,
+  label: string,
+): { text?: string; error?: string } {
+  try {
+    if (!fs.existsSync(file)) return { error: `${label} report not generated` };
+    const text = fs.readFileSync(file, "utf8");
+    if (text.trim() === "") return { error: `${label} report is empty` };
+    return { text };
+  } catch (error) {
+    return {
+      error: `${label} report unreadable: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+}
+
+/** Reads and consumes every report the gate declared, or names the first fault. */
+export function readGateReports(cwd: string, gate: GateConfig): GateReports {
+  const paths = gateReportPaths(gate, cwd);
+  const contents: GateReports["contents"] = {};
+  let error: string | undefined;
+  for (const [kind, label] of [
+    ["junit", "JUnit"],
+    ["ctrf", "CTRF"],
+    ["sarif", "SARIF"],
+  ] as const) {
+    const file = paths[kind];
+    if (!file) continue;
+    const report = readReport(file, label);
+    if (report.error) error ??= report.error;
+    else if (report.text !== undefined) contents[kind] = report.text;
+  }
+  return {
+    contents,
+    ...(error ? { error } : {}),
+    testReport: Boolean(paths.junit || paths.ctrf),
+  };
 }

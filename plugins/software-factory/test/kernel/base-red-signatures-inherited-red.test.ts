@@ -103,16 +103,19 @@ async function recordsPytestJUnitReportBaseSoPart1(
   }
   expect(baseline.ok).toBe(false);
   const recorded = recordedBaseGates(await runtime.store.listRecords())!;
-  // The base record carries the report's cases, not only its output lines.
+  // The base record carries the report's findings, not only its output lines.
   expect(recorded.checks[0]!.details).toMatchObject({
-    junit: { truncated: false },
+    findings: [
+      {
+        rule: "pytest > test_sub",
+        severity: "error",
+      },
+    ],
   });
   expect([...gateSignatures(recorded.checks[0]!)]).toEqual([
-    "py > tests.test_calc > test_sub",
+    "py > pytest > test_sub",
   ]);
-  expect(recorded.checks[0]!.summary).toBe(
-    "1 failing: tests.test_calc > test_sub",
-  );
+  expect(recorded.checks[0]!.summary).toBe("1 failing: pytest > test_sub");
 
   // The task worktree is a different absolute root and runs the same gate;
   // the failing case name, not a root-bearing output line, is the identity.
@@ -128,9 +131,7 @@ async function recordsPytestJUnitReportBaseSoPart2(
   try {
     fs.writeFileSync(path.join(taskRoot, "pytest-junit.xml"), PYTEST_JUNIT);
     const [run] = await runGates(runtime, taskRoot);
-    expect([...gateSignatures(run!)]).toEqual([
-      "py > tests.test_calc > test_sub",
-    ]);
+    expect([...gateSignatures(run!)]).toEqual(["py > pytest > test_sub"]);
     expect(newGateFailures([run!], preexistingRed(recorded))).toEqual([]);
 
     // A different failing case under the same gate is the task's own red.

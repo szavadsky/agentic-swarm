@@ -29,6 +29,15 @@ function worktreePath(label: string) {
 const codingRulesPathSchema = worktreePath("coding rules file");
 const gateEnvDirSchema = worktreePath("env dirs");
 const gateJunitPathSchema = worktreePath("junit path");
+const gateReportPathSchema = worktreePath("report path");
+const gateRegexSchema = z
+  .object({
+    pattern: z.string().min(1),
+    tool: z.string().min(1).optional(),
+    rule: z.string().min(1).optional(),
+    severity: z.enum(["error", "warning", "info"]).optional(),
+  })
+  .strict();
 const gateSchema = z
   .object({
     id: z.string().min(1),
@@ -44,12 +53,21 @@ const gateSchema = z
     format: z
       .object({
         junit: gateJunitPathSchema.optional(),
-        pattern: z.enum(["pytest", "jest", "cargo"]).optional(),
+        ctrf: gateReportPathSchema.optional(),
+        sarif: gateReportPathSchema.optional(),
+        regex: z.array(gateRegexSchema).optional(),
       })
       .strict()
-      .refine((val) => val.junit !== undefined || val.pattern !== undefined, {
-        message: "format must contain junit or pattern",
-      })
+      .refine(
+        (val) =>
+          val.junit !== undefined ||
+          val.ctrf !== undefined ||
+          val.sarif !== undefined ||
+          (val.regex !== undefined && val.regex.length > 0),
+        {
+          message: "format must contain junit, ctrf, sarif or regex",
+        },
+      )
       .optional(),
   })
   .strict();

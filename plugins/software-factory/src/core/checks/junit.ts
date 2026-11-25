@@ -11,16 +11,7 @@ export interface ParsedJunit {
   cases: ParsedCase[];
   /** The report carries a `<failure>` or `<error>` anywhere, cases or not. */
   suiteFailed: boolean;
-  /** `cases` is a capped subset of the report; the rest was dropped. */
-  truncated: boolean;
 }
-
-/** Cases a stored report keeps; failing cases are kept first. */
-const CASE_CAP = 100;
-/** Characters of case data one stored report keeps. */
-const CASE_CHARS = 4000;
-/** Characters of one stored case name. */
-const NAME_CAP = 300;
 
 function isNode(
   value: string | XML.Node | XML.Comment | XML.ProcessingInstruction,
@@ -71,52 +62,14 @@ function collectCases(
 
 /**
  * Reads one JUnit report, whatever runner wrote it. Throws a `SyntaxError` on a
- * malformed document: the caller decides whether an unreadable report is red
- * (a gate) or merely unusable for naming failures (a test runner).
+ * malformed document: the tests-gate runner reports the red from its own lines
+ * instead of using the report to name failures.
  */
 export function parseJunit(xml: string): ParsedJunit {
   const root = XML.parse(xml, { compact: false });
   const cases: ParsedCase[] = [];
   collectCases(root, undefined, cases);
-  return { cases, suiteFailed: hasFailure(root), truncated: false };
-}
-
-/**
- * The report a check record keeps: failing cases first, since they are the
- * failure identity, then passing cases and name prefixes as the caps allow.
- * `truncated` is what the caps dropped, so a stored report never claims to be
- * complete when it is not.
- */
-export function capJunit(
-  report: ParsedJunit,
-  limits: { cases?: number; chars?: number; nameChars?: number } = {},
-): ParsedJunit {
-  const caseCap = limits.cases ?? CASE_CAP;
-  const charCap = limits.chars ?? CASE_CHARS;
-  const nameCap = limits.nameChars ?? NAME_CAP;
-  const ordered = [
-    ...report.cases.filter((c) => c.status === "fail"),
-    ...report.cases.filter((c) => c.status === "pass"),
-  ];
-  const cases: ParsedCase[] = [];
-  let used = 0;
-  let truncated = report.truncated;
-  for (const c of ordered) {
-    if (cases.length >= caseCap) {
-      truncated = true;
-      break;
-    }
-    const name = c.name.slice(0, nameCap);
-    if (name !== c.name) truncated = true;
-    const size = name.length + (c.file?.length ?? 0);
-    if (used + size > charCap) {
-      truncated = true;
-      break;
-    }
-    used += size;
-    cases.push(name === c.name ? c : { ...c, name });
-  }
-  return { cases, suiteFailed: report.suiteFailed, truncated };
+  return { cases, suiteFailed: hasFailure(root) };
 }
 
 /** Files whose cases failed, in report order; empty when no report was read. */

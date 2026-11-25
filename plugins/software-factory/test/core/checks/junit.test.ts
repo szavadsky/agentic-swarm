@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import {
-  capJunit,
   failedFiles,
   failedTests,
   parseJunit,
@@ -65,7 +64,6 @@ describe("parseJunit", () => {
       { name: "suite > fails beta", status: "fail", file: "test/red.test.ts" },
     ]);
     expect(report.suiteFailed).toBe(true);
-    expect(report.truncated).toBe(false);
     expect(failedFiles(report)).toEqual(["test/red.test.ts"]);
     expect(failedTests(report)).toEqual([
       "test/red.test.ts > suite > fails beta",
@@ -106,33 +104,5 @@ describe("parseJunit", () => {
 
   it("rejects a malformed report instead of reading part of it", () => {
     expect(() => parseJunit("<testsuite><testcase")).toThrow();
-  });
-});
-
-describe("capJunit", () => {
-  it("keeps failing cases first and reports what the caps dropped", () => {
-    const report = parseJunit(PYTEST);
-    const capped = capJunit(report, { cases: 2, nameChars: 3 });
-    expect(capped.cases).toEqual([
-      { name: "tes", status: "fail", file: "tests.test_calc" },
-      { name: "tes", status: "fail", file: "tests.test_calc" },
-    ]);
-    expect(capped.truncated).toBe(true);
-    expect(capped.suiteFailed).toBe(true);
-    // The stored subset still names the failures it kept.
-    expect(failedFiles(capped)).toEqual(["tests.test_calc"]);
-  });
-
-  it("stops at the character cap and keeps the failures it already has", () => {
-    const capped = capJunit(parseJunit(PYTEST), { chars: 40, nameChars: 100 });
-    expect(capped.cases).toHaveLength(1);
-    expect(capped.cases[0]!.status).toBe("fail");
-    expect(capped.truncated).toBe(true);
-  });
-
-  it("is not truncated when every case fits", () => {
-    const capped = capJunit(parseJunit(BUN), { cases: 10, nameChars: 100 });
-    expect(capped.truncated).toBe(false);
-    expect(capped.cases).toHaveLength(2);
   });
 });

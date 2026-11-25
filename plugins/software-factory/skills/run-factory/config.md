@@ -22,8 +22,8 @@ gates:
     command: bun test --reporter=junit --reporter-outfile=reports/junit.xml
     format: { junit: reports/junit.xml }       # report the command writes
   - id: integration
-    command: bun test test/integration
-    format: { pattern: jest }                  # runner whose printed failures parse
+    command: ./scripts/integration-tests
+    format: { ctrf: reports/ctrf.json }        # standard test report
     serial: [database]                         # gates naming a mutex never overlap
     env: { TMPDIR: .cache/gate }               # per-worktree scratch directory
 cleanliness:                                   # optional
@@ -34,9 +34,9 @@ codingRules: .factory/prompts/coding-rules.md  # optional; replaces the factory 
 
 - Gate `env` values are worktree-relative directories; the kernel creates them
   and exports absolute paths, so two worktrees never share one.
-- `format.junit` is exported as `FACTORY_JUNIT_PATH` before the command runs; a
-  missing, empty or unreadable report is red. `pattern` is `pytest`, `jest` or
-  `cargo`.
+- `format` names the report the command writes (`junit`, `ctrf` or `sarif`);
+  missing, empty or unreadable is red; `format.junit` is exported as
+  `FACTORY_JUNIT_PATH`; a tool with no report uses a declared `regex` list.
 - Gates run once on the base; a red base is recorded and warned once, not fatal.
 - With no `gates` configured, the goal's `infra.yaml` (written by the shipped
   `infra` ingestion step) supplies the commands the task runs; a configured gate

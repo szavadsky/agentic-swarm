@@ -123,7 +123,6 @@ export type {
   ConfigFiles,
   FallbackModelConfig,
   GateConfig,
-  GatePattern,
   GoalPaths,
   GoalRoots,
   HarnessConfig,

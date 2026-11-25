@@ -113,21 +113,37 @@ function testScriptWithNoOutput() {
   });
 }
 
-function testPatternGatesUnchanged() {
-  it("existing pattern gates remain unchanged", async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gate-pattern-"));
+function testLogRegexGates() {
+  it("turns a declared log regex into findings", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gate-regex-"));
     try {
       const gate = {
         id: "cargo-gate",
         command:
           "echo 'test tests::alpha ... ok\ntest tests::beta ... FAILED'; exit 101",
         serial: [],
-        format: { pattern: "cargo" as const },
+        format: {
+          regex: [
+            {
+              pattern: "^test (?<rule>\\S+) \\.\\.\\. FAILED$",
+              tool: "cargo",
+            },
+          ],
+        },
       };
       const [run] = await runGates(runtimeWith(root, [gate]), root);
       expect(run!.ok).toBe(false);
       expect(run!.summary).toBe("exit 101");
-      expect(run!.details).toMatchObject({ pattern: "cargo" });
+      expect(run!.details).toMatchObject({
+        findings: [
+          {
+            check: "cargo-gate",
+            tool: "cargo",
+            rule: "tests::beta",
+            severity: "error",
+          },
+        ],
+      });
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -305,7 +321,7 @@ describe("plain shell-script gate evidence", () => {
   testScriptExitsNonZero();
   testScriptKilledByTimeout();
   testScriptWithNoOutput();
-  testPatternGatesUnchanged();
+  testLogRegexGates();
 });
 
 describe("non-test script gate flow: QA, review and merge", () => {

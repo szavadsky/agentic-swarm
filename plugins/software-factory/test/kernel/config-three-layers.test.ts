@@ -405,9 +405,11 @@ function threeConfigLayersPart22() {
         "  - id: test-junit",
         "    command: echo test",
         "    format: { junit: junit.xml }",
-        "  - id: test-pattern",
+        "  - id: test-regex",
         "    command: echo test",
-        "    format: { pattern: pytest }",
+        "    format:",
+        "      regex:",
+        "        - pattern: '^FAILED (?<rule>\\S+)$'",
         "",
       ].join("\n"),
     );
@@ -417,7 +419,9 @@ function threeConfigLayersPart22() {
     expect(format0).toBeDefined();
     expect(format0).toEqual({ junit: "junit.xml" });
     expect(format1).toBeDefined();
-    expect(format1).toEqual({ pattern: "pytest" });
+    expect(format1).toEqual({
+      regex: [{ pattern: "^FAILED (?<rule>\\S+)$" }],
+    });
     fs.rmSync(root, { recursive: true, force: true });
   });
 }

@@ -1,6 +1,6 @@
 import type { CheckResult } from "../core/checks/types.js";
 import type { ParsedJunit } from "../core/checks/junit.js";
-import type { GatePattern } from "./types.js";
+import type { Finding } from "../core/checks/findings.js";
 import {
   ANSI,
   BUN_BANNER,
@@ -15,73 +15,27 @@ import {
   TSC_PAREN,
   TSC_SUMMARY,
   caseLabel,
+  findingDetails,
   gateCheckMeta,
   junitDetails,
   normaliseRoots,
 } from "./gates-normalise.js";
 
-/**
- * pytest's `FAILED tests/a.py::test - assertion detail` summary and its verbose
- * `tests/a.py::test FAILED` line. The assertion text after ` - ` drifts with
- * the values under test, so the node id is the identity.
- */
-function pytestSignatures(lines: readonly string[]): Set<string> {
+/** A report finding's identity; the log fallback stays on the raw-output reader. */
+function findingGateSignatures(
+  check: CheckResult,
+  findings: readonly Finding[],
+): Set<string> | undefined {
   const signatures = new Set<string>();
-  for (const line of lines) {
-    const summary = /^(?:FAILED|ERROR)\s+(\S+?)(?:\s+-\s+.*)?$/.exec(line);
-    if (summary) {
-      signatures.add(summary[1]!);
-      continue;
-    }
-    const verbose = /^(\S+)\s+(?:FAILED|ERROR)(?:\s|$)/.exec(line);
-    if (verbose) signatures.add(verbose[1]!);
+  for (const finding of findings) {
+    if (finding.tool === "log" || finding.severity !== "error") continue;
+    const label =
+      finding.rule !== undefined
+        ? [finding.file, finding.rule].filter(Boolean).join(" > ")
+        : [finding.file, finding.message].filter(Boolean).join(" > ");
+    signatures.add(`${check.name} > ${label}`);
   }
-  return signatures;
-}
-
-/**
- * jest's `FAIL src/a.test.ts` header followed by `● suite › test` bullets. The
- * bullet repeats before each assertion of one failure; the set keeps one.
- */
-function jestSignatures(lines: readonly string[]): Set<string> {
-  const signatures = new Set<string>();
-  let file = "";
-  for (const line of lines) {
-    const failedFile = /^FAIL\s+(\S+)$/.exec(line);
-    if (failedFile) {
-      file = failedFile[1]!;
-      continue;
-    }
-    const bullet = /^[●✕]\s+(.+)$/u.exec(line);
-    if (bullet) {
-      signatures.add(file ? `${file} > ${bullet[1]}` : `test: ${bullet[1]}`);
-    }
-  }
-  return signatures;
-}
-
-/** libtest's `test tests::alpha ... FAILED`; passed tests name no failure. */
-function cargoSignatures(lines: readonly string[]): Set<string> {
-  const signatures = new Set<string>();
-  for (const line of lines) {
-    const failed = /^test\s+(.+?)\s+\.\.\.\s+FAILED$/.exec(line);
-    if (failed) signatures.add(failed[1]!);
-  }
-  return signatures;
-}
-
-function patternSignatures(
-  pattern: GatePattern,
-  lines: readonly string[],
-): Set<string> {
-  switch (pattern) {
-    case "pytest":
-      return pytestSignatures(lines);
-    case "jest":
-      return jestSignatures(lines);
-    case "cargo":
-      return cargoSignatures(lines);
-  }
+  return signatures.size > 0 ? signatures : undefined;
 }
 
 /** A red JUnit gate's failure identities; undefined when the report names none. */
@@ -242,32 +196,33 @@ function scanBunTscLines(
 }
 
 /**
- * Failure identities of one gate run: tsc diagnostics collapse to
- * `file:line code`, bun failures to `file > test`, bun's file-level load errors
- * to `file > error`, and any other output line outside a reporter block is
- * kept as `line: ...` after its run root is normalised. A red gate is inherited
- * only for the signatures it was red for, so a new failure under the same gate
- * still counts.
+ * Failure identities of one gate run: a report's findings when it names one
+ * (`test > file > name`, `tool > file > rule`), otherwise tsc diagnostics
+ * collapse to `file:line code`, bun failures to `file > test`, bun's file-level
+ * load errors to `file > error`, and any other output line outside a reporter
+ * block is kept as `line: ...` after its run root is normalised. A red gate is
+ * inherited only for the signatures it was red for, so a new failure under the
+ * same gate still counts.
  *
- * A JUnit report or a declared `format.pattern` is the identity when it names a
- * failure: its case names survive timing and assertion-value drift, which raw
- * output lines do not. A report with no failure and a pattern that matched
- * nothing fall back to the output lines, so a gate that exits red for a reason
- * no case records is still identifiable.
+ * Legacy records that stored `details.junit` are still read; new records carry
+ * `details.findings`, and a report with no failure falls back to the output
+ * lines, so a gate that exits red for a reason no report records is still
+ * identifiable.
  */
 export function gateSignatures(check: CheckResult): Set<string> {
   const meta = gateCheckMeta(check);
   const lines = check.output
     .split("\n")
     .map((line) => normaliseRoots(line.replace(ANSI, "").trim(), meta.roots));
+  const findings = findingDetails(check);
+  if (findings) {
+    const fromFindings = findingGateSignatures(check, findings);
+    if (fromFindings) return fromFindings;
+  }
   const junit = junitDetails(check);
   if (junit) {
     const fromJunit = junitGateSignatures(check, junit);
     if (fromJunit) return fromJunit;
-  }
-  if (meta.pattern) {
-    const fromPattern = patternSignatures(meta.pattern, lines);
-    if (fromPattern.size > 0) return fromPattern;
   }
   return scanBunTscLines(lines, meta.truncated);
 }

@@ -116,47 +116,41 @@ describe("gateSignatures", () => {
   });
 });
 
-describe("declared gate patterns", () => {
-  it("reads pytest's printed failures instead of their assertion detail", () => {
-    const report = (detail: string) =>
-      check({
-        name: "py",
-        output: [
-          `FAILED tests/test_calc.py::test_sub - AssertionError: ${detail}`,
-          "1 failed, 1 passed in 0.02s",
-        ].join("\n"),
-        details: { roots: [], truncated: false, pattern: "pytest" },
+describe("declared log regexes", () => {
+  it("reads a repo regex into one finding, not the assertion detail", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gate-regex-"));
+    try {
+      const gate = {
+        id: "py",
+        command:
+          "echo 'FAILED tests/test_calc.py::test_sub - AssertionError: assert 1 == 2'; exit 1",
+        serial: [],
+        format: {
+          regex: [
+            {
+              pattern: "^FAILED\\s+(?<rule>\\S+)\\s+-\\s+(?<message>.*)$",
+              tool: "pytest",
+            },
+          ],
+        },
+      };
+      const [run] = await runGates(runtimeWith(root, [gate]), root);
+      expect(run!.details).toMatchObject({
+        findings: [
+          {
+            check: "py",
+            tool: "pytest",
+            rule: "tests/test_calc.py::test_sub",
+            severity: "error",
+          },
+        ],
       });
-    expect([...gateSignatures(report("assert 1 == 2"))]).toEqual([
-      "tests/test_calc.py::test_sub",
-    ]);
-    expect([...gateSignatures(report("assert 3 == 4"))]).toEqual([
-      "tests/test_calc.py::test_sub",
-    ]);
-  });
-
-  it("reads jest and cargo failure lines", () => {
-    const jest = check({
-      name: "js",
-      output: [
-        "FAIL src/sum.test.js",
-        "  ● sum › subtracts",
-        "    expected 1 received 2",
-      ].join("\n"),
-      details: { roots: [], pattern: "jest" },
-    });
-    expect([...gateSignatures(jest)]).toEqual([
-      "src/sum.test.js > sum › subtracts",
-    ]);
-
-    const cargo = check({
-      name: "rs",
-      output: ["test tests::alpha ... ok", "test tests::beta ... FAILED"].join(
-        "\n",
-      ),
-      details: { roots: [], pattern: "cargo" },
-    });
-    expect([...gateSignatures(cargo)]).toEqual(["tests::beta"]);
+      expect([...gateSignatures(run!)]).toEqual([
+        "py > tests/test_calc.py::test_sub",
+      ]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 
@@ -175,19 +169,17 @@ describe("a pytest-shaped JUnit gate", () => {
       };
       const [first] = await runGates(runtimeWith(root, [gate]), root);
       expect(first!.ok).toBe(false);
-      expect(first!.summary).toBe("1 failing: tests.test_calc > test_sub");
-      expect([...gateSignatures(first!)]).toEqual([
-        "py > tests.test_calc > test_sub",
-      ]);
+      expect(first!.summary).toBe("1 failing: pytest > test_sub");
+      expect([...gateSignatures(first!)]).toEqual(["py > pytest > test_sub"]);
       expect(first!.details).toMatchObject({
-        junit: {
-          cases: [
-            { name: "test_sub", status: "fail", file: "tests.test_calc" },
-            { name: "test_add", status: "pass", file: "tests.test_calc" },
-          ],
-          suiteFailed: true,
-          truncated: false,
-        },
+        findings: [
+          {
+            check: "py",
+            tool: "py",
+            rule: "pytest > test_sub",
+            severity: "error",
+          },
+        ],
       });
       // The kernel consumed the report: a stale one cannot colour the next run.
       expect(fs.existsSync(path.join(root, "reports/junit.xml"))).toBe(false);
@@ -201,9 +193,7 @@ describe("a pytest-shaped JUnit gate", () => {
         ),
       );
       const [second] = await runGates(runtimeWith(root, [gate]), root);
-      expect([...gateSignatures(second!)]).toEqual([
-        "py > tests.test_calc > test_sub",
-      ]);
+      expect([...gateSignatures(second!)]).toEqual(["py > pytest > test_sub"]);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -231,21 +221,38 @@ describe("declared gate report failures", () => {
     }
   });
 
-  it("reads format.pattern from the gate config into the check", async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gate-pattern-"));
+  it("turns an empty declared report into a red, not a silent pass", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gate-empty-ctrf-"));
     try {
       const gate = {
-        id: "py",
-        command:
-          "echo 'FAILED tests/test_calc.py::test_sub - AssertionError: assert 1 == 2'; exit 1",
+        id: "js",
+        command: "mkdir -p reports && : > reports/ctrf.json",
         serial: [],
-        format: { pattern: "pytest" as const },
+        format: { ctrf: "reports/ctrf.json" },
       };
       const [run] = await runGates(runtimeWith(root, [gate]), root);
-      expect(run!.details).toMatchObject({ pattern: "pytest" });
-      expect([...gateSignatures(run!)]).toEqual([
-        "tests/test_calc.py::test_sub",
-      ]);
+      expect(run!.ok).toBe(false);
+      expect(run!.summary).toBe("CTRF report is empty");
+      expect(run!.details).toMatchObject({
+        error: "CTRF report is empty",
+      });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("turns a report its standard rejects into a red, not a silent pass", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gate-bad-ctrf-"));
+    try {
+      const gate = {
+        id: "js",
+        command: "mkdir -p reports && echo not-json > reports/ctrf.json",
+        serial: [],
+        format: { ctrf: "reports/ctrf.json" },
+      };
+      const [run] = await runGates(runtimeWith(root, [gate]), root);
+      expect(run!.ok).toBe(false);
+      expect(run!.summary.startsWith("CTRF report is not JSON")).toBe(true);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -272,17 +279,18 @@ describe("a JUnit gate whose command cannot start", () => {
   });
 });
 
-describe("a capped JUnit report", () => {
-  it("stores a bounded case list and says it did", async () => {
+describe("a large JUnit report", () => {
+  it("stores a bounded finding list, failures first", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "gate-cap-"));
     try {
       const cases = Array.from(
-        { length: 101 },
-        (_, i) => `<testcase classname="module" name="test_${i}" />`,
+        { length: 205 },
+        (_, i) =>
+          `<testcase classname="module" name="test_${i}"><failure message="broken">stack</failure></testcase>`,
       ).join("");
       fs.writeFileSync(
         path.join(root, "big-junit.xml"),
-        `<testsuite name="big" tests="101">${cases}</testsuite>`,
+        `<testsuite name="big" tests="205">${cases}</testsuite>`,
       );
       const gate = {
         id: "big",
@@ -291,12 +299,10 @@ describe("a capped JUnit report", () => {
         format: { junit: "reports/junit.xml" },
       };
       const [run] = await runGates(runtimeWith(root, [gate]), root);
-      expect(run!.ok).toBe(true);
-      expect(run!.details).toMatchObject({
-        junit: { truncated: true, suiteFailed: false },
-      });
-      const stored = run!.details as { junit: { cases: unknown[] } };
-      expect(stored.junit.cases).toHaveLength(100);
+      expect(run!.ok).toBe(false);
+      const stored = run!.details as { findings: { severity: string }[] };
+      expect(stored.findings).toHaveLength(200);
+      expect(stored.findings.every((f) => f.severity === "error")).toBe(true);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

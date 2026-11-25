@@ -1,10 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import {
-  capJunit,
-  type ParsedJunit,
-  parseJunit,
-} from "../core/checks/junit.js";
+import type { Finding } from "../core/checks/findings.js";
 import type { CheckAttribution, CheckResult } from "../core/checks/types.js";
 import { fingerprintText } from "../core/fingerprint.js";
 import { KeyedMutex } from "../core/mutex.js";
@@ -13,10 +9,12 @@ import { trackGateGroup } from "./gate-processes.js";
 import {
   type CappedGateOutput,
   capGateOutput,
-  caseLabel,
+  gateReportPaths,
   GATE_OUTPUT_CAP,
   isAdvisoryCheck,
   isInfraCheck,
+  normaliseFindings,
+  readGateReports,
 } from "./gates-normalise.js";
 import {
   gateSignatureKey,
@@ -24,7 +22,7 @@ import {
   UNIDENTIFIED_GATE_FAILURE,
 } from "./gates-signatures.js";
 import { resolveGates } from "./infra.js";
-import type { GateConfig, GatePattern, KernelRuntime } from "./types.js";
+import type { GateConfig, KernelRuntime } from "./types.js";
 
 export const GATE_TIMEOUT_SEC = 900;
 
@@ -152,32 +150,20 @@ const SUMMARY_CASES = 5;
 /** Characters of one case name in a summary. */
 const SUMMARY_NAME_CHARS = 120;
 
-/** A red gate's summary names what failed; `exit 0` says nothing. */
-function junitSummary(parsed: ParsedJunit, code: number | null): string {
-  const failing = parsed.cases
-    .filter((c) => c.status === "fail")
-    .map(caseLabel);
-  if (failing.length > 0) {
-    const shown = failing
-      .slice(0, SUMMARY_CASES)
-      .map((name) => name.slice(0, SUMMARY_NAME_CHARS));
-    const rest = failing.length - shown.length;
-    return `${failing.length} failing: ${shown.join(", ")}${rest > 0 ? `, +${rest} more` : ""}`;
-  }
-  if (parsed.suiteFailed) return "suite failure";
-  if (parsed.cases.length === 0) return "empty JUnit report";
-  return `exit ${code}`;
+/** A finding's stable display label: its file, then its rule or message. */
+function findingLabel(finding: Finding): string {
+  const name = finding.rule ?? finding.message;
+  return finding.file ? `${finding.file} > ${name}` : name;
 }
 
-/** A red JUnit gate's identity: its failing cases, never its passing ones. */
-function junitIdentity(parsed: ParsedJunit | undefined): string {
-  if (!parsed) return "";
-  const failing = parsed.cases
-    .filter((c) => c.status === "fail")
-    .map(caseLabel)
-    .sort();
-  if (failing.length > 0) return failing.join(",");
-  return parsed.suiteFailed ? "suite-failure" : "";
+/** A red test report's summary names what failed; other gates keep exit code. */
+function reportSummary(findings: readonly Finding[]): string {
+  const failing = findings.filter((finding) => finding.severity === "error");
+  const shown = failing
+    .slice(0, SUMMARY_CASES)
+    .map((finding) => findingLabel(finding).slice(0, SUMMARY_NAME_CHARS));
+  const rest = failing.length - shown.length;
+  return `${failing.length} failing: ${shown.join(", ")}${rest > 0 ? `, +${rest} more` : ""}`;
 }
 
 /** One declared gate run: its command result and the check built from it. */
@@ -186,60 +172,43 @@ export interface DeclaredGateRun {
   check: CheckResult;
 }
 
-/** The JUnit report a gate wrote, or why it is missing or unreadable. */
-function readJunitReport(junitPath: string | undefined): {
-  parsed?: ParsedJunit;
-  error?: string;
-} {
-  if (!junitPath) return {};
-  try {
-    if (!fs.existsSync(junitPath))
-      return { error: "JUnit report not generated" };
-    return { parsed: parseJunit(fs.readFileSync(junitPath, "utf8")) };
-  } catch (error) {
-    return {
-      error: `JUnit report unreadable: ${error instanceof Error ? error.message : String(error)}`,
-    };
-  } finally {
-    fs.rmSync(junitPath, { force: true });
-  }
-}
-
-/** A gate is green only when the command, its report and every case agree. */
+/** A gate is green only when the command and its test report agree. */
 function gatePassed(
   res: ProcessResult,
-  parsed: ParsedJunit | undefined,
-  junitError: string | undefined,
+  findings: readonly Finding[],
+  reportError: string | undefined,
+  testReport: boolean,
 ): boolean {
-  if (res.timedOut || res.code !== 0 || junitError !== undefined) return false;
-  if (parsed?.suiteFailed) return false;
-  if (parsed?.cases.some((c) => c.status === "fail")) return false;
-  return !(parsed !== undefined && parsed.cases.length === 0);
+  if (res.timedOut || res.code !== 0 || reportError !== undefined) return false;
+  if (!testReport) return true;
+  return !findings.some((finding) => finding.severity === "error");
 }
 
 /** The one line a fix turn reads: why the gate is red, or `pass`. */
 function gateSummary(
   gate: GateConfig,
   res: ProcessResult,
-  parsed: ParsedJunit | undefined,
-  junitError: string | undefined,
+  findings: readonly Finding[],
+  reportError: string | undefined,
   ok: boolean,
+  testReport: boolean,
 ): string {
   if (ok) return "pass";
   if (res.timedOut) return `timed out after ${gateTimeoutSec(gate)}s`;
   if (res.code === 126 || res.code === 127) return `exit ${res.code}`;
-  if (junitError) return junitError;
-  if (parsed) return junitSummary(parsed, res.code);
+  if (reportError) return reportError;
+  if (testReport && findings.some((finding) => finding.severity === "error"))
+    return reportSummary(findings);
   return `exit ${res.code}`;
 }
 
-/** What the record keeps of one gate run: roots, capped output and its report. */
+/** What the record keeps of one gate run: roots, capped output and findings. */
 function gateDetails(
   gate: GateConfig,
   cwd: string,
   capped: CappedGateOutput,
-  parsed: ParsedJunit | undefined,
-  junitError: string | undefined,
+  findings: readonly Finding[],
+  reportError: string | undefined,
   res?: ProcessResult,
 ): Record<string, unknown> {
   const details: Record<string, unknown> = {
@@ -253,20 +222,17 @@ function gateDetails(
     details.kind = "infra";
     details.cause = `exit ${res.code}`;
   }
-  if (gate.format?.pattern) details.pattern = gate.format.pattern;
-  // The record keeps a capped report; the verdict above read every case.
-  if (parsed) details.junit = capJunit(parsed);
-  if (junitError) details.error = junitError;
+  if (findings.length > 0) details.findings = findings;
+  if (reportError) details.error = reportError;
   return details;
 }
 
 /**
- * Runs one gate as declared and records what it produced. A `format.junit`
- * gate writes its report to the declared worktree-relative path — the kernel
- * exports the absolute path as `FACTORY_JUNIT_PATH` for runners that honour it
- * and reads the same file for the case identities. A `format.pattern` gate's
- * runner is recorded so `gateSignatures` reads its printed failures. Both
- * `runGates` and the baseline use this, so a gate executes and is recorded
+ * Runs one gate as declared and records what it produced. A declared report is
+ * written to its worktree-relative path — `junit` is also exported as
+ * `FACTORY_JUNIT_PATH` for runners that honour it — and read once into the one
+ * findings model; a gate with no report falls back to its log and exit code.
+ * Both `runGates` and the baseline use this, so a gate executes and is recorded
  * identically on base and in a task worktree. `repoRoot` names the repository
  * whose worktrees share the gate's `serial` mutexes; it defaults to `cwd` for
  * a caller running one tree in isolation.
@@ -276,34 +242,61 @@ export async function runDeclaredGate(
   gate: GateConfig,
   repoRoot = cwd,
 ): Promise<DeclaredGateRun> {
-  const junitPath = gate.format?.junit
-    ? path.resolve(cwd, gate.format.junit)
-    : undefined;
-  if (junitPath) fs.rmSync(junitPath, { force: true });
+  const paths = gateReportPaths(gate, cwd);
+  for (const file of Object.values(paths)) {
+    if (file) fs.rmSync(file, { force: true });
+  }
   const res = await runGateCommand(
     cwd,
     gate,
     gate.command,
     repoRoot,
-    junitPath ? { FACTORY_JUNIT_PATH: junitPath } : undefined,
+    paths.junit ? { FACTORY_JUNIT_PATH: paths.junit } : undefined,
   );
 
-  const { parsed, error: junitError } = readJunitReport(junitPath);
+  const reports = readGateReports(cwd, gate);
   const capped = capGateOutput(`${res.stdout}\n${res.stderr}`, [cwd]);
-  const ok = gatePassed(res, parsed, junitError);
+  let findings: Finding[] = [];
+  let reportError = reports.error;
+  if (!reportError) {
+    try {
+      findings = await normaliseFindings(gate, {
+        ...reports.contents,
+        exitCode: res.code,
+        log: capped.output,
+      });
+    } catch (error) {
+      reportError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  const ok = gatePassed(res, findings, reportError, reports.testReport);
   return {
     res,
     check: {
       name: gate.id,
       ok,
-      summary: gateSummary(gate, res, parsed, junitError, ok),
+      summary: gateSummary(
+        gate,
+        res,
+        findings,
+        reportError,
+        ok,
+        reports.testReport,
+      ),
       output: capped.output,
       fingerprint: fingerprintText(
-        `${gate.id}:${junitIdentity(parsed) || capped.output}`,
+        `${gate.id}:${
+          findings.length > 0
+            ? findings
+                .map((finding) => finding.fingerprint)
+                .sort()
+                .join(",")
+            : capped.output
+        }`,
         { lowercase: false },
       ),
       ...(gate.advisory && !ok ? { advisory: true } : {}),
-      details: gateDetails(gate, cwd, capped, parsed, junitError, res),
+      details: gateDetails(gate, cwd, capped, findings, reportError, res),
     },
   };
 }

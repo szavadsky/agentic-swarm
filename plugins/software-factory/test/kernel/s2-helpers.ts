@@ -34,7 +34,12 @@ export interface FlowRepoOptions {
     command: string;
     serial?: string[];
     env?: Record<string, string>;
-    format?: { junit?: string; pattern?: "pytest" | "jest" | "cargo" };
+    format?: {
+      junit?: string;
+      ctrf?: string;
+      sarif?: string;
+      regex?: { pattern: string; tool?: string; rule?: string }[];
+    };
     timeoutSec?: number;
   }[];
   setup?: string[];

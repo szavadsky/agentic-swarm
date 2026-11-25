@@ -110,8 +110,8 @@ gates:
     command: pytest --junitxml=reports/junit.xml
     format: { junit: reports/junit.xml }         # report the command writes
   - id: integration
-    command: jest --ci
-    format: { pattern: jest }                    # runner whose output it parses
+    command: ./scripts/integration-tests         # writes the declared report
+    format: { ctrf: reports/ctrf.json }           # standard test report
     serial: [database]                          # same-named gates in one repo never overlap
     env: { TMPDIR: .cache/gate }                # per-worktree scratch directory
   - id: lint-strict
@@ -167,19 +167,27 @@ kernel creates them and exports absolute paths, so two worktrees get two
 directories.
 
 A gate's `format` gives its failures identities that survive assertion values
-and timings, so a red inherited from the base is not blamed on the task:
+and timings, so a red inherited from the base is not blamed on the task. Every
+report normalises to one finding model: check, tool, file, line, rule,
+severity, message and fingerprint.
 
-- `junit: <path>` names a worktree-relative report the command writes before it
-  exits. The kernel exports the absolute path as `FACTORY_JUNIT_PATH`, reads the
-  same file after the run, and stores its cases (capped, failing cases first).
-  Any runner that emits JUnit works: bun, pytest, jest-junit, nextest.
-- `pattern: pytest | jest | cargo` parses that runner's printed failure lines
-  when it writes no report. A gate may declare both; the report wins when it
-  names a failure.
+- `ctrf: <path>` names a worktree-relative CTRF report, validated by the
+  `ctrf` reference implementation. A framework without a native CTRF reporter
+  writes JUnit and converts it with `junit-to-ctrf`.
+- `junit: <path>` names a JUnit report. The kernel exports its absolute path as
+  `FACTORY_JUNIT_PATH`, converts it with `junit-to-ctrf`, and reads the same
+  findings model. Any runner that emits JUnit works: bun, pytest, jest-junit,
+  nextest.
+- `sarif: <path>` names a SARIF 2.1.0 log, validated by ajv against the OASIS
+  schema.
+- `regex: [{ pattern, tool?, rule?, severity? }]` is the declared escape hatch
+  for a tool that emits neither. Named groups `file`, `line`, `rule`,
+  `severity` and `message` are read; the whole match is the message when the
+  pattern names none.
 
-A JUnit red's summary names its failing cases, and a missing, empty or
-unreadable report is red rather than a silent pass. Records written before
-`details.junit` existed still classify by their output lines.
+A test report's red summary names its failing findings, and a missing, empty or
+unreadable report is red rather than a silent pass. A gate with no report still
+works by its exit code and log.
 
 `advisory: true` on a gate records and shows its red with its log but never
 blocks: it opens no fix round, parks nothing and leaves the merge and goal head
