@@ -7,8 +7,17 @@ import type { CliDeps } from "../../src/cli/dispatch.js";
 import { testPriceSource } from "../helpers/price-source.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 import { scriptKernelRoleFallbacks } from "../kernel/fake-defaults.js";
+import { MANIFEST } from "../../scripts/plugin-manifest.js";
 
 const SKILL_DIR = path.resolve(import.meta.dir, "../../skills/run-factory");
+const PLUGIN_DIR = path.resolve(SKILL_DIR, "../..");
+const MANIFEST_FILE = path.join(PLUGIN_DIR, MANIFEST);
+
+interface PluginManifest {
+  name: string;
+  skills: string;
+  [field: string]: unknown;
+}
 
 const PLAN = `# Milestone 1 — alpha
 
@@ -280,6 +289,26 @@ describe("run-factory skill", () => {
       repo.cleanup();
     }
   }, 60_000);
+});
+
+describe("run-factory plugin manifest", () => {
+  it("points at the skills and leaves the flow to them", () => {
+    const manifest: PluginManifest = JSON.parse(
+      fs.readFileSync(MANIFEST_FILE, "utf8"),
+    );
+    expect(manifest.name).toBe("software-factory");
+    expect(manifest.skills).toBe("./skills/");
+    expect(
+      fs.existsSync(
+        path.resolve(PLUGIN_DIR, manifest.skills, "run-factory/SKILL.md"),
+      ),
+    ).toBe(true);
+    // A harness that reads only SKILL.md runs the walkthrough; the manifest
+    // must not become a second carrier for the flow.
+    for (const field of ["commands", "hooks", "mcpServers"]) {
+      expect(manifest).not.toHaveProperty(field);
+    }
+  });
 });
 
 async function runsSkillWalkthroughFromFreshPart1(

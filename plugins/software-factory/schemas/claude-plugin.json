@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Claude Code plugin manifest",
+  "description": "The .claude-plugin/plugin.json lint accepts. It is the metadata and skill pointer this plugin ships, not the whole Claude Code surface: the flow lives in SKILL.md, so a manifest-only part (commands, hooks, MCP wiring) stays rejected until the intent allows it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name"],
+  "properties": {
+    "$schema": {
+      "description": "Editor hint; ignored when the manifest is loaded.",
+      "type": "string"
+    },
+    "name": {
+      "description": "Kebab-case plugin identifier; namespaces the plugin's skills.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "version": {
+      "description": "Semantic version of the plugin.",
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$"
+    },
+    "description": {
+      "description": "One-line, user-facing account of what the plugin provides.",
+      "type": "string",
+      "minLength": 1
+    },
+    "author": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "email": { "type": "string" },
+        "url": { "type": "string" }
+      }
+    },
+    "homepage": { "type": "string" },
+    "repository": { "type": "string" },
+    "license": { "type": "string", "minLength": 1 },
+    "keywords": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "skills": {
+      "description": "Skill directories relative to the plugin root; each holds a SKILL.md.",
+      "anyOf": [
+        { "$ref": "#/definitions/pluginPath" },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/pluginPath" }
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "pluginPath": {
+      "type": "string",
+      "pattern": "^\\.\\/.*"
+    }
+  }
+}
