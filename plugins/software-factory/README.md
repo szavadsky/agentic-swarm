@@ -31,7 +31,6 @@ bun bin/factory.ts init   --repo <path> --goal <name> [--intent <file>]
 bun bin/factory.ts run    --repo <path> --goal <name> --run-config <file> [--iterations N]
                           [--pin-gate-override <reason>]
 bun bin/factory.ts status --repo <path> --goal <name> [--json]
-bun bin/factory.ts benchmark --repo <path> --goal <name>
 bun bin/factory.ts steer  --repo <path> --goal <name> <file | ->
 bun bin/factory.ts validate [--step <id>] [--run-config <file>] [<file>]
 bun bin/factory.ts schemas --out <dir>
@@ -48,7 +47,7 @@ anyway and records the reason in the run's records. `status` prints
 derived state and parked causes; `--json` prints `status.json`, the snapshot
 the kernel rewrites after each agent launch and finish, together with the
 static `dashboard.html` rendered beside it and the page's vendored `vendor/`
-assets; `benchmark` prints one goal's benchmark rows;
+assets;
 `steer` drops a file into the inbox atomically. `validate` checks one
 schema-enforced file with the gate's validators (tasks/*.md with its
 directory's dependency graph and flow existence against the merged process
@@ -495,17 +494,6 @@ unavailable: no harness call is made, and dispatch defers that work under a
 cause naming the dead pools and their reset times instead of probing the last
 dead tier.
 
-An alias may carry `rotate: [{ harness, model, effort }]` to change its primary
-per iteration: iteration N resolves `rotate[N % rotate.length]`, so iteration 1
-uses the second entry and the cycle wraps to the first. The rotated entry
-replaces the alias's own harness, model and effort for that turn; its fallbacks
-apply to the rotated entry, and a fallback without `harness` runs on the
-rotated harness. Pre-flight validates every entry's harness, model and effort,
-and a fallback that can land on several rotated harnesses is checked against
-each of them. Without `rotate` (or with an empty list) the alias keeps its own
-harness and model. Shipped example: `bootstrap/run/self-rotate.yaml` cycles the
-implementer across opencode, pi and codex.
-
 `prices` maps a model id to USD per million tokens: `input`, `cachedInput`,
 `output` and `reasoning`, all four required. A turn costs its harness's
 non-zero figure, else the table's price for the model. Every agent record
@@ -679,8 +667,7 @@ report and is unpriced even when its model has a table entry. A turn neither the
 counted as unpriced, so a total containing one is partial; cost per merged
 task is unset only when nothing merged or no turn had a known cost. A free
 model prices to a known `$0` through its all-zero table entry, and its tokens
-still carry the signal. `factory benchmark --goal <name>` prints these
-aggregates as rows.
+still carry the signal.
 
 ## Loop-based optimization
 

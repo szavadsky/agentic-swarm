@@ -13,7 +13,6 @@ Run from `plugins/software-factory`; `--repo` is the target checkout.
 bun bin/factory.ts init    --repo <path> --goal <name> [--intent <file>]
 bun bin/factory.ts run     --repo <path> --goal <name> [--run-config <file>] [--iterations N]
 bun bin/factory.ts status  --repo <path> --goal <name> [--json]
-bun bin/factory.ts benchmark --repo <path> --goal <name>
 bun bin/factory.ts steer   --repo <path> --goal <name> <file | ->
 bun bin/factory.ts validate [--step <id>] [--run-config <file>] [<file>]
 bun bin/factory.ts schemas --out <dir>
@@ -26,9 +25,8 @@ bun bin/factory.ts variables --out <file>
 | `run` | Loads the three config layers, pre-flights, takes the goal lock, recovers interrupted records and stale worktrees, then alternates boundary consults with task dispatch for the iteration budget. |
 | `status` | Derives goal state from task files and records, prints one line per task, every parked cause and the last summary path. Launches nothing. |
 | `status --json` | Prints `status.json`, the snapshot written after each agent launch and finish. Before the first launch it derives the same document. |
-| `benchmark` | Prints one goal's benchmark rows from `metrics.yaml` and its records. |
 | `steer` | Writes a steer file into the mailbox inbox atomically. |
-| `validate` | Checks one schema-enforced file with the gate's validators: `tasks/*.md`, `class.yaml`, `outcome.yaml`, `mailbox/holds/*.yaml`, `repo.yaml`, `run.yaml`, `process.yaml`, `infra.yaml`. `--run-config` names the run config explicitly, including one not named `run.yaml`. A repo, process or run file also gets the non-model pre-flight checks (required aliases and chains, unregistered alias, rotation and fallback harnesses, quota pools, task types and trivial-flow follow-ups, portability edges, configured executables, writable roots outside the repo) — launches nothing. Exit 0 valid, 1 invalid or unknown kind. |
+| `validate` | Checks one schema-enforced file with the gate's validators: `tasks/*.md`, `class.yaml`, `outcome.yaml`, `mailbox/holds/*.yaml`, `repo.yaml`, `run.yaml`, `process.yaml`, `infra.yaml`. `--run-config` names the run config explicitly, including one not named `run.yaml`. A repo, process or run file also gets the non-model pre-flight checks (required aliases and chains, unregistered alias, fallback harnesses, quota pools, task types and trivial-flow follow-ups, portability edges, configured executables, writable roots outside the repo) — launches nothing. Exit 0 valid, 1 invalid or unknown kind. |
 | `schemas` | Writes every kernel schema as JSON Schema (`task`, `outcome`, `hold`, `class`, `infra`, `repo`, `run`, `process`). |
 | `variables` | Renders `prompts/VARIABLES.md` from the typed prompt-variable descriptor. |
 
@@ -95,7 +93,6 @@ decision parks the goal until a steer arrives.
   and refresh after a launch.
 - `status` text is the quick read; `--json` is for editors, scripts and the
   dashboard's data source. Both derive from the same records.
-- `benchmark` adds cost, token, architect-share, work, incident and wall rows.
 
 ## Records
 

@@ -376,7 +376,7 @@ async function runIntentTurn(
     steer: steer.id,
   };
   await runAgentTurn(runtime, {
-    target: boundaryTarget(runtime, INTENT_STEP, iteration),
+    target: boundaryTarget(runtime, INTENT_STEP),
     cwd: runtime.paths.goalCheckout,
     meta: {
       iteration,

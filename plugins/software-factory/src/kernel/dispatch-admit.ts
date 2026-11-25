@@ -169,7 +169,6 @@ function admitStep(
     task,
     taskState,
     action.step,
-    state.iteration,
     records,
   );
   const tierIndex = admitTarget(state, action.slug, target);

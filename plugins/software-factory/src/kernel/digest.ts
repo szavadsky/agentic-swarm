@@ -234,7 +234,7 @@ export async function writeLaunchDigest(
   // digest instead of failing the launch.
   let scoutTarget: TurnTarget | undefined;
   try {
-    scoutTarget = boundaryTarget(runtime, "digest", iteration);
+    scoutTarget = boundaryTarget(runtime, "digest");
   } catch {
     scoutTarget = undefined;
   }

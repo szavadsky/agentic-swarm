@@ -4,19 +4,6 @@ import type { AliasConfig, FallbackModelConfig } from "../types.js";
 import type { AliasContext } from "./types.js";
 import { checkEffort, checkedModel } from "./models.js";
 
-/** A fallback without a harness runs on the rotated primary. */
-function fallbackHarnesses(
-  fallback: FallbackModelConfig,
-  rotation: readonly { harness: string }[],
-  alias: AliasConfig,
-): string[] {
-  if (fallback.harness !== undefined) return [fallback.harness];
-  if (rotation.length > 0) {
-    return [...new Set(rotation.map((entry) => entry.harness))];
-  }
-  return [alias.harness];
-}
-
 /** Checks one fallback model's own effort; it never inherits the alias's. */
 async function checkTierModel(
   ctx: AliasContext,
@@ -52,15 +39,16 @@ async function checkFallbackTier(
   tierKey: string,
   fallback: FallbackModelConfig,
   alias: AliasConfig,
-  rotation: readonly { harness: string; model: string }[],
 ): Promise<void> {
   if (fallback.harness !== undefined && !ctx.harnesses.has(fallback.harness)) {
     return;
   }
-  const tierHarnesses = fallbackHarnesses(fallback, rotation, alias);
-  for (const tierHarness of tierHarnesses) {
-    await checkTierModel(ctx, tierKey, fallback, tierHarness);
-  }
+  await checkTierModel(
+    ctx,
+    tierKey,
+    fallback,
+    fallback.harness ?? alias.harness,
+  );
 }
 
 export async function checkFallbacks(
@@ -68,16 +56,9 @@ export async function checkFallbacks(
   key: string,
   alias: AliasConfig,
 ): Promise<void> {
-  const rotation = alias.rotate ?? [];
   for (const [index, fallback] of (alias.fallbacks ?? []).entries()) {
     // A named alias is checked under its own key, its whole ladder included.
     if ("alias" in fallback) continue;
-    await checkFallbackTier(
-      ctx,
-      `${key}.fallbacks.${index}`,
-      fallback,
-      alias,
-      rotation,
-    );
+    await checkFallbackTier(ctx, `${key}.fallbacks.${index}`, fallback, alias);
   }
 }

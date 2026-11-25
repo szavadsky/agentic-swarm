@@ -271,7 +271,6 @@ export function unavailableAliases(
   tasks: readonly TaskFile[],
   state: State,
   records: readonly StepRecord[],
-  iteration: number,
 ): Map<string, string> {
   const causes = new Map<string, string>();
   const bySlug = new Map(tasks.map((task) => [task.slug, task]));
@@ -280,14 +279,7 @@ export function unavailableAliases(
     const task = bySlug.get(action.slug);
     const taskState = state.tasks[action.slug];
     if (!task || !taskState) continue;
-    const target = stepTarget(
-      runtime,
-      task,
-      taskState,
-      action.step,
-      iteration,
-      records,
-    );
+    const target = stepTarget(runtime, task, taskState, action.step, records);
     if (target.unavailable !== undefined)
       causes.set(action.slug, target.unavailable);
   }

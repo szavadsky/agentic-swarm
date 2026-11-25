@@ -215,7 +215,7 @@ async function runSubarchitectTurn(
   plan: PlanFile,
   session: SessionRef | undefined,
 ) {
-  const target = subarchitectTarget(runtime, opts.iteration);
+  const target = subarchitectTarget(runtime);
   return runBoundaryTurn(
     runtime,
     { iteration: opts.iteration, step: "subarchitect" },
@@ -330,7 +330,7 @@ export async function runEpicConsult(
   opts: EpicConsultOptions,
 ): Promise<{ consult?: EpicConsult; failure?: ConsultFailure }> {
   const plan = epicPlan(runtime.store.goalDir, opts.epic);
-  const target = subarchitectTarget(runtime, opts.iteration);
+  const target = subarchitectTarget(runtime);
   const setup = await prepareConsult(runtime, opts, plan, target);
   const result = await runSubarchitectTurn(runtime, opts, plan, setup.session);
   await reconcileForeignPlans(

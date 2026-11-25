@@ -228,7 +228,6 @@ export function stepTarget(
   task: TaskFile,
   state: TaskState,
   stepId: string,
-  iteration: number,
   records: readonly StepRecord[] = [],
 ): TurnTarget {
   if (isTrivialImplementTurn(runtime, task, state, stepId)) {
@@ -236,7 +235,7 @@ export function stepTarget(
     // implementer's: the prompt names the role, not the agent's history.
     const turn = stepTurn(runtime, task, state, stepId);
     return {
-      ...frontTarget(runtime, iteration),
+      ...frontTarget(runtime),
       ...repairFields(turn),
       prompt: turn.prompt,
     };
@@ -259,7 +258,6 @@ export function stepTarget(
       turn.prompt,
       alias,
       isVerdictStep(step) ? undefined : task.tier,
-      iteration,
     ),
     ...repairFields(turn),
   };

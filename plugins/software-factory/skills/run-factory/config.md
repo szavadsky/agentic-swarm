@@ -167,7 +167,7 @@ sandbox: { binary: /usr/bin/bwrap, args: [--ro-bind, /, /, --dev, /dev, --proc, 
   it, objects merge key by key, arrays replace, and `null` removes an inherited
   key. A missing base and a cycle are refused by name.
 - An alias may carry `effort`, `fallbacks` (infrastructure-only: quota,
-  crash), `rotate` (per-iteration primary), `escalateTo` (PM ladder) and
+  crash), `escalateTo` (PM ladder) and
   `timeouts`; a fallback may name another alias. A role's fallback chain walks
   the subscriptions whose roles fit it; architecture is the exception and falls
   back only within its own subscription.
@@ -242,13 +242,13 @@ file and key:
   name a run-config alias that does not exist, and escalation and fallback
   chains that cycle;
 - `scouts` while no alias or fallback tier runs on omp;
-- an alias, rotation entry or explicit fallback tier on a harness the launch
+- an alias or explicit fallback tier on a harness the launch
   does not register;
 - a `portability` edge whose endpoint no harness registers;
 - malformed acpx `options.args`/`options.env`;
 - every executable a registered harness declares (a harness entry's `binary`,
   a raw acpx `agent`, omp and its YAML server) that is not executable; a bare
-  alias, rotation or fallback harness with no declaration is the registration
+  alias or fallback harness with no declaration is the registration
   finding, not a missing executable;
 - a `worktreeRoot` or `sessions.dir` inside the repository, or a configured
   root that is not writable.

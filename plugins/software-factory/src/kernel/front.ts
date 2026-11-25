@@ -366,7 +366,7 @@ async function classifyFront(
   runtime: KernelRuntime,
   opts: FrontRunOptions,
 ): Promise<FrontResult> {
-  const target = frontTarget(runtime, opts.iteration);
+  const target = frontTarget(runtime);
   // The front writes its pack; the script owns the directory so the agent
   // never has to create a path outside the goal artifacts.
   const packPath = await runtime.store.localPath({

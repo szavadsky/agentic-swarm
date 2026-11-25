@@ -123,19 +123,39 @@ function registerCliDispatchPart1(): void {
   });
 }
 
+/** Asserts each name is refused as an unknown command, not misparsed. */
+async function expectUnknownCommands(names: string[]): Promise<void> {
+  const originalErr = console.error;
+  const originalLog = console.log;
+  console.log = () => {};
+  try {
+    for (const name of names) {
+      const errors: string[] = [];
+      console.error = (msg: string) => errors.push(msg);
+      expect(await dispatch([name])).toBe(1);
+      expect(errors.join("\n")).toContain(`unknown command "${name}"`);
+    }
+  } finally {
+    console.error = originalErr;
+    console.log = originalLog;
+  }
+}
+
 function registerCliDispatchPart2(): void {
-  it("rejects unknown commands", async () => {
+  it("rejects unknown commands", () => expectUnknownCommands(["nope"]));
+
+  it("rejects the removed commands as unknown", () =>
+    expectUnknownCommands(["benchmark", "canary"]));
+
+  it("rejects the removed --alias option as unknown", async () => {
     const originalErr = console.error;
-    const originalLog = console.log;
     const errors: string[] = [];
     console.error = (msg: string) => errors.push(msg);
-    console.log = () => {};
     try {
-      expect(await dispatch(["nope"])).toBe(1);
-      expect(errors.join("\n")).toContain('unknown command "nope"');
+      expect(await dispatch(["status", "--alias", "ghost"])).toBe(1);
+      expect(errors.join("\n")).toContain('unknown option "--alias"');
     } finally {
       console.error = originalErr;
-      console.log = originalLog;
     }
   });
 

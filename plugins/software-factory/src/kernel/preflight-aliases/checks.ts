@@ -4,12 +4,7 @@ import { OMP_ID } from "../../harness/omp/types.js";
 import type { AliasConfig, ConfigBundle } from "../types.js";
 import { runsOnOmp } from "../preflight/checks.js";
 import type { AliasContext } from "./types.js";
-import {
-  checkEffort,
-  checkPrimaryModel,
-  checkRotation,
-  checkedModel,
-} from "./models.js";
+import { checkEffort, checkPrimaryModel, checkedModel } from "./models.js";
 import { checkFallbacks } from "./tiers.js";
 
 export async function checkAlias(
@@ -20,7 +15,6 @@ export async function checkAlias(
   const key = `aliases.${name}`;
   if (!ctx.harnesses.has(alias.harness)) return;
   await checkPrimaryModel(ctx, key, alias);
-  await checkRotation(ctx, key, alias);
   await checkFallbacks(ctx, key, alias);
 }
 

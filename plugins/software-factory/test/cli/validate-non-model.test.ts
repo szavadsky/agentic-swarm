@@ -30,7 +30,7 @@ harnesses:
     options: { args: 7 }
 aliases:
   implementer: { harness: agent-a, model: impl, subscription: ghost-pool, escalateTo: ghost, fallbacks: [{ model: near, subscription: other-ghost }, { alias: implementer }] }
-  reviewer: { harness: fake, model: rev, rotate: [{ harness: phantom-rotate, model: rot }], fallbacks: [{ harness: phantom-tier, model: tier }] }
+  reviewer: { harness: fake, model: rev, fallbacks: [{ harness: phantom-tier, model: tier }] }
 limits:
   concurrency: { overall: 2, perSubscription: { pool: 1 } }
 scouts: { model: scout-model }
@@ -110,7 +110,6 @@ function brokenConfigFindings(root: string): string[] {
     `${run}: aliases.qa: required by flow "implement-review" step "qa" but missing`,
     `${run}: aliases.researcher: required by flow "spike" step "implement" but missing`,
     `${run}: aliases.reviewer.harness: harness "fake" is not registered (registered: omp, agent-a)`,
-    `${run}: aliases.reviewer.rotate.0.harness: harness "phantom-rotate" is not registered (registered: omp, agent-a)`,
     `${run}: aliases.reviewer.fallbacks.0.harness: harness "phantom-tier" is not registered (registered: omp, agent-a)`,
     `${run}: aliases.implementer.escalateTo: escalateTo "ghost" names no run-config alias`,
     `${run}: aliases.implementer.fallbacks.1.alias: fallback alias chain forms a cycle: implementer -> implementer`,

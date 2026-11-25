@@ -262,9 +262,8 @@ export async function trivialResumeSession(
   task: TaskFile,
   records: StepRecord[],
   isFix: boolean,
-  iteration: number,
 ): Promise<TrivialResume> {
-  const target = frontTarget(runtime, iteration);
+  const target = frontTarget(runtime);
   if (!(await canResume(target))) {
     return {
       cause: makeCause(

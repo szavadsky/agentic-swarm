@@ -358,7 +358,6 @@ function agedReady(
       context.tasks,
       context.state,
       context.records,
-      context.iteration,
     ),
   });
 }

@@ -187,14 +187,13 @@ async function tierFindings(
   return findings;
 }
 
-/** Every harness some configured alias, rotation or fallback can run. */
+/** Every harness some configured alias or fallback can run. */
 export function usedHarnesses(
   aliases: Record<string, AliasConfig>,
 ): Set<string> {
   const used = new Set<string>();
   for (const alias of Object.values(aliases)) {
     used.add(alias.harness);
-    for (const entry of alias.rotate ?? []) used.add(entry.harness);
     for (const fallback of alias.fallbacks ?? []) {
       if ("model" in fallback && fallback.harness) used.add(fallback.harness);
     }

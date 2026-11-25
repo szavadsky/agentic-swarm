@@ -396,11 +396,6 @@ async function runsSkillWalkthroughFromFreshPart2(
   expect(dashboard).toContain("alpha");
   expect(dashboard).toContain('href="status.json"');
 
-  const benchmark = runs.find((entry) => entry.args[0] === "benchmark")!;
-  expect(benchmark.result.code).toBe(0);
-  expect(benchmark.result.out).toContain("goal demo: 1 iteration(s)");
-  expect(benchmark.result.out).toContain("| merged/parked | 1 / 0 |");
-
   // The skill says a bounded launch ending in 3 is continued by the same
   // command; the second launch closes the goal.
   const close = await captured(() =>

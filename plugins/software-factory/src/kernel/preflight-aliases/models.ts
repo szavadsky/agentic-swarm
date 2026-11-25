@@ -1,4 +1,4 @@
-/** Model and rotation checks: registry, catalog probe, effort and quota. */
+/** Model and fallback checks: registry, catalog probe, effort and quota. */
 
 import type { ModelProbe, ModelRef } from "../../harness/types.js";
 import type { AliasConfig } from "../types.js";
@@ -63,7 +63,7 @@ export async function checkedModel(
   key: string,
   harness: string,
   model: string,
-  label: "model" | "fallback" | "rotation",
+  label: "model" | "fallback",
 ): Promise<CheckedModel | undefined> {
   let live: ModelProbe | undefined;
   try {
@@ -166,43 +166,4 @@ export async function checkPrimaryModel(
     alias.effort ?? primary.modelEffort,
     primary.effort,
   );
-}
-
-/** Checks one rotation entry and its configured effort. */
-async function checkRotationEntry(
-  ctx: AliasContext,
-  entryKey: string,
-  entry: NonNullable<AliasConfig["rotate"]>[number],
-  alias: AliasConfig,
-): Promise<void> {
-  if (!ctx.harnesses.has(entry.harness)) {
-    return;
-  }
-  if (ctx.unavailable.has(entry.harness)) return;
-  const checked = await checkedModel(
-    ctx,
-    entryKey,
-    entry.harness,
-    entry.model,
-    "rotation",
-  );
-  if (!checked) return;
-  checkEffort(
-    ctx,
-    entryKey,
-    entry.harness,
-    entry.model,
-    entry.effort ?? alias.effort ?? checked.modelEffort,
-    checked.effort,
-  );
-}
-
-export async function checkRotation(
-  ctx: AliasContext,
-  key: string,
-  alias: AliasConfig,
-): Promise<void> {
-  for (const [index, entry] of (alias.rotate ?? []).entries()) {
-    await checkRotationEntry(ctx, `${key}.rotate.${index}`, entry, alias);
-  }
 }

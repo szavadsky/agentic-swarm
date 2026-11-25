@@ -225,7 +225,7 @@ export async function steeredHosting(
 ): Promise<SteeredHosting | undefined> {
   const rows = steeredRows(opts);
   if (!rows) return undefined;
-  const target = subarchitectTarget(runtime, opts.iteration);
+  const target = subarchitectTarget(runtime);
   const outcomeDir = path.join(runtime.paths.sessionsDir, "subarchitect");
   fs.mkdirSync(outcomeDir, { recursive: true });
   const consults = await Promise.all(
@@ -406,7 +406,7 @@ export async function collectSteered(
   opts: { iteration: number; parent?: SessionRef; transcript?: string },
 ): Promise<{ delivered: Map<string, EpicConsult>; failure?: ConsultFailure }> {
   const delivered = new Map<string, EpicConsult>();
-  const target = subarchitectTarget(runtime, opts.iteration);
+  const target = subarchitectTarget(runtime);
   for (const consult of hosting.consults) {
     const source = readConsultSource(consult.outcomePath);
     if (!source) {

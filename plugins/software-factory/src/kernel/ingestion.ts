@@ -217,7 +217,7 @@ async function runGenericIngestionStep(
   const alias = step.alias ?? "pm";
   const codeMapPath = codeMapFile(runtime);
   const target: TurnTarget = {
-    ...resolveTurn(runtime, step.prompt!, alias, undefined, iteration),
+    ...resolveTurn(runtime, step.prompt!, alias, undefined),
     ...(step.deliverable ? { deliverable: step.deliverable } : {}),
   };
   const result = await runBoundaryTurn(

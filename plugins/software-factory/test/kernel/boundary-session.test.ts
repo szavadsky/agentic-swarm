@@ -32,35 +32,31 @@ Nothing to dispatch yet; the plan is the architect's.
 `;
 
 /**
- * The architect rotates across harnesses with the same model id, so iteration 1
- * runs on `fake` and iteration 2 on `other`; the declared edge admits the
- * crossing in that direction only.
+ * The architect runs on the named harness; the declared edge admits moving its
+ * compacted session from `fake` to `other` between launches.
  */
-const CROSS_HARNESS_ARCHITECT_RUN = [
-  "aliases:",
-  "  architect:",
-  "    harness: other",
-  "    model: fake-architect",
-  "    rotate:",
-  "      - { harness: other, model: fake-architect }",
-  "      - { harness: fake, model: fake-architect }",
-  "  pm: { harness: fake, model: fake-pm }",
-  "  digest: { harness: fake, model: fake-digest }",
-  "  intent: { harness: fake, model: fake-intent }",
-  "  implementer: { harness: fake, model: fake-impl }",
-  "  implementer-b: { harness: fake, model: fake-impl-b }",
-  "  researcher: { harness: fake, model: fake-research }",
-  "  reviewer: { harness: fake, model: fake-review }",
-  "  qa: { harness: fake, model: fake-qa }",
-  "  steward: { harness: fake, model: fake-steward }",
-  "  plan-checker: { harness: fake, model: fake-check }",
-  "  plan-reviewer: { harness: fake, model: fake-plan-review }",
-  "  pack-preparer: { harness: fake, model: fake-pack-prep }",
-  "portability:",
-  "  - { from: fake, to: other }",
-  "limits: { iterations: 1, concurrency: { overall: 1 } }",
-  "",
-].join("\n");
+function crossHarnessArchitectRun(architectHarness: string): string {
+  return [
+    "aliases:",
+    `  architect: { harness: ${architectHarness}, model: fake-architect }`,
+    "  pm: { harness: fake, model: fake-pm }",
+    "  digest: { harness: fake, model: fake-digest }",
+    "  intent: { harness: fake, model: fake-intent }",
+    "  implementer: { harness: fake, model: fake-impl }",
+    "  implementer-b: { harness: fake, model: fake-impl-b }",
+    "  researcher: { harness: fake, model: fake-research }",
+    "  reviewer: { harness: fake, model: fake-review }",
+    "  qa: { harness: fake, model: fake-qa }",
+    "  steward: { harness: fake, model: fake-steward }",
+    "  plan-checker: { harness: fake, model: fake-check }",
+    "  plan-reviewer: { harness: fake, model: fake-plan-review }",
+    "  pack-preparer: { harness: fake, model: fake-pack-prep }",
+    "portability:",
+    "  - { from: fake, to: other }",
+    "limits: { iterations: 1, concurrency: { overall: 1 } }",
+    "",
+  ].join("\n");
+}
 
 describe("architect session continuity", () => {
   registerArchitectSessionContinuityPart1();
@@ -434,25 +430,29 @@ function registerArchitectSessionContinuityPart1(): void {
   }, 60_000);
 }
 
+async function launchFirstCrossHarnessArchitect(
+  goal: ReturnType<typeof makeGoal>,
+): Promise<void> {
+  const first = new FakeHarness({ id: "fake" });
+  first.script((req, ctx) => {
+    writePlan(goal.goalDir, PLAN);
+    ctx.writeOutcome(outcome({ summary: "planned", decision: "continue" }));
+    return fakeTurnResult(req);
+  });
+  first.script((req, ctx) => {
+    ctx.writeOutcome(outcome({ summary: "nothing to file" }));
+    return fakeTurnResult(req);
+  });
+  await expectDispatch(3, ["run", "--repo", goal.repo.dir, "--goal", "demo"], {
+    harnesses: { fake: first, other: new FakeHarness({ id: "other" }) },
+  });
+}
+
 function registerArchitectSessionContinuityPart2(): void {
   it("resumes the architect across a declared portability edge", async () => {
-    const goal = makeGoal({ runYaml: CROSS_HARNESS_ARCHITECT_RUN });
+    const goal = makeGoal({ runYaml: crossHarnessArchitectRun("fake") });
     try {
-      const first = new FakeHarness({ id: "fake" });
-      first.script((req, ctx) => {
-        writePlan(goal.goalDir, PLAN);
-        ctx.writeOutcome(outcome({ summary: "planned", decision: "continue" }));
-        return fakeTurnResult(req);
-      });
-      first.script((req, ctx) => {
-        ctx.writeOutcome(outcome({ summary: "nothing to file" }));
-        return fakeTurnResult(req);
-      });
-      await expectDispatch(
-        3,
-        ["run", "--repo", goal.repo.dir, "--goal", "demo"],
-        { harnesses: { fake: first, other: new FakeHarness({ id: "other" }) } },
-      );
+      await launchFirstCrossHarnessArchitect(goal);
 
       const store = createFolderStore(goal.goalDir, undefined, {});
       const prior = (await store.listRecords()).find(
@@ -461,6 +461,11 @@ function registerArchitectSessionContinuityPart2(): void {
       expect(prior?.harness).toBe("fake");
       expect(prior?.compacted).toBe(true);
 
+      goal.repo.writeFile(
+        ".factory/run.yaml",
+        crossHarnessArchitectRun("other"),
+      );
+      goal.repo.commit("switch architect harness");
       const second = new FakeHarness({ id: "fake" });
       const other = new FakeHarness({ id: "other" });
       scriptDigest(second, goal.goalDir, 2);

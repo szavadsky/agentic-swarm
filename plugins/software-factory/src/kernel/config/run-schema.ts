@@ -112,25 +112,11 @@ export const fallbackSchema = z.union([
     ),
 ]);
 
-/** One rotation entry: replaces the alias primary on the iterations that select it. */
-export const aliasEntrySchema = z
-  .object({
-    harness: z.string().min(1),
-    model: z.string().min(1),
-    effort: z.string().min(1).optional(),
-  })
-  .strict();
-
 export const aliasSchema = z
   .object({
     harness: z.string().min(1),
     model: z.string().min(1),
     effort: z.string().min(1).optional(),
-    /**
-     * Per-iteration primaries: iteration N resolves `rotate[N % rotate.length]`.
-     * Absent or empty keeps the alias on its own harness and model.
-     */
-    rotate: z.array(aliasEntrySchema).default([]),
     /** Quota pool this alias draws on; absent means throttled only overall. */
     subscription: z.string().min(1).optional(),
     fallbacks: z.array(fallbackSchema).default([]),

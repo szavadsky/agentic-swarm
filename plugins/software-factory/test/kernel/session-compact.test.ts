@@ -290,7 +290,7 @@ async function resumesRecordingHarnessPart1() {
   }
 }
 
-/** Resume on the recording harness, refuse rotation, then admit a declared edge. */
+/** Resume on the recording harness, refuse a harness switch, then admit a declared edge. */
 async function resumesRecordingHarnessPart2(
   scope: Awaited<ReturnType<typeof resumesRecordingHarnessPart1>>,
 ) {
@@ -314,7 +314,7 @@ async function resumesRecordingHarnessPart2(
     );
     expect(resumed?.id).toBe(recorded.id);
 
-    // Rotation: the same alias now routes to a different harness.
+    // A harness switch on the same alias.
     runtime.configs.run.aliases.implementer!.harness = "other";
     expect(
       await followUpSession(

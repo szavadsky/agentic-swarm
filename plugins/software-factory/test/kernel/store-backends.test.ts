@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { benchmarkGoal } from "../../src/cli/benchmark.js";
 import { statusGoal, steerGoal } from "../../src/cli/commands.js";
 import { derive } from "../../src/kernel/derive.js";
 import { createArtifactStore } from "../../src/kernel/store-backend.js";
@@ -53,13 +52,11 @@ async function expectMergedStore(goal: BackendGoal): Promise<void> {
   ).toEqual([]);
 }
 
-/** The status and benchmark commands read the same merged goal. */
+/** The status command reads the same merged goal. */
 async function expectGoalReadable(goal: BackendGoal): Promise<void> {
   const status = await statusGoal(goal.repo.dir, "demo");
   expect(status.goalDir).toBe(goal.goalDir);
   expect(status.state.goal).toBe("done");
-  const report = await benchmarkGoal(goal.repo.dir, "demo");
-  expect(report.rows.length).toBeGreaterThan(0);
 }
 
 /** The folder backend keeps everything untracked under its ignored root. */

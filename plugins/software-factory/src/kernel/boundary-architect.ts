@@ -44,7 +44,7 @@ async function architectTurn(
     () =>
       runAgentTurn(context.runtime, {
         // Resolved per attempt: a quota death exhausts the alias.
-        target: boundaryTarget(context.runtime, "architect", context.iteration),
+        target: boundaryTarget(context.runtime, "architect"),
         cwd: context.runtime.paths.goalCheckout,
         meta: {
           iteration: context.iteration,
@@ -111,7 +111,7 @@ async function architectDelivery(
 ): Promise<"steer" | "report"> {
   const depth = runtime.configs.process.hierarchy?.depth ?? 1;
   if (depth !== 2) return "report";
-  return subarchitectDelivery(subarchitectTarget(runtime, context.iteration));
+  return subarchitectDelivery(subarchitectTarget(runtime));
 }
 
 /** Hosts steered children when the delivery route asks for them. */
@@ -217,7 +217,7 @@ export async function runArchitectStage(
   context: ConsultContext,
 ): Promise<ReturnType<typeof boundaryResult> | undefined> {
   const { runtime } = context;
-  const target = boundaryTarget(runtime, "architect", context.iteration);
+  const target = boundaryTarget(runtime, "architect");
   context.tasksBefore = await taskSnapshot(runtime.store);
   context.plansBefore = await snapshotPlans(
     runtime,

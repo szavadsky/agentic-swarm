@@ -74,13 +74,6 @@ const VALUE_FLAGS: readonly ValueFlag[] = [
     },
   },
   {
-    name: "--alias",
-    apply: (result, value) => {
-      if (!value) throw new Error("--alias requires an alias name");
-      result.alias = value;
-    },
-  },
-  {
     name: "--out",
     apply: (result, value) => {
       if (!value) throw new Error("--out requires a path");
@@ -89,17 +82,18 @@ const VALUE_FLAGS: readonly ValueFlag[] = [
   },
 ];
 
-/** Applies one value flag; returns the index of its consumed argument. */
+/** Applies one value flag; returns the index of its consumed argument, or
+ * undefined when the option is unknown. */
 function applyValueFlag(
   result: ParsedArgs,
   arg: string,
   args: string[],
   index: number,
-): number {
+): number | undefined {
   const flag = VALUE_FLAGS.find(
     ({ name }) => arg === name || arg.startsWith(`${name}=`),
   );
-  if (!flag) return index;
+  if (!flag) return undefined;
   const parsed = flagValue(arg, flag.name, args, index);
   flag.apply(result, parsed.value);
   return parsed.next;
@@ -139,7 +133,9 @@ export function parseCliArgs(args: string[]): ParsedArgs {
     if (arg === "-" || !arg.startsWith("-")) {
       positional.push(arg);
     } else {
-      i = applyValueFlag(result, arg, args, i);
+      const next = applyValueFlag(result, arg, args, i);
+      if (next === undefined) throw new Error(`unknown option "${arg}"`);
+      i = next;
     }
   }
   result.command = positional[0];

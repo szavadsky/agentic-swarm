@@ -61,11 +61,6 @@ export interface FlowRepoOptions {
       effort?: string;
       subscription?: string;
       escalateTo?: string;
-      rotate?: {
-        harness: string;
-        model: string;
-        effort?: string;
-      }[];
       fallbacks?: (
         | { alias: string }
         | {
@@ -232,7 +227,6 @@ export async function makeRuntime(
       run: configs.run,
     }),
     limits: toLimits(configs),
-    provenCombinations: new Set(),
     exhaustedPools: new Map(),
     // Hermetic prices: the repo-local cache, never the network.
     priceSource: {

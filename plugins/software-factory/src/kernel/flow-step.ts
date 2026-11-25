@@ -318,7 +318,7 @@ async function chooseSession(
   const { runtime, task, state, step, iteration, ensured } = run;
   run.target = admittedTierTarget(
     run,
-    stepTarget(runtime, task, state, step.id, iteration, run.records),
+    stepTarget(runtime, task, state, step.id, run.records),
   );
   run.trivial = isTrivialImplementTurn(runtime, task, state, step.id);
   run.turnCwd = ensured.path;
@@ -342,7 +342,6 @@ async function chooseSession(
     task,
     run.records,
     run.fix,
-    iteration,
   );
   if ("cause" in resumed) {
     await parkTask(runtime, taskMeta(task, state, iteration), resumed.cause);

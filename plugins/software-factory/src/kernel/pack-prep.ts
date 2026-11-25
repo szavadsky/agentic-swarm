@@ -90,7 +90,7 @@ async function runPreparerAlias(
   alias: string,
   round: number,
 ): Promise<PackPreparerReport> {
-  const target = boundaryTarget(runtime, PACK_PREP_STEP, opts.iteration, alias);
+  const target = boundaryTarget(runtime, PACK_PREP_STEP, alias);
   const result = await runAgentTurn(runtime, {
     target,
     cwd: runtime.paths.goalCheckout,
@@ -123,7 +123,7 @@ export async function runPackPreparer(
   runtime: KernelRuntime,
   opts: { iteration: number; dataRel: string },
 ): Promise<PackPreparerReport> {
-  const rootTarget = boundaryTarget(runtime, PACK_PREP_STEP, opts.iteration);
+  const rootTarget = boundaryTarget(runtime, PACK_PREP_STEP);
   const aliases = packPreparerAliases(runtime, rootTarget.alias);
   let lastFailure = "turn produced no outcome";
 

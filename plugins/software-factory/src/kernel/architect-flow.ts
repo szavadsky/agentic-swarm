@@ -120,13 +120,7 @@ async function runCustomStep(
     () =>
       runAgentTurn(runtime, {
         target: {
-          ...resolveTurn(
-            runtime,
-            step.prompt!,
-            step.alias!,
-            undefined,
-            context.iteration,
-          ),
+          ...resolveTurn(runtime, step.prompt!, step.alias!, undefined),
           ...repairFields(step),
         },
         cwd: runtime.paths.goalCheckout,

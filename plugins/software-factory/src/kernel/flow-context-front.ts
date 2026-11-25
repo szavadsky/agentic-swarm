@@ -55,11 +55,8 @@ export function readFrontClass(runtime: KernelRuntime): FrontClass | null {
 }
 
 /** The front's configured boundary target. */
-export function frontTarget(
-  runtime: KernelRuntime,
-  iteration?: number,
-): TurnTarget {
-  return boundaryTarget(runtime, "front", iteration);
+export function frontTarget(runtime: KernelRuntime): TurnTarget {
+  return boundaryTarget(runtime, "front");
 }
 
 export function lastFrontRecord(records: StepRecord[]): StepRecord | undefined {

@@ -309,7 +309,7 @@ async function runStewardTurn(
   result: Awaited<ReturnType<typeof runAgentTurn>>;
   breach: string | undefined;
 }> {
-  const target = boundaryTarget(runtime, "steward", iteration);
+  const target = boundaryTarget(runtime, "steward");
   const base = records
     .filter((r) => r.slug === task.slug && r.actor === "agent" && r.base)
     .sort((a, b) => b.seq - a.seq)[0]?.base;

@@ -194,7 +194,7 @@ export async function runPm(
   let failure: string[] = [];
 
   for (const [index, rung] of rungSteps(runtime).entries()) {
-    const target = boundaryTarget(runtime, "pm", opts.iteration, rung.alias);
+    const target = boundaryTarget(runtime, "pm", rung.alias);
     const result = await runPmTurn(
       runtime,
       opts,

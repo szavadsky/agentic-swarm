@@ -151,12 +151,7 @@ async function runPlanReviewer(
   alias: string,
 ): Promise<ReviewerOutcome> {
   const plan = opts.plan;
-  const target = architectureTarget(
-    runtime,
-    "planReview",
-    alias,
-    opts.iteration,
-  );
+  const target = architectureTarget(runtime, "planReview", alias);
   const snapshot = await snapshotTurn(runtime, planSet(runtime, plan));
   const result = await runAgentTurn(runtime, {
     target,
@@ -347,7 +342,6 @@ export async function runArchitectReturn(
     runtime,
     "planReturn",
     runtime.configs.process.boundary.architect.alias,
-    opts.iteration,
   );
   const numbered = numberedPlanFindings(opts.findings);
   const architect = opts.architect ?? MAIN_ARCHITECT;

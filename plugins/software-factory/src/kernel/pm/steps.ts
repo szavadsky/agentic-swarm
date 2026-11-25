@@ -90,13 +90,7 @@ async function runPmFlowStep(
   const epic = scopeEpic(scope);
   const result = await runAgentTurn(runtime, {
     target: {
-      ...resolveTurn(
-        runtime,
-        step.prompt!,
-        step.alias!,
-        undefined,
-        opts.iteration,
-      ),
+      ...resolveTurn(runtime, step.prompt!, step.alias!, undefined),
       ...repairFields(step),
     },
     cwd: opts.cwd,

@@ -16,7 +16,6 @@ export interface ParsedArgs {
   intent?: string;
   file?: string;
   step?: string;
-  alias?: string;
   /** Output directory for `factory schemas`. */
   out?: string;
   /** `factory status --json`: print the machine-readable snapshot. */

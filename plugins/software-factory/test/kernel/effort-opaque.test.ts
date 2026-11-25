@@ -271,15 +271,13 @@ function effortPart4(): void {
     }
   });
 
-  it("probes every leg: primary, rotation entries and fallbacks", async () => {
+  it("probes the primary and fallback models", async () => {
     const f = await fixture(
       runConfig(
         `  architect: { harness: fake, model: ${WITH_EFFORT}, effort: dim, fallbacks: [{ model: ${FALLBACK_MODEL}, effort: deep }] }`,
         `  implementer:
     harness: fake
-    model: ${NO_EFFORT}
-    rotate:
-      - { harness: fake, model: ${WITH_EFFORT}, effort: deep }`,
+    model: ${NO_EFFORT}`,
       ),
     );
     try {

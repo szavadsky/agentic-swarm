@@ -201,22 +201,10 @@ export interface FallbackModelConfig {
   sharesPool?: true;
 }
 
-/** One rotation entry: the alias's primary harness, model and effort for an iteration. */
-export interface AliasEntry {
-  harness: string;
-  model: string;
-  effort?: string;
-}
-
 export interface AliasConfig {
   harness: string;
   model: string;
   effort?: string;
-  /**
-   * Per-iteration primaries: iteration N resolves `rotate[N % rotate.length]`.
-   * Absent or empty keeps the alias's own harness and model on every iteration.
-   */
-  rotate?: AliasEntry[];
   /** Quota pool this alias draws on; absent means throttled only overall. */
   subscription?: string;
   fallbacks?: FallbackConfig[];
@@ -349,12 +337,6 @@ export interface KernelRuntime {
   harnesses: ReadonlyMap<string, Harness>;
   prompts: PromptLibrary;
   limits: Limits;
-  /**
-   * `harness+model` combinations that passed a canary run. Loaded from the
-   * session store at launch; rotation only picks proven combinations. Narrow
-   * per-test runtimes may omit it; rotation then stays ungated.
-   */
-  provenCombinations?: Set<string>;
   /**
    * Quota pool keys (subscription, or harness+model when none) latched by a
    * quota stop, with the epoch ms they may serve again and a probe in flight.

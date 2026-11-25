@@ -6,9 +6,7 @@ software-factory
 Commands:
   init                     Create the repo config, goal directory and intent
   run                      Run bounded iterations of one goal
-  canary                   Run the canary turns and record a pass for rotation
   status                   Show derived state, parked causes and the last summary
-  benchmark                Print the benchmark rows for one goal's artifacts
   steer                    Drop a steering file into the goal inbox
   validate                 Validate one schema-enforced file with the gate's validators
   schemas                  Write every kernel schema as JSON Schema
@@ -46,31 +44,12 @@ State is derived from <artifactRoot>/<goal>/{tasks,records}; there is no state
 file. Exit: 0 done, 1 failure, 2 blocked, 3 iteration limit, 130/143 signal.
 `;
 
-const CANARY_USAGE = `
-factory canary <harness/model> | --alias <name> [bigger]
-
-Runs a trivial goal and a standalone task against the named combination and
-records a pass where rotation reads it; --alias resolves the combination from
-the run config; bigger adds the small bigger goal architect legs need. The
-turns run in an isolated temp directory and never merge into the goal branch.
-Exit: 0 pass, 1 fail.
-`;
-
 const STATUS_USAGE = `
 factory status --repo <path> --goal <name> [--json]
 
 Prints the state derived from task files and records, every parked cause, and
 the path of the last iteration summary. --json prints status.json, the
 kernel's machine-readable snapshot written after each agent launch and finish.
-`;
-
-const BENCHMARK_USAGE = `
-factory benchmark --repo <path> --goal <name>
-
-Prints the rows and units of bootstrap/context/benchmark.md section 1 for the
-goal's artifacts: launches, architect launches, tokens in/out, cost, architect
-share, cost per merged, loop incidents, human interventions, wall and
-merged/parked. Reads <artifactRoot>/<goal>/metrics.yaml and its records.
 `;
 
 const STEER_USAGE = `
@@ -89,15 +68,14 @@ schema-validation gate: tasks/*.md (with its directory's dependency graph and
 flow existence against the merged process config), class.yaml, outcome.yaml,
 mailbox/holds/*.yaml, repo.yaml, run.yaml, process.yaml and infra.yaml. A repo,
 process or run file also gets the non-model pre-flight checks — required
-aliases and chains, unregistered alias, rotation and fallback harnesses,
-quota pools, task types and trivial-flow follow-ups, portability edges,
-configured executables, writable roots outside the repo — without launching
-a harness or probing a model. --run-config <file> names a run config
-explicitly, including a file not named run.yaml, and is the validated file when
-no positional file is given. --step names the
-flow step an outcome is given for and overrides the step in the sibling
-started.yaml; a standalone outcome without either gets step-independent checks
-only. Exit: 0 valid, 1 invalid or unknown kind.
+aliases and chains, unregistered alias, fallback harnesses, quota pools, task
+types and trivial-flow follow-ups, portability edges, configured executables,
+writable roots outside the repo — without launching a harness or probing a
+model. --run-config <file> names a run config explicitly, including a file not
+named run.yaml, and is the validated file when no positional file is given.
+--step names the flow step an outcome is given for and overrides the step in
+the sibling started.yaml; a standalone outcome without either gets
+step-independent checks only. Exit: 0 valid, 1 invalid or unknown kind.
 `;
 
 const VARIABLES_USAGE = `
@@ -129,9 +107,7 @@ directory. Editors and the artifact LSP consume these files. Exit: 0 written,
 export function usageFor(command: string | undefined): string {
   if (command === "init") return INIT_USAGE;
   if (command === "run") return RUN_USAGE;
-  if (command === "canary") return CANARY_USAGE;
   if (command === "status") return STATUS_USAGE;
-  if (command === "benchmark") return BENCHMARK_USAGE;
   if (command === "steer") return STEER_USAGE;
   if (command === "validate") return VALIDATE_USAGE;
   if (command === "schemas") return SCHEMAS_USAGE;

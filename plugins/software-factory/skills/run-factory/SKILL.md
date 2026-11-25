@@ -53,7 +53,6 @@ bun bin/factory.ts steer --repo "$REPO" --goal demo "$REPO/notes.md"
 bun bin/factory.ts run --repo "$REPO" --goal demo --run-config "$REPO/.factory/run.yaml" --iterations 1
 bun bin/factory.ts status --repo "$REPO" --goal demo
 bun bin/factory.ts status --repo "$REPO" --goal demo --json
-bun bin/factory.ts benchmark --repo "$REPO" --goal demo
 ```
 
 - `init` writes `.factory/repo.yaml` when missing, creates the goal layout and
@@ -79,8 +78,6 @@ bun bin/factory.ts benchmark --repo "$REPO" --goal demo
   mechanical account when none was written) and reads the architect's
   `iterations/<n>/intent-status.json` as one input. Open it in a browser and
   refresh it; it updates only when the kernel writes a snapshot.
-- `benchmark` — cost, tokens, architect share, cost per merged task, work,
-  incidents and wall time.
 - Iteration record — `<artifact root>/<goal>/iterations/<n>/summary.md` and
   `metrics.yaml`.
 - [kernel.md](kernel.md) — command surface, goal layout, records, exit codes.

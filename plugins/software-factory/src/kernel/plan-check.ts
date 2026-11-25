@@ -374,7 +374,7 @@ export async function runPlanCheck(
   const records = await runtime.store.listRecords();
   const gateRecord = lastGateRecord(records, runtime.store);
   const result = await runAgentTurn(runtime, {
-    target: boundaryTarget(runtime, "plancheck", opts.iteration),
+    target: boundaryTarget(runtime, "plancheck"),
     cwd: runtime.paths.goalCheckout,
     meta: {
       iteration: opts.iteration,

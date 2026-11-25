@@ -112,7 +112,7 @@ export async function runSteerPm(
 
   for (const [index, rung] of rungSteps(runtime).entries()) {
     const round = index + 1;
-    const target = boundaryTarget(runtime, "pm", opts.iteration, rung.alias);
+    const target = boundaryTarget(runtime, "pm", rung.alias);
     const result = await runSteerTurn(
       runtime,
       opts,

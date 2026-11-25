@@ -322,8 +322,8 @@ export function portabilityFindings(
 }
 
 /**
- * An alias, rotation entry or explicit fallback tier naming a harness a launch
- * does not register can never run. The check reads only the run config and the
+ * An alias or explicit fallback tier naming a harness a launch does not
+ * register can never run. The check reads only the run config and the
  * registered ids, so `validate` reports it and pre-flight skips that branch's
  * model probe.
  */
@@ -343,9 +343,6 @@ export function harnessRegistrationFindings(
   };
   for (const [name, alias] of Object.entries(configs.run.aliases)) {
     check(`aliases.${name}.harness`, alias.harness);
-    for (const [index, entry] of (alias.rotate ?? []).entries()) {
-      check(`aliases.${name}.rotate.${index}.harness`, entry.harness);
-    }
     for (const [index, fallback] of (alias.fallbacks ?? []).entries()) {
       if ("alias" in fallback || fallback.harness === undefined) continue;
       check(`aliases.${name}.fallbacks.${index}.harness`, fallback.harness);
@@ -355,16 +352,12 @@ export function harnessRegistrationFindings(
 }
 
 /**
- * Whether some alias, rotation entry or literal fallback tier runs on omp.
- * `scouts` is a subagent pin only the omp adapter reads.
+ * Whether some alias or literal fallback tier runs on omp. `scouts` is a
+ * subagent pin only the omp adapter reads.
  */
 export function runsOnOmp(aliases: Record<string, AliasConfig>): boolean {
   for (const alias of Object.values(aliases)) {
-    const primaries =
-      alias.rotate && alias.rotate.length > 0
-        ? alias.rotate.map((entry) => entry.harness)
-        : [alias.harness];
-    if (primaries.includes(OMP_ID)) return true;
+    if (alias.harness === OMP_ID) return true;
     for (const fallback of alias.fallbacks ?? []) {
       if ("model" in fallback && fallback.harness === OMP_ID) return true;
     }
@@ -373,8 +366,8 @@ export function runsOnOmp(aliases: Record<string, AliasConfig>): boolean {
 }
 
 /**
- * `scouts` configures a model no harness reads when no alias, rotation entry
- * or fallback tier runs on omp: the pin would parse clean and start nothing.
+ * `scouts` configures a model no harness reads when no alias or fallback tier
+ * runs on omp: the pin would parse clean and start nothing.
  */
 export function scoutsConsumerFindings(
   configs: ConfigBundle,
@@ -398,15 +391,12 @@ function poolMessage(subscription: string): string {
 function fallbackPoolFindings(
   fallback: FallbackModelConfig,
   alias: AliasConfig,
-  rotation: readonly { harness: string; model: string }[],
   known: ReadonlySet<string>,
   file: string,
   tierKey: string,
 ): Finding[] {
   const findings: Finding[] = [];
-  const changesPrimary = [alias, ...rotation].some((primary) =>
-    fallbackChangesPrimary(fallback, primary),
-  );
+  const changesPrimary = fallbackChangesPrimary(fallback, alias);
   const sharesPool = fallback.sharesPool === true;
   if (sharesPool && alias.subscription === undefined) {
     findings.push({
@@ -464,14 +454,12 @@ export function subscriptionPoolFindings(
         message: poolMessage(alias.subscription),
       });
     }
-    const rotation = alias.rotate ?? [];
     for (const [index, fallback] of (alias.fallbacks ?? []).entries()) {
       if (!("model" in fallback)) continue;
       findings.push(
         ...fallbackPoolFindings(
           fallback,
           alias,
-          rotation,
           known,
           file,
           `${key}.fallbacks.${index}`,
