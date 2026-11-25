@@ -35,6 +35,7 @@ import { qaOutcomeSchema } from "./qa.js";
 import {
   isAcceptanceStep,
   isLastReviewCall,
+  launchCounts,
   reviewRoundLimit,
 } from "./review.js";
 import { materialHash } from "./task-material.js";
@@ -101,7 +102,12 @@ function setLastCallVars(run: StepRun, vars: Record<string, string>): void {
   const { step, state } = run;
   // The decide turn carries no last call: every verdict stays available.
   const acceptance = isAcceptanceStep(step) && !isDecideStep(step);
-  run.lastCall = acceptance && isLastReviewCall(step, state.round);
+  run.lastCall =
+    acceptance &&
+    isLastReviewCall(
+      step,
+      launchCounts(state.launches, step.id).changeRequests,
+    );
   if (acceptance) {
     vars.max_rounds = String(reviewRoundLimit(step));
     vars.last_call = String(run.lastCall);

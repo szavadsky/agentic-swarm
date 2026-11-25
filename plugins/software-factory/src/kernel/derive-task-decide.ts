@@ -69,11 +69,7 @@ export function applyDecideTurn(
       grantGateFix(context, state, resume);
       return;
     }
-    // The grant lets the acceptance step the round limit stopped run once more;
-    // that turn is its last call, so it ships or parks on its own outcome.
-    state.roundGrants += 1;
-    state.verdict = "changes";
-    startFixRound(context, state, rec);
+    grantFixRound(context, state, rec, resume);
     return;
   }
   if (verdict === "reject") {
@@ -145,4 +141,24 @@ function grantGateFix(
   state.pendingChecks = null;
   state.stepIndex = 0;
   state.phase = context.firstStep;
+}
+
+/**
+ * A non-gate `changes` buys the stopped step one more call and starts the next
+ * fix round; the call that round pays for is the step's last call, so it ships
+ * or parks on its own outcome.
+ */
+function grantFixRound(
+  context: ReduceContext,
+  state: ReduceState,
+  rec: StepRecord,
+  resume: ReduceState["signalResume"],
+): void {
+  if (resume?.kind === "past-step") {
+    const granted = context.steps[resume.index];
+    if (granted !== undefined)
+      state.roundGrants[granted.id] = (state.roundGrants[granted.id] ?? 0) + 1;
+  }
+  state.verdict = "changes";
+  startFixRound(context, state, rec);
 }

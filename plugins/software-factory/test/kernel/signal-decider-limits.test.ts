@@ -137,8 +137,12 @@ const redMergeGate = (seq: number): StepRecord =>
     startedAt: new Date(seq).toISOString(),
   });
 
-/** A review that spends its bound leaves the next QA call past QA's own bound. */
-const ROUND_LIMIT_FLOW: FlowDefinition = {
+/**
+ * The reviewer spends its own bound; QA has not launched, so QA's first call
+ * is still inside its own budget. The task-wide round is past QA's bound, which
+ * must not spend QA's rounds.
+ */
+const SPENT_REVIEW_FLOW: FlowDefinition = {
   steps: [
     IMPLEMENT,
     {
@@ -152,7 +156,7 @@ const ROUND_LIMIT_FLOW: FlowDefinition = {
   ],
 };
 
-const roundLimitRecords = (): StepRecord[] => [
+const spentReviewRecords = (): StepRecord[] => [
   implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
   checks(2),
   review(3, "changes", 1),
@@ -161,90 +165,69 @@ const roundLimitRecords = (): StepRecord[] => [
   review(6, "approve", 2),
 ];
 
-function registerRoundLimitSignal(): void {
-  it("raises the round-limit signal where the bound used to park", () => {
+/**
+ * QA's one call is spent (it accepted), so the reviewer's later change request
+ * reaches a step that has no call left in its own budget.
+ */
+const SPENT_QA_FLOW: FlowDefinition = {
+  steps: [
+    IMPLEMENT,
+    { id: "qa", prompt: "qa", alias: "qa", qa: true, changeRequests: 0 },
+    {
+      id: "review",
+      prompt: "reviewer",
+      alias: "reviewer",
+      review: true,
+      changeRequests: 2,
+    },
+  ],
+};
+
+const spentQaRecords = (): StepRecord[] => [
+  implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
+  checks(2),
+  qaRecord(3, "accept"),
+  checks(4),
+  review(5, "changes", 1),
+  implement(6, 2, { tree: "tree-2", commit: "c2", base: "c0" }),
+  checks(7),
+];
+
+function registerPerAgentBudget(): void {
+  it("does not raise a round signal for an agent that spent its own bound", () => {
     const reduction = reduceTask(
       task("a"),
-      roundLimitRecords(),
-      ROUND_LIMIT_FLOW,
+      spentReviewRecords(),
+      SPENT_REVIEW_FLOW,
     );
-    expect(reduction.phase).toBe(DECIDE_STEP);
+    expect(reduction.phase).toBe("qa");
     expect(reduction.park).toBeUndefined();
-    expect(reduction.pendingSignal).toEqual({
-      kind: "round-limit",
-      evidence: 'after verdict "approve" (1 rounds)',
+    expect(reduction.pendingSignal).toBeUndefined();
+  });
+
+  it("dispatches QA's own first call instead of a decide turn", () => {
+    const state = derive([task("a")], spentReviewRecords(), {
+      "implement-review": SPENT_REVIEW_FLOW,
     });
+    const limits: Limits = {
+      flows: { "implement-review": SPENT_REVIEW_FLOW },
+      iterations: 1,
+      concurrency: { overall: 1, perSubscription: {}, perModel: {} },
+      planCheckRounds: 2,
+    };
+    expect(next(state, limits, new Set())).toEqual([
+      { kind: "step", slug: "a", step: "qa", round: 2 },
+    ]);
   });
 
-  it("ships the branch when the decider approves the spent round", () => {
-    const reduction = reduceTask(
-      task("a"),
-      [...roundLimitRecords(), decide(7, "approve", 2)],
-      ROUND_LIMIT_FLOW,
-    );
-    expect(reduction.pendingSignal).toBeUndefined();
+  it("does not charge the reviewer's change request to QA", () => {
+    // QA owns no change request, so its bound is the last call alone; a
+    // change request pays for the call it sends back, so the reviewer's spend
+    // never spends QA's.
+    const reduction = reduceTask(task("a"), spentQaRecords(), SPENT_QA_FLOW);
+    expect(reduction.phase).toBe("qa");
     expect(reduction.park).toBeUndefined();
-    expect(reduction.phase).toBe("checks");
-  });
-
-  it("grants the next fix round when the decider asks for changes", () => {
-    const reduction = reduceTask(
-      task("a"),
-      [...roundLimitRecords(), decide(7, "changes", 2)],
-      ROUND_LIMIT_FLOW,
-    );
     expect(reduction.pendingSignal).toBeUndefined();
-    expect(reduction.park).toBeUndefined();
-    expect(reduction.phase).toBe("implement");
-    expect(reduction.round).toBe(3);
-    expect(reduction.verdict).toBe("changes");
-  });
-}
-
-function registerChangeRequestsExhaustedSignal(): void {
-  // QA owns no change request, so the reviewer's request spends QA's bound.
-  const flow: FlowDefinition = {
-    steps: [
-      IMPLEMENT,
-      { id: "qa", prompt: "qa", alias: "qa", qa: true, changeRequests: 0 },
-      {
-        id: "review",
-        prompt: "reviewer",
-        alias: "reviewer",
-        review: true,
-        changeRequests: 2,
-      },
-    ],
-  };
-  const records = [
-    implement(1, 1, { tree: "tree-1", commit: "c1", base: "c0" }),
-    checks(2),
-    qaRecord(3, "accept"),
-    checks(4),
-    review(5, "changes", 1),
-    implement(6, 2, { tree: "tree-2", commit: "c2", base: "c0" }),
-    checks(7),
-  ];
-
-  it("raises the exhausted-change-requests signal with the verdict", () => {
-    const reduction = reduceTask(task("a"), records, flow);
-    expect(reduction.phase).toBe(DECIDE_STEP);
-    expect(reduction.park).toBeUndefined();
-    expect(reduction.pendingSignal).toEqual({
-      kind: "change-requests-exhausted",
-      evidence: 'after verdict "changes" (1 rounds)',
-    });
-  });
-
-  it("parks only through the decider's reject", () => {
-    const reduction = reduceTask(
-      task("a"),
-      [...records, decide(8, "reject", 2)],
-      flow,
-    );
-    expect(reduction.pendingSignal).toBeUndefined();
-    expect(causeText(reduction.park)).toContain("decided reject");
-    expect(reduction.phase).toBe("parked");
   });
 }
 
@@ -343,23 +326,7 @@ function registerGateFixNoProgressSignal(): void {
 }
 
 describe("signal decider limits", () => {
-  registerRoundLimitSignal();
-
-  it("dispatches the decide turn for the derived round-limit signal", () => {
-    const state = derive([task("a")], roundLimitRecords(), {
-      "implement-review": ROUND_LIMIT_FLOW,
-    });
-    const limits: Limits = {
-      flows: { "implement-review": ROUND_LIMIT_FLOW },
-      iterations: 1,
-      concurrency: { overall: 1, perSubscription: {}, perModel: {} },
-      planCheckRounds: 2,
-    };
-    expect(next(state, limits, new Set())).toEqual([
-      { kind: "step", slug: "a", step: DECIDE_STEP, round: 2 },
-    ]);
-  });
-  registerChangeRequestsExhaustedSignal();
+  registerPerAgentBudget();
   registerRedBaseSignal();
   registerGateFixNoProgressSignal();
 });

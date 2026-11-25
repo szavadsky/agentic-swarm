@@ -57,6 +57,16 @@ export const causeSchema = z.object({
 export type Cause = z.infer<typeof causeSchema>;
 
 /**
+ * How many launches one flow step's agent spent, kept apart by kind: a glitch
+ * or failure is no change request, and each step carries its own bound.
+ */
+export interface StepLaunches {
+  glitches: number;
+  changeRequests: number;
+  failures: number;
+}
+
+/**
  * A no-progress signal a turn raised instead of parking it in the kernel: the
  * decider turn reads it, the branch and the checks log, then decides through
  * its outcome. `evidence` is the sentence the park would have carried.
@@ -79,6 +89,8 @@ export interface TaskState {
   started?: boolean;
   /** Current implementation/review round, 1-based. */
   round: number;
+  /** Agent launches by flow step, so one acceptance step never spends another's bound. */
+  launches: Record<string, StepLaunches>;
   kind: TaskKind;
   flow: string;
   /** The type stops the launch for operator promotion instead of running. */

@@ -293,6 +293,7 @@ function parkedState(park = "gates: check"): State {
         cause: cause(park),
         turns: 3,
         round: 1,
+        launches: {},
         kind: "development",
         flow: "implement-review",
         phase: "parked",

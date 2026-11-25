@@ -18,6 +18,7 @@ import {
   createReduceState,
   type ReduceContext,
   type ReduceState,
+  recordLaunch,
   routeResolve,
 } from "./derive-task-state.js";
 import { applyAgentTurn } from "./derive-task-turn.js";
@@ -79,7 +80,10 @@ function applyRecord(
     applyScriptFailure(context, state, rec);
     return;
   }
-  if (rec.actor === "agent") applyAgentTurn(context, state, rec);
+  if (rec.actor === "agent") {
+    applyAgentTurn(context, state, rec);
+    recordLaunch(state, rec);
+  }
 }
 
 /** The phase pending work names, the park last: a park never rides a signal. */
@@ -108,6 +112,7 @@ function finishReduction(
     terminal,
     phase: state.phase,
     round: state.round,
+    launches: state.launches,
     turns: state.turns,
     started,
     verdict: state.verdict,
@@ -148,7 +153,7 @@ export function reduceTask(
     flowIndex: new Map(steps.map((step, i) => [step.id, i])),
     firstStep: steps[0]?.id ?? "done",
   };
-  const owned = records.slice(revisionStart(task, records));
+  const owned = records.slice(revisionStart(task.revision, records));
   // A revision bump keeps the branch and its work, so started reads the slug's whole history.
   const started = records.some((rec) => rec.actor === "agent");
   const terminal = terminalFactFromRecords(owned, task.slug, task.kind);
@@ -157,8 +162,8 @@ export function reduceTask(
   for (const rec of owned) {
     if (!rec.endedAt) continue;
     applyRecord(context, state, rec);
-    // A record that settles the flow on an acceptance step past its round bound
-    // raises the signal before the next dispatch, never a kernel park.
+    // A record that settles the flow on an acceptance step past its own call
+    // bound raises the signal before the next dispatch, never a kernel park.
     raiseBudgetSignal(context, state);
   }
   settleDag(context, state, owned);

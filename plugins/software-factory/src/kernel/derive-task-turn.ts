@@ -225,6 +225,9 @@ function applyFlowStepTurn(
   state.resolveRan = false;
 
   state.round = Math.max(state.round, rec.round);
+  // One counted turn is one call of this step's own budget: the acceptance
+  // bound counts its calls, never the task-wide round.
+  state.calls[rec.step] = (state.calls[rec.step] ?? 0) + 1;
   state.commit = rec.commit ?? state.commit;
   if (checkTerminalStatus(state, rec)) return;
 
@@ -378,7 +381,7 @@ function applyQaChanges(
   if (
     isLastReviewCall(
       context.steps[context.flowIndex.get(rec.step)!]!,
-      rec.round,
+      state.launches[rec.step]?.changeRequests ?? 0,
     )
   ) {
     // The outcome validator refuses this; a recorded changes on the last call

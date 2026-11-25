@@ -391,10 +391,14 @@ describe("default development flow", () => {
 });
 
 describe("QA contract breaches", () => {
-  it("parks a QA change on the last acceptance call instead of routing it back", () => {
+  it("parks a QA change once its own change requests are spent", () => {
     const reduction = reduceTask(
       task("a"),
-      [qaRecord(1, 3, "changes", ["task.txt:1 needs work"])],
+      [
+        qaRecord(1, 1, "changes", ["task.txt:1 needs work"]),
+        qaRecord(2, 2, "changes", ["task.txt:1 still needs work"]),
+        qaRecord(3, 3, "changes", ["task.txt:1 needs work"]),
+      ],
       DEFAULT_FLOWS["implement-review"]!,
     );
     expect(reduction.phase).toBe("parked");

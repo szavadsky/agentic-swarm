@@ -8,9 +8,11 @@ import type { ReduceContext, ReduceState } from "./derive-task-state.js";
 import { raisePendingSignal } from "./derive-task-state.js";
 import {
   adjudicationDue,
+  changeRequestBound,
   isAcceptanceStep,
   isAdjudicatorStep,
   isLastReviewCall,
+  launchCounts,
   reviewRoundLimit,
 } from "./review.js";
 import type { FlowStep, ReviewVerdict, StepRecord } from "./types.js";
@@ -157,7 +159,11 @@ function applyVerdict(
     advancePastStep(context, state, idx);
   } else if (verdict === "changes") {
     const isLastReview =
-      step !== undefined && isLastReviewCall(step, rec.round);
+      step !== undefined &&
+      isLastReviewCall(
+        step,
+        launchCounts(state.launches, rec.step).changeRequests,
+      );
     if (isLastReview) {
       state.park = makeCause(
         "invalid-outcome",
@@ -203,7 +209,11 @@ function applyChanges(
   if (
     adjudicator !== undefined &&
     isAdjudicatorStep(adjudicator) &&
-    adjudicationDue(adjudicator, context.steps[idx]!, rec.round)
+    adjudicationDue(
+      adjudicator,
+      context.steps[idx]!,
+      launchCounts(state.launches, rec.step).changeRequests + 1,
+    )
   ) {
     // The findings are not handed to the implementer yet: the adjudicator
     // re-judges them in the same review cycle.
@@ -238,10 +248,13 @@ function phaseAfterStep(context: ReduceContext, index: number) {
 }
 
 /**
- * The acceptance rounds a step may run: its configured change requests plus the
- * last call, plus the rounds a decider's `changes` bought. When the flow settles
- * on an acceptance step past that bound, the signal replaces the kernel's park:
- * the round limit is a mechanical fact, never the decision.
+ * The acceptance calls a step may run: its configured change requests plus the
+ * last call, plus the calls a decider's `changes` bought for that step. When
+ * the flow settles on an acceptance step past that bound, the signal replaces
+ * the kernel's park: the round limit is a mechanical fact, never the decision.
+ * The count is the step's own, so one agent's spend never stops another, and a
+ * `changes` verdict pays for the call it sends back, so the step it returns to
+ * judges the tree that request bought before the limit reads as spent.
  */
 export function raiseBudgetSignal(
   context: ReduceContext,
@@ -252,16 +265,18 @@ export function raiseBudgetSignal(
   if (index === undefined) return;
   const step = context.steps[index]!;
   if (!isAcceptanceStep(step)) return;
-  const limit = reviewRoundLimit(step) + state.roundGrants;
-  if (state.round <= limit) return;
+  if (state.verdict === "changes") return;
+  const grants = state.roundGrants[step.id] ?? 0;
+  const limit = reviewRoundLimit(step) + grants;
+  if ((state.calls[step.id] ?? 0) < limit) return;
+  const spentRequests =
+    (state.launches[step.id]?.changeRequests ?? 0) >=
+    changeRequestBound(step) + grants;
   raisePendingSignal(
     state,
     {
-      kind:
-        state.verdict === "changes"
-          ? "change-requests-exhausted"
-          : "round-limit",
-      evidence: `after verdict "${state.verdict ?? "none"}" (${limit} rounds)`,
+      kind: spentRequests ? "change-requests-exhausted" : "round-limit",
+      evidence: `after verdict "${state.verdict ?? "none"}" (${limit} call${limit === 1 ? "" : "s"})`,
     },
     { kind: "past-step", index },
   );

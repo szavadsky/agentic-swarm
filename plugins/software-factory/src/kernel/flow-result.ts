@@ -16,7 +16,7 @@ import type { TaskActionResult } from "./flow-state.js";
 import { isDecideStep } from "./pending-signal.js";
 import { qaReportOf } from "./qa.js";
 import { appendDebt, appendPark } from "./record.js";
-import { isLastReviewCall } from "./review.js";
+import { isLastReviewCall, launchCounts } from "./review.js";
 import type {
   FlowDefinition,
   FlowStep,
@@ -161,7 +161,12 @@ async function qaStepOutcome(
 ): Promise<boolean> {
   const qa = qaReportOf(outcome);
   if (qa?.verdict === "changes") {
-    if (isLastReviewCall(step, state.round)) {
+    if (
+      isLastReviewCall(
+        step,
+        launchCounts(state.launches, step.id).changeRequests,
+      )
+    ) {
       // The outcome validator refuses this; a delivered record is a contract
       // breach, never a merge.
       await appendPark(
@@ -238,7 +243,10 @@ async function reviewStepOutcome(
   meta: TaskMeta,
   outcome: StepRecord["outcome"],
 ): Promise<void> {
-  const lastCall = isLastReviewCall(step, state.round);
+  const lastCall = isLastReviewCall(
+    step,
+    launchCounts(state.launches, step.id).changeRequests,
+  );
   if (outcome?.verdict === "reject") {
     await appendPark(
       runtime.store,

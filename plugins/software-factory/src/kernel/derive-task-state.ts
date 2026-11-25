@@ -7,7 +7,7 @@
 import { makeCause } from "./cause.js";
 import type { PendingChecks, TerminalFact } from "./derive-task-facts.js";
 import { DECIDE_STEP } from "./pending-signal.js";
-import { isAcceptanceStep } from "./review.js";
+import { countLaunch, emptyLaunches, isAcceptanceStep } from "./review.js";
 import type {
   Cause,
   FlowDefinition,
@@ -15,6 +15,7 @@ import type {
   PendingSignal,
   ProgressRepeat,
   ReviewVerdict,
+  StepLaunches,
   StepRecord,
   TaskFile,
   TaskPhase,
@@ -41,6 +42,11 @@ export interface ReduceState {
   terminal: TerminalFact | null;
   phase: TaskPhase;
   round: number;
+  launches: Record<string, StepLaunches>;
+  /** Acceptance calls each flow step ran: one counted turn that judged the tree. */
+  calls: Record<string, number>;
+  /** Acceptance calls a decider's `changes` bought past a step's own bound, by step. */
+  roundGrants: Record<string, number>;
   stepIndex: number;
   verdict?: ReviewVerdict;
   commit?: string;
@@ -80,8 +86,6 @@ export interface ReduceState {
   pendingSignal: PendingSignal | null;
   /** Where the signal stopped the flow; its decide turn's approve resumes there. */
   signalResume: SignalResume | null;
-  /** Acceptance rounds the decider's `changes` verdicts bought past the bound. */
-  roundGrants: number;
   seen: Map<string, { step: string; round: number }>;
   lastInfraStep?: string;
   infraRepeatCount: number;
@@ -95,6 +99,9 @@ export function createReduceState(
     terminal,
     phase: context.firstStep,
     round: 1,
+    launches: {},
+    calls: {},
+    roundGrants: {},
     stepIndex: 0,
     gateFix: false,
     gateLastCall: false,
@@ -115,10 +122,16 @@ export function createReduceState(
     resolveRan: false,
     pendingSignal: null,
     signalResume: null,
-    roundGrants: 0,
     seen: new Map(),
     infraRepeatCount: 0,
   };
+}
+
+/** Add one ended agent turn to its step's launch counts. */
+export function recordLaunch(state: ReduceState, rec: StepRecord): void {
+  const counts = state.launches[rec.step] ?? emptyLaunches();
+  state.launches[rec.step] = counts;
+  countLaunch(counts, rec);
 }
 
 /**

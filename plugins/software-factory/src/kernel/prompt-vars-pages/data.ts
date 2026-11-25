@@ -13,7 +13,7 @@ const QA_VARIABLES: Record<string, string> = {
   base_hash:
     "commit hash before this task's first turn; the range spans every round",
   head_hash: "commit hash after the latest turn",
-  round: "1-based shared acceptance round",
+  round: "1-based call of this QA step's own change-request budget",
   max_rounds:
     "this QA step's total acceptance calls: its change-request bound plus the last call",
   last_call:
@@ -314,7 +314,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       base_hash:
         "commit hash before this task's first turn; the range spans every round",
       head_hash: "commit hash after the latest implementer turn",
-      round: "1-based review round",
+      round: "1-based review round of this step's own change-request budget",
       max_rounds:
         "this review step's total review calls: its change-request bound plus the last call",
       base_gates:

@@ -16,6 +16,25 @@ const CUSTOM_FLOW =
 const STARTED = (step: string, round = 1): string =>
   `seq: 42\niteration: 1\nstep: ${step}\nround: ${round}\nactor: agent\n`;
 
+/** An earlier ended launch of the same step, recorded as a change request. */
+function priorChange(
+  root: string,
+  dir: string,
+  step: string,
+  seq: number,
+): void {
+  writeFile(
+    root,
+    `records/${dir}/started.yaml`,
+    `seq: ${seq}\niteration: 1\nstep: ${step}\nround: 1\nactor: agent\n`,
+  );
+  writeFile(
+    root,
+    `records/${dir}/end.yaml`,
+    "endedAt: 2024-01-01T00:00:00.000Z\nlaunchKind: change-request\n",
+  );
+}
+
 function writeFile(root: string, rel: string, content: string): string {
   const abs = path.join(root, rel);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
@@ -299,7 +318,7 @@ function registerFactoryValidatePart11(): void {
 
 function registerFactoryValidatePart12(): void {
   it(
-    "refuses a changes verdict on a record's last review call",
+    "counts the review step's own launches, not the shared round, for the last call",
     withTmp(async (root) => {
       writeFile(root, ".factory/process.yaml", CUSTOM_FLOW);
       const record = "records/00042-alpha-review-r3";
@@ -309,16 +328,18 @@ function registerFactoryValidatePart12(): void {
         `${record}/outcome.yaml`,
         "status: done\nsummary: reviewed\nverdict: changes\n",
       );
-      const refused = await runValidate(file);
-      expect(refused.code).toBe(1);
-      expect(refused.err).toContain(
+      const first = await runValidate(file);
+      expect(first.code).toBe(0);
+      expect(first.out).toContain(": valid");
+
+      priorChange(root, "00001-alpha-review-r1", "audit", 1);
+      priorChange(root, "00002-alpha-review-r2", "audit", 2);
+      writeFile(root, `${record}/started.yaml`, STARTED("audit", 1));
+      const spent = await runValidate(file);
+      expect(spent.code).toBe(1);
+      expect(spent.err).toContain(
         'verdict "changes" is not available on the last review call',
       );
-
-      writeFile(root, `${record}/started.yaml`, STARTED("audit", 2));
-      const accepted = await runValidate(file);
-      expect(accepted.code).toBe(0);
-      expect(accepted.out).toContain(": valid");
     }),
   );
 }

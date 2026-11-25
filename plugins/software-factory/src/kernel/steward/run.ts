@@ -192,7 +192,7 @@ async function parkUnresolvedConflicts(
     if (s?.status !== "ready" || s.phase !== "resolve") continue;
     const own = records.filter((r) => r.slug === task.slug);
     const merge = own
-      .slice(revisionStart(task, own))
+      .slice(revisionStart(task.revision, own))
       .findLast((r) => r.step === "merge");
     const cause = merge?.cause;
     if (cause?.kind !== "conflict") continue;

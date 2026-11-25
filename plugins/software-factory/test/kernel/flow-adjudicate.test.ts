@@ -3,9 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
+import { reduceTask } from "../../src/kernel/derive-task.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
-import type { StepRecord } from "../../src/kernel/types.js";
-import { task } from "./helpers.js";
+import type { FlowDefinition, StepRecord } from "../../src/kernel/types.js";
+import { rec, task } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
@@ -47,7 +48,67 @@ function agentRecords(records: StepRecord[]): StepRecord[] {
     .sort((a, b) => a.seq - b.seq);
 }
 
+function qaReviewAdjudicatedFlow(): FlowDefinition {
+  return {
+    steps: [
+      { id: "implement", prompt: "implementer", alias: "implementer" },
+      {
+        id: "qa",
+        prompt: "qa",
+        alias: "qa",
+        qa: true,
+        changeRequests: 2,
+        deliverable: "verdict",
+      },
+      {
+        id: "review",
+        prompt: "reviewer",
+        alias: "reviewer",
+        review: true,
+        changeRequests: 2,
+      },
+      {
+        id: "adjudicate",
+        prompt: "adjudicator",
+        alias: "reviewer",
+        adjudicate: "last",
+      },
+    ],
+  };
+}
+
+function reviewChangesRecord(seq: number, round: number): StepRecord {
+  return rec(seq, {
+    slug: "task",
+    step: "review",
+    round,
+    launchKind: "change-request",
+    outcome: outcome({
+      summary: "1. task.txt:1 needs v2",
+      verdict: "changes",
+    }),
+  });
+}
+
 describe("review adjudication", () => {
+  it("adjudicates on the review's own change requests, not the shared round", () => {
+    // QA's two changes leave the review's first changes at global round 4.
+    const flow = qaReviewAdjudicatedFlow();
+    const first = reduceTask(
+      task("task", { scope: ["task.txt"] }),
+      [reviewChangesRecord(1, 4)],
+      flow,
+    );
+    expect(first.phase).toBe("implement");
+
+    const second = reduceTask(
+      task("task", { scope: ["task.txt"] }),
+      [reviewChangesRecord(1, 4), reviewChangesRecord(2, 6)],
+      flow,
+    );
+    expect(second.phase).toBe("adjudicate");
+  });
+
   it("never hands a discarded finding to the implementer or the next review", async () => {
     const { repo, goal } = setupFlowRepo({
       process: { flows: adjudicatedFlow("all") },

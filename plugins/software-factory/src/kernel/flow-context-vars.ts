@@ -34,7 +34,11 @@ import { taskOutcomeSchema } from "./outcome-schemas.js";
 import { qaOutcomeSchema } from "./qa.js";
 import { CHECK_HANDOFF_DEFAULTS, GATE_LAST_CALL_ASK } from "./prompts.js";
 import { formatAcceptanceFindings, formatReviewFindings } from "./record.js";
-import { isLastChecksFixCall } from "./review.js";
+import {
+  isLastChecksFixCall,
+  isAcceptanceStep,
+  launchCounts,
+} from "./review.js";
 import { spikeReportPath } from "./spike-report.js";
 import type {
   FlowDefinition,
@@ -169,6 +173,21 @@ function commonVars(
   };
 }
 
+/** The round an acceptance prompt shows: its own change-bearing call, not the task's global round. */
+function promptRound(
+  flow: FlowDefinition,
+  stepId: string | undefined,
+  round: number,
+  state: TaskState | undefined,
+): number {
+  const step =
+    stepId === undefined
+      ? undefined
+      : flow.steps.find((candidate) => candidate.id === stepId);
+  if (!state || step === undefined || !isAcceptanceStep(step)) return round;
+  return launchCounts(state.launches, step.id).changeRequests + 1;
+}
+
 export function promptVars(
   runtime: KernelRuntime,
   task: TaskFile,
@@ -191,7 +210,14 @@ export function promptVars(
     ? qaOutcomeSchema
     : taskOutcomeSchema(task, runtime.configs.process.taskTypes);
   return {
-    ...commonVars(runtime, task, worktree, round, handoff, state),
+    ...commonVars(
+      runtime,
+      task,
+      worktree,
+      promptRound(flow, stepId, round, state),
+      handoff,
+      state,
+    ),
     prior_findings: priorFindings(qaStep, acceptance, review),
     fix_dispositions: fixDispositions(records, task.slug, flow, round, state),
     front_pack: frontPack(runtime, task, records) ?? "",

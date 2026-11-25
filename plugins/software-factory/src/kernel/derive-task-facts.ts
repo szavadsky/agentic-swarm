@@ -19,12 +19,15 @@ import type {
   PendingSignal,
   ProgressRepeat,
   ReviewVerdict,
+  StepLaunches,
   StepRecord,
   TaskFile,
   TaskKind,
   TaskPhase,
   TaskStatus,
 } from "./types.js";
+
+export { revisionStart } from "./revision-start.js";
 
 export const DEFAULT_FLOWS: Record<string, FlowDefinition> = {
   "implement-review": {
@@ -78,6 +81,7 @@ export interface TaskReduction {
   terminal: TerminalFact | null;
   phase: TaskPhase;
   round: number;
+  launches: Record<string, StepLaunches>;
   turns: number;
   /** An agent turn on this slug has started, ended or not. */
   started: boolean;
@@ -154,32 +158,6 @@ function terminalOf(rec: StepRecord, kind: TaskKind): TerminalFact | null {
     return { status: "finished", commit: rec.commit };
   }
   return null;
-}
-
-/**
- * The first record the task's current revision owns. A revision bump follows
- * a park: what the records through the last park of an earlier revision built
- * describes the brief the decider replaced, so phase, counts and terminal fact
- * restart from the amended one. The current revision's parks stay, and a
- * record without the field belongs to revision 0, so old records derive as
- * today. The records themselves stay for the prompts' review history.
- */
-export function revisionStart(
-  task: TaskFile,
-  records: readonly StepRecord[],
-): number {
-  if (task.revision === 0) return 0;
-  let start = 0;
-  records.forEach((rec, index) => {
-    if (
-      rec.step === "park" &&
-      rec.endedAt &&
-      (rec.revision ?? 0) < task.revision
-    ) {
-      start = index + 1;
-    }
-  });
-  return start;
 }
 
 export function phaseAfter(

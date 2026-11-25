@@ -27,11 +27,6 @@ import {
 } from "../../kernel/outcome-schemas.js";
 import { PLAN_CHECK_STEP } from "../../kernel/plan-check.js";
 import {
-  architectureFlowPromptNames,
-  pmFlowPromptNames,
-} from "../../kernel/prompt-dry-run.js";
-import { loadPrompts } from "../../kernel/prompts.js";
-import {
   PLAN_REVIEW_STEP,
   validatePlanReviewDelivery,
 } from "../../kernel/plan-review.js";
@@ -41,7 +36,11 @@ import {
   requiredAliases,
 } from "../../kernel/preflight.js";
 import { qaOutcomeSchema } from "../../kernel/qa.js";
-import { isAcceptanceStep, isLastReviewCall } from "../../kernel/review.js";
+import {
+  isAcceptanceStep,
+  isLastReviewCall,
+  launchesBefore,
+} from "../../kernel/review.js";
 import { createFolderStore } from "../../kernel/store.js";
 import {
   parseTaskFile,
@@ -57,6 +56,7 @@ import {
   type ValidateKind,
 } from "./validate-kind.js";
 import { planCheckFindings } from "./validate-plan-check.js";
+import { flowPromptFindings } from "./validate-prompt-findings.js";
 
 /**
  * A run config through its `extends` chain: its findings already name the
@@ -98,10 +98,7 @@ function zodFindings(
   return [];
 }
 
-/**
- * One hold file with the kernel's exported hold schema: same verdicts and
- * messages as `readHolds` (`must be ...` / `not valid YAML: ...`).
- */
+/** One hold file with the kernel's exported hold schema and its messages. */
 function holdFindings(text: string, file: string): string[] {
   let raw: unknown;
   try {
@@ -115,10 +112,7 @@ function holdFindings(text: string, file: string): string[] {
     : [`${file}: must be { slugs: string[], goal: boolean }`];
 }
 
-/**
- * Nearest repo root above `fromDir`: a directory with `.factory` config or
- * `.git`. Null when the file lives outside any repo (a scratch dir).
- */
+/** Nearest repo root above `fromDir`; null for a file outside any repo. */
 function findRepoRoot(fromDir: string): string | null {
   let dir = path.resolve(fromDir);
   while (true) {
@@ -136,10 +130,8 @@ function findRepoRoot(fromDir: string): string | null {
 }
 
 /**
- * Merged process config for validation: the repo owning the file wins and the
- * `--repo` fallback covers scratch files. `loadConfigs` merges the package
- * defaults, so the built-in flows and task types still apply; an invalid
- * config throws.
+ * Merged process config for validation: the repo owning the file, or the
+ * `--repo` fallback; an invalid config throws.
  */
 function processForValidation(
   startDir: string,
@@ -152,13 +144,13 @@ function processForValidation(
 }
 
 /**
- * The step and round a record directory's `started.yaml` gives its outcome.
- * Absent when the file is not in a record directory; a broken record is an
- * error, never a silently weaker check.
+ * The step, sequence, slug and revision a record directory's `started.yaml`
+ * gives its outcome. Absent when the file is not in a record directory; a
+ * broken record is an error, never a silently weaker check.
  */
 function startedMeta(
   absPath: string,
-): { step: string; round: number } | undefined {
+): { step: string; seq: number; slug?: string; revision?: number } | undefined {
   const started = path.join(path.dirname(absPath), "started.yaml");
   if (!fs.existsSync(started)) return undefined;
   let parsed: unknown;
@@ -167,16 +159,73 @@ function startedMeta(
   } catch (err) {
     throw new Error(`${started}: not valid YAML: ${(err as Error).message}`);
   }
-  const meta = parsed as { step?: unknown; round?: unknown } | null;
+  const meta = parsed as {
+    step?: unknown;
+    seq?: unknown;
+    slug?: unknown;
+    revision?: unknown;
+  } | null;
   if (typeof meta?.step !== "string" || !meta.step) {
     throw new Error(`${started}: no step to infer the outcome's contract from`);
   }
-  if (typeof meta.round !== "number" || !Number.isInteger(meta.round)) {
+  if (typeof meta.seq !== "number" || !Number.isInteger(meta.seq)) {
     throw new Error(
-      `${started}: no round to infer the review's last call from`,
+      `${started}: no sequence to separate earlier launches from this one`,
     );
   }
-  return { step: meta.step, round: meta.round };
+  const revision = meta.revision;
+  if (
+    revision !== undefined &&
+    (typeof revision !== "number" ||
+      !Number.isInteger(revision) ||
+      revision < 0)
+  ) {
+    throw new Error(`${started}: revision must be a non-negative integer`);
+  }
+  return {
+    step: meta.step,
+    seq: meta.seq,
+    ...(typeof meta.slug === "string" && meta.slug ? { slug: meta.slug } : {}),
+    ...(revision !== undefined ? { revision } : {}),
+  };
+}
+
+/**
+ * The record facts an outcome is judged with: the record beside it, and the
+ * acceptance call's own step launch count. Reads the records tree once so
+ * `debtClosed` ids and the step's earlier launches share it.
+ */
+async function recordFacts(
+  abs: string,
+  started: ReturnType<typeof startedMeta>,
+  step: string,
+  stepConfig: ReturnType<typeof flowStepFor>,
+  hasDebt: boolean,
+  process: ProcessConfig,
+) {
+  const recordsDir = path.dirname(path.dirname(abs));
+  const recordId = path.basename(path.dirname(abs));
+  const acceptance =
+    started?.step === step &&
+    stepConfig !== undefined &&
+    isAcceptanceStep(stepConfig);
+  const needsRecords =
+    path.basename(recordsDir) === "records" && (hasDebt || acceptance);
+  const records = needsRecords
+    ? await createFolderStore(
+        path.dirname(recordsDir),
+        undefined,
+        process.taskTypes ?? {},
+      ).listRecords()
+    : undefined;
+  const lastCall =
+    acceptance && started !== undefined && stepConfig !== undefined
+      ? isLastReviewCall(
+          stepConfig,
+          launchesBefore(records ?? [], started).changeRequests,
+        )
+      : false;
+  return { recordId, records, lastCall };
 }
 
 /**
@@ -197,34 +246,20 @@ async function outcomeResult(
       return { findings: [], stepIndependent: true };
     }
     const process = processForValidation(path.dirname(abs), opts.repo);
-    const flows = process.flows;
-    const stepConfig = flowStepFor(step, flows);
+    const stepConfig = flowStepFor(step, process.flows);
     const outcome = parseOutcome(
       text,
       stepConfig?.qa ? qaOutcomeSchema : outcomeSchema,
     );
-    const expectation = expectationForStep(step, flows);
-    const lastCall =
-      started?.step === step &&
-      stepConfig !== undefined &&
-      isAcceptanceStep(stepConfig) &&
-      isLastReviewCall(stepConfig, started.round);
-    // The outcome sits in a record directory under a `records` tree: read the
-    // tree so a `debtClosed` id is checked against what ingest assigned. Any
-    // other file has no records to resolve an id against, so only the step
-    // contract runs.
-    const recordsDir = path.dirname(path.dirname(abs));
-    const recordId = path.basename(path.dirname(abs));
-    const records =
-      started &&
-      outcome.debtClosed?.length &&
-      path.basename(recordsDir) === "records"
-        ? await createFolderStore(
-            path.dirname(recordsDir),
-            undefined,
-            process.taskTypes ?? {},
-          ).listRecords()
-        : undefined;
+    const expectation = expectationForStep(step, process.flows);
+    const { recordId, records, lastCall } = await recordFacts(
+      abs,
+      started,
+      step,
+      stepConfig,
+      Boolean(outcome.debtClosed?.length),
+      process,
+    );
     const findings = validateExpectation(outcome, expectation, {
       lastCall,
       ...(records ? { records, excludeRecordId: recordId } : {}),
@@ -349,45 +384,12 @@ function crossLayerFindings(
     ...crossLayerTaskTypeFindings(bundleOrError),
     ...crossLayerPoolFindings(bundleOrError),
     ...crossLayerChainFindings(bundleOrError),
-    ...crossLayerPromptFindings(
-      bundleOrError,
-      architectureFlowPromptNames(
-        bundleOrError.process.architecture.flows ?? [],
-      ),
-      "architecture.flows",
-    ),
-    ...crossLayerPromptFindings(
-      bundleOrError,
-      pmFlowPromptNames(bundleOrError.process.pm?.steps ?? []),
-      "pm.steps",
+    ...flowPromptFindings(
+      bundleOrError.process,
+      bundleOrError.processFile,
+      bundleOrError.root,
     ),
   ];
-}
-
-/** Every prompt template the repo's prompt layers can resolve, or its findings. */
-function crossLayerPromptFindings(
-  bundle: CrossLayerBundle,
-  names: ReadonlySet<string>,
-  label: string,
-): string[] {
-  if (names.size === 0) return [];
-  let library: ReturnType<typeof loadPrompts>;
-  try {
-    library = loadPrompts(bundle.process, bundle.root);
-  } catch (err) {
-    return [`${bundle.processFile}: ${label}: ${(err as Error).message}`];
-  }
-  const findings: string[] = [];
-  for (const name of [...names].sort()) {
-    try {
-      library.placeholders(name);
-    } catch (err) {
-      findings.push(
-        `${bundle.processFile}: ${label}: ${(err as Error).message}`,
-      );
-    }
-  }
-  return findings;
 }
 
 function crossLayerAliasFindings(bundle: CrossLayerBundle): string[] {

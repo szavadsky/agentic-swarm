@@ -105,6 +105,7 @@ function fixtureState(fixture: FullFixture, tasks: readonly TaskFile[]): State {
       status: merged.has(file.slug) ? "merged" : "parked",
       turns: 1,
       round: 1,
+      launches: {},
       kind: file.kind,
       flow: file.flow,
       phase: "merge",

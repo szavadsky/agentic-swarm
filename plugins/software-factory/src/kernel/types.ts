@@ -61,6 +61,7 @@ export type {
   GoalStatus,
   PendingSignal,
   State,
+  StepLaunches,
   TaskState,
 } from "./types/state.js";
 export {

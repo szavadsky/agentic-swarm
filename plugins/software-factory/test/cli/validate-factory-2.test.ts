@@ -6,8 +6,49 @@ import { recordedConcernId } from "../../src/core/concerns.js";
 import { dispatch } from "../../src/cli/dispatch.js";
 
 /** The fields inference reads from a record directory's started.yaml. */
-const STARTED = (step: string, round = 1): string =>
-  `seq: 42\niteration: 1\nstep: ${step}\nround: ${round}\nactor: agent\n`;
+const STARTED = (step: string, round = 1, revision?: number): string =>
+  `seq: 42\niteration: 1\nstep: ${step}\nround: ${round}\nactor: agent\n${revision === undefined ? "" : `revision: ${revision}\n`}`;
+
+/** An earlier ended launch of the same step, recorded as a change request. */
+function priorChange(
+  root: string,
+  dir: string,
+  step: string,
+  seq: number,
+  revision?: number,
+): void {
+  const record = `artifacts/demo/records/${dir}`;
+  writeFile(
+    root,
+    `${record}/started.yaml`,
+    `seq: ${seq}\niteration: 1\nstep: ${step}\nround: 1\nactor: agent\n${revision === undefined ? "" : `revision: ${revision}\n`}`,
+  );
+  writeFile(
+    root,
+    `${record}/end.yaml`,
+    `endedAt: 2024-01-01T00:00:00.000Z\nlaunchKind: ${step === "qa" ? "qa-finding" : "change-request"}\n`,
+  );
+}
+
+/** A park that ends an earlier revision. */
+function priorPark(
+  root: string,
+  dir: string,
+  seq: number,
+  revision: number,
+): void {
+  const record = `artifacts/demo/records/${dir}`;
+  writeFile(
+    root,
+    `${record}/started.yaml`,
+    `seq: ${seq}\niteration: 1\nstep: park\nround: 1\nactor: script\nrevision: ${revision}\n`,
+  );
+  writeFile(
+    root,
+    `${record}/end.yaml`,
+    "endedAt: 2024-01-01T00:00:00.000Z\nok: true\n",
+  );
+}
 
 function writeFile(root: string, rel: string, content: string): string {
   const abs = path.join(root, rel);
@@ -101,7 +142,7 @@ function factoryValidateQAOutcomesPart1() {
 
 function factoryValidateQAOutcomesPart2() {
   it(
-    "refuses a change verdict on the last acceptance call",
+    "counts QA's own launches, not the shared round, for the last acceptance call",
     withTmp(async (root) => {
       writeFile(
         root,
@@ -113,9 +154,20 @@ function factoryValidateQAOutcomesPart2() {
         "artifacts/demo/records/00001-i1-alpha-qa-r1/outcome.yaml",
         'status: done\nsummary: needs work\nqa:\n  verdict: changes\n  findings: ["task.txt:1 needs v2"]\n',
       );
-      const result = await runValidate(file);
-      expect(result.code).toBe(1);
-      expect(result.err).toContain("last acceptance call");
+      const first = await runValidate(file);
+      expect(first.code).toBe(0);
+      expect(first.out).toContain(": valid");
+
+      priorChange(root, "00002-i1-alpha-qa-r1", "qa", 2);
+      priorChange(root, "00003-i1-alpha-qa-r2", "qa", 3);
+      writeFile(
+        root,
+        "artifacts/demo/records/00001-i1-alpha-qa-r1/started.yaml",
+        STARTED("qa", 1),
+      );
+      const spent = await runValidate(file);
+      expect(spent.code).toBe(1);
+      expect(spent.err).toContain("last acceptance call");
     }),
   );
 
@@ -135,6 +187,51 @@ function factoryValidateQAOutcomesPart2() {
       const result = await runValidate(file);
       expect(result.code).toBe(1);
       expect(result.err).toContain("qa verdict is required");
+    }),
+  );
+}
+
+function factoryValidateQAOutcomesPart3() {
+  it(
+    "ignores same-step launches after the record's sequence",
+    withTmp(async (root) => {
+      writeFile(
+        root,
+        "artifacts/demo/records/00001-i1-alpha-qa-r1/started.yaml",
+        STARTED("qa", 1),
+      );
+      const file = writeFile(
+        root,
+        "artifacts/demo/records/00001-i1-alpha-qa-r1/outcome.yaml",
+        'status: done\nsummary: needs work\nqa:\n  verdict: changes\n  findings: ["task.txt:1 needs v2"]\n',
+      );
+      priorChange(root, "00043-i1-alpha-qa-r2", "qa", 43);
+      priorChange(root, "00044-i1-alpha-qa-r3", "qa", 44);
+      const result = await runValidate(file);
+      expect(result.code).toBe(0);
+      expect(result.out).toContain(": valid");
+    }),
+  );
+
+  it(
+    "ignores launches from before the record's revision",
+    withTmp(async (root) => {
+      writeFile(
+        root,
+        "artifacts/demo/records/00001-i1-alpha-qa-r1/started.yaml",
+        STARTED("qa", 1, 1),
+      );
+      const file = writeFile(
+        root,
+        "artifacts/demo/records/00001-i1-alpha-qa-r1/outcome.yaml",
+        'status: done\nsummary: needs work\nqa:\n  verdict: changes\n  findings: ["task.txt:1 needs v2"]\n',
+      );
+      priorChange(root, "00002-i1-alpha-qa-r1", "qa", 2, 0);
+      priorChange(root, "00003-i1-alpha-qa-r2", "qa", 3, 0);
+      priorPark(root, "00004-i1-alpha-park-r1", 4, 0);
+      const result = await runValidate(file);
+      expect(result.code).toBe(0);
+      expect(result.out).toContain(": valid");
     }),
   );
 }
@@ -308,4 +405,6 @@ describe("factory validate: QA outcomes", () => {
   factoryValidateQAOutcomesPart1();
 
   factoryValidateQAOutcomesPart2();
+
+  factoryValidateQAOutcomesPart3();
 });
