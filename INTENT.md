@@ -347,8 +347,18 @@ flowchart TD
 - Plan review is the architecture flow of the factory config — its reviewers, its findings schema, the architect's turns on technical concerns — and it completes before the PM derives tasks.
 - The script calls the checker before every architect consult, also when nothing is parked, blocked or pending; the checker reads the recorded gate results instead of running the gates.
 
-### Context pack and status [[ctxOnly:ContextPackMechanicsNote]]
+### Context pack and status [[ContextPackMechanicsNote]]
 - The pack preparer decides what is included in full and what is a reference with a brief summary; Distance counts what is open.
+
+### Config Driven Semaphores [[Semaphores]]
+- Factory config allow to declare counting semaphores, each have a maximum
+- Each of the following can be associated with zero or more semaphores
+   - harness
+   - subscription
+   - ci/cd step
+   - individual turn  in the flow (eg, using testing resource - separate semaphore)
+- eg config not more then 3 subagents per time can be done with 1 semaphore assocuated with each agent
+- one entitiry always consume at  one count for each semaphore it associated with, eg agnetic turn  may point to same semaphore as turn, subscription, and harness - still consume 1.  
 
 ### Gates
 - [[TreeKeyedGateCache]] A tree is judged once: a gate result is keyed by the tree it ran on, and the result and log go to the agents that follow.
