@@ -4,15 +4,7 @@ import {
   type Finding,
   type FindingSeverity,
 } from "./findings.js";
-
-/** A repo-declared escape hatch for a tool that emits no standard report. */
-export interface LogRegex {
-  /** A JavaScript regex; named groups file, line, rule, severity and message are read. */
-  pattern: string;
-  tool?: string;
-  rule?: string;
-  severity?: FindingSeverity;
-}
+import type { LogRegex } from "./types.js";
 
 const SEVERITIES: readonly FindingSeverity[] = ["error", "warning", "info"];
 

@@ -1,15 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { SandboxCommand } from "./types.js";
 
-/**
- * One process-level wrapper for a whole run. `args` are the wrapper's own
- * flags (for bwrap: namespace and bind arguments); the wrapped command
- * follows a `--` separator, so a wrapper that takes its program after `--`
- * accepts every child the run starts.
- */
-export interface SandboxCommand {
-  binary: string;
-  args: readonly string[];
-}
+export type { SandboxCommand } from "./types.js";
 
 const active = new AsyncLocalStorage<SandboxCommand | undefined>();
 

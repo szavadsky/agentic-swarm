@@ -4,11 +4,9 @@
  * before an adapter is constructed.
  */
 
-/** One malformed option key and the message pre-flight reports for it. */
-export interface AcpxOptionProblem {
-  key: "args" | "env";
-  message: string;
-}
+import type { AcpxOptionProblem } from "./types.js";
+
+export type { AcpxOptionProblem } from "./types.js";
 
 /** `typeof` for scalar shapes; arrays report themselves rather than "object". */
 function shapeOf(value: unknown): string {

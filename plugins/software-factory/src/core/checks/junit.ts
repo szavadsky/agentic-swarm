@@ -1,17 +1,7 @@
 import { XML } from "bun";
+import type { ParsedCase, ParsedJunit } from "./types.js";
 
-export interface ParsedCase {
-  name: string;
-  status: "pass" | "fail";
-  /** The file the report recorded for this case, when it names one. */
-  file?: string;
-}
-
-export interface ParsedJunit {
-  cases: ParsedCase[];
-  /** The report carries a `<failure>` or `<error>` anywhere, cases or not. */
-  suiteFailed: boolean;
-}
+export type { ParsedCase, ParsedJunit } from "./types.js";
 
 function isNode(
   value: string | XML.Node | XML.Comment | XML.ProcessingInstruction,

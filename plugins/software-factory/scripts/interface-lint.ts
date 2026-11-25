@@ -17,10 +17,9 @@ import { walkFiles } from "./files.js";
  * made clean, never by an allowlist.
  */
 export const SCOPE = [
-  "cli/dispatch",
-  "core/records",
-  "harness/acpx/turn",
-  "harness/omp/turn",
+  "cli",
+  "core",
+  "harness",
   "kernel/agent",
   "kernel/config",
   "kernel/context-pack",

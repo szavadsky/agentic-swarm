@@ -1,16 +1,7 @@
 import { git } from "./exec.js";
+import type { StatusEntry } from "./types.js";
 
-/**
- * One entry of `git status --porcelain -z`.
- */
-export interface StatusEntry {
-  /** Two-letter porcelain code, e.g. " M", "??", "UU", "R ". */
-  code: string;
-  /** Repo-relative path (rename target for R/C entries). */
-  path: string;
-  /** Rename source for R/C entries. */
-  from?: string;
-}
+export type { StatusEntry } from "./types.js";
 
 /**
  * Runs `git status --porcelain -z` and parses the NUL-separated output.

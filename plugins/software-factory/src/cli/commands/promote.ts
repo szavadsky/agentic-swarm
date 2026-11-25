@@ -18,6 +18,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { PinGate } from "../../kernel/preflight/types.js";
+import type { GateVerdicts, PromoteOptions, RunResult } from "./types.js";
+
+export type { GateVerdicts, PromoteOptions, RunResult } from "./types.js";
 
 /** Tree paths the suite and the schema gate read: the rev's copy, never the operator's. */
 export const PROMOTE_TREE_PATHS: readonly string[] = [
@@ -26,13 +29,6 @@ export const PROMOTE_TREE_PATHS: readonly string[] = [
   "bootstrap/promote.sh",
   "bootstrap/dispatch.sh",
 ];
-
-/** Result of one synchronous command run. */
-export interface RunResult {
-  code: number;
-  stdout: string;
-  stderr: string;
-}
 
 /** A hard promote failure; the entry maps it to this exit code. */
 export class PromoteError extends Error {
@@ -237,12 +233,6 @@ const GATE_SCRIPTS = [
   script: string;
 }[];
 
-/** One verdict per declared gate, in the pin record's shape. */
-export type GateVerdicts = Record<
-  (typeof GATE_SCRIPTS)[number]["key"],
-  PinGate["typecheck"]
->;
-
 /**
  * Writes one pin's `gate.yaml`: the rev plus the verdicts promote measured on
  * the clean export. The record's shape is the kernel's pinGateSchema, imported
@@ -266,14 +256,6 @@ export function writePinGate(
     `${JSON.stringify(gate, null, 2)}\n`,
     "utf8",
   );
-}
-
-export interface PromoteOptions {
-  /** Repo root of the tree running promote. */
-  repo: string;
-  /** Commitment to promote; defaults to HEAD. */
-  rev?: string;
-  env?: NodeJS.ProcessEnv;
 }
 
 /** Gates one package: install, then every declared gate. */

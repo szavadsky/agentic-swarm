@@ -1,5 +1,127 @@
 import type { RetryPolicy } from "../fallback.js";
-import type { CacheTtl, ModelRef } from "../types.js";
+import type { CacheTtl, ModelRef, Usage } from "../types.js";
+
+/** Directories the runtime keeps for one launch: sessions, prompts and their base. */
+export interface OmpDirs {
+  base: string;
+  sessions: string;
+  prompts: string;
+}
+
+/** The overlay written for a turn: cache retention plus the entry's opaque options. */
+export interface OmpOverlayOptions {
+  /** Cheap model every spawned subagent must run on. */
+  subagentModel?: string;
+  /** Provider cache lifetime from `sessions.retention`. */
+  retention: CacheTtl;
+  /**
+   * Harness-entry `options`: omp config keys, passed through untouched. The
+   * shipped run config carries the unattended policy (memory/auto-learn off,
+   * approval, disabled providers, retry); the adapter adds only runtime facts.
+   */
+  options?: Record<string, unknown>;
+}
+
+/** Raw usage omp reports on an assistant message (`message_end.message.usage`). */
+export interface OmpMessageUsage {
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  reasoningTokens?: number;
+  cost?: { total?: number } | number;
+}
+
+export interface OmpTokens {
+  input?: number;
+  output?: number;
+  reasoning?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  total?: number;
+}
+
+export interface OmpStats {
+  sessionId?: string;
+  sessionFile?: string;
+  tokens?: OmpTokens;
+  cost?: number;
+}
+
+/** The frame-summed usage and last assistant facts of one turn. */
+export interface OmpFrameSummary {
+  /** Usage summed from `message_end` frames (fallback when session stats are unavailable). */
+  usage: Usage;
+  lastAssistantStopReason?: string;
+  assistantText?: string;
+}
+
+/** Everything one turn's usage is computed from. */
+export interface OmpTurnUsage {
+  /** Session stats before the prompt; absent when the RPC query failed. */
+  before?: OmpStats;
+  /** Session stats after the prompt; absent when the RPC query failed. */
+  after?: OmpStats;
+  /** Frame-sum usage, used when either stats snapshot is missing. */
+  fallback: Usage;
+  /** Parent session file; child transcripts live beside it. */
+  sessionFile?: string;
+  /** Epoch ms at which the prompt was sent; earlier child messages belong to an earlier turn. */
+  sinceMs: number;
+}
+
+/** Error object omp attaches to `prompt_result.status === "error"`. */
+export interface OmpPromptError {
+  message?: string;
+  provider?: string;
+  model?: string;
+  httpStatus?: number;
+  retryable?: boolean;
+  code?: string;
+}
+
+/** The `prompt_result` frame's data; only the fields the turn reads. */
+export interface OmpPromptResult {
+  /** Terminal status omp reports for the prompt. */
+  status?: "completed" | "error" | "aborted";
+  /** Error object omp attaches when `status` is "error". */
+  error?: OmpPromptError;
+  /** A subarchitect child keeps its session open after the prompt settles. */
+  sessionSettled?: boolean;
+}
+
+/** How omp's process ended, when it died before a `prompt_result`. */
+export interface OmpTurnFailure {
+  /** Child process exit code, when omp died before a prompt_result. */
+  code?: number | null;
+  /** Child process exit signal, when omp died before a prompt_result. */
+  signal?: string | null;
+  stderr?: string;
+  /** The adapter's own wall/idle timer caused the kill. */
+  timedOut?: boolean;
+}
+
+/** Fields one omp turn's stop is classified from. */
+export interface OmpTurnOutcomeInput {
+  abortReason?: "idle" | "wall";
+  failure?: OmpTurnFailure;
+  promptResult?: OmpPromptResult;
+  lastStopReason?: string;
+  usage?: Usage;
+  text?: string;
+}
+
+/** Options one `omp --mode rpc` process is launched with. */
+export interface OmpRpcOptions {
+  binary: string;
+  args: string[];
+  cwd: string;
+  /** Names the run config allows this child to inherit. */
+  envAllowlist?: readonly string[];
+  /** Called for every retained frame; used for idle timers and usage fallback. */
+  onFrame?: (frame: any) => void;
+  maxStderrBytes?: number;
+}
 
 /** Harness configuration carried through `TurnRequest.opaque`. */
 export interface OmpTurnOpaque {

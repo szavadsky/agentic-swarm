@@ -20,6 +20,9 @@ import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { runSync } from "./promote.js";
+import type { DispatchOptions, LogSummary } from "./types.js";
+
+export type { DispatchOptions, LogSummary } from "./types.js";
 
 /** A hard dispatch failure; the entry maps it to this exit code. */
 export class DispatchError extends Error {
@@ -112,15 +115,6 @@ function runMust(
   return res;
 }
 
-/** Aggregates of one harness JSONL event log, as the old jq pipes printed. */
-export interface LogSummary {
-  session: string;
-  steps: number;
-  toolCalls: number;
-  errors: unknown[];
-  finalText: string;
-}
-
 /** One log line's event folded into the summary, as the old jq did. */
 function applyEvent(summary: LogSummary, event: unknown): void {
   const obj = event as Record<string, unknown>;
@@ -176,18 +170,6 @@ export function printSummary(
   for (const err of sum.errors.slice(-3)) console.log(JSON.stringify(err));
   console.log("final text:");
   console.log(sum.finalText.slice(0, 1500));
-}
-
-export interface DispatchOptions {
-  /** Repo root of the checkout running dispatch. */
-  root: string;
-  /** Assignment name; usage and exit 1 when missing. */
-  name?: string;
-  /** Model; `$FACTORY_DISPATCH_MODEL` when missing. */
-  model?: string;
-  env?: NodeJS.ProcessEnv;
-  /** Overrides the clock, for deterministic log names in tests. */
-  now?: Date;
 }
 
 /**

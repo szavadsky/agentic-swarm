@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
-import type { Concern } from "./concern-types.js";
-
-export type ConcernInput = Pick<
+import type {
   Concern,
-  "kind" | "summary" | "location" | "affects"
-> &
-  Partial<Pick<Concern, "detail" | "severity">>;
+  ConcernInput,
+  RecordedConcern,
+} from "./concern-types.js";
+
+export type { ConcernInput, RecordedConcern } from "./concern-types.js";
 
 const norm = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
 const locationOf = (l?: { file?: string; line?: number }) =>
@@ -16,13 +16,6 @@ const hash = (prefix: string, parts: unknown[]) =>
 /** Stable concern identity: kind, normalized summary, location. */
 export function concernFingerprint(c: ConcernInput): string {
   return hash("c", [c.kind, norm(c.summary), ...locationOf(c.location)]);
-}
-
-/** One concern as the pack forwards it and the PM's mark names it. */
-export interface RecordedConcern {
-  kind: string;
-  text: string;
-  evidence?: string;
 }
 
 /**

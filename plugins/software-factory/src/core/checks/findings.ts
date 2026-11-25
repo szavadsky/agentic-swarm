@@ -1,32 +1,11 @@
 import { fingerprintText } from "../fingerprint.js";
+import type { Finding, FindingSeverity } from "./types.js";
+
+export type { Finding, FindingSeverity } from "./types.js";
 
 /** A declared report exists but cannot be read as the format it claims. */
 export class GateReportError extends Error {
   override name = "GateReportError";
-}
-
-/** How a finding affects the tree, mapped from CTRF status or SARIF level. */
-export type FindingSeverity = "error" | "warning" | "info";
-
-/**
- * One gate finding. CTRF tests, SARIF results and log regexes all land here, so
- * a fix turn and the pre-existing check read one vocabulary.
- */
-export interface Finding {
-  /** The gate that produced it. */
-  check: string;
-  /** The producer the report names: a CTRF tool, a SARIF driver or `regex`/`log`. */
-  tool: string;
-  /** The file the finding points at, when the report names one. */
-  file?: string;
-  /** One-based line, when the report names one. */
-  line?: number;
-  /** A rule id, test name or test id; the stable part of a test finding. */
-  rule?: string;
-  severity: FindingSeverity;
-  message: string;
-  /** Stable identity a later run matches against the base. */
-  fingerprint: string;
 }
 
 /**

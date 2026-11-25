@@ -61,17 +61,9 @@ export const acpxConfigSchema = z
   })
   .strict();
 
-export type AcpxUsageFields = z.infer<typeof acpxUsageFieldsSchema>;
-export type AcpxConfig = z.infer<typeof acpxConfigSchema>;
-
-/**
- * Effective config after the harness entry's opaque `options` are merged in:
- * `args` run before the agent selection, `env` is added to the acpx children.
- */
-export type AcpxRunConfig = AcpxConfig & {
-  args?: string[];
-  env?: Record<string, string>;
-};
-
-/** Harness configuration carried through `TurnRequest.opaque`. */
-export type AcpxTurnOpaque = AcpxConfig;
+export type {
+  AcpxConfig,
+  AcpxRunConfig,
+  AcpxTurnOpaque,
+  AcpxUsageFields,
+} from "./config-types.js";

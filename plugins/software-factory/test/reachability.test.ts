@@ -15,10 +15,14 @@ const ALLOWLIST: Record<string, string> = {
     "test double: imported only by tests, never by production code",
   "src/harness/fake/index.ts":
     "test double barrel: imported only by tests, never by production code",
+  "src/harness/fake/types.ts":
+    "test double shapes: imported only by the fake harness, never by production code",
   "src/schema-check.ts":
     "standalone schema-validation entrypoint invoked by bun, not imported by production",
   "src/harness/lsp/frontmatter.ts":
     "standalone LSP entrypoint omp spawns by path, not imported by production",
+  "src/harness/lsp/types.ts":
+    "LSP protocol shapes: imported only by the frontmatter entrypoint, never by production code",
   "src/cli/commands/promote.ts":
     "bootstrap entrypoint scripts/promote.ts runs from the tree, not imported by production",
   "src/cli/commands/bootstrap-dispatch.ts":

@@ -284,13 +284,77 @@ describe("interface lint", () => {
 
   it("ignores an exported type in a folder outside the scope", () => {
     writeFixture(
-      "src/cli/run.ts",
+      "src/kernel/run.ts",
       ["export interface Handle {", "  id: string;", "}", ""].join("\n"),
     );
 
     expect(interfaceLintProblems(root)).toEqual([]);
   });
 });
+
+describe("interface lint scope", () => {
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "interface-lint-scope-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("covers core, cli and harness without exclusions", () => {
+    for (const dir of ["core", "cli", "harness"] as const) {
+      expect(SCOPE).toContain(dir);
+      writeFixture(
+        `src/${dir}/run.ts`,
+        ["export interface Handle {", "  id: string;", "}", ""].join("\n"),
+      );
+    }
+
+    expect(interfaceLintProblems(root)).toEqual([
+      'interface lint: src/cli/run.ts:1 exports interface "Handle"; a type module carries the declaration',
+      'interface lint: src/core/run.ts:1 exports interface "Handle"; a type module carries the declaration',
+      'interface lint: src/harness/run.ts:1 exports interface "Handle"; a type module carries the declaration',
+    ]);
+  });
+
+  it("reaches every nested folder of the three, so none is excluded", () => {
+    const dirs = ["cli", "core", "harness"].flatMap((dir) =>
+      nestedDirs(path.join(PACKAGE, "src", dir)),
+    );
+
+    expect(dirs.length).toBeGreaterThan(0);
+    for (const dir of dirs) {
+      writeFixture(
+        `src/${dir}/run.ts`,
+        ["export interface Handle {", "  id: string;", "}", ""].join("\n"),
+      );
+    }
+
+    expect(interfaceLintProblems(root)).toEqual(
+      [...dirs]
+        .sort()
+        .map(
+          (dir) =>
+            `interface lint: src/${dir}/run.ts:1 exports interface "Handle"; a type module carries the declaration`,
+        ),
+    );
+  });
+});
+
+/** Every directory below `dir`, `src`-relative, so a fixture follows the real tree. */
+function nestedDirs(dir: string): string[] {
+  const src = path.join(PACKAGE, "src");
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .flatMap((entry) => {
+      const child = path.join(dir, entry.name);
+      return [
+        path.relative(src, child).split(path.sep).join("/"),
+        ...nestedDirs(child),
+      ];
+    });
+}
 
 describe("interface lint scope widening", () => {
   beforeEach(() => {
@@ -361,7 +425,6 @@ describe("interface lint on the package", () => {
     expect(interfaceLintProblems(PACKAGE)).toEqual([]);
   }, 30_000);
 });
-
 /** Exit-0 biome and knip stand-ins and a sound manifest, so the gate reaches the interface check. */
 function stubLintGate(): void {
   writeFixture(

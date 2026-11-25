@@ -1,5 +1,16 @@
 import { statedWaitMs } from "./stated-wait.js";
-import type { ModelRef, PoolLatch, Stop, TurnAttempt, Usage } from "./types.js";
+import type {
+  AttemptOutput,
+  FallbackResult,
+  RetryPolicy,
+} from "./fallback-types.js";
+import type { ModelRef, PoolLatch, Stop, TurnAttempt } from "./types.js";
+
+export type {
+  AttemptOutput,
+  FallbackResult,
+  RetryPolicy,
+} from "./fallback-types.js";
 
 /**
  * One retry/fallback mechanism for every adapter (LOG D8): bounded retries for
@@ -9,16 +20,6 @@ import type { ModelRef, PoolLatch, Stop, TurnAttempt, Usage } from "./types.js";
  * fallback that reads the latch makes no call. Every call is reported in
  * `attempts`.
  */
-export interface RetryPolicy {
-  /** Extra calls shared by the whole chain, only for retryable causes. */
-  retries: number;
-  baseDelayMs: number;
-  /**
-   * Longest single backoff, and the longest stated quota wait a retry may sit
-   * out: a quota stop naming a longer wait is not retried.
-   */
-  maxDelayMs: number;
-}
 
 export const DEFAULT_RETRY_POLICY: RetryPolicy = {
   retries: 2,
@@ -46,19 +47,6 @@ export function isRetryableInfra(stop: Stop): boolean {
 function quotaStatedWait(stop: Stop): number | undefined {
   if (stop.kind !== "infra" || stop.cause !== "quota") return undefined;
   return statedWaitMs(stop.details);
-}
-
-export interface AttemptOutput<T> {
-  stop: Stop;
-  usage: Usage;
-  value: T;
-  /** Calls made inside this one (a lost session retried de novo), recorded first. */
-  attempts?: TurnAttempt[];
-}
-
-export interface FallbackResult<T> {
-  outcome: AttemptOutput<T>;
-  attempts: TurnAttempt[];
 }
 
 /** Primary first, then fallbacks, deduplicated by model id and effort. */

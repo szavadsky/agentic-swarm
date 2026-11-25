@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { writeYamlAtomic } from "../../core/records/io.js";
-import type { CacheTtl } from "../types.js";
+import type { OmpOverlayOptions } from "./types.js";
+
+export type { OmpOverlayOptions } from "./types.js";
 
 /** Agents omp ships with; their bundled frontmatter would otherwise inherit the parent model. */
 const BUNDLED_SUBAGENTS = [
@@ -11,19 +13,6 @@ const BUNDLED_SUBAGENTS = [
   "sonic",
   "security-reviewer",
 ];
-
-export interface OmpOverlayOptions {
-  /** Cheap model every spawned subagent must run on. */
-  subagentModel?: string;
-  /** Provider cache lifetime from `sessions.retention`. */
-  retention: CacheTtl;
-  /**
-   * Harness-entry `options`: omp config keys, passed through untouched. The
-   * shipped run config carries the unattended policy (memory/auto-learn off,
-   * approval, disabled providers, retry); the adapter adds only runtime facts.
-   */
-  options?: Record<string, unknown>;
-}
 
 function record(
   value: unknown,

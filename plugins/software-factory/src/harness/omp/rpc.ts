@@ -6,6 +6,9 @@ import {
   unregisterChildGroup,
 } from "../../core/shutdown.js";
 import { OmpRpcExit, OmpRpcTimeout } from "./errors.js";
+import type { OmpRpcOptions } from "./types.js";
+
+export type { OmpRpcOptions } from "./types.js";
 
 export { OmpRpcExit, OmpRpcTimeout };
 
@@ -17,17 +20,6 @@ const KEEP_FRAME_TYPES = new Set([
   "prompt_result",
   "session_settled",
 ]);
-
-export interface OmpRpcOptions {
-  binary: string;
-  args: string[];
-  cwd: string;
-  /** Names the run config allows this child to inherit. */
-  envAllowlist?: readonly string[];
-  /** Called for every retained frame; used for idle timers and usage fallback. */
-  onFrame?: (frame: any) => void;
-  maxStderrBytes?: number;
-}
 
 interface Waiter {
   match: (frame: any) => boolean;

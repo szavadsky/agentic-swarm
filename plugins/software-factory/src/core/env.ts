@@ -9,6 +9,10 @@
  * what the child inherits.
  */
 
+import type { ChildEnvOptions } from "./types.js";
+
+export type { ChildEnvOptions } from "./types.js";
+
 /** Exact names every child keeps: executable and toolchain resolution. */
 const BASE_ENV_NAMES: readonly string[] = [
   // Executable resolution and the per-user config/cache roots harnesses read.
@@ -42,15 +46,6 @@ const BASE_ENV_NAMES: readonly string[] = [
 
 /** Localized message settings (LC_ALL, LC_CTYPE, ...) carry no secret. */
 const BASE_ENV_PREFIXES: readonly string[] = ["LC_"];
-
-export interface ChildEnvOptions {
-  /** Extra names the run config allows (`envAllowlist`). */
-  allow?: readonly string[];
-  /** Values the caller sets explicitly; they always reach the child. */
-  set?: Record<string, string>;
-  /** Parent environment; callers default to `process.env`, tests pass a fixture. */
-  source?: NodeJS.ProcessEnv;
-}
 
 /** Builds one child's environment: base names, then `allow`, then `set`. */
 export function childEnv(
