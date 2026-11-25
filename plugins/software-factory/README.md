@@ -129,10 +129,13 @@ No real harness, model or subscription names appear in `src/` or `test/`
 lint-gate check): the names are checked against that JSON list, the omp
 adapter is the only exempt directory, and the name list itself is excluded.
 The price-source API endpoint is not a name and is never listed. Pricing
-matches a harness id against the price table exactly, or through a run-config
-`priceIds` entry; a turn the harness does not price and the config does not
-name stays unpriced. Verified adapter behaviours live in
-`config/acpx-verify.md` so the acpx code carries no names.
+matches a harness id against the price table exactly, or after dropping a
+leading provider segment the harness adds, an effort suffix the adapter keeps,
+and a free-tier spelling; a bare model name also matches a table model by its
+suffix, and a run-config `priceIds` entry wins over all of it and must name a
+row exactly, so a stale mapping stays unpriced. A turn the harness does not
+price and no candidate names stays unpriced. Verified adapter
+behaviours live in `config/acpx-verify.md` so the acpx code carries no names.
 
 `codingRules` names a repo-relative markdown file whose text replaces the factory default `clean-code` partial in the implementer, QA, reviewer, steward and adjudicator prompts. When `codingRules` is absent the factory default renders; when present the file replaces it rather than appending, and a missing file is a config error. The path must stay worktree-relative and cannot escape the repo.
 

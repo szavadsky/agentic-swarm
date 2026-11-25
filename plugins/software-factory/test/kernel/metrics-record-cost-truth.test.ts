@@ -111,7 +111,9 @@ async function writesPricedCostListPriceIntoEveryPart3(
       });
       return fakeTurnResult(req, {
         usage: { in: 1_000_000, costUsd: 0 },
-        model: { id: "paid/one" },
+        // The harness reaches the model through its own provider segment; the
+        // price row names the model's provider, so only normalization finds it.
+        model: { id: "other-host/paid/one" },
       });
     });
     const result = await runAgentTurn(runtime, {
@@ -131,7 +133,9 @@ async function writesPricedCostListPriceIntoEveryPart3(
       },
       expectation: "any",
     });
-    expect(result.record.model?.id).toBe("paid/one");
+    expect(result.record.model?.id).toBe("other-host/paid/one");
+    // The turn reported a literal 0, so its priced cost is the table's list
+    // estimate; both columns carry it, and the harness figure stays visible.
     expect(result.record.usage?.costUsd).toBeCloseTo(4, 10);
     expect(result.record.usage?.listCostUsd).toBeCloseTo(4, 10);
     expect(result.record.usage?.harnessCostUsd).toBe(0);

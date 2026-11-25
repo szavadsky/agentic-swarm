@@ -156,35 +156,60 @@ function harnessIdMatchingPart2(
     expect(matchPrice(TABLE_ROWS, "mystery/model")).toBeUndefined();
   });
 
-  it("strips no harness prefix: an id from another provider must name its price id or stay unpriced", () => {
-    // A bare candidate no longer names the model: matching is exact-only.
-    expect(matchPrice(TABLE_ROWS, "other/mini-flash")).toBeUndefined();
-    expect(matchPrice(TABLE_ROWS, "other-host/mini-flash")).toBeUndefined();
-    // ...unless the run config names the price id.
-    expect(
-      matchPrice(TABLE_ROWS, "other-host/mini-flash", {
-        "other-host/mini-flash": "vendor/mini-flash",
-      })?.input,
-    ).toBeCloseTo(0.0507, 10);
+  it("matches a harness id whose leading provider segment the table does not carry", () => {
+    // A harness reaches the model through its own provider name; the price
+    // source names the model's provider instead, so the segment is dropped
+    // before the exact and model-suffix lookups.
+    expect(matchPrice(TABLE_ROWS, "other-host/vendor/flagship-5")?.input).toBe(
+      4,
+    );
+    expect(matchPrice(TABLE_ROWS, "other/mini-flash")?.input).toBeCloseTo(
+      0.0507,
+      10,
+    );
+    // The last segment is the model; a prefixed id still reaches its bare row.
+    expect(matchPrice(TABLE_ROWS, "other-host/mini-flash")?.input).toBeCloseTo(
+      0.0507,
+      10,
+    );
+    // A model the table does not carry stays unpriced, prefix or not.
+    expect(matchPrice(TABLE_ROWS, "other-host/unknown-7")).toBeUndefined();
   });
 
-  it("strips no effort suffix: the recorded id must be exact or mapped", () => {
-    // A `-high` suffixed id names nothing exactly, so it needs a priceIds row.
-    expect(matchPrice(TABLE_ROWS, "vendor/hopper-flash-high")).toBeUndefined();
+  it("matches an id that keeps its effort suffix", () => {
     expect(
-      matchPrice(TABLE_ROWS, "vendor/hopper-flash-high", {
-        "vendor/hopper-flash-high": "vendor/hopper-flash",
-      })?.input,
+      matchPrice(TABLE_ROWS, "vendor/hopper-flash-high")?.input,
     ).toBeCloseTo(0.075, 10);
+    expect(matchPrice(TABLE_ROWS, "other/hopper-flash-max")?.input).toBeCloseTo(
+      0.075,
+      10,
+    );
+    // A suffix the adapter could add to a real model name is stripped only
+    // when the base names a row; `flash-max` has none.
+    expect(matchPrice(TABLE_ROWS, "vendor/mini-flash-max")?.input).toBeCloseTo(
+      0.0507,
+      10,
+    );
   });
+}
 
+/** A run-config mapping names the row; it never normalizes onto another. */
+function priceIdMappingPart(scope: ReturnType<typeof harnessIdMatchingPart1>) {
+  const { TABLE_ROWS } = scope;
   it("lets an explicit priceId win and leaves a stale mapping unpriced", () => {
     expect(
       matchPrice(TABLE_ROWS, "local/lamp-free", {
         "local/lamp-free": "vendor/lamp-1",
       })?.input,
     ).toBeCloseTo(0.3, 10);
-    // A mapping that names nothing is unpriced, never a silent mismatch.
+    // A mapping that names nothing is unpriced, never a silent mismatch: the
+    // mapped value is the operator's row, not a harness id to normalize onto
+    // `vendor/mini-flash` by its model suffix.
+    expect(
+      matchPrice(TABLE_ROWS, "local/lamp-free", {
+        "local/lamp-free": "retired/mini-flash",
+      }),
+    ).toBeUndefined();
     expect(
       matchPrice(TABLE_ROWS, "local/lamp-free", {
         "local/lamp-free": "retired/lamp-0",
@@ -212,6 +237,40 @@ function freeTierPart(scope: ReturnType<typeof harnessIdMatchingPart1>) {
       priceTableOnly(usage({ in: 1 }), "other-host/nothing-free", TABLE_ROWS),
     ).toBeUndefined();
   });
+
+  it("reaches a free row through the other free-tier spelling", () => {
+    // The adapter's `-free` spelling names the table's `:free` row.
+    expect(matchPrice(TABLE_ROWS, "vendor/tiny-preview-free")?.input).toBe(0);
+    expect(
+      matchPrice(TABLE_ROWS, "other-host/vendor/tiny-preview-free")?.input,
+    ).toBe(0);
+  });
+
+  it("prices a free-tier harness id at its paid row's list", () => {
+    // The table carries only the paid row; the free tier's list price is that
+    // row, and the free turn itself stays a known $0.
+    expect(
+      matchPrice(TABLE_ROWS, "vendor/hopper-flash-free")?.input,
+    ).toBeCloseTo(0.075, 10);
+    expect(
+      priceTableOnly(
+        usage({ in: 1_000_000 }),
+        "vendor/hopper-flash-free",
+        TABLE_ROWS,
+      ),
+    ).toBeCloseTo(0.075, 10);
+    expect(
+      priceUsage(
+        usage({ in: 1_000_000 }),
+        "vendor/hopper-flash-free",
+        TABLE_ROWS,
+      ),
+    ).toBe(0);
+    // The same fallback survives a harness prefix and a `:free` spelling.
+    expect(
+      matchPrice(TABLE_ROWS, "other/hopper-flash:free")?.input,
+    ).toBeCloseTo(0.075, 10);
+  });
 }
 
 describe("price usage at aggregation time", () => {
@@ -223,6 +282,7 @@ describe("price usage at aggregation time", () => {
 describe("harness id matching against the price table", () => {
   const scope1 = harnessIdMatchingPart1();
   harnessIdMatchingPart2(scope1);
+  priceIdMappingPart(scope1);
   freeTierPart(scope1);
 });
 

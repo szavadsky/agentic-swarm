@@ -134,16 +134,16 @@ async function pricesEveryReportedAttemptOncePart1(
     // fallback: one attempt priced by the table, one unpriced; the harness cost wins.
     rec(2, {
       slug: "a",
-      model: { id: "mystery/one" },
+      model: { id: "mystery/absent" },
       usage: usage({ in: 7 }),
       attempts: [
         {
-          model: { id: "mystery/one" },
+          model: { id: "mystery/absent" },
           stop: { kind: "done" },
           usage: usage({ in: 7 }),
         },
         {
-          model: { id: "mystery/one" },
+          model: { id: "mystery/absent" },
           stop: { kind: "done" },
           usage: usage({ costUsd: 0.25 }),
         },

@@ -81,6 +81,7 @@ function metricLines(render: SummaryRender): string[] {
     `- tokens: input ${usage.in}, cached ${usage.cacheRead}, output ${usage.out}, reasoning ${usage.reasoningOut}`,
     `- harness-reported cost: ${sourceCostText(usage.harnessCostUsd, unpricedTurns)}`,
     `- list-price estimate: ${sourceCostText(usage.listCostUsd, unpricedTurns)}`,
+    `- unpriced turns: ${unpricedTurns}`,
     ...costByRoleLines(render.named.roleNames),
     `- cost per merged task: harness-reported ${perMergedCost(computed.harnessCostPerMergedTask, unpricedTurns)}; list-price estimate ${perMergedCost(computed.listCostPerMergedTask, unpricedTurns)}`,
     `- work: ${computed.edits} files (+${computed.addedLines}/-${computed.removedLines}), ${computed.testRuns} test runs in ${computed.gateRuns} gate runs`,

@@ -38,17 +38,28 @@ function shortHash(hash: string): string {
   return hash.slice(0, 10);
 }
 
+/** A cell's own figure, never a false $0: absent with no unpriced turn is n/a. */
+function tableCostText(
+  costUsd: number | undefined,
+  unpricedTurns: number,
+): string {
+  if (costUsd === undefined) return unpricedTurns > 0 ? "unknown" : "n/a";
+  return unpricedTurns > 0
+    ? `$${costUsd.toFixed(4)} (partial)`
+    : `$${costUsd.toFixed(4)}`;
+}
+
 export function spendTable(
   label: string,
   rows: Array<{ name: string } & GroupMetrics>,
 ): string[] {
   if (rows.length === 0) return ["- none"];
   return [
-    `| ${label} | turns | tokens | harness-reported | list-price estimate | prompt bytes |`,
-    "| --- | --- | --- | --- | --- | --- |",
+    `| ${label} | turns | tokens | harness-reported | list-price estimate | unpriced | prompt bytes |`,
+    "| --- | --- | --- | --- | --- | --- | --- |",
     ...rows.map(
       (row) =>
-        `| ${row.name} | ${row.turns} | ${row.tokens} | ${sourceCostText(row.usage.harnessCostUsd, row.unpricedTurns)} | ${sourceCostText(row.usage.listCostUsd, row.unpricedTurns)} | ${row.promptBytes} |`,
+        `| ${row.name} | ${row.turns} | ${row.tokens} | ${tableCostText(row.usage.harnessCostUsd, row.unpricedTurns)} | ${tableCostText(row.usage.listCostUsd, row.unpricedTurns)} | ${row.unpricedTurns} | ${row.promptBytes} |`,
     ),
   ];
 }
