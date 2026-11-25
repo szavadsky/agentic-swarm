@@ -28,7 +28,15 @@ export async function executeTaskAction(
   if (action.kind === "step") {
     const flow = flowOf(runtime, task);
     const step = findStep(flow, action.step);
-    return runStep({ runtime, task, state, iteration, step, flow });
+    return runStep({
+      runtime,
+      task,
+      state,
+      iteration,
+      step,
+      flow,
+      tierIndex: action.tierIndex,
+    });
   }
   if (action.kind === "checks") {
     return runChecks(runtime, task, state, iteration);

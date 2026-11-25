@@ -142,7 +142,14 @@ export interface State {
 }
 
 export type Action =
-  | { kind: "step"; slug: string; step: string; round: number }
+  | {
+      kind: "step";
+      slug: string;
+      step: string;
+      round: number;
+      /** Admission chose this fallback-chain index; absent is the primary. */
+      tierIndex?: number;
+    }
   | { kind: "checks"; slug: string }
   | { kind: "merge"; slug: string }
   | { kind: "finish"; slug: string }

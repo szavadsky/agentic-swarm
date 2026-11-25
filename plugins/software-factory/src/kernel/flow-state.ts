@@ -55,6 +55,8 @@ export interface StepRun {
     snapshot: ConflictSnapshot;
   };
   target?: TurnTarget;
+  /** Admission chose this fallback-chain index; absent is the primary. */
+  tierIndex?: number;
   session?: import("../harness/types.js").SessionRef;
   trivial: boolean;
   /** This step's turn continues one recovery sealed as a bare crash. */

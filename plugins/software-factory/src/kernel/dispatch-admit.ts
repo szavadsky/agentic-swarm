@@ -102,34 +102,50 @@ function turnAllows(state: DispatchState, turnsUsed: number): boolean {
   );
 }
 
-/** The target's quota pools and model cap; an exhausted chain books its cause. */
-function targetAdmits(
+/** One tier's pool and model caps against the turns already running. */
+function tierAdmits(
   state: DispatchState,
-  slug: string,
-  target: ReturnType<typeof stepTarget>,
+  tier: ReturnType<typeof stepTarget>["tiers"][number],
 ): boolean {
-  if (target.unavailable !== undefined) {
-    noteInfra(state, slug, target.unavailable);
-    return false;
-  }
-  if (target.subscription !== undefined) {
+  if (tier.subscription !== undefined) {
     const poolLimit =
-      state.runtime.limits.concurrency.perSubscription[target.subscription];
+      state.runtime.limits.concurrency.perSubscription[tier.subscription];
     if (poolLimit !== undefined) {
       const onPool = [...state.running.values()].filter(
-        (r) => r.agent && r.subscription === target.subscription,
+        (r) => r.agent && r.subscription === tier.subscription,
       ).length;
       if (onPool >= poolLimit) return false;
     }
   }
-  const modelLimit = state.runtime.limits.concurrency.perModel[target.model.id];
+  const modelLimit = state.runtime.limits.concurrency.perModel[tier.model.id];
   if (modelLimit !== undefined) {
     const onModel = [...state.running.values()].filter(
-      (r) => r.agent && r.model === target.model.id,
+      (r) => r.agent && r.model === tier.model.id,
     ).length;
     if (onModel >= modelLimit) return false;
   }
   return true;
+}
+
+/**
+ * The target's tiers in configured order, first one admitted by its caps.
+ * A capped pool falls back to the next tier in the chain instead of waiting;
+ * every tier capped still waits. The chosen index rides the action so the
+ * step runs on the same tier admission judged.
+ */
+function admitTarget(
+  state: DispatchState,
+  slug: string,
+  target: ReturnType<typeof stepTarget>,
+): number | undefined {
+  if (target.unavailable !== undefined) {
+    noteInfra(state, slug, target.unavailable);
+    return undefined;
+  }
+  for (let index = 0; index < target.tiers.length; index += 1) {
+    if (tierAdmits(state, target.tiers[index]!)) return index;
+  }
+  return undefined;
 }
 
 /** A started task turn is admitted only below all three concurrency limits. */
@@ -146,8 +162,8 @@ function admitStep(
   if (!holdAllows(state, action.slug, hold)) return;
   if (!turnAllows(state, turnsUsed)) return;
   if (agentCount(state) >= state.runtime.limits.concurrency.overall) return;
-  // The target is already on the working tier: admission counts the pool and
-  // model the turn will actually draw on, whichever harness that is.
+  // Admission counts the pool and model each tier would draw on and starts
+  // the first one below its caps, whichever harness that is.
   const target = stepTarget(
     state.runtime,
     task,
@@ -156,10 +172,12 @@ function admitStep(
     state.iteration,
     records,
   );
-  if (!targetAdmits(state, action.slug, target)) return;
-  startAction(state, action, taskState, task, true, {
-    subscription: target.subscription,
-    model: target.model.id,
+  const tierIndex = admitTarget(state, action.slug, target);
+  if (tierIndex === undefined) return;
+  const chosen = target.tiers[tierIndex]!;
+  startAction(state, { ...action, tierIndex }, taskState, task, true, {
+    subscription: chosen.subscription,
+    model: chosen.model.id,
   });
 }
 
