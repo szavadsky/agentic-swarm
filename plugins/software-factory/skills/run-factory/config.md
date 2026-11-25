@@ -30,6 +30,11 @@ cleanliness:                                   # optional
   maxFileSizeBytes: 1048576
   allowedExtensions: [ts, json, md]
 codingRules: .factory/prompts/coding-rules.md  # optional; replaces the factory default clean-code partial
+parkRoutes:                                    # optional; the PM stall turn's per-cause default
+  gates:                                       # keyed by the kernel's closed cause vocabulary
+    action: amend                              # amend | cancel | replace | split | leave
+    reason: fix the named gate on the kept branch
+    exception: the gate is already red on base or the repo config
 ```
 
 - Gate `env` values are worktree-relative directories; the kernel creates them
@@ -46,6 +51,10 @@ codingRules: .factory/prompts/coding-rules.md  # optional; replaces the factory 
   none.
 - The tracked layer names no worktree root: checkouts and sessions belong to
   the run layer.
+- `parkRoutes` is advice, not a rule: the kernel carries no per-cause default,
+  the PM's stall brief renders the repo's route for the park's cause, and a
+  cause with no entry is the architect's (`leave`). The PM may choose any
+  decision the park's records and branch support.
 - `artifacts` selects the store by backend name, not by path:
 
   ```yaml

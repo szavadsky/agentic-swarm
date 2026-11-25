@@ -43,6 +43,11 @@ export interface FlowRepoOptions {
     timeoutSec?: number;
   }[];
   setup?: string[];
+  /** Per-cause park defaults the PM's stall brief reads. */
+  parkRoutes?: Record<
+    string,
+    { action: string; reason: string; exception: string }
+  >;
   /** Raw `.factory/process.yaml` override. */
   process?: Record<string, unknown>;
   limits?: Record<string, unknown>;
@@ -154,6 +159,7 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
         ...(g.timeoutSec !== undefined ? { timeoutSec: g.timeoutSec } : {}),
       })),
       ...(opts.identity ? { identity: opts.identity } : {}),
+      ...(opts.parkRoutes ? { parkRoutes: opts.parkRoutes } : {}),
     }),
   );
   // The package default flow includes QA; a test that narrows its aliases

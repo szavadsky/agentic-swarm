@@ -127,6 +127,8 @@ export type {
   GoalRoots,
   HarnessConfig,
   KernelRuntime,
+  ParkRouteConfig,
+  ParkRoutes,
   ProcessConfig,
   RepoConfig,
   RunConfig,

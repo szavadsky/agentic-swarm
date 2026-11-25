@@ -78,13 +78,21 @@ const optionalOutcomeSlugSchema = z.preprocess(
  * revision of its file), cancel spends it, replace and split continue the kept
  * branch under new slugs, leave defers to the architect.
  */
+export const stallDecisionSchema = z.enum([
+  "amend",
+  "cancel",
+  "replace",
+  "split",
+  "leave",
+]);
+export type StallDecision = z.infer<typeof stallDecisionSchema>;
+
 export const stallRouteEntrySchema = z.object({
   slug: outcomeSlugSchema,
-  action: z.enum(["amend", "cancel", "replace", "split", "leave"]),
+  action: stallDecisionSchema,
   reason: z.string().min(1),
 });
 export type StallRouteEntry = z.infer<typeof stallRouteEntrySchema>;
-export type StallDecision = StallRouteEntry["action"];
 
 /** One plan item's check result: what the checker inspected and what it showed. */
 export const planCheckEvidenceSchema = z.object({

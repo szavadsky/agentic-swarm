@@ -20,6 +20,8 @@ import type {
 } from "./flow.js";
 import type { TaskTypeDefinition } from "./tasks.js";
 import type { ArtifactStore } from "./records.js";
+import type { StallDecision } from "./outcome.js";
+import type { CauseKind } from "./state.js";
 
 /** A repo-declared regex over a gate log for a tool that emits no report. */
 export interface GateRegex {
@@ -104,6 +106,17 @@ export interface ArtifactLocation {
   remote?: string;
 }
 
+/** One cause's default park route: the action this repo's history points to and
+ * the evidence that overrides it. */
+export interface ParkRouteConfig {
+  action: StallDecision;
+  reason: string;
+  exception: string;
+}
+
+/** The routes a repo declares, keyed by the closed cause vocabulary. */
+export type ParkRoutes = Partial<Record<CauseKind, ParkRouteConfig>>;
+
 export interface RepoConfig {
   baseBranch: string;
   /** Goal directories live at <repo>/<artifactRoot>/<goal> unless a backend names another root. */
@@ -117,6 +130,12 @@ export interface RepoConfig {
   requireGates?: boolean;
   /** Repo-relative rule file replacing the factory default coding rules; absent uses the factory default. */
   codingRules?: string;
+  /**
+   * Per-cause default for the PM's park decision: what this repo's history says
+   * a cause usually deserves, and the evidence that overrides it. A cause the
+   * repo names no route for is the architect's (`leave`).
+   */
+  parkRoutes?: ParkRoutes;
   cleanliness?: {
     maxFileSizeBytes?: number;
     allowedExtensions?: string[];

@@ -264,7 +264,7 @@ function slugFactLines(
     `  branch: ${taskBranchName(runtime, slug)}`,
     `  turns: ${parked?.turns ?? 0} spent`,
     `  amends: ${used} of ${bound} this iteration${used >= bound ? " (amend refused; replace, split, cancel or leave)" : ""}`,
-    `  default: ${formatParkDefault(cause)}`,
+    `  default: ${formatParkDefault(cause, runtime.configs.repo.parkRoutes)}`,
     `  done-when: ${doneWhen(facts.bySlug.get(slug)?.body ?? "") || "(none)"}`,
   ];
 }

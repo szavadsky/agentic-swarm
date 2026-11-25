@@ -3,6 +3,8 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { stallDecisionSchema } from "../types/outcome.js";
+import { causeKindSchema } from "../types/state.js";
 
 export const packageRoot = fileURLToPath(new URL("../../..", import.meta.url));
 
@@ -72,6 +74,15 @@ const gateSchema = z
   })
   .strict();
 
+/** One cause's default park route, as the PM's stall brief renders it. */
+const parkRouteSchema = z
+  .object({
+    action: stallDecisionSchema,
+    reason: z.string().min(1),
+    exception: z.string().min(1),
+  })
+  .strict();
+
 /** `.factory/repo.yaml` — the tracked layer: branches, paths, gates. */
 export const repoConfigSchema = z
   .object({
@@ -99,6 +110,11 @@ export const repoConfigSchema = z
     /** A launch that resolves no gate stops before dispatch unless this is false. */
     requireGates: z.boolean().default(true),
     codingRules: codingRulesPathSchema.optional(),
+    /**
+     * Per-cause defaults for the PM's park decision, keyed by the closed cause
+     * vocabulary; a cause the repo names no route for is the architect's.
+     */
+    parkRoutes: z.partialRecord(causeKindSchema, parkRouteSchema).optional(),
     cleanliness: z
       .object({
         maxFileSizeBytes: z.number().int().positive().optional(),

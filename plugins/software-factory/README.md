@@ -122,7 +122,17 @@ cleanliness:                                    # optional; default rules active
   allowedExtensions: [ts, json, md]             # default: extensions present in base tree
   allowedFiles: [data/benchmark.csv]            # optional; explicit files exempt from the heuristic
 codingRules: .factory/prompts/coding-rules.md   # optional; replaces the factory default clean-code partial
+parkRoutes:                                     # optional; the PM stall turn's per-cause default
+  gates:                                        # keyed by the kernel's closed cause vocabulary
+    action: amend                               # amend | cancel | replace | split | leave
+    reason: fix the named gate on the kept branch
+    exception: the gate is already red on base or the repo config
 ```
+
+`parkRoutes` holds this repo's per-cause defaults for the PM's park decision;
+the stall brief renders the route for the park's cause, and a cause with no
+entry is the architect's (`leave`). These are advice, not rules: the PM chooses
+from the park's records and branch.
 
 Cleanliness checks run by default without repo config to detect large files, disallowed/new extensions, and temp/weights/huge outputs. A cleanliness hit sends the author one revision follow-up turn with three exits: clean up the files, add them to `.gitignore`, or list them under `cleanliness.allowedFiles` in `.factory/repo.yaml`. The follow-up is never repeated; an author who keeps a file explains it, and the reviewer evaluates the reason. Tightened thresholds may be configured under `cleanliness` in `.factory/repo.yaml`.
 

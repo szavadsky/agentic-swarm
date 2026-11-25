@@ -606,7 +606,7 @@ goal: false
 - \`cancel\` — nothing about the park is worth another attempt.
 - \`replace\` — write one task file with a new slug, \`base:\` naming the parked slug, the same done-when, and the turn's \`source\`; it may set \`turnMinutes\` and \`repairTurns\` for its own turns.
 - \`split\` — write one task file per separable outcome, each with a new slug, \`base:\` naming the parked slug, its own done-when, and the turn's \`source\`.
-- \`leave\` — the park needs the architect. \`review rejected:\` and a design blocker default to leave: a rejected premise or an approach that cannot work is a direction decision, not a retry. A deterministic red whose gate is already red on base or in the repo config is also the architect's.
+- \`leave\` — the park needs the architect. A rejected premise or an approach that cannot work is usually direction, not a retry; the entry's \`default\` line is this repo's route for the cause, and its evidence overrides it.
 - \`amends: <used> of <limit>\` — \`limits.parkAmends\` (default 1) bounds how many times one slug may be amended in an iteration. At the limit an \`amend\` is refused: choose \`replace\`, \`split\`, \`cancel\` or \`leave\`.
 
 ## Stall
@@ -2556,7 +2556,7 @@ goal: false
 - \`cancel\` — nothing about the park is worth another attempt.
 - \`replace\` — write one task file with a new slug, \`base:\` naming the parked slug, the same done-when, and the turn's \`source\`; it may set \`turnMinutes\` and \`repairTurns\` for its own turns.
 - \`split\` — write one task file per separable outcome, each with a new slug, \`base:\` naming the parked slug, its own done-when, and the turn's \`source\`.
-- \`leave\` — the park needs the architect. \`review rejected:\` and a design blocker default to leave: a rejected premise or an approach that cannot work is a direction decision, not a retry. A deterministic red whose gate is already red on base or in the repo config is also the architect's.
+- \`leave\` — the park needs the architect. A rejected premise or an approach that cannot work is usually direction, not a retry; the entry's \`default\` line is this repo's route for the cause, and its evidence overrides it.
 - \`amends: <used> of <limit>\` — \`limits.parkAmends\` (default 1) bounds how many times one slug may be amended in an iteration. At the limit an \`amend\` is refused: choose \`replace\`, \`split\`, \`cancel\` or \`leave\`.
 
 ## Stall
@@ -3160,7 +3160,7 @@ goal: false
 - \`cancel\` — nothing about the park is worth another attempt.
 - \`replace\` — write one task file with a new slug, \`base:\` naming the parked slug, the same done-when, and the turn's \`source\`; it may set \`turnMinutes\` and \`repairTurns\` for its own turns.
 - \`split\` — write one task file per separable outcome, each with a new slug, \`base:\` naming the parked slug, its own done-when, and the turn's \`source\`.
-- \`leave\` — the park needs the architect. \`review rejected:\` and a design blocker default to leave: a rejected premise or an approach that cannot work is a direction decision, not a retry. A deterministic red whose gate is already red on base or in the repo config is also the architect's.
+- \`leave\` — the park needs the architect. A rejected premise or an approach that cannot work is usually direction, not a retry; the entry's \`default\` line is this repo's route for the cause, and its evidence overrides it.
 - \`amends: <used> of <limit>\` — \`limits.parkAmends\` (default 1) bounds how many times one slug may be amended in an iteration. At the limit an \`amend\` is refused: choose \`replace\`, \`split\`, \`cancel\` or \`leave\`.
 
 ## Stall
@@ -3764,7 +3764,7 @@ goal: false
 - \`cancel\` — nothing about the park is worth another attempt.
 - \`replace\` — write one task file with a new slug, \`base:\` naming the parked slug, the same done-when, and the turn's \`source\`; it may set \`turnMinutes\` and \`repairTurns\` for its own turns.
 - \`split\` — write one task file per separable outcome, each with a new slug, \`base:\` naming the parked slug, its own done-when, and the turn's \`source\`.
-- \`leave\` — the park needs the architect. \`review rejected:\` and a design blocker default to leave: a rejected premise or an approach that cannot work is a direction decision, not a retry. A deterministic red whose gate is already red on base or in the repo config is also the architect's.
+- \`leave\` — the park needs the architect. A rejected premise or an approach that cannot work is usually direction, not a retry; the entry's \`default\` line is this repo's route for the cause, and its evidence overrides it.
 - \`amends: <used> of <limit>\` — \`limits.parkAmends\` (default 1) bounds how many times one slug may be amended in an iteration. At the limit an \`amend\` is refused: choose \`replace\`, \`split\`, \`cancel\` or \`leave\`.
 
 ## Stall
