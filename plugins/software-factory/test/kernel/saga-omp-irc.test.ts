@@ -83,6 +83,12 @@ function recordOf(req: Parameters<FakeTurnHandler>[0]): string {
   return fakeTurnIdentity(req).record;
 }
 
+/** The saga pass a subarchitect turn runs, from its rendered turn block. */
+function passOf(req: Parameters<FakeTurnHandler>[0]): string {
+  const match = /- pass: `([^`]+)`/.exec(req.prompt);
+  return match?.[1] ?? "";
+}
+
 /** The outcome path a steered consult names. */
 function steeredOutcome(prompt: string): string {
   const match = /- outcome path: `([^`]+)`/.exec(prompt);
@@ -138,6 +144,7 @@ interface SagaIrcCtx {
   alphaPlan: string;
   betaPlan: string;
   childFile: string;
+  alphaChildFile: string;
   harness: FakeHarness;
   live: SagaIrcState;
 }
@@ -166,7 +173,7 @@ function scriptIrcPlans(ctx: SagaIrcCtx): void {
       fs.mkdirSync(path.dirname(ctx.alphaPlan), { recursive: true });
       fs.writeFileSync(ctx.alphaPlan, ALPHA_PLAN, "utf8");
       turnedCtx.writeOutcome(
-        outcome({ summary: "epic alpha planned", decision: "done" }),
+        outcome({ summary: "epic alpha planned", decision: "continue" }),
       );
       return fakeTurnResult(req);
     },
@@ -226,13 +233,41 @@ function scriptIrcTasks(ctx: SagaIrcCtx): void {
   }
 }
 
-/** Iteration 2's architect hosts beta as a live child and writes alpha's plan. */
+/** Iteration 2's bottom-up reports: both open epics report before the top turn. */
+function scriptIrcReportsI2(ctx: SagaIrcCtx): void {
+  for (const epic of ["alpha", "beta"] as const) {
+    ctx.harness.script(
+      (req, turnedCtx) => {
+        expect(passOf(req)).toBe("report");
+        turnedCtx.writeOutcome(
+          outcome({
+            summary: `${epic} reports one open gap`,
+            decision: "continue",
+          }),
+        );
+        return fakeTurnResult(req);
+      },
+      {
+        when: (req) =>
+          recordOf(req).includes("-i2-subarchitect-") &&
+          req.prompt.includes(`- epic: \`${epic}\``),
+      },
+    );
+  }
+}
+
+/**
+ * Iteration 2's architect hosts both open epics as live children. The top
+ * names only beta: on a steer harness the choice cannot stop alpha's child.
+ */
 function scriptIrcArchitectI2(ctx: SagaIrcCtx): void {
   ctx.harness.script(
     (req, turnedCtx) => {
       expect(req.prompt).toContain("## Subarchitects in this session");
+      expect(req.prompt).toContain("- epic `alpha`");
       expect(req.prompt).toContain("- epic `beta`");
       expect(req.prompt).toContain("write agent://");
+      expect(req.prompt).toContain("cannot hold one of them back");
       expect(req.onLive).toBeDefined();
       if (Array.isArray((req.opaque as any)?.agents)) {
         expect((req.opaque as any).agents[0].name).toBe("subarchitect");
@@ -243,7 +278,11 @@ function scriptIrcArchitectI2(ctx: SagaIrcCtx): void {
       fs.appendFileSync(ctx.alphaPlan, "\nforeign main write\n", "utf8");
       ctx.live.childLive = true;
       turnedCtx.writeOutcome(
-        outcome({ summary: "direction holds", decision: "continue" }),
+        outcome({
+          summary: "direction holds",
+          decision: "continue",
+          epicConsults: ["beta"],
+        }),
       );
       return fakeTurnResult(req);
     },
@@ -251,15 +290,18 @@ function scriptIrcArchitectI2(ctx: SagaIrcCtx): void {
   );
 }
 
-/** The steer is the consult: the child edits its plan and writes its outcome. */
+/** The steer is the consult: each child edits its plan and writes its outcome. */
 function scriptIrcChildSteer(ctx: SagaIrcCtx): void {
-  ctx.live.childSteer = (_id, message) => {
+  ctx.live.childSteer = (id, message) => {
+    const epic = id === "epic-alpha" ? "alpha" : "beta";
+    const plan = epic === "alpha" ? ctx.alphaPlan : ctx.betaPlan;
+    const text = epic === "alpha" ? ALPHA_PLAN : BETA_PLAN;
     const outcomePath = steeredOutcome(message);
     fs.writeFileSync(
-      ctx.betaPlan,
-      `${BETA_PLAN.replace(
-        "- `beta.build` — create beta.txt.\n  - done: beta.txt exists.\n",
-        "- `beta.build` — merged.\n",
+      plan,
+      `${text.replace(
+        `- \`${epic}.build\` — create ${epic}.txt.\n  - done: ${epic}.txt exists.\n`,
+        `- \`${epic}.build\` — merged.\n`,
       )}\n## Milestone 2\n- child review.\n`,
       "utf8",
     );
@@ -268,7 +310,7 @@ function scriptIrcChildSteer(ctx: SagaIrcCtx): void {
       outcomePath,
       JSON.stringify({
         status: "done",
-        summary: "epic beta reviewed live",
+        summary: `epic ${epic} reviewed live`,
         concerns: [],
         forward: [],
         decision: "continue",
@@ -289,77 +331,89 @@ function scriptIrcPmI2(ctx: SagaIrcCtx): void {
   );
 }
 
-/** The child's consult ran over IRC, not as a written-report turn. */
+/** Both children's consults ran over IRC, not as written direction turns. */
 function expectIrcSteered(ctx: SagaIrcCtx): void {
-  expect(ctx.live.steers.map((steer) => steer.id)).toEqual(["epic-beta"]);
-  expect(
-    ctx.harness.calls.some((call) =>
-      recordOf(call).includes("-i2-subarchitect-"),
-    ),
-  ).toBe(false);
-  expect(
-    ctx.harness.calls.some(
-      (call) =>
-        recordOf(call).includes("-i2-planreview-") &&
-        call.prompt.includes("epics/beta.md"),
-    ),
-  ).toBe(true);
-  expect(ctx.harness.compactions.map((ref) => ref.id)).toContain(ctx.childFile);
-  expect(fs.readFileSync(ctx.alphaPlan, "utf8")).not.toContain(
-    "foreign main write",
+  // The top named only beta, but the hosting choice predates its outcome:
+  // every open epic is steered, and the prompt says the field cannot narrow it.
+  expect(ctx.live.steers.map((steer) => steer.id)).toEqual([
+    "epic-alpha",
+    "epic-beta",
+  ]);
+  const reports = ctx.harness.calls.filter(
+    (call) =>
+      recordOf(call).includes("-i2-subarchitect-") &&
+      (call.prompt.includes("- epic: `alpha`") ||
+        call.prompt.includes("- epic: `beta`")),
   );
-  expect(fs.readFileSync(ctx.betaPlan, "utf8")).toContain("child review");
+  expect(reports.map((call) => passOf(call))).toEqual(["report", "report"]);
+  for (const epic of ["alpha", "beta"] as const) {
+    expect(
+      ctx.harness.calls.some(
+        (call) =>
+          recordOf(call).includes("-i2-planreview-") &&
+          call.prompt.includes(`epics/${epic}.md`),
+      ),
+    ).toBe(true);
+  }
+  const compactions = ctx.harness.compactions.map((ref) => ref.id);
+  expect(compactions).toContain(ctx.alphaChildFile);
+  expect(compactions).toContain(ctx.childFile);
+  for (const plan of [ctx.alphaPlan, ctx.betaPlan]) {
+    expect(fs.readFileSync(plan, "utf8")).not.toContain("foreign main write");
+    expect(fs.readFileSync(plan, "utf8")).toContain("child review");
+  }
 }
 
-/** The beta consult record carries the live child's outcome and session. */
+/** Each epic's consult records carry the report, then the live child. */
 async function expectIrcConsultAndState(ctx: SagaIrcCtx): Promise<void> {
   const store = createFolderStore(ctx.goal.goalDir, undefined, {});
   const records = await store.listRecords();
-  const betaConsult = records.find(
-    (record) =>
-      record.iteration === 2 &&
-      record.step === "subarchitect" &&
-      record.architect === "beta",
-  );
-  expect(betaConsult?.outcome?.summary).toBe("epic beta reviewed live");
-  expect(betaConsult?.session?.id).toBe(ctx.childFile);
-  expect(betaConsult?.session?.compacted).toBe(true);
-  expect(
-    records.some(
+  for (const [epic, session] of [
+    ["alpha", ctx.alphaChildFile],
+    ["beta", ctx.childFile],
+  ] as const) {
+    const consults = records.filter(
       (record) =>
         record.iteration === 2 &&
         record.step === "subarchitect" &&
-        record.architect === "alpha",
-    ),
-  ).toBe(false);
-  expect(
-    fs.readFileSync(
-      path.join(ctx.goal.goalDir, "iterations/2/epics/beta/summary.md"),
-      "utf8",
-    ),
-  ).toContain("epic beta reviewed live");
+        record.architect === epic,
+    );
+    // One written report before the top turn, one steered child after it.
+    expect(consults.map((record) => record.outcome?.summary)).toEqual([
+      `${epic} reports one open gap`,
+      `epic ${epic} reviewed live`,
+    ]);
+    expect(consults[1]?.session?.id).toBe(session);
+    expect(consults[1]?.session?.compacted).toBe(true);
+    expect(
+      fs.readFileSync(
+        path.join(ctx.goal.goalDir, `iterations/2/epics/${epic}/summary.md`),
+        "utf8",
+      ),
+    ).toContain(`epic ${epic} reviewed live`);
+  }
   const state = await stateOf(ctx.goal.goalDir);
   expect(state.tasks["alpha.build"]?.status).toBe("merged");
   expect(state.tasks["beta.build"]?.status).toBe("merged");
 }
 
 /** The live child registry: first poll before admission, then steerable. */
-function ircLiveAgents(state: SagaIrcState, childFile: string): LiveAgents {
+function ircLiveAgents(
+  state: SagaIrcState,
+  childFiles: { alpha: string; beta: string },
+): LiveAgents {
   return {
-    // The first poll answers before the child is admitted, so the monitor
+    // The first poll answers before the children are admitted, so the monitor
     // exercises the retry the probe saw ("Subagent not running").
     list: async () => {
       state.polls += 1;
-      return state.childLive && state.polls > 1
-        ? [
-            {
-              id: "epic-beta",
-              agent: "subarchitect",
-              status: "running",
-              sessionFile: childFile,
-            },
-          ]
-        : [];
+      if (!state.childLive || state.polls <= 1) return [];
+      return (["alpha", "beta"] as const).map((epic) => ({
+        id: `epic-${epic}`,
+        agent: "subarchitect",
+        status: "running",
+        sessionFile: childFiles[epic],
+      }));
     },
     steer: async (id, message) => {
       if (!state.childLive) throw new Error(`Subagent not running: ${id}`);
@@ -370,17 +424,25 @@ function ircLiveAgents(state: SagaIrcState, childFile: string): LiveAgents {
 }
 
 function registerSubarchitectDeliveryStrategyPart2(): void {
-  it("steers an epic's consult into the architect's live session", async () => {
+  it("steers every open epic into the live session before the top's choice", async () => {
     const goal = makeGoal({ processYaml: PROCESS });
     try {
       const childFile = path.join(goal.goalDir, "sessions", "epic-beta.jsonl");
+      const alphaChildFile = path.join(
+        goal.goalDir,
+        "sessions",
+        "epic-alpha.jsonl",
+      );
       const live: SagaIrcState = {
         childLive: false,
         polls: 0,
         childSteer: undefined,
         steers: [],
       };
-      const agents = ircLiveAgents(live, childFile);
+      const agents = ircLiveAgents(live, {
+        alpha: alphaChildFile,
+        beta: childFile,
+      });
       const harness = new FakeHarness({
         id: "fake",
         caps: { subagents: "steer" },
@@ -392,6 +454,7 @@ function registerSubarchitectDeliveryStrategyPart2(): void {
         alphaPlan: path.join(goal.goalDir, "epics/alpha.md"),
         betaPlan: path.join(goal.goalDir, "epics/beta.md"),
         childFile,
+        alphaChildFile,
         harness,
         live,
       };
@@ -399,6 +462,7 @@ function registerSubarchitectDeliveryStrategyPart2(): void {
       scriptIrcPlans(ctx);
       scriptIrcPmI1(ctx);
       scriptIrcTasks(ctx);
+      scriptIrcReportsI2(ctx);
       scriptIrcArchitectI2(ctx);
       scriptIrcChildSteer(ctx);
       scriptIrcPmI2(ctx);

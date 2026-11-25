@@ -1,8 +1,9 @@
 /**
- * The boundary's first half: task/state init, the plan checker, the digest,
- * steer partitioning and the scripted pack. The architect turn lives in
- * `boundary-architect.ts`; each phase either mutates the shared context or
- * returns the iteration's result.
+ * The boundary's first half: task/state init, the digest, steer partitioning
+ * and the scripted pack. The plan-checker pass lives in `boundary-checker.ts`,
+ * the architect turn in `boundary-architect.ts`, and the saga passes in
+ * `boundary-saga.ts`; each phase either mutates the shared context or returns
+ * the iteration's result.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -20,7 +21,7 @@ import {
 import { contextCodeMap } from "./ingestion.js";
 import { runSpikeSteer } from "./boundary-spike.js";
 import type { BoundaryOptions } from "./boundary-state.js";
-import { boundaryResult, type ConsultContext } from "./boundary-state.js";
+import type { ConsultContext } from "./boundary-state.js";
 import { makeCause } from "./cause.js";
 import {
   type ContextPackInput,
@@ -55,12 +56,7 @@ import {
   wasteSpikeProposals,
 } from "./metrics/recurring.js";
 import { PACK_PREP_STEP, runPackPreparer } from "./pack-prep.js";
-import {
-  consultGate,
-  latestPlanCheck,
-  PLAN_CHECK_STEP,
-  runPlanCheckRound,
-} from "./plan-check.js";
+import { latestPlanCheck } from "./plan-check.js";
 import { goalPlan } from "./plan-file.js";
 import { latestPlanReview } from "./plan-review.js";
 import { planBulletEditFindings, runSteerPm } from "./pm.js";
@@ -99,46 +95,6 @@ export async function prepareBoundary(
     forArchitect: [],
     pmAnswers: [],
   };
-}
-
-/** The plan checker runs before the architect; a follow-up skips the consult. */
-export async function runChecker(
-  context: ConsultContext,
-): Promise<ReturnType<typeof boundaryResult> | undefined> {
-  const { runtime } = context;
-  const gate = consultGate({
-    plan: await runtime.store.plans.exists(),
-    steerWaiting: context.steers.length > 0,
-    records: context.records,
-    bound: runtime.limits.planCheckRounds,
-  });
-  if (gate !== "check") return undefined;
-  // `planCheckRounds` bounds the rounds one consult owns, wherever they ran.
-  const round =
-    context.records.filter(
-      (record) =>
-        record.iteration === context.iteration &&
-        record.actor === "agent" &&
-        record.step === PLAN_CHECK_STEP &&
-        record.endedAt,
-    ).length + 1;
-  const checked = await runBoundaryTurn(
-    runtime,
-    { iteration: context.iteration, step: PLAN_CHECK_STEP },
-    () =>
-      runPlanCheckRound(runtime, {
-        iteration: context.iteration,
-        round,
-        state: context.state,
-      }),
-  );
-  if (checked.status === "architect") {
-    return boundaryResult(context, "continue", {
-      cause: `PM ladder routed to the architect: ${checked.findings.join("; ")}`,
-    });
-  }
-  if (checked.continued.length > 0) return boundaryResult(context, "continue");
-  return undefined;
 }
 
 /** After a checker pass the consult reads the records it wrote. */
@@ -443,8 +399,16 @@ async function planReviewWithKernel(
   };
 }
 
-/** Renders the pack: one script render, briefed where the preparer decided. */
-export async function writePack(context: ConsultContext): Promise<void> {
+/**
+ * Renders the pack: one script render, briefed where the preparer decided. A
+ * refresh after the bottom-up report pass skips the preparer: its one turn
+ * already ran on the pre-report pack, and the reports must reach the top
+ * architect before its turn, not spend a second prep turn.
+ */
+export async function writePack(
+  context: ConsultContext,
+  opts: { prepare?: boolean } = {},
+): Promise<void> {
   if (context.opts.frontPack) return;
   const { runtime } = context;
   const input = await packInput(context);
@@ -458,7 +422,7 @@ export async function writePack(context: ConsultContext): Promise<void> {
   // the sections it judges better as a pointer and one line. The script
   // renders the single index either way; the preparer never authors it.
   const preparer =
-    context.iteration > 1
+    opts.prepare !== false && context.iteration > 1
       ? await runBoundaryTurn(
           runtime,
           { iteration: context.iteration, step: PACK_PREP_STEP },
@@ -469,7 +433,14 @@ export async function writePack(context: ConsultContext): Promise<void> {
             }),
         )
       : undefined;
-  const briefs = preparer && "briefs" in preparer ? preparer.briefs : undefined;
+  const briefs =
+    opts.prepare === false
+      ? context.packBriefs
+      : preparer && "briefs" in preparer
+        ? preparer.briefs
+        : undefined;
+  if (opts.prepare !== false && preparer && "briefs" in preparer)
+    context.packBriefs = preparer.briefs;
   await runtime.store.writeFile(
     context.packRel!,
     renderContextPack({ ...input, ...(briefs ? { briefs } : {}) }),

@@ -97,6 +97,12 @@ function iterationOf(req: Parameters<FakeTurnHandler>[0]): string {
   return fakeTurnIdentity(req).record;
 }
 
+/** The saga pass a subarchitect turn runs, from its rendered turn block. */
+function passOf(req: Parameters<FakeTurnHandler>[0]): string {
+  const match = /- pass: `([^`]+)`/.exec(req.prompt);
+  return match?.[1] ?? "";
+}
+
 /** The pack a turn was pointed at, from its rendered turn block. */
 function packPathOf(req: Parameters<FakeTurnHandler>[0]): string {
   const match = /- context pack: `([^`]+)`/.exec(req.prompt);
@@ -218,8 +224,11 @@ function scriptChainArchitectI2(ctx: SagaChainCtx): void {
       const pack = readPack(req);
       expect(pack).not.toContain(ALPHA_RISK);
       expect(pack).not.toContain(BETA_RISK);
-      expect(pack).toContain("- `alpha`: open");
-      expect(pack).toContain("- `beta`: open");
+      // The bottom-up reports ran before this turn: both epics are done and
+      // alpha's brief already reached the top pack.
+      expect(pack).toContain(ALPHA_BRIEF);
+      expect(pack).toContain("- `alpha`: done");
+      expect(pack).toContain("- `beta`: done");
       fs.appendFileSync(
         ctx.planPath,
         "\n## Milestone 2\n- keep the cross-epic interface stable.\n",
@@ -238,6 +247,7 @@ function scriptChainArchitectI2(ctx: SagaChainCtx): void {
 function scriptChainAlphaI2(ctx: SagaChainCtx): void {
   ctx.harness.script(
     (req, turnedCtx) => {
+      expect(passOf(req)).toBe("report");
       const pack = readPack(req);
       expect(pack).toContain(
         "# Context pack — goal demo, epic `alpha`, iteration 2",
@@ -273,6 +283,7 @@ function scriptChainAlphaI2(ctx: SagaChainCtx): void {
 function scriptChainBetaI2(ctx: SagaChainCtx): void {
   ctx.harness.script(
     (req, turnedCtx) => {
+      expect(passOf(req)).toBe("report");
       const pack = readPack(req);
       expect(pack).toContain(BETA_RISK);
       expect(pack).not.toContain(ALPHA_RISK);
@@ -298,6 +309,27 @@ function scriptChainPmI2(ctx: SagaChainCtx): void {
     },
     { when: (req) => iterationOf(req).includes("-i2-pm-") },
   );
+}
+
+/** Iteration 3 is the goal's last: both epics report upward and take no direction. */
+function scriptChainReportsI3(ctx: SagaChainCtx): void {
+  for (const epic of ["alpha", "beta"] as const) {
+    ctx.harness.script(
+      (req, turnedCtx) => {
+        expect(passOf(req)).toBe("report");
+        expect(readPack(req)).toContain(`- \`${epic}\`: done`);
+        turnedCtx.writeOutcome(
+          outcome({ summary: `${epic} final report`, decision: "done" }),
+        );
+        return fakeTurnResult(req);
+      },
+      {
+        when: (req) =>
+          iterationOf(req).includes("-i3-subarchitect-") &&
+          req.prompt.includes(`- epic: \`${epic}\``),
+      },
+    );
+  }
 }
 
 /** Iteration 3: only the brief reaches the top; both epics are done. */
@@ -373,6 +405,7 @@ function registerSagaConcernChainAtDepth2Part1(): void {
       scriptChainAlphaI2(ctx);
       scriptChainBetaI2(ctx);
       scriptChainPmI2(ctx);
+      scriptChainReportsI3(ctx);
       scriptChainArchitectI3(ctx);
 
       await expectLaunch(0, goal.repo, ctx.harness, 3);

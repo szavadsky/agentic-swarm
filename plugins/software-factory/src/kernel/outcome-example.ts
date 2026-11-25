@@ -26,7 +26,7 @@ const BASE_OUTCOME_FIELDS = [
  * the upscope ask.
  */
 const PROMPT_OUTCOME_FIELDS: Record<string, string[]> = {
-  architect: ["planReviewMarks", "intentStatus"],
+  architect: ["planReviewMarks", "intentStatus", "epicConsults"],
   "architect-review-return": ["planReviewMarks"],
   implementer: ["replies"],
   "pack-preparer": ["packBriefs"],
@@ -66,6 +66,7 @@ const SAMPLE_TEXT: Readonly<Record<string, string>> = {
     "the done-when names no command; name `bun test test/prompts.test.ts`",
   "planCheckRoutes[].slug": "alpha",
   "planCheckRoutes[].reason": "the follow-up retries the turn",
+  "epicConsults[]": "alpha",
   "qa.findings[]": "the done-when needs a failing case in test/prompts.test.ts",
 };
 

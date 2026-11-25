@@ -146,11 +146,14 @@ export function openWork(state: State): string[] {
 }
 
 /**
- * Closed plan-check turns since the last architect turn. One consult owns at
- * most `planCheckRounds` of them, so this is the repeat count whether the
- * rounds ran inside dispatch or at the boundary gate.
+ * Closed plan-check turns since the last architect turn, one architect's scope
+ * only: the goal check (no architect) and an epic check count against their own
+ * budget, so a per-epic round never spends the goal's.
  */
-export function planChecksSinceConsult(records: StepRecord[]): StepRecord[] {
+export function planChecksSinceConsult(
+  records: StepRecord[],
+  architect?: string,
+): StepRecord[] {
   const lastArchitect = records
     .filter(
       (record) =>
@@ -165,6 +168,7 @@ export function planChecksSinceConsult(records: StepRecord[]): StepRecord[] {
       (record) =>
         record.actor === "agent" &&
         record.step === PLAN_CHECK_STEP &&
+        record.architect === architect &&
         record.endedAt &&
         (lastArchitect === undefined || record.seq > lastArchitect.seq),
     )
@@ -175,8 +179,9 @@ export function planChecksSinceConsult(records: StepRecord[]): StepRecord[] {
  * Whether a boundary spends a checker round before the architect. The
  * checker runs before every consult with a plan, including when nothing is
  * open: its clean record is the architect's evidence that the plan still
- * holds. `architect`, an exhausted repeat bound and a steer only the
- * architect can answer also skip the check: the consult is their resolver.
+ * holds. The scope's own exhausted repeat bound, its last `architect` verdict
+ * and a steer only the architect can answer also skip the check: the consult
+ * is their resolver.
  */
 export function consultGate(input: {
   /** A plan exists to verify. */
@@ -186,10 +191,12 @@ export function consultGate(input: {
   records: StepRecord[];
   /** `limits.planCheckRounds`: checker turns allowed before one consult. */
   bound: number;
+  /** The scope whose budget this gate spends; absent is the goal check. */
+  architect?: string;
 }): "check" | "consult" {
   if (!input.plan) return "consult";
   if (input.steerWaiting) return "consult";
-  const checks = planChecksSinceConsult(input.records);
+  const checks = planChecksSinceConsult(input.records, input.architect);
   if (checks.length >= input.bound) return "consult";
   if (checks.at(-1)?.outcome?.planCheck?.verdict === "architect")
     return "consult";
@@ -228,9 +235,15 @@ function parkedCauseText(cause: Cause | undefined): string {
  * park (a follow-up) from a review rejection or a deterministic red (the
  * architect), without opening every record first.
  */
-export function planCheckBrief(state: State, tasks: TaskFile[]): string {
-  const lines = [existingTasks(state, tasks)];
-  const parked = tasks
+export function planCheckBrief(
+  state: State,
+  tasks: TaskFile[],
+  epic?: string,
+): string {
+  const scoped =
+    epic === undefined ? tasks : tasks.filter((task) => task.epic === epic);
+  const lines = [existingTasks(state, scoped)];
+  const parked = scoped
     .filter((task) => state.tasks[task.slug]?.status === "parked")
     .sort((a, b) => a.slug.localeCompare(b.slug))
     .map(
@@ -259,7 +272,7 @@ function openConcernLines(records: readonly StepRecord[]): string {
 /** The template variables of one plan-checker turn. */
 function planCheckVars(
   runtime: KernelRuntime,
-  opts: { iteration: number; state: State },
+  opts: { iteration: number; state: State; epic?: string },
   plans: ReturnType<KernelRuntime["store"]["plans"]["existing"]>,
   tasks: Awaited<ReturnType<KernelRuntime["store"]["listTasks"]>>,
   gateRecord: string | undefined,
@@ -271,7 +284,7 @@ function planCheckVars(
     plans: formatPlanList(plans),
     checkout: runtime.paths.goalCheckout,
     tasks_dir: runtime.store.tasks.dir,
-    existing_tasks: planCheckBrief(opts.state, tasks),
+    existing_tasks: planCheckBrief(opts.state, tasks, opts.epic),
     open_concerns: openConcernLines(records),
     gate_record_path: gateRecord ?? "none recorded",
   };
@@ -333,19 +346,31 @@ function planCheckTurnResult(
   };
 }
 
+/** One epic's plan from a plan list; the goal check reads every plan. */
+function scopedPlans(
+  plans: ReturnType<KernelRuntime["store"]["plans"]["existing"]>,
+  epic: string | undefined,
+) {
+  if (epic === undefined) return plans;
+  return plans.filter(
+    (plan) => plan.scope.kind === "epic" && plan.scope.epic === epic,
+  );
+}
+
 /**
  * One plan-checker turn: a task-tier, read-only check of the plan against
- * the repo at a boundary or dispatch exhaustion. Writes outside the outcome
- * are discarded and recorded; a missing verdict, a refusal, or an infra stop
- * reports `architect`, so the checker can only add progress, never block the
- * iteration on its own failure.
+ * the repo at a boundary or dispatch exhaustion. An epic check reads only that
+ * epic's plan and tasks and records the epic as its architect; the goal check
+ * keeps every plan. Writes outside the outcome are discarded and recorded; a
+ * missing verdict, a refusal, or an infra stop reports `architect`, so the
+ * checker can only add progress, never block the iteration on its own failure.
  */
 export async function runPlanCheck(
   runtime: KernelRuntime,
-  opts: { iteration: number; round: number; state: State },
+  opts: { iteration: number; round: number; state: State; epic?: string },
 ): Promise<PlanCheckTurn> {
   const allPlans = runtime.store.plans.registered();
-  const plans = runtime.store.plans.existing();
+  const plans = scopedPlans(runtime.store.plans.existing(), opts.epic);
   const texts = (
     await Promise.all(plans.map((plan) => runtime.store.plans.read(plan.scope)))
   ).filter((text): text is string => text !== null);
@@ -360,6 +385,7 @@ export async function runPlanCheck(
       iteration: opts.iteration,
       step: PLAN_CHECK_STEP,
       round: opts.round,
+      ...(opts.epic ? { architect: opts.epic } : {}),
     },
     vars: planCheckVars(runtime, opts, plans, tasks, gateRecord, records),
     expectation: KERNEL_TURN_STEPS[PLAN_CHECK_STEP],
@@ -399,7 +425,7 @@ export interface PlanCheckRound {
  */
 export async function runPlanCheckRound(
   runtime: KernelRuntime,
-  opts: { iteration: number; round: number; state: State },
+  opts: { iteration: number; round: number; state: State; epic?: string },
 ): Promise<PlanCheckRound> {
   const turn = await runPlanCheck(runtime, opts);
   if (turn.infra || turn.verdict !== "progress" || turn.followUps.length === 0)

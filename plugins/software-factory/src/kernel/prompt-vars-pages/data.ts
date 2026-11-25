@@ -99,6 +99,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       "One epic's architect, below the top architect: the same bounds, turn order, plan format, granularity, debt and stop rules, plus its epic scope and the upward brief. It edits only its own epic plan and reports `done` for the epic, never for the goal.",
     variables: {
       turn: "`first` on this epic's first turn; `relaunch` on the first turn of a relaunch; `boundary` otherwise",
+      pass: "`report` on the bottom-up pass before the top's turn; `direction` on the top-down consult after it",
       iteration: "1-based iteration number of this launch",
       epic: "the epic name from the parent's register, `[a-z0-9-]+`",
       intent_path: "path to the goal's `intent.md`",

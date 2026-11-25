@@ -278,15 +278,20 @@ edit on disk; the default template then carries no role branch.
 `hierarchy.depth: 2` makes the architect register in `plan.md` live: one
 bullet per epic (`- epic \`auth\` | architect \`subarchitect\` | plan
 \`epics/auth.md\` | scope \`src/auth/**\` | opened i7 | active`). The boundary
-runs the main architect, then one subarchitect consult per active
-`subarchitect` row on the architect alias — each with its own epic plan and
-its own resumable, compacted session — then a plan review for every plan
-that changed, then the PM. An epic with a prior plan is steered on a harness
-whose caps advertise `subagents: steer` (omp with the subagent RPC surface):
-the main architect launches it as a named child of its own session, the
-script sends the consult over IRC, and the child's context is compacted
-before the next launch revives it by name. Every other harness, and a new
-epic's first consult, runs the separate written-report turn. A subarchitect
+checks the active epics bottom-to-top and then the goal, runs the bottom-up
+subarchitect report pass, the main architect's turn, then the top-down
+direction pass for the epics it names in `epicConsults` — each consult on
+the architect alias with its own epic plan and its own resumable, compacted
+session — then a plan review for every changed plan, then the PM. A first
+iteration runs only the top-down pass; a done iteration only the bottom-up
+pass. An epic with a prior plan is steered on a harness whose caps advertise
+`subagents: steer` (omp with the subagent RPC surface): the main architect
+launches it as a named child of its own session, the script sends the consult
+over IRC, and the child's context is compacted before the next launch revives
+it by name. A steer harness launches and steers every active epic before the
+top's choice exists, so `epicConsults` names only the written direction
+turns for chosen epics whose child did not deliver. Every other harness, and
+a new epic's first consult, runs the separate written turn. A subarchitect
 whose last decision was `done` and whose epic has no open task is left out
 until a task reopens it. Each subarchitect's outcome paragraph is written to
 `iterations/<n>/epics/<epic>/summary.md`. Depth 1 never parses the register

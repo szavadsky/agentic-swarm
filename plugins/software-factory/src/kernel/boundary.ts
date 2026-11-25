@@ -8,12 +8,12 @@
 export type { BoundaryOptions, BoundaryResult } from "./boundary-state.js";
 
 import { runArchitectureFlow } from "./architect-flow.js";
+import { runChecker } from "./boundary-checker.js";
 import {
   partitionSteers,
   prepareBoundary,
   refreshAfterChecker,
   routeUnroutedSteers,
-  runChecker,
   writeDigest,
   writePack,
 } from "./boundary-stage.js";

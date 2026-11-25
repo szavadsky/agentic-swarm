@@ -27,6 +27,67 @@ export interface ArchitectRegister {
   findings: string[];
 }
 
+/** Which pass shape one iteration runs: the top's first turn, a middle iteration, or the goal's last. */
+export type SagaIterationKind = "first" | "middle" | "done";
+
+/** One iteration's saga pass order, computed from the register before the top turn. */
+export interface SagaPassPlan {
+  kind: SagaIterationKind;
+  /** Epics the checker pass visits bottom-to-top before the goal check. */
+  checkerEpics: EpicRow[];
+  /** Epics the bottom-up report pass consults bottom-to-top. */
+  reportEpics: EpicRow[];
+  /** Whether a top-down direction pass runs after the top turn. */
+  direction: boolean;
+}
+
+/** Active epics owned by a subarchitect, bottom-to-top (epic order). */
+export function subarchitectRows(epics: readonly EpicRow[]): EpicRow[] {
+  return epics
+    .filter(
+      (row) => row.closed === undefined && row.architect === "subarchitect",
+    )
+    .sort((a, b) => a.epic.localeCompare(b.epic));
+}
+
+/**
+ * The passes one iteration runs. The first iteration is top-down only: the top
+ * turn writes the register and the direction pass consults it. A middle
+ * iteration checks and reports bottom-to-top, then lets the top turn choose the
+ * direction subset. Once every active epic is done the iteration is the goal's
+ * last: checkers plus the bottom-up report, with no direction pass.
+ */
+export function sagaPassPlan(input: {
+  /** The goal has attempted a top architect turn: it has left its first iteration. */
+  started: boolean;
+  epics: readonly EpicRow[];
+  epicDone: (epic: string) => boolean;
+}): SagaPassPlan {
+  const epics = subarchitectRows(input.epics);
+  if (!input.started) {
+    return {
+      kind: "first",
+      checkerEpics: [],
+      reportEpics: [],
+      direction: true,
+    };
+  }
+  if (epics.length > 0 && epics.every((row) => input.epicDone(row.epic))) {
+    return {
+      kind: "done",
+      checkerEpics: epics,
+      reportEpics: epics,
+      direction: false,
+    };
+  }
+  return {
+    kind: "middle",
+    checkerEpics: epics,
+    reportEpics: epics.filter((row) => !input.epicDone(row.epic)),
+    direction: true,
+  };
+}
+
 const REGISTER_HEADING = /^##\s+architect register\s*$/i;
 const HEADING = /^(#{1,6})\s/;
 const FENCE = /^\s*(`{3,}|~{3,})/;

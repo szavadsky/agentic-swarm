@@ -151,6 +151,7 @@ function steeredConsult(
   fs.rmSync(outcomePath, { force: true });
   const prompt = runtime.prompts.render(target.prompt, {
     turn: opts.turn,
+    pass: "direction",
     iteration: String(opts.iteration),
     epic,
     intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),

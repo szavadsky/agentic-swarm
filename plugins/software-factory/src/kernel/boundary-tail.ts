@@ -1,27 +1,12 @@
 /**
  * The boundary's second half: the architect's ownership reconcile, steer
- * answers, the task-file guard, the epic consults, the plan review and the PM
- * turn. Each stage either returns the iteration's result or leaves the context
- * ready for the next.
+ * answers, the task-file guard, the plan review and the PM turn. The saga
+ * passes around the top turn live in `boundary-saga.ts`; each stage here either
+ * returns the iteration's result or leaves the context ready for the next.
  */
-import fs from "node:fs";
 import { missingPlanFinding, snapshotPlan } from "./architect-session.js";
-import {
-  type ConsultFailure,
-  type EpicConsult,
-  reconcileForeignPlans,
-  runEpicConsult,
-  writeEpicPack,
-} from "./boundary-consult.js";
-import {
-  epicJobDone,
-  epicPlan,
-  ownedPlanText,
-  parseRegister,
-  rungTrace,
-  snapshotDiff,
-  taskSnapshot,
-} from "./boundary-context.js";
+import { reconcileForeignPlans } from "./boundary-consult.js";
+import { rungTrace, snapshotDiff, taskSnapshot } from "./boundary-context.js";
 import {
   type BoundaryResult,
   boundaryResult,
@@ -208,131 +193,38 @@ async function answerSteers(context: ConsultContext): Promise<void> {
   }
 }
 
-type ConsultStep = { result: BoundaryResult } | { consult: EpicConsult };
-
-/** One epic's pack and consult; its failure belongs to the whole iteration. */
-async function consultEpic(
-  context: ConsultContext,
-  epic: string,
-  records: StepRecord[],
-  planText: string,
-): Promise<ConsultStep> {
-  const { runtime } = context;
-  const prior = records.some(
-    (record) =>
-      record.step === "subarchitect" &&
-      record.architect === epic &&
-      record.endedAt,
-  );
-  const epicTurn = !prior
-    ? "first"
-    : context.opts.relaunch
-      ? "relaunch"
-      : "boundary";
-  const packRel = await writeEpicPack(runtime, {
-    iteration: context.iteration,
-    epic,
-    goalPlanFile: context.plan,
-    records,
-    turn: epicTurn,
-    tasks: context.tasks,
-    state: context.state,
-    planText,
-    ...(context.opts.runConfigPath
-      ? { runConfigPath: context.opts.runConfigPath }
-      : {}),
-  });
-  const consult = await runEpicConsult(runtime, {
-    iteration: context.iteration,
-    epic,
-    packRel,
-    goalPlanFile: context.plan,
-    ...(context.digestPath ? { digestPath: context.digestPath } : {}),
-    records,
-    turn: epicTurn,
-  });
-  if (consult.failure)
-    return { result: consultFailureResult(context, consult.failure) };
-  return { consult: consult.consult! };
-}
-
-function consultFailureResult(
-  context: ConsultContext,
-  failure: ConsultFailure,
-): BoundaryResult {
-  return boundaryResult(context, "blocked", {
-    cause: failure.cause,
-    ...(failure.stop ? { stop: failure.stop } : {}),
-    outcome: context.architect?.outcome,
-  });
-}
-
-/** Depth 2: one subarchitect consult per active epic, then every epic plan must exist. */
-export async function runConsults(
-  context: ConsultContext,
-): Promise<BoundaryResult | undefined> {
-  const { runtime } = context;
-  const depth = runtime.configs.process.hierarchy?.depth ?? 1;
-  const register = parseRegister(
-    context.plan,
-    depth,
-    context.tasks,
-    context.state,
-  );
-  if (register.findings.length > 0) {
-    return boundaryResult(context, "blocked", {
-      cause: `architect register: ${register.findings.join("; ")}`,
-      outcome: context.architect?.outcome,
-    });
-  }
-  const active = register.epics
-    .filter(
-      (row) => row.closed === undefined && row.architect === "subarchitect",
-    )
-    .sort((a, b) => a.epic.localeCompare(b.epic));
-  const records = await runtime.store.listRecords();
-  const planText = await ownedPlanText(runtime);
-  const consults: EpicConsult[] = [];
-  for (const row of active) {
-    // A steered child already ran this epic's consult inside the architect's
-    // session; its record is on disk and its plan edit is the consult's.
-    const delivered = context.steeredDone?.get(row.epic);
-    if (delivered) {
-      consults.push(delivered);
-      continue;
-    }
-    if (epicJobDone(context.state, row.epic)) continue;
-    const step = await consultEpic(context, row.epic, records, planText);
-    if ("result" in step) return step.result;
-    consults.push(step.consult);
-  }
-  const missing = active.find(
-    (row) => !fs.existsSync(epicPlan(runtime.store.goalDir, row.epic).path),
-  );
-  if (missing) {
-    const epic = epicPlan(runtime.store.goalDir, missing.epic);
-    return boundaryResult(context, "blocked", {
-      cause: `epic "${missing.epic}" plan "${epic.rel}" does not exist after its consult; the subarchitect creates it`,
-      outcome: context.architect?.outcome,
-    });
-  }
-  context.consults = consults;
-  return undefined;
-}
-
-/** Every plan that changed this consult gets a second reading, then its owner answers. */
+/**
+ * Every plan that changed this consult gets a second reading, then its owner
+ * answers. Epic plans review first bottom-to-top; the goal plan reviews last,
+ * after the plans it depends on. The two passes can both touch one epic, so a
+ * plan reviews once, with any pass's change counting.
+ */
 export async function reviewChangedPlans(
   context: ConsultContext,
 ): Promise<void> {
-  const changed: Array<{ plan: typeof context.plan; architect?: string }> = [];
-  if (snapshotPlan(context.plan.path) !== context.planBefore)
-    changed.push({ plan: context.plan });
+  const changed = new Map<
+    string,
+    { plan: typeof context.plan; architect?: string }
+  >();
   for (const consult of context.consults ?? []) {
-    if (consult.changed)
-      changed.push({ plan: consult.plan, architect: consult.epic });
+    if (!consult.changed) continue;
+    const prior = changed.get(consult.plan.rel);
+    if (prior) continue;
+    changed.set(consult.plan.rel, {
+      plan: consult.plan,
+      architect: consult.epic,
+    });
   }
+  const epics = [...changed.values()]
+    .filter((entry) => entry.architect !== undefined)
+    .sort((a, b) => a.plan.rel.localeCompare(b.plan.rel));
+  const goal: Array<{ plan: typeof context.plan; architect?: string }> =
+    snapshotPlan(context.plan.path) !== context.planBefore
+      ? [{ plan: context.plan }]
+      : [];
+  const ordered = [...epics, ...goal];
   const policy = context.runtime.configs.process.architecture.architectReturn;
-  for (const entry of changed) {
+  for (const entry of ordered) {
     const review = await runBoundaryTurn(
       context.runtime,
       { iteration: context.iteration, step: PLAN_REVIEW_STEP },

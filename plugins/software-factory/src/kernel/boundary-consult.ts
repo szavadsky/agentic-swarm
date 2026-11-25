@@ -65,6 +65,11 @@ export interface EpicConsultOptions {
   digestPath?: string;
   records: readonly StepRecord[];
   turn: string;
+  /**
+   * `report` is the bottom-up pass: the epic reports upward and leaves its plan
+   * to the top's direction pass. `direction` is the top-down consult.
+   */
+  pass: "report" | "direction";
 }
 
 export interface EpicPackOptions extends Omit<EpicConsultOptions, "packRel"> {
@@ -215,6 +220,7 @@ async function runSubarchitectTurn(
         },
         vars: {
           turn: opts.turn,
+          pass: opts.pass,
           iteration: String(opts.iteration),
           epic: opts.epic,
           intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
@@ -290,7 +296,7 @@ function consultFailure(
       cause: `subarchitect ${opts.epic} produced no decision: ${result.outcome?.summary ?? "no outcome"}`,
     };
   }
-  if (decision === "continue") {
+  if (decision === "continue" && opts.pass === "direction") {
     const finding = missingPlanFinding(
       plan.path,
       decision,

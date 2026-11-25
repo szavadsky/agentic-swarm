@@ -311,7 +311,13 @@ export async function assessTurn(
   if (state.findings.length === 0 && !delivered && !isHalted(state.stop)) {
     state.findings = [missingOutcomeFinding(state.deliverable, afterRepair)];
   }
-  if (!isHalted(state.stop) && state.spec.expectation === "architect") {
+  if (
+    !isHalted(state.stop) &&
+    state.spec.expectation === "architect" &&
+    // The bottom-up report pass asks only for the upward brief: its plan edit
+    // belongs to the top-down direction pass, so `continue` may leave it alone.
+    state.spec.vars.pass !== "report"
+  ) {
     const planFinding = missingPlanFinding(
       state.spec.vars.plan_path,
       delivered?.outcome.decision,

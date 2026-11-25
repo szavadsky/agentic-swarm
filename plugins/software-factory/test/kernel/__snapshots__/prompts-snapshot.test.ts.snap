@@ -31,6 +31,8 @@ Keep one register under \`## Architect register\` in \`plan.md\`, one bullet per
 - \`opened i<N>\` is the iteration the row first appeared. Close a row with \`closed i<N>: <reason>\` only when the epic has no non-terminal task; a closed name is never reopened.
 - \`decision: done\` requires no active epic with a non-terminal task.
 
+Your top-down direction pass follows your turn. Name in \`epicConsults\` the subarchitect-owned epics that need new direction this iteration; only those are consulted, and every other active epic keeps the plan it has. An epic you leave out keeps the brief it reported upward; omit the field to consult every active epic.
+
 ## Steers
 
 Every steer gets one \`steerAnswers: {steer, answer}\` entry, citing the id from the pending steers. Silence is not an answer.
@@ -154,6 +156,8 @@ steerAnswers:
   - steer: s1
     answer: the API stays stable
 decision: continue
+epicConsults:
+  - alpha
 planReviewMarks:
   - finding: 1
     mark: helpful
@@ -178,6 +182,8 @@ steerAnswers:
   - steer: s1
     answer: the API stays stable
 decision: done
+epicConsults:
+  - alpha
 planReviewMarks:
   - finding: 1
     mark: helpful
@@ -377,6 +383,7 @@ decision: done
 ## This turn
 
 - turn: \`boundary\`
+- pass: \`direction\` (\`report\` is the bottom-up report before the top's turn; \`direction\` is the top-down consult after it)
 - iteration: \`3\`
 - epic: \`auth\`
 - intent: \`/goal/intent.md\`
@@ -2148,6 +2155,8 @@ Keep one register under \`## Architect register\` in \`plan.md\`, one bullet per
 - \`opened i<N>\` is the iteration the row first appeared. Close a row with \`closed i<N>: <reason>\` only when the epic has no non-terminal task; a closed name is never reopened.
 - \`decision: done\` requires no active epic with a non-terminal task.
 
+Your top-down direction pass follows your turn. Name in \`epicConsults\` the subarchitect-owned epics that need new direction this iteration; only those are consulted, and every other active epic keeps the plan it has. An epic you leave out keeps the brief it reported upward; omit the field to consult every active epic.
+
 ## Steers
 
 Every steer gets one \`steerAnswers: {steer, answer}\` entry, citing the id from the pending steers. Silence is not an answer.
@@ -2259,6 +2268,8 @@ steerAnswers:
   - steer: s1
     answer: the API stays stable
 decision: continue
+epicConsults:
+  - alpha
 planReviewMarks:
   - finding: 1
     mark: helpful
@@ -2283,6 +2294,8 @@ steerAnswers:
   - steer: s1
     answer: the API stays stable
 decision: done
+epicConsults:
+  - alpha
 planReviewMarks:
   - finding: 1
     mark: helpful
@@ -2470,6 +2483,7 @@ decision: done
 ## This turn
 
 - turn: \`boundary\`
+- pass: \`direction\` (\`report\` is the bottom-up report before the top's turn; \`direction\` is the top-down consult after it)
 - iteration: \`3\`
 - epic: \`auth\`
 - intent: \`/goal/intent.md\`
@@ -2749,6 +2763,8 @@ Keep one register under \`## Architect register\` in \`plan.md\`, one bullet per
 - \`opened i<N>\` is the iteration the row first appeared. Close a row with \`closed i<N>: <reason>\` only when the epic has no non-terminal task; a closed name is never reopened.
 - \`decision: done\` requires no active epic with a non-terminal task.
 
+Your top-down direction pass follows your turn. Name in \`epicConsults\` the subarchitect-owned epics that need new direction this iteration; only those are consulted, and every other active epic keeps the plan it has. An epic you leave out keeps the brief it reported upward; omit the field to consult every active epic.
+
 ## Steers
 
 Every steer gets one \`steerAnswers: {steer, answer}\` entry, citing the id from the pending steers. Silence is not an answer.
@@ -2860,6 +2876,8 @@ steerAnswers:
   - steer: s1
     answer: the API stays stable
 decision: continue
+epicConsults:
+  - alpha
 planReviewMarks:
   - finding: 1
     mark: helpful
@@ -2884,6 +2902,8 @@ steerAnswers:
   - steer: s1
     answer: the API stays stable
 decision: done
+epicConsults:
+  - alpha
 planReviewMarks:
   - finding: 1
     mark: helpful
@@ -3071,6 +3091,7 @@ decision: done
 ## This turn
 
 - turn: \`boundary\`
+- pass: \`direction\` (\`report\` is the bottom-up report before the top's turn; \`direction\` is the top-down consult after it)
 - iteration: \`3\`
 - epic: \`auth\`
 - intent: \`/goal/intent.md\`
@@ -3350,6 +3371,8 @@ Keep one register under \`## Architect register\` in \`plan.md\`, one bullet per
 - \`opened i<N>\` is the iteration the row first appeared. Close a row with \`closed i<N>: <reason>\` only when the epic has no non-terminal task; a closed name is never reopened.
 - \`decision: done\` requires no active epic with a non-terminal task.
 
+Your top-down direction pass follows your turn. Name in \`epicConsults\` the subarchitect-owned epics that need new direction this iteration; only those are consulted, and every other active epic keeps the plan it has. An epic you leave out keeps the brief it reported upward; omit the field to consult every active epic.
+
 ## Steers
 
 Every steer gets one \`steerAnswers: {steer, answer}\` entry, citing the id from the pending steers. Silence is not an answer.
@@ -3461,6 +3484,8 @@ steerAnswers:
   - steer: s1
     answer: the API stays stable
 decision: continue
+epicConsults:
+  - alpha
 planReviewMarks:
   - finding: 1
     mark: helpful
@@ -3485,6 +3510,8 @@ steerAnswers:
   - steer: s1
     answer: the API stays stable
 decision: done
+epicConsults:
+  - alpha
 planReviewMarks:
   - finding: 1
     mark: helpful
@@ -3672,6 +3699,7 @@ decision: done
 ## This turn
 
 - turn: \`boundary\`
+- pass: \`direction\` (\`report\` is the bottom-up report before the top's turn; \`direction\` is the top-down consult after it)
 - iteration: \`3\`
 - epic: \`auth\`
 - intent: \`/goal/intent.md\`

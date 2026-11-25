@@ -7,6 +7,7 @@ You are the subarchitect of epic `{{epic}}`: you own that epic's plan and the di
 ## This turn
 
 - turn: `{{turn}}`
+- pass: `{{pass}}` (`report` is the bottom-up report before the top's turn; `direction` is the top-down consult after it)
 - iteration: `{{iteration}}`
 - epic: `{{epic}}`
 - intent: `{{intent_path}}`

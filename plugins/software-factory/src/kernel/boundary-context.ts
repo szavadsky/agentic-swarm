@@ -22,7 +22,12 @@ import { next } from "./next.js";
 import { type PlanFile, resolvePlan } from "./plan-file.js";
 import { type PlanSnapshot, type PmRung, restorePlans } from "./pm.js";
 import { scriptMeta } from "./record.js";
-import { type EpicRow, parseArchitectRegister } from "./register.js";
+import {
+  type EpicRow,
+  parseArchitectRegister,
+  sagaPassPlan,
+  type SagaPassPlan,
+} from "./register.js";
 import { spikeFinding } from "./spike-report.js";
 import type {
   ArtifactStore,
@@ -326,6 +331,30 @@ export function parseRegister(
     depth,
     tasks: rows,
     exists: () => true,
+  });
+}
+
+/**
+ * The pass order this iteration runs, read before the top turn from the
+ * register the previous top turn wrote. A goal with no plan yet or at depth 1
+ * has no epic passes; the top turn and its direction pass still run.
+ */
+export function boundaryPassPlan(input: {
+  plan: PlanFile;
+  depth: 1 | 2;
+  tasks: readonly TaskFile[];
+  state: State;
+  records: readonly StepRecord[];
+}): SagaPassPlan {
+  const started = input.records.some((record) => record.step === "architect");
+  const epics =
+    input.depth === 2 && fs.existsSync(input.plan.path)
+      ? parseRegister(input.plan, input.depth, input.tasks, input.state).epics
+      : [];
+  return sagaPassPlan({
+    started,
+    epics,
+    epicDone: (epic) => epicJobDone(input.state, epic),
   });
 }
 

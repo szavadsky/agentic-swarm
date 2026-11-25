@@ -6,7 +6,7 @@
  */
 import { runAgentTurn } from "./agent.js";
 import { runArchitectStage } from "./boundary-architect.js";
-import { infraCause } from "./boundary-context.js";
+import { boundaryPassPlan, infraCause } from "./boundary-context.js";
 import {
   boundaryResult,
   type BoundaryResult,
@@ -14,10 +14,10 @@ import {
 } from "./boundary-state.js";
 import {
   reviewChangedPlans,
-  runConsults,
   runPmStage,
   settleArchitectStage,
 } from "./boundary-tail.js";
+import { runConsults, runReportPass } from "./boundary-saga.js";
 import { resolveTurn } from "./flow-context.js";
 import { repairFields } from "./flow-context-targets.js";
 import { runBoundaryTurn } from "./integration-lock.js";
@@ -143,14 +143,29 @@ async function runCustomStep(
   return undefined;
 }
 
-/** Runs the architect's post-turn ownership checks and epic consults. */
+/**
+ * Runs the architect's post-turn ownership checks and the pass around it: the
+ * bottom-up report pass, the top turn, then the top-down direction pass for the
+ * subset the top chose. The goal's last iteration reports upward and takes no
+ * direction; the first has nothing to report and runs top-down only.
+ */
 async function runArchitectAndTail(
   context: ConsultContext,
 ): Promise<BoundaryResult | undefined> {
+  const passPlan = boundaryPassPlan({
+    plan: context.plan,
+    depth: context.runtime.configs.process.hierarchy?.depth ?? 1,
+    tasks: context.tasks,
+    state: context.state,
+    records: context.records,
+  });
+  const reported = await runReportPass(context);
+  if (reported) return reported;
   const architect = await runArchitectStage(context);
   if (architect) return architect;
   const settled = await settleArchitectStage(context);
   if (settled) return settled;
+  if (!passPlan.direction) return undefined;
   return runConsults(context);
 }
 

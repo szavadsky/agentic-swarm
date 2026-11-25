@@ -1,12 +1,14 @@
 /**
  * The boundary's public result/option types and the mutable consult context
- * its phases share. The phases live under `boundary-stage.ts` (checker,
- * digest, pack), `boundary-architect.ts` (the architect turn) and
- * `boundary-tail.ts` (steers, consults, review, PM); `boundary.ts` composes them.
+ * its phases share. The phases live under `boundary-stage.ts` (digest, pack),
+ * `boundary-checker.ts` (the plan checker), `boundary-architect.ts` (the
+ * architect turn), `boundary-saga.ts` (the epic passes) and `boundary-tail.ts`
+ * (steers, review, PM); `boundary.ts` composes them.
  */
 
 import type { EpicConsult } from "./boundary-consult.js";
 import type { IntentChange } from "./context-pack.js";
+import type { PackBrief } from "./context-pack/sections.js";
 import type { Steer } from "./mailbox.js";
 import type { PlanFile } from "./plan-file.js";
 import type { PlanSnapshot } from "./pm.js";
@@ -71,6 +73,8 @@ export interface ConsultContext {
   intentChanges?: IntentChange[];
   digestPath?: string;
   packRel?: string;
+  /** The preparer's briefs, reused when the report pass re-renders the pack. */
+  packBriefs?: PackBrief[];
   /** Files and plans the architect turn must not have touched or written. */
   tasksBefore?: Map<string, string>;
   plansBefore?: PlanSnapshot[];

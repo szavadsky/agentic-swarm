@@ -67,6 +67,7 @@ const ROLES: Record<string, Record<string, string>> = {
     turn: "boundary",
     iteration: "3",
     epic: "auth",
+    pass: "direction",
     intent_path: "/goal/intent.md",
     plan_path: "/goal/epics/auth.md",
     parent_plan_path: "/goal/plan.md",

@@ -255,6 +255,16 @@ export const outcomeSchema = z.object({
     .enum(["continue", "done", "blocked"])
     .optional()
     .describe("architect step only"),
+  // The top's per-iteration direction choice at hierarchy depth 2: only these
+  // epics get the written top-down pass after its turn. A steer harness hosts
+  // live children for every active epic before the choice; absent keeps every
+  // active epic.
+  epicConsults: z
+    .array(z.string().min(1))
+    .optional()
+    .describe(
+      "architect step only: the epics that get this iteration's written top-down direction pass; a steer harness hosts every active epic live before the choice; absent consults every active epic",
+    ),
   // `yes` parks with cause upscope and (standalone only) rewrites the front
   // class to bigger; `no` and absent keep the normal verdict path.
   upscope: z

@@ -15,7 +15,15 @@ Keep one register under `## Architect register` in `plan.md`, one bullet per epi
 - A subarchitect owns `epics/<epic>.md`: never edit it. Its status summary for an iteration is `iterations/<n>/epics/<epic>/summary.md`; read the previous one and its concerns, not every task in the epic.
 - `opened i<N>` is the iteration the row first appeared. Close a row with `closed i<N>: <reason>` only when the epic has no non-terminal task; a closed name is never reopened.
 - `decision: done` requires no active epic with a non-terminal task.
-  {%- endif %}
+
+{%- if subarchitect_block == "" %}
+
+Your top-down direction pass follows your turn. Name in `epicConsults` the subarchitect-owned epics that need new direction this iteration; only those are consulted, and every other active epic keeps the plan it has. An epic you leave out keeps the brief it reported upward; omit the field to consult every active epic.
+{%- else %}
+
+This turn hosts live subarchitects. The script launches and steers every active epic with a prior turn before your turn ends, so `epicConsults` cannot hold one of them back; each live child's plan edit is this iteration's consult. Name the epics that still need direction: a chosen epic whose child did not deliver gets the written direction pass, and an unnamed epic keeps the plan its child returned.
+{%- endif %}
+{%- endif %}
 
 ## Steers
 
