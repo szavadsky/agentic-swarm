@@ -131,7 +131,7 @@ launch. `--run-config <file>` and `FACTORY_RUN_CONFIG` override the default
 ```yaml
 extends: base.yaml                                   # paths resolve from this file
 aliases:
-  architect: { harness: omp, model: anthropic/claude-opus-5-5, effort: high }
+  architect: { harness: omp, model: anthropic/claude-opus-5-5, effort: xhigh, fallbacks: [{ model: anthropic/claude-sonnet-5-5, effort: high }] }
   implementer: { harness: opencode, model: opencode/deepseek-v4.1-flash-free }
   implementer-b: { harness: omp, model: opencode-go/deepseek-v4.1-flash, effort: max }
 harnesses:
@@ -158,7 +158,9 @@ envAllowlist: [ANTHROPIC_API_KEY]
   key. A missing base and a cycle are refused by name.
 - An alias may carry `effort`, `fallbacks` (infrastructure-only: quota,
   crash), `rotate` (per-iteration primary), `escalateTo` (PM ladder) and
-  `timeouts`; a fallback may name another alias.
+  `timeouts`; a fallback may name another alias. A role's fallback chain walks
+  the subscriptions whose roles fit it; architecture is the exception and falls
+  back only within its own subscription.
 - `harnesses.<id>` binds an `acpx:` adapter or an executable and passes
   `options` untouched. Every harness entry must declare `compaction`; its
   `enabled` flag turns session compaction on or off for that harness; disabling

@@ -8,12 +8,16 @@
 # is tracked and shared by every run, so a checkout location there would be a
 # second, silently overridden source.
 aliases:
+  # Architecture is Claude's role in the subscription table, and it is the one
+  # alias whose fallback stays inside that subscription: Opus at xhigh, Sonnet
+  # at high, never a task-level leg.
   architect:
     harness: omp
     model: anthropic/claude-opus-5-5
-    effort: high
+    effort: xhigh
     fallbacks:
-      - model: opencode-go/deepseek-v4.1-flash
+      - model: anthropic/claude-sonnet-5-5
+        effort: high
   pm:
     harness: opencode
     model: opencode-go/deepseek-v4.1-flash
