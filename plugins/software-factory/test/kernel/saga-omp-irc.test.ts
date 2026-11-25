@@ -267,7 +267,7 @@ function scriptIrcArchitectI2(ctx: SagaIrcCtx): void {
       expect(req.prompt).toContain("- epic `alpha`");
       expect(req.prompt).toContain("- epic `beta`");
       expect(req.prompt).toContain("write agent://");
-      expect(req.prompt).toContain("cannot hold one of them back");
+      expect(req.prompt).toContain("cannot hold one back");
       expect(req.onLive).toBeDefined();
       if (Array.isArray((req.opaque as any)?.agents)) {
         expect((req.opaque as any).agents[0].name).toBe("subarchitect");

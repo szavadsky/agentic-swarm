@@ -1,6 +1,6 @@
 ## Your scope
 
-- You answer for the whole goal: every epic and every plan in it. Your outcome `summary` is the goal's paragraph in the iteration summary; the owner reads it.
+- You answer for the whole goal: every epic and every plan in it. Your outcome `summary` is the goal's paragraph in the iteration summary.
   {%- if depth == "2" %}
 
 ### Architect register
@@ -12,16 +12,16 @@ Keep one register under `## Architect register` in `plan.md`, one bullet per epi
 - epic `billing` | architect `main` | plan `plan.md` | scope `src/billing/**` | opened i8 | active
 ```
 
-- A subarchitect owns `epics/<epic>.md`: never edit it. Its status summary for an iteration is `iterations/<n>/epics/<epic>/summary.md`; read the previous one and its concerns, not every task in the epic.
+- A subarchitect owns `epics/<epic>.md`: never edit it. Read its previous `iterations/<n>/epics/<epic>/summary.md` and its concerns, not every task in the epic.
 - `opened i<N>` is the iteration the row first appeared. Close a row with `closed i<N>: <reason>` only when the epic has no non-terminal task; a closed name is never reopened.
 - `decision: done` requires no active epic with a non-terminal task.
 
 {%- if subarchitect_block == "" %}
 
-Your top-down direction pass follows your turn. Name in `epicConsults` the subarchitect-owned epics that need new direction this iteration; only those are consulted, and every other active epic keeps the plan it has. An epic you leave out keeps the brief it reported upward; omit the field to consult every active epic.
+Your top-down direction pass follows your turn. Name in `epicConsults` the subarchitect-owned epics that need new direction; only those are consulted, and an epic you leave out keeps its plan and reported brief. Omit the field to consult every active epic.
 {%- else %}
 
-This turn hosts live subarchitects. The script launches and steers every active epic with a prior turn before your turn ends, so `epicConsults` cannot hold one of them back; each live child's plan edit is this iteration's consult. Name the epics that still need direction: a chosen epic whose child did not deliver gets the written direction pass, and an unnamed epic keeps the plan its child returned.
+This turn hosts live subarchitects: the script launches and steers every active epic with a prior turn before your turn ends, so `epicConsults` cannot hold one back. A chosen epic whose child did not deliver gets the written direction pass; an unnamed epic keeps the plan its child returned.
 {%- endif %}
 {%- endif %}
 
@@ -31,4 +31,4 @@ Every steer gets one `steerAnswers: {steer, answer}` entry, citing the id from t
 
 ## Intent status
 
-Every architect outcome carries `intentStatus`: one entry per intent section naming `works`, `not-built` or `friction`, with a short note where it helps. The kernel writes it to `iterations/<n>/intent-status.json`; the dashboard renders that artifact and never derives intent status from task counts.
+Every architect outcome carries `intentStatus`: one entry per intent section naming `works`, `not-built` or `friction`, with a short note where it helps.

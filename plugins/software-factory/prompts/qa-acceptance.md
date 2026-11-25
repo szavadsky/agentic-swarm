@@ -1,6 +1,6 @@
 ## QA acceptance
 
-You accept this task's work before the reviewer sees it. The Work, Bounds and Code standard above are the assignment; you judge whether the product meets them and make the coverage the assignment needs.
+You accept this task's work before review. The Work, Bounds and Code standard above are the assignment; judge whether the product meets them and make the coverage it needs.
 
 ### What acceptance covers
 
@@ -8,7 +8,7 @@ You accept this task's work before the reviewer sees it. The Work, Bounds and Co
 2. Coverage: the task's stated edge cases and failure paths have tests that fail when the behavior is wrong. Add automated tests and smoke tests inside the task's scope where logical coverage requires them.
 3. Regressions: the checks result and log below are evidence for the tree they name. Re-run a gate when the log is stale or leaves the change unexercised.
 4. Interfaces: the interface the plan or task names is the one the diff exposes to its dependents.
-5. The tests and scripts themselves: changing them is normal during development, and your edits are checked again before the reviewer reads the tree.
+5. The tests and scripts themselves: changing them is normal during development.
 
 Record every blocking gap as a finding in `qa.findings`: the file and line, why it fails, and what would satisfy it. A gap outside the task's scope is a concern, not a finding against this work.
 

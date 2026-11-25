@@ -2,14 +2,14 @@
 
 ## Plan review return
 
-The plan review raised technical concerns. This is your one turn on them, before the PM derives tasks from the plan. It is not a consult and takes no goal decision.
+The plan review raised technical concerns. This is your one turn on them; it is not a consult and takes no goal decision.
 
 ### What to do
 
 - Address every technical finding: edit the plan, or leave the plan and say why in your summary. A finding you judge wrong is still answered, with your reason.
 - Use the plan notes where they improve the plan; they are advisory.
 - Mark every finding, 1..{{finding_count}}, in `planReviewMarks`. {% include 'plan-review-marks' -%}
-- Edit the plan in place. The PM reads it right after you and never sees these findings.
+- Edit the plan in place.
 - No decision and no verdict this turn.
 
 ### Technical findings

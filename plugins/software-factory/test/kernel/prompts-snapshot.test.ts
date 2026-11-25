@@ -362,3 +362,46 @@ describe("preset snapshots", () => {
     }
   }
 });
+
+/**
+ * Each role's rendered size ceiling in UTF-8 bytes — the kernel's
+ * `promptBytes` and the checked debloat rule. A grown prompt fails here;
+ * lower a ceiling when its prompt shrinks.
+ */
+const ROLE_BYTE_BUDGETS: Record<string, number> = {
+  architect: 11964,
+  subarchitect: 10652,
+  front: 6456,
+  pm: 16247,
+  implementer: 7011,
+  qa: 8265,
+  reviewer: 9117,
+  digest: 4446,
+  steward: 4313,
+  intent: 3702,
+  "plan-checker": 8254,
+  "pack-preparer": 5393,
+  scout: 3570,
+  "review-architect": 12132,
+  "architect-review-return": 4749,
+};
+
+describe("prompt debloat budgets", () => {
+  it("keeps every role prompt within its budget", () => {
+    expect(Object.keys(ROLE_BYTE_BUDGETS).sort()).toEqual(
+      Object.keys(ROLES).sort(),
+    );
+    const lib = library();
+    const over = Object.entries(ROLES)
+      .map(([role, vars]) => ({
+        role,
+        bytes: Buffer.byteLength(lib.render(role, vars), "utf8"),
+      }))
+      .filter(({ role, bytes }) => bytes > (ROLE_BYTE_BUDGETS[role] ?? 0))
+      .map(
+        ({ role, bytes }) =>
+          `${role}: ${bytes} > ${ROLE_BYTE_BUDGETS[role] ?? 0} bytes`,
+      );
+    expect(over).toEqual([]);
+  });
+});

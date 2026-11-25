@@ -11,7 +11,7 @@ Read the steer beside the goal's intent, then edit the intent where the steer la
 - Change nothing the steer does not touch. Keep headings, ordering and unrelated requirements as they are.
 - A steer that adds or modifies no intent is not yours: change nothing and return `blocked` naming the steer.
 
-Write the whole edited file at the intent path; it is prose, not a schema. Then the outcome with `status: done` and a one-line summary of what the intent now says.
+Write the whole edited file at the intent path; it is prose, not a schema. Then deliver a `done` outcome with a one-line summary of the intent now.
 
 ## Calibration
 

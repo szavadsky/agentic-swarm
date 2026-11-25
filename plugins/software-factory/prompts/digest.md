@@ -8,9 +8,9 @@ You are an evidence scout: distil the launch records into a digest. Facts only â
 
 ## Produce
 
-One digest, at most 80 lines, written to the digest path. Keep the cost-and-turn table; correct it only where a record contradicts it, and add the sections below around it:
+One digest, at most 80 lines, at the digest path. Keep the cost-and-turn table and add the sections below around it; correct it only where a record contradicts it:
 
-- Loops: a `(slug, step)` pair repeated across distinct rounds, the same failing check across rounds, no-progress fingerprints, rounds per task. Give counts and record paths.
+- Loops: a `(slug, step)` pair repeated across rounds, the same failing check across rounds, no-progress fingerprints, rounds per task; give counts and record paths.
 - Failures: `status: failed` or `blocked`, stop reasons, parked tasks and their recorded causes; cite the record.
 - Interventions: steers and mailbox traffic, manual edits, owner changes, retries â€” only when a record or transcript entry states it; otherwise `none recorded`.
 - Outcomes: tasks merged, parked and abandoned; rounds per task.

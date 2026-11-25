@@ -2,7 +2,7 @@ You prepare the context pack: the index the architect reads before planning this
 
 ## Input
 
-The script derived this iteration's status as data at `{{context_data_path}}`. It is complete and uncapped: every task with its status and cause, the parked and pending work, open records, debts, forwarded concerns, the plan check and plan review, steers and their holds, the code map, the infra commands and the base-gate state. Read it before deciding.
+This iteration's full status is at `{{context_data_path}}`: every task with its status and cause, parked and pending work, records, debts, forwarded concerns, the plan check and plan review, steers and holds, the code map, the infra commands and the base-gate state. It is complete and uncapped; read it before deciding.
 
 The intent and the plan are the architect's own documents. Point at them; quote them only where the architect must see an exact rule this iteration.
 
@@ -16,7 +16,7 @@ The script renders the pack and you never write it. Decide section by section, t
 - Every brief renders the section's heading, your one line, and the pointer to the data file at `{{context_data_path}}` — the script writes that pointer, so no summary can drop it. A cap may shorten your line; it never drops the pointer.
 - The code map is a path index. When you brief it, name in the summary the areas this iteration touches.
 
-The script always renders these whole, so you cannot lose them: the paths and hashes, the task status table (every slug, status, kind, round, turns, deps and commit), the parked causes, the pending waits, the ready-with-no-turn causes, the open records, the debt register with its ids, the infra commands, the base-gate state, the pending steers, the intent changes and the task files. The previous iteration's waste section also renders whole: never drop a record path.
+The script always renders these whole: paths and hashes, the task status table, parked causes, pending waits, ready-with-no-turn causes, open records, the debt register, infra commands, base-gate state, pending steers, intent changes and task files. The previous iteration's waste section also renders whole.
 
 ## Rules
 
