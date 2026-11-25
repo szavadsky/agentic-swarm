@@ -167,9 +167,11 @@ kernel creates them and exports absolute paths, so two worktrees get two
 directories.
 
 A gate's `format` gives its failures identities that survive assertion values
-and timings, so a red inherited from the base is not blamed on the task. Every
-report normalises to one finding model: check, tool, file, line, rule,
-severity, message and fingerprint.
+and timings, so a red inherited from the base is not blamed on the task. A
+report failure is matched against the base by its fingerprint: one the base did
+not record is the task's, even under an already-red gate. A gate that names no
+report finding keeps the output-line signatures. Every report normalises to one
+finding model: check, tool, file, line, rule, severity, message and fingerprint.
 
 - `ctrf: <path>` names a worktree-relative CTRF report, validated by the
   `ctrf` reference implementation. A framework without a native CTRF reporter

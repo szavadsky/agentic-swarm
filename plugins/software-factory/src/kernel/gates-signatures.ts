@@ -21,21 +21,42 @@ import {
   normaliseRoots,
 } from "./gates-normalise.js";
 
-/** A report finding's identity; the log fallback stays on the raw-output reader. */
+/** The failures a report names; a `log` finding is console text, not a report finding. */
+function reportFailures(findings: readonly Finding[]): Finding[] {
+  return findings.filter(
+    (finding) => finding.tool !== "log" && finding.severity === "error",
+  );
+}
+
+/** A report finding's human label; the matching identity is its fingerprint. */
 function findingGateSignatures(
   check: CheckResult,
   findings: readonly Finding[],
 ): Set<string> | undefined {
-  const signatures = new Set<string>();
-  for (const finding of findings) {
-    if (finding.tool === "log" || finding.severity !== "error") continue;
-    const label =
-      finding.rule !== undefined
-        ? [finding.file, finding.rule].filter(Boolean).join(" > ")
-        : [finding.file, finding.message].filter(Boolean).join(" > ");
-    signatures.add(`${check.name} > ${label}`);
-  }
-  return signatures.size > 0 ? signatures : undefined;
+  const failures = reportFailures(findings);
+  if (failures.length === 0) return undefined;
+  return new Set(
+    failures.map((finding) => {
+      const label =
+        finding.rule !== undefined
+          ? [finding.file, finding.rule].filter(Boolean).join(" > ")
+          : [finding.file, finding.message].filter(Boolean).join(" > ");
+      return `${check.name} > ${label}`;
+    }),
+  );
+}
+
+/**
+ * A report's failure fingerprints: the finding model's stable identity, which a
+ * later run matches against the base. The log fallback names no report finding,
+ * so it keeps the raw-output reader's identities instead.
+ */
+function gateFindingFingerprints(check: CheckResult): Set<string> | undefined {
+  const findings = findingDetails(check);
+  if (!findings) return undefined;
+  const failures = reportFailures(findings);
+  if (failures.length === 0) return undefined;
+  return new Set(failures.map((finding) => finding.fingerprint));
 }
 
 /** A red JUnit gate's failure identities; undefined when the report names none. */
@@ -196,13 +217,14 @@ function scanBunTscLines(
 }
 
 /**
- * Failure identities of one gate run: a report's findings when it names one
- * (`test > file > name`, `tool > file > rule`), otherwise tsc diagnostics
- * collapse to `file:line code`, bun failures to `file > test`, bun's file-level
- * load errors to `file > error`, and any other output line outside a reporter
- * block is kept as `line: ...` after its run root is normalised. A red gate is
- * inherited only for the signatures it was red for, so a new failure under the
- * same gate still counts.
+ * Human-readable failure signatures of one gate run: a report's findings when
+ * it names one (`test > file > name`, `tool > file > rule`), otherwise tsc
+ * diagnostics collapse to `file:line code`, bun failures to `file > test`,
+ * bun's file-level load errors to `file > error`, and any other output line
+ * outside a reporter block is kept as `line: ...` after its run root is
+ * normalised. Pre-existing matching prefers the finding model's fingerprint
+ * (`gateFailureIdentities`) and reads these signatures only for a gate that
+ * named no report failure.
  *
  * Legacy records that stored `details.junit` are still read; new records carry
  * `details.findings`, and a report with no failure falls back to the output
@@ -233,6 +255,22 @@ export function gateSignatures(check: CheckResult): Set<string> {
  */
 export function gateSignatureKey(gate: string, signature: string): string {
   return `${gate}\u0000${signature}`;
+}
+
+/**
+ * The identities a run is matched on against the base: a report's finding
+ * fingerprints when it names failures (the finding model's stable identity),
+ * otherwise the output-line signatures keyed by their gate. Empty when the gate
+ * named no failure at all.
+ */
+export function gateFailureIdentities(check: CheckResult): Set<string> {
+  const fingerprints = gateFindingFingerprints(check);
+  if (fingerprints) return fingerprints;
+  return new Set(
+    [...gateSignatures(check)].map((signature) =>
+      gateSignatureKey(check.name, signature),
+    ),
+  );
 }
 
 /** A red gate that printed nothing: the only identity it offers is its name. */

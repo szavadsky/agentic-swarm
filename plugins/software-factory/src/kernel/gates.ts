@@ -17,6 +17,7 @@ import {
   readGateReports,
 } from "./gates-normalise.js";
 import {
+  gateFailureIdentities,
   gateSignatureKey,
   gateSignatures,
   UNIDENTIFIED_GATE_FAILURE,
@@ -49,6 +50,7 @@ export {
   isStaleGateCheck,
 } from "./gates-normalise.js";
 export {
+  gateFailureIdentities,
   gateSignatureKey,
   gateSignatures,
   UNIDENTIFIED_GATE_FAILURE,
@@ -402,26 +404,26 @@ export function formatFailingChecks(
 
 /**
  * Failing gates that are the task's own: an inherited failure is dropped only
- * when every signature it fails for was already red on base (KERNEL0 §6); one
- * new signature under the same gate name still forces a fix round and blocks
- * the merge.
+ * when every identity it fails for is already in the base's pre-existing set
+ * (KERNEL0 §6); one new identity under the same gate name still forces a fix
+ * round and blocks the merge. The identity is the finding model's fingerprint
+ * when the run named report failures, else the output-line signature.
  */
 export function newGateFailures(
   checks: readonly CheckResult[],
   preexisting: ReadonlySet<string>,
 ): CheckResult[] {
   return blockingFailures(checks).filter((check) => {
-    const signatures = gateSignatures(check);
+    const identities = gateFailureIdentities(check);
     // A silent red gate offers only its name, exactly as before signature
     // matching: there is no evidence that this run's failure is a new one.
-    if (signatures.size === 0) {
+    if (identities.size === 0) {
       return !preexisting.has(
         gateSignatureKey(check.name, UNIDENTIFIED_GATE_FAILURE),
       );
     }
-    for (const signature of signatures) {
-      if (!preexisting.has(gateSignatureKey(check.name, signature)))
-        return true;
+    for (const identity of identities) {
+      if (!preexisting.has(identity)) return true;
     }
     return false;
   });

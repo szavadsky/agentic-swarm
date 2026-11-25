@@ -11,8 +11,8 @@ import {
   capGateOutput,
   formatFailingChecks,
   type GateInfra,
+  gateFailureIdentities,
   gateSignatureKey,
-  gateSignatures,
   gateTimeoutSec,
   isAdvisoryCheck,
   isInfraCheck,
@@ -115,12 +115,13 @@ export function formatBaseGates(base: BaseGateState | undefined): string {
 }
 
 /**
- * Inherited red, one key per failing signature. A gate that was red on baseline
- * suppresses only the failures it already showed; a silent red gate offers only
- * its name. Infra checks were never a red verdict and contribute nothing, and
- * stale checks (recorded before run roots were stored) contribute nothing:
- * their basename-collapsed paths must never match a current run's below-root
- * tail.
+ * Inherited red, one key per failing identity. The identity is the finding
+ * model's fingerprint when the base check named report failures, else the
+ * output-line signature. A gate that was red on baseline suppresses only the
+ * failures it already showed; a silent red gate offers only its name. Infra
+ * checks were never a red verdict and contribute nothing, and stale checks
+ * (recorded before run roots were stored) contribute nothing: their
+ * basename-collapsed paths must never match a current run's below-root tail.
  */
 export function preexistingRed(base: BaseGateState | undefined): Set<string> {
   const inherited = new Set<string>();
@@ -132,14 +133,12 @@ export function preexistingRed(base: BaseGateState | undefined): Set<string> {
       isStaleGateCheck(check)
     )
       continue;
-    const signatures = gateSignatures(check);
-    if (signatures.size === 0) {
+    const identities = gateFailureIdentities(check);
+    if (identities.size === 0) {
       inherited.add(gateSignatureKey(check.name, UNIDENTIFIED_GATE_FAILURE));
       continue;
     }
-    for (const signature of signatures) {
-      inherited.add(gateSignatureKey(check.name, signature));
-    }
+    for (const identity of identities) inherited.add(identity);
   }
   return inherited;
 }
