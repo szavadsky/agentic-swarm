@@ -1,0 +1,28 @@
+# Self-improvement process overlay: copy this file to the target repo's
+# `.factory/process.yaml`. Everything it does not name is the package default;
+# its one difference is the previous-run assessment, a separate configured
+# agent that runs before the architect once a launch has a run to read.
+#
+# The `assess` alias belongs to the run layer, which stays on the operator's
+# machine. Bind it there: the shipped example binds it to a cheap model, never
+# to the architect's.
+architecture:
+  flows:
+    # The first consult of a goal has no previous launch; nothing to assess.
+    - when: [initial]
+      steps:
+        - id: architect
+        - id: planreview
+        - id: pm
+    # Every later consult reads the run that ended first. The step is a plain
+    # agent turn on `assess-run`, so a committed run's friction and waste reach
+    # the architect through the assessment it leaves beside the context pack.
+    - when: [concerns, iteration-done, steer, relaunch]
+      steps:
+        - id: assess
+          prompt: assess-run
+          alias: assess
+          deliverable: "previous-run assessment"
+        - id: architect
+        - id: planreview
+        - id: pm

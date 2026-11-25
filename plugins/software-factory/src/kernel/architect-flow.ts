@@ -49,9 +49,13 @@ function architectureReason(context: ConsultContext): ArchitectReason {
   if (context.forArchitect.length > 0) return "steer";
   if (context.opts.relaunch) return "relaunch";
   if (previousConcerns(context)) return "concerns";
+  // Iteration 0 is the pre-flight baseline, not a previous iteration: a goal's
+  // first consult is initial even though that record already exists.
   const priorIteration = context.records.some(
     (record) =>
-      record.iteration < context.iteration && record.endedAt !== undefined,
+      record.iteration > 0 &&
+      record.iteration < context.iteration &&
+      record.endedAt !== undefined,
   );
   return priorIteration ? "iteration-done" : "initial";
 }
