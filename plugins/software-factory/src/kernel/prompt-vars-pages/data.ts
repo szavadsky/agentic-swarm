@@ -1,7 +1,43 @@
 /** The prompt-variable descriptors, one entry per template variable. */
 
-import type { PromptVariablesPage } from "./types.js";
+import { DECIDER_PAGE } from "./data-decider.js";
+import { INFRA_PROMPT_VARIABLES } from "./data-infra.js";
+import { PLAN_CHECKER_PAGE } from "./data-plan-checker.js";
 import { REPAIR_PROMPT_VARIABLES } from "./data-repair.js";
+import type { PromptVariablesPage } from "./types.js";
+
+/** The acceptance variables both QA prompts read: the code QA and browser QA. */
+const QA_VARIABLES: Record<string, string> = {
+  task_path: "path to the task file whose done-when this turn accepts",
+  worktree: "path to the task worktree holding the gated tree",
+  base_hash:
+    "commit hash before this task's first turn; the range spans every round",
+  head_hash: "commit hash after the latest turn",
+  round: "1-based call of this QA step's own change-request budget",
+  max_rounds:
+    "this QA step's total acceptance calls: its change-request bound plus the last call",
+  last_call:
+    "`true` when this QA turn is the step's last call: `qa.verdict changes` is refused",
+  base_gates:
+    "the base tree's recorded gate result: commit plus `green`, the pre-existing failing checks, or `not recorded`",
+  checks_result:
+    "latest checks record's failing-check text, or `pass` when green; `no checks run` without a checks record",
+  checks_tree: "the checked tree's hash; `unknown` without a checks record",
+  checks_log:
+    "the checks record's directory; `unknown` without a checks record",
+  gate_commands:
+    "configured compile/lint/test commands as `- id: command` lines; `none` when empty",
+  prior_findings:
+    "the last acceptance's findings (QA or review), numbered; empty before the first acceptance",
+  fix_dispositions:
+    "the current fix round's summary plus one numbered reply per prior finding; round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; renderer default",
+  outcome_path:
+    "path where the outcome file must be written when the harness asks for a file",
+  validate_cmd:
+    "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
+  outcome_schema:
+    "outcome examples narrowed to the base fields and `qa`; supplied by the turn",
+};
 
 /** One page per prompt template; the renderer emits them in this order. */
 export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
@@ -25,33 +61,36 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
       task_types:
-        "configured task types with their flow, kind and schema; renderer default",
+        "configured task types with their flow, kind, output schema, nogit/promote flags and use-when; renderer default",
       tiers: "run-config alias names; renderer default",
       depth:
         "`2` renders the architect register; `1` (renderer default) leaves it out",
       subarchitect_block:
         "the rendered launch block naming each live subarchitect with its agent id and spawn name; empty when the harness cannot steer or no epic has a plan to review",
+      saga_reminder:
+        "the rendered consider-a-saga block, naming the goal's task count and the configured `sagaTaskCount`; empty at or below the threshold and when none is configured",
     },
   },
   {
     file: "architect-subarchitects.md",
     prompt: "architect-subarchitects",
-    intro:
-      "The steered hierarchy's launch block: rendered once per architect turn and passed to `architect.md` as `subarchitect_block`, so the top architect launches or revives one named subarchitect per active epic in its own session.",
+    intro: "Architect's steered-subarchitect block; omp text conditional.",
     variables: {
       subarchitects:
         "one row per epic: the epic id, the agent id `subarchitect`, and the exact spawn name the script steers",
+      subagents: "the architect harness's `Caps.subagents`; `none` by default",
     },
   },
   {
     file: "subarchitect-agent.md",
     prompt: "subarchitect-agent",
-    intro:
-      "The transient omp agent definition the steered hierarchy installs with `-e`. Its body is the standing role; the per-iteration consult arrives over IRC, so it reads no turn variables.",
+    intro: "Transient subarchitect definition; omp tool text is conditional.",
     note: "The file opens with the agent's YAML frontmatter, so `biome.json` excludes it from markdown formatting: the formatter would re-indent the definition.",
-    variables: {},
+    variables: {
+      subagents: "`Caps.subagents`; `steer` renders the omp tool text",
+    },
   },
   {
     file: "subarchitect.md",
@@ -60,6 +99,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       "One epic's architect, below the top architect: the same bounds, turn order, plan format, granularity, debt and stop rules, plus its epic scope and the upward brief. It edits only its own epic plan and reports `done` for the epic, never for the goal.",
     variables: {
       turn: "`first` on this epic's first turn; `relaunch` on the first turn of a relaunch; `boundary` otherwise",
+      pass: "`report` on the bottom-up pass before the top's turn; `direction` on the top-down consult after it",
       iteration: "1-based iteration number of this launch",
       epic: "the epic name from the parent's register, `[a-z0-9-]+`",
       intent_path: "path to the goal's `intent.md`",
@@ -76,9 +116,9 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
       task_types:
-        "configured task types with their flow, kind and schema; renderer default",
+        "configured task types with their flow, kind, output schema, nogit/promote flags and use-when; renderer default",
       tiers: "run-config alias names; renderer default",
     },
   },
@@ -103,13 +143,14 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
       task_frontmatter:
         "frontmatter YAML skeleton from the kernel schema; renderer default",
       task_types:
-        "configured task types with their flow, kind and schema; renderer default",
+        "configured task types with their flow, kind, output schema, nogit/promote flags and use-when; renderer default",
       tiers: "run-config alias names; renderer default",
-      class_types: "class-to-task-type mapping, rendered by the front turn",
+      class_types:
+        "the configured development types each front class may write, rendered by the front turn",
       code_map_path:
         "path of the code map a `when: [bigger]` scout step wrote; `none` when no scout ran",
     },
@@ -129,7 +170,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
     },
     note: "The turn's record carries the unified diff of the edit; the next architect pack renders it beside the pending steer.",
   },
@@ -138,9 +179,13 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     prompt: "pm",
     variables: {
       iteration: "1-based iteration number of this launch",
+      epic: "the epic this PM derives for; empty for the top PM",
+      epic_scoped: "`true` for an epic's PM, `false` for the top",
       intent_path: "path to the goal's `intent.md`, for resolving wording only",
       plans:
-        "the active plans, one `- goal: <path>` or ``- epic `<epic>`: <path>`` line each; derive every bullet from the plan that carries it; read-only to the PM",
+        "the plan this PM owns, one `- goal: <path>` for the top PM or ``- epic `<epic>`: <path>`` for that epic's PM; derive every bullet from the plan that carries it; read-only to the PM",
+      plan_diff:
+        "diff of the plan keyed by task slug against the previous derived plan (`none` on the first iteration or when the previous plan is missing)",
       tasks_dir:
         "directory where task files are written, one `<slug>.md` per task",
       existing_tasks:
@@ -151,20 +196,20 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
         "pending steers as `- id (file):` plus indented full text; `none` on a derive, stall or plan-check turn",
       stalls:
         "this iteration's undecided parks as one entry per slug (cause, record paths, kept branch, spent turns, amends used of the limit, the cause's default action, done-when); `none` except on a stall turn",
+      concerns: "open concerns no wave-end turn has marked yet, one per line",
       plan_checks:
         "checker follow-ups as one entry per slug (kind, reason, cause, record paths, kept branch, spent turns, amends used of the limit, the cause's default action, done-when); `none` except on a plan-check turn",
-      holds_dir:
-        "directory for one `<steer-id>.yaml` hold file per structured steer",
+      holds_dir: "directory for one `<id>.yaml` hold per steer or concern",
       outcome_path:
         "path where the outcome file must be written when the harness asks for a file",
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
       task_frontmatter:
         "frontmatter YAML skeleton from the kernel schema; renderer default",
       task_types:
-        "configured task types with their flow, kind and schema; renderer default",
+        "configured task types with their flow, kind, output schema, nogit/promote flags and use-when; renderer default",
       tiers: "run-config alias names; renderer default",
     },
   },
@@ -181,7 +226,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       resume_note:
         "follow-up notice for a relaunched or trivial turn: the task branch and the resume fragment; empty string on a de-novo turn",
       report_path:
-        "repo-relative path a spike commits its finding to (`.factory/spikes/<slug>.md`); empty string on a development task; when set, it also opens the prompt with the commit-first sentence",
+        "repo-relative path a spike commits its finding to (`.factory/spikes/<slug>.md`); empty on a development task and on a `nogit` task, whose product lives outside git; when set, it also opens the prompt with the commit-first sentence",
       env_notes:
         "the task file's environment notes as `- ` bullet lines (infra facts, known flakes, workarounds); empty string when the task has none",
       setup_command:
@@ -197,7 +242,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
     },
   },
   {
@@ -211,38 +256,16 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     prompt: "qa",
     intro:
       "The QA step's acceptance prompt: the implementer's Work, Bounds and Code standard, then the acceptance focus, its own `qa` verdict, and the checks handoff. QA sends actionable findings back to the author or accepts the work; its own test and script edits are gated again before review.",
-    variables: {
-      task_path: "path to the task file whose done-when this turn accepts",
-      worktree: "path to the task worktree holding the gated tree",
-      base_hash:
-        "commit hash before this task's first turn; the range spans every round",
-      head_hash: "commit hash after the latest turn",
-      round: "1-based shared acceptance round",
-      max_rounds:
-        "this QA step's total acceptance calls: its change-request bound plus the last call",
-      last_call:
-        "`true` when this QA turn is the step's last call: `qa.verdict changes` is refused",
-      base_gates:
-        "the base tree's recorded gate result: commit plus `green`, the pre-existing failing checks, or `not recorded`",
-      checks_result:
-        "latest checks record's failing-check text, or `pass` when green; `no checks run` without a checks record",
-      checks_tree: "the checked tree's hash; `unknown` without a checks record",
-      checks_log:
-        "the checks record's directory; `unknown` without a checks record",
-      gate_commands:
-        "configured compile/lint/test commands as `- id: command` lines; `none` when empty",
-      prior_findings:
-        "the last acceptance's findings (QA or review), numbered; empty before the first acceptance",
-      fix_dispositions:
-        "the current fix round's summary plus one numbered reply per prior finding; round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; renderer default",
-      outcome_path:
-        "path where the outcome file must be written when the harness asks for a file",
-      validate_cmd:
-        "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
-      outcome_schema:
-        "outcome YAML skeleton narrowed to `status`, `summary`, `concerns` and `qa`; supplied by the turn",
-    },
+    variables: QA_VARIABLES,
   },
+  {
+    file: "browser-qa.md",
+    prompt: "browser-qa",
+    intro:
+      "The browser-test acceptance prompt: the QA body plus one browser-surface turn before the code QA, with the same `qa` verdict and the same checks handoff.",
+    variables: QA_VARIABLES,
+  },
+  DECIDER_PAGE,
   {
     file: "reviewer.md",
     prompt: "reviewer",
@@ -264,7 +287,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
     },
   },
   {
@@ -293,7 +316,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       base_hash:
         "commit hash before this task's first turn; the range spans every round",
       head_hash: "commit hash after the latest implementer turn",
-      round: "1-based review round",
+      round: "1-based review round of this step's own change-request budget",
       max_rounds:
         "this review step's total review calls: its change-request bound plus the last call",
       base_gates:
@@ -327,7 +350,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       outcome_path: "path for the outcome file the harness asks for",
       validate_cmd:
         "absolute validate command for this launch; renderer default",
-      outcome_schema: "outcome YAML skeleton; renderer default",
+      outcome_schema: "outcome examples; renderer default",
     },
   },
   {
@@ -348,9 +371,9 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton narrowed to `status`, `summary`, `concerns`, `steerAnswers`, `debtClosed` and `planReview`; supplied by the turn",
+        "outcome examples narrowed to `status`, `summary`, `concerns`, `steerAnswers`, `debtClosed` and `planReview`; supplied by the turn",
       task_types:
-        "configured task types with their flow, kind and schema, read by the included plan standard; renderer default",
+        "configured task types with their flow, kind, output schema, nogit/promote flags and use-when, read by the included plan standard; renderer default",
       tiers:
         "run-config alias names, read by the included architect scope; renderer default",
     },
@@ -376,7 +399,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton narrowed to the base fields and `planReviewMarks`; supplied by the turn",
+        "outcome examples narrowed to the base fields and `planReviewMarks`; supplied by the turn",
     },
   },
   {
@@ -395,7 +418,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
     },
     note: "The digest scout appends loops, failures and interventions; it does not restate the script table.",
   },
@@ -409,7 +432,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       conflicts:
         "conflicted files, comma-separated; `none` when the merge needs no resolution",
       gate_log_path:
-        "path to the red merged result's gate log when this branch is a red-after-merge candidate; `none` when the merge needs no gate repair",
+        "path to the gate log of the red this branch must repair (the goal head's run when the head is red, else the branch's red merged result); `none` when the merge needs no gate repair",
       gate_commands:
         "configured gate commands as `- id: command` lines; `none` when empty",
       base_gates:
@@ -419,41 +442,18 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
     },
     note: "The flow's `resolve` step renders this same prompt with the same variables: the wave-end steward and the in-flow resolve turn own one conflict ask.",
   },
-  {
-    file: "plan-checker.md",
-    prompt: "plan-checker",
-    variables: {
-      iteration: "1-based iteration number of this launch",
-      intent_path: "path to the goal's `intent.md`, for resolving wording only",
-      plans:
-        "the active plans, one `- goal: <path>` or ``- epic `<epic>`: <path>`` line each; verify every plan against the repo; read-only to the checker",
-      checkout: "path to the stable goal checkout (integration worktree)",
-      tasks_dir: "directory holding one `<slug>.md` task file per task",
-      existing_tasks:
-        "existing task files as `- slug | status | hash | deps: a,b` lines (`none` when empty), then parked slugs with their cause",
-      gate_record_path:
-        "`end.yaml` of the newest record that ran gates, to read instead of running them; `none recorded` when no gate has run",
-      outcome_path:
-        "path where the outcome file must be written when the harness asks for a file",
-      validate_cmd:
-        "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
-      outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
-    },
-  },
+  PLAN_CHECKER_PAGE,
   {
     file: "pack-preparer.md",
     prompt: "pack-preparer",
     variables: {
       iteration: "1-based iteration number of this launch",
       context_data_path:
-        "the script's full derived status for this iteration as JSON; the preparer's input",
-      pack_path:
-        "path of the context pack to write; the one artifact the turn authors (the outcome file is the other)",
+        "the script's full derived status for this iteration as JSON; the preparer reads it and returns the sections to brief",
       intent_path: "path to the goal's `intent.md`; a pointer, never pasted",
       plan_path: "path to the current plan; a pointer, never pasted",
       checkout: "path to the stable goal checkout (integration worktree)",
@@ -462,7 +462,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema plus this turn's `packBriefs`; the turn supplies it",
     },
   },
   {
@@ -480,9 +480,10 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; renderer default",
+        "outcome examples from the kernel schema; renderer default",
     },
   },
+  INFRA_PROMPT_VARIABLES,
   ...REPAIR_PROMPT_VARIABLES,
   {
     file: "resume.md",
@@ -490,7 +491,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     variables: {
       branch: "task branch the relaunch continues; empty when none",
       reason:
-        "`relaunch` after an interruption, `trivial` in the front's session",
+        "`relaunch` after an interruption, `fallback` for a tier that continues edited work, `trivial` in the front's session",
       session_cwd:
         "directory the resumed session's tools run in; trivial turns only",
       worktree: "absolute worktree a trivial turn must use; trivial turns only",

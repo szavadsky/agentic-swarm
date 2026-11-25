@@ -17,6 +17,7 @@ import {
   ingestionSchema,
   taskTypeSchema,
 } from "./flow-schema.js";
+import { DEFAULT_PM_FLOW, pmSchema } from "./pm-schema.js";
 
 /** Process layer: package default deep-merged with an optional repo override. */
 export const processConfigSchema = z
@@ -28,6 +29,8 @@ export const processConfigSchema = z
     ingestion: ingestionSchema.default(DEFAULT_INGESTION_STEPS),
     /** The plan review flow that completes before the PM derives tasks. */
     architecture: architectureSchema,
+    /** The PM stage's step list: the derive ladder and any turns around it. */
+    pm: pmSchema.default(DEFAULT_PM_FLOW),
     /** Depth and the epic architect's prompt; depth 1 is one architect. */
     hierarchy: hierarchySchema.default({
       depth: 1,
@@ -40,6 +43,8 @@ export const processConfigSchema = z
     /** Repair template a step renders when it names none. */
     repairPrompt: z.string().min(1).optional(),
     reminders: z.number().int().nonnegative().default(1),
+    /** Task files past which the architect prompt suggests a saga; absent renders no reminder. */
+    sagaTaskCount: z.number().int().positive().optional(),
     /** Wasted turns of one cause across iterations that call for a spike; defaults to 2. */
     wasteSpikeThreshold: z.number().int().positive().optional(),
     calibration: z.string().optional(),
@@ -66,6 +71,7 @@ export const processConfigSchema = z
 export const processOverrideSchema = processConfigSchema.extend({
   boundary: boundaryOverrideSchema.optional(),
   architecture: architectureOverrideSchema.optional(),
+  pm: pmSchema.optional(),
   hierarchy: hierarchyOverrideSchema.optional(),
   ingestion: ingestionSchema.optional(),
 });
@@ -106,25 +112,11 @@ export const fallbackSchema = z.union([
     ),
 ]);
 
-/** One rotation entry: replaces the alias primary on the iterations that select it. */
-export const aliasEntrySchema = z
-  .object({
-    harness: z.string().min(1),
-    model: z.string().min(1),
-    effort: z.string().min(1).optional(),
-  })
-  .strict();
-
 export const aliasSchema = z
   .object({
     harness: z.string().min(1),
     model: z.string().min(1),
     effort: z.string().min(1).optional(),
-    /**
-     * Per-iteration primaries: iteration N resolves `rotate[N % rotate.length]`.
-     * Absent or empty keeps the alias on its own harness and model.
-     */
-    rotate: z.array(aliasEntrySchema).default([]),
     /** Quota pool this alias draws on; absent means throttled only overall. */
     subscription: z.string().min(1).optional(),
     fallbacks: z.array(fallbackSchema).default([]),
@@ -141,9 +133,10 @@ export const aliasSchema = z
   .strict();
 
 /**
- * A harness entry's compaction policy. Disabling it needs a recorded reason:
- * the run config says why a harness's sessions stay uncompacted instead of
- * leaving a YAML comment to explain the absence.
+ * A harness entry's compaction policy. Every entry declares one, so an absent
+ * policy never silently means on. Disabling it needs a recorded reason: the run
+ * config says why a harness's sessions stay uncompacted instead of leaving a
+ * YAML comment to explain the absence.
  */
 export const compactionSchema = z
   .object({
@@ -177,7 +170,8 @@ export const harnessEntrySchema = z
      * Absent resolves through PATH.
      */
     binary: z.string().min(1).optional(),
-    compaction: compactionSchema.optional(),
+    /** Required: an absent policy would otherwise silently mean on. */
+    compaction: compactionSchema,
     /**
      * Adapter-specific keys, opaque to the kernel except pre-flight's shape
      * check of the acpx `args`/`env`; omp merges the rest into its launch
@@ -200,6 +194,14 @@ export const harnessEntrySchema = z
       entry.acpx.compact === true,
     "acpx compaction enabled needs acpx.compact: true",
   );
+
+/** The whole-run process wrapper; `args` precede the command after `--`. */
+export const sandboxSchema = z
+  .object({
+    binary: z.string().min(1),
+    args: z.array(z.string()).default([]),
+  })
+  .strict();
 
 const concurrencySchema = z
   .object({
@@ -233,6 +235,12 @@ export const limitsSchema = z
     iterationUsd: z.number().positive().optional(),
     turnMinutes: z.number().positive().optional(),
     iterationMinutes: z.number().positive().optional(),
+    /**
+     * How long a stable inbox steer waits before it interrupts a running turn,
+     * in seconds; defaults to 60. The inbox is watched every few seconds, so a
+     * steer dropped during a long turn is answered well inside that turn.
+     */
+    steerDebounceSeconds: z.number().positive().optional(),
     minTmpFreeBytes: z.number().int().nonnegative().optional(),
   })
   .strict()
@@ -245,6 +253,8 @@ export const limitsSchema = z
 export const runConfigSchema = z
   .object({
     aliases: z.record(z.string(), aliasSchema).default({}),
+    /** One process-level wrapper for every child this run starts. */
+    sandbox: sandboxSchema.optional(),
     /** Harness id -> adapter binding; a harness id is a config name. */
     harnesses: z.record(z.string(), harnessEntrySchema).default({}),
     /**
@@ -277,15 +287,23 @@ export const runConfigSchema = z
     /**
      * Quota-pool cooldown. A quota stop's stated reset ("Resets in 130h") sets
      * the pool's cooldown, capped by `maxResetMinutes` when set; without a
-     * stated reset the window is `resetMinutes` from the stop.
+     * stated reset the window is the pool's `perSubscription` entry, else
+     * `resetMinutes` from the stop. A latch that expires buys one probe.
      */
     quota: z
       .object({
         resetMinutes: z.number().positive().default(DEFAULT_POOL_RESET_MINUTES),
         maxResetMinutes: z.number().positive().optional(),
+        /** Pool key (subscription, or harness+model) -> its own retry interval. */
+        perSubscription: z
+          .record(z.string(), z.number().positive())
+          .default({}),
       })
       .strict()
-      .default(() => ({ resetMinutes: DEFAULT_POOL_RESET_MINUTES })),
+      .default(() => ({
+        resetMinutes: DEFAULT_POOL_RESET_MINUTES,
+        perSubscription: {},
+      })),
     worktreeRoot: z.string().min(1).optional(),
     /**
      * Enable artifact LSP where the harness supports it. omp runs without

@@ -8,6 +8,7 @@ import { formatFindings } from "../findings.js";
 import type { Finding } from "../findings.js";
 import type { ConfigFiles } from "../types.js";
 import { packageRoot } from "./repo-schema.js";
+import type { LoadConfigOptions } from "./types.js";
 
 export class ConfigError extends Error {
   readonly findings: Finding[];
@@ -23,13 +24,6 @@ export class ConfigError extends Error {
     this.findings = findings;
     this.report = report;
   }
-}
-
-export interface LoadConfigOptions {
-  /** Overrides run-config launch limit (--iterations). */
-  iterations?: number;
-  /** Explicit run-config path; defaults to <repo>/.factory/run.yaml. */
-  runConfigPath?: string;
 }
 
 export function configFilePaths(

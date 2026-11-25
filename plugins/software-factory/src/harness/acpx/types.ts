@@ -64,3 +64,19 @@ export interface AcpxCommandResult {
   aborted: boolean;
   stderr: string;
 }
+
+/** One malformed harness-entry option and the message pre-flight reports for it. */
+export interface AcpxOptionProblem {
+  key: "args" | "env";
+  message: string;
+}
+
+/** The facts one acpx turn's stop is classified from. */
+export interface AcpxTurnClassificationInput {
+  summary: AcpxTurnSummary;
+  code: number | null;
+  signal: string | null;
+  timedOut: boolean;
+  /** Raw stderr; only reached when stdout carried no error frame. */
+  stderr?: string;
+}

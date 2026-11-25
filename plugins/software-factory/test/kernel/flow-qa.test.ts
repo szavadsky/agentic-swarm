@@ -65,7 +65,8 @@ function scriptAcceptFlow(harness: FakeHarness): void {
     (req: TurnRequest, ctx) => {
       expect(req.prompt).toContain("- checks: `pass`");
       expect(req.prompt).toContain("- round: `1` of `3`");
-      expect(req.prompt).toContain("qa: {verdict");
+      expect(req.prompt).toContain("qa:");
+      expect(req.prompt).toContain("verdict: accept");
       ctx.writeOutcome(
         outcome({ summary: "accepted", qa: { verdict: "accept" } }),
       );
@@ -160,7 +161,8 @@ async function expectQaVerdictRepair(
   );
   expect(qaCalls).toHaveLength(2);
   expect(qaCalls[1]!.prompt).toContain("qa verdict is required");
-  expect(qaCalls[1]!.prompt).toContain("qa: {verdict");
+  expect(qaCalls[1]!.prompt).toContain("qa:");
+  expect(qaCalls[1]!.prompt).toContain("verdict: accept");
 
   const records = await runtime.store.listRecords();
   const qa = records.find(
@@ -389,10 +391,14 @@ describe("default development flow", () => {
 });
 
 describe("QA contract breaches", () => {
-  it("parks a QA change on the last acceptance call instead of routing it back", () => {
+  it("parks a QA change once its own change requests are spent", () => {
     const reduction = reduceTask(
       task("a"),
-      [qaRecord(1, 3, "changes", ["task.txt:1 needs work"])],
+      [
+        qaRecord(1, 1, "changes", ["task.txt:1 needs work"]),
+        qaRecord(2, 2, "changes", ["task.txt:1 still needs work"]),
+        qaRecord(3, 3, "changes", ["task.txt:1 needs work"]),
+      ],
       DEFAULT_FLOWS["implement-review"]!,
     );
     expect(reduction.phase).toBe("parked");

@@ -16,7 +16,7 @@ import { createFolderStore } from "../../src/kernel/store.js";
 import { testPriceSource } from "../helpers/price-source.js";
 import { cleanup, expectDispatch, makeGoal, outcome } from "./e2e-helpers.js";
 import { withKernelRoleFallbacks } from "./fake-defaults.js";
-import { drainedAfterAlpha, queueDigestSteer } from "./resume-helpers.js";
+import { drainedAfterAlpha } from "./resume-helpers.js";
 import { formatCause } from "../../src/kernel/cause.js";
 import { causeText } from "./helpers.js";
 
@@ -237,7 +237,6 @@ function registerHoldReadPurePart4(): void {
       writeHold(dir, "s1.yaml", MALFORMED);
 
       const second = new FakeHarness({ id: "fake" });
-      queueDigestSteer(second);
       second.script((req, ctx) => {
         fs.appendFileSync(
           path.join(goalDir, "plan.md"),

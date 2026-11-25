@@ -300,7 +300,8 @@ function registerDeliveryGuardPart1(): void {
         "You are the reviewer. Your turn did not deliver its verdict.",
       );
       expect(repair).toContain("- verdict is required on a completed review");
-      expect(repair).toContain("verdict: approve | changes | reject");
+      expect(repair).toContain("verdict: approve");
+      expect(repair).toContain("verdict: changes");
       expect(result.outcome?.status).toBe("failed");
       expect(result.outcome?.summary).toContain("verdict is required");
     } finally {

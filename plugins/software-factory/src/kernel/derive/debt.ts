@@ -83,13 +83,13 @@ function planOwnedDebtTexts(
 /**
  * Every open debt-kind concern, any calibration, deduplicated by text and
  * carrying the id of the record that first raised it. FYI entries are notes
- * for the architect's register, not blockers: `materialOpenDebts` is the
- * done-detection view.
+ * for the architect's register, not distance: `materialOpenDebts` is the
+ * distance view.
  *
  * `plan` is the register's view: a debt a top-level plan bullet names is
- * owned and leaves the register. Done-detection never passes a plan — owning
- * debt does not remove it, so only `debtClosed` or a `debt closed:` forward
- * line lands a done.
+ * owned and leaves the register. A done never waits on it — owning debt does
+ * not close it, and neither does deciding done; only `debtClosed` or a
+ * `debt closed:` forward line retires it.
  */
 /** Records one concern as an open debt unless its text is already known. */
 function addDebt(
@@ -140,14 +140,9 @@ export function openDebts(
     .sort((a, b) => a.seq - b.seq);
 }
 
-/** The open debts that block done: architect/owner calibration. */
+/** The open debts the summary's distance reports: architect/owner calibration. */
 export function materialOpenDebts(records: readonly StepRecord[]): OpenDebt[] {
   return openDebts(records).filter((debt) => debt.calibration !== "fyi");
-}
-
-/** True while any material debt is still open. */
-export function hasOpenDebt(records: readonly StepRecord[]): boolean {
-  return materialOpenDebts(records).length > 0;
 }
 
 /** The ids ingest assigned to debt concerns; a `debtClosed` id must name one. */

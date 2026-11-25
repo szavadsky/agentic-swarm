@@ -1,6 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parseTaskFile } from "../../kernel/tasks.js";
+import type { LspDiagnostic } from "./types.js";
+
+export type { LspDiagnostic } from "./types.js";
 
 /**
  * Minimal LSP server for task files: their YAML frontmatter is schema-
@@ -9,18 +12,6 @@ import { parseTaskFile } from "../../kernel/tasks.js";
  * This server validates the frontmatter with the kernel parser and speaks just
  * enough LSP for diagnostics on open, change and save.
  */
-
-export interface LspPosition {
-  line: number;
-  character: number;
-}
-
-export interface LspDiagnostic {
-  range: { start: LspPosition; end: LspPosition };
-  severity: 1;
-  source: string;
-  message: string;
-}
 
 interface FrontmatterBounds {
   /** 0-based line of the first frontmatter line. */
@@ -43,7 +34,6 @@ const TASK_KEYS = new Set([
   "kind",
   "flow",
   "deps",
-  "scope",
   "tier",
   "revision",
   "base",

@@ -5,8 +5,19 @@ import type { CheckResult } from "../../src/core/checks/types.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
-import { stewardCandidates } from "../../src/kernel/steward/candidates.js";
-import type { KernelRuntime, State } from "../../src/kernel/types.js";
+import {
+  judgeGoalHead,
+  type GoalHeadJudgement,
+} from "../../src/kernel/integrate.js";
+import {
+  stewardCandidates,
+  stewardParks,
+} from "../../src/kernel/steward/candidates.js";
+import type {
+  KernelRuntime,
+  State,
+  StepRecord,
+} from "../../src/kernel/types.js";
 import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
 import { cause, rec, script, task } from "./helpers.js";
 import {
@@ -15,6 +26,7 @@ import {
   makeRuntime,
   outcome,
   setupFlowRepo,
+  scriptDecider,
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
@@ -68,6 +80,10 @@ function scriptRedAfterMerge(
     },
     { when: whenTurn({ step: "review" }), fallback: true },
   );
+  scriptDecider(harness, {
+    summary: "the merged result is red; the steward owns the repair",
+    verdict: "reject",
+  });
   harness.script(
     (req, ctx) => {
       onStewardTurn(req.prompt ?? "");
@@ -126,8 +142,70 @@ function seedGateFile(repo: ReturnType<typeof setupFlowRepo>["repo"]): void {
   repo.git(["commit", "-m", "seed the gate file on the base"]);
 }
 
+/** The goal head's tree, as the gate record keys it. */
+function headTreeOf(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  cwd: string,
+) {
+  return repo.git(["rev-parse", "HEAD^{tree}"], { cwd }).stdout.trim();
+}
+
+/** Runs a wave whose head lost the gated file after the task branched. */
+async function redHeadRun(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+  checkout: string,
+) {
+  const harness = new FakeHarness({ id: "fake" });
+  const prompts: string[] = [];
+  scriptRedAfterMerge(harness, (prompt) => prompts.push(prompt));
+
+  const runtime = await makeRuntime(repo, goal, { fake: harness });
+  const file = task("alpha", { scope: ["feature.txt"] });
+  await writeTask(runtime, file);
+  await ensureTaskWorktree(runtime, file);
+
+  fs.rmSync(path.join(checkout, "check.txt"));
+  repo.git(["add", "-A"], { cwd: checkout });
+  repo.git(["commit", "-m", "remove the gate file on the integration head"], {
+    cwd: checkout,
+  });
+  const headTree = headTreeOf(repo, checkout);
+  expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
+    "boundary",
+  );
+  return { runtime, prompts, headTree };
+}
+
+/** The steward turn reads the head's own gate log, not a merge-check. */
+async function redHeadAssert(
+  checkout: string,
+  scope: Awaited<ReturnType<typeof redHeadRun>>,
+) {
+  const { runtime, prompts, headTree } = scope;
+  const records = await runtime.store.listRecords();
+  expect(prompts).toHaveLength(1);
+  const judged = records.filter((record) => record.step === "goal-head");
+  expect(judged).toHaveLength(1);
+  expect(judged[0]!.tree).toBe(headTree);
+  const headLog = runtime.store.records.file(judged[0]!, "end.yaml");
+  expect(fs.readFileSync(headLog, "utf8")).toContain(
+    "check.txt vanished from the merged result",
+  );
+  expect(gateLogOf(prompts[0]!)).toBe(headLog);
+  const lastRed = records
+    .filter(
+      (r) => r.slug === "alpha" && r.step === "merge-checks" && r.ok === false,
+    )
+    .sort((a, b) => a.seq - b.seq)
+    .at(-1)!;
+  expect(lastRed.seq).toBeLessThan(judged[0]!.seq);
+  expect((await stateOf(runtime)).tasks.alpha!.status).toBe("merged");
+  expect(fs.existsSync(path.join(checkout, "check.txt"))).toBe(true);
+}
+
 function registerRedAfterMerge(): void {
-  it("runs a steward turn with the red gate log when the merged result is red", async () => {
+  it("runs a steward turn on the goal head's own red gate log", async () => {
     const { repo, goal } = setupFlowRepo({
       aliases: stewardAliases,
       gates: [GATE],
@@ -135,47 +213,7 @@ function registerRedAfterMerge(): void {
     const checkout = goalCheckout(repo, goal);
     seedGateFile(repo);
     try {
-      const harness = new FakeHarness({ id: "fake" });
-      const prompts: string[] = [];
-      scriptRedAfterMerge(harness, (prompt) => prompts.push(prompt));
-
-      const runtime = await makeRuntime(repo, goal, { fake: harness });
-      const file = task("alpha", { scope: ["feature.txt"] });
-      await writeTask(runtime, file);
-      await ensureTaskWorktree(runtime, file);
-
-      // The goal branch loses the gated file after the task branched, so the
-      // task's own checks stay green and only the merged result runs red.
-      fs.rmSync(path.join(checkout, "check.txt"));
-      repo.git(["add", "-A"], { cwd: checkout });
-      repo.git(
-        ["commit", "-m", "remove the gate file on the integration head"],
-        {
-          cwd: checkout,
-        },
-      );
-
-      expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
-        "boundary",
-      );
-
-      const records = await runtime.store.listRecords();
-      expect(prompts).toHaveLength(1);
-      const lastRed = records
-        .filter(
-          (r) =>
-            r.slug === "alpha" && r.step === "merge-checks" && r.ok === false,
-        )
-        .sort((a, b) => a.seq - b.seq)
-        .at(-1)!;
-      const log = gateLogOf(prompts[0]!);
-      expect(log).toBe(runtime.store.records.file(lastRed, "end.yaml"));
-      expect(fs.readFileSync(log, "utf8")).toContain(
-        "check.txt vanished from the merged result",
-      );
-
-      expect((await stateOf(runtime)).tasks.alpha!.status).toBe("merged");
-      expect(fs.existsSync(path.join(checkout, "check.txt"))).toBe(true);
+      await redHeadAssert(checkout, await redHeadRun(repo, goal, checkout));
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -205,6 +243,8 @@ function registerGreenWave(): void {
       expect(
         records.some((r) => r.step === "steward" && r.actor === "agent"),
       ).toBe(false);
+      // Nothing parked on a gate: the head is never gated for the steward.
+      expect(records.some((r) => r.step === "goal-head")).toBe(false);
       const skip = records.find((r) => r.step === "steward");
       expect(skip?.cause).toEqual(cause("skipped: no conflicts"));
     } finally {
@@ -240,7 +280,7 @@ function baseGates(ok: boolean) {
 }
 
 /** A parked task in a one-task wave, whose gate fix is spent. */
-function parkedState(): State {
+function parkedState(park = "gates: check"): State {
   return {
     goal: "active",
     iteration: 1,
@@ -250,9 +290,10 @@ function parkedState(): State {
     tasks: {
       alpha: {
         status: "parked",
-        cause: cause("gates: check"),
+        cause: cause(park),
         turns: 3,
         round: 1,
+        launches: {},
         kind: "development",
         flow: "implement-review",
         phase: "parked",
@@ -271,22 +312,39 @@ function redMergeChecks(gate: CheckResult, seq = 6) {
   });
 }
 
-function candidatesFor(records: ReturnType<typeof script>[]) {
+/** The goal head's gate verdict: the record that judged its tree, and its red. */
+function headJudgement(gate: CheckResult | undefined): GoalHeadJudgement {
+  return {
+    record: script(9, {
+      step: "goal-head",
+      checks: gate ? [gate] : [check("check", true)],
+    }),
+    red: gate ? [gate] : [],
+  };
+}
+
+function candidatesFor(
+  records: StepRecord[],
+  goalHead: GoalHeadJudgement | undefined,
+  state: State = parkedState(),
+) {
   return stewardCandidates(
     [task("alpha", { scope: ["feature.txt"] })],
-    parkedState(),
+    state,
     new Set(),
     undefined,
     [rec(3, { slug: "alpha", step: "implement", commit: "c1" }), ...records],
+    undefined,
+    goalHead,
   );
 }
 
-function registerNewRedCandidate(): void {
-  it("takes the red merged result when the base was green", () => {
-    const candidates = candidatesFor([
-      baseGates(true),
-      redMergeChecks(check("check", false)),
-    ]);
+function registerRedHeadCandidate(): void {
+  it("takes a gates park when the goal head's own gate run is red", () => {
+    const candidates = candidatesFor(
+      [baseGates(true)],
+      headJudgement(check("check", false)),
+    );
 
     expect(candidates.map((c) => [c.slug, c.kind])).toEqual([
       ["alpha", "red-after-merge"],
@@ -294,10 +352,34 @@ function registerNewRedCandidate(): void {
   });
 }
 
+function registerMergedRedCandidate(): void {
+  it("takes the branch's red merged result when the head is green", () => {
+    const candidates = candidatesFor(
+      [baseGates(true), redMergeChecks(check("check", false))],
+      headJudgement(undefined),
+    );
+
+    expect(candidates.map((c) => [c.slug, c.kind])).toEqual([
+      ["alpha", "red-after-merge"],
+    ]);
+  });
+}
+
+function registerNoRedCandidate(): void {
+  it("leaves a gates park with no red on the head or the merged result", () => {
+    expect(candidatesFor([baseGates(true)], headJudgement(undefined))).toEqual(
+      [],
+    );
+  });
+}
+
 function registerInheritedRedCandidate(): void {
   it("leaves a red the base already showed to the baseline handling", () => {
     expect(
-      candidatesFor([baseGates(false), redMergeChecks(check("check", false))]),
+      candidatesFor(
+        [baseGates(false), redMergeChecks(check("check", false))],
+        headJudgement(undefined),
+      ),
     ).toEqual([]);
   });
 }
@@ -309,7 +391,50 @@ function registerInfraRedCandidate(): void {
       details: { kind: "infra", cause: "missing-runner" },
     });
 
-    expect(candidatesFor([baseGates(true), redMergeChecks(infra)])).toEqual([]);
+    expect(
+      candidatesFor(
+        [baseGates(true), redMergeChecks(infra)],
+        headJudgement(undefined),
+      ),
+    ).toEqual([]);
+  });
+}
+
+function registerBaseConflictCandidate(): void {
+  it("takes a base-conflict park as a branch the head must merge into", () => {
+    const state = parkedState("base-conflict: clash.txt");
+    const tasks = [task("alpha", { scope: ["clash.txt"] })];
+
+    expect(stewardParks(tasks, state, new Set(), undefined)).toEqual([
+      { slug: "alpha", kind: "conflict" },
+    ]);
+    expect(
+      candidatesFor([baseGates(true)], headJudgement(undefined), state),
+    ).toEqual([{ slug: "alpha", kind: "conflict" }]);
+    expect(stewardParks(tasks, state, new Set(["alpha"]), undefined)).toEqual(
+      [],
+    );
+    expect(stewardParks(tasks, state, new Set(), new Set(["alpha"]))).toEqual(
+      [],
+    );
+  });
+}
+
+function registerKeptLandSkip(): void {
+  it("leaves a gates park the kept-land can land on its own", () => {
+    const records = [
+      baseGates(true),
+      rec(4, {
+        slug: "alpha",
+        step: "review",
+        commit: "c1",
+        outcome: outcome({ verdict: "approve" }),
+      }),
+    ];
+
+    expect(
+      candidatesFor(records, headJudgement(check("check", false))),
+    ).toEqual([]);
   });
 }
 
@@ -320,9 +445,17 @@ describe("steward on red", () => {
 });
 
 describe("steward candidate selection", () => {
-  registerNewRedCandidate();
+  registerRedHeadCandidate();
+
+  registerMergedRedCandidate();
+
+  registerNoRedCandidate();
 
   registerInheritedRedCandidate();
 
   registerInfraRedCandidate();
+
+  registerBaseConflictCandidate();
+
+  registerKeptLandSkip();
 });

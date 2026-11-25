@@ -12,24 +12,24 @@ import { makeCause } from "./cause.js";
 import { frontTarget, lastFrontRecord } from "./flow-context-front.js";
 import { bySeq } from "./flow-context-history.js";
 import { findStep, flowOf } from "./flow-context-step.js";
-import type { TurnTarget } from "./flow-context-targets.js";
+import type {
+  CompactionReview,
+  ResumeNoteOptions,
+  ResumeReason,
+  TrivialResume,
+  TurnTarget,
+} from "./flow-types.js";
+import { DECIDE_STEP } from "./pending-signal.js";
 import { scriptMeta } from "./record.js";
 import type { PromptLibrary } from "./prompts.js";
 import { sessionCacheHot } from "./sessions.js";
 import type {
-  Cause,
   FlowStep,
   FollowUp,
   KernelRuntime,
   StepRecord,
   TaskFile,
 } from "./types.js";
-
-/** The review turn whose ended session is being compacted: step role and 1-based round. */
-export interface CompactionReview {
-  review: boolean;
-  round: number;
-}
 
 /** Script record: a follow-up session could not resume, so the turn started de novo. */
 export const RESUME_FALLBACK_STEP = "resume-fallback";
@@ -142,6 +142,37 @@ export async function followUpSession(
   return prior!.session;
 }
 
+/**
+ * The session the decide turn continues: the task's reviewer session when one
+ * exists, else the decide turn's own prior session, else a fresh reviewer turn.
+ */
+export async function deciderSession(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  target: TurnTarget,
+  records: StepRecord[],
+  worktree: string,
+): Promise<SessionRef | undefined> {
+  const review = flowOf(runtime, task).steps.find(
+    (step) => step.review === true,
+  );
+  const reviewer =
+    review === undefined
+      ? undefined
+      : await followUpSession(
+          runtime,
+          task,
+          target,
+          review.id,
+          records,
+          worktree,
+        );
+  return (
+    reviewer ??
+    followUpSession(runtime, task, target, DECIDE_STEP, records, worktree)
+  );
+}
+
 /** The step's ended agent sessions for this task, oldest first. */
 function resumePriors(
   records: StepRecord[],
@@ -213,9 +244,6 @@ export function priorStepCommit(
     .at(-1)?.commit;
 }
 
-/** The session a trivial implement turn resumes, or why the task parks instead. */
-export type TrivialResume = { session: SessionRef } | { cause: Cause };
-
 /**
  * The front's own session for a trivial implement turn: the front record's
  * session on a first turn, the last session on the front alias on a fix turn.
@@ -230,9 +258,8 @@ export async function trivialResumeSession(
   task: TaskFile,
   records: StepRecord[],
   isFix: boolean,
-  iteration: number,
 ): Promise<TrivialResume> {
-  const target = frontTarget(runtime, iteration);
+  const target = frontTarget(runtime);
   if (!(await canResume(target))) {
     return {
       cause: makeCause(
@@ -321,22 +348,13 @@ function keptSession(
     : undefined;
 }
 
-/** Why a turn is rendered the resume fragment. */
-export type ResumeReason = "relaunch" | "trivial";
-
-/** The facts the resume fragment renders; empty strings for the parts a reason does not use. */
-export interface ResumeNoteOptions {
-  branch?: string;
-  worktree?: string;
-  sessionCwd?: string;
-}
-
 /**
- * The resume fragment a relaunched turn carries. A relaunch continues the
- * task branch and says to assess status first; a trivial turn also continues
- * the front's session, so its note names the session cwd and the absolute
- * worktree the tools must use instead. The leading newline separates the
- * fragment from the `worktree:` line it follows.
+ * The resume fragment a relaunched or fallback turn carries. A relaunch
+ * continues the task branch and says to assess status first; a fallback tier
+ * continues the same worktree under the same ask; a trivial turn also
+ * continues the front's session, so its note names the session cwd and the
+ * absolute worktree the tools must use instead. The leading newline separates
+ * the fragment from the `worktree:` line it follows.
  */
 export function resumeNote(
   prompts: PromptLibrary,

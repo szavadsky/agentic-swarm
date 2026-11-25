@@ -12,8 +12,6 @@ import {
   BETA,
   outcome,
   setupRepo,
-  digestTaskTurn,
-  queueDigestSteer,
   drainedAfterAlpha,
 } from "./resume-helpers.js";
 import { formatCause } from "../../src/kernel/cause.js";
@@ -82,7 +80,6 @@ async function anIterationAllTasksTerminalGoesPart2(
   expect(midState.tasks.beta!.status).toBe("merged");
 
   const second = new FakeHarness({ id: "fake" });
-  queueDigestSteer(second);
   second.script((req, ctx) => {
     ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
     return fakeTurnResult(req);
@@ -109,7 +106,6 @@ function registerResumeGuardsFrontStopHoldsAndTerminalPart1(): void {
     const { repo, goalDir, taskDir } = await drainedAfterAlpha();
     try {
       const second = new FakeHarness({ id: "fake" });
-      queueDigestSteer(second, digestTaskTurn(taskDir, "beta"));
       second.script((req, ctx) => {
         fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
         ctx.writeOutcome(outcome({ summary: "beta added" }));
@@ -159,7 +155,6 @@ function registerResumeGuardsFrontStopHoldsAndTerminalPart2(): void {
       );
 
       const second = new FakeHarness({ id: "fake" });
-      queueDigestSteer(second);
       second.script((req, ctx) => {
         fs.appendFileSync(
           path.join(goalDir, "plan.md"),

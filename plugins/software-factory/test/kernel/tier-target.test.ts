@@ -58,15 +58,14 @@ async function runsProducerTierAliasLeavesReviewPart1(
     escalated,
     escalatedState,
     "implement",
-    1,
   );
   expect(escalatedTarget.alias).toBe("escalation");
   // A tier moves the same prompt to another alias; it declares no role.
   expect(escalatedTarget.prompt).toBe("implementer");
-  expect(
-    stepTarget(runtime, escalated, escalatedState, "review", 1).alias,
-  ).toBe("reviewer");
-  expect(stepTarget(runtime, plain, plainState, "implement", 1).alias).toBe(
+  expect(stepTarget(runtime, escalated, escalatedState, "review").alias).toBe(
+    "reviewer",
+  );
+  expect(stepTarget(runtime, plain, plainState, "implement").alias).toBe(
     "implementer",
   );
 
@@ -137,7 +136,7 @@ async function admitsRunsEscalatedImplementTurnPart1(
   )!;
   const initialState = derive([taskFile], [], runtime.configs.process.flows)
     .tasks.task!;
-  const admitted = stepTarget(runtime, taskFile, initialState, "implement", 1);
+  const admitted = stepTarget(runtime, taskFile, initialState, "implement");
   expect(admitted.harness.id).toBe("expensive");
 
   expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(

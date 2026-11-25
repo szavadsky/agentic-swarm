@@ -1,5 +1,6 @@
 import yaml from "yaml";
 import { type ZodIssue, z } from "zod";
+import { deadDepFindings } from "./task-deps.js";
 import type {
   FlowDefinition,
   State,
@@ -54,7 +55,6 @@ export const taskFrontmatterSchema = z
     deps: z
       .array(z.string().describe("a slug that must merge first"))
       .default([]),
-    scope: z.array(z.string().describe("a predicted area")).default([]),
     epic: z
       .string()
       .min(1)
@@ -106,6 +106,12 @@ export const taskFrontmatterSchema = z
       .positive()
       .optional()
       .describe("per-turn wall bound in minutes"),
+    advisory: z
+      .boolean()
+      .optional()
+      .describe(
+        "this task's checks are advisory: recorded and shown, never blocking",
+      ),
   })
   .strict();
 
@@ -163,7 +169,6 @@ function frontmatterIssue(
     type: "a non-empty string",
     flow: "a non-empty string",
     deps: "a list of strings",
-    scope: "a list of strings",
     tier: "a non-empty string",
     revision: "a non-negative integer",
     base: "a non-empty string",
@@ -171,6 +176,7 @@ function frontmatterIssue(
     envNotes: "a list of non-empty strings",
     repairTurns: "a non-negative integer",
     turnMinutes: "a positive number",
+    advisory: "a boolean",
   };
   return expected[field]
     ? `frontmatter "${field}" must be ${expected[field]}`
@@ -185,7 +191,7 @@ function resolveTaskType(
   fileSlug: string,
   type: string,
   taskTypes: Record<string, TaskTypeDefinition>,
-): { kind: TaskKind; flow: string } {
+): { kind: TaskKind; flow: string; nogit?: boolean; promote?: boolean } {
   const definition = Object.hasOwn(taskTypes, type)
     ? taskTypes[type]
     : undefined;
@@ -195,7 +201,12 @@ function resolveTaskType(
       "unconfigured-type",
     );
   }
-  return { kind: definition.kind, flow: definition.flow };
+  return {
+    kind: definition.kind,
+    flow: definition.flow,
+    ...(definition.nogit ? { nogit: true } : {}),
+    ...(definition.promote ? { promote: true } : {}),
+  };
 }
 
 /**
@@ -240,6 +251,8 @@ export function parseTaskFile(
   taskTypes: Record<string, TaskTypeDefinition> = {},
 ): TaskFile {
   const { meta, body } = taskSections(text, fileSlug);
+  // Tasks have no file scope: a legacy `scope` key is accepted and ignored.
+  delete meta.scope;
   const result = taskFrontmatterSchema.safeParse({
     ...meta,
     slug: meta.slug ?? fileSlug,
@@ -274,6 +287,7 @@ export function parseTaskFile(
             ? "spike"
             : "development") as TaskKind,
           flow: result.data.flow ?? DEFAULT_FLOW,
+          nogit: false,
         };
   return {
     ...result.data,
@@ -294,7 +308,6 @@ export function renderTaskFile(task: TaskFile): string {
     front.flow = task.flow;
   }
   front.deps = task.deps;
-  front.scope = task.scope;
   if (task.epic !== undefined) front.epic = task.epic;
   if (task.tier) front.tier = task.tier;
   if (task.revision > 0) front.revision = task.revision;
@@ -304,6 +317,7 @@ export function renderTaskFile(task: TaskFile): string {
     front.envNotes = task.envNotes;
   if (task.repairTurns !== undefined) front.repairTurns = task.repairTurns;
   if (task.turnMinutes !== undefined) front.turnMinutes = task.turnMinutes;
+  if (task.advisory !== undefined) front.advisory = task.advisory;
   return `---\n${yaml.stringify(front).trimEnd()}\n---\n\n${task.body.trim()}\n`;
 }
 
@@ -341,7 +355,7 @@ export function taskStatuses(state: State): Map<string, TaskStatus> {
  * the edge away. A live continuation names a base that is not parked by the
  * base's state (merged, finished, cancelled, or not parked at all).
  */
-/** Slug, scope, duplicate and epic findings; registers the task by slug. */
+/** Slug, duplicate and epic findings; registers the task by slug. */
 function taskFieldFindings(
   task: TaskFile,
   bySlug: Map<string, TaskFile>,
@@ -350,11 +364,6 @@ function taskFieldFindings(
   if (!isValidTaskSlug(task.slug)) {
     findings.push(
       `slug "${task.slug}" is not namespaced kebab-case (example: auth.token-refresh)`,
-    );
-  }
-  if (task.scope.length === 0) {
-    findings.push(
-      `task "${task.slug}" has no scope: declare the predicted area it works in`,
     );
   }
   if (bySlug.has(task.slug)) {
@@ -461,6 +470,7 @@ export function validateTaskGraph(
       ...baseFindings(task, bySlug, opts.status),
     );
   }
+  if (opts.status) findings.push(...deadDepFindings(tasks, opts.status));
   findings.push(...cycleFindings(bySlug));
   return [...new Set(findings)];
 }

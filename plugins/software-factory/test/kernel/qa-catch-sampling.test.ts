@@ -5,7 +5,7 @@ import path from "node:path";
 import yaml from "yaml";
 import { derive } from "../../src/kernel/derive.js";
 import { type GoalMetrics, writeMetrics } from "../../src/kernel/metrics.js";
-import { MAX_QA_CATCH_SAMPLES, qaOnlyCatches } from "../../src/kernel/qa.js";
+import { MAX_QA_CATCH_SAMPLES, qaCatches } from "../../src/kernel/qa.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { writeIterationSummary } from "../../src/kernel/summary.js";
 import type { StepRecord } from "../../src/kernel/types.js";
@@ -124,15 +124,16 @@ function taskRound(
   ];
 }
 
-function registerCountsQAOnlyFindingsPerTask() {
-  it("counts QA-only findings per task and records zero for a task with none", () => {
+function registerQaOnlyCount() {
+  it("counts a QA-only finding per task and records zero for a task with none", () => {
     const records = [
       ...taskRound(1, 1, "task-a", [
         "src/a.ts:10 null deref in the parser fallback",
       ]),
       ...taskRound(4, 1, "task-b", []),
     ];
-    const result = qaOnlyCatches(records);
+    const result = qaCatches(records);
+    expect(result.total).toBe(1);
     expect(result.count).toBe(1);
     expect(result.byTask).toEqual({ "task-a": 1, "task-b": 0 });
     expect(result.sample).toEqual([
@@ -141,34 +142,39 @@ function registerCountsQAOnlyFindingsPerTask() {
         finding: "src/a.ts:10 null deref in the parser fallback",
         record: "records/00002-i1-task-a-qa-r1",
         round: 1,
+        alsoCaughtBy: "none",
       },
     ]);
   });
 }
 
-function registerExcludesDuplicateGateFailure() {
-  it("excludes a QA finding that duplicates a gate failure but keeps the others", () => {
+function registerGateScope() {
+  it("classifies a gate failure from the same task and ignores another task's gate", () => {
     const duplicate = "test/parser.test.ts:12 expected 2 but got 3";
+    const otherTask = "test/b.test.ts:3 expected 1 but got 2";
     const records = [
-      checksRecord(1, "task-a", 1, [
-        check("tests", false, duplicate, "FAIL test/parser.test.ts"),
-      ]),
-      qaRecord(2, "task-a", 1, [
+      checksRecord(1, "task-a", 1, [check("tests", false, duplicate)]),
+      checksRecord(2, "task-b", 1, [check("tests", false, otherTask)]),
+      qaRecord(3, "task-a", 1, [
         duplicate,
         "src/a.ts:40 missing bounds check in decoder",
       ]),
+      qaRecord(4, "task-b", 1, [otherTask]),
     ];
-    const result = qaOnlyCatches(records);
+    const result = qaCatches(records);
+    expect(result.total).toBe(3);
     expect(result.count).toBe(1);
-    expect(result.byTask).toEqual({ "task-a": 1 });
-    expect(result.sample[0]!.finding).toBe(
-      "src/a.ts:40 missing bounds check in decoder",
-    );
+    expect(result.byTask).toEqual({ "task-a": 1, "task-b": 0 });
+    expect(result.sample.map((entry) => entry.alsoCaughtBy)).toEqual([
+      "gate",
+      "none",
+      "gate",
+    ]);
   });
 }
 
-function registerExcludesReviewerRaisedFinding() {
-  it("excludes a QA finding a reviewer already raised in an earlier round", () => {
+function registerEarlierReviewer() {
+  it("classifies a QA finding an earlier reviewer already raised", () => {
     const repeated = "src/a.ts:10 null deref in the parser fallback";
     const records = [
       reviewRecord(
@@ -183,16 +189,19 @@ function registerExcludesReviewerRaisedFinding() {
         "src/a.ts:50 swallowed error in the retry loop",
       ]),
     ];
-    const result = qaOnlyCatches(records);
+    const result = qaCatches(records);
+    expect(result.total).toBe(2);
     expect(result.count).toBe(1);
-    expect(result.sample[0]!.finding).toBe(
-      "src/a.ts:50 swallowed error in the retry loop",
-    );
+    expect(result.byTask).toEqual({ "task-a": 1 });
+    expect(result.sample.map((entry) => entry.alsoCaughtBy)).toEqual([
+      "reviewer",
+      "none",
+    ]);
   });
 }
 
-function registerCountsFindingOnce() {
-  it("counts a finding once when the reviewer repeats it later", () => {
+function registerReviewerAfter() {
+  it("does not count a finding the reviewer repeats after QA as QA-only", () => {
     const repeated = "src/a.ts:10 null deref in the parser fallback";
     const records = [
       ...taskRound(1, 1, "task-a", [repeated]),
@@ -205,23 +214,46 @@ function registerCountsFindingOnce() {
       checksRecord(4, "task-a", 2, [check("tests", true, "pass")]),
       qaRecord(5, "task-a", 2, []),
       reviewRecord(6, "task-a", 2, `1. ${repeated}`),
-      rec(7, {
+    ];
+    const result = qaCatches(records);
+    expect(result.total).toBe(1);
+    expect(result.count).toBe(0);
+    expect(result.byTask).toEqual({ "task-a": 0 });
+    expect(result.sample).toEqual([
+      {
+        task: "task-a",
+        finding: repeated,
+        record: "records/00002-i1-task-a-qa-r1",
+        round: 1,
+        alsoCaughtBy: "reviewer-after",
+      },
+    ]);
+  });
+}
+
+function registerDedupeAcrossRounds() {
+  it("counts a finding once when QA raises it in several rounds", () => {
+    const repeated = "src/a.ts:10 null deref in the parser fallback";
+    const records = [
+      ...taskRound(1, 1, "task-a", [repeated]),
+      rec(3, {
         slug: "task-a",
-        round: 3,
+        round: 2,
         step: "implement",
         alias: "implementer",
       }),
-      checksRecord(8, "task-a", 3, [check("tests", true, "pass")]),
-      qaRecord(9, "task-a", 3, [repeated]),
+      checksRecord(4, "task-a", 2, [check("tests", true, "pass")]),
+      qaRecord(5, "task-a", 2, [repeated]),
     ];
-    const result = qaOnlyCatches(records);
+    const result = qaCatches(records);
+    expect(result.total).toBe(1);
     expect(result.count).toBe(1);
     expect(result.byTask).toEqual({ "task-a": 1 });
     expect(result.sample).toHaveLength(1);
   });
 }
 
-function registerBoundsSampleDeterministically() {
+function registerBoundsSample() {
   it("bounds the sample deterministically while counting every catch", () => {
     const records: StepRecord[] = [];
     let seq = 1;
@@ -235,7 +267,8 @@ function registerBoundsSampleDeterministically() {
         );
       }
     }
-    const result = qaOnlyCatches(records);
+    const result = qaCatches(records);
+    expect(result.total).toBe(30);
     expect(result.count).toBe(30);
     expect(result.sample).toHaveLength(MAX_QA_CATCH_SAMPLES);
     expect(result.sample[0]!.task).toBe("a");
@@ -247,19 +280,20 @@ function registerBoundsSampleDeterministically() {
       e: 5,
       f: 5,
     });
-    expect(qaOnlyCatches(records)).toEqual(result);
+    expect(qaCatches(records)).toEqual(result);
   });
 }
 
-describe("QA-only catches", () => {
-  registerCountsQAOnlyFindingsPerTask();
-  registerExcludesDuplicateGateFailure();
-  registerExcludesReviewerRaisedFinding();
-  registerCountsFindingOnce();
-  registerBoundsSampleDeterministically();
+describe("QA catches", () => {
+  registerQaOnlyCount();
+  registerGateScope();
+  registerEarlierReviewer();
+  registerReviewerAfter();
+  registerDedupeAcrossRounds();
+  registerBoundsSample();
 });
 
-describe("QA-only catches in metrics", () => {
+function registerMetricsSums() {
   it("writes per-task counts into iteration metrics and sums them in totals", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-qa-catches-"));
     const store = createFolderStore(path.join(root, "goal"), undefined, {});
@@ -285,39 +319,53 @@ describe("QA-only catches in metrics", () => {
         (await store.readFile("metrics.yaml"))!,
       ) as GoalMetrics;
 
-      expect(metrics.iterations[0]!.qaOnlyCatches).toMatchObject({
+      expect(metrics.iterations[0]!.qaCatches).toMatchObject({
+        total: 2,
         count: 2,
         byTask: { "task-a": 2, "task-b": 0 },
       });
-      expect(metrics.iterations[1]!.qaOnlyCatches).toMatchObject({
+      expect(metrics.iterations[1]!.qaCatches).toMatchObject({
+        total: 1,
         count: 1,
         byTask: { "task-a": 1, "task-c": 0 },
       });
-      expect(metrics.totals.qaOnlyCatches.count).toBe(3);
-      expect(metrics.totals.qaOnlyCatches.byTask).toEqual({
+      expect(metrics.totals.qaCatches.total).toBe(3);
+      expect(metrics.totals.qaCatches.count).toBe(3);
+      expect(metrics.totals.qaCatches.byTask).toEqual({
         "task-a": 3,
         "task-b": 0,
         "task-c": 0,
       });
-      expect(metrics.totals.qaOnlyCatches.sample).toHaveLength(3);
+      expect(metrics.totals.qaCatches.sample).toHaveLength(3);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
+
+describe("QA catches in metrics", () => {
+  registerMetricsSums();
 });
 
-describe("QA-only catches in the summary", () => {
-  it("renders the per-task counts", async () => {
+function registerSummaryProvenance() {
+  it("renders each sampled catch with its record and who else carried it", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-qa-summary-"));
     const store = createFolderStore(path.join(root, "goal"), undefined, {});
+    const duplicate = "test/parser.test.ts:12 expected 2 but got 3";
     try {
       await store.ensureLayout();
       const records = [
-        ...taskRound(1, 1, "task-a", [
-          "src/a.ts:10 null deref in the parser fallback",
-          "src/a.ts:20 missing bounds check in decoder",
+        checksRecord(1, "task-a", 1, [check("tests", false, duplicate)]),
+        qaRecord(2, "task-a", 1, [
+          duplicate,
+          "src/a.ts:40 missing bounds check in decoder",
         ]),
-        ...taskRound(4, 1, "task-b", []),
+        reviewRecord(
+          3,
+          "task-a",
+          1,
+          "1. src/a.ts:40 missing bounds check in decoder",
+        ),
       ];
       await writeIterationSummary(store, {
         iteration: 1,
@@ -329,12 +377,23 @@ describe("QA-only catches in the summary", () => {
         path.join(store.goalDir, "iterations/1/summary.md"),
         "utf8",
       );
-      expect(text).toContain("- QA-only catches: 2 (task-a: 2, task-b: 0)");
+      expect(text).toContain(
+        "- QA-only catches: 0 of 2 QA findings (task-a: 0)",
+      );
+      expect(text).toContain("- QA catch sample:");
+      expect(text).toContain(
+        `  - task-a records/00002-i1-task-a-qa-r1: ${duplicate} (also a gate failure)`,
+      );
+      expect(text).toContain(
+        "  - task-a records/00002-i1-task-a-qa-r1: src/a.ts:40 missing bounds check in decoder (repeated by the reviewer after QA)",
+      );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
 
+function registerSummaryZero() {
   it("renders zero when the iteration had a QA step but no catches", async () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), "factory-qa-summary-zero-"),
@@ -353,9 +412,17 @@ describe("QA-only catches in the summary", () => {
         path.join(store.goalDir, "iterations/1/summary.md"),
         "utf8",
       );
-      expect(text).toContain("- QA-only catches: 0 (task-b: 0)");
+      expect(text).toContain(
+        "- QA-only catches: 0 of 0 QA findings (task-b: 0)",
+      );
+      expect(text).not.toContain("- QA catch sample:");
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+}
+
+describe("QA catches in the summary", () => {
+  registerSummaryProvenance();
+  registerSummaryZero();
 });

@@ -27,6 +27,7 @@ import {
   cleanupFlowRepo,
   makeRuntime,
   outcome,
+  scriptDecider,
   setupFlowRepo,
   whenTurn,
   writeTask,
@@ -73,25 +74,51 @@ const aliases = {
 
 const BETA_BODY = "Write beta.txt.\nDone when: beta.txt holds beta.";
 
+/** The defaults a test repo declares for the causes below; the kernel carries none. */
+const configuredRoutes = {
+  gates: {
+    action: "amend" as const,
+    reason: "fix the named gate on the kept branch",
+    exception: "the gate is already red on base or the repo config",
+  },
+  "review-rejected": {
+    action: "leave" as const,
+    reason: "a rejected premise is a direction decision for the architect",
+    exception:
+      "the rejection names concrete findings and the premise stands; amend",
+  },
+};
+
 describe("per-cause default routing", () => {
-  it("leaves review rejections and design blockers to the architect", () => {
-    // The task's named edge: a rejected premise or an impossible approach is
-    // direction, not a retry.
-    expect(
-      defaultParkRoute(cause("review rejected: premise is wrong")).action,
-    ).toBe("leave");
-    expect(
-      defaultParkRoute(cause("blocked: the API cannot express this")).action,
-    ).toBe("leave");
-    // The fixable classes keep the branch; the spike's table is the default.
-    expect(defaultParkRoute(cause("gates: unit")).action).toBe("amend");
-    expect(defaultParkRoute(cause("base-conflict: clash.txt")).action).toBe(
-      "amend",
+  it("routes a cause by its kind from the repo's configured defaults", () => {
+    // The detail never changes the route: the kind is the closed vocabulary.
+    expect(defaultParkRoute(cause("gates: unit"), configuredRoutes)).toEqual(
+      configuredRoutes.gates,
     );
-    // Routing reads the kind, never the detail: every failed outcome keeps
-    // the branch unless its own evidence says otherwise.
-    expect(defaultParkRoute(cause("failed: no work")).action).toBe("amend");
-    expect(defaultParkRoute(cause("anything else")).action).toBe("leave");
+    expect(
+      defaultParkRoute(cause("gates: a different red"), configuredRoutes)
+        .action,
+    ).toBe("amend");
+    expect(
+      defaultParkRoute(
+        cause("review rejected: premise is wrong"),
+        configuredRoutes,
+      ).action,
+    ).toBe("leave");
+  });
+
+  it("leaves a cause the repo config does not route to the architect", () => {
+    // No configured entry means no repo policy: the kernel falls back to the
+    // architect for every kind it used to carry a default for.
+    for (const kind of ["failed", "upscope", "infra", "blocked"] as const) {
+      expect(
+        defaultParkRoute({ kind, detail: "evidence" }, configuredRoutes).action,
+      ).toBe("leave");
+    }
+    expect(defaultParkRoute(cause("anything else"), {})).toMatchObject({
+      action: "leave",
+      reason: "an unclassified park is the architect's",
+    });
   });
 });
 
@@ -142,6 +169,10 @@ function scriptBetaRetries(harness: FakeHarness, turns: { n: number }): void {
     harness.script(betaTurn, {
       when: whenTurn({ slug: "beta", step: "implement" }),
     });
+  scriptDecider(harness, {
+    summary: "the red gate survives its fix; the PM decides the park",
+    verdict: "reject",
+  });
 }
 
 /** Scripts the PM's amend route for beta and returns its prompt. */
@@ -216,7 +247,8 @@ function expectParkRecoveredInIteration(
     expect(record.iteration).toBe(1);
   }
   // The PM saw the park evidence, the kept branch and the cause's default.
-  expect(stallPrompt).toContain("cause: gates: ready");
+  expect(stallPrompt).toContain("cause: gates:");
+  expect(stallPrompt).toContain("ready");
   expect(stallPrompt).toContain("factory-task/demo/beta");
   expect(stallPrompt).toContain("amends: 0 of 1");
   expect(stallPrompt).toContain("default: amend — fix the named gate");
@@ -229,6 +261,13 @@ function registerParkRecoveryInsideTheRunningIterationPart1(): void {
       aliases,
       gates: [{ id: "ready", command: "test ! -f beta-red.txt" }],
       limits: { concurrency: { overall: 1 } },
+      parkRoutes: {
+        gates: {
+          action: "amend",
+          reason: "fix the named gate on the kept branch",
+          exception: "the gate is already red on base or the repo config",
+        },
+      },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -358,6 +397,13 @@ function registerParkRecoveryInsideTheRunningIterationPart2(): void {
   it("refuses a second amend of one slug in an iteration and leaves the park", async () => {
     const { repo, goal } = setupFlowRepo({
       limits: { concurrency: { overall: 1 } },
+      parkRoutes: {
+        gates: {
+          action: "amend",
+          reason: "fix the named gate on the kept branch",
+          exception: "the gate is already red on base or the repo config",
+        },
+      },
     });
     try {
       const harness = withKernelRoleFallbacks(new FakeHarness({ id: "fake" }));

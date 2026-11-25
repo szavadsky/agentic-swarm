@@ -1,4 +1,6 @@
 import { formatCause, readCause } from "../../src/kernel/cause.js";
+import { frontClassTypesVar } from "../../src/kernel/front.js";
+import { taskTypesVar } from "../../src/kernel/prompt-schema.js";
 import type {
   ArchitectureConfig,
   BoundaryStep,
@@ -6,6 +8,7 @@ import type {
   RecordStart,
   StepRecord,
   TaskFile,
+  TaskTypeDefinition,
   TurnSpec,
 } from "../../src/kernel/types.js";
 
@@ -43,7 +46,7 @@ export const TEST_BOUNDARY: Record<BoundaryStep, TurnSpec> = {
   packprep: {
     prompt: "pack-preparer",
     alias: "pack-preparer",
-    deliverable: "context pack",
+    deliverable: "pack briefs",
   },
   plancheck: {
     prompt: "plan-checker",
@@ -66,18 +69,116 @@ export const TEST_ARCHITECTURE: ArchitectureConfig = {
   planReturn: { prompt: "architect-review-return" },
 };
 
-export function task(slug: string, patch: Partial<TaskFile> = {}): TaskFile {
+/** The package-default task types: what `config/process.yaml` ships. */
+export const SHIPPED_TASK_TYPES: Record<string, TaskTypeDefinition> = {
+  development: {
+    flow: "implement-review",
+    kind: "development",
+    schema: "outcome",
+    nogit: false,
+    promote: false,
+    useWhen: "change meant to land in the repo and merge after QA and review",
+  },
+  spike: {
+    flow: "spike",
+    kind: "spike",
+    schema: "outcome",
+    nogit: false,
+    promote: false,
+    useWhen:
+      "question only evidence answers — finished with findings and never merged",
+  },
+  "fact-finder": {
+    flow: "fact-find",
+    kind: "spike",
+    schema: "outcome",
+    nogit: true,
+    promote: false,
+    useWhen:
+      "document behavior or research libraries and best practices — one researcher turn, its file may live outside git",
+  },
+  poc: {
+    flow: "poc",
+    kind: "spike",
+    schema: "outcome",
+    nogit: true,
+    promote: false,
+    useWhen:
+      "explore an approach without production intent — implementer and reviewer, its product may live outside git",
+  },
+  "computer-use": {
+    flow: "computer-use",
+    kind: "development",
+    schema: "outcome",
+    nogit: false,
+    promote: false,
+    useWhen:
+      "a delivery that needs browser tests — implementer, a browser acceptance turn, then QA and review",
+  },
+  promote: {
+    flow: "spike",
+    kind: "spike",
+    schema: "outcome",
+    nogit: true,
+    promote: true,
+    useWhen:
+      "an operator barrier — landing this batch needs a build promotion before the work depending on it starts; the launch drains and stops so the operator promotes, then a relaunch continues",
+  },
+  trivial: {
+    flow: "just-implement",
+    kind: "development",
+    schema: "outcome",
+    nogit: false,
+    promote: false,
+    useWhen:
+      "small fully understood change with one implement turn and no acceptance step",
+  },
+};
+
+/** The task types the prompt snapshots configure and render. */
+export const TEST_TASK_TYPES: Record<string, TaskTypeDefinition> = {
+  development: {
+    flow: "implement-review",
+    kind: "development",
+    schema: "outcome",
+    useWhen: "work that lands after review",
+  },
+  spike: {
+    flow: "spike",
+    kind: "spike",
+    schema: "outcome",
+    useWhen: "a question only evidence answers",
+  },
+  trivial: {
+    flow: "just-implement",
+    kind: "development",
+    schema: "outcome",
+    useWhen: "a small fully understood change",
+  },
+};
+
+/** `task_types` as every prompt snapshot renders it. */
+export const TEST_TASK_TYPES_VAR = taskTypesVar(TEST_TASK_TYPES);
+
+/** The front's class-to-type line, rendered from the same configured types. */
+export const TEST_CLASS_TYPES = frontClassTypesVar(TEST_TASK_TYPES);
+
+/** A test task; a legacy `scope` patch is accepted and dropped, as the parser does. */
+export function task(
+  slug: string,
+  patch: Partial<TaskFile> & { scope?: string[] } = {},
+): TaskFile {
+  const { scope: _legacyScope, ...rest } = patch;
   return {
     slug,
     title: slug,
     kind: "development",
     flow: "implement-review",
     deps: [],
-    scope: [],
     revision: 0,
     source: "test",
     body: "Do it.\nDone when: it works.",
-    ...patch,
+    ...rest,
   };
 }
 

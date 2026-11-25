@@ -6,14 +6,22 @@ set runs out with fresh parks, the PM decides each one in the same iteration —
 amend on its kept branch with the park's evidence, replace, split, cancel, or
 leave for the architect — whether or not the wave merged anything. An amended
 task reruns on its kept branch, after merging a moved head in its first turn,
-and on its step's next alternate. When open work remains, the boundary runs
+and on its step's next alternate. The same wave-end turn marks the open
+concerns it has not judged: a concern that makes the remaining work wasteful
+leaves a hold naming the tasks it withholds, and one that blocks nothing keeps
+an empty hold and reaches the architect unchanged. The mark is a
+`mailbox/holds/<concern-id>.yaml` file, so a judged concern is never asked
+twice and a concern's hold lapses when no record raises it any more. When open
+work remains, the boundary runs
 the plan checker first: a `progress` verdict resumes dispatch without a
 consult, bounded by `limits.planCheckRounds`; the consult runs on `architect`,
 when nothing is open, or when the bound is hit. State is derived from task
 files and append-only records; there is no state file to repair. After the
-first iteration a pack-preparer turn turns the script's full status data into
-the iteration's index pack; when it fails, it tries its alias fallback chain before the
-script renders a bounded index pack and the fallback is recorded as a glitch.
+first iteration a pack-preparer turn reads the script's full status data and
+returns the sections it judges better as a pointer and a one-line brief; the
+script renders the iteration's index from that one renderer either way. When
+the preparer fails, it tries its alias fallback chain before the script renders
+every section whole and the fallback is recorded as a glitch.
 
 ## Commands
 
@@ -23,7 +31,6 @@ bun bin/factory.ts init   --repo <path> --goal <name> [--intent <file>]
 bun bin/factory.ts run    --repo <path> --goal <name> --run-config <file> [--iterations N]
                           [--pin-gate-override <reason>]
 bun bin/factory.ts status --repo <path> --goal <name> [--json]
-bun bin/factory.ts benchmark --repo <path> --goal <name>
 bun bin/factory.ts steer  --repo <path> --goal <name> <file | ->
 bun bin/factory.ts validate [--step <id>] [--run-config <file>] [<file>]
 bun bin/factory.ts schemas --out <dir>
@@ -40,15 +47,18 @@ anyway and records the reason in the run's records. `status` prints
 derived state and parked causes; `--json` prints `status.json`, the snapshot
 the kernel rewrites after each agent launch and finish, together with the
 static `dashboard.html` rendered beside it and the page's vendored `vendor/`
-assets; `benchmark` prints one goal's benchmark rows;
+assets;
 `steer` drops a file into the inbox atomically. `validate` checks one
 schema-enforced file with the gate's validators (tasks/*.md with its
 directory's dependency graph and flow existence against the merged process
 config, class.yaml, outcome.yaml keyed by the step in the sibling
 started.yaml or `--step`, mailbox/holds/*.yaml, repo.yaml, run.yaml,
-process.yaml); exit 0 valid, 1 invalid or unknown kind. `schemas` writes every
-kernel file schema as JSON Schema (`task`, `outcome`, `qa`, `hold`, `class`, `repo`,
-`run`, `process`, `gate`) into `--out` for editors and the artifact LSP. `variables`
+process.yaml, infra.yaml) and, for a repo, process or run file, the non-model
+pre-flight checks without launching a harness or probing a model; exit 0 valid,
+1 invalid or unknown kind. `schemas`
+writes every kernel file schema as JSON Schema (`task`, `outcome`, `qa`, `hold`,
+`class`, `infra`, `repo`, `run`, `process`, `gate`) into `--out` for editors and
+the artifact LSP. `variables`
 renders `prompts/VARIABLES.md` from the typed prompt-variable descriptor; the
 prompt tests fail when the committed file differs from that render.
 
@@ -78,7 +88,7 @@ dashboard is. Its resources are [kernel.md](skills/run-factory/kernel.md)
 [config.md](skills/run-factory/config.md) (the three layers); its walkthrough
 commands run green on the fake harness in the test suite.
 [sandbox.md](skills/run-factory/sandbox.md) documents the
-run-inside-a-sandbox assumption.
+run-config `sandbox` wrapper and the paths its profile must leave writable.
 
 ## Configuration
 
@@ -99,16 +109,29 @@ gates:
     command: pytest --junitxml=reports/junit.xml
     format: { junit: reports/junit.xml }         # report the command writes
   - id: integration
-    command: jest --ci
-    format: { pattern: jest }                    # runner whose output it parses
-    serial: [database]                          # same-named gates in one worktree never overlap
+    command: ./scripts/integration-tests         # writes the declared report
+    format: { ctrf: reports/ctrf.json }           # standard test report
+    serial: [database]                          # same-named gates in one repo never overlap
     env: { TMPDIR: .cache/gate }                # per-worktree scratch directory
+  - id: lint-strict
+    command: bun run lint:strict
+    advisory: true                              # red is recorded and shown, never blocking
 cleanliness:                                    # optional; default rules active without it
   maxFileSizeBytes: 1048576                     # default: 1048576 (1 MB)
   allowedExtensions: [ts, json, md]             # default: extensions present in base tree
   allowedFiles: [data/benchmark.csv]            # optional; explicit files exempt from the heuristic
 codingRules: .factory/prompts/coding-rules.md   # optional; replaces the factory default clean-code partial
+parkRoutes:                                     # optional; the PM stall turn's per-cause default
+  gates:                                        # keyed by the kernel's closed cause vocabulary
+    action: amend                               # amend | cancel | replace | split | leave
+    reason: fix the named gate on the kept branch
+    exception: the gate is already red on base or the repo config
 ```
+
+`parkRoutes` holds this repo's per-cause defaults for the PM's park decision;
+the stall brief renders the route for the park's cause, and a cause with no
+entry is the architect's (`leave`). These are advice, not rules: the PM chooses
+from the park's records and branch.
 
 Cleanliness checks run by default without repo config to detect large files, disallowed/new extensions, and temp/weights/huge outputs. A cleanliness hit sends the author one revision follow-up turn with three exits: clean up the files, add them to `.gitignore`, or list them under `cleanliness.allowedFiles` in `.factory/repo.yaml`. The follow-up is never repeated; an author who keeps a file explains it, and the reviewer evaluates the reason. Tightened thresholds may be configured under `cleanliness` in `.factory/repo.yaml`.
 
@@ -117,10 +140,13 @@ No real harness, model or subscription names appear in `src/` or `test/`
 lint-gate check): the names are checked against that JSON list, the omp
 adapter is the only exempt directory, and the name list itself is excluded.
 The price-source API endpoint is not a name and is never listed. Pricing
-matches a harness id against the price table exactly, or through a run-config
-`priceIds` entry; a turn the harness does not price and the config does not
-name stays unpriced. Verified adapter behaviours live in
-`config/acpx-verify.md` so the acpx code carries no names.
+matches a harness id against the price table exactly, or after dropping a
+leading provider segment the harness adds, an effort suffix the adapter keeps,
+and a free-tier spelling; a bare model name also matches a table model by its
+suffix, and a run-config `priceIds` entry wins over all of it and must name a
+row exactly, so a stale mapping stays unpriced. A turn the harness does not
+price and no candidate names stays unpriced. Verified adapter
+behaviours live in `config/acpx-verify.md` so the acpx code carries no names.
 
 `codingRules` names a repo-relative markdown file whose text replaces the factory default `clean-code` partial in the implementer, QA, reviewer, steward and adjudicator prompts. When `codingRules` is absent the factory default renders; when present the file replaces it rather than appending, and a missing file is a config error. The path must stay worktree-relative and cannot escape the repo.
 
@@ -142,26 +168,54 @@ absorbs the other's history; the same-repo root must also not be ignored by the
 repository (the store replaces only its own folder `.gitignore`).
 
 Gate runs in different worktrees run in parallel. A gate waits only for the
-mutexes it names in `serial`, and same-named gates serialize within one worktree
-only: two worktrees never wait on each other's mutex, and a gate that names none
-never waits. `env` maps variable names to worktree-relative directories; the
+mutexes it names in `serial`, and same-named gates serialize across one
+repository's worktrees: two worktrees naming the same mutex wait for each other,
+two repositories never wait on each other, and a gate that names none never
+waits. `env` maps variable names to worktree-relative directories; the
 kernel creates them and exports absolute paths, so two worktrees get two
 directories.
 
 A gate's `format` gives its failures identities that survive assertion values
-and timings, so a red inherited from the base is not blamed on the task:
+and timings, so a red inherited from the base is not blamed on the task. A
+report failure is matched against the base by its fingerprint: one the base did
+not record is the task's, even under an already-red gate. A gate that names no
+report finding keeps the output-line signatures. Every report normalises to one
+finding model: check, tool, file, line, rule, severity, message and fingerprint.
 
-- `junit: <path>` names a worktree-relative report the command writes before it
-  exits. The kernel exports the absolute path as `FACTORY_JUNIT_PATH`, reads the
-  same file after the run, and stores its cases (capped, failing cases first).
-  Any runner that emits JUnit works: bun, pytest, jest-junit, nextest.
-- `pattern: pytest | jest | cargo` parses that runner's printed failure lines
-  when it writes no report. A gate may declare both; the report wins when it
-  names a failure.
+- `ctrf: <path>` names a worktree-relative CTRF report, validated by the
+  `ctrf` reference implementation. A framework without a native CTRF reporter
+  writes JUnit and converts it with `junit-to-ctrf`.
+- `junit: <path>` names a JUnit report. The kernel exports its absolute path as
+  `FACTORY_JUNIT_PATH`, converts it with `junit-to-ctrf`, and reads the same
+  findings model. Any runner that emits JUnit works: bun, pytest, jest-junit,
+  nextest.
+- `sarif: <path>` names a SARIF 2.1.0 log, validated by ajv against the OASIS
+  schema.
+- `regex: [{ pattern, tool?, rule?, severity? }]` is the declared escape hatch
+  for a tool that emits neither. Named groups `file`, `line`, `rule`,
+  `severity` and `message` are read; the whole match is the message when the
+  pattern names none.
 
-A JUnit red's summary names its failing cases, and a missing, empty or
-unreadable report is red rather than a silent pass. Records written before
-`details.junit` existed still classify by their output lines.
+A test report's red summary names its failing findings, and a missing, empty or
+unreadable report is red rather than a silent pass. A gate with no report still
+works by its exit code and log.
+
+`advisory: true` on a gate records and shows its red with its log but never
+blocks: it opens no fix round, parks nothing and leaves the merge and goal head
+green. A task file's `advisory: true` makes every check of that task advisory
+the same way. The reviewer and steward still read the red; only the kernel's
+blocking rules skip it.
+
+With no `gates` configured, the gates the kernel runs come from the goal's
+`infra.yaml`, written by the shipped `infra` ingestion step: each gate names a
+command, `speed: fast | slow`, the `status` the turn observed (`green`,
+`yellow` or `red`), and optionally `flaky` and `notes`. Discovery fills an empty
+repo config only; a configured gate is never replaced by a discovered one. The
+observed status is advisory — the kernel still runs the command and judges the
+tree — and reaches the context pack on the first iteration, before the
+architect's turn. A launch that resolves no gate stops before dispatch with
+that cause; a repository that intentionally runs none sets `requireGates: false`
+on the repo layer.
 
 **Process** — package `config/process.yaml`, optionally overridden by
 `.factory/process.yaml`:
@@ -175,17 +229,18 @@ flows:
       - { id: review, prompt: reviewer, alias: reviewer, review: true, changeRequests: 2 }
       - { id: resolve, prompt: steward, alias: steward }   # merge-conflict turn only; the wave-end steward also owns red-after-merge candidates
 taskTypes:
-  development: { flow: implement-review, kind: development, schema: outcome }
+  development: { flow: implement-review, kind: development, schema: outcome, useWhen: "change meant to land in the repo and merge after QA and review" }
 ingestion:                      # the goal-start step sequence, in list order
   - { id: branch }              # records the goal branch the launch created
   - { id: front }               # the classifier; exactly one, prompt/alias from boundary.front
+  - { id: infra, prompt: infra, alias: pm, deliverable: gate commands and status }
   - { id: scout, prompt: scout, alias: pm, deliverable: code map, when: [bigger] }
 boundary:                       # the kernel turns outside any task flow
   architect: { prompt: architect, alias: architect, repairPrompt: architect-repair, deliverable: "plan edit or stop decision" }
   digest: { prompt: digest, alias: digest }
   front: { prompt: front, alias: pm, deliverable: "class, task, and pack" }
   intent: { prompt: intent, alias: intent, deliverable: "intent edit" }
-  packprep: { prompt: pack-preparer, alias: pack-preparer, deliverable: "context pack" }
+  packprep: { prompt: pack-preparer, alias: pack-preparer, deliverable: "pack briefs" }
   plancheck: { prompt: plan-checker, alias: plan-checker, deliverable: "plan verdict" }
   pm: { prompt: pm, alias: pm, deliverable: "task files" }
   steward: { prompt: steward, alias: steward, deliverable: "merge resolution" }
@@ -194,6 +249,19 @@ architecture:                   # the plan review flow, before the PM derives ta
   reviewers: [plan-reviewer]    # one fresh read-only review turn per alias
   architectReturn: on-technical-concerns  # or never
   planReturn: { prompt: architect-review-return, deliverable: "plan edit and marks" }
+  flows:                        # the consult's steps, selected by launch reason
+    - when: [initial, concerns, iteration-done, steer, relaunch]
+      steps:
+        - { id: architect }     # a built-in id runs its kernel stage
+        - { id: planreview }
+        - { id: pm }
+        # A custom id runs one agent turn on its prompt and alias:
+        # - { id: assess, prompt: previous-run-assessment, alias: architect }
+pm:
+  steps:
+    - { id: derive }            # the built-in ladder that writes the task files
+    # A custom id runs one agent turn on its prompt and alias:
+    # - { id: postaudit, prompt: postaudit, alias: pm }
 hierarchy:                      # 1 architect (the norm), or 2 with one subarchitect per epic
   depth: 1
   subarchitect: { prompt: subarchitect, repairPrompt: architect-repair, deliverable: "epic plan edit or stop decision" }
@@ -204,10 +272,15 @@ first and exactly one `front` classifies the goal. Any other id runs one agent
 turn with its `prompt` on its `alias` (default `pm`) and must name a `prompt`;
 `deliverable` names what the turn produces. `when` gates a step to one or more
 goal classes (`trivial`, `task`, `bigger`) and cannot be named ahead of `front`,
-where the class is not known yet. The shipped `scout` step runs for bigger goals
-and writes the code map the context packs carry; without a scout step the packs
-keep the shallow directory index. Adding an ingestion agent (e.g. a
-requirements step) is a config edit, and its turn is recorded like any flow step.
+where the class is not known yet. The shipped `infra` step writes `infra.yaml`
+at the goal root: it copies the configured gates exactly, or discovers the
+project's commands when the repo config declares none, and reports the status it
+observed. The kernel runs those gates when none are configured and appends the
+report to the front's pack, so the architect reads a red or flaky gate before
+its turn. The shipped `scout` step runs for bigger goals and writes the code map
+the context packs carry; without a scout step the packs keep the shallow
+directory index. Adding an ingestion agent (e.g. a requirements step) is a
+config edit, and its turn is recorded like any flow step.
 
 A step may name `repairPrompt` (the template its in-session repair ask
 renders) and `deliverable` (the product the ask and the missing-outcome finding
@@ -228,9 +301,11 @@ through QA and review before it lands. The wave-end steward runs when a merge
 conflicts or when the goal branch is red: a parked branch whose last merged
 result ran red is a red-after-merge candidate — its turn receives the red gate
 log and repairs the merged result on that branch, then the merge queue re-runs
-its gates. A branch the boundary's kept-land pass can still land (its approve
-covers the tip, or its review-less flow's checks are green) stays with
-kept-land. A step that names no `repairPrompt`
+its gates. A branch the kept-land pass can still land (its approve covers the
+tip, or its review-less flow's checks are green) stays with kept-land until its
+wave-end attempt; kept-land runs there first and at the boundary last, and a
+branch that attempt cannot land — a conflict or a red — is the steward's on the
+same pass. A step that names no `repairPrompt`
 renders the process-level `repairPrompt` (default `delivery-repair`).
 The architect names `architect-repair` because its ask also requires the plan
 edit on disk; the default template then carries no role branch.
@@ -238,28 +313,44 @@ edit on disk; the default template then carries no role branch.
 `hierarchy.depth: 2` makes the architect register in `plan.md` live: one
 bullet per epic (`- epic \`auth\` | architect \`subarchitect\` | plan
 \`epics/auth.md\` | scope \`src/auth/**\` | opened i7 | active`). The boundary
-runs the main architect, then one subarchitect consult per active
-`subarchitect` row on the architect alias — each with its own epic plan and
-its own resumable, compacted session — then a plan review for every plan
-that changed, then the PM. An epic with a prior plan is steered on a harness
-whose caps advertise `subagents: steer` (omp with the subagent RPC surface):
-the main architect launches it as a named child of its own session, the
-script sends the consult over IRC, and the child's context is compacted
-before the next launch revives it by name. Every other harness, and a new
-epic's first consult, runs the separate written-report turn. A subarchitect
+checks the active epics bottom-to-top and then the goal, runs the bottom-up
+subarchitect report pass, the main architect's turn, then the top-down
+direction pass for the epics it names in `epicConsults` — each consult on
+the architect alias with its own epic plan and its own resumable, compacted
+session — then a plan review for every changed plan, then the PM. A first
+iteration runs only the top-down pass; a done iteration only the bottom-up
+pass. An epic with a prior plan is steered on a harness whose caps advertise
+`subagents: steer` (omp with the subagent RPC surface): the main architect
+launches it as a named child of its own session, the script sends the consult
+over IRC, and the child's context is compacted before the next launch revives
+it by name. A steer harness launches and steers every active epic before the
+top's choice exists, so `epicConsults` names only the written direction
+turns for chosen epics whose child did not deliver. Every other harness, and
+a new epic's first consult, runs the separate written turn. A subarchitect
 whose last decision was `done` and whose epic has no open task is left out
 until a task reopens it. Each subarchitect's outcome paragraph is written to
 `iterations/<n>/epics/<epic>/summary.md`. Depth 1 never parses the register
 and keeps today's single-architect flow.
 
-The `architecture` flow completes before the PM derives tasks. Each alias in
-`reviewers` gets one fresh read-only review turn that delivers `planReview`
-findings (`technical`, `planNotes`) and no verdict. With `architectReturn:
+The `architecture` flow completes before the PM derives tasks. `flows` holds
+one step list per launch reason (`initial`, `concerns`, `iteration-done`,
+`steer`, `relaunch`); a reason no list names runs the `initial` flow. The
+built-in ids `architect`, `planreview` and `pm` run the kernel's own stages
+and take no prompt, alias or repair fields; any other id runs one agent turn and
+must name a `prompt` and `alias`, so an assessment before the architect or
+another reviewer after it is a config edit.
+Each alias in `reviewers` gets one fresh read-only review turn that delivers
+`planReview` findings (`technical`, `planNotes`) and no verdict. With `architectReturn:
 on-technical-concerns`, technical findings get one `planReturn` architect turn
 that edits the plan and marks every finding; the findings never block the
 iteration. With `never`, the findings reach the next architect's pack, which
 asks for the same marks. The return runs on the architect boundary step's
 alias; its prompt is `planReturn.prompt`.
+
+The `pm` stage runs its own `steps` list; the built-in `derive` step runs the
+PM ladder and takes no turn fields; any other id runs one agent turn and must
+name a `prompt` and `alias`, so an assessment before the derive or an audit
+after it is a config edit. The flow names exactly one `derive` step.
 
 The kernel adds one technical finding of its own: an in-place edit to the
 bullet of a task whose file already exists. A task file is immutable outside
@@ -332,12 +423,13 @@ overlay.
 enum (`auto|short|long|none`) and is required in a declared `sessions` block.
 `short` and `long` bound a compaction to the hot window (5 minutes and one hour);
 `none` disables caching and `auto` leaves the window to the provider, so neither
-compacts — set `short` to compact. A harness entry's `compaction.enabled` decides
-whether its sessions compact at all; disabling it requires a `reason`, and an
-`acpx` harness that enables it must also declare `acpx.compact: true`. A review
-step's harness may add `reviewIterations: [1, 2]`: only those 1-based review
-rounds compact, while every other step ignores the rule. Absent means every
-review round compacts.
+compacts. Every harness entry must declare `compaction`: `enabled` decides
+whether its sessions compact at all; disabling it requires a `reason` recorded
+in the config itself (the shipped `agy` entry says the agent forwards `/compact`
+to the model and compacts nothing), and an `acpx` harness that enables it must
+also declare `acpx.compact: true`. A review step's harness may add
+`reviewIterations: [1, 2]`: only those 1-based review rounds compact, while every
+other step ignores the rule. Absent means every review round compacts.
 
 A task session resumes on the harness that recorded it. `portability: [{from, to}]`
 declares further directional edges: a session recorded on `from` may resume on
@@ -382,31 +474,25 @@ limit.
 A tier that answers quota latches its pool. The stop's stated reset
 (`Resets in 130h19m23s`, `Resets in 33m53s`, `retry-after-ms=38240413`) sets
 that pool's cooldown, capped by `quota.maxResetMinutes` when the run config sets
-one; a stop whose text names no parseable reset falls back to
-`quota.resetMinutes` (default 300) from the stop. A quota stop is final for the
-pool: a stated wait inside the retry window (`maxDelayMs`, 8 s) sleeps in full
-and retries once, and a quota stop again on that retry latches; a stop naming no
-wait, or a wait beyond the window, latches at once after one call. Every retry
-and every tier call reads the latch, so a latched pool makes no call and a
-later, shorter reset never shortens the stored one. A later tier drawing on a
-different pool is still called. The latch is visible in memory before the store
-write. The launch stores the reset time in the goal's session store
-(`quota-pools.yaml` beside the launch directories, so rotation keeps it), and a
-relaunch before that time skips the pool and starts on the next tier. An alias
-whose every tier is exhausted is unavailable: no harness call is made, and
-dispatch defers that work under a cause naming the dead pools and their reset
-times instead of probing the last dead tier.
-
-An alias may carry `rotate: [{ harness, model, effort }]` to change its primary
-per iteration: iteration N resolves `rotate[N % rotate.length]`, so iteration 1
-uses the second entry and the cycle wraps to the first. The rotated entry
-replaces the alias's own harness, model and effort for that turn; its fallbacks
-apply to the rotated entry, and a fallback without `harness` runs on the
-rotated harness. Pre-flight validates every entry's harness, model and effort,
-and a fallback that can land on several rotated harnesses is checked against
-each of them. Without `rotate` (or with an empty list) the alias keeps its own
-harness and model. Shipped example: `bootstrap/run/self-rotate.yaml` cycles the
-implementer across opencode, pi and codex.
+one; a stop whose text names no parseable reset falls back to that pool's own
+`quota.perSubscription` interval, else `quota.resetMinutes` (default 300), from
+the stop. A quota stop is final for the pool: a stated wait inside the retry
+window (`maxDelayMs`, 8 s) sleeps in full and retries once, and a quota stop
+again on that retry latches; a stop naming no wait, or a wait beyond the
+window, latches at once after one call. Every retry and every tier call reads
+the latch, so a latched pool makes no call and a later, shorter reset never
+shortens the stored one. A later tier drawing on a different pool is still
+called. The latch is visible in memory before the store write. The launch
+stores the latch in the machine's session store
+(`<sessions.dir>/quota-pools.yaml`), outside every goal directory, so a
+relaunch or another goal on this machine skips the pool before that time and
+starts on the next tier. A pool whose interval has passed is due one probe: the
+first tier call claims it, every other leg reads the claim as a latch and falls
+back meanwhile, and a probe that serves frees the pool while a probe that
+answers quota latches it again. An alias whose every tier is exhausted is
+unavailable: no harness call is made, and dispatch defers that work under a
+cause naming the dead pools and their reset times instead of probing the last
+dead tier.
 
 `prices` maps a model id to USD per million tokens: `input`, `cachedInput`,
 `output` and `reasoning`, all four required. A turn costs its harness's
@@ -443,11 +529,20 @@ spent, the previous resume started no task turn or architect ruling, the
 iteration's latest plan-check is `architect`, every ready task is held by a
 pending steer, a hold file is unreadable, or a goal hold or iteration brake
 stands. A refused resume goes straight to the boundary at the next iteration.
-An architect route (a stall waits for the architect too) or an underivable graph
-finding from the resume's steer turn runs the boundary before dispatch in the
-same iteration, and that ruling counts as the pass's progress. A resumed pass that starts no task turn and runs no
-boundary does not consume the `iterations` budget: the boundary runs next in the
-same launch.
+An iteration that died before its decision — inside the ingestion sequence —
+also resumes in place: a step whose turn already wrote a valid outcome and its
+promised artifact (the front's class, the scout's code map) is adopted with it,
+so the completed steps are not rerun, a done outcome the step never backed is
+sealed a crash and reruns, the adopted turn is priced as unpriced (its usage
+died with the process), and the boundary runs in that same iteration. A clean
+resume is script-only: dispatch starts from the records with no digest and no PM
+turn first. A problematic resume — a task file the scan quarantined, or a task
+graph finding the script cannot derive away — gets the digest and one PM repair
+turn before dispatch. An architect route (a stall waits for the architect too)
+or an underivable graph finding from that repair turn runs the boundary before
+dispatch in the same iteration, and that ruling counts as the pass's progress. A
+resumed pass that starts no task turn and runs no boundary does not consume the
+`iterations` budget: the boundary runs next in the same launch.
 
 Pre-flight resolves every alias (and fallback) through the harness, checks the
 model list, the effort level, binaries, the base branch, and that
@@ -461,9 +556,9 @@ levels plus `auto`.
 `options` passed untouched: acpx reads `args`/`env` (pre-flight refuses an
 `args` that is not a string array or an `env` that is not a string-to-string
 map), omp merges the keys into its launch overlay (`sessions.retention` owns
-`providers.cacheRetention`). Each entry's `compaction` block records whether its
-sessions compact and, when disabled, why (the `agy` entry: `/compact` reaches
-the model as a prompt and compacts nothing). The shipped
+`providers.cacheRetention`). Each entry must declare a `compaction` block that
+records whether its sessions compact and, when disabled, why (the `agy` entry:
+`/compact` reaches the model as a prompt and compacts nothing). The shipped
 `bootstrap/run/base.yaml` keeps the unattended omp policy there —
 memory/auto-learn/skills off, approval, disabled providers, retry — so no policy
 is compiled in.
@@ -495,9 +590,14 @@ Gates run once on the base; a red base is recorded and warned once, not fatal.
 ## Steering
 
 `factory steer --goal demo notes.md` (or `-` for stdin) puts the file in
-`mailbox/inbox` without a partial-file window. A steer that arrives while
-dispatch runs gets one PM steer turn at the next poll. A steer that arrives
-while nothing is in flight takes the same PM turn at the next boundary, before
+`mailbox/inbox` without a partial-file window. Dispatch watches the inbox on
+its own five-second timer, independent of the turns it runs, so a steer that
+arrives during a long turn gets its one PM steer turn before that turn ends: a
+steer is announced once its content has held for
+`limits.steerDebounceSeconds` (default 60), everything announced together gets
+one turn, and a steer that arrives before the goal has a plan waits for the
+plan, because the PM routes nothing without one. A steer that arrives while
+nothing is in flight takes the same PM turn at the next boundary, before
 the architect: the PM answers it, writes its task or spike, routes it to the
 intent agent, or hands it to the architect. An `intent` route is carried into
 `intent.md` first, and the architect's pack shows the diff and the steer
@@ -508,6 +608,18 @@ A steer whose file starts with `urgent: true` frontmatter is the exception: it
 is not answered by the PM. Dispatch stops starting new work, in-flight tasks
 finish, and the next iteration's architect consult reads the steer with the
 flag shown as `[urgent]`. The frontmatter block is not part of the steer text.
+
+A steer whose frontmatter names `epic: <name>` belongs to that epic: only its
+epic's PM routes it, only its epic's architect reads it, and the top PM and
+architect never see it. The epic must be active in the architect register; a
+name outside it leaves the steer goal-level.
+
+```markdown
+---
+epic: auth
+---
+Keep the auth interface steady.
+```
 
 ```markdown
 ---
@@ -533,8 +645,11 @@ unfinished ask and the rescue recovered, loop incidents (no-progress and
 empty-diff parks; a spike's empty finish and overflow parks are not loop
 incidents), wasted turns by reason and by role and alias (complete implementer
 failure; structure: protocol, containment, outcome channel, infra; flaky-test
-rejection), rebutted review turns counted apart as accepted tax, QA-only
-catches per task (findings no earlier gate failure or reviewer finding matched),
+rejection), quota stops that landed no work reported apart from waste (a
+failed launch that landed work still counts), rebutted review turns counted
+apart as accepted tax, QA-only catches per task (findings no gate failure or
+reviewer finding carried, before or — since the reviewer runs after QA — after
+the QA turn) with a sampled catch naming its record and who else carried it,
 human interventions (processed steers) and the observable
 operator-act counter (steers plus containment outside-changes and
 integration-moved merges), gate and commit wall time, and turns, tokens, cost
@@ -552,15 +667,14 @@ report and is unpriced even when its model has a table entry. A turn neither the
 counted as unpriced, so a total containing one is partial; cost per merged
 task is unset only when nothing merged or no turn had a known cost. A free
 model prices to a known `$0` through its all-zero table entry, and its tokens
-still carry the signal. `factory benchmark --goal <name>` prints these
-aggregates as rows.
+still carry the signal.
 
 ## Loop-based optimization
 
 Loop-based optimization goals (such as algorithmic speedups, throughput tuning,
-cache optimization, or memory reduction) run entirely on the shipped task types
-(`spike`, `development`, `trivial`) and the standard boundary iteration loop with
-no new configuration keys or custom flows:
+cache optimization, or memory reduction) run entirely on the shipped
+`spike`, `development` and `trivial` types and the standard boundary iteration
+loop with no new configuration keys or custom flows:
 
 - **Candidate spikes (`type: spike`)**: When exploring multiple or uncertain
   optimization approaches (e.g. SIMD vectorization vs. arena allocation vs.

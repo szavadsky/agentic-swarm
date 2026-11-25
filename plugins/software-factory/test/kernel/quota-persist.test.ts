@@ -14,6 +14,7 @@ import {
   poolExhausted,
   poolResetAt,
   quotaPoolsPath,
+  takePoolCall,
 } from "../../src/kernel/quota-pools.js";
 import {
   cleanup,
@@ -100,7 +101,6 @@ describe("pool reset window", () => {
     );
   });
 });
-
 describe("exhausted-pool persistence", () => {
   registerExhaustedPoolPersistencePart1();
   registerExhaustedPoolPersistencePart2();
@@ -116,7 +116,7 @@ describe("pool latch reset", () => {
   it("never shortens a stored reset", async () => {
     const paths = tempPoolPaths();
     try {
-      const pools = new Map<string, number>();
+      const pools = new Map<string, { resetAt: number }>();
       const now = Date.now();
       const long = now + 130 * 60 * 60_000;
       const short = now + 5 * 60 * 60_000;
@@ -132,7 +132,7 @@ describe("pool latch reset", () => {
         pool: "pool-a",
         resetAt: short,
       });
-      expect(pools.get("pool-a")).toBe(long);
+      expect(pools.get("pool-a")?.resetAt).toBe(long);
       let stored = yaml.parse(fs.readFileSync(quotaPoolsPath(paths), "utf8"));
       expect(Date.parse(stored.pools["pool-a"].resetAt)).toBe(long);
 
@@ -143,7 +143,7 @@ describe("pool latch reset", () => {
         pool: "pool-a",
         resetAt: later,
       });
-      expect(pools.get("pool-a")).toBe(later);
+      expect(pools.get("pool-a")?.resetAt).toBe(later);
       stored = yaml.parse(fs.readFileSync(quotaPoolsPath(paths), "utf8"));
       expect(Date.parse(stored.pools["pool-a"].resetAt)).toBe(later);
     } finally {
@@ -156,7 +156,7 @@ describe("pool latch visibility", () => {
   it("latches in memory before the store write, and both concurrent stops persist", async () => {
     const paths = tempPoolPaths();
     try {
-      const pools = new Map<string, number>();
+      const pools = new Map<string, { resetAt: number }>();
       const poolA = Date.now() + 60_000;
       const go = Date.now() + 120_000;
       const first = markPoolExhausted({
@@ -297,7 +297,8 @@ async function skipsPoolRelaunchBeforeStoredResetPart3(
     "utf8",
   );
   const reloaded = await loadPoolResets(paths);
-  expect(reloaded.has("fake+fake-impl")).toBe(false);
+  expect(poolExhausted(reloaded, "fake+fake-impl")).toBe(false);
+  expect(takePoolCall(reloaded, "fake+fake-impl").kind).toBe("probe");
 }
 
 function registerExhaustedPoolPersistencePart1(): void {
@@ -338,10 +339,11 @@ function registerExhaustedPoolPersistencePart1(): void {
       expect(result.outcome?.status).toBe("done");
       expect(poolExhausted(runtime.exhaustedPools, "a+ma")).toBe(true);
 
-      // The file sits beside the launch directories in the goal's session store.
+      // The latch sits at the machine's session store root, outside every
+      // goal directory, so another goal reads it.
       const file = quotaPoolsPath(runtime.paths);
       expect(path.relative(runtime.paths.sessionsDir, file)).toBe(
-        path.join(goal, "quota-pools.yaml"),
+        "quota-pools.yaml",
       );
       const stored = yaml.parse(fs.readFileSync(file, "utf8"));
       expect(Object.keys(stored.pools)).toEqual(["a+ma"]);
@@ -356,7 +358,7 @@ function registerExhaustedPoolPersistencePart1(): void {
 }
 
 function registerExhaustedPoolPersistencePart2(): void {
-  it("drops a stored reset that already passed and refuses a corrupt file", async () => {
+  it("keeps a passed reset as a due probe and refuses a corrupt file", async () => {
     const { repo, goal } = setupFlowRepo();
     const paths = resolveGoalPaths(loadConfigs(repo.dir), repo.dir, goal);
     try {
@@ -375,7 +377,11 @@ function registerExhaustedPoolPersistencePart2(): void {
       );
 
       const resets = await loadPoolResets(paths);
-      expect([...resets.keys()]).toEqual(["future"]);
+      // The pool that passed its interval is still known: its next call is
+      // its one probe, while the future latch keeps the pool dead.
+      expect([...resets.keys()].sort()).toEqual(["future", "past"]);
+      expect(poolExhausted(resets, "past")).toBe(false);
+      expect(poolExhausted(resets, "future")).toBe(true);
 
       fs.writeFileSync(file, "pools: [\n", "utf8");
       await expect(loadPoolResets(paths)).rejects.toThrow(/not valid YAML/);

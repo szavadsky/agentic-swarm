@@ -1,29 +1,17 @@
 /**
- * Turn targeting: the alias chain (rotation, fallbacks, quota pools) and the
+ * Turn targeting: the alias chain (fallbacks, quota pools) and the
  * kernel/architecture boundary targets resolved from process config.
  */
 import type { Harness, ModelRef } from "../harness/types.js";
-import { canaryKey, isProven } from "./canary.js";
+import type { ResolvedTier, TurnTarget } from "./flow-types.js";
 import { poolExhausted } from "./quota-pools.js";
 import type {
-  AliasConfig,
   BoundaryStep,
   FallbackModelConfig,
   KernelRuntime,
   RepairSpec,
-  Timeouts,
   TurnSpec,
 } from "./types.js";
-
-/** One resolved fallback tier: the harness, model, effort and quota pool one call draws on. */
-export interface ResolvedTier {
-  harness: Harness;
-  model: ModelRef;
-  effort?: string;
-  subscription?: string;
-  /** Harness configuration passed through `TurnRequest.opaque`. */
-  opaque?: unknown;
-}
 
 /** Pool key for quota tracking: explicit subscription, or harness+model when none. */
 export function tierPoolKey(tier: {
@@ -67,40 +55,6 @@ export function fallbackTierSubscription(
   return aliasSubscription;
 }
 
-/** Everything one turn needs to run: the resolved prompt, alias, harness, model and its own limits. */
-export interface TurnTarget {
-  /** Prompt template the turn renders; the role the agent acts as. */
-  prompt: string;
-  alias: string;
-  /** Repair template the step named; absent renders `delivery-repair`. */
-  repairPrompt?: string;
-  /** Ask for a turn that settled no outcome at all; absent keeps the repair ask. */
-  unfinishedPrompt?: string;
-  /** Product the step named; absent derives from the turn's expectation. */
-  deliverable?: string;
-  harness: Harness;
-  model: ModelRef;
-  effort?: string;
-  subscription?: string;
-  /**
-   * Effective fallback chain, primary first: tiers whose quota pool is recorded
-   * in `exhaustedPools` are dropped, so `[0]` mirrors the fields above. Empty
-   * when every tier is exhausted: no call may run, and `unavailable` says why.
-   */
-  tiers: ResolvedTier[];
-  /**
-   * Why no tier can serve this turn: every tier's quota pool is exhausted.
-   * `harness`, `model` and `opaque` name the chain's last tier for bookkeeping,
-   * but a turn must not call it; dispatch defers the work under this cause.
-   */
-  unavailable?: string;
-  /** Chain index `tiers[0]` had in the alias's configured chain before exhausted tiers were dropped; the chain length when none is left. */
-  tierOffset: number;
-  timeouts?: Timeouts;
-  /** Harness configuration passed through `TurnRequest.opaque`. */
-  opaque?: unknown;
-}
-
 /**
  * Names an alias whose every tier is exhausted, with each dead pool and the
  * stored time it may serve again. Dispatch defers the work under this cause
@@ -113,10 +67,11 @@ export function noLiveTierCause(
 ): string {
   const pools = [...new Set(chain.map((tier) => tierPoolKey(tier)))].map(
     (pool) => {
-      const resetAt = runtime.exhaustedPools.get(pool);
-      return resetAt === undefined
-        ? pool
-        : `${pool} resets at ${new Date(resetAt).toISOString()}`;
+      const stored = runtime.exhaustedPools.get(pool);
+      if (stored === undefined) return pool;
+      return stored.probing === true
+        ? `${pool} probe in flight`
+        : `${pool} resets at ${new Date(stored.resetAt).toISOString()}`;
     },
   );
   return `alias "${aliasName}" has no live tier: its quota pools are exhausted (${pools.join("; ")})`;
@@ -130,15 +85,13 @@ function targetForAlias(
   runtime: KernelRuntime,
   prompt: string,
   aliasName: string,
-  iteration?: number,
-  proven?: ReadonlySet<string>,
 ): TurnTarget {
   const alias = runtime.configs.run.aliases[aliasName];
   if (!alias)
     throw new Error(
       `run config has no alias "${aliasName}" (needed by prompt "${prompt}")`,
     );
-  const chain = resolveChain(runtime, aliasName, iteration, proven);
+  const chain = resolveChain(runtime, aliasName);
   const available = chain.filter(
     (tier) => !poolExhausted(runtime.exhaustedPools, tierPoolKey(tier)),
   );
@@ -159,44 +112,6 @@ function targetForAlias(
     ...(exhausted
       ? { unavailable: noLiveTierCause(runtime, aliasName, chain) }
       : {}),
-  };
-}
-
-/**
- * The alias's primary entry for an iteration: its rotate entry when one is
- * configured, else the alias's own harness, model and effort. Iteration N
- * selects `rotate[N % rotate.length]`, so iteration 1 starts at index 1.
- * Rotation only picks proven combinations: an entry with no passing canary
- * record is skipped, and when none are proven the alias keeps its own
- * primary.
- */
-function primaryEntry(
-  alias: AliasConfig,
-  iteration: number | undefined,
-  proven?: ReadonlySet<string>,
-): { harness: string; model: string; effort?: string } {
-  const rotateAll = alias.rotate ?? [];
-  // Only a non-empty registry gates: before any canary has been recorded,
-  // rotation stays as configured; once the first proof lands, unproven
-  // entries are skipped.
-  const rotate =
-    proven === undefined || proven.size === 0
-      ? rotateAll
-      : rotateAll.filter((entry) =>
-          isProven(proven, canaryKey(entry.harness, entry.model)),
-        );
-  if (iteration === undefined || rotate.length === 0)
-    return {
-      harness: alias.harness,
-      model: alias.model,
-      ...(alias.effort ? { effort: alias.effort } : {}),
-    };
-  const entry = rotate[iteration % rotate.length]!;
-  const effort = entry.effort ?? alias.effort;
-  return {
-    harness: entry.harness,
-    model: entry.model,
-    ...(effort ? { effort } : {}),
   };
 }
 
@@ -234,33 +149,29 @@ function pushTier(
 }
 
 /**
- * Appends one alias's ladder to `out`: its primary for the iteration, then
- * each fallback in order. A literal fallback carries its own effort and, when it
- * keeps the primary's harness and model or declares `sharesPool`, its
- * subscription to this alias's; one that changes either without declaring
- * draws on no subscription and is keyed `harness+model`. A fallback that names
- * another alias contributes that alias's whole ladder on the same iteration,
- * so each of its tiers keeps the named alias's own defaults and quota pools. An
- * alias already on `path` is a cycle, refused at pre-flight and never walked
- * twice here.
+ * Appends one alias's ladder to `out`: its primary, then each fallback in
+ * order. A literal fallback carries its own effort and, when it keeps the
+ * primary's harness and model or declares `sharesPool`, its subscription to
+ * this alias's; one that changes either without declaring draws on no
+ * subscription and is keyed `harness+model`. A fallback that names another
+ * alias contributes that alias's whole ladder, so each of its tiers keeps the
+ * named alias's own defaults and quota pools. An alias already on `path` is a
+ * cycle, refused at pre-flight and never walked twice here.
  */
 function collectTiers(
   runtime: KernelRuntime,
   aliasName: string,
-  iteration: number | undefined,
   path: readonly string[],
   out: ChainTiers,
-  proven?: ReadonlySet<string>,
 ): void {
   const alias = runtime.configs.run.aliases[aliasName]!;
-  const primary = primaryEntry(alias, iteration, proven);
   pushTier(
     runtime,
     out,
     aliasName,
-    primary.harness,
-    primary.model,
-    primary.effort,
+    alias.harness,
+    alias.model,
+    alias.effort,
     alias.subscription,
   );
   for (const fallback of alias.fallbacks ?? []) {
@@ -274,13 +185,13 @@ function collectTiers(
         throw new Error(
           `fallback alias chain forms a cycle: ${[...path, target].join(" -> ")}`,
         );
-      collectTiers(runtime, target, iteration, [...path, target], out, proven);
+      collectTiers(runtime, target, [...path, target], out);
       continue;
     }
-    const tierHarness = fallback.harness ?? primary.harness;
+    const tierHarness = fallback.harness ?? alias.harness;
     const changesPrimary = fallbackChangesPrimary(fallback, {
-      harness: primary.harness,
-      model: primary.model,
+      harness: alias.harness,
+      model: alias.model,
     });
     pushTier(
       runtime,
@@ -302,38 +213,26 @@ function collectTiers(
 function resolveChain(
   runtime: KernelRuntime,
   aliasName: string,
-  iteration?: number,
-  proven?: ReadonlySet<string>,
 ): ResolvedTier[] {
   const out: ChainTiers = { seen: new Set(), tiers: [] };
-  collectTiers(runtime, aliasName, iteration, [aliasName], out, proven);
+  collectTiers(runtime, aliasName, [aliasName], out);
   return out.tiers;
 }
 
 /**
- * Resolves a configured prompt and alias for an iteration. `aliasOverride` is
- * a task tier or a PM rung (`default` means no override); flows branch on the
- * resolved alias, never on a harness id. An alias with `rotate` resolves the
- * iteration's entry as its primary; omitting the iteration resolves the
- * alias's own primary, for callers that need only its identity.
+ * Resolves a configured prompt and alias. `aliasOverride` is a task tier or a
+ * PM rung (`default` means no override); flows branch on the resolved alias,
+ * never on a harness id.
  */
 export function resolveTurn(
   runtime: KernelRuntime,
   prompt: string,
   aliasName: string,
   aliasOverride?: string,
-  iteration?: number,
-  proven?: ReadonlySet<string>,
 ): TurnTarget {
   const override =
     aliasOverride && aliasOverride !== "default" ? aliasOverride : undefined;
-  return targetForAlias(
-    runtime,
-    prompt,
-    override ?? aliasName,
-    iteration,
-    proven ?? runtime.provenCombinations,
-  );
+  return targetForAlias(runtime, prompt, override ?? aliasName);
 }
 
 /** A step's repair ask; absent fields stay absent so the kernel default applies. */
@@ -351,13 +250,12 @@ export function repairFields(
 export function boundaryTarget(
   runtime: KernelRuntime,
   step: BoundaryStep,
-  iteration?: number,
   aliasOverride?: string,
 ): TurnTarget {
   const spec: TurnSpec | undefined = runtime.configs.process.boundary[step];
   if (!spec) throw new Error(`process config has no boundary step "${step}"`);
   return {
-    ...resolveTurn(runtime, spec.prompt, spec.alias, aliasOverride, iteration),
+    ...resolveTurn(runtime, spec.prompt, spec.alias, aliasOverride),
     ...repairFields(spec),
   };
 }
@@ -367,10 +265,7 @@ export function boundaryTarget(
  * architect boundary step's alias, so depth 2 needs no second run-config
  * alias. A missing prompt is a config defect, never a silent depth-1 turn.
  */
-export function subarchitectTarget(
-  runtime: KernelRuntime,
-  iteration: number,
-): TurnTarget {
+export function subarchitectTarget(runtime: KernelRuntime): TurnTarget {
   const spec = runtime.configs.process.hierarchy?.subarchitect;
   if (!spec)
     throw new Error(
@@ -382,7 +277,6 @@ export function subarchitectTarget(
       spec.prompt,
       runtime.configs.process.boundary.architect.alias,
       undefined,
-      iteration,
     ),
     ...repairFields(spec),
   };
@@ -397,13 +291,12 @@ export function architectureTarget(
   runtime: KernelRuntime,
   turn: "planReview" | "planReturn",
   alias: string,
-  iteration: number,
 ): TurnTarget {
   const spec = runtime.configs.process.architecture[turn];
   if (!spec)
     throw new Error(`process config has no architecture ${turn} prompt`);
   return {
-    ...resolveTurn(runtime, spec.prompt, alias, undefined, iteration),
+    ...resolveTurn(runtime, spec.prompt, alias, undefined),
     ...repairFields(spec),
   };
 }

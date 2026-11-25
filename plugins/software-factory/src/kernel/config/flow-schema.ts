@@ -2,8 +2,14 @@
 
 import { z } from "zod";
 import { dagEdges } from "../dag.js";
-import { BOUNDARY_STEPS, BUILTIN_INGESTION_IDS } from "../types.js";
+import {
+  ARCHITECT_REASONS,
+  BOUNDARY_STEPS,
+  BUILTIN_ARCHITECTURE_FLOW_STEPS,
+  BUILTIN_INGESTION_IDS,
+} from "../types.js";
 import type {
+  ArchitectureFlow,
   BoundaryStep,
   BuiltinIngestionId,
   IngestionStepConfig,
@@ -199,7 +205,7 @@ export const flowStepSchema = z
   );
 
 /** Step ids the flow vocabulary reserves; never usable as `after` targets. */
-const RESERVED_STEP_IDS = new Set(["checks", "resolve"]);
+const RESERVED_STEP_IDS = new Set(["checks", "decide", "resolve"]);
 
 /** A flow's raw shape: the step list every refinement reads. */
 const flowBaseSchema = z
@@ -305,16 +311,38 @@ export const flowSchema = flowBaseSchema
 
 /**
  * One task type: the flow a task runs, whether it is a spike or development
- * work, and the kernel output schema its turns deliver. The type owns all
- * three so a task file cannot pair a spike kind with a review-only flow.
+ * work, the kernel output schema its turns deliver, and the one line that
+ * tells a planner when the type fits. The type owns all of it so a task file
+ * cannot pair a spike kind with a review-only flow, and a planner never picks a
+ * type from its name alone.
  */
 export const taskTypeSchema = z
   .object({
     flow: z.string().min(1),
     kind: z.enum(["spike", "development"]),
     schema: z.string().min(1),
+    /**
+     * The type's product may live outside git: the task finishes without a
+     * committed report and never merges. A normal type defaults to false.
+     */
+    nogit: z.boolean().default(false),
+    /**
+     * An operator barrier: the task runs no flow; its readiness stops the
+     * launch for promotion, and the stop marks it finished for the relaunch.
+     */
+    promote: z.boolean().default(false),
+    /** One line naming the work this type fits; rendered to every planner. */
+    useWhen: z.string().min(1),
   })
-  .strict();
+  .strict()
+  .refine((type) => !type.nogit || type.kind === "spike", {
+    message: "a nogit task type needs kind spike: it finishes without a merge",
+    path: ["nogit"],
+  })
+  .refine((type) => !type.promote || type.kind === "spike", {
+    message: "a promote task type needs kind spike: it never merges",
+    path: ["promote"],
+  });
 
 /** Every boundary step names its prompt and alias; unknown steps are refused. */
 export const boundarySchema = z
@@ -340,6 +368,89 @@ export const boundaryOverrideSchema = z
  */
 const promptSpecSchema = turnSchema.omit({ alias: true });
 
+/**
+ * One architect-flow step: a built-in id binds its kernel stage and names no
+ * turn fields; a non-built-in id names its prompt and alias.
+ */
+export const architectureFlowStepSchema = z
+  .object({
+    id: z
+      .string()
+      .min(1)
+      .regex(
+        /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/,
+        "step id must be a simple name (no path separators)",
+      ),
+    prompt: z.string().min(1).optional(),
+    alias: z.string().min(1).optional(),
+    repairPrompt: z.string().min(1).optional(),
+    unfinishedPrompt: z.string().min(1).optional(),
+    deliverable: z.string().min(1).optional(),
+  })
+  .strict()
+  .refine(
+    (step) =>
+      BUILTIN_ARCHITECTURE_FLOW_STEPS.includes(
+        step.id as (typeof BUILTIN_ARCHITECTURE_FLOW_STEPS)[number],
+      ) ||
+      (step.prompt !== undefined && step.alias !== undefined),
+    {
+      message: "a non-built-in architect flow step needs a prompt and an alias",
+      path: ["prompt"],
+    },
+  )
+  .refine(
+    (step) =>
+      !BUILTIN_ARCHITECTURE_FLOW_STEPS.includes(
+        step.id as (typeof BUILTIN_ARCHITECTURE_FLOW_STEPS)[number],
+      ) ||
+      (step.prompt === undefined &&
+        step.alias === undefined &&
+        step.repairPrompt === undefined &&
+        step.unfinishedPrompt === undefined &&
+        step.deliverable === undefined),
+    {
+      message:
+        "a built-in architect flow step cannot name a prompt, alias, repair prompt, unfinished prompt or deliverable",
+      path: ["id"],
+    },
+  );
+
+/** One launch-reason flow: at least one reason and a step list ending in `pm`. */
+export const architectureFlowSchema = z
+  .object({
+    when: z.array(z.enum(ARCHITECT_REASONS)).min(1),
+    steps: z.array(architectureFlowStepSchema).min(1),
+  })
+  .strict()
+  .refine(
+    (flow) => {
+      const ids = flow.steps.map((step) => step.id);
+      return new Set(ids).size === ids.length;
+    },
+    {
+      message: "an architect flow's steps must not repeat a step id",
+      path: ["steps"],
+    },
+  )
+  .refine(
+    (flow) => flow.steps.filter((step) => step.id === "architect").length === 1,
+    {
+      message: "an architect flow must name exactly one architect step",
+      path: ["steps"],
+    },
+  )
+  .refine((flow) => flow.steps.at(-1)?.id === "pm", {
+    message: "an architect flow must end at the pm step",
+    path: ["steps"],
+  });
+
+/** A step list per launch reason; a reason no list names runs the initial flow. */
+export const architectureFlowsSchema = z
+  .array(architectureFlowSchema)
+  .min(1)
+  .transform((flows) => flows as ArchitectureFlow[]);
+
 /** The plan review flow: its prompt, reviewers, and the architect's return. */
 export const architectureSchema = z
   .object({
@@ -347,6 +458,7 @@ export const architectureSchema = z
     reviewers: z.array(z.string().min(1)).min(1),
     architectReturn: z.enum(["on-technical-concerns", "never"]),
     planReturn: promptSpecSchema.optional(),
+    flows: architectureFlowsSchema.optional(),
   })
   .strict()
   .refine(
@@ -366,6 +478,7 @@ export const architectureOverrideSchema = z
     reviewers: z.array(z.string().min(1)).min(1).optional(),
     architectReturn: z.enum(["on-technical-concerns", "never"]).optional(),
     planReturn: promptSpecSchema.optional(),
+    flows: architectureFlowsSchema.optional(),
   })
   .strict();
 

@@ -8,7 +8,12 @@ import { runDispatch } from "../../src/kernel/dispatch.js";
 import { executeTaskAction } from "../../src/kernel/flow.js";
 import type { KernelRuntime } from "../../src/kernel/types.js";
 import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
-import { commitIn, head, parkAlpha } from "./base-sync-helpers.js";
+import {
+  commitIn,
+  head,
+  parkAlpha,
+  runImplementStep,
+} from "./base-sync-helpers.js";
 import {
   expectSyncedContinuation,
   scriptSyncedHeadTurns,
@@ -39,7 +44,6 @@ async function parksBaseConflictWhenMarkersRemainPart1(
   const harness = new FakeHarness({ id: "fake" });
   parkAlpha(harness, "clash.txt", "alpha\n");
   scriptStallLeave(harness, ["alpha"]);
-  scriptStallLeave(harness, ["beta"]);
   const runtime = await makeRuntime(repo, goal, { fake: harness });
   const checkout = goalCheckout(repo, goal);
   await writeTask(runtime, task("alpha", { scope: ["clash.txt"] }));
@@ -66,11 +70,9 @@ async function parksBaseConflictWhenMarkersRemainPart1(
     ctx.writeOutcome(outcome({ summary: "beta tried" }));
     return fakeTurnResult(req);
   });
-  await writeTask(
-    runtime,
-    task("beta", { base: "alpha", scope: ["beta.txt"] }),
-  );
-  await runDispatch(runtime, { iteration: 2 });
+  const beta = task("beta", { base: "alpha", scope: ["beta.txt"] });
+  await writeTask(runtime, beta);
+  await runImplementStep(runtime, beta, 2);
   const records = await runtime.store.listRecords();
   const state = derive(
     await runtime.store.listTasks(),
@@ -428,7 +430,6 @@ function registerParkedContinuationSyncsToTheIntegrationHeadPart5(): void {
       const harness = new FakeHarness({ id: "fake" });
       parkAlpha(harness, "clash.txt", "alpha\n");
       scriptStallLeave(harness, ["alpha"]);
-      scriptStallLeave(harness, ["beta"]);
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       const checkout = goalCheckout(repo, goal);
       await writeTask(runtime, task("alpha", { scope: ["clash.txt"] }));
@@ -445,11 +446,9 @@ function registerParkedContinuationSyncsToTheIntegrationHeadPart5(): void {
         ctx.writeOutcome(outcome({ summary: "beta ignored the conflict" }));
         return fakeTurnResult(req);
       });
-      await writeTask(
-        runtime,
-        task("beta", { base: "alpha", scope: ["beta.txt"] }),
-      );
-      await runDispatch(runtime, { iteration: 2 });
+      const beta = task("beta", { base: "alpha", scope: ["beta.txt"] });
+      await writeTask(runtime, beta);
+      await runImplementStep(runtime, beta, 2);
       const records = await runtime.store.listRecords();
       const state = derive(
         await runtime.store.listTasks(),

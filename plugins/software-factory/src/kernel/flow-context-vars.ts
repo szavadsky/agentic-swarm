@@ -17,6 +17,7 @@ import {
   fixDispositions,
   lastAcceptance,
   lastChecks,
+  lastDecide,
   lastMergeChecks,
   lastReview,
 } from "./flow-context-history.js";
@@ -26,11 +27,18 @@ import {
   formatFailingChecks,
   newGateFailures,
 } from "./gates.js";
+import { gateCommandsText } from "./infra.js";
+import { outcomeExampleVar } from "./outcome-example.js";
+import { expectationForStep } from "./outcome.js";
 import { taskOutcomeSchema } from "./outcome-schemas.js";
-import { outcomeSchemaVar, qaOutcomeSchemaVar } from "./prompt-schema.js";
+import { qaOutcomeSchema } from "./qa.js";
 import { CHECK_HANDOFF_DEFAULTS, GATE_LAST_CALL_ASK } from "./prompts.js";
 import { formatAcceptanceFindings, formatReviewFindings } from "./record.js";
-import { isLastChecksFixCall } from "./review.js";
+import {
+  isLastChecksFixCall,
+  isAcceptanceStep,
+  launchCounts,
+} from "./review.js";
 import { spikeReportPath } from "./spike-report.js";
 import type {
   FlowDefinition,
@@ -72,10 +80,13 @@ function readHandoff(
 ): Handoff {
   const review = lastReview(records, task.slug, flow);
   const acceptance = lastAcceptance(records, task.slug, flow);
+  const decide = lastDecide(records, task.slug);
   const qaStep = flow.steps.find((step) => step.id === stepId)?.qa === true;
   const checks = lastChecks(records, task.slug);
   const mergeChecks = lastMergeChecks(records, task.slug);
-  const latest = [acceptance, checks, mergeChecks]
+  // A decide turn's `changes` verdict is the next fix turn's findings, like a
+  // review's: it is the ask that sent the work back.
+  const latest = [acceptance, decide, checks, mergeChecks]
     .filter((r): r is StepRecord => Boolean(r))
     .sort(bySeq)
     .at(-1);
@@ -84,6 +95,8 @@ function readHandoff(
   let findings = "";
   if (latest === acceptance && acceptance?.outcome)
     findings = formatAcceptanceFindings(acceptance.outcome);
+  else if (latest === decide && decide?.outcome)
+    findings = formatAcceptanceFindings(decide.outcome);
   else if (latest?.checks)
     findings = formatFailingChecks(recordFailures(latest, preexisting));
 
@@ -132,16 +145,21 @@ function commonVars(
     task_path: runtime.store.tasks.path(task.slug),
     cleanliness_revision: state?.cleanlinessRevision ? "true" : "false",
     worktree,
-    // Where a spike commits its finding; empty for every other task.
-    report_path: task.kind === "spike" ? spikeReportPath(task.slug) : "",
+    // Where a spike commits its finding; empty for a development task and a
+    // `nogit` task, whose product lives outside git.
+    report_path:
+      task.kind === "spike" && !task.nogit ? spikeReportPath(task.slug) : "",
     env_notes: formatEnvNotes(task.envNotes),
     setup_command: runtime.configs.repo.setup.join(" && ") || "none",
-    gate_commands:
-      runtime.configs.repo.gates
-        .map((g) => `- ${g.id}: ${g.command}`)
-        .join("\n") || "none",
+    gate_commands: gateCommandsText(
+      runtime.store.goalDir,
+      runtime.configs.repo.gates,
+    ),
     base_gates: formatBaseGates(handoff.base),
     findings: handoff.findings,
+    pending_signal: state?.pendingSignal
+      ? `${state.pendingSignal.kind}: ${state.pendingSignal.evidence}`
+      : "",
     checks_result: checks?.checks
       ? formatFailingChecks(checks.checks) || "pass"
       : CHECK_HANDOFF_DEFAULTS.checks_result,
@@ -153,6 +171,21 @@ function commonVars(
     base_hash: "",
     head_hash: "",
   };
+}
+
+/** The round an acceptance prompt shows: its own change-bearing call, not the task's global round. */
+function promptRound(
+  flow: FlowDefinition,
+  stepId: string | undefined,
+  round: number,
+  state: TaskState | undefined,
+): number {
+  const step =
+    stepId === undefined
+      ? undefined
+      : flow.steps.find((candidate) => candidate.id === stepId);
+  if (!state || step === undefined || !isAcceptanceStep(step)) return round;
+  return launchCounts(state.launches, step.id).changeRequests + 1;
 }
 
 export function promptVars(
@@ -167,8 +200,24 @@ export function promptVars(
 ): Record<string, string> {
   const handoff = readHandoff(records, task, flow, state, stepId);
   const { qaStep, acceptance, review } = handoff;
+  const step = stepId
+    ? flow.steps.find((candidate) => candidate.id === stepId)
+    : undefined;
+  const expectation = step
+    ? expectationForStep(step.id, { current: flow })
+    : "any";
+  const schema = qaStep
+    ? qaOutcomeSchema
+    : taskOutcomeSchema(task, runtime.configs.process.taskTypes);
   return {
-    ...commonVars(runtime, task, worktree, round, handoff, state),
+    ...commonVars(
+      runtime,
+      task,
+      worktree,
+      promptRound(flow, stepId, round, state),
+      handoff,
+      state,
+    ),
     prior_findings: priorFindings(qaStep, acceptance, review),
     fix_dispositions: fixDispositions(records, task.slug, flow, round, state),
     front_pack: frontPack(runtime, task, records) ?? "",
@@ -180,12 +229,12 @@ export function promptVars(
     resume_note: "",
     // QA carries its own kernel schema; every other step delivers the task
     // type's schema (a spike and a development task may differ even when the
-    // same role runs both).
-    outcome_schema: qaStep
-      ? qaOutcomeSchemaVar()
-      : outcomeSchemaVar(
-          undefined,
-          taskOutcomeSchema(task, runtime.configs.process.taskTypes),
-        ),
+    // same role runs both). The example is narrowed to the fields this step
+    // delivers, so a bare done is never shown a verdict it cannot give.
+    outcome_schema: outcomeExampleVar(
+      step?.prompt ?? "implementer",
+      expectation,
+      schema,
+    ),
   };
 }

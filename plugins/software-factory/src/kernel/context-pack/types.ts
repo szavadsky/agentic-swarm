@@ -1,9 +1,12 @@
 /** The context pack's input and the packs it renders. */
 
+import type { z } from "zod";
 import type { BaseGateState } from "../baseline.js";
 import type { OpenDebt } from "../derive.js";
+import type { PackGate } from "../infra.js";
 import type { Steer } from "../mailbox.js";
-import type { WasteSpikeProposal } from "../metrics/recurring.js";
+import type { WasteSpikeProposal } from "../metrics/types.js";
+import type { PACK_SECTIONS, packBriefSchema } from "./sections.js";
 import type {
   PlanCheckEvidence,
   PlanReviewFinding,
@@ -12,7 +15,15 @@ import type {
   TaskFile,
 } from "../types.js";
 
+/** One index section the preparer may brief; every other section renders whole. */
+export type PackSection = (typeof PACK_SECTIONS)[number];
+
+/** One section the preparer judged better as a brief; the script places it. */
+export type PackBrief = z.infer<typeof packBriefSchema>;
+
 export interface ForwardedConcern {
+  /** Stable identity: the hold file the PM's mark writes and the pack line share it. */
+  id: string;
   source: string;
   calibration: string;
   kind: string;
@@ -38,6 +49,8 @@ export interface PlanCheckPack {
   iteration: number;
   verdict: string;
   evidence: PlanCheckEvidence[];
+  /** Why the checker could not run; absent when it reported normally. */
+  reason?: string;
 }
 
 /** The latest plan-review round's advisory findings, for the next architect turn. */
@@ -149,7 +162,8 @@ export interface ContextPackInput {
   /** Pending steers the intent agent carried or failed to carry before this pack. */
   intentChanges?: IntentChange[];
   setup: string[];
-  gates: { id: string; command: string }[];
+  /** Resolved config-or-discovered gates with the infra turn's status. */
+  gates: PackGate[];
   /** Last recorded pre-flight base run; absent when it was skipped. */
   baseGates?: BaseGateState;
   forwarded: ForwardedConcern[];
@@ -165,12 +179,17 @@ export interface ContextPackInput {
   planReview?: PlanReviewPack;
   /** Ready tasks with no turn in the previous segment; absent before one exists. */
   agedReady?: ReadyAgingTask[];
+  /**
+   * Absolute path of the derived status JSON the pack renders from; the
+   * pointer a briefed section names.
+   */
+  dataPath?: string;
+  /** Sections the preparer judged better as a pointer and one line. */
+  briefs?: PackBrief[];
 }
 
 export interface AgingContext {
   terminal: ReadonlyMap<string, string>;
-  active: ReadonlySet<string>;
-  ordered: readonly TaskFile[];
   segment: number;
   unavailableAliases: ReadyAgingInput["unavailableAliases"];
 }

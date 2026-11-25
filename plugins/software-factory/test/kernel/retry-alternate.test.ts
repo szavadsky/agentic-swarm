@@ -397,7 +397,7 @@ async function derivesTheAliasFromRecordsPart1(
   const file = task("task");
   const state = derive([file], [], runtime.configs.process.flows).tasks.task!;
   const target = (records: StepRecord[]) =>
-    stepTarget(runtime, file, state, "implement", 1, records);
+    stepTarget(runtime, file, state, "implement", records);
   const flow = flowOf(runtime);
 
   expect(target([]).alias).toBe("implementer");
@@ -424,7 +424,7 @@ async function derivesTheAliasFromRecordsPart1(
   ).toBe("implementer-alt");
   // Review keeps its own alias: the implement step owns the switch.
   expect(
-    stepTarget(runtime, file, state, "review", 1, [
+    stepTarget(runtime, file, state, "review", [
       stepRec(1, { outcome: failedOutcome() }),
     ]).alias,
   ).toBe("reviewer");

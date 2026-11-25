@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { runValidate } from "../helpers/validate.js";
 
 const PACKAGE_ROOT = path.join(import.meta.dir, "..", "..");
 const SCRIPT = path.join(PACKAGE_ROOT, "src", "schema-check.ts");
@@ -123,7 +124,39 @@ describe("schema validation", () => {
   schemaValidationPart1();
   schemaValidationPart2();
   schemaValidationPart3();
+  schemaValidationInfra();
   schemaValidationPart4();
+});
+
+describe("schema validation: one check list", () => {
+  it("reports a task exactly as factory validate does", async () => {
+    freshCase(() => {
+      write(
+        ".factory/artifacts/demo/tasks/demo.task.md",
+        VALID_TASK.replace("deps: []", "deps:\n  - demo.other"),
+      );
+      write(
+        ".factory/artifacts/demo/tasks/demo.other.md",
+        VALID_TASK.replace("demo.task", "demo.other").replace(
+          "deps: []",
+          "deps:\n  - demo.task",
+        ),
+      );
+    });
+    const gate = validRun();
+    expect(gate.code).toBe(1);
+    const gateFinding = gate.output
+      .split("\n")
+      .find((line) => line.includes("dependency cycle"));
+    expect(gateFinding).toBeDefined();
+    if (gateFinding === undefined) throw new Error("no cycle finding");
+
+    const validated = await runValidate(
+      path.join(root, ".factory/artifacts/demo/tasks/demo.task.md"),
+    );
+    expect(validated.code).toBe(1);
+    expect(validated.err.split("\n")).toContain(gateFinding);
+  });
 });
 
 /**
@@ -321,6 +354,32 @@ function schemaValidationPart3() {
     expect(result.output).toContain(
       factory("artifacts/demo/mailbox/holds/steer-1.yaml"),
     );
+  });
+}
+
+function schemaValidationInfra() {
+  it("passes a valid infra.yaml the infra turn wrote", () => {
+    freshCase(() =>
+      write(
+        ".factory/artifacts/demo/infra.yaml",
+        'gates:\n  - { name: unit, command: "bun test", speed: fast, status: green }\n',
+      ),
+    );
+    const result = validRun();
+    expect(result.code).toBe(0);
+    expect(result.output).toContain("8 schema-enforced file(s) valid");
+  });
+
+  it("fails on an invalid infra.yaml and names the file", () => {
+    freshCase(() =>
+      write(
+        ".factory/artifacts/demo/infra.yaml",
+        'gates:\n  - { name: unit, command: "bun test", speed: medium, status: green }\n',
+      ),
+    );
+    const result = validRun();
+    expect(result.code).toBe(1);
+    expect(result.output).toContain(factory("artifacts/demo/infra.yaml"));
   });
 }
 

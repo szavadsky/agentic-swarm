@@ -15,10 +15,14 @@ const ALLOWLIST: Record<string, string> = {
     "test double: imported only by tests, never by production code",
   "src/harness/fake/index.ts":
     "test double barrel: imported only by tests, never by production code",
+  "src/harness/fake/types.ts":
+    "test double shapes: imported only by the fake harness, never by production code",
   "src/schema-check.ts":
     "standalone schema-validation entrypoint invoked by bun, not imported by production",
   "src/harness/lsp/frontmatter.ts":
     "standalone LSP entrypoint omp spawns by path, not imported by production",
+  "src/harness/lsp/types.ts":
+    "LSP protocol shapes: imported only by the frontmatter entrypoint, never by production code",
   "src/cli/commands/promote.ts":
     "bootstrap entrypoint scripts/promote.ts runs from the tree, not imported by production",
   "src/cli/commands/bootstrap-dispatch.ts":
@@ -131,6 +135,15 @@ describe("source reachability from bin/factory.ts", () => {
  */
 const PROMPT_DOCS: Record<string, string> = {
   "VARIABLES.md": "prompt variable reference for authors, never rendered",
+};
+
+/**
+ * Kernel-raised prompts whose names are not a config literal: a signal or a
+ * kernel turn names them at runtime. Each needs a reason, like an allowlist.
+ */
+const RUNTIME_PROMPTS: Record<string, string> = {
+  decider:
+    "the kernel decide turn renders it on a signal; no flow step or config key names it",
 };
 
 /** Matches Liquid includes: `{% include 'name' %}` (either quote, `-` trims allowed). */
@@ -255,8 +268,25 @@ function entryFragments(): Set<string> {
 
 describe("prompt fragment reachability", () => {
   const fragments = promptFragments();
-  const used = new Set([...includedFragments(), ...entryFragments()]);
+  const used = new Set([
+    ...includedFragments(),
+    ...entryFragments(),
+    ...Object.keys(RUNTIME_PROMPTS),
+  ]);
   const dead = fragments.filter((fragment) => !used.has(fragment));
+
+  it("keeps every runtime prompt named and reason-carrying", () => {
+    for (const [fragment, reason] of Object.entries(RUNTIME_PROMPTS)) {
+      expect(
+        reason.trim().length,
+        `runtime prompt ${fragment} has no reason`,
+      ).toBeGreaterThan(0);
+      expect(
+        fs.existsSync(path.join(PACKAGE_ROOT, "prompts", `${fragment}.md`)),
+        `runtime prompt ${fragment} no longer exists`,
+      ).toBe(true);
+    }
+  });
 
   it("fails on a prompt fragment no template includes and no entrypoint renders", () => {
     expect(dead).toEqual([]);

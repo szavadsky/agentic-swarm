@@ -234,7 +234,7 @@ export async function writeLaunchDigest(
   // digest instead of failing the launch.
   let scoutTarget: TurnTarget | undefined;
   try {
-    scoutTarget = boundaryTarget(runtime, "digest", iteration);
+    scoutTarget = boundaryTarget(runtime, "digest");
   } catch {
     scoutTarget = undefined;
   }
@@ -278,12 +278,13 @@ export async function writeLaunchDigest(
 }
 
 /**
- * A resumed launch has no architect turn, so its digest reaches the PM as a
+ * A repair resume has no architect turn, so its digest reaches the PM as a
  * steer instead: the PM routes the evidence (a repair task, a spike, the
- * architect) and dispatch proceeds. The id carries the content hash, so a
- * relaunch of the same iteration with unchanged evidence is not delivered
- * twice, while fresh evidence is. Null when there is no previous launch to
- * digest or the identical steer was already handled.
+ * architect) and dispatch proceeds. A clean resume runs no digest and posts
+ * none. The id carries the content hash, so a relaunch of the same iteration
+ * with unchanged evidence is not delivered twice, while fresh evidence is. Null
+ * when there is no previous launch to digest or the identical steer was already
+ * handled.
  */
 export async function postLaunchDigest(
   runtime: KernelRuntime,

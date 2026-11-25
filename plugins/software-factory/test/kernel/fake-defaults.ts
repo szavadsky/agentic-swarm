@@ -6,6 +6,7 @@ import {
 } from "../../src/harness/fake/index.js";
 import fs from "node:fs";
 import path from "node:path";
+import { INFRA_FILE } from "../../src/kernel/infra.js";
 import { CODE_MAP_FILE } from "../../src/kernel/ingestion.js";
 import { PACK_PREP_STEP } from "../../src/kernel/pack-prep.js";
 import { PLAN_CHECK_STEP } from "../../src/kernel/plan-check.js";
@@ -22,6 +23,7 @@ const BACKGROUND_STEPS = new Set([
   PLAN_REVIEW_STEP,
   PACK_PREP_STEP,
   "digest",
+  "infra",
   "scout",
 ]);
 
@@ -45,6 +47,15 @@ const packPrepFallback: FakeTurnHandler = (req, ctx) => {
 
 const digestFallback: FakeTurnHandler = (req, ctx) => {
   ctx.writeOutcome({ ...EMPTY, summary: "digest scout done" });
+  return fakeTurnResult(req);
+};
+
+const infraFallback: FakeTurnHandler = (req, ctx) => {
+  const goalDir = path.resolve(path.dirname(req.outcomePath!), "../..");
+  // Unrelated runs keep the configured gates; discovery is exercised by the
+  // tests that script this step themselves.
+  fs.writeFileSync(path.join(goalDir, INFRA_FILE), "gates: []\n");
+  ctx.writeOutcome(EMPTY);
   return fakeTurnResult(req);
 };
 
@@ -89,8 +100,9 @@ export function scriptKernelRoleFallbacks(harness: FakeHarness): void {
   background(harness, PLAN_REVIEW_STEP, planReviewFallback);
   background(harness, PACK_PREP_STEP, packPrepFallback);
   background(harness, "digest", digestFallback);
-  // The shipped ingestion sequence scouts a bigger goal before the architect;
-  // tests focused on other turns still run that step.
+  // The shipped ingestion sequence discovers gates and scouts a bigger goal
+  // before the architect; tests focused on other turns still run those steps.
+  background(harness, "infra", infraFallback);
   background(harness, "scout", scoutFallback);
   // The default development flow includes QA. A test that wants QA findings
   // binds its own handler for the step, which wins over this fallback.

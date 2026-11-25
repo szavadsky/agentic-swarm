@@ -4,7 +4,7 @@ import {
   renderDashboard,
   writeDashboardAssets,
 } from "./dashboard.js";
-import { derive, materialOpenDebts, type OpenDebt } from "./derive.js";
+import { derive } from "./derive.js";
 import {
   DEFAULT_ROLE_BY_STEP,
   type GroupMetrics,
@@ -13,261 +13,58 @@ import {
   rolesByStep,
   totalsOf,
 } from "./metrics.js";
-import { loadPriceTable, type PriceSource } from "./openrouter.js";
+import { loadPriceTable } from "./openrouter.js";
 import type { PriceTable } from "./pricing.js";
 import { latestRunLog } from "./run-log.js";
-import { recordDirName } from "./store.js";
+import { reportView } from "./report-view.js";
 import {
-  type IntentStatusArtifact,
-  readLatestIntentStatus,
-} from "./summary/intent-status.js";
+  openConcernEntries,
+  readStatusMailbox,
+  statusConcerns,
+  statusSteers,
+} from "./status-triage.js";
+import type { StatusStop } from "./status-triage.js";
+import {
+  latestPmSummary,
+  mechanicalSummary,
+  type StatusTaskCounts,
+} from "./status-summary.js";
+import { readLatestIntentStatus } from "./summary/intent-status.js";
 import type {
-  ArtifactStore,
-  Cause,
-  Concern,
-  ConcernId,
-  FlowDefinition,
-  GoalStatus,
-  KernelRuntime,
-  State,
-  StepRecord,
-  TaskFile,
-  TaskKind,
-  TaskState,
-  TaskStatus,
-} from "./types.js";
+  StatusCost,
+  StatusDocument,
+  StatusInput,
+  StatusSource,
+  StatusWork,
+} from "./status-types.js";
+import type { ArtifactStore, KernelRuntime, StepRecord } from "./types.js";
+export type {
+  StatusCost,
+  StatusDocument,
+  StatusTask,
+  StatusWork,
+} from "./status-types.js";
 
 /** Goal-relative path of the machine-readable status snapshot. */
 export const STATUS_REL_PATH = "status.json";
 
-/** One task as status.json names it, with the record a dashboard can link. */
-export interface StatusTask {
-  slug: string;
-  title: string;
-  status: TaskStatus;
-  kind: TaskKind;
-  epic?: string;
-  round: number;
-  turns: number;
-  commit?: string;
-  cause?: Cause;
-  /**
-   * A parked task whose work landed through a base continuation; not counted
-   * as live work.
-   */
-  supersededBy?: string;
-  /** `records/<dir>` of the slug's latest record. */
-  record?: string;
-}
+export type {
+  StatusOpenConcern,
+  StatusSteer,
+  StatusStop,
+  SteerState,
+} from "./status-triage.js";
 
-/** One open debt, with the record that raised it. */
-export interface StatusDebt {
-  id?: ConcernId;
-  text: string;
-  evidence?: string;
-  calibration: Concern["calibration"];
-  /** `slug step rN` of the record that raised it. */
-  source: string;
-  iteration: number;
-  record?: string;
-}
-
-/** One concern a record delivered, with its source record. */
-export interface StatusConcern {
-  id?: ConcernId;
-  slug?: string;
-  step: string;
-  round: number;
-  kind: Concern["kind"];
-  calibration: Concern["calibration"];
-  text: string;
-  evidence?: string;
-  /** `records/<dir>` of the record that raised it. */
-  record: string;
-}
-
-export interface StatusCost {
-  turns: number;
-  tokens: number;
-  /** Sum of the figures the harnesses reported; null when none reported one. */
-  harnessCostUsd: number | null;
-  /** OpenRouter list-price equivalent; null when no model is priced. */
-  listCostUsd: number | null;
-  unpricedTurns: number;
-}
-
-export interface StatusWork {
-  turns: number;
-  edits: number;
-  addedLines: number;
-  removedLines: number;
-  testRuns: number;
-}
-
-/** The snapshot `factory status --json` prints and the dashboard reads. */
-export interface StatusDocument {
-  goal: string;
-  status: GoalStatus;
-  /** Highest iteration seen in the records. */
-  iteration: number;
-  /** Iterations recorded so far; equals `iteration` and names the count. */
-  iterations: number;
-  updatedAt: string;
-  tasks: {
-    open: StatusTask[];
-    merged: StatusTask[];
-    finished: StatusTask[];
-    parked: StatusTask[];
-    /**
-     * Parks whose kept work landed through a `base` continuation; counted
-     * apart from live parks.
-     */
-    superseded: StatusTask[];
-    cancelled: StatusTask[];
-  };
-  distance: {
-    pending: string[];
-    parks: string[];
-    openDebt: StatusDebt[];
-  };
-  concerns: StatusConcern[];
-  /** Latest intent-wise status an architect summary wrote; absent until one does. */
-  intentStatus?: IntentStatusArtifact;
-  /** Goal-relative path of the latest launch log; absent before the first launch. */
-  runLog?: string;
-  cost: {
-    harnessCostUsd: number | null;
-    listCostUsd: number | null;
-    harnessCostPerMergedTask: number | null;
-    listCostPerMergedTask: number | null;
-    unpricedTurns: number;
-    byRole: Record<string, StatusCost>;
-    byModel: Record<string, StatusCost>;
-  };
-  work: {
-    turns: number;
-    edits: number;
-    addedLines: number;
-    removedLines: number;
-    testRuns: number;
-    byRole: Record<string, StatusWork>;
-    byModel: Record<string, StatusWork>;
-  };
-  /** Task slugs grouped by epic; absent when the goal carries no epic. */
-  epics?: Record<string, string[]>;
-}
-
-export interface StatusInput {
-  goal: string;
-  state: State;
-  tasks: readonly TaskFile[];
-  /** Latest intent status artifact; absent before an architect summary writes one. */
-  intentStatus?: IntentStatusArtifact;
-  /** Goal-relative path of the latest launch log; absent before the first launch. */
-  runLog?: string;
-  records: readonly StepRecord[];
-  /** Step id -> role; the process flows supply it at write time. */
-  roleByStep?: Record<string, string>;
-  /** OpenRouter price table; absent means the records' own priced usage only. */
-  prices?: PriceTable;
-  /** Harness model id -> OpenRouter model id, from the run config. */
-  priceIds?: Record<string, string>;
-  /** Injected by tests; production stamps the write time. */
-  updatedAt?: string;
-}
-
-const OPEN: ReadonlySet<TaskStatus> = new Set(["pending", "ready", "running"]);
-
-function recordPath(record: StepRecord): string {
-  return `records/${recordDirName(record.seq, record)}`;
-}
-
-/** The record directory a concern id names: `<recordId>#<n>`. */
-function concernRecord(id: ConcernId | undefined): string | undefined {
-  if (!id) return undefined;
-  const dir = id.slice(0, id.indexOf("#"));
-  return dir ? `records/${dir}` : undefined;
-}
-
-function latestRecords(
-  records: readonly StepRecord[],
-): Map<string, StepRecord> {
-  const latest = new Map<string, StepRecord>();
-  for (const record of [...records].sort((a, b) => a.seq - b.seq)) {
-    if (record.slug) latest.set(record.slug, record);
-  }
-  return latest;
-}
-
-function statusTask(
-  slug: string,
-  state: TaskState,
-  titles: ReadonlyMap<string, string>,
-  latest: ReadonlyMap<string, StepRecord>,
-): StatusTask {
-  const record = latest.get(slug);
+/** The counts the mechanical account names, from the grouped tasks. */
+function taskCounts(tasks: StatusDocument["tasks"]): StatusTaskCounts {
+  const landed = tasks.merged.length + tasks.finished.length;
   return {
-    slug,
-    title: titles.get(slug) ?? slug,
-    status: state.status,
-    kind: state.kind,
-    ...(state.epic ? { epic: state.epic } : {}),
-    round: state.round,
-    turns: state.turns,
-    ...(state.commit ? { commit: state.commit } : {}),
-    ...(state.cause ? { cause: state.cause } : {}),
-    ...(state.supersededBy ? { supersededBy: state.supersededBy } : {}),
-    ...(record ? { record: recordPath(record) } : {}),
+    landed,
+    total:
+      landed + tasks.open.length + tasks.parked.length + tasks.cancelled.length,
+    open: tasks.open.length,
+    parked: tasks.parked.length,
   };
-}
-
-function groupTasks(tasks: StatusTask[]): StatusDocument["tasks"] {
-  const parked = tasks.filter((task) => task.status === "parked");
-  return {
-    open: tasks.filter((task) => OPEN.has(task.status)),
-    merged: tasks.filter((task) => task.status === "merged"),
-    finished: tasks.filter((task) => task.status === "finished"),
-    parked: parked.filter((task) => !task.supersededBy),
-    superseded: parked.filter((task) => task.supersededBy),
-    cancelled: tasks.filter((task) => task.status === "cancelled"),
-  };
-}
-
-function statusTasks(input: StatusInput): StatusTask[] {
-  const titles = new Map(input.tasks.map((task) => [task.slug, task.title]));
-  const latest = latestRecords(input.records);
-  return Object.entries(input.state.tasks)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([slug, state]) => statusTask(slug, state, titles, latest));
-}
-
-function debtEntry(debt: OpenDebt): StatusDebt {
-  const record = concernRecord(debt.id);
-  return {
-    ...(debt.id ? { id: debt.id } : {}),
-    text: debt.text,
-    ...(debt.evidence ? { evidence: debt.evidence } : {}),
-    calibration: debt.calibration,
-    source: debt.source,
-    iteration: debt.iteration,
-    ...(record ? { record } : {}),
-  };
-}
-
-function statusConcerns(records: readonly StepRecord[]): StatusConcern[] {
-  return records.flatMap((record) =>
-    (record.outcome?.concerns ?? []).map((concern) => ({
-      ...(concern.id ? { id: concern.id } : {}),
-      ...(record.slug ? { slug: record.slug } : {}),
-      step: record.step,
-      round: record.round,
-      kind: concern.kind,
-      calibration: concern.calibration,
-      text: concern.text,
-      ...(concern.evidence ? { evidence: concern.evidence } : {}),
-      record: recordPath(record),
-    })),
-  );
 }
 
 function goalTotals(
@@ -293,38 +90,40 @@ function goalTotals(
   return totalsOf(iterations);
 }
 
+/** One projection per group, keyed by name in sorted order. */
+function byName<T>(
+  groups: Record<string, GroupMetrics>,
+  pick: (entry: GroupMetrics) => T,
+): Record<string, T> {
+  return Object.fromEntries(
+    Object.keys(groups)
+      .sort()
+      .map((name) => [name, pick(groups[name]!)]),
+  );
+}
+
 function costOf(
   groups: Record<string, GroupMetrics>,
 ): Record<string, StatusCost> {
-  const out: Record<string, StatusCost> = {};
-  for (const name of Object.keys(groups).sort()) {
-    const entry = groups[name]!;
-    out[name] = {
-      turns: entry.turns,
-      tokens: entry.tokens,
-      harnessCostUsd: entry.usage.harnessCostUsd ?? null,
-      listCostUsd: entry.usage.listCostUsd ?? null,
-      unpricedTurns: entry.unpricedTurns,
-    };
-  }
-  return out;
+  return byName(groups, (entry) => ({
+    turns: entry.turns,
+    tokens: entry.tokens,
+    harnessCostUsd: entry.usage.harnessCostUsd ?? null,
+    listCostUsd: entry.usage.listCostUsd ?? null,
+    unpricedTurns: entry.unpricedTurns,
+  }));
 }
 
 function workOf(
   groups: Record<string, GroupMetrics>,
 ): Record<string, StatusWork> {
-  const out: Record<string, StatusWork> = {};
-  for (const name of Object.keys(groups).sort()) {
-    const entry = groups[name]!;
-    out[name] = {
-      turns: entry.turns,
-      edits: entry.edits,
-      addedLines: entry.addedLines,
-      removedLines: entry.removedLines,
-      testRuns: entry.testRuns,
-    };
-  }
-  return out;
+  return byName(groups, (entry) => ({
+    turns: entry.turns,
+    edits: entry.edits,
+    addedLines: entry.addedLines,
+    removedLines: entry.removedLines,
+    testRuns: entry.testRuns,
+  }));
 }
 
 function workView(totals: MetricsTotals): StatusDocument["work"] {
@@ -353,8 +152,13 @@ function costView(totals: MetricsTotals): StatusDocument["cost"] {
 
 /** The snapshot as one data object; every field derives from task files and records. */
 export function buildStatus(input: StatusInput): StatusDocument {
-  const tasks = statusTasks(input);
-  const groups = groupTasks(tasks);
+  const view = reportView({
+    state: input.state,
+    tasks: input.tasks,
+    records: input.records,
+  });
+  const { open, merged, finished, parked, superseded, cancelled } = view.groups;
+  const tasks = { open, merged, finished, parked, superseded, cancelled };
   const roleByStep = { ...DEFAULT_ROLE_BY_STEP, ...(input.roleByStep ?? {}) };
   const totals = goalTotals(
     input.records,
@@ -377,20 +181,24 @@ export function buildStatus(input: StatusInput): StatusDocument {
     iteration: input.state.iteration,
     iterations: input.state.iteration,
     updatedAt: input.updatedAt ?? new Date().toISOString(),
-    tasks: groups,
-    distance: {
-      pending: groups.open
-        .filter((task) => task.status !== "running")
-        .map((task) => task.slug),
-      parks: groups.parked.map((task) => task.slug),
-      openDebt: materialOpenDebts([...input.records]).map(debtEntry),
-    },
+    summary:
+      latestPmSummary(input.records) ??
+      mechanicalSummary(
+        input.state.goal,
+        input.state.iteration,
+        taskCounts(tasks),
+      ),
+    tasks,
+    distance: view.distance,
     concerns: statusConcerns(input.records),
+    openConcerns: openConcernEntries(input.records, view.distance.openDebt),
+    steers: statusSteers(input.records, input.mailbox),
     cost: costView(totals),
     work: workView(totals),
     ...(epics ? { epics } : {}),
     ...(input.intentStatus ? { intentStatus: input.intentStatus } : {}),
     ...(input.runLog ? { runLog: input.runLog } : {}),
+    ...(input.stop ? { stop: input.stop } : {}),
   };
 }
 
@@ -398,17 +206,10 @@ export function renderStatus(status: StatusDocument): string {
   return `${JSON.stringify(status, null, 2)}\n`;
 }
 
-/** Everything a status refresh needs from the running kernel. */
-export interface StatusSource {
-  store: ArtifactStore;
-  flows: Record<string, FlowDefinition>;
-  priceIds?: Record<string, string>;
-  priceSource?: PriceSource;
-}
-
 /** Derives the snapshot from the goal's current task files and records. */
 export async function collectStatus(
   source: StatusSource,
+  stop?: StatusStop,
 ): Promise<StatusDocument> {
   const tasks = await source.store.listTasks();
   const records = await source.store.listRecords();
@@ -418,6 +219,8 @@ export async function collectStatus(
     state,
     tasks,
     records,
+    mailbox: await readStatusMailbox(source.store),
+    ...(stop ? { stop } : {}),
     intentStatus: await readLatestIntentStatus(source.store, state.iteration),
     runLog: await latestRunLog(source.store.goalDir),
     roleByStep: rolesByStep(source.flows),
@@ -427,8 +230,11 @@ export async function collectStatus(
 }
 
 /** Rewrites `status.json` and its dashboard after an agent launch or finish. */
-export async function writeStatus(source: StatusSource): Promise<string> {
-  const status = await collectStatus(source);
+export async function writeStatus(
+  source: StatusSource,
+  stop?: StatusStop,
+): Promise<string> {
+  const status = await collectStatus(source, stop);
   // Render before either write: a template failure never leaves a fresh
   // status.json beside a dashboard describing the previous snapshot.
   const dashboard = renderDashboard(status);

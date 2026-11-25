@@ -22,6 +22,8 @@ export interface AcpxRuntime {
   sessionDir: string;
   /** Run-config names this runtime's children may inherit on top of the base set. */
   envAllowlist?: readonly string[];
+  /** Prompt child group pids by session name, for the liveness probe. */
+  activePids?: Map<string, number>;
 }
 
 export interface SetupFailure {

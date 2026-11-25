@@ -15,6 +15,7 @@ import type {
   TaskState,
 } from "../../src/kernel/types.js";
 import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
+import { workCalls } from "./fake-defaults.js";
 import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -147,8 +148,14 @@ async function parksReviewUpscopeYesRewritesClassPart1(
 
   const store = createFolderStore(goal.goalDir, undefined, {});
   const escalated = await stateOf(goal.goalDir);
-  expect(escalated.tasks.solo!.status).toBe("parked");
-  expect(causeText(escalated.tasks.solo!.cause)).toMatch(/^upscope: /);
+  // The review approved the work and recorded the escalation park: the wave
+  // end lands the green branch, so the next launch plans from landed state.
+  expect(escalated.tasks.solo!.status).toBe("merged");
+  const parks = (await store.listRecords()).filter(
+    (r) => r.slug === "solo" && r.step === "park",
+  );
+  expect(parks).toHaveLength(1);
+  expect(causeText(parks[0]!.cause)).toMatch(/^upscope: /);
   expect(escalated.goal).toBe("active");
   expect(escalated.terminal).toBe(false);
   expect(readClass(goal.goalDir)).toEqual({ class: "bigger" });
@@ -180,7 +187,7 @@ async function parksReviewUpscopeYesRewritesClassPart2(
   expect(architect).toBeDefined();
   expect(architect?.iteration).toBe(2);
   expect((await stateOf(goal.goalDir)).goal).toBe("done");
-  expect(first.calls).toHaveLength(4);
+  expect(workCalls(first)).toHaveLength(4);
   // digest, the pack preparer and the architect: iteration 2 prepares its
   // index from the script data before the consult; the bigger relaunch also
   // scouted the plan-less goal first.

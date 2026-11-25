@@ -429,7 +429,7 @@ function registersBlockedScout(): void {
 }
 
 function registersShippedDefaults(): void {
-  it("the shipped defaults classify without an extra turn", async () => {
+  it("the shipped defaults classify and discover gates", async () => {
     const { repo, goalDir, goal } = setupFlowRepo({ classYaml: null });
     try {
       const harness = new FakeHarness({ id: "fake" });
@@ -446,7 +446,31 @@ function registersShippedDefaults(): void {
         state: await emptyState(runtime),
       });
       expect(result.action, result.cause ?? "").toBe("dispatch");
-      expect(await agentSteps(runtime)).toEqual(["front"]);
+      expect(await agentSteps(runtime)).toEqual(["front", "infra"]);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  });
+}
+
+function registersMissingGates(): void {
+  it("stops a launch that ends ingestion with no gate", async () => {
+    const { repo, goalDir, goal } = setupFlowRepo({
+      gates: [],
+      classYaml: null,
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script(trivialFront(goalDir, "demo-task"), {
+        when: whenTurn({ step: "front" }),
+      });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      const result = await runFront(runtime, {
+        iteration: 1,
+        state: await emptyState(runtime),
+      });
+      expect(result.action).toBe("infra");
+      expect(result.cause).toContain("no gate");
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -462,4 +486,5 @@ describe("configured ingestion", () => {
   registersRemovedScout();
   registersShippedDefaults();
   registersBlockedScout();
+  registersMissingGates();
 });

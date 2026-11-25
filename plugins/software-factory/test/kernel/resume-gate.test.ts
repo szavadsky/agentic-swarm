@@ -7,11 +7,10 @@ import { postSteer } from "../../src/kernel/mailbox.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import { expectDispatch } from "./e2e-helpers.js";
 import {
-  digestTaskTurn,
   drainedAfterAlpha,
   outcome,
-  queueDigestSteer,
   silenceWarn,
+  turnsBeforeFirstTask,
 } from "./resume-helpers.js";
 import { formatCause } from "../../src/kernel/cause.js";
 import { causeText } from "./helpers.js";
@@ -58,14 +57,10 @@ describe("resume gate — recorded, bounded attempts", () => {
   }, 120_000);
 
   it("a healthy resume records its attempt and, when its plan-check summons the architect, does not consume the pass budget", async () => {
-    const { repo, goalDir, taskDir } = await drainedAfterAlpha();
+    const { repo, goalDir } = await drainedAfterAlpha();
     const restoreWarn = silenceWarn();
     try {
-      const scope1 = await aHealthyResumeRecordsAttemptWhenPart1(
-        taskDir,
-        repo,
-        goalDir,
-      );
+      const scope1 = await aHealthyResumeRecordsAttemptWhenPart1(repo, goalDir);
       await aHealthyResumeRecordsAttemptWhenPart2(scope1);
     } finally {
       restoreWarn();
@@ -75,12 +70,10 @@ describe("resume gate — recorded, bounded attempts", () => {
 });
 
 async function aHealthyResumeRecordsAttemptWhenPart1(
-  taskDir: string,
   repo: Awaited<ReturnType<typeof drainedAfterAlpha>>["repo"],
   goalDir: string,
 ) {
   const second = new FakeHarness({ id: "fake" });
-  queueDigestSteer(second, digestTaskTurn(taskDir, "beta"));
   second.script((req, ctx) => {
     fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
     ctx.writeOutcome(outcome({ summary: "beta added" }));
@@ -94,7 +87,12 @@ async function aHealthyResumeRecordsAttemptWhenPart1(
     ctx.writeOutcome(
       outcome({
         summary: "needs the architect",
-        planCheck: { verdict: "architect", evidence: [], followUps: [] },
+        planCheck: {
+          verdict: "architect",
+          evidence: [],
+          followUps: [],
+          concerns: [],
+        },
       }),
     );
     return fakeTurnResult(req);
@@ -115,17 +113,25 @@ async function aHealthyResumeRecordsAttemptWhenPart1(
   expect(resumes[0]!.iteration).toBe(1);
   expect(resumes[0]!.outcome?.summary).toBe("resume attempt 1 of iteration 1");
   expect(records.some((r) => r.step === "resume-refused")).toBe(false);
+  // Script-only: beta's task turn is the first agent turn, with no digest.
+  expect(turnsBeforeFirstTask(second)).toEqual([]);
+  expect(
+    records.filter(
+      (r) => r.actor === "agent" && r.step === "digest" && r.iteration === 1,
+    ),
+  ).toHaveLength(0);
 
-  return { store, records };
+  return { store, records, second };
 }
 
 async function aHealthyResumeRecordsAttemptWhenPart2(
   scope: Awaited<ReturnType<typeof aHealthyResumeRecordsAttemptWhenPart1>>,
 ) {
-  const { records, store } = scope;
+  const { records, store, second } = scope;
   expect(
     records.filter((r) => r.slug === "beta").every((r) => r.iteration === 1),
   ).toBe(true);
+  expect(turnsBeforeFirstTask(second)).toEqual([]);
   expect(
     records.filter(
       (r) => r.actor === "agent" && r.step === "architect" && r.iteration === 2,
@@ -158,7 +164,12 @@ async function deltaStateRefusesResumeCauseRunsPart1(
         summary: "plan needs the architect",
         concerns: [],
         forward: [],
-        planCheck: { verdict: "architect", evidence: [], followUps: [] },
+        planCheck: {
+          verdict: "architect",
+          evidence: [],
+          followUps: [],
+          concerns: [],
+        },
       },
     },
   );
@@ -168,7 +179,6 @@ async function deltaStateRefusesResumeCauseRunsPart1(
   expect(before.tasks.beta!.status).toBe("ready");
 
   const second = new FakeHarness({ id: "fake" });
-  queueDigestSteer(second);
   stillGoing(second, 4);
   await expectDispatch(3, args(repo.dir, "1"), {
     harnesses: { fake: second },
@@ -200,7 +210,6 @@ async function deltaStateRefusesResumeCauseRunsPart2(
 
   // A second launch stands on iteration 2: iteration 1 is never resumed.
   const third = new FakeHarness({ id: "fake" });
-  queueDigestSteer(third);
   stillGoing(third, 4);
   await expectDispatch(3, args(repo.dir, "1"), {
     harnesses: { fake: third },

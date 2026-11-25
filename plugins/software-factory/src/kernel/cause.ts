@@ -16,6 +16,19 @@ export function formatStop(stop: StepRecord["stop"]): string {
   return "cause" in stop ? `${stop.kind}: ${stop.cause}` : stop.kind;
 }
 
+/** A stop's diagnostic text with its provider detail: `kind: cause (details)`. */
+export function stopDetail(stop: StepRecord["stop"]): string {
+  if (!stop) return "no recorded stop";
+  if (stop.kind === "infra") {
+    return `infra: ${stop.cause}${stop.details ? ` (${stop.details})` : ""}`;
+  }
+  if (stop.kind === "refusal") {
+    return `refusal${stop.details ? `: ${stop.details}` : ""}`;
+  }
+  if (stop.kind === "truncated") return `truncated: ${stop.cause}`;
+  return stop.kind;
+}
+
 /**
  * The one rendering of a cause: `<kind>: <detail>`, with an empty detail
  * omitted. `note`, `unknown`, `boundary` and `error` carry no category of

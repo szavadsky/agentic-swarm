@@ -15,51 +15,39 @@ import type {
 } from "../../types.js";
 import {
   failureReasons,
-  type PmTurnSetup,
+  NO_TURN_INPUTS,
   recordPmRejection,
-  runPmTurn,
   rungSteps,
+  runPmTurn,
   setupPmTurn,
 } from "../ladder.js";
 import { planCheckLadderNote, planCheckPmBrief } from "../prompts.js";
 import {
   introducedFindings,
-  type PlanSnapshot,
   readTasks,
   reconcileTurn,
+  scopeWriteFindings,
   unfixedBaseline,
 } from "../reconcile.js";
+import { scopeEpic } from "../scope.js";
 import { PLAN_CHECK_ROUTES_STEP } from "../steps.js";
-import {
-  addCredit,
-  depFixFindings,
-  depRewriteFindings,
-} from "./plan-check-deps.js";
+import type {
+  PlanCheckPmResult,
+  PlanSnapshot,
+  PmScope,
+  PmTurnSetup,
+} from "../types.js";
 import {
   amendsUsed,
   cancelRoutes,
   decisionFindings,
   planCheckDecision,
 } from "../validation.js";
-
-/**
- * Which follow-up slugs a plan-check turn resumed; a cancel spends its slug
- * and a leave keeps it for the architect. `architect` is the exit for a clean
- * turn the graph still contradicts: its routes are committed, and the findings
- * no rung introduced travel to the architect like the other PM ladders.
- */
-export type PlanCheckPmResult =
-  | { status: "routed"; continued: string[]; left: string[] }
-  | {
-      status: "architect";
-      continued: string[];
-      left: string[];
-      findings: string[];
-    }
-  /** A rung ended on an infra stop; the writes are rolled back for the boundary. */
-  | { status: "infra"; continued: []; left: string[] }
-  /** Every tier failed both of its turns; the boundary reads the attempts. */
-  | { status: "exhausted"; continued: []; left: string[] };
+import {
+  addCredit,
+  depFixFindings,
+  depRewriteFindings,
+} from "./plan-check-deps.js";
 
 async function validatePlanCheckTurn(
   runtime: KernelRuntime,
@@ -68,6 +56,7 @@ async function validatePlanCheckTurn(
     state: State;
     round: number;
     followUps: PlanCheckFollowUp[];
+    scope?: PmScope;
   },
   plansBefore: readonly PlanSnapshot[],
   taskSnapshot: Map<string, string>,
@@ -80,6 +69,14 @@ async function validatePlanCheckTurn(
     taskSnapshot,
   );
   const used = amendsUsed(await runtime.store.listRecords(), opts.iteration);
+  findings.push(
+    ...scopeWriteFindings(
+      opts.scope ?? { kind: "goal" },
+      taskSnapshot,
+      texts,
+      tasks,
+    ),
+  );
 
   const routes = outcome?.planCheckRoutes;
   const slugs = [...new Set(opts.followUps.map((item) => item.slug))].sort();
@@ -272,6 +269,7 @@ export async function runPlanCheckPm(
     state: State;
     followUps: PlanCheckFollowUp[];
     cwd: string;
+    scope?: PmScope;
   },
 ): Promise<PlanCheckPmResult> {
   const slugs = [...new Set(opts.followUps.map((item) => item.slug))].sort();
@@ -282,15 +280,14 @@ export async function runPlanCheckPm(
 
   for (const [index, rung] of rungSteps(runtime).entries()) {
     const round = index + 1;
-    const target = boundaryTarget(runtime, "pm", opts.iteration, rung.alias);
+    const target = boundaryTarget(runtime, "pm", rung.alias);
     const { tasks } = await readTasks(runtime);
     const result = await runPmTurn(runtime, opts, target, {
       round,
       planList: setup.planList,
       tasks,
       repair: round === 1 ? "" : planCheckLadderNote(rung, target, failure),
-      steers: "none",
-      stalls: "none",
+      ...NO_TURN_INPUTS,
       planChecks: brief,
     });
     const outcome = result.outcome;
@@ -331,7 +328,11 @@ export async function runPlanCheckPm(
 /** Records a failed rung; an infra stop still ends the ladder. */
 async function rejectPlanCheckRung(
   runtime: KernelRuntime,
-  opts: { iteration: number; followUps: PlanCheckFollowUp[] },
+  opts: {
+    iteration: number;
+    followUps: PlanCheckFollowUp[];
+    scope?: PmScope;
+  },
   round: number,
   reasons: string[],
   setup: PmTurnSetup,
@@ -343,6 +344,7 @@ async function rejectPlanCheckRung(
     round,
     reasons,
     setup.snapshot,
+    scopeEpic(opts.scope ?? { kind: "goal" }),
   );
   if (result.record.stop?.kind !== "infra") return undefined;
   await recordPlanCheckFailure(

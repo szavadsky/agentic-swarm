@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { acquireRunLock, type RunLockHandle } from "../cli/lock.js";
 import { Repo } from "../core/git/repo.js";
+import { runInSandbox } from "../core/sandbox.js";
 import type { Harness } from "../harness/types.js";
 import { artifactLspConfigPath } from "./artifact-lsp.js";
 import { makeCause } from "./cause.js";
@@ -32,9 +33,9 @@ import {
   preflight,
   pinBuildOf,
   pinRefusal,
+  sandboxFindings,
   tmpHeadroom,
 } from "./preflight.js";
-import { loadCanaryProven } from "./canary.js";
 import { loadPrompts } from "./prompts.js";
 import { loadPoolResets } from "./quota-pools.js";
 import { scriptMeta } from "./record.js";
@@ -45,12 +46,8 @@ import { createDrainController, type DrainController } from "./signals.js";
 import { createArtifactStore } from "./store-backend.js";
 import type { KernelRuntime } from "./types.js";
 import { BaseFollowConflictError } from "./worktree.js";
-
-interface LaunchSetup {
-  repoRoot: string;
-  configs: KernelRuntime["configs"];
-  paths: KernelRuntime["paths"];
-}
+import type { LaunchSetup, PreparedLaunch } from "./launch-setup-types.js";
+export type { PreparedLaunch } from "./launch-setup-types.js";
 
 /** The pin gate this launch runs under: the named build, or the running package when it is a pin. */
 function pinRefusalFor(opts: RunGoalOptions): string | undefined {
@@ -169,7 +166,6 @@ async function buildRuntime(
       repo: configs.repo,
     }),
     limits: toLimits(configs),
-    provenCombinations: await loadCanaryProven(paths),
     exhaustedPools: await loadPoolResets(paths),
     priceSource: opts.priceSource,
   };
@@ -230,22 +226,22 @@ export async function recoverOrInfra(
   }
 }
 
-export interface PreparedLaunch {
-  setup: LaunchSetup;
-  store: KernelRuntime["store"];
-  runtime: KernelRuntime;
-  signals: DrainController;
-  uninstall: (() => void) | undefined;
-  lock: RunLockHandle;
-  /** Stops copying console lines into this launch's file. */
-  closeRunLog: () => void;
-}
-
 /** Everything a launch needs before its first turn, including the goal lock. */
 export async function prepareLaunch(
   opts: RunGoalOptions,
 ): Promise<PreparedLaunch> {
   const setup = resolveLaunch(opts);
+  const files = setup.configs.files ?? configFilePaths(setup.repoRoot);
+  const sandboxProblems = sandboxFindings(setup.configs, files.run);
+  if (sandboxProblems.length > 0) throw new PreflightError(sandboxProblems);
+  return runInSandbox(setup.configs.run.sandbox, () => prepareRun(opts, setup));
+}
+
+/** Pre-flight and launch setup, inside the sandbox once its binary is present. */
+async function prepareRun(
+  opts: RunGoalOptions,
+  setup: LaunchSetup,
+): Promise<PreparedLaunch> {
   const refusal = pinRefusalFor(opts);
   const override = opts.pinGateOverride?.trim();
   if (refusal !== undefined && override === undefined)

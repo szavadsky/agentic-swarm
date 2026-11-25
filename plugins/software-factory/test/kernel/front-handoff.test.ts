@@ -35,7 +35,7 @@ describe("front prompt handoff", () => {
       );
 
       expect(vars.front_pack).toBe("");
-      expect(stepTarget(runtime, taskFile, state, "implement", 1).alias).toBe(
+      expect(stepTarget(runtime, taskFile, state, "implement").alias).toBe(
         "implementer",
       );
     } finally {
@@ -143,7 +143,6 @@ async function pointsFrontPackAtFrontRecordSPart1(
     taskFile,
     { ...state, round: 2 },
     "implement",
-    1,
   );
 
   expect(vars.front_pack).toBe(
@@ -212,10 +211,10 @@ function registerTrivialSessionResumePart1(): void {
       const records = await runtime.store.listRecords();
 
       expect(
-        await trivialResumeSession(runtime, taskFile, records, false, 1),
+        await trivialResumeSession(runtime, taskFile, records, false),
       ).toEqual({ session: frontSession });
       expect(
-        await trivialResumeSession(runtime, taskFile, records, true, 1),
+        await trivialResumeSession(runtime, taskFile, records, true),
       ).toEqual({ session: implementSession });
     } finally {
       cleanupFlowRepo(repo);
@@ -259,7 +258,6 @@ function registerTrivialSessionResumePart2(): void {
         taskFile,
         records,
         false,
-        1,
       );
       if (!("cause" in resumed)) throw new Error("expected a park cause");
       expect(causeText(resumed.cause)).toContain(

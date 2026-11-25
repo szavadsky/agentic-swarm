@@ -1,33 +1,32 @@
 import { runAgentTurn } from "./agent.js";
-import { makeCause } from "./cause.js";
-import { formatCause } from "./cause.js";
+import { formatCause, makeCause } from "./cause.js";
 import type { PlanCheckPack } from "./context-pack.js";
+import { formatOpenConcern, openConcerns } from "./context-pack.js";
 import { boundaryTarget } from "./flow-context.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
+import { formatPlanList, planBullets } from "./plan-file.js";
 import {
   existingTasks,
-  type PlanCheckPmResult,
   restoreTurn,
   runPlanCheckPm,
   snapshotTurn,
 } from "./pm.js";
-import { formatPlanList, planBullets } from "./plan-file.js";
+import { reportView } from "./report-view.js";
 import { scriptMeta } from "./record.js";
 import {
   type ArtifactStore,
-  type Cause,
   type KernelRuntime,
   normalizeSlug,
   type Outcome,
   type PlanCheck,
-  type PlanCheckEvidence,
-  type PlanCheckFollowUp,
-  type PlanCheckVerdict,
+  type PlanCheckConcern,
   type State,
   type StepRecord,
   type TaskFile,
   type TaskStatus,
 } from "./types.js";
+import type { PlanCheckTurn, PlanCheckRound } from "./plan-check-types.js";
+export type { PlanCheckTurn } from "./plan-check-types.js";
 
 /** Agent step of a plan-checker turn; slug-less, so it stays out of the item's turn count. */
 export const PLAN_CHECK_STEP = "plancheck";
@@ -54,29 +53,85 @@ export function planSlugs(plan: string): Set<string> {
 }
 
 /**
+ * One checker report's findings about its concern entries: each names an open
+ * concern once, a `task` names a follow-up the same report carries, and a
+ * `resolve` names no slug. Without a record tree the open-id check is skipped.
+ */
+function concernFindings(
+  entries: readonly PlanCheckConcern[],
+  followUps: ReadonlySet<string>,
+  openConcernIds?: ReadonlySet<string>,
+): string[] {
+  const findings: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of entries) {
+    if (seen.has(entry.id)) {
+      findings.push(
+        `concern ${entry.id} is named twice; one entry per concern`,
+      );
+    }
+    seen.add(entry.id);
+    if (openConcernIds && !openConcernIds.has(entry.id)) {
+      findings.push(
+        `concern id "${entry.id}" is not an open concern; name an id from the brief's concern list`,
+      );
+    }
+    if (entry.action === "resolve") {
+      if (entry.slug) {
+        findings.push(
+          `concern ${entry.id} action resolve takes no slug; drop "${normalizeSlug(entry.slug)}"`,
+        );
+      }
+      continue;
+    }
+    if (!entry.slug) {
+      findings.push(
+        `concern ${entry.id} action task needs the slug of a follow-up it relies on`,
+      );
+    } else if (!followUps.has(normalizeSlug(entry.slug))) {
+      findings.push(
+        `concern ${entry.id} names slug "${normalizeSlug(entry.slug)}" that no follow-up carries`,
+      );
+    }
+  }
+  return findings;
+}
+
+/**
  * Findings for a plan-check report whose follow-ups reach outside every active
  * plan: each follow-up's own slug must be a `- <slug> —` bullet in one of them.
  * A `missing-dep` follow-up's dead dependency may be absent from the plans; it
  * is the dep, not the slug acted on. Only a `done` outcome carries a report to
- * check.
+ * check. A concern entry must name an open concern, and a `task` entry must
+ * name one of the report's own follow-up slugs. When the caller has no record
+ * tree to resolve ids against, the open-id check is skipped like the debt
+ * check is; the follow-up and duplicate checks always run.
  */
 export function validatePlanCheck(
   plans: readonly string[],
   outcome: Outcome,
+  openConcernIds?: ReadonlySet<string>,
 ): string[] {
   if (outcome.status !== "done" || !outcome.planCheck) return [];
+  const check = outcome.planCheck;
   const named = new Set(plans.flatMap((plan) => [...planSlugs(plan)]));
   const outside = [
     ...new Set(
-      outcome.planCheck.followUps
+      check.followUps
         .map((followUp) => normalizeSlug(followUp.slug))
         .filter((slug) => !named.has(slug)),
     ),
   ];
-  return outside.map(
-    (slug) =>
-      `follow-up slug "${slug}" has no "- ${slug} —" bullet in the plan; merged and retired slugs are history`,
+  const followUps = new Set(
+    check.followUps.map((followUp) => normalizeSlug(followUp.slug)),
   );
+  return [
+    ...outside.map(
+      (slug) =>
+        `follow-up slug "${slug}" has no "- ${slug} —" bullet in the plan; merged and retired slugs are history`,
+    ),
+    ...concernFindings(check.concerns ?? [], followUps, openConcernIds),
+  ];
 }
 
 /** Non-terminal task slugs, sorted: the work a boundary still owes the goal. */
@@ -88,11 +143,14 @@ export function openWork(state: State): string[] {
 }
 
 /**
- * Closed plan-check turns since the last architect turn. One consult owns at
- * most `planCheckRounds` of them, so this is the repeat count whether the
- * rounds ran inside dispatch or at the boundary gate.
+ * Closed plan-check turns since the last architect turn, one architect's scope
+ * only: the goal check (no architect) and an epic check count against their own
+ * budget, so a per-epic round never spends the goal's.
  */
-export function planChecksSinceConsult(records: StepRecord[]): StepRecord[] {
+export function planChecksSinceConsult(
+  records: StepRecord[],
+  architect?: string,
+): StepRecord[] {
   const lastArchitect = records
     .filter(
       (record) =>
@@ -107,6 +165,7 @@ export function planChecksSinceConsult(records: StepRecord[]): StepRecord[] {
       (record) =>
         record.actor === "agent" &&
         record.step === PLAN_CHECK_STEP &&
+        record.architect === architect &&
         record.endedAt &&
         (lastArchitect === undefined || record.seq > lastArchitect.seq),
     )
@@ -115,26 +174,26 @@ export function planChecksSinceConsult(records: StepRecord[]): StepRecord[] {
 
 /**
  * Whether a boundary spends a checker round before the architect. The
- * checker runs only on open work, so a goal whose tasks all landed consults
- * directly (the plan is complete or needs a direction the checker cannot
- * give). `architect`, an exhausted repeat bound and a steer only the architect
- * can answer also skip the check: the consult is their resolver.
+ * checker runs before every consult with a plan, including when nothing is
+ * open: its clean record is the architect's evidence that the plan still
+ * holds. The scope's own exhausted repeat bound, its last `architect` verdict
+ * and a steer only the architect can answer also skip the check: the consult
+ * is their resolver.
  */
 export function consultGate(input: {
   /** A plan exists to verify. */
   plan: boolean;
-  /** `openWork(state)`. */
-  open: string[];
   /** An unprocessed inbox steer waits: the architect is its consumer. */
   steerWaiting: boolean;
   records: StepRecord[];
   /** `limits.planCheckRounds`: checker turns allowed before one consult. */
   bound: number;
+  /** The scope whose budget this gate spends; absent is the goal check. */
+  architect?: string;
 }): "check" | "consult" {
   if (!input.plan) return "consult";
-  if (input.open.length === 0) return "consult";
   if (input.steerWaiting) return "consult";
-  const checks = planChecksSinceConsult(input.records);
+  const checks = planChecksSinceConsult(input.records, input.architect);
   if (checks.length >= input.bound) return "consult";
   if (checks.at(-1)?.outcome?.planCheck?.verdict === "architect")
     return "consult";
@@ -162,53 +221,46 @@ export function lastGateRecord(
   return last ? store.records.file(last, "end.yaml") : undefined;
 }
 
-/** One parked task's cause as the brief reads it. */
-function parkedCauseText(cause: Cause | undefined): string {
-  return cause ? formatCause(cause) : "no recorded cause";
-}
-
 /**
  * The checker's brief: every task file with status, then parked slugs with
  * the cause that parked them. The causes let the checker tell a mechanical
  * park (a follow-up) from a review rejection or a deterministic red (the
  * architect), without opening every record first.
  */
-export function planCheckBrief(state: State, tasks: TaskFile[]): string {
-  const lines = [existingTasks(state, tasks)];
-  const parked = tasks
-    .filter((task) => state.tasks[task.slug]?.status === "parked")
-    .sort((a, b) => a.slug.localeCompare(b.slug))
-    .map(
-      (task) =>
-        `- ${task.slug}: ${parkedCauseText(state.tasks[task.slug]?.cause)}`,
-    );
+export function planCheckBrief(
+  state: State,
+  tasks: TaskFile[],
+  epic?: string,
+): string {
+  const scoped =
+    epic === undefined ? tasks : tasks.filter((task) => task.epic === epic);
+  const lines = [existingTasks(state, scoped)];
+  const parked = reportView({
+    state,
+    tasks: scoped,
+    slugs: scoped.map((task) => task.slug),
+  }).groups.allParked.map(
+    (task) =>
+      `- ${task.slug}: ${task.cause ? formatCause(task.cause) : "no recorded cause"}`,
+  );
   if (parked.length > 0) lines.push("", "Parked by cause:", ...parked);
   return lines.join("\n");
 }
 
-export interface PlanCheckTurn {
-  verdict: PlanCheckVerdict;
-  evidence: PlanCheckEvidence[];
-  followUps: PlanCheckFollowUp[];
-  outcome?: Outcome;
-  /** An infrastructure stop: the iteration falls through to the boundary. */
-  infra?: { cause: string };
+/** The open concerns the checker judges, one line per concern, or `none`. */
+function openConcernLines(records: readonly StepRecord[]): string {
+  const open = openConcerns(records);
+  return open.length > 0 ? open.map(formatOpenConcern).join("\n") : "none";
 }
 
-/**
- * One plan-checker turn: a task-tier, read-only check of the plan against
- * the repo at a boundary or dispatch exhaustion. Writes outside the outcome
- * are discarded and recorded; a missing verdict, a refusal, or an infra stop
- * reports `architect`, so the checker can only add progress, never block the
- * iteration on its own failure.
- */
 /** The template variables of one plan-checker turn. */
 function planCheckVars(
   runtime: KernelRuntime,
-  opts: { iteration: number; state: State },
+  opts: { iteration: number; state: State; epic?: string },
   plans: ReturnType<KernelRuntime["store"]["plans"]["existing"]>,
   tasks: Awaited<ReturnType<KernelRuntime["store"]["listTasks"]>>,
   gateRecord: string | undefined,
+  records: readonly StepRecord[],
 ): Record<string, string> {
   return {
     iteration: String(opts.iteration),
@@ -216,7 +268,8 @@ function planCheckVars(
     plans: formatPlanList(plans),
     checkout: runtime.paths.goalCheckout,
     tasks_dir: runtime.store.tasks.dir,
-    existing_tasks: planCheckBrief(opts.state, tasks),
+    existing_tasks: planCheckBrief(opts.state, tasks, opts.epic),
+    open_concerns: openConcernLines(records),
     gate_record_path: gateRecord ?? "none recorded",
   };
 }
@@ -277,32 +330,55 @@ function planCheckTurnResult(
   };
 }
 
+/** One epic's plan from a plan list; the goal check reads every plan. */
+function scopedPlans(
+  plans: ReturnType<KernelRuntime["store"]["plans"]["existing"]>,
+  epic: string | undefined,
+) {
+  if (epic === undefined) return plans;
+  return plans.filter(
+    (plan) => plan.scope.kind === "epic" && plan.scope.epic === epic,
+  );
+}
+
+/**
+ * One plan-checker turn: a task-tier, read-only check of the plan against
+ * the repo at a boundary or dispatch exhaustion. An epic check reads only that
+ * epic's plan and tasks and records the epic as its architect; the goal check
+ * keeps every plan. Writes outside the outcome are discarded and recorded; a
+ * missing verdict, a refusal, or an infra stop reports `architect`, so the
+ * checker can only add progress, never block the iteration on its own failure.
+ */
 export async function runPlanCheck(
   runtime: KernelRuntime,
-  opts: { iteration: number; round: number; state: State },
+  opts: { iteration: number; round: number; state: State; epic?: string },
 ): Promise<PlanCheckTurn> {
   const allPlans = runtime.store.plans.registered();
-  const plans = runtime.store.plans.existing();
+  const plans = scopedPlans(runtime.store.plans.existing(), opts.epic);
   const texts = (
     await Promise.all(plans.map((plan) => runtime.store.plans.read(plan.scope)))
   ).filter((text): text is string => text !== null);
   const snapshot = await snapshotTurn(runtime, allPlans);
   const tasks = await runtime.store.listTasks();
-  const gateRecord = lastGateRecord(
-    await runtime.store.listRecords(),
-    runtime.store,
-  );
+  const records = await runtime.store.listRecords();
+  const gateRecord = lastGateRecord(records, runtime.store);
   const result = await runAgentTurn(runtime, {
-    target: boundaryTarget(runtime, "plancheck", opts.iteration),
+    target: boundaryTarget(runtime, "plancheck"),
     cwd: runtime.paths.goalCheckout,
     meta: {
       iteration: opts.iteration,
       step: PLAN_CHECK_STEP,
       round: opts.round,
+      ...(opts.epic ? { architect: opts.epic } : {}),
     },
-    vars: planCheckVars(runtime, opts, plans, tasks, gateRecord),
+    vars: planCheckVars(runtime, opts, plans, tasks, gateRecord, records),
     expectation: KERNEL_TURN_STEPS[PLAN_CHECK_STEP],
-    validate: (outcome) => validatePlanCheck(texts, outcome),
+    validate: (outcome) =>
+      validatePlanCheck(
+        texts,
+        outcome,
+        new Set(openConcerns(records).map((concern) => concern.id)),
+      ),
   });
   await recordDiscardedWrites(
     runtime,
@@ -310,16 +386,6 @@ export async function runPlanCheck(
     await restoreTurn(runtime, snapshot),
   );
   return planCheckTurnResult(result);
-}
-
-export interface PlanCheckRound {
-  turn: PlanCheckTurn;
-  /** Follow-up slugs the PM continued; non-empty means dispatch has work. */
-  continued: string[];
-  /** `checked` when no follow-up PM turn ran; otherwise that ladder's exit. */
-  status: PlanCheckPmResult["status"] | "checked";
-  /** Baseline findings the PM could not fix; `architect` only. */
-  findings: string[];
 }
 
 /**
@@ -333,7 +399,7 @@ export interface PlanCheckRound {
  */
 export async function runPlanCheckRound(
   runtime: KernelRuntime,
-  opts: { iteration: number; round: number; state: State },
+  opts: { iteration: number; round: number; state: State; epic?: string },
 ): Promise<PlanCheckRound> {
   const turn = await runPlanCheck(runtime, opts);
   if (turn.infra || turn.verdict !== "progress" || turn.followUps.length === 0)
@@ -343,6 +409,7 @@ export async function runPlanCheckRound(
     state: opts.state,
     followUps: turn.followUps,
     cwd: runtime.paths.goalCheckout,
+    ...(opts.epic ? { scope: { kind: "epic" as const, epic: opts.epic } } : {}),
   });
   return {
     turn,
@@ -353,9 +420,11 @@ export async function runPlanCheckRound(
 }
 
 /**
- * The latest plan-check turn carrying a report, newest record wins. The
- * boundary renders it into the pack, so the architect sees the evidence
- * that sent the goal its way.
+ * The latest plan-check turn carrying a report, newest record wins. A check
+ * that ended on infrastructure carries its reason instead of a report, so
+ * the architect reads why the checker did not run. The boundary renders it
+ * into the pack, so the architect sees the evidence that sent the goal its
+ * way, or the reason there was none.
  */
 export function latestPlanCheck(
   records: StepRecord[],
@@ -366,15 +435,28 @@ export function latestPlanCheck(
         record.step === PLAN_CHECK_STEP &&
         record.actor === "agent" &&
         record.endedAt &&
-        record.outcome?.planCheck,
+        (record.outcome?.planCheck !== undefined ||
+          record.stop?.kind === "infra"),
     )
     .sort((a, b) => a.seq - b.seq)
     .at(-1);
-  const check = last?.outcome?.planCheck;
-  if (!last || !check) return undefined;
-  return {
-    iteration: last.iteration,
-    verdict: check.verdict,
-    evidence: check.evidence,
-  };
+  if (!last) return undefined;
+  const check = last.outcome?.planCheck;
+  if (check) {
+    return {
+      iteration: last.iteration,
+      verdict: check.verdict,
+      evidence: check.evidence,
+    };
+  }
+  const stop = last.stop;
+  if (stop?.kind === "infra") {
+    return {
+      iteration: last.iteration,
+      verdict: "architect",
+      evidence: [],
+      reason: stop.details ? `${stop.cause}: ${stop.details}` : stop.cause,
+    };
+  }
+  return undefined;
 }

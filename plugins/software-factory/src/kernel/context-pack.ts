@@ -10,6 +10,7 @@ export type {
 } from "./context-pack/types.js";
 export { goalDebtRecords, recordsForAudience } from "./context-pack/debt.js";
 export {
+  formatOpenConcern,
   formatPlanFinding,
   numberedPlanFindings,
 } from "./context-pack/plan-findings.js";
@@ -18,9 +19,15 @@ export {
   contextPackRelPath,
   epicContextPackRelPath,
   epicSummaryRelPath,
+  PACK_BRIEF_SUMMARY_MAX,
   renderContextData,
   renderContextPack,
   summaryRelPath,
 } from "./context-pack/render.js";
 export { readyAging } from "./context-pack/aging.js";
-export { forwardedConcerns, shallowCodeMap } from "./context-pack/misc.js";
+export {
+  forwardedConcerns,
+  openConcernIds,
+  openConcerns,
+  shallowCodeMap,
+} from "./context-pack/misc.js";

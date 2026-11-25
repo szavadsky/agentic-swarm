@@ -11,6 +11,7 @@ import {
   goalCheckout,
   makeRuntime,
   outcome,
+  scriptDecider,
   scriptStallLeave,
   setupFlowRepo,
   writeTask,
@@ -172,8 +173,7 @@ async function parksEmptyDiffWhenRedChecksFixTurnPart1(
     ctx.writeOutcome(outcome({ summary: "beta implemented" }));
     return fakeTurnResult(req);
   });
-  // No review scripted: beta's checks stay red, so the fix turn loops on
-  // the implement step in the same round.
+  // No review scripted: beta's checks stay red and its fix loops on implement.
   await writeTask(
     runtime,
     task("beta", { base: "alpha", scope: ["beta.txt"] }),
@@ -196,10 +196,9 @@ async function parksEmptyDiffWhenRedChecksFixTurnPart1(
     ctx.writeOutcome(outcome({ summary: "beta fixed" }));
     return fakeTurnResult(req);
   });
-  // A missed park would loop the implementer into an exhausted-harness
-  // crash instead of parking; the assertions below catch that.
+  scriptDecider(harness, { summary: "repeated red", verdict: "reject" });
+  // A missed park would loop the implementer into an exhausted-harness crash.
   await runDispatch(runtime, { iteration: 3 });
-
   return { runtime, sawSince };
 }
 
@@ -216,11 +215,18 @@ async function parksEmptyDiffWhenRedChecksFixTurnPart2(
     runtime.configs.process.flows,
   );
   expect(state.tasks.beta!.status).toBe("parked");
-  expect(causeText(state.tasks.beta!.cause)).toContain("empty-diff");
-  expect(causeText(state.tasks.beta!.cause)).toContain(
-    "after red checks: no-beta (exit 1)",
-  );
-  // The fix turn never reached review, so no merge ran.
+  expect(causeText(state.tasks.beta!.cause)).toContain("repeated red");
+  // The decider saw the repeated-red signal; the fix never reached review and
+  // no merge ran.
+  expect(
+    records.find((r) => r.slug === "beta" && r.step === "decide"),
+  ).toBeDefined();
+  expect(
+    records.find(
+      (r) =>
+        r.slug === "beta" && r.step === "decide" && (r.promptBytes ?? 0) > 0,
+    ),
+  ).toBeDefined();
   expect(
     records.filter((r) => r.slug === "beta" && r.step === "review"),
   ).toHaveLength(0);
@@ -233,8 +239,15 @@ async function parksEmptyDiffWhenRedChecksFixTurnPart2(
     repo.git(["show", "factory/demo:beta.txt"], { allowFail: true }).code,
   ).not.toBe(0);
 
+  return scope;
+}
+
+async function parksEmptyDiffWhenRedChecksFixTurnPart3(
+  scope: Awaited<ReturnType<typeof parksEmptyDiffWhenRedChecksFixTurnPart2>>,
+) {
   // The advance hides the no-change turn from a last-turn comparison:
   // first tree != post-advance tree == fix tree.
+  const records = await scope.runtime.store.listRecords();
   const betaImplements = records
     .filter(
       (r) =>
@@ -250,14 +263,6 @@ async function parksEmptyDiffWhenRedChecksFixTurnPart2(
   expect(betaImplements).toHaveLength(2);
   expect(advances.length).toBeGreaterThanOrEqual(2);
   const firstTree = betaImplements[0]!.tree;
-
-  return { ...scope, betaImplements, advances, firstTree };
-}
-
-async function parksEmptyDiffWhenRedChecksFixTurnPart3(
-  scope: Awaited<ReturnType<typeof parksEmptyDiffWhenRedChecksFixTurnPart2>>,
-) {
-  const { betaImplements, advances, firstTree } = scope;
   const fixTree = betaImplements[1]!.tree;
   const postAdvance = advances[advances.length - 1]!.tree;
   expect(firstTree).toBeDefined();

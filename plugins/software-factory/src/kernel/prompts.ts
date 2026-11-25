@@ -3,13 +3,15 @@ import path from "node:path";
 import { type FS, Liquid } from "liquidjs";
 import { BASE_GATES_NOT_RECORDED } from "./baseline.js";
 import { packageRoot } from "./config.js";
+import { outcomeExampleVar } from "./outcome-example.js";
 import {
-  outcomeSchemaVar,
   taskFrontmatterVar,
   taskTypesVar,
   tierNamesVar,
 } from "./prompt-schema.js";
 import type { ProcessConfig, RepoConfig, RunConfig } from "./types.js";
+import type { PromptLibrary } from "./prompts-types.js";
+export type { PromptLibrary } from "./prompts-types.js";
 
 /**
  * Prompt templates render through LiquidJS in strict mode: an unknown variable
@@ -17,17 +19,6 @@ import type { ProcessConfig, RepoConfig, RunConfig } from "./types.js";
  * repo may shadow any template under `.factory/prompts/` and replace the
  * calibration partial with process-config text.
  */
-
-export interface PromptLibrary {
-  render(fragment: string, vars: Record<string, string>): string;
-  /** Variables the library supplies to every render; a caller never passes them. */
-  readonly defaults: Readonly<Record<string, string>>;
-  /**
-   * Variables a render needs; `vars` resolves a template's dynamic include
-   * (the reviewer's author body) that static analysis cannot name.
-   */
-  placeholders(fragment: string, vars?: Record<string, string>): string[];
-}
 
 function resolveWithExt(dir: string, file: string, ext: string): string {
   return path.resolve(dir, path.extname(file) ? file : file + ext);
@@ -253,6 +244,15 @@ export const CHECK_HANDOFF_DEFAULTS = {
 /** Default author used by prompt renders. */
 export const DEFAULT_PROMPT_AUTHOR = "implementer";
 /**
+ * A render that knows no hierarchy: depth 1, no steered subarchitects and no
+ * saga reminder. The hierarchy turns and the dry-run supply their own blocks.
+ */
+const HIERARCHY_DEFAULTS = {
+  depth: "1",
+  subarchitect_block: "",
+  saga_reminder: "",
+} as const;
+/**
  * Templates live in the package `prompts/` dir; a repo may shadow any
  * template under `.factory/prompts/` and replace the calibration partial with
  * process-config text. Schema and config names render as launch-wide defaults
@@ -308,7 +308,7 @@ export function loadPrompts(
       // A task with no environment notes renders none; promptVars supplies them per task.
       env_notes: "",
       fix_dispositions: "",
-      outcome_schema: outcomeSchemaVar(),
+      outcome_schema: outcomeExampleVar(DEFAULT_PROMPT_AUTHOR, "any"),
       task_frontmatter: taskFrontmatterVar(),
       task_types: taskTypesVar(process.taskTypes),
       tiers: tierNamesVar(aliases),
@@ -316,10 +316,10 @@ export function loadPrompts(
       // A render with no base record must never read as a clean base: the
       // reviewer treats a "pre-existing" claim without a record as a finding.
       base_gates: BASE_GATES_NOT_RECORDED,
-      // No hierarchy is the default; the epic consult passes `2` on its turn.
-      depth: "1",
-      // No steered subarchitects by default; the steered hierarchy renders the block.
-      subarchitect_block: "",
+      ...HIERARCHY_DEFAULTS,
+      // A render that knows no harness gets the generic launch text; the
+      // steered hierarchy supplies `steer` for its own block and definition.
+      subagents: "none",
     },
   });
 }

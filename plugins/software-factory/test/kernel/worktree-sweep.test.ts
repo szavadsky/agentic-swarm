@@ -375,8 +375,8 @@ function stoppedGoalHarness(goal: E2EGoal): FakeHarness {
   return withKernelRoleFallbacks(harness);
 }
 
-function registerStoppedGoalKeeps(): void {
-  it("keeps every worktree when the goal stops without done", async () => {
+function registerStoppedGoalSweeps(): void {
+  it("sweeps a merged worktree when the goal stops without done", async () => {
     const goal = makeGoal();
     try {
       writePlan(
@@ -398,7 +398,7 @@ function registerStoppedGoalKeeps(): void {
       });
       expect(result.stop).toBe("iteration-limit");
       expect(result.state.tasks.alpha!.status).toBe("merged");
-      expect(fs.existsSync(alphaWt)).toBe(true);
+      expect(fs.existsSync(alphaWt)).toBe(false);
     } finally {
       cleanup(goal);
     }
@@ -408,5 +408,5 @@ function registerStoppedGoalKeeps(): void {
 describe("worktree sweep at launch and goal end", () => {
   registerDoneGoalSweep();
   registerAllRootsSweep();
-  registerStoppedGoalKeeps();
+  registerStoppedGoalSweeps();
 });

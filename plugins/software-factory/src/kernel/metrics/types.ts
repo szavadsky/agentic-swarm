@@ -2,10 +2,34 @@
 
 import type { Usage } from "../../harness/types.js";
 import type { PriceTable } from "../pricing.js";
-import type { QaOnlyCatches } from "../qa.js";
+import type { QaCatches } from "../qa.js";
 import type { SummaryStatus } from "../summary.js";
 import type { State, StepRecord } from "../types.js";
-import type { WasteAccounting, WasteCounts } from "../waste.js";
+import type { WasteAccounting, WasteCounts, WasteReason } from "../waste.js";
+
+/** One iteration's waste facts a proposal reads; an older metrics file may omit them. */
+export interface IterationWaste {
+  n: number;
+  waste?: { counts?: Partial<WasteCounts> };
+}
+
+/** The metrics facts proposals read: every iteration's waste counts. */
+export interface WasteSpikeMetrics {
+  iterations: readonly IterationWaste[];
+}
+
+/** A waste cause at or above the threshold: the pack proposes a spike, never a task. */
+export interface WasteSpikeProposal {
+  reason: WasteReason;
+  /** The cause's label, the one name every table and line uses. */
+  label: string;
+  /** Wasted turns of this cause, summed over the goal's iterations. */
+  count: number;
+  /** Iterations carrying at least one such turn. */
+  iterations: number[];
+  /** The configured count at which a cause becomes a proposal. */
+  threshold: number;
+}
 
 /** Incident launches by kind; `unknown` is an old record without a stored kind. */
 export interface LaunchCounts {
@@ -173,6 +197,29 @@ export interface AskRecoveryCounts {
   rescue: number;
 }
 
+/** The kinds of friction one iteration reports, each naming the event it was. */
+export type FrictionKind =
+  | "fallback chain"
+  | "stalled steer"
+  | "kept branch"
+  | "park"
+  | "merge"
+  | "dispatch";
+
+/**
+ * One friction event: the record that proves it and the priced cost of the
+ * work behind it. Cost is absent when no associated turn had a known price;
+ * `unpricedTurns` says how partial the sum is.
+ */
+export interface FrictionEntry {
+  kind: FrictionKind;
+  /** Goal-relative record directory that proves the friction. */
+  record: string;
+  detail: string;
+  costUsd?: number;
+  unpricedTurns: number;
+}
+
 export interface ArchitectMetrics {
   turns: number;
   launches: number;
@@ -211,8 +258,8 @@ export interface IterationMetrics {
   architect: ArchitectMetrics;
   /** Architect marks on plan-review findings in this iteration. */
   planReviewMarks: PlanReviewMarkCounts;
-  /** QA findings no earlier gate or reviewer finding matched, counted per task. */
-  qaOnlyCatches: QaOnlyCatches;
+  /** QA findings no gate or reviewer carried, and a sample of all with their source. */
+  qaCatches: QaCatches;
   unpricedTurns: number;
   /** Wasted turns, each naming its record; rebutted reviews counted apart. */
   waste: WasteAccounting;
@@ -227,6 +274,8 @@ export interface IterationMetrics {
   zeroEditParks: ZeroEditParkMetrics;
   /** Turns the unfinished ask and the rescue recovered. */
   askRecoveries: AskRecoveryCounts;
+  /** Record-derived friction events, each with its record and cost. */
+  friction: FrictionEntry[];
   /** Steers moved from inbox to processed during this iteration. */
   humanInterventions: number;
   /**
@@ -236,11 +285,11 @@ export interface IterationMetrics {
    * artifacts stay in the journal; this is the lower bound the records show.
    */
   operatorActs: number;
-  /** Wall ms in checks/merge-checks records; wallMs falls back to timestamps. */
+  /** Wall ms in checks/merge-checks/baseline records; wallMs falls back to timestamps. */
   gateWallMs: number;
   /** Wall ms in commit records. */
   commitWallMs: number;
-  /** Checks/merge-checks records in this iteration. */
+  /** Checks/merge-checks/baseline records in this iteration. */
   gateRuns: number;
   /** Gates run across those records. */
   testRuns: number;

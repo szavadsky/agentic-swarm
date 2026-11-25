@@ -259,13 +259,12 @@ async function spikeWritesStandaloneTaskWhosePart2(
   const dispatched = await runDispatch(runtime, { iteration: 1 });
   expect(dispatched.reason).toBe("boundary");
   expect((await stateOf(runtime)).tasks["probe-page"]!.status).toBe("finished");
-  // The spike steer stays pending with no answer until its task lands.
-  expect(inboxHas(runtime, "s1")).toBe(true);
-  expect(
-    fs.existsSync(
-      path.join(runtime.store.goalDir, "mailbox/outbox", "steer-s1.md"),
-    ),
-  ).toBe(false);
+  // The spike settled during dispatch, so the sealed report answers the owner
+  // there: a terminal goal would never open the boundary that used to. The
+  // outcome summary is not the finding.
+  expect(outboxOf(runtime, "s1")).toContain("Cursor pagination wins.");
+  expect(outboxOf(runtime, "s1")).not.toContain("cursor pagination wins");
+  expect(inboxHas(runtime, "s1")).toBe(false);
 
   harness.script((req, ctx) => {
     expect(req.prompt).not.toContain("s1 (mailbox/inbox/s1.md)");
@@ -279,9 +278,7 @@ async function spikeWritesStandaloneTaskWhosePart2(
   });
   const boundary = await runBoundary(runtime, { relaunch: false });
   expect(boundary.decision).toBe("continue");
-  // The sealed report, not the outcome summary, answers the owner.
   expect(outboxOf(runtime, "s1")).toContain("Cursor pagination wins.");
-  expect(outboxOf(runtime, "s1")).not.toContain("cursor pagination wins");
   expect(inboxHas(runtime, "s1")).toBe(false);
 
   return { ...scope, boundary };

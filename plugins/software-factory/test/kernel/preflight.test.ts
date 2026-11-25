@@ -135,6 +135,7 @@ function registerPreFlightPart2(): void {
     const runYaml = `${RUN_HEAD_NO_HIGHEST}harnesses:
   agent-c:
     acpx: { agent: agent-c }
+    compaction: { enabled: false, reason: test harness has no compact command }
     options:
       args: "--approve-all"
       env: { TOKEN: 1 }
@@ -172,6 +173,7 @@ sessions: { dir: SESSIONS_DIR, retention: short }
 harnesses:
   agent-c:
     acpx: { agent: agent-c }
+    compaction: { enabled: false, reason: test harness has no compact command }
     options: { args: "--approve-all" }
 `;
     const f = await fixture(runYaml);
@@ -200,6 +202,7 @@ function registerPreFlightPart4(): void {
     const runYaml = `${RUN_HEAD_NO_HIGHEST}harnesses:
   agent-c:
     acpx: { agent: agent-c }
+    compaction: { enabled: false, reason: test harness has no compact command }
     options:
       args: ["--approve-all"]
       env: { TOKEN: "value" }
@@ -217,7 +220,7 @@ function registerPreFlightPart4(): void {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST,
       undefined,
-      "taskTypes:\n  odd: { flow: no-such-flow, kind: development, schema: outcome }\n",
+      "taskTypes:\n  odd: { flow: no-such-flow, kind: development, schema: outcome, useWhen: fixture work }\n",
     );
     try {
       const err = await refusal(f.input);
@@ -257,7 +260,7 @@ function registerPreFlightPart5(): void {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST,
       undefined,
-      "taskTypes:\n  odd: { flow: toString, kind: development, schema: outcome }\n",
+      "taskTypes:\n  odd: { flow: toString, kind: development, schema: outcome, useWhen: fixture work }\n",
     );
     try {
       const err = await refusal(f.input);
@@ -279,7 +282,7 @@ function registerPreFlightPart6(): void {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST,
       undefined,
-      "taskTypes:\n  odd: { flow: implement-review, kind: development, schema: nope }\n",
+      "taskTypes:\n  odd: { flow: implement-review, kind: development, schema: nope, useWhen: fixture work }\n",
     );
     try {
       const err = await refusal(f.input);
@@ -299,7 +302,7 @@ function registerPreFlightPart6(): void {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST,
       undefined,
-      "taskTypes:\n  odd: { flow: implement-review, kind: development, schema: constructor }\n",
+      "taskTypes:\n  odd: { flow: implement-review, kind: development, schema: constructor, useWhen: fixture work }\n",
     );
     try {
       const err = await refusal(f.input);
@@ -322,7 +325,7 @@ function registerPreFlightPart7(): void {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST,
       undefined,
-      "taskTypes:\n  docs: { flow: just-implement, kind: development, schema: outcome }\n",
+      "taskTypes:\n  docs: { flow: just-implement, kind: development, schema: outcome, useWhen: fixture work }\n",
     );
     try {
       await preflight(f.input);

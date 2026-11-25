@@ -4,10 +4,12 @@ import type { SessionRef } from "../../harness/types.js";
 import type { Cause, Outcome } from "../types.js";
 
 /**
- * A wave-end steward candidate. A `conflict` candidate owns a parked merge
- * conflict; `red-after-merge` owns a branch whose last merged result ran red
- * (the goal branch is red while its gate-fix is spent) and carries the newest
- * red gate record's `end.yaml` file — the gate log the steward turn reads.
+ * A wave-end steward candidate. A `conflict` candidate owns a branch the
+ * integration head must merge into — a parked merge conflict, or a base
+ * conflict the branch could not take the head in through; `red-after-merge`
+ * owns a branch whose gates are still red (the goal head the branch merges onto
+ * is red, or the branch's own merged result is) and carries the gate log the
+ * steward turn reads.
  */
 export interface StewardCandidate {
   slug: string;
@@ -21,6 +23,16 @@ export interface StewardDead {
   /** The stop's cause verbatim: dispatch classifies it for the backoff. */
   cause: string;
   details?: string;
+}
+
+/**
+ * A park the wave-end steward may attempt, in slug order, before its gate
+ * evidence is read. `conflict` owns a branch the integration head must merge
+ * into; `gates` waits on a red the head has to establish.
+ */
+export interface StewardPark {
+  slug: string;
+  kind: "conflict" | "gates";
 }
 
 export interface StewardResult {

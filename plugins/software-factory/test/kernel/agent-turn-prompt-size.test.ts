@@ -37,12 +37,16 @@ const vars = {
 
 const pmVars = {
   iteration: "1",
+  epic: "",
+  epic_scoped: "false",
   intent_path: "/g/intent.md",
   plans: "- goal: /g/plan.md",
+  plan_diff: "none",
   tasks_dir: "/g/tasks",
   existing_tasks: "none",
   repair: "",
   steers: "none",
+  concerns: "none",
   holds_dir: "/g/mailbox/holds",
   stalls: "none",
   plan_checks: "none",

@@ -8,6 +8,7 @@ import {
   resolveGoalPaths,
   toLimits,
 } from "../../src/kernel/config.js";
+import { SHIPPED_TASK_TYPES } from "./helpers.js";
 
 function tmpRepo(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "factory-config-"));
@@ -24,19 +25,7 @@ function threeConfigLayersPart1() {
       configs.process.flows["implement-review"]!.steps[1]!.changeRequests,
     ).toBe(2);
     expect(configs.process.reminders).toBe(1);
-    expect(configs.process.taskTypes).toEqual({
-      development: {
-        flow: "implement-review",
-        kind: "development",
-        schema: "outcome",
-      },
-      spike: { flow: "spike", kind: "spike", schema: "outcome" },
-      trivial: {
-        flow: "just-implement",
-        kind: "development",
-        schema: "outcome",
-      },
-    });
+    expect(configs.process.taskTypes).toEqual(SHIPPED_TASK_TYPES);
     const paths = resolveGoalPaths(configs, root, "demo");
     expect(paths.goalDir).toBe(path.join(root, ".factory/artifacts/demo"));
     expect(paths.goalCheckout.startsWith(root)).toBe(false);
@@ -67,7 +56,10 @@ function threeConfigLayersPart2() {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
     const run = path.join(root, ".factory/run.yaml");
-    expect(loadConfigs(root).run.quota).toEqual({ resetMinutes: 300 });
+    expect(loadConfigs(root).run.quota).toEqual({
+      resetMinutes: 300,
+      perSubscription: {},
+    });
     fs.writeFileSync(
       run,
       "quota: { resetMinutes: 45, maxResetMinutes: 600 }\n",
@@ -75,6 +67,7 @@ function threeConfigLayersPart2() {
     expect(loadConfigs(root).run.quota).toEqual({
       resetMinutes: 45,
       maxResetMinutes: 600,
+      perSubscription: {},
     });
     fs.writeFileSync(run, "quota: { resetMinutes: 45, capMinutes: 600 }\n");
     expect(() => loadConfigs(root)).toThrow(ConfigError);
@@ -91,6 +84,17 @@ function threeConfigLayersPart3() {
       "taskTypes:\n  odd: { flow: implement-review, kind: task, schema: outcome }\n",
     );
     expect(() => loadConfigs(root)).toThrow(/taskTypes/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("refuses a task type without a use-when", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      "taskTypes:\n  vague: { flow: implement-review, kind: development, schema: outcome }\n",
+    );
+    expect(() => loadConfigs(root)).toThrow(/taskTypes\.vague\.useWhen/);
     fs.rmSync(root, { recursive: true, force: true });
   });
 
@@ -116,6 +120,80 @@ function threeConfigLayersPart3() {
       },
     ]);
     fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+function catalogueTypesPart1(): void {
+  it("ships the intent catalogue: one-agent fact finder, nogit PoC, and browser delivery", () => {
+    const root = tmpRepo();
+    const configs = loadConfigs(root);
+    expect(configs.process.flows["fact-find"]!.steps.map((s) => s.id)).toEqual([
+      "implement",
+    ]);
+    expect(configs.process.flows.poc!.steps.map((s) => s.id)).toEqual([
+      "implement",
+      "review",
+    ]);
+    expect(
+      configs.process.flows["computer-use"]!.steps.map((s) => s.id),
+    ).toEqual(["implement", "browser", "qa", "review", "resolve"]);
+    expect(configs.process.flows["computer-use"]!.steps[1]).toMatchObject({
+      prompt: "browser-qa",
+      qa: true,
+    });
+    expect(configs.process.taskTypes["fact-finder"]!.nogit).toBe(true);
+    expect(configs.process.taskTypes.poc!.nogit).toBe(true);
+    expect(configs.process.taskTypes["computer-use"]!.nogit).toBe(false);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("refuses a non-boolean nogit marker", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      "taskTypes:\n  odd: { flow: implement-review, kind: spike, schema: outcome, nogit: yes, useWhen: odd work }\n",
+    );
+    expect(() => loadConfigs(root)).toThrow(/taskTypes\.odd\.nogit/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("refuses a nogit type that would still merge", () => {
+    const root = tmpRepo();
+    fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".factory/process.yaml"),
+      "taskTypes:\n  odd: { flow: implement-review, kind: development, schema: outcome, nogit: true, useWhen: odd work }\n",
+    );
+    expect(() => loadConfigs(root)).toThrow(/nogit task type needs kind spike/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+
+function promoteTaskType(): void {
+  it("ships the promote barrier type and refuses one that would merge", () => {
+    const root = tmpRepo();
+    const configs = loadConfigs(root);
+    expect(configs.process.taskTypes.promote).toMatchObject({
+      kind: "spike",
+      nogit: true,
+      promote: true,
+    });
+    expect(
+      configs.process.flows[configs.process.taskTypes.promote!.flow],
+    ).toBeDefined();
+    fs.rmSync(root, { recursive: true, force: true });
+
+    const odd = tmpRepo();
+    fs.mkdirSync(path.join(odd, ".factory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(odd, ".factory/process.yaml"),
+      "taskTypes:\n  odd: { flow: implement-review, kind: development, schema: outcome, promote: true, useWhen: odd work }\n",
+    );
+    expect(() => loadConfigs(odd)).toThrow(
+      /promote task type needs kind spike/,
+    );
+    fs.rmSync(odd, { recursive: true, force: true });
   });
 }
 
@@ -399,6 +477,10 @@ describe("three config layers", () => {
   threeConfigLayersPart2();
 
   threeConfigLayersPart3();
+
+  catalogueTypesPart1();
+
+  promoteTaskType();
 
   threeConfigLayersPart4();
 

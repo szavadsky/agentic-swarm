@@ -13,8 +13,10 @@ import {
   goalCheckout,
   makeRuntime,
   outcome,
+  scriptDecider,
   scriptStallLeave,
   setupFlowRepo,
+  whenTurn,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -178,6 +180,20 @@ async function parksAfterRedMergedGateLetsOneGatePart1(
     ctx.writeOutcome(outcome({ summary: "v2" }));
     return fakeTurnResult(req);
   });
+  scriptDecider(harness, {
+    summary: "the head is poisoned; keep the branch for the steward",
+    verdict: "reject",
+  });
+  scriptStallLeave(harness, ["task"]);
+  // The wave-end kept-land re-runs the merge, reds again, and hands the branch
+  // to the steward; its turn leaves the merged result as red as it found it.
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(outcome({ summary: "steward found no repair" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "steward" }) },
+  );
 
   const runtime = await makeRuntime(repo, goal, { fake: harness });
   const file = task("task", {
@@ -201,7 +217,6 @@ async function parksAfterRedMergedGateLetsOneGatePart1(
   await drive({ kind: "merge", slug: "task" });
   await drive({ kind: "step", slug: "task", step: "implement", round: 1 });
   await drive({ kind: "merge", slug: "task" });
-  scriptStallLeave(harness, ["task"]);
   const result = await runDispatch(runtime, { iteration: 1 });
   expect(result.reason).toBe("boundary");
 
@@ -220,18 +235,20 @@ async function parksAfterRedMergedGateLetsOneGatePart2(
     runtime.configs.process.flows,
   );
   expect(state.tasks.task!.status).toBe("parked");
-  expect(causeText(state.tasks.task!.cause)).toContain("gates: poison-gate");
+  expect(state.tasks.task!.cause?.kind).toBe("gates");
+  expect(causeText(state.tasks.task!.cause)).toContain("poison-gate");
   expect(state.tasks.task!.round).toBe(1);
-  expect(harness.calls.length).toBe(3);
+  expect(harness.calls.length).toBe(5);
+  // The dispatch merge and its gate fix, then the wave-end kept-land retry.
   expect(
     records.filter(
       (r) => r.slug === "task" && r.step === "merge" && r.ok === false,
     ).length,
-  ).toBe(2);
+  ).toBe(3);
   expect(
     records.filter((r) => r.slug === "task" && r.step === "merge-checks")
       .length,
-  ).toBe(2);
+  ).toBe(3);
   expect(
     records.filter((r) => r.slug === "task" && r.step === "review"),
   ).toEqual([]);

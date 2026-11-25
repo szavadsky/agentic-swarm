@@ -12,6 +12,7 @@ import { Repo } from "../../src/core/git/repo.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { reportsUsage, zeroUsage } from "../../src/harness/usage.js";
 import { runAgentTurn } from "../../src/kernel/agent.js";
+import { DEFAULT_FLOWS, reduceTask } from "../../src/kernel/derive-task.js";
 import { resolveTurn } from "../../src/kernel/flow-context.js";
 import { type GoalMetrics, writeMetrics } from "../../src/kernel/metrics.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
@@ -29,6 +30,7 @@ import {
   cause,
   rec,
   script,
+  task,
 } from "./helpers.js";
 
 function runtimeForPart1() {
@@ -268,4 +270,113 @@ describe("glitch turns", () => {
   registerGlitchTurnPart();
 
   registerGlitchBoundaryPart();
+});
+
+const reviewChanges = (seq: number, round: number): StepRecord =>
+  rec(seq, {
+    step: "review",
+    round,
+    tree: `tree-${round}`,
+    outcome: {
+      status: "done",
+      summary: `1. finding ${round}`,
+      concerns: [],
+      forward: [],
+      verdict: "changes",
+    },
+  });
+
+const fallbackAttempts: StepRecord["attempts"] = [
+  {
+    model: { id: "fake-a" },
+    stop: { kind: "infra", cause: "quota", details: "quota spent" },
+    usage: zeroUsage(),
+    harness: "first",
+  },
+  {
+    model: { id: "fake-b" },
+    stop: { kind: "done" },
+    usage: zeroUsage(),
+    harness: "second",
+  },
+];
+
+function registerFallbackLaunchPart(): void {
+  it("keeps a fallback launch out of the review's change-request budget", () => {
+    const flow = DEFAULT_FLOWS["implement-review"]!;
+    const records = [
+      reviewChanges(1, 1),
+      rec(2, {
+        step: "review",
+        round: 2,
+        tree: "tree-2",
+        attempts: fallbackAttempts,
+        outcome: {
+          status: "done",
+          summary: "1. finding 2",
+          concerns: [],
+          forward: [],
+          verdict: "changes",
+        },
+      }),
+      reviewChanges(3, 3),
+    ];
+    const reduction = reduceTask(task("a"), records, flow);
+    expect(reduction.phase).toBe("implement");
+    expect(reduction.launches.review).toEqual({
+      glitches: 1,
+      changeRequests: 2,
+      failures: 0,
+    });
+
+    const lastCall = reduceTask(
+      task("a"),
+      [...records, reviewChanges(4, 4)],
+      flow,
+    );
+    expect(lastCall.phase).toBe("parked");
+    expect(lastCall.park?.kind).toBe("invalid-outcome");
+  });
+}
+
+function registerGlitchFailureLaunchPart(): void {
+  it("counts glitches and failures apart from change requests", () => {
+    const reduction = reduceTask(
+      task("a"),
+      [
+        rec(1, {
+          step: "review",
+          round: 1,
+          usage: zeroUsage(),
+          stop: {
+            kind: "infra",
+            cause: "glitch",
+            details: "zero-usage, no-output",
+          },
+        }),
+        rec(2, {
+          step: "review",
+          round: 1,
+          outcome: {
+            status: "failed",
+            summary: "the review could not run",
+            concerns: [],
+            forward: [],
+          },
+        }),
+      ],
+      DEFAULT_FLOWS["implement-review"]!,
+    );
+    expect(reduction.phase).toBe("parked");
+    expect(reduction.launches.review).toEqual({
+      glitches: 1,
+      changeRequests: 0,
+      failures: 1,
+    });
+  });
+}
+
+describe("per-agent launch counts", () => {
+  registerFallbackLaunchPart();
+  registerGlitchFailureLaunchPart();
 });

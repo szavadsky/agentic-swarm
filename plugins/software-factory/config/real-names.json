@@ -17,7 +17,8 @@
     "beam",
     "longcat",
     "hy4",
-    "mimo"
+    "mimo",
+    "big-pickle"
   ],
   "providers": ["anthropic", "baidu", "reflection", "xai"],
   "subscriptions": ["antigravity", "command code", "open code", "open code go", "open router"]

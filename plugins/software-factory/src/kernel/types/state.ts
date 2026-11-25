@@ -8,7 +8,7 @@ import type {
   TaskPhase,
   TaskStatus,
 } from "./tasks.js";
-import type { ReviewVerdict } from "./outcome.js";
+import type { Concern, ConcernId, ReviewVerdict } from "./outcome.js";
 
 /**
  * A park or failure cause, closed by `kind`: the kernel switches on it and
@@ -56,17 +56,45 @@ export const causeSchema = z.object({
 });
 export type Cause = z.infer<typeof causeSchema>;
 
+/**
+ * How many launches one flow step's agent spent, kept apart by kind: a glitch
+ * or failure is no change request, and each step carries its own bound.
+ */
+export interface StepLaunches {
+  glitches: number;
+  changeRequests: number;
+  failures: number;
+}
+
+/**
+ * A no-progress signal a turn raised instead of parking it in the kernel: the
+ * decider turn reads it, the branch and the checks log, then decides through
+ * its outcome. `evidence` is the sentence the park would have carried.
+ */
+export interface PendingSignal {
+  kind: CauseKind;
+  evidence: string;
+}
+
 export interface TaskState {
   status: TaskStatus;
   /** The task file's epic, copied so a consumer reading state keeps the owner. */
   epic?: string;
+  /** The task's dependency edges, copied so dispatch can order ready work. */
+  deps?: readonly string[];
   cause?: Cause;
   /** Agent turns spent on this slug, a spend fact only: no bound reads it. */
   turns: number;
+  /** An agent turn on this slug has started; dispatch finishes it first. */
+  started?: boolean;
   /** Current implementation/review round, 1-based. */
   round: number;
+  /** Agent launches by flow step, so one acceptance step never spends another's bound. */
+  launches: Record<string, StepLaunches>;
   kind: TaskKind;
   flow: string;
+  /** The type stops the launch for operator promotion instead of running. */
+  promote?: boolean;
   phase: TaskPhase;
   commit?: string;
   verdict?: ReviewVerdict;
@@ -88,9 +116,68 @@ export interface TaskState {
   cleanlinessRevision?: boolean;
   /** True when the author justified a cleanliness hit to advance to review. */
   cleanlinessJustified?: boolean;
+  /** A no-progress signal awaiting its decide turn; the next action is `decide`. */
+  pendingSignal?: PendingSignal;
 }
 
 export type GoalStatus = "active" | "done" | "blocked";
+
+/** One task row a report lists: the shape status.json writes and the pack lists. */
+export interface ReportTask {
+  slug: string;
+  title: string;
+  status: TaskStatus;
+  kind: TaskKind;
+  epic?: string;
+  round: number;
+  turns: number;
+  commit?: string;
+  cause?: Cause;
+  /** Set on a park whose kept work landed through a base continuation. */
+  supersededBy?: string;
+  /** `records/<dir>` of the slug's latest record; absent without records. */
+  record?: string;
+}
+
+/**
+ * The task rows grouped once. `parked` is the live set the goal still counts;
+ * `allParked` keeps every park, including the base continuations.
+ */
+export interface ReportTaskGroups {
+  open: ReportTask[];
+  /** `pending` and `ready`: a boundary's waiting list. */
+  pending: ReportTask[];
+  merged: ReportTask[];
+  finished: ReportTask[];
+  parked: ReportTask[];
+  allParked: ReportTask[];
+  superseded: ReportTask[];
+  cancelled: ReportTask[];
+}
+
+/** One open debt with the record that raised it. */
+export interface ReportDebt {
+  id?: ConcernId;
+  text: string;
+  evidence?: string;
+  calibration: Concern["calibration"];
+  /** `slug step rN` of the record that raised it. */
+  source: string;
+  iteration: number;
+  record?: string;
+}
+
+/** The one derived view summary, status, dashboard and pack read. */
+export interface ReportView {
+  tasks: ReportTask[];
+  groups: ReportTaskGroups;
+  /** The goal's distance: what waits, what parked, what debt stays open. */
+  distance: {
+    pending: string[];
+    parks: string[];
+    openDebt: ReportDebt[];
+  };
+}
 
 /**
  * One epic's derived state. The epic's last completed subarchitect record owns
@@ -112,7 +199,11 @@ export interface State {
   /** Highest iteration seen in records; 0 before the first boundary turn. */
   iteration: number;
   terminal: boolean;
-  /** The current iteration was interrupted with ready work left; a relaunch resumes it. */
+  /**
+   * The current iteration was interrupted before it settled: it decided with
+   * ready work left, or it never reached a decision at all; a relaunch resumes
+   * it.
+   */
   interrupted: boolean;
   tasks: Record<string, TaskState>;
   /** Every epic the task files and subarchitect records name. */
@@ -120,7 +211,14 @@ export interface State {
 }
 
 export type Action =
-  | { kind: "step"; slug: string; step: string; round: number }
+  | {
+      kind: "step";
+      slug: string;
+      step: string;
+      round: number;
+      /** Admission chose this fallback-chain index; absent is the primary. */
+      tierIndex?: number;
+    }
   | { kind: "checks"; slug: string }
   | { kind: "merge"; slug: string }
   | { kind: "finish"; slug: string }

@@ -153,7 +153,7 @@ function registerPreFlightPart29(): void {
     const f = await fixture(
       SPLIT_HARNESSES.replace(
         "limits:",
-        `harnesses:\n  omp:\n    binary: ${configured}\nlimits:`,
+        `harnesses:\n  omp:\n    binary: ${configured}\n    compaction: { enabled: true }\nlimits:`,
       ),
     );
     try {
@@ -219,7 +219,7 @@ function registerPreFlightPart31(): void {
         "implementer: { harness: agent-c, model: impl }",
       ).replace(
         "limits:",
-        `harnesses:\n  agent-c:\n    binary: ${configured}\n    acpx: { agent: "agent-c acp", raw: true }\nlimits:`,
+        `harnesses:\n  agent-c:\n    binary: ${configured}\n    acpx: { agent: "agent-c acp", raw: true }\n    compaction: { enabled: false, reason: test harness has no compact command }\nlimits:`,
       ),
     );
     try {
@@ -253,7 +253,7 @@ function registerPreFlightPart32(): void {
         "implementer: { harness: agent-c, model: impl }",
       ).replace(
         "limits:",
-        `harnesses:\n  agent-c:\n    binary: ${process.execPath}\n    acpx: { agent: "agent-c acp", raw: true }\nlimits:`,
+        `harnesses:\n  agent-c:\n    binary: ${process.execPath}\n    acpx: { agent: "agent-c acp", raw: true }\n    compaction: { enabled: false, reason: test harness has no compact command }\nlimits:`,
       ),
     );
     try {

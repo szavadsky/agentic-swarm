@@ -4,10 +4,11 @@
  * repeated failure escalates to.
  */
 
+import { DECIDE_STEP, decideStep, isDecideStep } from "./pending-signal.js";
 import { isRecoveryCrash } from "./recovery-seal.js";
 import { frontTarget, frontTaskClass } from "./flow-context-front.js";
 import { bySeq } from "./flow-context-history.js";
-import type { TurnTarget } from "./flow-context-targets.js";
+import type { TurnTarget } from "./flow-types.js";
 import { repairFields, resolveTurn } from "./flow-context-targets.js";
 import { launchKindOf } from "./metrics.js";
 import { agentSteps, isAcceptanceStep, isVerdictStep } from "./review.js";
@@ -28,6 +29,9 @@ export function flowOf(runtime: KernelRuntime, task: TaskFile): FlowDefinition {
 }
 
 export function findStep(flow: FlowDefinition, id: string): FlowStep {
+  // The decide turn is raised by a signal, never configured: it borrows the
+  // reviewer's prompt role and alias without entering any step sequence.
+  if (id === DECIDE_STEP) return decideStep(flow);
   const step = flow.steps.find((s) => s.id === id);
   if (!step) throw new Error(`flow has no step "${id}"`);
   return step;
@@ -40,6 +44,9 @@ export function findStep(flow: FlowDefinition, id: string): FlowStep {
  * previous branch's tree, so the seam between ready steps is a gate too.
  */
 export function checksDue(flow: FlowDefinition, id: string): boolean {
+  // The decide turn reads the checks record already on the branch; it never
+  // gates the tree it produced no work on.
+  if (isDecideStep(id)) return false;
   // The resolve step is outside the agent sequence: its commit is the branch's
   // new tip, so the gates that decide the re-merge always run after it.
   if (id === "resolve") return true;
@@ -221,7 +228,6 @@ export function stepTarget(
   task: TaskFile,
   state: TaskState,
   stepId: string,
-  iteration: number,
   records: readonly StepRecord[] = [],
 ): TurnTarget {
   if (isTrivialImplementTurn(runtime, task, state, stepId)) {
@@ -229,7 +235,7 @@ export function stepTarget(
     // implementer's: the prompt names the role, not the agent's history.
     const turn = stepTurn(runtime, task, state, stepId);
     return {
-      ...frontTarget(runtime, iteration),
+      ...frontTarget(runtime),
       ...repairFields(turn),
       prompt: turn.prompt,
     };
@@ -252,7 +258,6 @@ export function stepTarget(
       turn.prompt,
       alias,
       isVerdictStep(step) ? undefined : task.tier,
-      iteration,
     ),
     ...repairFields(turn),
   };

@@ -10,6 +10,7 @@ import type {
   ArtifactLocation,
   ConfigBundle,
   GoalPaths,
+  GoalRoots,
   Limits,
 } from "../types.js";
 import { DEFAULT_PARK_AMENDS, limitsSchema } from "./run-schema.js";
@@ -160,6 +161,24 @@ function resolveArtifacts(
   };
 }
 
+export function resolveRoots(
+  configs: ConfigBundle,
+  repoRoot: string,
+): GoalRoots {
+  const root = path.resolve(repoRoot);
+  const baseRoot = configs.run.worktreeRoot
+    ? fromRoot(root, configs.run.worktreeRoot)
+    : path.resolve(root, "..", ".factory-worktrees", path.basename(root));
+  const worktreeRoot = path.join(baseRoot, repositoryId(root));
+  return {
+    repoRoot: root,
+    worktreeRoot,
+    sessionsDir: configs.run.sessions.dir
+      ? fromRoot(root, configs.run.sessions.dir)
+      : path.join(worktreeRoot, ".sessions"),
+  };
+}
+
 export function resolveGoalPaths(
   configs: ConfigBundle,
   repoRoot: string,
@@ -170,22 +189,19 @@ export function resolveGoalPaths(
       `goal name "${goal}" must be kebab-case (a-z, 0-9, dashes)`,
     );
   }
-  const root = path.resolve(repoRoot);
-  const baseRoot = configs.run.worktreeRoot
-    ? fromRoot(root, configs.run.worktreeRoot)
-    : path.resolve(root, "..", ".factory-worktrees", path.basename(root));
-  const worktreeRoot = path.join(baseRoot, repositoryId(root));
-  const artifacts = resolveArtifacts(configs, root, worktreeRoot);
+  const roots = resolveRoots(configs, repoRoot);
+  const artifacts = resolveArtifacts(
+    configs,
+    roots.repoRoot,
+    roots.worktreeRoot,
+  );
   return {
-    repoRoot: root,
+    ...roots,
     goalDir: path.join(artifacts.root, goal),
     goalCheckout:
-      legacyCheckout(baseRoot, goal, root) ?? path.join(worktreeRoot, goal),
+      legacyCheckout(path.dirname(roots.worktreeRoot), goal, roots.repoRoot) ??
+      path.join(roots.worktreeRoot, goal),
     integrationBranch: `factory/${goal}`,
-    worktreeRoot,
-    sessionsDir: configs.run.sessions.dir
-      ? fromRoot(root, configs.run.sessions.dir)
-      : path.join(worktreeRoot, ".sessions"),
     artifacts,
   };
 }
@@ -220,6 +236,9 @@ export function toLimits(configs: ConfigBundle): Limits {
       : {}),
     ...(runLimits.iterationMinutes !== undefined
       ? { iterationMinutes: runLimits.iterationMinutes }
+      : {}),
+    ...(runLimits.steerDebounceSeconds !== undefined
+      ? { steerDebounceMs: Math.round(runLimits.steerDebounceSeconds * 1000) }
       : {}),
     ...(runLimits.minTmpFreeBytes !== undefined
       ? { minTmpFreeBytes: runLimits.minTmpFreeBytes }

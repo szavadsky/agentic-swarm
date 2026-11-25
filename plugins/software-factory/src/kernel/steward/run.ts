@@ -4,6 +4,7 @@ import type { SessionRef } from "../../harness/types.js";
 import { derive } from "../derive.js";
 import { revisionStart } from "../derive-task-facts.js";
 import { parkTask, taskMeta } from "../flow-meta.js";
+import { judgeGoalHead } from "../integrate.js";
 import type { KernelRuntime, StepRecord, TaskFile } from "../types.js";
 import type {
   StewardCandidate,
@@ -13,22 +14,27 @@ import type {
 } from "./types.js";
 import {
   attemptedThisWave,
+  keptLandLeft,
   skipStewardWave,
   stewardCandidate,
   stewardCandidateState,
   stewardCandidates,
+  stewardParks,
 } from "./candidates.js";
 
 /**
- * Steward-merge launch step: every conflict the wave left parked, including
- * one it could not hand to its resolve turn, is attempted once by a model
- * turn in its own worktree (compacted at settle), then the merge queue
- * lands it with gates; failures hold the task and leave an architect pointer
- * (status, worktree, branch) as a forwarded concern. A candidate whose leg
- * stops on infra is reported as dead and the remaining candidates still run;
- * only a frozen slug (its bounded re-dispatches spent, or a fatal cause) is
- * left for the next launch. Unmerged tasks relaunch via continuations on the
- * new head through the existing `base:` path.
+ * Steward-merge launch step: every conflict the wave left parked, including a
+ * base conflict the branch could not take in and one the flow could not hand
+ * to its resolve turn, is attempted once by a model turn in its own worktree
+ * (compacted at settle), then the merge queue lands it with gates; failures
+ * hold the task and leave an architect pointer (status, worktree, branch) as a
+ * forwarded concern. A gates park is a candidate only when gate evidence says
+ * the red is still there: the goal head is gated (or the run that already
+ * judged its tree reused) and a red-after-merge candidate repairs it. A
+ * candidate whose leg stops on infra is reported as dead and the remaining
+ * candidates still run; only a frozen slug (its bounded re-dispatches spent, or
+ * a fatal cause) is left for the next launch. Unmerged tasks relaunch via
+ * continuations on the new head through the existing `base:` path.
  */
 export async function runSteward(
   runtime: KernelRuntime,
@@ -40,6 +46,18 @@ export async function runSteward(
   // A turn that stopped on infra is not an attempt: its slug gets the
   // task-turn backoff, so a later wave retries it instead of skipping it.
   const attempted = attemptedThisWave(records, iteration);
+  // A kept branch the wave-end kept-land could not land is the steward's: the
+  // merge cause names the repair, and kept-land will not retry before the next
+  // boundary.
+  const keptLeft = keptLandLeft(records, iteration);
+  const parks = stewardParks(tasks, state, attempted, frozen, keptLeft);
+  if (parks.length === 0)
+    return await skipStewardWave(runtime, records, iteration);
+  // A gates park needs the head's own verdict before it can be a candidate:
+  // the gates run once per head tree, and a tree already judged reuses its run.
+  const goalHead = parks.some((park) => park.kind === "gates")
+    ? await judgeGoalHead(runtime, iteration, records)
+    : undefined;
   const candidates = stewardCandidates(
     tasks,
     state,
@@ -47,6 +65,8 @@ export async function runSteward(
     frozen,
     records,
     runtime.store,
+    goalHead,
+    keptLeft,
   );
   if (candidates.length === 0)
     return await skipStewardWave(runtime, records, iteration);
@@ -178,7 +198,7 @@ async function parkUnresolvedConflicts(
     if (s?.status !== "ready" || s.phase !== "resolve") continue;
     const own = records.filter((r) => r.slug === task.slug);
     const merge = own
-      .slice(revisionStart(task, own))
+      .slice(revisionStart(task.revision, own))
       .findLast((r) => r.step === "merge");
     const cause = merge?.cause;
     if (cause?.kind !== "conflict") continue;

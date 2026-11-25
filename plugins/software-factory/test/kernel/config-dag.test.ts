@@ -1,10 +1,15 @@
 import { describe, expect, it } from "bun:test";
-import { flowSchema } from "../../src/kernel/config/flow-schema.js";
+import { architectureFlowForReason } from "../../src/kernel/architect-flow.js";
+import {
+  architectureFlowsSchema,
+  flowSchema,
+} from "../../src/kernel/config/flow-schema.js";
 import { derive } from "../../src/kernel/derive.js";
 import { next } from "../../src/kernel/next.js";
 import type {
   FlowDefinition,
   Limits,
+  ProcessConfig,
   StepRecord,
 } from "../../src/kernel/types.js";
 import { rec, script, task } from "./helpers.js";
@@ -99,6 +104,133 @@ describe("flow config DAG validation", () => {
     const plain = flowSchema.safeParse(flow([step("draft"), step("polish")]));
     expect(plain.success).toBe(true);
     if (plain.success) expect(plain.data.dag).toBeUndefined();
+  });
+});
+
+describe("architect flow config", () => {
+  const custom = { id: "assess", prompt: "assess", alias: "architect" };
+
+  it("accepts steps before and after the architect", () => {
+    const parsed = architectureFlowsSchema.safeParse([
+      {
+        when: ["initial"],
+        steps: [
+          custom,
+          { id: "architect" },
+          {
+            id: "second-review",
+            prompt: "review-architect",
+            alias: "reviewer-b",
+          },
+          { id: "planreview" },
+          { id: "pm" },
+        ],
+      },
+    ]);
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects an unknown reason", () => {
+    const parsed = architectureFlowsSchema.safeParse([
+      {
+        when: ["cheker-done"],
+        steps: [{ id: "architect" }, { id: "pm" }],
+      },
+    ]);
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects prompt and repair fields on a built-in step", () => {
+    const candidates = [
+      [
+        { id: "architect", prompt: "architect", alias: "architect" },
+        { id: "pm" },
+      ],
+      [
+        { id: "architect" },
+        { id: "planreview", alias: "plan-reviewer" },
+        { id: "pm" },
+      ],
+      [{ id: "architect" }, { id: "pm", repairPrompt: "delivery-repair" }],
+      [{ id: "architect" }, { id: "pm", unfinishedPrompt: "delivery-repair" }],
+      [{ id: "architect" }, { id: "pm", deliverable: "a task list" }],
+    ];
+    for (const steps of candidates) {
+      const parsed = architectureFlowsSchema.safeParse([
+        { when: ["initial"], steps },
+      ]);
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(
+          parsed.error.issues.some((issue) =>
+            issue.message.includes("built-in architect flow step"),
+          ),
+        ).toBe(true);
+      }
+    }
+  });
+});
+
+describe("architect flow step requirements", () => {
+  it("rejects a custom step without a prompt or alias", () => {
+    expect(
+      architectureFlowsSchema.safeParse([
+        {
+          when: ["initial"],
+          steps: [{ id: "assess" }, { id: "architect" }, { id: "pm" }],
+        },
+      ]).success,
+    ).toBe(false);
+    expect(
+      architectureFlowsSchema.safeParse([
+        {
+          when: ["initial"],
+          steps: [
+            { id: "assess", prompt: "assess" },
+            { id: "architect" },
+            { id: "pm" },
+          ],
+        },
+      ]).success,
+    ).toBe(false);
+  });
+
+  it("requires one architect and a closing pm step", () => {
+    expect(
+      architectureFlowsSchema.safeParse([
+        { when: ["initial"], steps: [{ id: "pm" }] },
+      ]).success,
+    ).toBe(false);
+    expect(
+      architectureFlowsSchema.safeParse([
+        { when: ["initial"], steps: [{ id: "architect" }] },
+      ]).success,
+    ).toBe(false);
+  });
+});
+
+describe("architect flow selection", () => {
+  it("falls back to the initial flow when no reason matches", () => {
+    const process = {
+      architecture: {
+        flows: [
+          {
+            when: ["initial"],
+            steps: [{ id: "architect" }, { id: "pm" }],
+          },
+          {
+            when: ["steer"],
+            steps: [{ id: "architect" }, { id: "planreview" }, { id: "pm" }],
+          },
+        ],
+      },
+    } as unknown as ProcessConfig;
+    expect(architectureFlowForReason(process, "concerns")).toEqual(
+      process.architecture.flows![0]!,
+    );
+    expect(
+      architectureFlowForReason(process, "steer").steps.map((s) => s.id),
+    ).toEqual(["architect", "planreview", "pm"]);
   });
 });
 

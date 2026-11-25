@@ -155,14 +155,20 @@ export interface SubagentInfo {
 }
 
 /**
- * The children of a turn that is still running. Available only through
- * `TurnRequest.onLive`: once the owning process closes, a fresh resume has an
- * empty registry and a parked child is reachable only by name through the
- * model-side `agent://` path.
+ * The live handles of a turn that is still running: its children and its own
+ * session. Available only through `TurnRequest.onLive`: once the owning
+ * process closes, a fresh resume has an empty registry and a parked child is
+ * reachable only by name through the model-side `agent://` path.
  */
 export interface LiveAgents {
   list(): Promise<SubagentInfo[]>;
   steer(id: string, message: string): Promise<void>;
+  /**
+   * Queue a steering message into the turn's own session, delivered at the
+   * agent's next step. Absent when the harness can steer only its children:
+   * the caller then queues the message for the session's next turn instead.
+   */
+  steerSession?(message: string): Promise<void>;
 }
 
 /**
@@ -202,9 +208,9 @@ export interface TurnRequest {
   opaque?: unknown;
   /**
    * Harnesses that can steer (`Caps.subagents === "steer"`) call this once the
-   * launch is live and before the prompt, so the caller can steer children the
-   * turn spawns. The handle dies with the turn; a harness that cannot steer
-   * never calls it.
+   * launch is live and before the prompt, so the caller can steer the turn's
+   * session or the children it spawns. The handle dies with the turn; a
+   * harness that cannot steer never calls it.
    */
   onLive?: (agents: LiveAgents) => void;
 }
@@ -260,6 +266,17 @@ export interface Harness {
   /** Live model/effort discovery for harnesses that only expose it in a session. */
   probe?(model: ModelRef): Promise<ModelProbe>;
   turn(req: TurnRequest): Promise<TurnResult>;
+  /**
+   * Whether the harness's process for this session is still running. A turn
+   * may report its stop before a child that writes the outcome has exited;
+   * absent means the harness cannot tell, so the kernel does not wait.
+   */
+  isLive?(session?: SessionRef): boolean | Promise<boolean>;
+  /**
+   * Resolves when that process exits, or after `timeoutMs` when positive.
+   * The caller rechecks `isLive` and owns the bound.
+   */
+  waitExit?(session?: SessionRef, timeoutMs?: number): Promise<void>;
   /** Absent capability = missing member, a type error at the call site. */
   compact?(ref: SessionRef): Promise<CompactResult>;
 }

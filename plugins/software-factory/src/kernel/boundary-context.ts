@@ -18,11 +18,17 @@ import {
   selfHeldSlugs,
   steerProvenance,
 } from "./mailbox.js";
+import type { RecordedPackHashes } from "./boundary-types.js";
 import { next } from "./next.js";
 import { type PlanFile, resolvePlan } from "./plan-file.js";
 import { type PlanSnapshot, type PmRung, restorePlans } from "./pm.js";
 import { scriptMeta } from "./record.js";
-import { type EpicRow, parseArchitectRegister } from "./register.js";
+import {
+  type EpicRow,
+  parseArchitectRegister,
+  sagaPassPlan,
+  type SagaPassPlan,
+} from "./register.js";
 import { spikeFinding } from "./spike-report.js";
 import type {
   ArtifactStore,
@@ -74,12 +80,6 @@ export async function recordedIterationHead(
   const headHash = (parsed as { paths?: { headHash?: unknown } } | null)?.paths
     ?.headHash;
   return typeof headHash === "string" ? headHash : undefined;
-}
-
-/** The pack's historical hashes: where the goal started and where its last iteration started. */
-export interface RecordedPackHashes {
-  goalStartHash: string | undefined;
-  lastIterationHash: string | undefined;
 }
 
 /**
@@ -266,7 +266,6 @@ export function unavailableAliases(
   tasks: readonly TaskFile[],
   state: State,
   records: readonly StepRecord[],
-  iteration: number,
 ): Map<string, string> {
   const causes = new Map<string, string>();
   const bySlug = new Map(tasks.map((task) => [task.slug, task]));
@@ -275,14 +274,7 @@ export function unavailableAliases(
     const task = bySlug.get(action.slug);
     const taskState = state.tasks[action.slug];
     if (!task || !taskState) continue;
-    const target = stepTarget(
-      runtime,
-      task,
-      taskState,
-      action.step,
-      iteration,
-      records,
-    );
+    const target = stepTarget(runtime, task, taskState, action.step, records);
     if (target.unavailable !== undefined)
       causes.set(action.slug, target.unavailable);
   }
@@ -326,6 +318,30 @@ export function parseRegister(
     depth,
     tasks: rows,
     exists: () => true,
+  });
+}
+
+/**
+ * The pass order this iteration runs, read before the top turn from the
+ * register the previous top turn wrote. A goal with no plan yet or at depth 1
+ * has no epic passes; the top turn and its direction pass still run.
+ */
+export function boundaryPassPlan(input: {
+  plan: PlanFile;
+  depth: 1 | 2;
+  tasks: readonly TaskFile[];
+  state: State;
+  records: readonly StepRecord[];
+}): SagaPassPlan {
+  const started = input.records.some((record) => record.step === "architect");
+  const epics =
+    input.depth === 2 && fs.existsSync(input.plan.path)
+      ? parseRegister(input.plan, input.depth, input.tasks, input.state).epics
+      : [];
+  return sagaPassPlan({
+    started,
+    epics,
+    epicDone: (epic) => epicJobDone(input.state, epic),
   });
 }
 

@@ -17,13 +17,17 @@ import type {
   ArtifactStore,
   ConfigBundle,
   GoalPaths,
+  GoalRoots,
   HarnessConfig,
   ProcessConfig,
 } from "../types.js";
 import {
   escalationFindings,
   fallbackAliasFindings,
+  isExecutable,
   requiredAliases,
+  scoutsConsumerFindings,
+  subscriptionPoolFindings,
   trivialFollowUpFindings,
 } from "./checks.js";
 import type { PreflightInput } from "./types.js";
@@ -65,17 +69,6 @@ function inside(child: string, parent: string): boolean {
  */
 const ACPX_ON_DEMAND_BINARY = "bunx";
 
-function executable(value: string | undefined): boolean {
-  if (!value) return false;
-  if (!value.includes(path.sep)) return Bun.which(value) !== null;
-  try {
-    fs.accessSync(value, fs.constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * One harness executable that pre-flight must find; the key is the run-config
  * path the operator sets to point at it.
@@ -88,7 +81,7 @@ function binaryFinding(
   key: string,
   unavailable: Set<string>,
 ): void {
-  if (executable(binary)) return;
+  if (isExecutable(binary)) return;
   unavailable.add(harness);
   // resolveAcpxCommand reports `bunx` when acpx is absent; naming only the
   // shim would hide the dispatcher and the route the operator must provide.
@@ -194,14 +187,13 @@ async function tierFindings(
   return findings;
 }
 
-/** Every harness some configured alias, rotation or fallback can run. */
+/** Every harness some configured alias or fallback can run. */
 export function usedHarnesses(
   aliases: Record<string, AliasConfig>,
 ): Set<string> {
   const used = new Set<string>();
   for (const alias of Object.values(aliases)) {
     used.add(alias.harness);
-    for (const entry of alias.rotate ?? []) used.add(entry.harness);
     for (const fallback of alias.fallbacks ?? []) {
       if ("model" in fallback && fallback.harness) used.add(fallback.harness);
     }
@@ -213,13 +205,11 @@ export function usedHarnesses(
 export function harnessBinaries(
   configs: ConfigBundle,
   files: ReturnType<typeof configFilePaths>,
-  input: PreflightInput,
-  used: ReadonlySet<string>,
+  binaries: Record<string, string | undefined>,
 ): { findings: Finding[]; unavailable: Set<string> } {
   const findings: Finding[] = [];
   const unavailable = new Set<string>();
-  if (!input.binaries) return { findings, unavailable };
-  for (const harness of [...used].sort()) {
+  for (const harness of Object.keys(binaries).sort()) {
     const entry = configs.run.harnesses?.[harness];
     if (entry?.acpx?.raw) {
       // A raw agent is still spawned by acpx, so both executables must run:
@@ -236,7 +226,7 @@ export function harnessBinaries(
         findings,
         files.run,
         harness,
-        input.binaries[harness],
+        binaries[harness],
         `harnesses.${harness}.acpx.agent`,
         unavailable,
       );
@@ -246,15 +236,19 @@ export function harnessBinaries(
       findings,
       files.run,
       harness,
-      input.binaries[harness],
+      binaries[harness],
       `harnesses.${harness}.binary`,
       unavailable,
     );
   }
   // omp's built-in yamlls entry needs the server binary; it does not ship one.
-  // Only a real launch checks executables (`binaries` omitted means an injected
-  // harness and no executable surface).
-  if (configs.run.lsp && used.has(OMP_ID) && !executable(yamlLspBinary())) {
+  // Only a call that names executables checks them (`binaries` omitted means an
+  // injected harness and no executable surface).
+  if (
+    configs.run.lsp &&
+    Object.hasOwn(binaries, OMP_ID) &&
+    !isExecutable(yamlLspBinary())
+  ) {
     findings.push({
       file: files.run,
       key: "lsp",
@@ -276,9 +270,6 @@ export function aliasContext(
     harnesses: input.harnesses,
     catalog: input.catalog,
     unavailable,
-    subscriptions: new Set(
-      Object.keys(input.configs.run.limits.concurrency.perSubscription),
-    ),
     modelCache: new Map(),
     probeCache: new Map(),
   };
@@ -295,30 +286,30 @@ export async function resolveAliases(
 
 /** Writable-root checks for the scratch worktree root and the sessions dir. */
 export async function rootFindings(
-  paths: GoalPaths,
+  roots: GoalRoots,
   files: ReturnType<typeof configFilePaths>,
 ): Promise<Finding[]> {
   const findings: Finding[] = [];
-  const worktreeProblem = inside(paths.worktreeRoot, paths.repoRoot)
+  const worktreeProblem = inside(roots.worktreeRoot, roots.repoRoot)
     ? undefined
-    : await writable(paths.worktreeRoot);
+    : await writable(roots.worktreeRoot);
   rootFinding(
     findings,
     files.run,
     "worktreeRoot",
-    paths.worktreeRoot,
-    paths.repoRoot,
+    roots.worktreeRoot,
+    roots.repoRoot,
     worktreeProblem,
   );
-  const sessionsProblem = inside(paths.sessionsDir, paths.repoRoot)
+  const sessionsProblem = inside(roots.sessionsDir, roots.repoRoot)
     ? undefined
-    : await writable(paths.sessionsDir);
+    : await writable(roots.sessionsDir);
   rootFinding(
     findings,
     files.run,
     "sessions.dir",
-    paths.sessionsDir,
-    paths.repoRoot,
+    roots.sessionsDir,
+    roots.repoRoot,
     sessionsProblem,
   );
   return findings;
@@ -370,11 +361,11 @@ export async function unconfiguredTaskFindings(
     }));
 }
 
-/** The static config findings: aliases, fallbacks, process types, tiers. */
+/** The static config findings: aliases, fallbacks, pools, process types, tiers. */
 export async function configFindings(
   configs: ConfigBundle,
   files: ReturnType<typeof configFilePaths>,
-  store: ArtifactStore,
+  store?: ArtifactStore,
 ): Promise<Finding[]> {
   const findings: Finding[] = [];
   findings.push(
@@ -382,6 +373,14 @@ export async function configFindings(
   );
   findings.push(...escalationFindings(configs.run.aliases, files.run));
   findings.push(...fallbackAliasFindings(configs.run.aliases, files.run));
+  findings.push(
+    ...subscriptionPoolFindings(
+      configs.run.aliases,
+      configs.run.limits.concurrency.perSubscription,
+      files.run,
+    ),
+  );
+  findings.push(...scoutsConsumerFindings(configs, files.run));
   findings.push(...acpxOptionFindings(configs.run.harnesses, files.run));
 
   // A task type owns its flow and output schema. A type naming either one
@@ -397,6 +396,8 @@ export async function configFindings(
   findings.push(...trivialFollowUpFindings(configs.process, processFile));
   // An escalated task naming a missing alias would fail only mid-turn, after
   // the plan spent.
-  findings.push(...(await tierFindings(store, configs.run.aliases)));
+  if (store) {
+    findings.push(...(await tierFindings(store, configs.run.aliases)));
+  }
   return findings;
 }

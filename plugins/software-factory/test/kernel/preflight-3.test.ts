@@ -345,91 +345,6 @@ function registerPreFlightPart25(): void {
   });
 }
 
-function registerPreFlightPart26(): void {
-  it("validates every rotation entry's harness, model and effort", async () => {
-    const f = await fixture(
-      RUN_HEAD_NO_HIGHEST.replace(
-        "implementer: { harness: fake, model: impl }",
-        `implementer:
-    harness: fake
-    model: impl
-    rotate:
-      - { harness: other, model: far }
-      - { harness: fake, model: ghost }
-      - { harness: fake, model: impl, effort: ultra }
-      - { harness: ghost, model: far }`,
-      ),
-    );
-    try {
-      // Per-model probe fake for "fake": ghost is unlisted, the rest carry
-      // the effort list. "other" is probe-less so the catalog decides there.
-      const harnesses = new Map(f.input.harnesses);
-      const fake = new FakeHarness({ id: "fake" });
-      fake.probe = async (model) =>
-        model.id === "ghost"
-          ? { listed: false, available: ["impl"], effort: null }
-          : {
-              listed: true,
-              available: ["impl"],
-              effort: ["low", "high", "max"],
-            };
-      harnesses.set("fake", fake);
-      harnesses.set("other", new FakeHarness({ id: "other" }));
-      const catalog: ModelCatalog = async (_harness, model) =>
-        model !== "ghost";
-      const err = await refusal({ ...f.input, harnesses, catalog });
-      const keys = err.findings.map((finding) => finding.key);
-      expect(keys).toContain("aliases.implementer.rotate.1.model");
-      expect(keys).toContain("aliases.implementer.rotate.2.effort");
-      expect(keys).toContain("aliases.implementer.rotate.3.harness");
-      expect(keys).not.toContain("aliases.implementer.rotate.0.model");
-      expect(err.report).toContain(
-        'rotation "ghost" is not listed by harness "fake"; available models: impl',
-      );
-      expect(err.report).toContain('effort "ultra" is not supported');
-    } finally {
-      f.repo.cleanup();
-    }
-  });
-}
-
-function registerPreFlightPart27(): void {
-  it("validates a rotated entry's effort against its own harness and checks a rotating fallback everywhere it can land", async () => {
-    const f = await fixture(
-      RUN_HEAD_NO_HIGHEST.replace(
-        "implementer: { harness: fake, model: impl }",
-        `implementer:
-    harness: fake
-    model: impl
-    effort: max
-    rotate:
-      - { harness: other, model: far, effort: high }
-      - { harness: fake, model: near, effort: max }
-    fallbacks:
-      - { model: near }`,
-      ),
-    );
-    try {
-      // Probe-less "other", so the injected catalog decides its model list.
-      const harnesses = new Map(f.input.harnesses);
-      harnesses.set("other", new FakeHarness({ id: "other" }));
-      const catalog: ModelCatalog = async (harness, model) =>
-        !(harness === "other" && model === "near");
-      const err = await refusal({ ...f.input, harnesses, catalog });
-      expect(err.findings).toContainEqual(
-        expect.objectContaining({
-          key: "aliases.implementer.fallbacks.0.model",
-          message: 'fallback "near" is not listed by harness "other"',
-        }),
-      );
-      const rotating = f.configs.run.aliases.implementer!.fallbacks![0]!;
-      expect("model" in rotating ? rotating.effort : undefined).toBeUndefined();
-    } finally {
-      f.repo.cleanup();
-    }
-  });
-}
-
 describe("pre-flight", () => {
   registerPreFlightPart19();
 
@@ -444,8 +359,4 @@ describe("pre-flight", () => {
   registerPreFlightPart24();
 
   registerPreFlightPart25();
-
-  registerPreFlightPart26();
-
-  registerPreFlightPart27();
 });

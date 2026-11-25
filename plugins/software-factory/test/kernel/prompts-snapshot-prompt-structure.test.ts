@@ -2,41 +2,39 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { packageRoot } from "../../src/kernel/config.js";
-import { frontClassTypesVar } from "../../src/kernel/front.js";
+import { outcomeExampleVar } from "../../src/kernel/outcome-example.js";
+import { packPreparerOutcomeSchemaVar } from "../../src/kernel/pack-prep.js";
 import {
-  outcomeRepairSchemaVar,
-  outcomeSchemaVar,
-  qaOutcomeSchemaVar,
   taskFrontmatterVar,
-  taskTypesVar,
   tierNamesVar,
 } from "../../src/kernel/prompt-schema.js";
 import { loadPromptLibrary } from "../../src/kernel/prompts.js";
+import { qaOutcomeSchema } from "../../src/kernel/qa.js";
+import { TEST_CLASS_TYPES, TEST_TASK_TYPES_VAR } from "./helpers.js";
 
-const OUTCOME_SCHEMA = outcomeSchemaVar();
+const OUTCOME_SCHEMA = outcomeExampleVar("implementer", "any");
+
+const BASE_SCHEMA = outcomeExampleVar("front", "any");
+
+const ARCHITECT_SCHEMA = outcomeExampleVar("architect", "architect");
+
+const SUBARCHITECT_SCHEMA = outcomeExampleVar("subarchitect", "architect");
+
+const PM_SCHEMA = outcomeExampleVar("pm", "any");
+
+const QA_SCHEMA = outcomeExampleVar("qa", "qa", qaOutcomeSchema);
+
+const REVIEWER_SCHEMA = outcomeExampleVar("reviewer", "review");
+
+const CHECKER_SCHEMA = outcomeExampleVar("plan-checker", "any");
+
+const PLAN_REVIEW_SCHEMA = outcomeExampleVar("review-architect", "any");
+
+const PLAN_RETURN_SCHEMA = outcomeExampleVar("architect-review-return", "any");
 
 const TASK_FRONTMATTER = taskFrontmatterVar();
 
-const TASK_TYPES = taskTypesVar({
-  development: {
-    flow: "implement-review",
-    kind: "development",
-    schema: "outcome",
-  },
-  spike: { flow: "spike", kind: "spike", schema: "outcome" },
-  trivial: { flow: "just-implement", kind: "development", schema: "outcome" },
-});
-
 const TIERS = tierNamesVar({ implementer: {}, escalation: {} });
-
-const CLASS_TYPES = frontClassTypesVar({
-  development: {
-    flow: "implement-review",
-    kind: "development",
-    schema: "outcome",
-  },
-  trivial: { flow: "just-implement", kind: "development", schema: "outcome" },
-});
 
 const ROLES: Record<string, Record<string, string>> = {
   architect: {
@@ -50,16 +48,18 @@ const ROLES: Record<string, Record<string, string>> = {
     steers: "- s1 (mailbox/inbox/s1.md): keep the API stable",
     outcome_path: "/goal/records/00042-i3-architect-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
-    task_types: TASK_TYPES,
+    outcome_schema: ARCHITECT_SCHEMA,
+    task_types: TEST_TASK_TYPES_VAR,
     tiers: TIERS,
     depth: "2",
     subarchitect_block: "",
+    saga_reminder: "",
   },
   subarchitect: {
     turn: "boundary",
     iteration: "3",
     epic: "auth",
+    pass: "direction",
     intent_path: "/goal/intent.md",
     plan_path: "/goal/epics/auth.md",
     parent_plan_path: "/goal/plan.md",
@@ -68,8 +68,8 @@ const ROLES: Record<string, Record<string, string>> = {
     digest_path: "/goal/iterations/3/epics/auth/digest.md",
     outcome_path: "/goal/records/00048-i3-subarchitect-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
-    task_types: TASK_TYPES,
+    outcome_schema: SUBARCHITECT_SCHEMA,
+    task_types: TEST_TASK_TYPES_VAR,
     tiers: TIERS,
   },
   front: {
@@ -85,20 +85,24 @@ const ROLES: Record<string, Record<string, string>> = {
     gate_commands: "- test: bun test",
     outcome_path: "/goal/records/00041-i3-front-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
+    outcome_schema: BASE_SCHEMA,
     task_frontmatter: TASK_FRONTMATTER,
-    task_types: TASK_TYPES,
+    task_types: TEST_TASK_TYPES_VAR,
     tiers: TIERS,
-    class_types: CLASS_TYPES,
+    class_types: TEST_CLASS_TYPES,
   },
   pm: {
     iteration: "3",
+    epic: "",
+    epic_scoped: "false",
     intent_path: "/goal/intent.md",
     plans: "- goal: /goal/plan.md\n  - epic `auth`: /goal/epics/auth.md",
+    plan_diff: "none",
     tasks_dir: "/goal/tasks",
     existing_tasks: "- alpha | merged | abcdef1234 | deps: none | frozen",
     repair: '- task "beta" depends on missing task "ghost"',
     steers: "- s1 (mailbox/inbox/s1.md):\n  keep the API stable",
+    concerns: "none",
     holds_dir: "/goal/mailbox/holds",
     stalls:
       "- alpha\n  cause: blocked: stuck\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 spent\n  done-when: Done when: it works.",
@@ -106,9 +110,9 @@ const ROLES: Record<string, Record<string, string>> = {
     plan_checks:
       "- alpha (replace): mechanical park\n  cause: infra: runner lost\n  records: /goal/records/00007-i3-alpha-implement-r1\n  branch: factory-task/demo/alpha\n  turns: 1 spent\n  done-when: Done when: it works.",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
+    outcome_schema: PM_SCHEMA,
     task_frontmatter: TASK_FRONTMATTER,
-    task_types: TASK_TYPES,
+    task_types: TEST_TASK_TYPES_VAR,
     tiers: TIERS,
   },
   implementer: {
@@ -144,7 +148,7 @@ const ROLES: Record<string, Record<string, string>> = {
     fix_dispositions: "",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: qaOutcomeSchemaVar(),
+    outcome_schema: QA_SCHEMA,
   },
   reviewer: {
     task_path: "/goal/tasks/alpha.md",
@@ -164,7 +168,7 @@ const ROLES: Record<string, Record<string, string>> = {
     fix_dispositions: "",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
+    outcome_schema: REVIEWER_SCHEMA,
   },
   digest: {
     launch_id: "previous-launch-before-3",
@@ -174,7 +178,7 @@ const ROLES: Record<string, Record<string, string>> = {
     digest_path: "/goal/iterations/3/digest.md",
     outcome_path: "/goal/records/00044-i3-digest-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
+    outcome_schema: BASE_SCHEMA,
   },
   steward: {
     worktree: "/worktrees/demo-tasks/alpha",
@@ -186,7 +190,7 @@ const ROLES: Record<string, Record<string, string>> = {
     base_gates: "base abc1234def: green",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
+    outcome_schema: BASE_SCHEMA,
   },
   intent: {
     iteration: "3",
@@ -194,7 +198,7 @@ const ROLES: Record<string, Record<string, string>> = {
     steer: "- s1 (mailbox/inbox/s1.md):\n  keep the API stable",
     outcome_path: "/goal/records/00009-i3-s1-intent-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
+    outcome_schema: BASE_SCHEMA,
   },
   "plan-checker": {
     iteration: "3",
@@ -203,21 +207,23 @@ const ROLES: Record<string, Record<string, string>> = {
     checkout: "/worktrees/demo",
     tasks_dir: "/goal/tasks",
     existing_tasks: "- alpha | merged | abcdef1234 | deps: none | frozen",
+    open_concerns:
+      "- c-1a2b3c4d5e [risk/architect]: the retry window drops head names — alpha implement r1",
     gate_record_path: "/goal/records/00007-i3-alpha-checks-r1/end.yaml",
     outcome_path: "/goal/records/00045-i3-plan-check-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
+    outcome_schema: CHECKER_SCHEMA,
+    task_types: TEST_TASK_TYPES_VAR,
   },
   "pack-preparer": {
     iteration: "3",
     context_data_path: "/goal/iterations/3/context-data.json",
-    pack_path: "/goal/iterations/3/context-pack.md",
     intent_path: "/goal/intent.md",
     plan_path: "/goal/plan.md",
     checkout: "/worktrees/demo",
     outcome_path: "/goal/records/00046-i3-packprep-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: OUTCOME_SCHEMA,
+    outcome_schema: packPreparerOutcomeSchemaVar(),
   },
   "review-architect": {
     iteration: "3",
@@ -227,8 +233,8 @@ const ROLES: Record<string, Record<string, string>> = {
     worktree: "/worktrees/demo",
     outcome_path: "/goal/records/00046-i3-planreview-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: outcomeRepairSchemaVar("review-architect", "any"),
-    task_types: TASK_TYPES,
+    outcome_schema: PLAN_REVIEW_SCHEMA,
+    task_types: TEST_TASK_TYPES_VAR,
     tiers: TIERS,
   },
   "architect-review-return": {
@@ -243,12 +249,51 @@ const ROLES: Record<string, Record<string, string>> = {
     finding_count: "2",
     outcome_path: "/goal/records/00047-i3-planreturn-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
-    outcome_schema: outcomeRepairSchemaVar("architect-review-return", "any"),
+    outcome_schema: PLAN_RETURN_SCHEMA,
   },
 };
 
 function library() {
   return loadPromptLibrary({ builtinDir: path.join(packageRoot, "prompts") });
+}
+
+/** The first fragment in a role's static include chain that carries the turn block. */
+function turnSource(
+  dir: string,
+  file: string,
+  seen = new Set<string>(),
+): string | undefined {
+  if (seen.has(file)) return undefined;
+  seen.add(file);
+  const text = fs.readFileSync(path.join(dir, file), "utf8");
+  if (text.split("\n").some((line) => line.startsWith("## This turn")))
+    return text;
+  for (const match of text.matchAll(/\{%-?\s*include\s+['"]([^'"]+)['"]/g)) {
+    const found = turnSource(dir, `${match[1]}.md`, seen);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+/** The fragment that owns the turn block has no prose after it. */
+function expectAtTurnSource(promptsDir: string, role: string): void {
+  const source = turnSource(promptsDir, `${role}.md`);
+  if (source === undefined)
+    throw new Error(`${role} source chain has no ## This turn`);
+  const turnLine = source
+    .split("\n")
+    .findIndex((l) => l.startsWith("## This turn"));
+  expect(turnLine, `${role} source has no ## This turn`).toBeGreaterThanOrEqual(
+    0,
+  );
+  const stray = source
+    .split("\n")
+    .slice(turnLine + 1)
+    .filter((l) => l.trim() !== "" && !/^(\s|-|\{%|\{\{)/.test(l));
+  expect(
+    stray,
+    `${role} has non-variable content after ## This turn: ${stray.join(" | ")}`,
+  ).toEqual([]);
 }
 
 describe("prompt structure", () => {
@@ -280,25 +325,7 @@ describe("prompt structure", () => {
         turnAt,
         `${role} has text after ## This turn: ${headings.slice(turnAt + 1).join(" | ")}`,
       ).toBe(headings.length - 1);
-      const source = fs.readFileSync(
-        path.join(promptsDir, `${role}.md`),
-        "utf8",
-      );
-      const turnLine = source
-        .split("\n")
-        .findIndex((l) => l.startsWith("## This turn"));
-      expect(
-        turnLine,
-        `${role} source has no ## This turn`,
-      ).toBeGreaterThanOrEqual(0);
-      const stray = source
-        .split("\n")
-        .slice(turnLine + 1)
-        .filter((l) => l.trim() !== "" && !/^(\s|-|\{%|\{\{)/.test(l));
-      expect(
-        stray,
-        `${role} has non-variable content after ## This turn: ${stray.join(" | ")}`,
-      ).toEqual([]);
+      expectAtTurnSource(promptsDir, role);
     }
   });
 });

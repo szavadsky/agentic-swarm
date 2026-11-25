@@ -1,13 +1,17 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import {
   FakeHarness,
+  type FakeTurnHandler,
   fakeTurnIdentity,
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
+import { runDispatch } from "../../src/kernel/dispatch.js";
 import { postSteer } from "../../src/kernel/mailbox.js";
 import { createFolderStore } from "../../src/kernel/store.js";
+import type { KernelRuntime } from "../../src/kernel/types.js";
 import {
   cleanup,
   implementerTurn,
@@ -19,6 +23,20 @@ import {
   writePlan,
   writeTask,
 } from "./e2e-helpers.js";
+import { task } from "./helpers.js";
+import {
+  cleanupFlowRepo,
+  makeRuntime,
+  outcome as flowOutcome,
+  setupFlowRepo,
+  whenTurn,
+  writeTask as writeFlowTask,
+} from "./s2-helpers.js";
+import {
+  approver,
+  tasks as flowTasks,
+  writePlan as writeFlowPlan,
+} from "./steer-holds-helpers.js";
 
 const PLAN = `# Milestone 1
 
@@ -255,4 +273,219 @@ describe("steer dropped with nothing in flight after the first plan", () => {
       cleanup(goal);
     }
   }, 60_000);
+});
+
+/**
+ * A watch a test can wait out: it looks every 20ms, and the run config's
+ * `limits.steerDebounceSeconds` settles a steer after 30ms.
+ */
+const TICK_MS = 20;
+const DEBOUNCE_SECONDS = 0.03;
+
+/** Resolves the promise, or throws the named failure after `ms`. */
+async function within<T>(
+  promise: Promise<T>,
+  ms: number,
+  failure: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(failure)), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+interface SteerScope {
+  repo: ReturnType<typeof setupFlowRepo>["repo"];
+  runtime: KernelRuntime;
+  harness: FakeHarness;
+  /** Resolves once the scripted PM steer turn ran. */
+  pmRan: Promise<void>;
+  markPmRan: () => void;
+}
+
+/** A direct-runtime goal with one task and, optionally, a plan. */
+async function steerScope(plan: boolean): Promise<SteerScope> {
+  const { repo, goal } = setupFlowRepo({
+    limits: {
+      concurrency: { overall: 1 },
+      steerDebounceSeconds: DEBOUNCE_SECONDS,
+    },
+  });
+  const harness = new FakeHarness({ id: "fake" });
+  const runtime = await makeRuntime(repo, goal, { fake: harness });
+  // The scenario below waits out `steerDebounceSeconds`, so the run config's
+  // mapping to the watch's window must hold.
+  expect(runtime.limits.steerDebounceMs).toBe(DEBOUNCE_SECONDS * 1000);
+  if (plan) writeFlowPlan(runtime);
+  await writeFlowTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+  let markPmRan!: () => void;
+  const pmRan = new Promise<void>((resolve) => {
+    markPmRan = resolve;
+  });
+  return { repo, runtime, harness, pmRan, markPmRan };
+}
+
+/**
+ * An implement turn that drops its steers and stays open until the PM steer
+ * turn ran: only the watch can hand a steer over while it is in flight.
+ */
+function longImplementTurn(
+  scope: SteerScope,
+  steers: string[],
+  opened?: () => Promise<void>,
+): FakeTurnHandler {
+  return async (req, ctx) => {
+    for (const [index, text] of steers.entries()) {
+      await postSteer(scope.runtime.store, `s${index + 1}`, text);
+    }
+    await opened?.();
+    ctx.writeOutcome(flowOutcome({ summary: "alpha implemented" }));
+    await within(
+      scope.pmRan,
+      10_000,
+      "the steer PM turn did not run before the implement turn ended",
+    );
+    fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
+    return fakeTurnResult(req);
+  };
+}
+
+/** The PM steer turn: every steer reached it, and each waits for the architect. */
+function steerTurnPm(
+  ids: string[],
+  texts: string[],
+  ran: () => void,
+): FakeTurnHandler {
+  return (req, ctx) => {
+    for (const text of texts) expect(req.prompt).toContain(text);
+    ctx.writeOutcome(
+      flowOutcome({
+        summary: `routed ${ids.join(", ")}`,
+        steerRoutes: ids.map((steer) => ({ steer, route: "architect" })),
+      }),
+    );
+    ran();
+    return fakeTurnResult(req);
+  };
+}
+
+async function runSteerScenario(
+  scope: SteerScope,
+  steers: string[],
+  opened?: () => Promise<void>,
+) {
+  const { harness, runtime } = scope;
+  harness.script(longImplementTurn(scope, steers, opened), {
+    when: whenTurn({ slug: "alpha", step: "implement" }),
+  });
+  harness.script(
+    steerTurnPm(
+      steers.map((_, index) => `s${index + 1}`),
+      steers,
+      scope.markPmRan,
+    ),
+    { when: whenTurn({ step: "pm" }) },
+  );
+  harness.script(approver("alpha is correct"), {
+    when: whenTurn({ slug: "alpha", step: "review" }),
+  });
+  return runDispatch(runtime, {
+    iteration: 1,
+    seenSteers: [],
+    steerWatchTickMs: TICK_MS,
+  });
+}
+
+function registerLongTurnSteerPart1(): void {
+  it("gets its PM steer turn before that turn ends", async () => {
+    const scope = await steerScope(true);
+    try {
+      const steer = "Keep alpha unmerged until I answer.";
+      const dispatched = await runSteerScenario(scope, [steer]);
+
+      expect(dispatched.reason).toBe("boundary");
+      const pm = (await scope.runtime.store.listRecords()).filter(
+        (record) => record.step === "pm",
+      );
+      expect(pm).toHaveLength(1);
+      expect((await flowTasks(scope.runtime)).tasks.alpha!.status).toBe(
+        "merged",
+      );
+    } finally {
+      cleanupFlowRepo(scope.repo);
+    }
+  }, 60_000);
+}
+
+function registerLongTurnSteerPart2(): void {
+  it("gets one PM turn for the whole batch", async () => {
+    const scope = await steerScope(true);
+    try {
+      const batch = [
+        "Keep alpha unmerged until I answer.",
+        "Then add a note to the plan.",
+      ];
+      const dispatched = await runSteerScenario(scope, batch);
+
+      expect(dispatched.reason).toBe("boundary");
+      const pm = scope.harness.calls.filter(
+        (call) => fakeTurnIdentity(call).step === "pm",
+      );
+      expect(pm).toHaveLength(1);
+      for (const text of batch) expect(pm[0]!.prompt).toContain(text);
+      expect((await flowTasks(scope.runtime)).tasks.alpha!.status).toBe(
+        "merged",
+      );
+    } finally {
+      cleanupFlowRepo(scope.repo);
+    }
+  }, 60_000);
+}
+
+function registerLongTurnSteerPart3(): void {
+  it("waits in the inbox for the plan, then takes its turn", async () => {
+    const scope = await steerScope(false);
+    try {
+      const steer = "Amend the plan before alpha starts.";
+      const dispatched = await runSteerScenario(scope, [steer], async () => {
+        // Watch ticks pass with the steer stable and due; without a plan it is
+        // not claimed and no PM turn runs for it.
+        await sleep(200);
+        expect(
+          (await scope.runtime.store.listRecords()).filter(
+            (record) => record.step === "pm",
+          ),
+        ).toHaveLength(0);
+        writeFlowPlan(scope.runtime);
+      });
+
+      expect(dispatched.reason).toBe("boundary");
+      const pm = (await scope.runtime.store.listRecords()).filter(
+        (record) => record.step === "pm",
+      );
+      expect(pm).toHaveLength(1);
+      expect(
+        fs.existsSync(
+          path.join(scope.runtime.store.goalDir, "mailbox/inbox/s1.md"),
+        ),
+      ).toBe(true);
+    } finally {
+      cleanupFlowRepo(scope.repo);
+    }
+  }, 60_000);
+}
+
+describe("steer dropped during a long turn", () => {
+  registerLongTurnSteerPart1();
+
+  registerLongTurnSteerPart2();
+
+  registerLongTurnSteerPart3();
 });

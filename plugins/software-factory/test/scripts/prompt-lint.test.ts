@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { duplicateHelperProblems } from "../../scripts/duplicate-helpers.js";
+import { MANIFEST } from "../../scripts/plugin-manifest.js";
 import { promptProblems } from "../../scripts/prompt-lint.js";
 
 const PACKAGE = path.join(import.meta.dir, "..", "..");
@@ -208,6 +209,14 @@ describe("lint gate", () => {
   it("passes when the prompt inventory and the source are clean", () => {
     stubBinaries();
     write(
+      MANIFEST,
+      JSON.stringify({ name: "demo-plugin", skills: "./skills/" }),
+    );
+    write(
+      "skills/run-factory/SKILL.md",
+      "---\nname: run-factory\ndescription: Run it.\n---\n",
+    );
+    write(
       "prompts/role.md",
       "{% if last_call == \"true\" %}{% include 'conditional' %}{% endif %}\n",
     );
@@ -217,5 +226,5 @@ describe("lint gate", () => {
     const result = runLint();
     expect(result.status).toBe(0);
     expect(`${result.stdout}${result.stderr}`).toBe("");
-  });
+  }, 20_000);
 });

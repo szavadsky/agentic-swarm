@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
-import type { Concern } from "./concern-types.js";
-
-export type ConcernInput = Pick<
+import type {
   Concern,
-  "kind" | "summary" | "location" | "affects"
-> &
-  Partial<Pick<Concern, "detail" | "severity">>;
+  ConcernInput,
+  RecordedConcern,
+} from "./concern-types.js";
+
+export type { ConcernInput, RecordedConcern } from "./concern-types.js";
 
 const norm = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
 const locationOf = (l?: { file?: string; line?: number }) =>
@@ -16,4 +16,16 @@ const hash = (prefix: string, parts: unknown[]) =>
 /** Stable concern identity: kind, normalized summary, location. */
 export function concernFingerprint(c: ConcernInput): string {
   return hash("c", [c.kind, norm(c.summary), ...locationOf(c.location)]);
+}
+
+/**
+ * A recorded concern's id: the same kind, text and evidence are one concern
+ * wherever they are raised, so its hold file and pack line share one identity.
+ */
+export function recordedConcernId(c: RecordedConcern): string {
+  return concernFingerprint({
+    kind: c.kind as Concern["kind"],
+    summary: c.text,
+    ...(c.evidence ? { location: { file: c.evidence } } : {}),
+  });
 }

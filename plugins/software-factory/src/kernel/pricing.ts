@@ -1,31 +1,18 @@
-import type {
-  ModelRef,
-  ServedUsage,
-  TurnAttempt,
-  Usage,
-} from "../harness/types.js";
+import type { ServedUsage, Usage } from "../harness/types.js";
 import {
   addUsage,
   reportsUsage,
   tokenTotal,
   zeroUsage,
 } from "../harness/usage.js";
-
-/** USD per million tokens for one model. All four rates are required. */
-export interface ModelPrice {
-  input: number;
-  cachedInput: number;
-  output: number;
-  /** Reasoning tokens; `out` already excludes them where the harness splits the counters. */
-  reasoning: number;
-}
-
-/**
- * Price-source model id -> price. A harness id absent from the table is
- * unpriced, not free: only a zero rate or a free-tier id with a known list
- * price makes a turn a known $0.
- */
-export type PriceTable = Record<string, ModelPrice>;
+import type {
+  ModelPrice,
+  PriceTable,
+  PricedServedUsage,
+  PricedUsage,
+  UsageRecord,
+} from "./pricing-types.js";
+export type { ModelPrice, PriceTable } from "./pricing-types.js";
 
 /** A free-tier id: the provider's own marker, `-free` or `:free`. */
 export function isFreeTierId(model: string): boolean {
@@ -33,21 +20,128 @@ export function isFreeTierId(model: string): boolean {
   return lower.endsWith("-free") || lower.endsWith(":free");
 }
 
-function resolvePriceId(
+/** Effort levels an adapter may leave suffixed on a recorded model id. */
+const EFFORT_SUFFIXES = ["low", "medium", "high", "xhigh", "max"];
+
+/** The operator-declared price id for a harness id, if the config names one. */
+function mappedPriceId(
   model: string,
   priceIds?: Record<string, string>,
-): string {
-  if (!priceIds) return model;
+): string | undefined {
+  if (!priceIds) return undefined;
   const lower = model.toLowerCase();
   const key = Object.keys(priceIds).find((k) => k.toLowerCase() === lower);
-  return key ? priceIds[key]! : model;
+  return key ? priceIds[key] : undefined;
+}
+
+/**
+ * The id with its leading namespace segment removed: a harness may prefix the
+ * provider it reached the model through, which the price source does not
+ * carry. The rest still names the model exactly or by its model suffix.
+ */
+function withoutLeadingSegment(id: string): string | undefined {
+  const slash = id.indexOf("/");
+  return slash < 0 ? undefined : id.slice(slash + 1);
+}
+
+function swapFreeSuffix(id: string): string | undefined {
+  const lower = id.toLowerCase();
+  if (lower.endsWith("-free")) return `${id.slice(0, -"-free".length)}:free`;
+  if (lower.endsWith(":free")) return `${id.slice(0, -":free".length)}-free`;
+  return undefined;
+}
+
+/** The paid id a free-tier id names; the paid row carries the list price. */
+function paidId(id: string): string | undefined {
+  if (!isFreeTierId(id)) return undefined;
+  const suffix = id.toLowerCase().endsWith("-free") ? "-free" : ":free";
+  return id.slice(0, -suffix.length);
+}
+
+function withoutEffortSuffix(id: string): string | undefined {
+  const dash = id.lastIndexOf("-");
+  if (dash < 0) return undefined;
+  return EFFORT_SUFFIXES.includes(id.slice(dash + 1).toLowerCase())
+    ? id.slice(0, dash)
+    : undefined;
+}
+
+/**
+ * One harness id as every price-source id it could name: itself, the same
+ * with its leading provider segment removed, each with its effort suffix
+ * removed, and each free-tier spelling plus its paid equivalent. Earlier
+ * candidates win.
+ */
+function matchCandidates(model: string): string[] {
+  const out: string[] = [];
+  const push = (id: string | undefined): void => {
+    if (id !== undefined && !out.includes(id)) out.push(id);
+  };
+  for (const base of [model, withoutLeadingSegment(model)]) {
+    if (base === undefined) continue;
+    for (const root of [base, withoutEffortSuffix(base)]) {
+      if (root === undefined) continue;
+      push(root);
+      push(swapFreeSuffix(root));
+      push(paidId(root));
+    }
+  }
+  return out;
+}
+
+interface PriceIndex {
+  exact: Map<string, ModelPrice>;
+  suffixes: Map<string, Array<{ id: string; price: ModelPrice }>>;
+}
+
+function indexPrices(table: PriceTable): PriceIndex {
+  const exact = new Map<string, ModelPrice>();
+  const suffixes = new Map<string, Array<{ id: string; price: ModelPrice }>>();
+  for (const [id, price] of Object.entries(table)) {
+    const lower = id.toLowerCase();
+    if (!exact.has(lower)) exact.set(lower, price);
+    const segment = lower.slice(lower.lastIndexOf("/") + 1);
+    const group = suffixes.get(segment) ?? [];
+    group.push({ id, price });
+    suffixes.set(segment, group);
+  }
+  return { exact, suffixes };
+}
+
+/**
+ * The model-suffix entry for a bare candidate: a harness id that names no
+ * provider in the table still names its model, and a bare spelling is how the
+ * table's model segment is reached. A qualified candidate never suffix-matches,
+ * so a known vendor's qualified id stays its own row. Ties prefer a bare id
+ * over a `:variant`, then sort lexicographically.
+ */
+function suffixPrice(
+  candidates: string[],
+  suffixes: PriceIndex["suffixes"],
+): ModelPrice | undefined {
+  for (const id of candidates) {
+    const lower = id.toLowerCase();
+    if (lower.includes("/")) continue;
+    const group = suffixes.get(lower);
+    if (!group) continue;
+    const [first] = [...group].sort(
+      (a, b) =>
+        Number(a.id.includes(":")) - Number(b.id.includes(":")) ||
+        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    );
+    return first!.price;
+  }
+  return undefined;
 }
 
 /**
  * The table entry for one harness model id. An explicit `priceIds` entry wins
- * over matching; then exact (case-insensitive) against the table. No prefix or
- * suffix stripping: a `priceIds` entry is how a harness id names its price id,
- * or it stays unpriced. `undefined` means unpriced, never $0.
+ * over matching and is looked up exactly: the operator named the row, so a
+ * stale mapping is unpriced rather than normalized onto another model. Without
+ * a mapping: exact (case-insensitive), in candidate order, then the model
+ * suffix, but only for a bare candidate. The candidates drop a harness provider
+ * prefix, an effort suffix and a free-tier spelling, so an id the harness could
+ * not price still reaches its list row. `undefined` means unpriced, never $0.
  */
 export function matchPrice(
   table: PriceTable,
@@ -55,11 +149,15 @@ export function matchPrice(
   priceIds?: Record<string, string>,
 ): ModelPrice | undefined {
   if (!model) return undefined;
-  const id = resolvePriceId(model, priceIds).toLowerCase();
-  for (const [key, price] of Object.entries(table)) {
-    if (key.toLowerCase() === id) return price;
+  const { exact, suffixes } = indexPrices(table);
+  const mapped = mappedPriceId(model, priceIds);
+  if (mapped !== undefined) return exact.get(mapped.toLowerCase());
+  const candidates = matchCandidates(model);
+  for (const id of candidates) {
+    const hit = exact.get(id.toLowerCase());
+    if (hit) return hit;
   }
-  return undefined;
+  return suffixPrice(candidates, suffixes);
 }
 
 const PER_MTOK = 1_000_000;
@@ -67,7 +165,7 @@ const PER_MTOK = 1_000_000;
 /**
  * Table price for one usage in USD, ignoring any harness figure: the
  * harness id is matched against the table (`matchPrice`), so a free-tier id
- * with a named price id prices at its list — this is the list-price column. When
+ * prices at its paid row's list — this is the list-price column. When
  * `cachedPrefix` is set and the harness did not split the cache (input only,
  * no cache counters), the input is priced at the cached rate: a resumed
  * turn's prefix is cached, and an unreported split on a resumed turn is that
@@ -123,22 +221,6 @@ export function priceUsage(
   if (list === undefined) return undefined;
   if (isFreeTierId(model)) return 0;
   return list;
-}
-
-/** One served model's usage with its own cost verdict. */
-export interface PricedServedUsage extends ServedUsage {
-  costKnown: boolean;
-}
-
-export interface PricedUsage {
-  usage: Usage;
-  /** False when any part of the turn has no source for its cost. */
-  costKnown: boolean;
-  /**
-   * Per-model split when the turn resolved its model natively, each entry
-   * priced at its own row. Absent for an aggregate-priced turn.
-   */
-  served?: PricedServedUsage[];
 }
 
 /**
@@ -209,23 +291,6 @@ export function pricedUsage(
   if (listCostUsd !== undefined) priced.listCostUsd = listCostUsd;
   else delete priced.listCostUsd;
   return { usage: priced, costKnown: true };
-}
-
-/** The record fields pricing reads; a settled agent step carries all five. */
-export interface UsageRecord {
-  usage?: Usage;
-  model?: ModelRef;
-  attempts?: TurnAttempt[];
-  /**
-   * Models the turn actually served, with their share of the tokens. Present
-   * when one call switched models natively (omp `@` aliases); each is priced at
-   * its own row instead of the record's single model.
-   */
-  served?: ServedUsage[];
-  /** Resumed turn whose unsplit input is the cached prefix, set at record time. */
-  cachedPrefix?: boolean;
-  /** This turn's session-end compaction, priced as the hot cache read it was. */
-  compactUsage?: Usage;
 }
 
 /**

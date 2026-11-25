@@ -1,12 +1,17 @@
 import { formatCause, makeCause } from "../cause.js";
 import { DEFAULT_PARK_AMENDS } from "../config.js";
+import type { ForwardedConcern } from "../context-pack/types.js";
 import type { TurnTarget } from "../flow-context.js";
 import {
+  formatSteerTurn,
+  holdsDir,
   planCheckProvenance,
+  type Steer,
   stallProvenance,
   steerProvenance,
 } from "../mailbox.js";
 import { formatParkDefault } from "../park-route.js";
+import { formatPlanDiff, type PlanDocument } from "../plan-file.js";
 import { doneWhen, materialHash } from "../task-material.js";
 import type {
   Cause,
@@ -19,7 +24,8 @@ import type {
 } from "../types.js";
 import { integrationHead, taskBranchName } from "../worktree.js";
 import { isFrozenStatus } from "./reconcile.js";
-import type { PmMandate } from "./types.js";
+import { scopeEpic } from "./scope.js";
+import type { PlanSnapshot, PmMandate, PmScope } from "./types.js";
 import { amendsUsed } from "./validation.js";
 
 /** A cancelled slug is spent: reconcile restores it and the PM must not reuse it. */
@@ -35,6 +41,53 @@ export function existingTasks(state: State, tasks: TaskFile[]): string {
     .sort((a, b) => a.slug.localeCompare(b.slug))
     .map((task) => existingTaskLine(state, task))
     .join("\n");
+}
+
+/** The prompt inputs every PM turn renders, the derive ladder and config steps alike. */
+interface PmPromptInput {
+  planList: string;
+  planDiff?: string;
+  tasks: TaskFile[];
+  repair: string;
+  steers: string;
+  stalls: string;
+  planChecks: string;
+  concerns: string;
+}
+
+/** The variables a PM-role turn renders, whichever step of the PM flow runs it. */
+export function pmTurnVars(
+  runtime: KernelRuntime,
+  opts: { iteration: number; state: State; scope?: PmScope },
+  input: PmPromptInput,
+): Record<string, string> {
+  return {
+    iteration: String(opts.iteration),
+    epic: scopeEpic(opts.scope ?? { kind: "goal" }) ?? "",
+    epic_scoped: scopeEpic(opts.scope ?? { kind: "goal" }) ? "true" : "false",
+    intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
+    plans: input.planList,
+    plan_diff: input.planDiff ?? "none",
+    tasks_dir: runtime.store.tasks.dir,
+    existing_tasks: existingTasks(opts.state, input.tasks),
+    repair: input.repair,
+    steers: input.steers,
+    holds_dir: holdsDir(runtime.store),
+    stalls: input.stalls,
+    plan_checks: input.planChecks,
+    concerns: input.concerns,
+  };
+}
+
+/** The plan diff since the last derived plan, or `none` on the first derive. */
+export function planDiffPrompt(
+  plansBefore: readonly PlanSnapshot[],
+  previous: readonly PlanDocument[] | null,
+): string {
+  const current = plansBefore
+    .filter((before) => before.exists)
+    .map((before) => ({ rel: before.plan.rel, text: before.text }));
+  return formatPlanDiff(current, previous);
 }
 
 function existingTaskLine(state: State, task: TaskFile): string {
@@ -103,6 +156,20 @@ export function steerLadderNote(
     "Restated PM steer contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Route each pending steer as task|spike|intent|architect|stall (or {architect: id}), write one hold file per steer, write task files only for task and spike steers with source steer: <id>, then the outcome with steerRoutes.",
   );
 }
+
+/**
+ * The message injected into a PM steer turn when a new steer arrives: the
+ * running turn takes it into the same `steerRoutes`, so one turn answers both
+ * and no second PM starts. The contract is restated because the steer was not
+ * in the turn's opening prompt.
+ */
+export function steerInjectionNote(steer: Steer): string {
+  return [
+    "A steer arrived while this turn was running. Route it in this turn's steerRoutes as well (task|spike|intent|architect|stall, answer only a task route), then rewrite the outcome so it carries the route:",
+    formatSteerTurn([steer]),
+  ].join("\n");
+}
+
 /**
  * One stall entry per parked slug: the cause, this iteration's record paths,
  * the kept branch, spent turns and the done-when the continuation keeps.
@@ -119,6 +186,25 @@ export async function stallBrief(
   }
   lines.push(`integration head: ${facts.head}`);
   return lines.join("\n");
+}
+
+/**
+ * The open concerns a wave-end turn marks, one per identity: the id names the
+ * hold file, and the rest is what the PM judges. `none` when no concern waits
+ * for a mark.
+ */
+export function openConcernBrief(
+  concerns: readonly ForwardedConcern[],
+): string {
+  if (concerns.length === 0) return "none";
+  return concerns
+    .map(
+      (concern) =>
+        `- ${concern.id} [${concern.kind}/${concern.calibration}]: ${concern.text}${
+          concern.evidence ? ` (${concern.evidence})` : ""
+        }\n  raised by ${concern.source}`,
+    )
+    .join("\n");
 }
 
 /** Everything a per-slug brief entry needs, read once per PM turn. */
@@ -178,7 +264,7 @@ function slugFactLines(
     `  branch: ${taskBranchName(runtime, slug)}`,
     `  turns: ${parked?.turns ?? 0} spent`,
     `  amends: ${used} of ${bound} this iteration${used >= bound ? " (amend refused; replace, split, cancel or leave)" : ""}`,
-    `  default: ${formatParkDefault(cause)}`,
+    `  default: ${formatParkDefault(cause, runtime.configs.repo.parkRoutes)}`,
     `  done-when: ${doneWhen(facts.bySlug.get(slug)?.body ?? "") || "(none)"}`,
   ];
 }

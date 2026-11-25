@@ -11,6 +11,8 @@ export interface Steer {
   hash: string;
   /** Leading frontmatter `urgent: true`; the steer drains its iteration. */
   urgent: boolean;
+  /** Leading frontmatter `epic: <name>`; the epic whose PM and architect own it. */
+  epic?: string;
 }
 
 export interface ScanOptions {
@@ -18,7 +20,10 @@ export interface ScanOptions {
   settleMs?: number;
 }
 
-/** What the PM's steer turn decided one steer blocks. */
+/**
+ * One hold file as the PM wrote it. Its name is the hold's owner: a pending
+ * steer on the steer turn, an open concern's id on the wave-end turn.
+ */
 export interface Hold {
   steer: string;
   slugs: string[];

@@ -4,13 +4,7 @@ import {
   type WasteAccounting,
   type WasteCounts,
 } from "./waste.js";
-
-/** The waste fields a role/alias row carries; GroupMetrics satisfies this. */
-export interface WasteGroupRow {
-  name: string;
-  waste: WasteCounts;
-  rebuttedReviews: number;
-}
+import type { WasteGroupRow } from "./waste-summary-types.js";
 
 function wasteTotal(counts: WasteCounts): number {
   return WASTE_REASONS.reduce((sum, reason) => sum + counts[reason], 0);
@@ -33,6 +27,20 @@ function wasteTable(label: string, rows: readonly WasteGroupRow[]): string[] {
         `| ${row.name} | ${wasteTotal(row.waste)} | ${row.rebuttedReviews} | ${wasteReasons(row.waste)} |`,
     ),
   ];
+}
+
+function quotaStopLines(waste: WasteAccounting): string[] {
+  const lines = [
+    `- quota stops (reported apart, not waste): ${waste.quotaStops.length}`,
+  ];
+  if (waste.quotaStops.length === 0) return lines;
+  lines.push("- quota-stop records:");
+  for (const stop of waste.quotaStops) {
+    lines.push(
+      `  - ${stop.record}: ${stop.role}/${stop.alias} (${stop.step} r${stop.round}) — ${stop.detail}`,
+    );
+  }
+  return lines;
 }
 
 function wasteEntryLines(waste: WasteAccounting): string[] {
@@ -68,6 +76,7 @@ export function wasteLines(
     ...WASTE_REASONS.map(
       (reason) => `  - ${WASTE_REASON_LABEL[reason]}: ${waste.counts[reason]}`,
     ),
+    ...quotaStopLines(waste),
     `- rebutted reviews (accepted tax, not waste): ${waste.rebuttedReviews.length}`,
     ...wasteEntryLines(waste),
     "",

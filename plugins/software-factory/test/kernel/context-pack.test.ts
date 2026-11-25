@@ -1,10 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import {
+  type ContextPackInput,
   forwardedConcerns,
   renderContextData,
   renderContextPack,
   shallowCodeMap,
 } from "../../src/kernel/context-pack.js";
+import { PACK_SECTIONS } from "../../src/kernel/context-pack/sections.js";
 import { derive } from "../../src/kernel/derive.js";
 import { rec, script, task, cause } from "./helpers.js";
 
@@ -70,6 +72,7 @@ function rendersIdenticalBytesIdenticalPart2(
     },
     forwarded: [
       {
+        id: "c-watchit",
         source: "a review r1",
         calibration: "architect",
         kind: "risk",
@@ -152,6 +155,7 @@ function bulkPointerMailFragment() {
     gates: [{ id: "test", command: "bun test" }],
     forwarded: [
       {
+        id: "c-bulk003",
         source: "bulk-003 review r1",
         calibration: "architect",
         kind: "debt",
@@ -159,6 +163,7 @@ function bulkPointerMailFragment() {
         evidence: "src/kernel/baseline.ts:175",
       },
       {
+        id: "c-bulk004",
         source: "bulk-004 review r1",
         calibration: "architect",
         kind: "risk",
@@ -393,6 +398,78 @@ function registerContextPackPart5(): void {
   });
 }
 
+function registerContextPackPart6(): void {
+  it("renders files without a slash and splits a large package by subdirectory", () => {
+    const map = shallowCodeMap([
+      "package.json",
+      "src/main.ts",
+      ...Array.from({ length: 24 }, (_, i) => `plugins/big/src/f${i}.ts`),
+      "plugins/big/test/one.test.ts",
+      "plugins/big/package.json",
+      "plugins/small/src/a.ts",
+      "plugins/small/src/b.ts",
+    ]);
+    expect(map).toEqual([
+      "(root) — 1 file",
+      "plugins/big/package.json",
+      "plugins/big/src/ — 24 files",
+      "plugins/big/test/ — 1 file",
+      "plugins/small/ — 2 files",
+      "src/main.ts",
+    ]);
+  });
+}
+
+function briefPackInput(): ContextPackInput {
+  return {
+    goal: "briefs",
+    iteration: 2,
+    intentPath: "/goal/intent.md",
+    planPath: "/goal/plan.md",
+    checkout: "/wt/briefs",
+    integrationBranch: "factory/briefs",
+    headHash: "abcdef1234567890",
+    recordsDir: "/goal/records",
+    tasksDir: "/goal/tasks",
+    dataPath: "/goal/iterations/2/context-data.json",
+    tasks,
+    state: derive(tasks, []),
+    steers: [],
+    setup: [],
+    gates: [],
+    forwarded: [],
+    debts: [],
+    planCheck: {
+      iteration: 1,
+      verdict: "architect",
+      evidence: [{ item: "a", status: "missing", evidence: "no task file" }],
+    },
+  };
+}
+
+function registerPackBriefs(): void {
+  it("points every briefable section at a key the status data carries", () => {
+    const data = JSON.parse(renderContextData(briefPackInput())) as Record<
+      string,
+      unknown
+    >;
+    for (const section of PACK_SECTIONS) {
+      expect(Object.hasOwn(data, section)).toBe(true);
+    }
+  });
+
+  it("keeps a brief on one line so it cannot break the index", () => {
+    const pack = renderContextPack({
+      ...briefPackInput(),
+      briefs: [
+        { section: "planCheck", summary: "first line\n## Fake heading" },
+      ],
+    });
+    expect(pack.split("\n")).not.toContain("## Fake heading");
+    expect(pack).toContain("- first line ## Fake heading");
+  });
+}
+
 describe("context pack", () => {
   registerContextPackPart1();
 
@@ -403,4 +480,8 @@ describe("context pack", () => {
   registerContextPackPart4();
 
   registerContextPackPart5();
+
+  registerContextPackPart6();
+
+  registerPackBriefs();
 });

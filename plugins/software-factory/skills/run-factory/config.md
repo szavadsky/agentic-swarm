@@ -22,24 +22,39 @@ gates:
     command: bun test --reporter=junit --reporter-outfile=reports/junit.xml
     format: { junit: reports/junit.xml }       # report the command writes
   - id: integration
-    command: bun test test/integration
-    format: { pattern: jest }                  # runner whose printed failures parse
+    command: ./scripts/integration-tests
+    format: { ctrf: reports/ctrf.json }        # standard test report
     serial: [database]                         # gates naming a mutex never overlap
     env: { TMPDIR: .cache/gate }               # per-worktree scratch directory
 cleanliness:                                   # optional
   maxFileSizeBytes: 1048576
   allowedExtensions: [ts, json, md]
 codingRules: .factory/prompts/coding-rules.md  # optional; replaces the factory default clean-code partial
+parkRoutes:                                    # optional; the PM stall turn's per-cause default
+  gates:                                       # keyed by the kernel's closed cause vocabulary
+    action: amend                              # amend | cancel | replace | split | leave
+    reason: fix the named gate on the kept branch
+    exception: the gate is already red on base or the repo config
 ```
 
 - Gate `env` values are worktree-relative directories; the kernel creates them
   and exports absolute paths, so two worktrees never share one.
-- `format.junit` is exported as `FACTORY_JUNIT_PATH` before the command runs; a
-  missing, empty or unreadable report is red. `pattern` is `pytest`, `jest` or
-  `cargo`.
+- `format` names the report the command writes (`junit`, `ctrf` or `sarif`);
+  missing, empty or unreadable is red; `format.junit` is exported as
+  `FACTORY_JUNIT_PATH`; a tool with no report uses a declared `regex` list.
 - Gates run once on the base; a red base is recorded and warned once, not fatal.
+- With no `gates` configured, the goal's `infra.yaml` (written by the shipped
+  `infra` ingestion step) supplies the commands the task runs; a configured gate
+  always wins, and the infra turn's observed red/flaky status is advisory.
+- A launch that resolves no gate stops before dispatch with that cause; set
+  `requireGates: false` on the repo layer when the repository intentionally runs
+  none.
 - The tracked layer names no worktree root: checkouts and sessions belong to
   the run layer.
+- `parkRoutes` is advice, not a rule: the kernel carries no per-cause default,
+  the PM's stall brief renders the repo's route for the park's cause, and a
+  cause with no entry is the architect's (`leave`). The PM may choose any
+  decision the park's records and branch support.
 - `artifacts` selects the store by backend name, not by path:
 
   ```yaml
@@ -71,8 +86,11 @@ flows:
       - { id: review, prompt: reviewer, alias: reviewer, review: true, changeRequests: 2, deliverable: verdict }
       - { id: resolve, prompt: steward, alias: steward }   # merge-conflict turn only
 taskTypes:
-  development: { flow: implement-review, kind: development, schema: outcome }
-  spike: { flow: spike, kind: spike, schema: outcome }
+  development: { flow: implement-review, kind: development, schema: outcome, useWhen: "change meant to land in the repo and merge after QA and review" }
+  spike: { flow: spike, kind: spike, schema: outcome, useWhen: "question only evidence answers — finished with findings and never merged" }
+  # An operator barrier: no flow turn runs; its readiness drains the launch and
+  # stops it so the operator promotes the build before dependent work starts.
+  promote: { flow: spike, kind: spike, schema: outcome, nogit: true, promote: true, useWhen: "a landed batch needs a build promotion before the work depending on it starts" }
 boundary:                        # kernel turns outside any task flow
   architect: { prompt: architect, alias: architect, repairPrompt: architect-repair, deliverable: "plan edit or stop decision" }
   front: { prompt: front, alias: pm, deliverable: "class, task, and pack" }
@@ -90,11 +108,26 @@ architecture:                    # plan review, before the PM derives tasks
 - `qa: true` makes the step an acceptance turn with its own verdict schema;
   `review: true` makes it a review turn. A `resolve` step runs only after a
   squash merge conflicts.
+- `nogit: true` on a spike task type marks work whose product may live outside
+  git: the task finishes without a committed report and never merges. The shipped
+  `fact-finder` and `poc` types use it; `computer-use` is a development type
+  with an extra browser acceptance turn before QA.
+- `promote: true` on a spike task type makes it an operator barrier: no flow
+  turn runs, the task's readiness drains the launch (in-flight turns finish,
+  nothing new starts) and stops it so the operator promotes the goal build,
+  then relaunches. The stop records the task finished, so the relaunch
+  continues with the work depending on it. A promote type must be a spike: it
+  never merges.
 - `boundary` and `architecture` name the kernel turns. Every boundary step is
   required in the merged layer; the package default supplies them.
+- `ingestion` names the goal-start sequence: `branch` first, exactly one
+  `front`, then configured agent steps such as the shipped `infra` (gate
+  discovery and status) and `scout` (`when: [bigger]`); `when` cannot appear
+  ahead of `front`.
 - `reminders` (default 1) bounds missing-outcome reminders; `repairPrompt`
   names the default missing-outcome template; `promptsDir` shadows prompt files
-  from a repo directory.
+  from a repo directory; `sagaTaskCount` (default 20) is the task count past
+  which the architect prompt reminds him to weigh a saga.
 - `presets` defines named calibration text; the run layer's `preset` selects
   one.
 
@@ -107,7 +140,7 @@ launch. `--run-config <file>` and `FACTORY_RUN_CONFIG` override the default
 ```yaml
 extends: base.yaml                                   # paths resolve from this file
 aliases:
-  architect: { harness: omp, model: anthropic/claude-opus-5-5, effort: high }
+  architect: { harness: omp, model: anthropic/claude-opus-5-5, effort: xhigh, fallbacks: [{ model: anthropic/claude-sonnet-5-5, effort: high }] }
   implementer: { harness: opencode, model: opencode/deepseek-v4.1-flash-free }
   implementer-b: { harness: omp, model: opencode-go/deepseek-v4.1-flash, effort: max }
 harnesses:
@@ -122,31 +155,48 @@ limits:
   concurrency: { overall: 3, perSubscription: { opencode-go: 2 }, perModel: {} }
   iterationUsd: 5
 sessions: { dir: ~/.local/share/factory/sessions, keepRuns: 5, retention: short }
-quota: { resetMinutes: 300, maxResetMinutes: 1440 }
+quota: { resetMinutes: 300, maxResetMinutes: 1440, perSubscription: { opencode-go: 60 } }
 worktreeRoot: ~/.local/share/factory/worktrees
 lsp: true
 priceIds: { opencode/beam-free: reflection/beam-1.0-501b-a23b }
 envAllowlist: [ANTHROPIC_API_KEY]
+sandbox: { binary: /usr/bin/bwrap, args: [--ro-bind, /, /, --dev, /dev, --proc, /proc, --unshare-all, --share-net, --die-with-parent] }
 ```
 
 - `extends` composes from a base; the path resolves from the file that names
   it, objects merge key by key, arrays replace, and `null` removes an inherited
   key. A missing base and a cycle are refused by name.
 - An alias may carry `effort`, `fallbacks` (infrastructure-only: quota,
-  crash), `rotate` (per-iteration primary), `escalateTo` (PM ladder) and
-  `timeouts`; a fallback may name another alias.
+  crash), `escalateTo` (PM ladder) and
+  `timeouts`; a fallback may name another alias. A role's fallback chain walks
+  the subscriptions whose roles fit it; architecture is the exception and falls
+  back only within its own subscription.
 - `harnesses.<id>` binds an `acpx:` adapter or an executable and passes
-  `options` untouched. `compaction.enabled` turns session compaction on or off
-  for that harness; disabling it requires a `reason`, an acpx harness that
-  enables it needs `acpx.compact: true`, and `reviewIterations: [1, 2]` limits
-  review compaction to those 1-based rounds. `sessions.retention` is the
+  `options` untouched. Every harness entry must declare `compaction`; its
+  `enabled` flag turns session compaction on or off for that harness; disabling
+  it requires a `reason`, an acpx harness that enables it needs
+  `acpx.compact: true`, and `reviewIterations: [1, 2]` limits review compaction
+  to those 1-based rounds. `sessions.retention` is the
   provider cache TTL (`auto|short|long|none`, required in a declared `sessions`
   block); only `short`/`long` give a hot window, so `auto` and `none` do not
   compact. The factory repository's `bootstrap/run/base.yaml` and
   `bootstrap/run/self.yaml` are complete examples.
 - `limits`: `iterations` (default 1), `concurrency`, `planCheckRounds`,
   `resumeAttempts`, `parkAmends`, `turns`, `wallMinutes`, `iterationUsd`,
-  `turnMinutes`, `iterationMinutes`, `minTmpFreeBytes`.
+  `turnMinutes`, `iterationMinutes`, `steerDebounceSeconds`,
+  `minTmpFreeBytes`.
+- `quota`: a quota stop's pool is latched until the provider-stated reset
+  (capped by `maxResetMinutes`), or for the pool's `perSubscription` interval
+  when the stop states none, else `resetMinutes` (default 300). The latches
+  live in `<sessions.dir>/quota-pools.yaml`, outside every goal directory, so
+  another goal on this machine skips the same pool; a pool whose interval
+  passes is probed once, and a serving probe frees it.
+- `sandbox` names one process-level wrapper for every child the run starts,
+  pre-flight included (`binary`, plus `args` passed before `--` and the child's
+  argv). Pre-flight refuses a missing binary; a run without the block behaves
+  as before. Bind the repo, `worktreeRoot`, `sessions.dir` and `TMPDIR`
+  writable, plus per-harness state directories (`~/.omp`, `~/.acpx`, an agent's
+  own); see [sandbox.md](sandbox.md).
 - `worktreeRoot` defaults to `../.factory-worktrees/<repo-id>` beside the
   checkout; `sessions.dir` defaults to `<worktreeRoot>/.sessions`. Both must be
   outside the repo and writable.
@@ -182,15 +232,31 @@ file and key:
   reviewers, flow steps, alternates, different-model follow-ups) that the run
   layer does not define;
 - every task type that names a flow or a kernel outcome schema the process
-  layer does not define;
-- every quota pool named by `aliases.<name>.subscription` that
-  `limits.concurrency.perSubscription` does not define;
+  layer does not define, and every follow-up declared on the trivial flow,
+  which never follows up;
+- every quota pool an alias or a literal fallback tier draws on that
+  `limits.concurrency.perSubscription` does not define, a tier that changes
+  the primary without naming its pool or `sharesPool`, and a `sharesPool` with
+  no alias subscription to share;
 - `aliases.<name>.escalateTo` and `aliases.<name>.fallbacks[<n>].alias` that
   name a run-config alias that does not exist, and escalation and fallback
-  chains that cycle.
+  chains that cycle;
+- `scouts` while no alias or fallback tier runs on omp;
+- an alias or explicit fallback tier on a harness the launch
+  does not register;
+- a `portability` edge whose endpoint no harness registers;
+- malformed acpx `options.args`/`options.env`;
+- every executable a registered harness declares (a harness entry's `binary`,
+  a raw acpx `agent`, omp and its YAML server) that is not executable; a bare
+  alias or fallback harness with no declaration is the registration
+  finding, not a missing executable;
+- a `worktreeRoot` or `sessions.dir` inside the repository, or a configured
+  root that is not writable.
 
 A scratch run file outside a repo is checked against the process defaults and
 an optional `--repo` fallback; a file inside a repo is checked against that
-repo's process override. The pre-flight that runs at launch still does the
-live checks (model lists, effort probe, binaries, writable roots, base
-gates); this command is the offline subset that shares its static checks.
+repo's process override. A scratch file has no repository roots to judge, so
+those checks need a repo file or `--repo`. The checks are the launch
+pre-flight's non-model list; the pre-flight also does the live checks (model
+lists, effort probe, base branch, base gates), while this command launches
+nothing and probes no model.

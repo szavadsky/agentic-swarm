@@ -2,6 +2,7 @@ import path from "node:path";
 import { writeTextAtomic } from "../core/records/io.js";
 import { packageRoot } from "./config.js";
 import { writeKernelSchemas } from "./schemas.js";
+import type { ArtifactLspFiles } from "./artifact-lsp-types.js";
 
 /**
  * The executable omp's built-in `yamlls` server names. omp resolves it through
@@ -63,6 +64,9 @@ export function artifactLspConfig(goalDir: string): Record<string, unknown> {
               [path.join(schemas, "class.schema.json")]: [
                 path.join(dir, "class.yaml"),
               ],
+              [path.join(schemas, "infra.schema.json")]: [
+                path.join(dir, "infra.yaml"),
+              ],
             },
           },
         },
@@ -77,13 +81,6 @@ export function artifactLspConfig(goalDir: string): Record<string, unknown> {
       },
     },
   };
-}
-
-export interface ArtifactLspFiles {
-  /** The canonical config written into the artifact folder. */
-  config: string;
-  /** Every kernel schema written beside it. */
-  schemas: string[];
 }
 
 /** Writes the schemas and the canonical config into the goal's artifact folder. */

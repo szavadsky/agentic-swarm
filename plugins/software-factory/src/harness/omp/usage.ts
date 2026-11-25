@@ -1,33 +1,20 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ServedUsage, Usage } from "../types.js";
+import type {
+  OmpFrameSummary,
+  OmpMessageUsage,
+  OmpStats,
+  OmpTurnUsage,
+} from "./types.js";
 import { addUsage, reportsUsage, zeroUsage } from "../usage.js";
 
-/** Raw usage omp reports on an assistant message (`message_end.message.usage`). */
-export interface OmpMessageUsage {
-  input?: number;
-  output?: number;
-  cacheRead?: number;
-  cacheWrite?: number;
-  reasoningTokens?: number;
-  cost?: { total?: number } | number;
-}
-
-export interface OmpTokens {
-  input?: number;
-  output?: number;
-  reasoning?: number;
-  cacheRead?: number;
-  cacheWrite?: number;
-  total?: number;
-}
-
-export interface OmpStats {
-  sessionId?: string;
-  sessionFile?: string;
-  tokens?: OmpTokens;
-  cost?: number;
-}
+export type {
+  OmpFrameSummary,
+  OmpMessageUsage,
+  OmpStats,
+  OmpTurnUsage,
+} from "./types.js";
 
 /**
  * omp reports `totalTokens = input + output + cacheRead` and counts reasoning
@@ -82,13 +69,6 @@ export function textOfContent(content: unknown): string {
     )
     .map((part: any) => part.text)
     .join("");
-}
-
-export interface OmpFrameSummary {
-  /** Usage summed from `message_end` frames (fallback when session stats are unavailable). */
-  usage: Usage;
-  lastAssistantStopReason?: string;
-  assistantText?: string;
 }
 
 /** Pure summary over the frames an adapter decides to retain. */
@@ -227,19 +207,6 @@ export function servedTotal(served: readonly ServedUsage[]): Usage {
     (total, entry) => addUsage(total, entry.usage),
     zeroUsage(),
   );
-}
-
-export interface OmpTurnUsage {
-  /** Session stats before the prompt; absent when the RPC query failed. */
-  before?: OmpStats;
-  /** Session stats after the prompt; absent when the RPC query failed. */
-  after?: OmpStats;
-  /** Frame-sum usage, used when either stats snapshot is missing. */
-  fallback: Usage;
-  /** Parent session file; child transcripts live beside it. */
-  sessionFile?: string;
-  /** Epoch ms at which the prompt was sent; earlier child messages belong to an earlier turn. */
-  sinceMs: number;
 }
 
 /**

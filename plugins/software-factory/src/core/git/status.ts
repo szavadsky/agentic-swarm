@@ -1,29 +1,29 @@
 import { git } from "./exec.js";
+import type { StatusEntry } from "./types.js";
+
+export type { StatusEntry } from "./types.js";
 
 /**
- * One entry of `git status --porcelain -z --untracked-files=all`.
- */
-interface StatusEntry {
-  /** Two-letter porcelain code, e.g. " M", "??", "UU", "R ". */
-  code: string;
-  /** Repo-relative path (rename target for R/C entries). */
-  path: string;
-  /** Rename source for R/C entries. */
-  from?: string;
-}
-
-/**
- * Runs `git status --porcelain -z --untracked-files=all` and parses the
- * NUL-separated output. Unlike the default mode this lists every untracked
- * file individually (never a collapsed folder entry), and -z avoids all
- * quoting/whitespace pitfalls. Rename entries arrive as
- * `R  new\0old\0` pairs.
+ * Runs `git status --porcelain -z` and parses the NUL-separated output.
+ * `untracked` chooses whether every untracked file is listed (`all`, the
+ * default) or a folder is collapsed (`normal`). `-z` avoids all
+ * quoting/whitespace pitfalls. Rename entries arrive as `R  new\0old\0`
+ * pairs.
  */
 export async function porcelainStatus(
   wt: string,
-  opts?: { env?: Record<string, string>; pathspec?: string },
+  opts?: {
+    env?: Record<string, string>;
+    pathspec?: string;
+    untracked?: "all" | "normal";
+  },
 ): Promise<StatusEntry[]> {
-  const args = ["status", "--porcelain", "-z", "--untracked-files=all"];
+  const args = [
+    "status",
+    "--porcelain",
+    "-z",
+    `--untracked-files=${opts?.untracked ?? "all"}`,
+  ];
   if (opts?.pathspec) args.push("--", opts.pathspec);
   const res = await git(wt, args, {
     allowFail: true,

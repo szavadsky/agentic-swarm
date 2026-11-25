@@ -344,7 +344,7 @@ function registerFactoryValidateCrossLayerAliases(): void {
       const file = writeFile(
         root,
         "run.yaml",
-        "aliases:\n  implementer: { harness: fake, model: m }\n",
+        "aliases:\n  implementer: { harness: omp, model: m }\n",
       );
       const result = await runValidate(file);
       expect(result.code).toBe(1);
@@ -367,7 +367,7 @@ function registerFactoryValidateCrossLayerReferences(): void {
       const processFile = writeFile(
         root,
         ".factory/process.yaml",
-        "taskTypes:\n  broken: { flow: ghost-flow, kind: development, schema: ghost-schema }\n",
+        "taskTypes:\n  broken: { flow: ghost-flow, kind: development, schema: ghost-schema, useWhen: fixture work }\n",
       );
       const file = writeFile(root, ".factory/repo.yaml", "baseBranch: main\n");
       const result = await runValidate(file);
@@ -386,8 +386,8 @@ function registerFactoryValidateCrossLayerReferences(): void {
     "reports a missing quota pool class",
     withTmp(async (root) => {
       const config = validRunConfig().replace(
-        "implementer: { harness: fake, model: implementer-model }",
-        "implementer: { harness: fake, model: implementer-model, subscription: ghost-pool }",
+        "implementer: { harness: omp, model: implementer-model }",
+        "implementer: { harness: omp, model: implementer-model, subscription: ghost-pool }",
       );
       const file = writeFile(root, "run.yaml", config);
       const result = await runValidate(file);
@@ -405,8 +405,8 @@ function registerFactoryValidateCrossLayerChains(): void {
     "reports a missing fallback alias class",
     withTmp(async (root) => {
       const config = validRunConfig().replace(
-        "implementer: { harness: fake, model: implementer-model }",
-        "implementer: { harness: fake, model: implementer-model, fallbacks: [{ alias: ghost-alias }] }",
+        "implementer: { harness: omp, model: implementer-model }",
+        "implementer: { harness: omp, model: implementer-model, fallbacks: [{ alias: ghost-alias }] }",
       );
       const file = writeFile(root, "run.yaml", config);
       const result = await runValidate(file);
@@ -420,8 +420,8 @@ function registerFactoryValidateCrossLayerChains(): void {
     "reports a missing escalation alias class",
     withTmp(async (root) => {
       const config = validRunConfig().replace(
-        "implementer: { harness: fake, model: implementer-model }",
-        "implementer: { harness: fake, model: implementer-model, escalateTo: ghost-escalation }",
+        "implementer: { harness: omp, model: implementer-model }",
+        "implementer: { harness: omp, model: implementer-model, escalateTo: ghost-escalation }",
       );
       const file = writeFile(root, "run.yaml", config);
       const result = await runValidate(file);
@@ -435,7 +435,7 @@ function registerFactoryValidateCrossLayerChains(): void {
 
 function registerFactoryValidateCrossLayerPass(): void {
   it(
-    "passes a valid fake config with no harness probe",
+    "passes a valid config with no harness probe",
     withTmp(async (root) => {
       const file = writeFile(root, "run.yaml", validRunConfig());
       const result = await runValidate(file);

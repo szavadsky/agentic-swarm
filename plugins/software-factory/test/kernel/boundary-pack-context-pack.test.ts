@@ -333,6 +333,9 @@ describe("boundary context pack", () => {
   registerBoundaryContextPackPart5();
 });
 
+/** The default implementer pool, preset as latched in the aging fixture. */
+const IMPL_POOL = "fake+fake-impl";
+
 describe("boundary ready aging", () => {
   it("names a ready spike held by its own steer at the next boundary", async () => {
     const { repo, goal } = setupFlowRepo();
@@ -356,7 +359,7 @@ describe("boundary ready aging", () => {
         { ok: true },
       );
       // The implementer's only tier sits in a quota cooldown.
-      runtime.exhaustedPools.set("fake+fake-impl", Date.now() + 60_000);
+      runtime.exhaustedPools.set(IMPL_POOL, { resetAt: Date.now() + 60_000 });
       await postSteer(runtime.store, "note", "Take a look at the plan.");
 
       const planPath = path.join(runtime.store.goalDir, "plan.md");

@@ -10,10 +10,17 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { LiveAgents, SessionRef, SubagentInfo } from "../harness/types.js";
 import { missingPlanFinding, snapshotPlan } from "./architect-session.js";
-import type { EpicConsult, ConsultFailure } from "./boundary-consult.js";
+import { writeEpicPack } from "./boundary-consult.js";
 import { epicJobDone, parseRegister } from "./boundary-context.js";
+import type {
+  ConsultFailure,
+  EpicConsult,
+  SteeredConsult,
+  SteeredHosting,
+} from "./boundary-types.js";
 import { makeCause } from "./cause.js";
 import { compactSession, subarchitectTarget } from "./flow-context.js";
+import type { Steer } from "./mailbox.js";
 import {
   KERNEL_TURN_STEPS,
   OutcomeInvalidError,
@@ -31,35 +38,6 @@ const SUBARCHITECT_AGENT = "subarchitect";
 /** The name the architect and the script address one epic's child by. */
 function subarchitectName(epic: string): string {
   return `epic-${epic.replace(/[^a-zA-Z0-9_-]+/g, "-")}`;
-}
-
-/** One epic's consult, handed to a live child of the architect's session. */
-interface SteeredConsult {
-  epic: string;
-  plan: PlanFile;
-  planBefore: string | null;
-  name: string;
-  outcomePath: string;
-  /** The full consult the script steers over IRC. */
-  prompt: string;
-  promptBytes: number;
-  child?: SubagentInfo;
-}
-
-/**
- * The live host's contract: one named child per epic that already has a plan to
- * review, the architect prompt's launch block and the agent definition, and the
- * start/stop pairing around the owning turn.
- */
-export interface SteeredHosting {
-  consults: SteeredConsult[];
-  agents: { name: string; markdown: string }[];
-  /** The architect prompt's block: one launch row per child, empty without children. */
-  block: string;
-  /** Starts the IRC monitor; a child is steered when the registry admits it. */
-  start(agents: LiveAgents): void;
-  /** Ends the monitor after the owning turn closes and reports why a child was not steered. */
-  stop(): Promise<string[]>;
 }
 
 /** Steers each expected child once, retrying until the registry admits it or the turn closes. */
@@ -106,12 +84,15 @@ async function monitorSteers(
 interface SteeredHostingOpts {
   iteration: number;
   turn: string;
-  packRel: string;
   goalPlanFile: PlanFile;
+  /** The shared plan text the epic packs render their debts from. */
+  planText: string;
   digestPath?: string;
   tasks: readonly TaskFile[];
   state: State;
   records: readonly StepRecord[];
+  /** Pending steers per epic: a child sees only its own epic's. */
+  steers: ReadonlyMap<string, readonly Steer[]>;
 }
 
 /** Epics with a finished subarchitect consult and no closed job yet. */
@@ -139,25 +120,41 @@ function steeredRows(opts: SteeredHostingOpts): EpicRow[] | undefined {
 }
 
 /** Builds one epic child's consult, prompt and snapshot before hosting. */
-function steeredConsult(
+async function steeredConsult(
   runtime: KernelRuntime,
   opts: SteeredHostingOpts,
   target: ReturnType<typeof subarchitectTarget>,
   outcomeDir: string,
   epic: string,
-): SteeredConsult {
+): Promise<SteeredConsult> {
   const plan = resolvePlan(runtime.store.goalDir, { kind: "epic", epic });
   const outcomePath = path.join(outcomeDir, `i${opts.iteration}-${epic}.yaml`);
   fs.rmSync(outcomePath, { force: true });
+  // A live child reads its own epic's pack, not the top pack: the steer that
+  // is this epic's must not travel through the goal's context.
+  const packRel = await writeEpicPack(runtime, {
+    iteration: opts.iteration,
+    epic,
+    goalPlanFile: opts.goalPlanFile,
+    records: opts.records,
+    turn: opts.turn,
+    pass: "direction",
+    tasks: opts.tasks,
+    state: opts.state,
+    planText: opts.planText,
+    steers: opts.steers.get(epic) ?? [],
+    ...(opts.digestPath ? { digestPath: opts.digestPath } : {}),
+  });
   const prompt = runtime.prompts.render(target.prompt, {
     turn: opts.turn,
+    pass: "direction",
     iteration: String(opts.iteration),
     epic,
     intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
     plan_path: plan.path,
     parent_plan_path: opts.goalPlanFile.path,
     checkout: runtime.paths.goalCheckout,
-    pack_path: runtime.store.pathOf({ area: "goal", rel: opts.packRel }),
+    pack_path: runtime.store.pathOf({ area: "goal", rel: packRel }),
     digest_path: opts.digestPath ?? "",
     outcome_path: outcomePath,
   });
@@ -184,6 +181,9 @@ function steeredHostingBlock(
           `- epic \`${consult.epic}\` — agent \`${SUBARCHITECT_AGENT}\`, name \`${consult.name}\``,
       )
       .join("\n"),
+    // This block exists only on the steered path; the template's omp text is
+    // the steer variant, never a guess about a harness that cannot steer.
+    subagents: "steer",
   })}\n`;
 }
 
@@ -198,11 +198,13 @@ export async function steeredHosting(
 ): Promise<SteeredHosting | undefined> {
   const rows = steeredRows(opts);
   if (!rows) return undefined;
-  const target = subarchitectTarget(runtime, opts.iteration);
+  const target = subarchitectTarget(runtime);
   const outcomeDir = path.join(runtime.paths.sessionsDir, "subarchitect");
   fs.mkdirSync(outcomeDir, { recursive: true });
-  const consults = rows.map((row) =>
-    steeredConsult(runtime, opts, target, outcomeDir, row.epic),
+  const consults = await Promise.all(
+    rows.map((row) =>
+      steeredConsult(runtime, opts, target, outcomeDir, row.epic),
+    ),
   );
   let cancelled = false;
   let running: Promise<string[]> | undefined;
@@ -211,7 +213,9 @@ export async function steeredHosting(
     agents: [
       {
         name: SUBARCHITECT_AGENT,
-        markdown: runtime.prompts.render("subarchitect-agent", {}),
+        markdown: runtime.prompts.render("subarchitect-agent", {
+          subagents: "steer",
+        }),
       },
     ],
     block: steeredHostingBlock(runtime, consults),
@@ -365,6 +369,7 @@ async function recordConsult(
     epic: consult.epic,
     plan: consult.plan,
     changed: snapshotPlan(consult.plan.path) !== consult.planBefore,
+    outcome: source.outcome,
   });
 }
 
@@ -374,7 +379,7 @@ export async function collectSteered(
   opts: { iteration: number; parent?: SessionRef; transcript?: string },
 ): Promise<{ delivered: Map<string, EpicConsult>; failure?: ConsultFailure }> {
   const delivered = new Map<string, EpicConsult>();
-  const target = subarchitectTarget(runtime, opts.iteration);
+  const target = subarchitectTarget(runtime);
   for (const consult of hosting.consults) {
     const source = readConsultSource(consult.outcomePath);
     if (!source) {

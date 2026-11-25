@@ -1,93 +1,14 @@
 /**
- * The dispatch loop's mutable state and its public result/option types. One
- * dispatch owns one iteration: the running set, the quarantine faults, the
- * steers it has seen, and the drain it is finishing.
+ * The dispatch loop's mutable state helpers: the initial holds, the drain
+ * arithmetic and the iteration's spend. The public shape lives in
+ * `dispatch-types.ts`.
  */
 import { makeCause } from "./cause.js";
-import type { Hold } from "./mailbox.js";
+import type { DispatchResult, DispatchState } from "./dispatch-types.js";
 import { readHolds } from "./mailbox.js";
 import type { PriceTable } from "./pricing.js";
 import { pricedRecord } from "./pricing.js";
-import type { DrainController } from "./signals.js";
-import type { Cause, KernelRuntime, StepRecord } from "./types.js";
-
-export interface DispatchResult {
-  reason: "boundary" | "drained" | "terminal" | "infra" | "cancelled";
-  cause?: Cause;
-  /** Completed agent turns in this iteration. */
-  turns: number;
-  /** Started task turns in this iteration. */
-  taskTurnsStarted: number;
-  /** The latest plancheck verdict of the pass, if any. */
-  planCheck?: "progress" | "architect";
-  allReadyHeld: boolean;
-}
-
-export interface DispatchOptions {
-  iteration?: number;
-  /**
-   * The inbox steer ids the boundary's read covered. Anything else present at
-   * dispatch start was dropped after that read, and the architect never saw
-   * it, so it gets a PM steer turn here.
-   */
-  seenSteers?: string[];
-  /**
-   * The launch's drain controller. A first signal drains through the same
-   * channel as an iteration limit: unstarted tasks are refused while started
-   * ones finish their flow.
-   */
-  signals?: DrainController;
-  /**
-   * Sleeps out a transient fault's backoff before it is re-dispatched. Tests
-   * inject a recorder instead of waiting.
-   */
-  sleep?: (ms: number) => Promise<void>;
-}
-
-export interface Running {
-  promise: Promise<void>;
-  agent: boolean;
-  /** Quota pool and model the turn drew admission against; agent turns only. */
-  subscription?: string;
-  model?: string;
-}
-
-export interface InfraFault {
-  cause: string;
-  retries: number;
-  /** The backoff elapsed: the slug is dispatchable again this iteration. */
-  due: boolean;
-  retry: boolean;
-}
-
-/** Holds still in force: the goal-wide hold name and the slugs held. */
-export interface ActiveHolds {
-  /** Task slug -> the steer that holds it. First steer in file order wins. */
-  slugs: Map<string, string>;
-  /** The steer holding the whole goal, when one does. */
-  goal?: string;
-}
-
-export interface DispatchState {
-  runtime: KernelRuntime;
-  opts: DispatchOptions;
-  iteration: number;
-  taskTurnsStarted: number;
-  planCheckVerdict?: "progress" | "architect";
-  planCheckFindings: string[];
-  running: Map<string, Running>;
-  started: Set<string>;
-  infra: Map<string, InfraFault>;
-  cancelled: boolean;
-  drain?: Cause;
-  seenSteers: Set<string>;
-  /** Fresh files seen once but not yet stable: steer id -> last content hash. */
-  settling: Map<string, string>;
-  holds: Hold[];
-  sleep: (ms: number) => Promise<void>;
-  /** The iteration's dollar brake, if configured. */
-  usdLimit?: number;
-}
+import type { Cause, StepRecord } from "./types.js";
 
 /** The plan-check PM's unfixed findings, once, as the summary cause. */
 export function planCheckCause(state: DispatchState): Cause | undefined {

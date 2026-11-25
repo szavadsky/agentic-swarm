@@ -9,8 +9,10 @@ import type {
   IterationMetrics,
   SteerLatency,
 } from "../../src/kernel/metrics.js";
+import { derive } from "../../src/kernel/derive.js";
 import { writeMetrics } from "../../src/kernel/metrics.js";
 import { createFolderStore } from "../../src/kernel/store.js";
+import { writeIterationSummary } from "../../src/kernel/summary.js";
 import type {
   CauseKind,
   StepRecord,
@@ -200,6 +202,22 @@ function readMetrics(text: string | null): {
   return { one: metrics.iterations[0]!, steers: metrics.steers };
 }
 
+/** Runs one fixture write against a throwaway goal store and cleans it up. */
+async function withFixtureStore<T>(
+  tasks: readonly TaskFile[],
+  run: (store: ReturnType<typeof createFolderStore>) => Promise<T>,
+): Promise<T> {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-friction-"));
+  const store = createFolderStore(path.join(root, "goal"), undefined, {});
+  try {
+    await store.ensureLayout();
+    for (const file of tasks) await store.tasks.write(file);
+    return await run(store);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
 /**
  * Writes one record set and task files into a goal store, then returns the
  * iteration's metrics and the goal's steer latency.
@@ -208,20 +226,41 @@ export async function written(
   records: StepRecord[],
   tasks: readonly TaskFile[],
 ): Promise<{ one: IterationMetrics; steers: SteerLatency }> {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-friction-"));
-  const store = createFolderStore(path.join(root, "goal"), undefined, {});
-  try {
-    await store.ensureLayout();
-    for (const file of tasks) await store.tasks.write(file);
+  return withFixtureStore(tasks, async (store) => {
     await writeMetrics(store, {
       iteration: 1,
       status: "in-progress",
       records,
     });
     return readMetrics(await store.readFile("metrics.yaml"));
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
+  });
+}
+
+/** The iteration's metrics, steer latency and rendered summary for one fixture. */
+export async function writtenSummary(
+  records: StepRecord[],
+  tasks: readonly TaskFile[],
+): Promise<{
+  one: IterationMetrics;
+  steers: SteerLatency;
+  summary: string;
+}> {
+  return withFixtureStore(tasks, async (store) => {
+    await writeIterationSummary(store, {
+      iteration: 1,
+      state: derive([...tasks], records),
+      records,
+    });
+    await writeMetrics(store, {
+      iteration: 1,
+      status: "in-progress",
+      records,
+    });
+    return {
+      ...readMetrics(await store.readFile("metrics.yaml")),
+      summary: (await store.readFile("iterations/1/summary.md"))!,
+    };
+  });
 }
 
 /** An inbox or processed steer dropped by `factory steer`. */

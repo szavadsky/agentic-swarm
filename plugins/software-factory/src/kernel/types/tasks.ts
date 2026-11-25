@@ -6,12 +6,25 @@ export type GoalDecision = NonNullable<Outcome["decision"]>;
 /** Spike finishes with findings; development merges its branch. */
 export type TaskKind = "development" | "spike";
 
-/** One configured task type: the flow it runs, its kind and its output schema. */
+/** One configured task type: the flow it runs, its kind, its output schema and when it fits. */
 export interface TaskTypeDefinition {
   flow: string;
   kind: TaskKind;
   /** A kernel outcome schema name; a task type never supplies its own. */
   schema: string;
+  /**
+   * The type's product may live outside git: the task finishes without a
+   * committed report and never merges. Absent reads as false.
+   */
+  nogit?: boolean;
+  /**
+   * The type is an operator barrier: the task runs no flow, its readiness drains
+   * the launch and stops it so the operator promotes the build, and it is
+   * recorded finished at that stop so a relaunch continues. Absent reads as false.
+   */
+  promote?: boolean;
+  /** One line naming the work this type fits, so a planner never picks by name. */
+  useWhen: string;
 }
 
 export interface TaskFile {
@@ -23,8 +36,11 @@ export interface TaskFile {
   kind: TaskKind;
   /** Resolved from `type`; a legacy file declares it directly. */
   flow: string;
+  /** The type's product may live outside git; absent reads as false. */
+  nogit?: boolean;
+  /** The type stops the launch for operator promotion; absent reads as false. */
+  promote?: boolean;
   deps: string[];
-  scope: string[];
   /** The epic that owns this task; absent means goal-level work. */
   epic?: string;
   tier?: string;
@@ -52,6 +68,11 @@ export interface TaskFile {
    * wall, still capped by the run's `limits.turnMinutes`. Owner ruling 2.
    */
   turnMinutes?: number;
+  /**
+   * This task's checks are advisory: their reds are recorded and shown to the
+   * reviewer and steward, but never open a fix round, park or merge block.
+   */
+  advisory?: boolean;
   /** Plan-checker re-runs per iteration; exhausted rounds consult the architect. */
 }
 

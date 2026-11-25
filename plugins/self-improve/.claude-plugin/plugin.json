@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "self-improve",
+  "version": "0.1.0",
+  "description": "Self-improvement campaign on the host repository: the operator runbook, the process overlay that puts a previous-run assessment before the architect, and the shipped self-build flows the factory runs it with.",
+  "author": {
+    "name": "Vyacheslav Zavadsky"
+  },
+  "repository": "https://github.com/szavadsky/agentic-swarm",
+  "license": "MIT",
+  "keywords": ["orchestration", "agents", "self-improvement", "runbook"],
+  "skills": "./skills/"
+}

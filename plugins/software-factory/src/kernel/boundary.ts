@@ -5,25 +5,19 @@
  * `boundary-architect.ts` and `boundary-tail.ts`; this module is the ordered
  * composition and the public result/option types.
  */
-export type { BoundaryOptions, BoundaryResult } from "./boundary-state.js";
+export type { BoundaryOptions, BoundaryResult } from "./boundary-types.js";
 
-import { runArchitectStage } from "./boundary-architect.js";
+import { runArchitectureFlow } from "./architect-flow.js";
+import { runChecker } from "./boundary-checker.js";
 import {
   partitionSteers,
   prepareBoundary,
   refreshAfterChecker,
   routeUnroutedSteers,
-  runChecker,
   writeDigest,
   writePack,
 } from "./boundary-stage.js";
-import type { BoundaryOptions, BoundaryResult } from "./boundary-state.js";
-import {
-  reviewChangedPlans,
-  runConsults,
-  runPmStage,
-  settleArchitectStage,
-} from "./boundary-tail.js";
+import type { BoundaryOptions, BoundaryResult } from "./boundary-types.js";
 import type { KernelRuntime } from "./types.js";
 
 /**
@@ -43,12 +37,5 @@ export async function runBoundary(
   await routeUnroutedSteers(context);
   await partitionSteers(context);
   await writePack(context);
-  const architect = await runArchitectStage(context);
-  if (architect) return architect;
-  const settled = await settleArchitectStage(context);
-  if (settled) return settled;
-  const consulted = await runConsults(context);
-  if (consulted) return consulted;
-  await reviewChangedPlans(context);
-  return runPmStage(context);
+  return runArchitectureFlow(context);
 }

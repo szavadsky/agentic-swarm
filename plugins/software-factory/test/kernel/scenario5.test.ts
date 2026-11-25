@@ -19,6 +19,7 @@ import {
   makeRuntime,
   outcome,
   setupFlowRepo,
+  scriptDecider,
   scriptStallLeave,
   whenTurn,
   writeTask,
@@ -185,6 +186,11 @@ function scriptRedMergedResultHarness(): FakeHarness {
     ctx.writeOutcome(outcome({ summary: "gate fix attempt" }));
     return fakeTurnResult(req);
   });
+  // The merge gates' red is the head's, not the branch's: the decider parks it.
+  scriptDecider(harness, {
+    summary: "the merged head is red; the branch holds the fix that stayed red",
+    verdict: "reject",
+  });
   scriptStewardNoRepair(harness);
   scriptStallLeave(harness, ["task"]);
   return harness;
@@ -277,7 +283,7 @@ async function expectParkedAfterRedMergedResult(
   expect(
     repo.git(["show", "factory/demo:feature.txt"], { allowFail: true }).code,
   ).not.toBe(0);
-  expect(harness.calls.length).toBe(5);
+  expect(harness.calls.length).toBe(6);
 }
 
 function registerKERNEL0Scenario5RedGatesOnTheMergedResultPart2(): void {

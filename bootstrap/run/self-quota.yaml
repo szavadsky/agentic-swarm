@@ -10,6 +10,7 @@ aliases:
   architect:
     harness: claude-code
     model: opus
+    effort: xhigh
     subscription: claude
     timeouts:
       wallMs: 14400000 # 4 h: single turns must not die on the 1 h default
@@ -19,7 +20,7 @@ aliases:
         sharesPool: true # same Claude subscription, different model
       - harness: omp
         model: anthropic/claude-opus-5-5
-        effort: high
+        effort: xhigh
         sharesPool: true # omp Opus bills to the same Claude subscription
   pm:
     harness: omp

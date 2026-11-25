@@ -2,6 +2,7 @@
 
 export { packageRoot, repoConfigSchema } from "./config/repo-schema.js";
 export { architectureSchema } from "./config/flow-schema.js";
+export { pmSchema } from "./config/pm-schema.js";
 export {
   DEFAULT_PARK_AMENDS,
   processConfigSchema,
@@ -11,4 +12,9 @@ export {
 export { ConfigError, configFilePaths } from "./config/load.js";
 
 export { loadConfigs, loadProcessConfig, loadRunConfig } from "./config/run.js";
-export { repositoryId, resolveGoalPaths, toLimits } from "./config/paths.js";
+export {
+  repositoryId,
+  resolveGoalPaths,
+  resolveRoots,
+  toLimits,
+} from "./config/paths.js";

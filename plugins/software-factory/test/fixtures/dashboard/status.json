@@ -4,6 +4,12 @@
   "iteration": 2,
   "iterations": 2,
   "updatedAt": "2026-02-03T04:05:06.000Z",
+  "summary": {
+    "source": "pm",
+    "text": "Iteration 2 wrote the remaining task files and parked one task for its reviewer.",
+    "iteration": 2,
+    "record": "records/00006-i2-pm-r1"
+  },
   "tasks": {
     "open": [
       {
@@ -104,6 +110,54 @@
       "text": "Cache invalidation needs <follow-up>",
       "evidence": "src/cache.ts",
       "record": "records/00002-i1-merged1-implement-r1"
+    },
+    {
+      "id": "00006-i2-pm-r1#1",
+      "step": "pm",
+      "round": 1,
+      "kind": "risk",
+      "calibration": "fyi",
+      "text": "FYI: the fixture records an fyi note",
+      "record": "records/00006-i2-pm-r1"
+    }
+  ],
+  "openConcerns": [
+    {
+      "id": "c-5f1c0f0a11",
+      "kind": "risk",
+      "calibration": "owner",
+      "text": "<script>alert(\"plan\")</script> & owner must confirm",
+      "evidence": "plan.md",
+      "source": "goal architect r1",
+      "record": "records/00001-i1-architect-r1"
+    },
+    {
+      "id": "00002-i1-merged1-implement-r1#1",
+      "kind": "debt",
+      "calibration": "architect",
+      "text": "Cache invalidation needs <follow-up>",
+      "evidence": "src/cache.ts",
+      "source": "merged1 implement r1",
+      "record": "records/00002-i1-merged1-implement-r1"
+    }
+  ],
+  "steers": [
+    {
+      "id": "s-answered",
+      "state": "answered",
+      "route": "task",
+      "answer": "Filed as <task> & done",
+      "record": "records/00009-i2-architect-r1"
+    },
+    {
+      "id": "s-routed",
+      "state": "routed",
+      "route": "architect",
+      "record": "records/00008-i2-steer-routes-r1"
+    },
+    {
+      "id": "s-waiting",
+      "state": "waiting"
     }
   ],
   "intentStatus": {

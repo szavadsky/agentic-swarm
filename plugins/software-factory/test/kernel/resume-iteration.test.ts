@@ -17,8 +17,7 @@ import {
   silenceWarn,
   scriptInterruptedFirstLaunch,
   RESUME_ASK,
-  digestTaskTurn,
-  queueDigestSteer,
+  turnsBeforeFirstTask,
 } from "./resume-helpers.js";
 
 describe("resume iteration — SIGINT mid-dispatch", () => {
@@ -33,7 +32,7 @@ describe("resume iteration — SIGINT mid-dispatch", () => {
         controller,
         repo,
       );
-      await finishesInterruptedIterationPart2(goalDir, taskDir, repo, scope1);
+      await finishesInterruptedIterationPart2(goalDir, repo, scope1);
     } finally {
       restoreWarn();
       repo.cleanup();
@@ -93,7 +92,6 @@ async function finishesInterruptedIterationPart1(
 
 async function finishesInterruptedIterationPart2(
   goalDir: string,
-  taskDir: string,
   repo: ReturnType<typeof setupRepo>["repo"],
   scope: Awaited<ReturnType<typeof finishesInterruptedIterationPart1>>,
 ) {
@@ -103,10 +101,9 @@ async function finishesInterruptedIterationPart2(
   ).length;
   expect(architectIter1Before).toBe(1);
 
-  // Relaunch finishes iteration 1: the digest steer reaches the PM, then
-  // dispatches beta, with no new architect record in iteration 1.
+  // Relaunch finishes iteration 1: script-only, so beta dispatches with no
+  // agent turn before it and no new architect record in iteration 1.
   const second = new FakeHarness({ id: "fake" });
-  queueDigestSteer(second, digestTaskTurn(taskDir, "beta"));
   second.script((req, ctx) => {
     // A clean relaunch has no interrupted turn: the normal step prompt.
     expect(req.prompt).not.toContain(RESUME_ASK);
@@ -144,13 +141,14 @@ async function finishesInterruptedIterationPart2(
   // beta's records land in iteration 1 (same iteration resumed).
   const betaRecords = records2.filter((r) => r.slug === "beta");
   expect(betaRecords.every((r) => r.iteration === 1)).toBe(true);
-  // A clean resume keeps the digest: it is not an interrupt relaunch.
+  // A clean resume is script-only: no digest and no PM turn first.
+  expect(turnsBeforeFirstTask(second)).toEqual([]);
   expect(
     records2.filter(
       (r) => r.actor === "agent" && r.step === "digest" && r.iteration === 1,
     ).length,
-  ).toBe(1);
-  expect(await store2.readFile("iterations/1/digest.md")).not.toBeNull();
+  ).toBe(0);
+  expect(await store2.readFile("iterations/1/digest.md")).toBeNull();
 }
 
 async function givesUnclaimedSteerPMSteerTurnPart1(
@@ -189,7 +187,7 @@ async function givesUnclaimedSteerPMSteerTurnPart1(
   });
 
   // Dropped after the dying pass boundary read it: never claimed by the
-  // architect, never given a PM steer turn.
+  // architect, never given a PM steer turn in the dying pass.
   const inbox = createFolderStore(goalDir, undefined, {});
   await postSteer(inbox, "s1", "Please note beta for later.");
   const pmBefore = (await inbox.listRecords()).filter(
@@ -198,7 +196,6 @@ async function givesUnclaimedSteerPMSteerTurnPart1(
   expect(pmBefore).toBe(1);
 
   const second = new FakeHarness({ id: "fake" });
-  queueDigestSteer(second, digestTaskTurn(taskDir, "beta"));
 
   return { second };
 }
@@ -256,11 +253,20 @@ async function givesUnclaimedSteerPMSteerTurnPart3(
   goalDir: string,
   scope: Awaited<ReturnType<typeof givesUnclaimedSteerPMSteerTurnPart2>>,
 ) {
-  const { records2 } = scope;
+  const { records2, second } = scope;
+  // Script-only: the pending steer's PM turn is the one agent turn before
+  // dispatch, and no digest precedes it.
+  expect(turnsBeforeFirstTask(second)).toEqual(["pm"]);
+  expect(
+    records2.filter(
+      (r) => r.actor === "agent" && r.step === "digest" && r.iteration === 1,
+    ).length,
+  ).toBe(0);
+  // One PM turn for the first launch's derive, one for the pending steer.
   expect(
     records2.filter(
       (r) => r.actor === "agent" && r.step === "pm" && r.iteration === 1,
     ).length,
-  ).toBe(3);
+  ).toBe(2);
   expect(fs.existsSync(path.join(goalDir, "mailbox/holds/s1.yaml"))).toBe(true);
 }

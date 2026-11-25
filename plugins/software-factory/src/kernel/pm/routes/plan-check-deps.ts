@@ -8,7 +8,7 @@ import type {
   TaskTypeDefinition,
 } from "../../types.js";
 
-export interface DepFix {
+interface DepFix {
   depFixed: Set<string>;
   findings: string[];
 }

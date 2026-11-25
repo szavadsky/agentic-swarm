@@ -11,15 +11,17 @@ import {
   capGateOutput,
   formatFailingChecks,
   type GateInfra,
+  gateFailureIdentities,
   gateSignatureKey,
-  gateSignatures,
   gateTimeoutSec,
+  isAdvisoryCheck,
   isInfraCheck,
   isStaleGateCheck,
   reapGateProcesses,
   runDeclaredGate,
   UNIDENTIFIED_GATE_FAILURE,
 } from "./gates.js";
+import { resolveGates } from "./infra.js";
 import type {
   ArtifactStore,
   ConfigBundle,
@@ -28,25 +30,12 @@ import type {
   StepRecord,
 } from "./types.js";
 
+import type { BaselineResult, BaseGateState } from "./baseline-types.js";
+
+export type { BaselineResult, BaseGateState } from "./baseline-types.js";
+
 /** Record step for a baseline that could not run: infra, never a red verdict. */
 const BASELINE_INFRA_STEP = "baseline-infra";
-
-export interface BaselineResult {
-  commit: string;
-  ok: boolean;
-  checks: CheckResult[];
-  /** False when an identical base commit was already checked (reported once). */
-  fresh: boolean;
-  /** The baseline could not run; it is journaled as infra, never red, and retried next launch. */
-  infra?: boolean;
-}
-
-/** The last recorded base-gate run; absent before pre-flight has checked a base. */
-export interface BaseGateState {
-  commit: string;
-  ok: boolean;
-  checks: CheckResult[];
-}
 
 /**
  * Pre-flight records one base run per commit. Everything that judges a task's
@@ -113,25 +102,30 @@ export function formatBaseGates(base: BaseGateState | undefined): string {
 }
 
 /**
- * Inherited red, one key per failing signature. A gate that was red on baseline
- * suppresses only the failures it already showed; a silent red gate offers only
- * its name. Infra checks were never a red verdict and contribute nothing, and
- * stale checks (recorded before run roots were stored) contribute nothing:
- * their basename-collapsed paths must never match a current run's below-root
- * tail.
+ * Inherited red, one key per failing identity. The identity is the finding
+ * model's fingerprint when the base check named report failures, else the
+ * output-line signature. A gate that was red on baseline suppresses only the
+ * failures it already showed; a silent red gate offers only its name. Infra
+ * checks were never a red verdict and contribute nothing, and stale checks
+ * (recorded before run roots were stored) contribute nothing: their
+ * basename-collapsed paths must never match a current run's below-root tail.
  */
 export function preexistingRed(base: BaseGateState | undefined): Set<string> {
   const inherited = new Set<string>();
   for (const check of base?.checks ?? []) {
-    if (check.ok || isInfraCheck(check) || isStaleGateCheck(check)) continue;
-    const signatures = gateSignatures(check);
-    if (signatures.size === 0) {
+    if (
+      check.ok ||
+      isInfraCheck(check) ||
+      isAdvisoryCheck(check) ||
+      isStaleGateCheck(check)
+    )
+      continue;
+    const identities = gateFailureIdentities(check);
+    if (identities.size === 0) {
       inherited.add(gateSignatureKey(check.name, UNIDENTIFIED_GATE_FAILURE));
       continue;
     }
-    for (const signature of signatures) {
-      inherited.add(gateSignatureKey(check.name, signature));
-    }
+    for (const identity of identities) inherited.add(identity);
   }
   return inherited;
 }
@@ -209,12 +203,12 @@ function gateCheck(
 
 async function runBaseGates(
   configs: ConfigBundle,
+  gates: readonly GateConfig[],
   repoRoot: string,
   commit: string,
   mergeFrom?: string,
 ): Promise<CheckResult[]> {
-  if (configs.repo.gates.length === 0 && configs.repo.setup.length === 0)
-    return [];
+  if (gates.length === 0 && configs.repo.setup.length === 0) return [];
   const dir = scratchPath(configs, repoRoot);
   const root = path.resolve(repoRoot);
   try {
@@ -259,8 +253,8 @@ async function runBaseGates(
       return [infra("setup", setup.error ?? "setup failed")];
     }
     const checks: CheckResult[] = [];
-    for (const gate of configs.repo.gates) {
-      const { res, check } = await runDeclaredGate(dir, gate);
+    for (const gate of gates) {
+      const { res, check } = await runDeclaredGate(dir, gate, root);
       checks.push(gateCheck(gate, res, check));
     }
     return checks;
@@ -339,6 +333,12 @@ async function reusableBaseline(
     : found;
 }
 
+/** The wall a base-gate run occupied, stamped onto its record. */
+interface BaselineWall {
+  startedAt: string;
+  wallMs: number;
+}
+
 /** Records a baseline that could not run as infra and warns, never red. */
 async function recordInfraBase(
   store: ArtifactStore,
@@ -346,6 +346,7 @@ async function recordInfraBase(
   described: string,
   checks: CheckResult[],
   infraChecks: CheckResult[],
+  wall: BaselineWall,
 ): Promise<BaselineResult> {
   await store.appendRecord(
     {
@@ -354,8 +355,9 @@ async function recordInfraBase(
       round: 1,
       actor: "script",
       base: target,
+      startedAt: wall.startedAt,
     },
-    { ok: false, checks },
+    { ok: false, checks, wallMs: wall.wallMs },
   );
   console.warn(
     [
@@ -372,18 +374,20 @@ async function recordBaseResult(
   target: string,
   described: string,
   checks: CheckResult[],
+  wall: BaselineWall,
 ): Promise<boolean> {
-  const ok = checks.every((c) => c.ok);
+  const ok = checks.every((c) => c.ok || isAdvisoryCheck(c));
   const meta: RecordStart = {
     iteration: 0,
     step: "baseline",
     round: 1,
     actor: "script",
     base: target,
+    startedAt: wall.startedAt,
   };
-  await store.appendRecord(meta, { ok, checks });
+  await store.appendRecord(meta, { ok, checks, wallMs: wall.wallMs });
   if (!ok) {
-    const red = checks.filter((c) => !c.ok);
+    const red = checks.filter((c) => !c.ok && !isAdvisoryCheck(c));
     console.warn(
       [
         `[factory] ${described} is red; recorded once, continuing.`,
@@ -432,11 +436,28 @@ export async function checkBase(
   const described = mergeFrom
     ? `base "${targetBranch}" at ${target.slice(0, 8)} with "${baseBranch}" merged`
     : `base "${targetBranch}" at ${target.slice(0, 8)}`;
-  const checks = await runBaseGates(configs, repoRoot, target, mergeFrom);
+  const gates = resolveGates(store.goalDir, configs.repo.gates);
+  const startedAt = new Date().toISOString();
+  const startedMs = Date.now();
+  const checks = await runBaseGates(
+    configs,
+    gates,
+    repoRoot,
+    target,
+    mergeFrom,
+  );
+  const wall = { startedAt, wallMs: Math.max(0, Date.now() - startedMs) };
   const infraChecks = checks.filter(isInfraCheck);
   if (infraChecks.length > 0)
-    return await recordInfraBase(store, target, described, checks, infraChecks);
-  const ok = await recordBaseResult(store, target, described, checks);
+    return await recordInfraBase(
+      store,
+      target,
+      described,
+      checks,
+      infraChecks,
+      wall,
+    );
+  const ok = await recordBaseResult(store, target, described, checks, wall);
   return { commit: target, ok, checks, fresh: true };
 }
 

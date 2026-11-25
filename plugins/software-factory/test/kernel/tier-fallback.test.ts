@@ -72,7 +72,7 @@ function quota() {
 
 /** Latch a pool as if it answered quota a moment ago. */
 function latchPool(runtime: KernelRuntime, pool: string): void {
-  runtime.exhaustedPools.set(pool, Date.now() + 60_000);
+  runtime.exhaustedPools.set(pool, { resetAt: Date.now() + 60_000 });
 }
 
 function registerAliasFallbackTiersPart1(): void {

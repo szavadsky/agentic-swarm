@@ -20,7 +20,7 @@ The architect's assignment and whole body above are what the plan must meet; you
 
 Deliver `planReview` with both lists, empty when the plan has no findings:
 
-- `technical`: the concerns the architect must answer before the PM derives tasks — an impractical direction, a real bug, a broken assumption.
+- `technical`: the concerns the architect must answer — an impractical direction, a real bug, a broken assumption.
 - `planNotes`: plan-and-dependency notes the architect may improve the plan from — unclear bullets, missing coverage, ordering.
 
 One finding per entry, each naming the plan line or bullet and what would satisfy it. Findings are advisory input, never a veto: you recommend, you do not decide, and this review takes no verdict.
@@ -29,7 +29,7 @@ One finding per entry, each naming the plan line or bullet and what would satisf
 
 Report only findings you can evidence from the plan, the intent, the pack or the repo; a wrong or noisy finding costs more than it saves.
 
-The kernel numbers the findings technical first, then plan notes, for the architect's marks.
+Findings are numbered technical first, then plan notes, for the architect's marks.
 
 ## This turn
 

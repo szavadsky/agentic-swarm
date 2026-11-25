@@ -210,10 +210,12 @@ taskTypes:
     flow: implement-review
     kind: development
     schema: outcome
+    useWhen: fixture work
   test-type:
     flow: implement-review
     kind: development
     schema: outcome
+    useWhen: fixture work
 `,
     });
     try {

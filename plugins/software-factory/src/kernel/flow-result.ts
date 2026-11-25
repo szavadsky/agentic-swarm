@@ -11,11 +11,13 @@ import {
   readFrontClass,
 } from "./flow-context.js";
 import { redGateCause, runTaskGates } from "./flow-gates.js";
-import { type TaskMeta, taskMeta } from "./flow-meta.js";
+import { taskMeta } from "./flow-meta.js";
 import type { TaskActionResult } from "./flow-state.js";
+import type { TaskMeta } from "./flow-types.js";
+import { isDecideStep } from "./pending-signal.js";
 import { qaReportOf } from "./qa.js";
 import { appendDebt, appendPark } from "./record.js";
-import { isLastReviewCall } from "./review.js";
+import { isLastReviewCall, launchCounts } from "./review.js";
 import type {
   FlowDefinition,
   FlowStep,
@@ -135,6 +137,9 @@ async function settleOutcome(
     await appendPark(runtime.store, meta, parkCause(status, outcome?.summary));
     return true;
   }
+  // The decide turn's verdict is read by derive against its signal, never
+  // parked or debited here.
+  if (isDecideStep(step)) return false;
   if (step.qa) return qaStepOutcome(runtime, step, state, meta, outcome);
   if (step.review) {
     await reviewStepOutcome(runtime, step, state, meta, outcome);
@@ -157,7 +162,12 @@ async function qaStepOutcome(
 ): Promise<boolean> {
   const qa = qaReportOf(outcome);
   if (qa?.verdict === "changes") {
-    if (isLastReviewCall(step, state.round)) {
+    if (
+      isLastReviewCall(
+        step,
+        launchCounts(state.launches, step.id).changeRequests,
+      )
+    ) {
       // The outcome validator refuses this; a delivered record is a contract
       // breach, never a merge.
       await appendPark(
@@ -234,7 +244,10 @@ async function reviewStepOutcome(
   meta: TaskMeta,
   outcome: StepRecord["outcome"],
 ): Promise<void> {
-  const lastCall = isLastReviewCall(step, state.round);
+  const lastCall = isLastReviewCall(
+    step,
+    launchCounts(state.launches, step.id).changeRequests,
+  );
   if (outcome?.verdict === "reject") {
     await appendPark(
       runtime.store,

@@ -21,6 +21,7 @@ import {
   stateOf,
   writeTask,
 } from "./e2e-helpers.js";
+import { workCalls } from "./fake-defaults.js";
 import { scriptStallLeave } from "./s2-helpers.js";
 
 function writeClass(goal: E2EGoal, text: string): void {
@@ -303,8 +304,9 @@ async function implementsTrivialGoalFrontSOwnPart2(
   expect(implement?.session?.cwd).toBe(front?.session?.cwd);
   // The follow-up turn inherits the front's tool grant: same model and
   // same harness passthrough on both calls.
-  expect(harness.calls[1]?.model).toEqual(harness.calls[0]?.model);
-  expect(harness.calls[1]?.opaque).toEqual(harness.calls[0]?.opaque);
+  const work = workCalls(harness);
+  expect(work[1]?.model).toEqual(work[0]?.model);
+  expect(work[1]?.opaque).toEqual(work[0]?.opaque);
   expect(records.filter((r) => r.step === "architect")).toEqual([]);
   expect(records.filter((r) => r.step === "pm")).toEqual([]);
   expect(records.filter((r) => r.step === "review")).toEqual([]);
@@ -316,7 +318,7 @@ async function implementsTrivialGoalFrontSOwnPart2(
       (r) => r.slug === "tiny" && r.step === "merge" && r.ok === true,
     ),
   ).toBe(true);
-  expect(harness.calls).toHaveLength(2);
+  expect(workCalls(harness)).toHaveLength(2);
   const classPath = path.join(goal.goalDir, "class.yaml");
   expect(fs.readFileSync(classPath, "utf8")).toContain("class: trivial");
   expect((await validateFile(classPath)).findings).toEqual([]);

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import type { Hold } from "../../src/kernel/mailbox.js";
-import { resumeVerdict } from "../../src/kernel/resume.js";
+import {
+  resumeVerdict,
+  hasUnreadableArtifact,
+} from "../../src/kernel/resume.js";
 import type {
   Limits,
   State,
@@ -47,7 +50,7 @@ const planCheck = (verdict?: "progress" | "architect") =>
           summary: `plan-check ${verdict}`,
           concerns: [],
           forward: [],
-          planCheck: { verdict, evidence: [], followUps: [] },
+          planCheck: { verdict, evidence: [], followUps: [], concerns: [] },
         }
       : undefined,
   });
@@ -201,3 +204,26 @@ function resumeVerdictPart4() {
     ).toBe(true);
   });
 }
+
+describe("hasUnreadableArtifact", () => {
+  it("reports a task file the resumed iteration quarantined", () => {
+    const records = [
+      record({ step: "task-quarantine", actor: "script", slug: "beta" }),
+    ];
+    expect(hasUnreadableArtifact(records, 1)).toBe(true);
+  });
+
+  it("ignores a quarantine from another iteration or another artifact", () => {
+    const records = [
+      record({
+        iteration: 2,
+        step: "task-quarantine",
+        actor: "script",
+        slug: "beta",
+      }),
+      record({ step: "hold-quarantine", actor: "script" }),
+      record({ step: "resume", actor: "script" }),
+    ];
+    expect(hasUnreadableArtifact(records, 1)).toBe(false);
+  });
+});

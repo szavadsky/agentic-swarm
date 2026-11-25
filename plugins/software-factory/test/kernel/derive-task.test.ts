@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { DEFAULT_FLOWS, reduceTask } from "../../src/kernel/derive-task.js";
 import type { StepRecord } from "../../src/kernel/types.js";
-import { rec, script, task, cause, causeText } from "./helpers.js";
+import { rec, script, task, cause } from "./helpers.js";
 
 const implement = (
   seq: number,
@@ -118,7 +118,7 @@ function continuationCarryPart2() {
 }
 
 function continuationCarryPart3() {
-  it("parks empty-diff when the kept work is already on the head", () => {
+  it("raises the empty-diff signal when the kept work is already on the head", () => {
     const t = task("beta", { base: "alpha" });
     const flow = DEFAULT_FLOWS["implement-review"]!;
     const reduction = reduceTask(
@@ -129,9 +129,12 @@ function continuationCarryPart3() {
       ],
       flow,
     );
-    expect(reduction.phase).toBe("parked");
-    expect(causeText(reduction.park)).toStartWith("empty-diff:");
-    expect(causeText(reduction.park)).toContain("already on the head");
+    expect(reduction.phase).toBe("decide");
+    expect(reduction.park).toBeUndefined();
+    expect(reduction.pendingSignal).toEqual({
+      kind: "empty-diff",
+      evidence: "implement r1 kept work is already on the head",
+    });
   });
 }
 
@@ -212,10 +215,12 @@ function continuationCarryPart6() {
       ],
       flow,
     );
-    expect(reduction.phase).toBe("parked");
-    expect(reduction.park).toEqual(
-      cause("empty-diff: implement r1 committed no changes"),
-    );
+    expect(reduction.phase).toBe("decide");
+    expect(reduction.park).toBeUndefined();
+    expect(reduction.pendingSignal).toEqual({
+      kind: "empty-diff",
+      evidence: "implement r1 committed no changes",
+    });
   });
 }
 
@@ -277,13 +282,14 @@ function revisionAdvanceCarryPart1() {
       ],
       flow,
     );
-    expect(reduction.phase).toBe("parked");
-    expect(causeText(reduction.park)).toContain("already on the head");
+    expect(reduction.phase).toBe("decide");
+    expect(reduction.park).toBeUndefined();
+    expect(reduction.pendingSignal?.evidence).toContain("already on the head");
   });
 }
 
 function revisionAdvanceCarryPart2() {
-  it("still parks a later empty turn after the first turn carried kept work", () => {
+  it("raises the empty-diff signal for a later empty turn after the first turn carried kept work", () => {
     const t = task("beta", { base: "alpha" });
     const flow = DEFAULT_FLOWS["implement-review"]!;
     const reduction = reduceTask(
@@ -297,8 +303,9 @@ function revisionAdvanceCarryPart2() {
       ],
       flow,
     );
-    expect(reduction.phase).toBe("parked");
-    expect(causeText(reduction.park)).toContain("committed no changes");
+    expect(reduction.phase).toBe("decide");
+    expect(reduction.park).toBeUndefined();
+    expect(reduction.pendingSignal?.evidence).toContain("committed no changes");
   });
 }
 

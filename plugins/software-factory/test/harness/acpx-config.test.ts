@@ -179,7 +179,7 @@ function harnessBinaryResolutionPart4() {
       fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
       fs.writeFileSync(
         path.join(root, ".factory/run.yaml"),
-        "harnesses:\n  agent-a: {}\n",
+        "harnesses:\n  agent-a:\n    compaction: { enabled: true }\n",
       );
       expect(() => loadConfigs(root)).toThrow(ConfigError);
       try {

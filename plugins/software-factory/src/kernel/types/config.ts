@@ -1,8 +1,11 @@
 /** Repository, run and fallback configuration shapes. */
 
 import type { Repo } from "../../core/git/repo.js";
+import type { FindingSeverity } from "../../core/checks/findings.js";
+import type { SandboxCommand } from "../../core/sandbox.js";
 import type { CacheTtl, Harness } from "../../harness/types.js";
 import type { PriceSource } from "../openrouter.js";
+import type { PoolReset } from "../quota-pools.js";
 import type { PromptLibrary } from "../prompts.js";
 import type {
   ArchitectureConfig,
@@ -11,23 +14,31 @@ import type {
   HierarchyConfig,
   IngestionStepConfig,
   Limits,
+  PmConfig,
   Timeouts,
   TurnSpec,
 } from "./flow.js";
 import type { TaskTypeDefinition } from "./tasks.js";
 import type { ArtifactStore } from "./records.js";
+import type { StallDecision } from "./outcome.js";
+import type { CauseKind } from "./state.js";
 
-/** A runner whose printed failure report the kernel parses by name. */
-export type GatePattern = "pytest" | "jest" | "cargo";
+/** A repo-declared regex over a gate log for a tool that emits no report. */
+export interface GateRegex {
+  pattern: string;
+  tool?: string;
+  rule?: string;
+  severity?: FindingSeverity;
+}
 
 /** One repo gate command and the shared resources it needs to itself. */
 export interface GateConfig {
   id: string;
   command: string;
   /**
-   * Mutex names held while this gate runs. Same-named gates in one worktree
-   * never overlap; two worktrees never wait on each other because the key
-   * includes the worktree.
+   * Mutex names held while this gate runs. Same-named gates in any worktree of
+   * one repository never overlap; different repositories never wait for each
+   * other because the key includes the repository.
    */
   serial: string[];
   /**
@@ -36,15 +47,26 @@ export interface GateConfig {
    */
   env?: Record<string, string>;
   /**
-   * `junit` names the worktree-relative report the command writes before it
-   * exits; `pattern` names a runner whose printed failures the kernel reads.
+   * Report paths the command writes before it exits, or the log regexes that
+   * name its findings when it writes no report. `junit` is converted to CTRF
+   * with `junit-to-ctrf`; `ctrf` and `sarif` are read natively.
    */
-  format?: { junit?: string; pattern?: GatePattern };
+  format?: {
+    junit?: string;
+    ctrf?: string;
+    sarif?: string;
+    regex?: GateRegex[];
+  };
   /**
    * Wall for this gate's command, in seconds. Absent or not a positive finite
    * number falls back to `GATE_TIMEOUT_SEC`; it never disables the timeout.
    */
   timeoutSec?: number;
+  /**
+   * A red from this gate is recorded and shown, never blocking. Absent or
+   * false gates the tree.
+   */
+  advisory?: boolean;
 }
 
 /**
@@ -84,6 +106,17 @@ export interface ArtifactLocation {
   remote?: string;
 }
 
+/** One cause's default park route: the action this repo's history points to and
+ * the evidence that overrides it. */
+export interface ParkRouteConfig {
+  action: StallDecision;
+  reason: string;
+  exception: string;
+}
+
+/** The routes a repo declares, keyed by the closed cause vocabulary. */
+export type ParkRoutes = Partial<Record<CauseKind, ParkRouteConfig>>;
+
 export interface RepoConfig {
   baseBranch: string;
   /** Goal directories live at <repo>/<artifactRoot>/<goal> unless a backend names another root. */
@@ -93,8 +126,16 @@ export interface RepoConfig {
   identity?: { name: string; email: string };
   setup: string[];
   gates: GateConfig[];
+  /** Absent reads as required; false is the explicit no-gate opt-out. */
+  requireGates?: boolean;
   /** Repo-relative rule file replacing the factory default coding rules; absent uses the factory default. */
   codingRules?: string;
+  /**
+   * Per-cause default for the PM's park decision: what this repo's history says
+   * a cause usually deserves, and the evidence that overrides it. A cause the
+   * repo names no route for is the architect's (`leave`).
+   */
+  parkRoutes?: ParkRoutes;
   cleanliness?: {
     maxFileSizeBytes?: number;
     allowedExtensions?: string[];
@@ -115,12 +156,16 @@ export interface ProcessConfig {
   ingestion?: IngestionStepConfig[];
   /** The plan review flow that completes before the PM derives tasks. */
   architecture: ArchitectureConfig;
+  /** The PM stage's step list: the derive ladder and any turns around it. */
+  pm?: PmConfig;
   /** Hierarchy depth and the epic architect's prompt; absent reads as depth 1. */
   hierarchy?: HierarchyConfig;
   /** Repair template a step renders when it names none; defaults to `delivery-repair`. */
   repairPrompt?: string;
   /** Outcome reminders after the first attempt; a task file's `repairTurns` overrides it for that task's turns only. */
   reminders: number;
+  /** Task files past which the architect prompt suggests a saga; absent renders no reminder. */
+  sagaTaskCount?: number;
   /** Wasted turns of one cause across iterations at or above which the pack proposes a spike; defaults to 2. */
   wasteSpikeThreshold?: number;
   calibration?: string;
@@ -156,22 +201,10 @@ export interface FallbackModelConfig {
   sharesPool?: true;
 }
 
-/** One rotation entry: the alias's primary harness, model and effort for an iteration. */
-export interface AliasEntry {
-  harness: string;
-  model: string;
-  effort?: string;
-}
-
 export interface AliasConfig {
   harness: string;
   model: string;
   effort?: string;
-  /**
-   * Per-iteration primaries: iteration N resolves `rotate[N % rotate.length]`.
-   * Absent or empty keeps the alias's own harness and model on every iteration.
-   */
-  rotate?: AliasEntry[];
   /** Quota pool this alias draws on; absent means throttled only overall. */
   subscription?: string;
   fallbacks?: FallbackConfig[];
@@ -199,14 +232,16 @@ export interface HarnessConfig {
   acpx?: import("../../harness/acpx/config.js").AcpxConfig;
   /** Executable override; absent resolves through PATH. */
   binary?: string;
-  /** Compaction configuration for this harness; absent means the adapter's capability. */
-  compaction?: HarnessCompactionConfig;
+  /** Compaction policy for this harness; every entry declares one. */
+  compaction: HarnessCompactionConfig;
   /** Opaque adapter options: acpx `args`/`env`, omp overlay keys. */
   options?: Record<string, unknown>;
 }
 
 export interface RunConfig {
   aliases: Record<string, AliasConfig>;
+  /** One predefined process-level wrapper every child of this run starts in. */
+  sandbox?: SandboxCommand;
   /** Harness id -> adapter binding, binary override or opaque options. */
   harnesses?: Record<string, HarnessConfig>;
   /** Extra environment names a spawned harness or agent inherits. */
@@ -232,6 +267,8 @@ export interface RunConfig {
     turnMinutes?: number;
     /** Per-iteration wall bound in minutes; folds into `iterationWallMs`. */
     iterationMinutes?: number;
+    /** Stable-window an inbox steer waits before it interrupts a running turn, in seconds. */
+    steerDebounceSeconds?: number;
     /** Minimum free bytes in the temporary directory. */
     minTmpFreeBytes?: number;
   };
@@ -239,9 +276,15 @@ export interface RunConfig {
   /**
    * Quota-pool cooldown: a quota stop's stated reset sets the pool's skip
    * window, capped by `maxResetMinutes` when set; without a stated reset the
-   * window is `resetMinutes` from the stop (default 300).
+   * window is the pool's `perSubscription` entry, else `resetMinutes` (default
+   * 300) from the stop.
    */
-  quota?: { resetMinutes: number; maxResetMinutes?: number };
+  quota?: {
+    resetMinutes: number;
+    maxResetMinutes?: number;
+    /** Pool key (subscription, or harness+model) -> its own retry interval. */
+    perSubscription?: Record<string, number>;
+  };
   worktreeRoot?: string;
   /** Enable artifact LSP where the harness supports it. */
   lsp?: boolean;
@@ -267,13 +310,20 @@ export interface ConfigBundle {
   files?: ConfigFiles;
 }
 
-export interface GoalPaths {
+/**
+ * The repository and its run-config roots, before a goal name adds the goal's
+ * own directories. Validation reads this without naming a goal.
+ */
+export interface GoalRoots {
   repoRoot: string;
+  worktreeRoot: string;
+  sessionsDir: string;
+}
+
+export interface GoalPaths extends GoalRoots {
   goalDir: string;
   goalCheckout: string;
   integrationBranch: string;
-  worktreeRoot: string;
-  sessionsDir: string;
   /** The resolved artifact backend and the root holding every goal. */
   artifacts: ArtifactLocation;
 }
@@ -288,18 +338,12 @@ export interface KernelRuntime {
   prompts: PromptLibrary;
   limits: Limits;
   /**
-   * `harness+model` combinations that passed a canary run. Loaded from the
-   * session store at launch; rotation only picks proven combinations. Narrow
-   * per-test runtimes may omit it; rotation then stays ungated.
-   */
-  provenCombinations?: Set<string>;
-  /**
    * Quota pool keys (subscription, or harness+model when none) latched by a
-   * quota stop, mapped to the epoch ms they may serve again. Loaded from the
-   * session store at launch, so a relaunch before a stored reset skips the
-   * pool; turns skip tiers drawing on a pool until its reset time.
+   * quota stop, with the epoch ms they may serve again and a probe in flight.
+   * Loaded from the machine's session store at launch, so a relaunch or another
+   * goal skips the pool before a stored reset and probes a due one once.
    */
-  exhaustedPools: Map<string, number>;
+  exhaustedPools: Map<string, PoolReset>;
   /** Price cache and fetcher; undefined means the shared cache plus network. */
   priceSource?: PriceSource;
 }

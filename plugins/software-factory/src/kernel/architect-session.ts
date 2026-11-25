@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import path from "node:path";
-import { portable, type SessionRef } from "../harness/types.js";
+import type { SessionRef } from "../harness/types.js";
 import type { TurnTarget } from "./flow-context.js";
+import { resumableRef } from "./sessions.js";
+import { MAIN_ARCHITECT } from "./tasks.js";
 import type { KernelRuntime, Outcome, StepRecord } from "./types.js";
 
 /**
@@ -52,10 +53,25 @@ export function missingPlanFinding(
 }
 
 /**
+ * The boundary records that own a plan scope: the main architect's `architect`
+ * turn, or one epic's `subarchitect` consult. The plan-review return continues
+ * its plan's owner, so this selects exactly what that owner's own turn resumes;
+ * two subarchitects never resume each other and an epic never the main one.
+ */
+export function planOwnerSelector(
+  architect: string | undefined,
+): (record: StepRecord) => boolean {
+  const owner = architect ?? MAIN_ARCHITECT;
+  return owner === MAIN_ARCHITECT
+    ? (record) => record.step === "architect"
+    : (record) => record.step === "subarchitect" && record.architect === owner;
+}
+
+/**
  * The session ref is re-derived from the last record the selector names, never
- * kept in memory: a relaunch reads it off disk. The main architect selects its
- * `architect` records; an epic's selects `subarchitect` records carrying that
- * epic, so two subarchitects never resume each other. Resume is cwd- and
+ * kept in memory: a relaunch reads it off disk. A first turn has no prior and
+ * starts de novo silently; a prior that cannot be resumed is logged naming the
+ * turn and the blocker, then the turn starts de novo. Resume is cwd- and
  * model-bound, and only when the harness says it can and the run config's
  * portability graph admits the recorded harness's session.
  */
@@ -64,25 +80,12 @@ export async function resumableSession(
   records: readonly StepRecord[],
   select: (record: StepRecord) => boolean,
   target: Pick<TurnTarget, "harness" | "model">,
+  who: string,
 ): Promise<SessionRef | undefined> {
   const last = records
     .filter((r) => select(r) && r.session && r.endedAt)
     .sort((a, b) => a.seq - b.seq)
     .at(-1);
   if (!last?.session) return undefined;
-  const { harness, model } = target;
-  let resume = false;
-  try {
-    resume = (await harness.caps(model)).resume;
-  } catch {
-    return undefined;
-  }
-  if (!resume) return undefined;
-  const session = last.session;
-  if (!portable(session.harness, harness.id, runtime.configs.run.portability))
-    return undefined;
-  if (path.resolve(session.cwd) !== path.resolve(runtime.paths.goalCheckout))
-    return undefined;
-  if (session.model.id !== model.id) return undefined;
-  return session;
+  return resumableRef(runtime, last.session, target, who);
 }

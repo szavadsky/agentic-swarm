@@ -103,7 +103,12 @@ function registerCreateFolderStorePart2(): void {
 function registerCreateFolderStorePart3(): void {
   it("resolves a task file's type through the store's process config", async () => {
     const store = createFolderStore(goalDir, undefined, {
-      spike: { flow: "spike", kind: "spike", schema: "outcome" },
+      spike: {
+        flow: "spike",
+        kind: "spike",
+        schema: "outcome",
+        useWhen: "a question only evidence answers",
+      },
     });
     await store.writeTask({ ...task(), type: "spike" });
     const [parsed] = await store.listTasks();
@@ -127,7 +132,6 @@ function registerCreateFolderStorePart3(): void {
       title: "Base",
       kind: "spike",
       flow: "spike",
-      scope: [],
       body: "spike body",
     });
     await store.writeTask(login);

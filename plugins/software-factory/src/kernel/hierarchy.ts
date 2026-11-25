@@ -1,11 +1,5 @@
 import type { Harness, ModelRef } from "../harness/types.js";
-
-/**
- * How the boundary hands an epic's consult to its subarchitect.
- * `steer`: the subarchitect is a named child of the architect's live session,
- * reached over IRC. `report`: a separate turn that writes its own status.
- */
-export type SubarchitectDelivery = "steer" | "report";
+import type { SubarchitectDelivery } from "./hierarchy-types.js";
 
 /**
  * Selected from the architect alias's caps, because the subarchitect runs on

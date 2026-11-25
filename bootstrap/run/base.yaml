@@ -8,12 +8,16 @@
 # is tracked and shared by every run, so a checkout location there would be a
 # second, silently overridden source.
 aliases:
+  # Architecture is Claude's role in the subscription table, and it is the one
+  # alias whose fallback stays inside that subscription: Opus at xhigh, Sonnet
+  # at high, never a task-level leg.
   architect:
     harness: omp
     model: anthropic/claude-opus-5-5
-    effort: high
+    effort: xhigh
     fallbacks:
-      - model: opencode-go/deepseek-v4.1-flash
+      - model: anthropic/claude-sonnet-5-5
+        effort: high
   pm:
     harness: opencode
     model: opencode-go/deepseek-v4.1-flash
@@ -136,3 +140,23 @@ sessions:
 worktreeRoot: ~/.local/share/factory/worktrees
 
 lsp: true
+
+# One process-level sandbox for every child this run starts. Machine paths are
+# operator-specific, so the example stays commented: bind the checkout,
+# worktreeRoot, sessions.dir and TMPDIR writable, and keep model APIs reachable.
+# sandbox:
+#   binary: /usr/bin/bwrap
+#   args:
+#     - --ro-bind
+#     - /
+#     - /
+#     - --dev
+#     - /dev
+#     - --proc
+#     - /proc
+#     - --unshare-all
+#     - --share-net
+#     - --die-with-parent
+#     - --bind
+#     - /home/operator/.local/share/factory/worktrees
+#     - /home/operator/.local/share/factory/worktrees

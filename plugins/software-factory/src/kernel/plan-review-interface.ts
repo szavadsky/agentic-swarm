@@ -1,11 +1,5 @@
 import type { Outcome, PlanReviewMark, PlanReviewOutcome } from "./types.js";
-
-export interface PlanReviewRound {
-  /** Undefined when no reviewer delivered a findings outcome. */
-  findings: PlanReviewOutcome | undefined;
-  /** The aliases that delivered a valid findings outcome, in run order. */
-  reviewers: string[];
-}
+export type { PlanReviewRound } from "./plan-review-types.js";
 
 /**
  * A completed plan review delivers findings, not a verdict: a bare done hides

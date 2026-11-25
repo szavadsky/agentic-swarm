@@ -3,11 +3,12 @@
  * and agent rule modules, then the terminal fact and pending work folded into
  * the phase the caller acts on.
  */
-import {
-  revisionStart,
-  type TaskReduction,
-  terminalFactFromRecords,
-} from "./derive-task-facts.js";
+import { revisionStart, terminalFactFromRecords } from "./derive-task-facts.js";
+import type {
+  ReduceContext,
+  ReduceState,
+  TaskReduction,
+} from "./derive-types.js";
 import {
   applyChecks,
   applyMerge,
@@ -16,13 +17,18 @@ import {
 import { settleDag } from "./derive-task-dag.js";
 import {
   createReduceState,
-  type ReduceContext,
-  type ReduceState,
+  recordLaunch,
   routeResolve,
 } from "./derive-task-state.js";
 import { applyAgentTurn } from "./derive-task-turn.js";
+import { raiseBudgetSignal } from "./derive-task-verdict.js";
 import { agentSteps } from "./review.js";
-import type { FlowDefinition, StepRecord, TaskFile } from "./types.js";
+import type {
+  FlowDefinition,
+  StepRecord,
+  TaskFile,
+  TaskPhase,
+} from "./types.js";
 
 /** Script records that never move the phase or count a turn. */
 const FREE_STEPS = new Set(["merge-checks", "debt", "setup", "pm-validate"]);
@@ -73,16 +79,27 @@ function applyRecord(
     applyScriptFailure(context, state, rec);
     return;
   }
-  if (rec.actor === "agent") applyAgentTurn(context, state, rec);
+  if (rec.actor === "agent") {
+    applyAgentTurn(context, state, rec);
+    recordLaunch(state, rec);
+  }
+}
+
+/** The phase pending work names, the park last: a park never rides a signal. */
+function settlePhase(state: ReduceState): TaskPhase {
+  if (state.park) return "parked";
+  if (state.pendingSignal) return "decide";
+  if (state.pendingChecks) return "checks";
+  return state.phase;
 }
 
 /** Folds pending work and the terminal fact into the reduction's final shape. */
 function finishReduction(
   state: ReduceState,
   terminal: TaskReduction["terminal"],
+  started: boolean,
 ): TaskReduction {
-  if (state.pendingChecks) state.phase = "checks";
-  if (state.park) state.phase = "parked";
+  state.phase = settlePhase(state);
   if (terminal) {
     state.phase = "done";
     state.gateFix = false;
@@ -94,7 +111,9 @@ function finishReduction(
     terminal,
     phase: state.phase,
     round: state.round,
+    launches: state.launches,
     turns: state.turns,
+    started,
     verdict: state.verdict,
     commit: state.commit,
     park: terminal ? undefined : state.park,
@@ -109,6 +128,8 @@ function finishReduction(
     cleanlinessJustified: terminal
       ? undefined
       : state.cleanlinessJustified || undefined,
+    pendingSignal:
+      terminal || state.park ? undefined : (state.pendingSignal ?? undefined),
   };
 }
 
@@ -131,14 +152,20 @@ export function reduceTask(
     flowIndex: new Map(steps.map((step, i) => [step.id, i])),
     firstStep: steps[0]?.id ?? "done",
   };
-  const owned = records.slice(revisionStart(task, records));
+  const owned = records.slice(revisionStart(task.revision, records));
+  // A revision bump keeps the branch and its work, so started reads the slug's whole history.
+  const started = records.some((rec) => rec.actor === "agent");
   const terminal = terminalFactFromRecords(owned, task.slug, task.kind);
   const state = createReduceState(context, terminal);
 
   for (const rec of owned) {
     if (!rec.endedAt) continue;
     applyRecord(context, state, rec);
+    // A record that settles the flow on an acceptance step past its own call
+    // bound raises the signal before the next dispatch, never a kernel park.
+    raiseBudgetSignal(context, state);
   }
   settleDag(context, state, owned);
-  return finishReduction(state, terminal);
+  raiseBudgetSignal(context, state);
+  return finishReduction(state, terminal, started);
 }

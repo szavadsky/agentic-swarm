@@ -3,22 +3,27 @@
  * disposes) and the public result/options. The rule modules are
  * `dispatch-{state,holds,start,poll,admit,end}.ts`.
  */
+import { answerSettledSpikeSteers } from "./boundary-spike.js";
 import { makeCause } from "./cause.js";
 import { derive } from "./derive.js";
 import { admitAction, updateDrain } from "./dispatch-admit.js";
-import { waveEnd } from "./dispatch-end.js";
+import { drainForPromote, waveEnd } from "./dispatch-end.js";
 import { pollSteers } from "./dispatch-poll.js";
 import type {
   DispatchOptions,
   DispatchResult,
   DispatchState,
-} from "./dispatch-state.js";
+  SteerWatch,
+} from "./dispatch-types.js";
 import { readInitialHolds, settledTurns } from "./dispatch-state.js";
+import { createSteerWatch } from "./dispatch-watch.js";
+import { scanInbox } from "./mailbox.js";
 import { next } from "./next.js";
+import { LiveSteerSessions } from "./sessions.js";
 import type { Action, KernelRuntime } from "./types.js";
 
 export { INFRA_REDISPATCH_DELAYS_MS } from "./dispatch-start.js";
-export type { DispatchOptions, DispatchResult } from "./dispatch-state.js";
+export type { DispatchOptions, DispatchResult } from "./dispatch-types.js";
 export {
   iterationSpend,
   iterationStart,
@@ -57,6 +62,7 @@ async function prepareDispatch(
     seenSteers: new Set(opts.seenSteers ?? []),
     settling: new Map(),
     holds: [],
+    liveSteers: new LiveSteerSessions(),
     sleep:
       opts.sleep ??
       ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))),
@@ -114,17 +120,36 @@ async function readLoop(state: DispatchState): Promise<LoopRead> {
   };
 }
 
-/** Poll the inbox and the iteration brake; a hold-read failure ends the iteration. */
+/** Answer the spike steers whose linked tasks settled in the last pass. */
+async function answerSettledSteers(state: DispatchState): Promise<void> {
+  const read = await readLoop(state);
+  await answerSettledSpikeSteers(
+    state.runtime,
+    read.tasks,
+    read.snapshot,
+    read.recordsBefore,
+    await scanInbox(state.runtime.store, { settleMs: 0 }),
+  );
+}
+
+/** Poll the inbox and the iteration brake; a failed poll ends the iteration. */
 async function pollStage(
   state: DispatchState,
   read: LoopRead,
+  watch: SteerWatch,
 ): Promise<PollStage | DispatchResult> {
-  const polled = await pollSteers(state, read.snapshot, read.tasks);
-  if (polled.holdError) {
+  const polled = await pollSteers(
+    state,
+    read.snapshot,
+    read.tasks,
+    read.recordsBefore,
+    watch,
+  );
+  if (polled.error) {
     await settleRunning(state);
     return {
       reason: "infra",
-      cause: makeCause("error", polled.holdError),
+      cause: makeCause("error", polled.error),
       turns: settledTurns(
         await state.runtime.store.listRecords(),
         state.iteration,
@@ -187,7 +212,9 @@ async function admitWave(
  * this iteration gets no turn, tasks already started finish their flow,
  * in-flight work settles, then the caller ends the iteration normally. Only
  * when nothing is dispatchable does the wave run the steward, the stall PM and
- * the plan check, and only then does an infra fault end it.
+ * the plan check, and only then does an infra fault end it. An inbox watch on
+ * its own timer wakes the loop for a settled steer, so the wait on running
+ * turns cannot delay that steer's PM turn past them.
  */
 export async function runDispatch(
   runtime: KernelRuntime,
@@ -196,33 +223,58 @@ export async function runDispatch(
   const prepared = await prepareDispatch(runtime, opts);
   if ("reason" in prepared) return prepared;
   const state = prepared;
-
-  for (;;) {
-    const read = await readLoop(state);
-    if (read.snapshot.terminal) {
-      await settleRunning(state);
-      return {
-        reason: "terminal",
-        turns: settledTurns(read.recordsBefore, state.iteration),
-        taskTurnsStarted: state.taskTurnsStarted,
-        allReadyHeld: false,
-      };
+  const debounceMs = runtime.limits.steerDebounceMs;
+  const watch = createSteerWatch(runtime.store, state.seenSteers, {
+    ...(opts.steerWatchTickMs !== undefined
+      ? { tickMs: opts.steerWatchTickMs }
+      : {}),
+    ...(debounceMs !== undefined ? { debounceMs } : {}),
+    deliver: (steer) => state.liveSteers.inject(steer),
+  });
+  try {
+    for (;;) {
+      const read = await readLoop(state);
+      if (read.snapshot.terminal) {
+        await settleRunning(state);
+        // A final settle must answer its spike steer before the launch stops:
+        // a terminal goal never reaches the boundary that would answer it.
+        await answerSettledSteers(state);
+        return {
+          reason: "terminal",
+          turns: settledTurns(read.recordsBefore, state.iteration),
+          taskTurnsStarted: state.taskTurnsStarted,
+          allReadyHeld: false,
+        };
+      }
+      const stage = await pollStage(state, read, watch);
+      if ("reason" in stage) return stage;
+      // A ready promote task drains before admission: started turns finish, no
+      // unstarted work begins, and the wave end stops the launch.
+      drainForPromote(state, stage.snapshot);
+      await admitWave(state, stage, read.runningAtRead);
+      if (state.running.size > 0) {
+        // The watch's wake breaks the wait when a steer has sat long enough:
+        // the next pass claims it and runs its PM turn before these end.
+        await Promise.race([
+          ...state.running.values().map((r) => r.promise),
+          watch.wake(),
+        ]);
+        continue;
+      }
+      const ended = await waveEnd(
+        state,
+        read.snapshot,
+        stage.polled.hold,
+        stage.turnsUsed,
+        read.runningAtRead,
+      );
+      if (ended === "continue") continue;
+      // A terminal script step settles inside this wave, after the poll read;
+      // answer its steer here because the wave may end without another pass.
+      await answerSettledSteers(state);
+      return ended;
     }
-    const stage = await pollStage(state, read);
-    if ("reason" in stage) return stage;
-    await admitWave(state, stage, read.runningAtRead);
-    if (state.running.size > 0) {
-      await Promise.race([...state.running.values()].map((r) => r.promise));
-      continue;
-    }
-    const ended = await waveEnd(
-      state,
-      read.snapshot,
-      stage.polled.hold,
-      stage.turnsUsed,
-      read.runningAtRead,
-    );
-    if (ended === "continue") continue;
-    return ended;
+  } finally {
+    watch.stop();
   }
 }

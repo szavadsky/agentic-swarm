@@ -51,7 +51,6 @@ const FAKE_PRICES: PriceTable = {
   "fake/check": PRICE,
   "fake/impl": PRICE,
   "fake/impl-alt": PRICE,
-  "fake/impl-rot": PRICE,
   "fake/model-a": PRICE,
   "fake/model-b": PRICE,
   "fake/review": PRICE,
@@ -164,7 +163,6 @@ function collectModelIds(run: ReturnType<typeof loadRunConfig>): Set<string> {
   const ids = new Set<string>();
   for (const alias of Object.values(run.aliases)) {
     ids.add(alias.model);
-    for (const entry of alias.rotate ?? []) ids.add(entry.model);
     for (const fallback of alias.fallbacks ?? []) {
       if ("model" in fallback) ids.add(fallback.model);
     }
@@ -173,12 +171,11 @@ function collectModelIds(run: ReturnType<typeof loadRunConfig>): Set<string> {
   return ids;
 }
 
-/** Every harness a fixture alias, rotation or fallback can run. */
+/** Every harness a fixture alias or fallback can run. */
 function fixtureHarnessIds(run: ReturnType<typeof loadRunConfig>): Set<string> {
   const ids = new Set<string>();
   for (const alias of Object.values(run.aliases)) {
     ids.add(alias.harness);
-    for (const entry of alias.rotate ?? []) ids.add(entry.harness);
     for (const fallback of alias.fallbacks ?? []) {
       if ("model" in fallback) ids.add(fallback.harness ?? alias.harness);
     }
@@ -277,6 +274,26 @@ async function expectMissingAliasRefused(): Promise<void> {
   }
 }
 
+/** An overlay that re-adds the retired `rotate` key on an alias. */
+function overlayWithRetiredRotate(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-run-fixture-"));
+  fs.copyFileSync(
+    path.join(FIXTURE_DIR, "base.yaml"),
+    path.join(dir, "base.yaml"),
+  );
+  fs.writeFileSync(
+    path.join(dir, "overlay.yaml"),
+    [
+      "extends: base.yaml",
+      "aliases:",
+      "  implementer:",
+      "    rotate: [{ harness: fake-native, model: fake/impl-alt }]",
+      "",
+    ].join("\n"),
+  );
+  return dir;
+}
+
 async function refusal(input: PreflightInput): Promise<PreflightError> {
   try {
     await preflight(input);
@@ -287,14 +304,12 @@ async function refusal(input: PreflightInput): Promise<PreflightError> {
   throw new Error("pre-flight unexpectedly passed");
 }
 
-function tierChain(
-  f: Fixture,
-  alias: string,
-  iteration?: number,
-): (string | undefined)[][] {
-  return resolveTurn(f.runtime, alias, alias, undefined, iteration).tiers.map(
-    (tier) => [tier.harness.id, tier.model.id, tier.effort],
-  );
+function tierChain(f: Fixture, alias: string): (string | undefined)[][] {
+  return resolveTurn(f.runtime, alias, alias).tiers.map((tier) => [
+    tier.harness.id,
+    tier.model.id,
+    tier.effort,
+  ]);
 }
 
 describe("fake run-config fixtures", () => {
@@ -313,10 +328,21 @@ describe("fake run-config fixtures", () => {
     "refuses a variant that drops a required alias",
     expectMissingAliasRefused,
   );
+
+  it("refuses the retired rotate key instead of silently ignoring it", () => {
+    const dir = overlayWithRetiredRotate();
+    try {
+      expect(() => loadRunConfig(path.join(dir, "overlay.yaml"))).toThrow(
+        /aliases\.implementer: Unrecognized key: "rotate"/,
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("fake run-config fallback planning", () => {
-  it("resolves the overlay's fallback chain and both rotation entries", async () => {
+  it("resolves the overlay's fallback chain", async () => {
     const f = await fixtureRuntime("variant.yaml");
     try {
       expect(tierChain(f, "reviewer")).toEqual([
@@ -324,13 +350,6 @@ describe("fake run-config fallback planning", () => {
         ["fake-acpx", "fake-route/secondary", "low"],
         ["fake-native", "fake/review-alt", "medium"],
       ]);
-      expect(tierChain(f, "implementer", 1)).toEqual([
-        ["fake-native", "fake/impl-rot", "high"],
-      ]);
-      expect(tierChain(f, "implementer", 2)).toEqual([
-        ["fake-acpx", "fake-route/secondary", "low"],
-      ]);
-      // Without an iteration the alias's own primary is the tier.
       expect(tierChain(f, "implementer")).toEqual([
         ["fake-native", "fake/impl", undefined],
       ]);

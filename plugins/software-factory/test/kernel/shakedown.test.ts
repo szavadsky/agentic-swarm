@@ -28,13 +28,7 @@ import {
 describe("hostile shakedown", () => {
   it("recovers a merge killed in the ref-move window on a red base", async () => {
     const { repo, goal } = setupFlowRepo({
-      gates: [
-        {
-          id: "base-red",
-          command: "test -f never.txt",
-          format: { pattern: "pytest" },
-        },
-      ],
+      gates: [{ id: "base-red", command: "test -f never.txt" }],
     });
     try {
       const scope1 = await recoversMergeKilledRefMoveWindowPart1(repo, goal);

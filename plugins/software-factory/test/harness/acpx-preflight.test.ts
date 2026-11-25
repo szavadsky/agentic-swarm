@@ -57,6 +57,7 @@ harnesses:
       effort:
         configId: effort
         modelBases: { model-a: [none, high, default] }
+    compaction: { enabled: false, reason: fake harness has no compact command }
 limits: { concurrency: { overall: 2 }, iterations: 1 }
 `;
 }
@@ -293,6 +294,7 @@ harnesses:
     acpx:
       agent: fake-harness
       effort: { configId: effort }
+    compaction: { enabled: false, reason: fake harness has no compact command }
 limits: { concurrency: { overall: 2 }, iterations: 1 }
 `;
     const f = await fixture(text, stub);

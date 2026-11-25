@@ -16,7 +16,7 @@ Do not add a finding the reviewer did not raise. Do not re-review the whole diff
 
 ### Decision
 
-- `approve`: no finding survives; the work ships. Record only the risk you accept by shipping as a concern — never a finding you discarded — so the kernel carries it as debt.
+- `approve`: no finding survives; the work ships. Record only the risk you accept by shipping as a concern — never a finding you discarded.
 - `changes`: one or more findings survive. Your summary is the numbered list the implementer answers; number from 1, keep every entry actionable, and repeat no discarded finding.
 - `reject`: the diff must not merge — a failing check you ran, a security defect, a broken dependent interface, or code to throw away.
 - Do not manufacture findings; approving every finding away is normal when the review was wrong.

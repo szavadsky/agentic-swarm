@@ -8,18 +8,30 @@
 import fs from "node:fs";
 import { git } from "../core/git/exec.js";
 import { runAgentTurn } from "./agent.js";
-import { frontClassTypesVar, gateCommands } from "./front.js";
 import { shallowCodeMap } from "./context-pack.js";
 import { FrontClassError, readFrontClass } from "./flow-context.js";
-import { resolveTurn, type TurnTarget } from "./flow-context-targets.js";
+import { resolveTurn } from "./flow-context-targets.js";
+import type { TurnTarget } from "./flow-types.js";
+import { frontClassTypesVar } from "./front.js";
+import {
+  gateCommandsText,
+  INFRA_FILE,
+  InfraError,
+  infraPath,
+  missingGateCause,
+  readInfra,
+} from "./infra.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import { scriptMeta } from "./record.js";
 import type {
   IngestionStepConfig,
   IngestionWhenClass,
   KernelRuntime,
+  Outcome,
   StepRecord,
 } from "./types.js";
+import type { IngestionResult } from "./ingestion-types.js";
+export type { IngestionResult } from "./ingestion-types.js";
 
 export const CODE_MAP_FILE = "code-map.md";
 
@@ -33,6 +45,57 @@ function ingestionSteps(runtime: KernelRuntime): IngestionStepConfig[] {
   return (
     runtime.configs.process.ingestion ?? [{ id: "branch" }, { id: "front" }]
   );
+}
+
+/**
+ * The configured ingestion step ids. These steps have no mechanical settle
+ * after the turn — their product is the files the agent wrote — so recovery can
+ * adopt a delivered outcome for one where a task turn must be redispatched.
+ */
+export function ingestionStepIds(runtime: KernelRuntime): ReadonlySet<string> {
+  return new Set(ingestionSteps(runtime).map((step) => step.id));
+}
+
+/**
+ * Whether a delivered outcome completes a step: the turn said done and the
+ * artifact the step promised is on disk. A scout that died between its outcome
+ * and its code map is unfinished, so its step reruns and the loud
+ * missing-deliverable failure still fires.
+ */
+function deliveredComplete(
+  step: IngestionStepConfig,
+  runtime: KernelRuntime,
+  outcome: Outcome | undefined,
+): boolean {
+  return (
+    outcome?.status === "done" &&
+    missingDeliverable(step, runtime) === undefined
+  );
+}
+
+/**
+ * Whether a killed turn's delivered outcome completes its configured ingestion
+ * step. Recovery adopts a step only through this predicate: a done outcome the
+ * step never backed with its artifact is not a result, and a blocked or failed
+ * outcome is the turn's own stop, never a completion.
+ */
+export function deliveredIngestionComplete(
+  runtime: KernelRuntime,
+  stepId: string,
+  outcome: Outcome | undefined,
+): boolean {
+  if (outcome?.status !== "done") return false;
+  if (stepId === "front") {
+    try {
+      return readFrontClass(runtime) !== null;
+    } catch (err) {
+      // A malformed class is the front step's failure to report, not adoption.
+      if (err instanceof FrontClassError) return false;
+      throw err;
+    }
+  }
+  const step = ingestionSteps(runtime).find((entry) => entry.id === stepId);
+  return step !== undefined && deliveredComplete(step, runtime, outcome);
 }
 
 function isStepFinished(
@@ -60,7 +123,10 @@ function isStepFinished(
     );
   }
   return records.some(
-    (r) => r.step === step.id && r.endedAt && r.outcome?.status === "done",
+    (r) =>
+      r.step === step.id &&
+      r.endedAt &&
+      deliveredComplete(step, runtime, r.outcome),
   );
 }
 
@@ -73,15 +139,6 @@ function shouldSkipStep(
     step.when !== undefined &&
     !step.when.includes(goalClass)
   );
-}
-
-export interface IngestionResult {
-  /** A failing step's cause; absent when every step completed. */
-  cause?: string;
-  /** Which step failed. */
-  step?: string;
-  /** The step ended blocked on input only the user can supply, not as infra. */
-  blocked?: boolean;
 }
 
 /** The goal-branch step records the integration checkout it stands on: the
@@ -121,7 +178,7 @@ function ingestionStepVars(
   runtime: KernelRuntime,
   iteration: number,
   packPath: string,
-  extra: { codeMapPath: string },
+  extra: { codeMapPath: string; infraPath: string },
 ): Record<string, string> {
   return {
     iteration: String(iteration),
@@ -132,9 +189,13 @@ function ingestionStepVars(
     pack_path: packPath,
     checkout: runtime.paths.goalCheckout,
     setup_command: runtime.configs.repo.setup.join(" && ") || "none",
-    gate_commands: gateCommands(runtime),
+    gate_commands: gateCommandsText(
+      runtime.store.goalDir,
+      runtime.configs.repo.gates,
+    ),
     class_types: frontClassTypesVar(runtime.configs.process.taskTypes),
     code_map_path: extra.codeMapPath,
+    infra_path: extra.infraPath,
   };
 }
 
@@ -150,7 +211,7 @@ async function runGenericIngestionStep(
   const alias = step.alias ?? "pm";
   const codeMapPath = codeMapFile(runtime);
   const target: TurnTarget = {
-    ...resolveTurn(runtime, step.prompt!, alias, undefined, iteration),
+    ...resolveTurn(runtime, step.prompt!, alias, undefined),
     ...(step.deliverable ? { deliverable: step.deliverable } : {}),
   };
   const result = await runBoundaryTurn(
@@ -163,6 +224,7 @@ async function runGenericIngestionStep(
         meta: { iteration, step: step.id, round: 1 },
         vars: ingestionStepVars(runtime, iteration, packPath, {
           codeMapPath,
+          infraPath: infraPath(runtime.store.goalDir),
         }),
         expectation: "any",
       }),
@@ -186,15 +248,27 @@ async function runGenericIngestionStep(
   return {};
 }
 
-/** The artifact a finished step promised but did not write; none when present. */
+/** One step's promised artifact is missing or invalid; none when present. */
 function missingDeliverable(
   step: IngestionStepConfig,
   runtime: KernelRuntime,
 ): string | undefined {
-  if (step.id !== "scout") return undefined;
-  const file = codeMapFile(runtime);
-  if (fs.existsSync(file)) return undefined;
-  return `ingestion step "scout" wrote no code map at ${file}`;
+  if (step.id === "scout") {
+    const file = codeMapFile(runtime);
+    if (fs.existsSync(file)) return undefined;
+    return `ingestion step "scout" wrote no code map at ${file}`;
+  }
+  if (step.id !== "infra") return undefined;
+  const file = infraPath(runtime.store.goalDir);
+  try {
+    if (readInfra(runtime.store.goalDir) !== undefined) return undefined;
+  } catch (err) {
+    if (err instanceof InfraError) {
+      return `ingestion step "infra" wrote an invalid ${INFRA_FILE}: ${err.message}`;
+    }
+    throw err;
+  }
+  return `ingestion step "infra" wrote no ${INFRA_FILE} at ${file}`;
 }
 
 /** The scout-written entries, one per line; empty when no scout wrote one. */
@@ -281,11 +355,23 @@ async function runStepList(
 }
 
 /**
+ * A launch that ends ingestion with no runnable gate merges unverified code,
+ * so it stops unless the repo config opts out. The same requirement is checked
+ * by the launch before dispatch, where a plan or pending steer skips this
+ * ingestion sequence entirely.
+ */
+function gateAbsence(runtime: KernelRuntime): IngestionResult {
+  const cause = missingGateCause(runtime);
+  return cause === undefined ? {} : { cause };
+}
+
+/**
  * Runs the configured steps in list order, skipping the ones a previous pass
  * already finished and the class-gated ones this goal skips. The classifier
- * names the class the later gates read; the scout writes the code map the
- * packs carry. `runFront` itself is not invoked here: the caller runs the
- * classifier and leaves the post-classification step list to this module.
+ * names the class the later gates read; the infra step writes the gates and
+ * status the kernel runs by; the scout writes the code map the packs carry.
+ * `runFront` itself is not invoked here: the caller runs the classifier and
+ * leaves the post-classification step list to this module.
  */
 export async function runIngestionSteps(
   runtime: KernelRuntime,
@@ -332,5 +418,5 @@ export async function runIngestionSteps(
       .filter((step) => !shouldSkipStep(step, goalClass)),
     before.records,
   );
-  return after.failure ?? {};
+  return after.failure ?? gateAbsence(runtime);
 }

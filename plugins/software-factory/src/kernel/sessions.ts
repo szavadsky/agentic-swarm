@@ -1,13 +1,17 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { CacheTtl, SessionRef } from "../harness/types.js";
+import {
+  type CacheTtl,
+  type Harness,
+  type ModelRef,
+  portable,
+  type SessionRef,
+} from "../harness/types.js";
 import { writeYamlAtomic } from "../core/records/io.js";
-
-export interface LaunchSessions {
-  launchId: string;
-  dir: string;
-}
+import type { Steer } from "./mailbox.js";
+import type { KernelRuntime } from "./types.js";
+import type { LaunchSessions, LiveSteerSink } from "./sessions-types.js";
 
 function stamp(now: Date): string {
   return now.toISOString().replace(/[-:.]/g, "");
@@ -40,6 +44,44 @@ export function sessionCacheHot(
   const lastRequest = Date.parse(session.lastRequestStartedAt);
   if (!Number.isFinite(lastRequest)) return false;
   return now.getTime() - lastRequest < ttl;
+}
+
+/**
+ * The ref when this target can resume it, or undefined with the blocker named.
+ * Resume needs the harness's capability, a portability edge, the same checkout
+ * and the same model: a harness session is cwd- and model-bound.
+ */
+export async function resumableRef(
+  runtime: KernelRuntime,
+  session: SessionRef,
+  target: { harness: Harness; model: ModelRef },
+  who: string,
+): Promise<SessionRef | undefined> {
+  const { harness, model } = target;
+  const miss = (reason: string): undefined => {
+    console.warn(`[factory] ${who} starts de novo: ${reason}`);
+    return undefined;
+  };
+  let resume: boolean;
+  try {
+    resume = (await harness.caps(model)).resume;
+  } catch (err) {
+    return miss(
+      `harness "${harness.id}" did not report its capabilities: ${(err as Error).message}`,
+    );
+  }
+  if (!resume) return miss(`harness "${harness.id}" cannot resume a session`);
+  if (!portable(session.harness, harness.id, runtime.configs.run.portability))
+    return miss(
+      `a "${session.harness}" session is not portable to "${harness.id}"`,
+    );
+  if (path.resolve(session.cwd) !== path.resolve(runtime.paths.goalCheckout))
+    return miss(
+      `session cwd "${session.cwd}" is not the goal checkout "${runtime.paths.goalCheckout}"`,
+    );
+  if (session.model.id !== model.id)
+    return miss(`session model "${session.model.id}" is not "${model.id}"`);
+  return session;
 }
 
 async function directories(dir: string): Promise<string[]> {
@@ -83,4 +125,44 @@ export async function createLaunchSessions(
     });
   }
   return { launchId, dir };
+}
+
+/**
+ * The one live session a steer can be injected into. The inbox watch offers
+ * each due steer here before waking the dispatch loop: a delivered steer is
+ * answered by the running turn, and the watch wakes the loop only when no
+ * session is live — that steer then queues for its own PM turn. One sink at a
+ * time is the one-PM invariant, so a second registration is a kernel bug.
+ */
+export class LiveSteerSessions {
+  private sink: LiveSteerSink | undefined;
+
+  /** Registers the live turn; the release clears only its own sink. */
+  register(sink: LiveSteerSink): () => void {
+    if (this.sink !== undefined) {
+      throw new Error(
+        "a live steer session is already registered; only one PM turn runs at a time",
+      );
+    }
+    this.sink = sink;
+    return () => {
+      if (this.sink === sink) this.sink = undefined;
+    };
+  }
+
+  /** True when the steer reached the live session, false when it must queue. */
+  async inject(steer: Steer): Promise<boolean> {
+    const sink = this.sink;
+    if (sink === undefined) return false;
+    try {
+      return await sink.inject(steer);
+    } catch (error) {
+      // Injection is best effort: a harness that refuses it must not lose the
+      // steer, so the watch announces it for the next PM turn instead.
+      console.warn(
+        `[factory] steer "${steer.id}" not injected into the live session: ${(error as Error).message}; queued for its next PM turn`,
+      );
+      return false;
+    }
+  }
 }

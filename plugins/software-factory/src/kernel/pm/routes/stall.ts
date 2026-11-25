@@ -2,7 +2,8 @@ import type { AgentTurnResult } from "../../agent.js";
 import { makeCause } from "../../cause.js";
 import { DEFAULT_PARK_AMENDS } from "../../config.js";
 import { boundaryTarget } from "../../flow-context.js";
-import { stallProvenance } from "../../mailbox.js";
+import type { ForwardedConcern } from "../../context-pack/types.js";
+import { readHolds, stallProvenance } from "../../mailbox.js";
 import { scriptMeta } from "../../record.js";
 import type {
   KernelRuntime,
@@ -14,27 +15,39 @@ import type {
 } from "../../types.js";
 import {
   failureReasons,
-  type PmTurnSetup,
   recordPmRejection,
   runPmTurn,
   rungSteps,
   setupPmTurn,
 } from "../ladder.js";
-import { stallBrief, stallLadderNote } from "../prompts.js";
+import { openConcernBrief, stallBrief, stallLadderNote } from "../prompts.js";
+import { introducedFindings, readTasks, reconcileTurn } from "../reconcile.js";
 import {
-  introducedFindings,
-  type PlanSnapshot,
-  readTasks,
-  reconcileTurn,
-} from "../reconcile.js";
+  concernHoldProblem,
+  concernsToJudge,
+  expireConcernHolds,
+  markPassedConcerns,
+} from "../holds.js";
 import { STALL_ROUTES_STEP } from "../steps.js";
+import type { PlanSnapshot, PmTurnSetup } from "../types.js";
 import { amendsUsed, cancelRoutes, decisionFindings } from "../validation.js";
+
+/** The open concerns no wave-end turn has marked yet, read once before the ladder. */
+async function unmarkedConcerns(
+  runtime: KernelRuntime,
+): Promise<ForwardedConcern[]> {
+  const records = await runtime.store.listRecords();
+  const judged = new Set(
+    (await readHolds(runtime.store)).holds.map((hold) => hold.steer),
+  );
+  return concernsToJudge(records, judged);
+}
 
 /**
  * Which parked slugs a stall turn resumed (amend, replace, split); a leave
  * stays parked with its reason and a cancel spends the slug.
  */
-export interface StallResult {
+interface StallResult {
   continued: string[];
   left: string[];
 }
@@ -50,6 +63,7 @@ async function validateStallTurn(
   plansBefore: readonly PlanSnapshot[],
   taskSnapshot: Map<string, string>,
   outcome: Outcome | undefined,
+  concerns: readonly ForwardedConcern[],
 ): Promise<string[]> {
   const { findings, texts, tasks, parseFindings } = await reconcileTurn(
     runtime,
@@ -57,6 +71,10 @@ async function validateStallTurn(
     plansBefore,
     taskSnapshot,
   );
+  for (const concern of concerns) {
+    const problem = await concernHoldProblem(runtime, concern, tasks);
+    if (problem) findings.push(problem);
+  }
   const used = amendsUsed(await runtime.store.listRecords(), opts.iteration);
 
   const routes = outcome?.stallRoutes;
@@ -216,12 +234,13 @@ export async function runStallPm(
 ): Promise<StallResult> {
   const left = [...opts.slugs].sort();
   const setup = await setupPmTurn(runtime, opts);
+  const concerns = await unmarkedConcerns(runtime);
   const brief = await stallBrief(runtime, opts);
   let failure: string[] = [];
 
   for (const [index, rung] of rungSteps(runtime).entries()) {
     const round = index + 1;
-    const target = boundaryTarget(runtime, "pm", opts.iteration, rung.alias);
+    const target = boundaryTarget(runtime, "pm", rung.alias);
     const { tasks } = await readTasks(runtime);
     const result = await runPmTurn(runtime, opts, target, {
       round,
@@ -231,6 +250,7 @@ export async function runStallPm(
       steers: "none",
       stalls: brief,
       planChecks: "none",
+      concerns: openConcernBrief(concerns),
     });
     const outcome = result.outcome;
     const findings = introducedFindings(
@@ -240,10 +260,12 @@ export async function runStallPm(
         setup.plansBefore,
         setup.taskSnapshot,
         outcome,
+        concerns,
       ),
       setup.baselineKeys,
     );
     if (outcome?.status === "done" && findings.length === 0) {
+      await markPassedConcerns(runtime, concerns);
       return acceptStallRoutes(runtime, opts, outcome.stallRoutes ?? [], round);
     }
     const reasons = failureReasons(outcome, findings, result.record);
@@ -254,6 +276,7 @@ export async function runStallPm(
       reasons,
       setup,
       result,
+      concerns,
     );
     if (exit) return exit;
     failure = reasons;
@@ -262,7 +285,10 @@ export async function runStallPm(
   return { continued: [], left };
 }
 
-/** Records a failed rung; an infra stop still ends the ladder. */
+/**
+ * Records a failed rung; an infra stop still ends the ladder. The rung's
+ * concern marks are dropped with it, so a rejected decision holds nothing.
+ */
 async function rejectStallRung(
   runtime: KernelRuntime,
   opts: { iteration: number; slugs: string[] },
@@ -270,7 +296,9 @@ async function rejectStallRung(
   reasons: string[],
   setup: PmTurnSetup,
   result: AgentTurnResult,
+  concerns: readonly ForwardedConcern[],
 ): Promise<StallResult | undefined> {
+  await expireConcernHolds(runtime, concerns);
   await recordPmRejection(
     runtime,
     opts.iteration,

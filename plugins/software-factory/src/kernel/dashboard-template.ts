@@ -29,6 +29,7 @@ export const DASHBOARD_TEMPLATE = `<!doctype html>
   }
 }
 .page { max-width: 1180px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+.lead { margin: 0; font-size: 1rem; line-height: 1.5; white-space: pre-line; }
 h1 { margin: .15rem 0; font-size: 2rem; line-height: 1.15; letter-spacing: -.025em; }
 h2 { margin: 0 0 1rem; font-size: 1.15rem; letter-spacing: -.01em; }
 h3 { margin: 1.35rem 0 .55rem; font-size: .95rem; }
@@ -83,6 +84,12 @@ p { margin: .3rem 0; }
 .badge-parked, .goal-blocked, .cal-owner, .kind-risk, .intent-friction { --tone: var(--bad); }
 .badge-cancelled { --tone: var(--pico-muted-color); }
 .goal-active, .kind-choice { --tone: var(--pico-primary); }
+.stop-iteration-limit, .stop-promote, .steer-routed { --tone: var(--info); }
+.stop-interrupted, .stop-infra { --tone: var(--bad); }
+.steer-waiting { --tone: var(--warn); }
+.steer-answered { --tone: var(--good); }
+.steer-processed { --tone: var(--pico-muted-color); }
+.stop-detail { font-size: .8rem; }
 .chips { display: flex; flex-wrap: wrap; gap: .4rem; padding: 0; margin: .35rem 0 0; list-style: none; }
 .chip {
   display: inline-block; padding: .12rem .5rem; background: var(--chip);
@@ -109,6 +116,7 @@ tbody tr:hover { background: color-mix(in srgb, var(--pico-primary) 5%, transpar
   border-radius: 6px; padding: .08rem .3rem;
 }
 .evidence { display: block; width: fit-content; margin-top: .2rem; color: var(--pico-muted-color); }
+.answer { white-space: pre-line; }
 .cause { color: var(--bad); font-size: .82rem; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .8rem; }
 .stats div { padding: .6rem .75rem; background: var(--chip); border-radius: 10px; }
@@ -133,20 +141,32 @@ footer { margin-top: 2rem; color: var(--pico-muted-color); font-size: .78rem; }
     <h1>{{ doc.goal | escape }}</h1>
     <p class="meta">
       <span class="badge goal-{{ doc.status | escape }}">{{ doc.status | escape }}</span>
+      {% if summary.stop.shows %}
+      <span class="badge stop-{{ summary.stop.reason | escape }}">{{ summary.stop.label | escape }}</span>
+      {% if summary.stop.detail %}<span class="muted stop-detail">{{ summary.stop.detail | escape }}</span>{% endif %}
+      {% endif %}
       <span>iteration {{ doc.iteration }}</span>
       <span>updated <time datetime="{{ doc.updatedAt | escape }}">{{ doc.updatedAt | escape }}</time></span>
     </p>
   </div>
   <nav class="links" aria-label="Page sections">
     <a href="status.json">status.json</a>
+    <a href="#status">Status</a>
     <a href="#intent">Intent</a>
     <a href="#tasks">Tasks</a>
     <a href="#distance">Distance</a>
+    <a href="#steers">Steers</a>
     <a href="#concerns">Concerns</a>
     <a href="#cost">Cost</a>
     <a href="#work">Work</a>
   </nav>
 </header>
+
+<section id="status" class="panel" aria-labelledby="status-heading">
+  <h2 id="status-heading">Status</h2>
+  <p class="lead">{{ summary.status.text | escape }}</p>
+  <p class="muted">{{ summary.status.attribution | escape }}{% if summary.status.record %} · <a class="record" href="{{ summary.status.record | escape }}/" title="{{ summary.status.record | escape }}">{{ summary.status.record | split: "/" | last | escape }}</a>{% endif %}</p>
+</section>
 
 <div class="cards">
   <article class="card">
@@ -156,8 +176,8 @@ footer { margin-top: 2rem; color: var(--pico-muted-color); font-size: .78rem; }
     <p>intent sections · works {{ summary.intent.works }} · not built {{ summary.intent.notBuilt }} · friction {{ summary.intent.friction }}</p>
     <p>architect summary, iteration {{ summary.intent.iteration }}</p>
     {% else %}
-    <strong class="value">unknown</strong>
-    <p>No architect intent status yet</p>
+    <strong class="value">not reported</strong>
+    <p>No architect intent status yet; the Status section names its source</p>
     {% endif %}
   </article>
   <article class="card">
@@ -172,9 +192,9 @@ footer { margin-top: 2rem; color: var(--pico-muted-color); font-size: .78rem; }
     <p>{{ doc.tasks.finished.size }} finished · {{ doc.tasks.open.size }} open · {{ doc.tasks.parked.size }} parked · {{ doc.tasks.cancelled.size }} cancelled</p>
   </article>
   <article class="card">
-    <span class="label">Open debt</span>
-    <strong class="value">{{ doc.distance.openDebt.size }}</strong>
-    <p>{{ doc.concerns.size }} concerns recorded</p>
+    <span class="label">Open concerns</span>
+    <strong class="value">{{ summary.concerns.open }}</strong>
+    <p>{{ summary.concerns.debt }} open debt · {{ summary.concerns.recorded }} concerns recorded</p>
   </article>
 </div>
 
@@ -199,9 +219,9 @@ footer { margin-top: 2rem; color: var(--pico-muted-color); font-size: .78rem; }
   </table>
   </div>
   {% elsif summary.intent.hasArtifact %}
-  <p class="empty">unknown — the architect's iteration {{ summary.intent.iteration }} summary lists no intent sections.</p>
+  <p class="empty">not reported — the architect's iteration {{ summary.intent.iteration }} summary lists no intent sections. The Status section above names its source.</p>
   {% else %}
-  <p class="empty">unknown — no architect intent-status artifact has been written yet. This section never falls back to task counts.</p>
+  <p class="empty">not reported — the architect has written no intent-status artifact yet. The Status section above names its source; this section never falls back to task counts.</p>
   {% endif %}
 </section>
 
@@ -307,27 +327,53 @@ footer { margin-top: 2rem; color: var(--pico-muted-color); font-size: .78rem; }
   {% endif %}
 </section>
 
-<section id="concerns" class="panel" aria-labelledby="concerns-heading">
-  <h2 id="concerns-heading">Concerns <span class="count">{{ doc.concerns.size }}</span></h2>
-  {% if doc.concerns.size > 0 %}
+<section id="steers" class="panel" aria-labelledby="steers-heading">
+  <h2 id="steers-heading">Steers <span class="count">{{ summary.steers.total }}</span></h2>
+  {% if summary.steers.total > 0 %}
+  <p class="muted">{{ summary.steers.waiting }} waiting · {{ summary.steers.routed }} routed · {{ summary.steers.answered }} answered · {{ summary.steers.processed }} processed</p>
   <div class="table-wrap">
   <table>
-    <thead><tr><th scope="col">Concern</th><th scope="col">Kind</th><th scope="col">Calibration</th><th scope="col">Source</th><th scope="col">Record</th></tr></thead>
+    <thead><tr><th scope="col">Steer</th><th scope="col">State</th><th scope="col">Route</th><th scope="col">Answer</th><th scope="col">Record</th></tr></thead>
     <tbody>
-    {% for concern in doc.concerns %}
-      <tr{% if concern.id %} title="{{ concern.id | escape }}"{% endif %}>
-        <td>{{ concern.text | escape }}{% if concern.evidence %}<code class="evidence">{{ concern.evidence | escape }}</code>{% endif %}</td>
-        <td><span class="badge kind-{{ concern.kind | escape }}">{{ concern.kind | escape }}</span></td>
-        <td><span class="badge cal-{{ concern.calibration | escape }}">{{ concern.calibration | escape }}</span></td>
-        <td>{% if concern.slug %}<code class="slug">{{ concern.slug | escape }}</code>{% endif %}{{ concern.step | escape }} r{{ concern.round }}</td>
-        <td><a class="record" href="{{ concern.record | escape }}/" title="{{ concern.record | escape }}">{{ concern.record | split: "/" | last | escape }}</a></td>
+    {% for steer in summary.steers.rows %}
+      <tr>
+        <td><code class="slug">{{ steer.id | escape }}</code></td>
+        <td><span class="badge steer-{{ steer.state | escape }}">{{ steer.state | escape }}</span></td>
+        <td>{% if steer.route %}{{ steer.route | escape }}{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td>{% if steer.answer %}<span class="answer">{{ steer.answer | escape }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td>{% if steer.record %}<a class="record" href="{{ steer.record | escape }}/" title="{{ steer.record | escape }}">{{ steer.record | split: "/" | last | escape }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
   {% else %}
-  <p class="empty">No concerns recorded.</p>
+  <p class="empty">No steer in the mailbox.</p>
+  {% endif %}
+</section>
+
+<section id="concerns" class="panel" aria-labelledby="concerns-heading">
+  <h2 id="concerns-heading">Open concerns <span class="count">{{ summary.concerns.open }}</span></h2>
+  {% if summary.concerns.open > 0 %}
+  <p class="muted">{{ summary.concerns.recorded }} concerns recorded; FYI notes and answered ones are not listed.</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th scope="col">Concern</th><th scope="col">Kind</th><th scope="col">Calibration</th><th scope="col">Source</th><th scope="col">Record</th></tr></thead>
+    <tbody>
+    {% for concern in summary.openConcerns %}
+      <tr{% if concern.id %} title="{{ concern.id | escape }}"{% endif %}>
+        <td>{{ concern.text | escape }}{% if concern.evidence %}<code class="evidence">{{ concern.evidence | escape }}</code>{% endif %}</td>
+        <td><span class="badge kind-{{ concern.kind | escape }}">{{ concern.kind | escape }}</span></td>
+        <td><span class="badge cal-{{ concern.calibration | escape }}">{{ concern.calibration | escape }}</span></td>
+        <td>{{ concern.source | escape }}</td>
+        <td>{% if concern.record %}<a class="record" href="{{ concern.record | escape }}/" title="{{ concern.record | escape }}">{{ concern.record | split: "/" | last | escape }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="empty">No open concerns. {{ summary.concerns.recorded }} recorded; FYI notes and answered ones are not listed.</p>
   {% endif %}
 </section>
 

@@ -4,11 +4,11 @@ import path from "node:path";
 import type { Usage } from "../../harness/types.js";
 import { recordedBaseGates } from "../baseline.js";
 import { formatCause } from "../cause.js";
-import { materialOpenDebts } from "../derive.js";
 import { costText, medianMs, worstMs } from "../metrics.js";
-import type { QaOnlyCatches } from "../qa.js";
+import type { QaCatchSource, QaCatches } from "../qa.js";
 import type {
   AskRecoveryCounts,
+  FrictionEntry,
   GroupMetrics,
   IncidentCounts,
   ParkMetrics,
@@ -21,10 +21,12 @@ import type {
 import type {
   ArtifactStore,
   CauseKind,
+  Concern,
   GoalDecision,
+  ReportDebt,
   StepRecord,
 } from "../types.js";
-import type { SummaryInput, SummaryStatus, SummaryTaskLists } from "./types.js";
+import type { SummaryInput, SummaryStatus } from "./types.js";
 
 export function defaultStatus(
   decision: GoalDecision | undefined,
@@ -38,17 +40,28 @@ function shortHash(hash: string): string {
   return hash.slice(0, 10);
 }
 
+/** A cell's own figure, never a false $0: absent with no unpriced turn is n/a. */
+function tableCostText(
+  costUsd: number | undefined,
+  unpricedTurns: number,
+): string {
+  if (costUsd === undefined) return unpricedTurns > 0 ? "unknown" : "n/a";
+  return unpricedTurns > 0
+    ? `$${costUsd.toFixed(4)} (partial)`
+    : `$${costUsd.toFixed(4)}`;
+}
+
 export function spendTable(
   label: string,
   rows: Array<{ name: string } & GroupMetrics>,
 ): string[] {
   if (rows.length === 0) return ["- none"];
   return [
-    `| ${label} | turns | tokens | harness-reported | list-price estimate | prompt bytes |`,
-    "| --- | --- | --- | --- | --- | --- |",
+    `| ${label} | turns | tokens | harness-reported | list-price estimate | unpriced | prompt bytes |`,
+    "| --- | --- | --- | --- | --- | --- | --- |",
     ...rows.map(
       (row) =>
-        `| ${row.name} | ${row.turns} | ${row.tokens} | ${sourceCostText(row.usage.harnessCostUsd, row.unpricedTurns)} | ${sourceCostText(row.usage.listCostUsd, row.unpricedTurns)} | ${row.promptBytes} |`,
+        `| ${row.name} | ${row.turns} | ${row.tokens} | ${tableCostText(row.usage.harnessCostUsd, row.unpricedTurns)} | ${tableCostText(row.usage.listCostUsd, row.unpricedTurns)} | ${row.unpricedTurns} | ${row.promptBytes} |`,
     ),
   ];
 }
@@ -124,6 +137,15 @@ export function steerLines(steers: SteerLatency): string[] {
   ];
 }
 
+/** The iteration's friction events, each with the record that proves it and its cost. */
+export function frictionLines(entries: readonly FrictionEntry[]): string[] {
+  if (entries.length === 0) return ["- none"];
+  return entries.map(
+    (entry) =>
+      `- ${entry.kind}: ${entry.record} — ${entry.detail}; cost ${sourceCostText(entry.costUsd, entry.unpricedTurns)}`,
+  );
+}
+
 /** Zero-edit turns split by what the turn owed. */
 export function zeroEditLine(zeroEdit: ZeroEditCounts): string {
   const total = zeroEdit.reply + zeroEdit.finding + zeroEdit.noop;
@@ -142,16 +164,18 @@ export function askRecoveryLine(recoveries: AskRecoveryCounts): string {
   return `- ask recoveries: unfinished ${recoveries.unfinished}, rescue ${recoveries.rescue}`;
 }
 
+/** One concern line, prefixed by its record's slug when it has one. */
+function concernLine(rec: StepRecord, concern: Concern, prefix = ""): string {
+  return `- ${prefix}${rec.slug ? `${rec.slug}: ` : ""}${concern.text}${
+    concern.evidence ? ` (${concern.evidence})` : ""
+  }`;
+}
+
 export function concernLines(recs: StepRecord[], kind?: string): string[] {
   return recs.flatMap((rec) =>
     (rec.outcome?.concerns ?? [])
       .filter((concern) => !kind || concern.kind === kind)
-      .map(
-        (concern) =>
-          `- ${rec.slug ? `${rec.slug}: ` : ""}${concern.text}${
-            concern.evidence ? ` (${concern.evidence})` : ""
-          }`,
-      ),
+      .map((concern) => concernLine(rec, concern)),
   );
 }
 
@@ -172,35 +196,11 @@ export function summaryParkedByKind(
   return parkedByKind;
 }
 
-export function summaryTaskLists(
-  state: SummaryInput["state"],
-): SummaryTaskLists {
-  const pending: string[] = [];
-  const parked: string[] = [];
-  const cancelled: string[] = [];
-  for (const slug of Object.keys(state.tasks).sort()) {
-    const status = state.tasks[slug]!.status;
-    if (status === "parked" && state.tasks[slug]!.supersededBy === undefined) {
-      parked.push(slug);
-    } else if (status === "pending" || status === "ready") {
-      pending.push(slug);
-    } else if (status === "cancelled") {
-      cancelled.push(slug);
-    }
-  }
-  return { pending, parked, cancelled };
-}
-
 export function ownerRemarkableLines(recs: StepRecord[]): string[] {
   return recs.flatMap((rec) =>
     (rec.outcome?.concerns ?? [])
       .filter((concern) => concern.calibration === "owner")
-      .map(
-        (concern) =>
-          `- [${concern.kind}] ${rec.slug ? `${rec.slug}: ` : ""}${concern.text}${
-            concern.evidence ? ` (${concern.evidence})` : ""
-          }`,
-      ),
+      .map((concern) => concernLine(rec, concern, `[${concern.kind}] `)),
   );
 }
 
@@ -265,9 +265,7 @@ export function baseGateLines(
   ];
 }
 
-export function distanceDebtLines(
-  open: ReturnType<typeof materialOpenDebts>,
-): string[] {
+export function distanceDebtLines(open: readonly ReportDebt[]): string[] {
   if (open.length === 0) return ["- open debt (0): none"];
   return [
     `- open debt (${open.length}):`,
@@ -322,13 +320,39 @@ export function costByRoleLines(
   ];
 }
 
-export function qaCatchLine(catches: QaOnlyCatches): string {
+const QA_CATCH_SOURCE: Record<QaCatchSource, string> = {
+  none: "QA only",
+  gate: "also a gate failure",
+  reviewer: "also an earlier reviewer finding",
+  "reviewer-after": "repeated by the reviewer after QA",
+};
+
+/**
+ * The QA-only count with its per-task split, then one line per sampled catch
+ * naming its record and who else carried the finding.
+ */
+export function qaCatchLines(catches: QaCatches): string[] {
   const perTask = Object.entries(catches.byTask).sort(([a], [b]) =>
     a.localeCompare(b),
   );
-  if (perTask.length === 0) return `- QA-only catches: ${catches.count}`;
-  const detail = perTask.map(([task, count]) => `${task}: ${count}`).join(", ");
-  return `- QA-only catches: ${catches.count} (${detail})`;
+  const detail =
+    perTask.length > 0
+      ? ` (${perTask.map(([task, count]) => `${task}: ${count}`).join(", ")})`
+      : "";
+  const head = `- QA-only catches: ${catches.count} of ${catches.total} QA findings${detail}`;
+  if (catches.sample.length === 0) return [head];
+  const sampleHead =
+    catches.sample.length < catches.total
+      ? `- QA catch sample: first ${catches.sample.length} of ${catches.total}`
+      : "- QA catch sample:";
+  return [
+    head,
+    sampleHead,
+    ...catches.sample.map(
+      (entry) =>
+        `  - ${entry.task} ${entry.record}: ${entry.finding} (${QA_CATCH_SOURCE[entry.alsoCaughtBy]})`,
+    ),
+  ];
 }
 
 export function perMergedCost(

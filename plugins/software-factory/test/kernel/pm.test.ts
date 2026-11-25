@@ -16,7 +16,7 @@ import type {
   RunConfig,
 } from "../../src/kernel/types.js";
 import { simpleTask } from "./e2e-helpers.js";
-import { causeText } from "./helpers.js";
+import { cause, causeText } from "./helpers.js";
 import { withKernelRoleFallbacks } from "./fake-defaults.js";
 import { TEST_ARCHITECTURE, TEST_BOUNDARY } from "./helpers.js";
 
@@ -402,8 +402,68 @@ function registerPMTurnReconciliationPart2(): void {
   });
 }
 
+function registerPMTurnReconciliationPart3(): void {
+  it("refuses a derived task chained behind a parked dependency", async () => {
+    const { root, runtime, fake } = await setup();
+    try {
+      await runtime.store.writeTask(
+        parseTaskFile(simpleTask("alpha", "alpha.txt"), "alpha"),
+      );
+      await runtime.store.appendRecord(
+        {
+          iteration: 1,
+          slug: "alpha",
+          step: "park",
+          round: 1,
+          actor: "script",
+        },
+        { ok: true, cause: cause("blocked: alpha stuck") },
+      );
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+      );
+      expect(state.tasks.alpha!.status).toBe("parked");
+      for (let i = 0; i < 2; i++) {
+        fake.script((req, ctx) => {
+          fs.writeFileSync(
+            path.join(runtime.store.tasksDir, "beta.md"),
+            simpleTask("beta", "beta.txt", { deps: ["alpha"] }),
+            "utf8",
+          );
+          ctx.writeOutcome({
+            status: "done",
+            summary: "filed beta",
+            concerns: [],
+            forward: [],
+          });
+          return fakeTurnResult(req);
+        });
+      }
+
+      const result = await runPm(runtime, { iteration: 1, state, cwd: root });
+      expect(result.status).toBe("exhausted");
+      expect(result.rungs).toHaveLength(2);
+      const finding =
+        'task "beta" depends on "alpha", which is parked with no landed continuation; a parked dependency is satisfied only by one that landed';
+      expect(fake.calls[1]!.prompt).toContain(finding);
+      const records = await runtime.store.listRecords();
+      expect(
+        causeText(records.find((r) => r.step === "pm-validate")!.cause),
+      ).toContain(finding);
+      expect(fs.existsSync(path.join(runtime.store.tasksDir, "beta.md"))).toBe(
+        false,
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
 describe("PM turn reconciliation", () => {
   registerPMTurnReconciliationPart1();
 
   registerPMTurnReconciliationPart2();
+
+  registerPMTurnReconciliationPart3();
 });

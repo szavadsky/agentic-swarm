@@ -3,9 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   FakeHarness,
+  type FakeTurnHandler,
   fakeTurnIdentity,
   fakeTurnResult,
-  type FakeTurnHandler,
 } from "../../src/harness/fake/index.js";
 import { PLAN_REVIEW_STEP } from "../../src/kernel/plan-review.js";
 import { createFolderStore } from "../../src/kernel/store.js";
@@ -14,6 +14,7 @@ import {
   expectLaunch,
   makeGoal,
   outcome,
+  pmScopeOf,
   stateOf,
 } from "./e2e-helpers.js";
 import { causeText } from "./helpers.js";
@@ -81,6 +82,19 @@ function approver(summary: string): FakeTurnHandler {
 
 function iterationOf(req: Parameters<FakeTurnHandler>[0]): string {
   return fakeTurnIdentity(req).record;
+}
+
+/** The saga pass a subarchitect turn runs, from its rendered turn block. */
+function passOf(req: Parameters<FakeTurnHandler>[0]): string {
+  const match = /- pass: `([^`]+)`/.exec(req.prompt);
+  return match?.[1] ?? "";
+}
+
+/** The pack a turn was pointed at, read from disk. */
+function readPack(req: Parameters<FakeTurnHandler>[0]): string {
+  const match = /- context pack: `([^`]+)`/.exec(req.prompt);
+  if (!match?.[1]) throw new Error("turn prompt names no context pack");
+  return fs.readFileSync(match[1], "utf8");
 }
 
 /** The plan a plan-review turn read, from its rendered turn block. */
@@ -158,32 +172,43 @@ function scriptBoundaryBetaPlan(ctx: SagaBoundaryCtx): void {
   );
 }
 
-/** The PM derives one task per epic plan from the all-plans brief. */
+/** Each PM derives only its own scope; the top files no goal task. */
 function scriptBoundaryPmI1(ctx: SagaBoundaryCtx): void {
-  ctx.harness.script(
-    (req, turnedCtx) => {
-      expect(req.prompt).toContain("epics/alpha.md");
-      expect(req.prompt).toContain("epics/beta.md");
-      fs.mkdirSync(ctx.goal.tasksDir, { recursive: true });
-      fs.writeFileSync(
-        path.join(ctx.goal.tasksDir, "alpha.build.md"),
-        epicTask("alpha.build", "alpha", "alpha.txt"),
-        "utf8",
-      );
-      fs.writeFileSync(
-        path.join(ctx.goal.tasksDir, "beta.build.md"),
-        epicTask("beta.build", "beta", "beta.txt"),
-        "utf8",
-      );
-      turnedCtx.writeOutcome(outcome({ summary: "filed both epics' tasks" }));
-      return fakeTurnResult(req);
-    },
-    { when: (req) => iterationOf(req).includes("-i1-pm-") },
-  );
+  for (const [epic, slug, file] of [
+    ["alpha", "alpha.build", "alpha.txt"],
+    ["beta", "beta.build", "beta.txt"],
+    [undefined, undefined, undefined],
+  ] as const) {
+    ctx.harness.script(
+      (req, turnedCtx) => {
+        expect(pmScopeOf(req)).toBe(epic ?? "goal");
+        if (epic === undefined) {
+          turnedCtx.writeOutcome(outcome({ summary: "no goal-level tasks" }));
+          return fakeTurnResult(req);
+        }
+        expect(req.prompt).toContain(`epics/${epic}.md`);
+        expect(req.prompt).not.toContain("- goal:");
+        fs.mkdirSync(ctx.goal.tasksDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(ctx.goal.tasksDir, `${slug}.md`),
+          epicTask(slug, epic, file),
+          "utf8",
+        );
+        turnedCtx.writeOutcome(outcome({ summary: `filed ${slug}` }));
+        return fakeTurnResult(req);
+      },
+      {
+        when: (req) =>
+          pmScopeOf(req) === (epic ?? "goal") &&
+          iterationOf(req).includes("-i1-"),
+      },
+    );
+  }
 }
-
 /** Both epics' task implement/approve turns. */
-function scriptBoundaryTasks(ctx: SagaBoundaryCtx): void {
+function scriptBoundaryTasks(
+  ctx: Pick<SagaBoundaryCtx, "goal" | "harness">,
+): void {
   ctx.harness.script(implementer("alpha.txt"), {
     when: (req) =>
       fakeTurnIdentity(req).slug === "alpha.build" &&
@@ -206,11 +231,39 @@ function scriptBoundaryTasks(ctx: SagaBoundaryCtx): void {
   });
 }
 
-/** Iteration 2: the architect leaves alpha out and beta reviews its plan. */
-function scriptBoundaryIteration2(ctx: SagaBoundaryCtx): void {
+/** Iteration 2's bottom-up report: beta reports upward before the top turn. */
+function scriptBoundaryI2Report(ctx: SagaBoundaryCtx): void {
+  ctx.harness.script(
+    (req, turnedCtx) => {
+      // The report changes no plan and the top turn has not run yet.
+      expect(passOf(req)).toBe("report");
+      expect(readPack(req)).toContain("- `beta`: open");
+      turnedCtx.writeOutcome(
+        outcome({
+          summary: "beta reports one gap",
+          decision: "continue",
+          concerns: [
+            {
+              kind: "risk",
+              calibration: "architect",
+              text: "beta needs a goal-level decision",
+              evidence: "beta.txt:1",
+            },
+          ],
+        }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: (req) => iterationOf(req).includes("-i2-subarchitect-") },
+  );
+}
+
+/** Iteration 2's top turn chooses beta; the report brief already reached its pack. */
+function scriptBoundaryI2Architect(ctx: SagaBoundaryCtx): void {
   ctx.harness.script(
     (req, turnedCtx) => {
       expect(req.prompt).toContain("## Architect register");
+      expect(readPack(req)).toContain("beta needs a goal-level decision");
       fs.appendFileSync(
         ctx.planPath,
         "\n## Milestone 2\n- keep the cross-epic interface stable.\n",
@@ -218,16 +271,24 @@ function scriptBoundaryIteration2(ctx: SagaBoundaryCtx): void {
       );
       fs.appendFileSync(ctx.betaPlan, "\nforeign main write\n", "utf8");
       turnedCtx.writeOutcome(
-        outcome({ summary: "direction holds", decision: "continue" }),
+        outcome({
+          summary: "direction holds",
+          decision: "continue",
+          epicConsults: ["beta"],
+        }),
       );
       return fakeTurnResult(req);
     },
     { when: (req) => iterationOf(req).includes("-i2-architect-") },
   );
+}
+
+/** Iteration 2's top-down direction: only beta runs, in its own session. */
+function scriptBoundaryI2Direction(ctx: SagaBoundaryCtx): void {
   ctx.harness.script(
     (req, turnedCtx) => {
-      // The prior plan is reviewed first; the main architect's foreign
-      // write was rolled back before this turn starts.
+      expect(passOf(req)).toBe("direction");
+      // The main architect's foreign write was rolled back before this turn.
       expect(fs.existsSync(ctx.betaPlan)).toBe(true);
       expect(fs.readFileSync(ctx.betaPlan, "utf8")).not.toContain(
         "foreign main write",
@@ -236,20 +297,41 @@ function scriptBoundaryIteration2(ctx: SagaBoundaryCtx): void {
       expect(req.prompt).toContain("- turn: `boundary`");
       expect(req.session?.compacted).toBe(true);
       ctx.betaSecondSession = req.session?.id;
-      fs.appendFileSync(ctx.betaPlan, "\n## Milestone 2\n- hold.\n", "utf8");
+      fs.writeFileSync(
+        ctx.betaPlan,
+        `${BETA_PLAN.replace(
+          "- `beta.build` — create beta.txt.\n  - done: beta.txt exists.\n",
+          "- `beta.build` — merged.\n",
+        )}\n## Milestone 2\n- hold.\n`,
+        "utf8",
+      );
       turnedCtx.writeOutcome(
         outcome({ summary: "epic beta reviewed", decision: "continue" }),
       );
       return fakeTurnResult(req);
     },
-    { when: (req) => req.prompt.includes("- epic: `beta`") },
+    {
+      when: (req) =>
+        req.prompt.includes("- epic: `beta`") && passOf(req) === "direction",
+    },
   );
+}
+
+/** Iteration 2: beta reports upward, the architect chooses, beta takes direction. */
+function scriptBoundaryIteration2(ctx: SagaBoundaryCtx): void {
+  scriptBoundaryI2Report(ctx);
+  scriptBoundaryI2Architect(ctx);
+  scriptBoundaryI2Direction(ctx);
   ctx.harness.script(
     (req, turnedCtx) => {
       turnedCtx.writeOutcome(outcome({ summary: "no new tasks" }));
       return fakeTurnResult(req);
     },
-    { when: (req) => iterationOf(req).includes("-i2-pm-") },
+    {
+      fallback: true,
+      when: (req) =>
+        pmScopeOf(req) !== undefined && iterationOf(req).includes("-i2-"),
+    },
   );
 }
 
@@ -323,7 +405,14 @@ function expectBoundarySecondIteration(
     (record) => record.step === "subarchitect",
   );
   const second = subarchitectRecords.filter((record) => record.iteration === 2);
-  expect(second.map((record) => record.architect)).toEqual(["beta"]);
+  // The middle iteration reports beta upward before the top turn and takes its
+  // direction after; alpha is job-done, so neither pass consults it.
+  expect(second.map((record) => record.architect)).toEqual(["beta", "beta"]);
+  const architectRecord = records.find(
+    (record) => record.step === "architect" && record.iteration === 2,
+  );
+  expect(second[0]?.seq).toBeLessThan(architectRecord?.seq ?? 0);
+  expect(second[1]?.seq).toBeGreaterThan(architectRecord?.seq ?? 0);
   const betaSession = subarchitectRecords.find(
     (record) => record.architect === "beta" && record.iteration === 1,
   )?.session;

@@ -6,9 +6,15 @@ import { git } from "../core/git/exec.js";
 import { hasConflictMarkers, unmergedFiles } from "../core/git/merge.js";
 import { porcelainStatus } from "../core/git/status.js";
 import { formatBaseGates, recordedBaseGates } from "./baseline.js";
+import { gateCommandsText } from "./infra.js";
 import { commitEdits, scriptMeta } from "./record.js";
 import type { KernelRuntime, RecordEnd, StepRecord } from "./types.js";
 import { headSha, integrationHead, mergeRef, treeSha } from "./worktree.js";
+import type {
+  ConflictSnapshot,
+  ResolvePreparation,
+} from "./merge-conflict-types.js";
+export type { ConflictSnapshot } from "./merge-conflict-types.js";
 
 /**
  * The one resolve ask for a task branch that conflicts with the integration
@@ -61,10 +67,10 @@ export function resolveVars(
     integration_head: head,
     conflicts: conflicts.join(", ") || "none",
     gate_log_path: gateLogPath ?? "none",
-    gate_commands:
-      runtime.configs.repo.gates
-        .map((g) => `- ${g.id}: ${g.command}`)
-        .join("\n") || "none",
+    gate_commands: gateCommandsText(
+      runtime.store.goalDir,
+      runtime.configs.repo.gates,
+    ),
     base_gates: formatBaseGates(base),
   };
 }
@@ -102,18 +108,6 @@ export async function settleMergeTurn(
     wallMs,
   });
   return { commit: committed ?? head, tree, edits };
-}
-
-/**
- * What the resolve turn must not touch beyond its conflict set. `touched` is
- * every path the in-progress merge changed; `baseline` hashes the cleanly
- * merged half so the turn's edits of them are distinguishable from the merge's
- * own content after the merge commit hides the worktree diff.
- */
-export interface ConflictSnapshot {
-  baseHead: string;
-  touched: readonly string[];
-  baseline: ReadonlyMap<string, string>;
 }
 
 function fileHash(file: string): string {
@@ -176,16 +170,6 @@ export async function outsideConflictChanges(
   }
   return [...outside].sort();
 }
-
-export type ResolvePreparation =
-  | {
-      kind: "conflict";
-      head: string;
-      conflicts: string[];
-      snapshot: ConflictSnapshot;
-    }
-  | { kind: "clean" }
-  | { kind: "error"; cause: string };
 
 interface PendingMerge {
   kind: "pending";

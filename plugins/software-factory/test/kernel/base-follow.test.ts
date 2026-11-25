@@ -4,6 +4,7 @@ import path from "node:path";
 import { GitError } from "../../src/core/git/exec.js";
 import { FakeHarness } from "../../src/harness/fake/index.js";
 import { runGoal } from "../../src/kernel/launch.js";
+import { statusSource, writeStatus } from "../../src/kernel/status.js";
 import {
   BaseFollowConflictError,
   prepareIntegrationCheckout,
@@ -57,6 +58,17 @@ describe("launch follows base advances into the integration branch", () => {
 async function abortsConflictingBaseLeavesPart1(repo: TmpRepo, goal: string) {
   const runtime = await makeRuntime(repo, goal, {});
   const checkout = goalCheckout(repo, goal);
+  const goalDir = path.join(repo.dir, ".factory", "artifacts", goal);
+  // The previous launch's snapshot, so the recovered exit has a badge to replace.
+  await writeStatus(statusSource(runtime), {
+    reason: "iteration-limit",
+    cause: "iteration limit reached",
+  });
+  expect(
+    fs.readFileSync(path.join(goalDir, "dashboard.html"), "utf8"),
+  ).toContain(
+    '<span class="badge stop-iteration-limit">stopped: iteration limit</span>',
+  );
   commitFile(
     repo,
     checkout,
@@ -93,7 +105,7 @@ async function abortsConflictingBaseLeavesPart1(repo: TmpRepo, goal: string) {
   console.warn = (...args: unknown[]) =>
     warnings.push(args.map(String).join(" "));
 
-  return { checkout, integrationSha, warnings, originalWarn };
+  return { checkout, integrationSha, warnings, originalWarn, goalDir };
 }
 
 async function abortsConflictingBaseLeavesPart2(
@@ -101,7 +113,7 @@ async function abortsConflictingBaseLeavesPart2(
   goal: string,
   scope: Awaited<ReturnType<typeof abortsConflictingBaseLeavesPart1>>,
 ) {
-  const { originalWarn, warnings, checkout, integrationSha } = scope;
+  const { originalWarn, warnings, goalDir } = scope;
   try {
     const result = await runGoal({
       repo: repo.dir,
@@ -119,7 +131,20 @@ async function abortsConflictingBaseLeavesPart2(
     console.warn = originalWarn;
   }
   expect(warnings.join("\n")).toContain("shared.txt");
-  expect(head(repo, checkout)).toBe(integrationSha);
+  const status = JSON.parse(
+    fs.readFileSync(path.join(goalDir, "status.json"), "utf8"),
+  ) as { stop?: { reason: string; cause?: string } };
+  expect(status.stop?.reason).toBe("infra");
+  expect(status.stop?.cause).toContain("shared.txt");
+  const dashboard = fs.readFileSync(
+    path.join(goalDir, "dashboard.html"),
+    "utf8",
+  );
+  expect(dashboard).toContain(
+    '<span class="badge stop-infra">stopped: infrastructure stop</span>',
+  );
+  expect(dashboard).toContain("shared.txt");
+  expect(dashboard).not.toContain("stopped: iteration limit");
 }
 
 function registerLaunchFollowsBaseAdvancesIntoTheIntegrationBranchPart1(): void {
@@ -337,7 +362,7 @@ function registerLaunchFollowsBaseAdvancesIntoTheIntegrationBranchPart6(): void 
 }
 
 function registerLaunchFollowsBaseAdvancesIntoTheIntegrationBranchPart7(): void {
-  it("aborts a conflicting base, leaves the integration branch untouched and ends the launch naming the paths", async () => {
+  it("aborts a conflicting base, replaces the previous stop badge and names the paths", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
       const scope1 = await abortsConflictingBaseLeavesPart1(repo, goal);

@@ -1,70 +1,66 @@
+/**
+ * The schema-validation gate: walk the schema-enforced files and run the one
+ * check list `factory validate` also reads (`cli/commands/validate-files.ts`),
+ * so the gate and an agent's `validate` command agree on what is invalid.
+ */
+
 import fs from "node:fs";
 import path from "node:path";
-import yaml from "yaml";
 import type { z } from "zod";
 import {
-  ConfigError,
+  fileFindings,
+  runConfigFindings,
+  schemaFindings,
+  taskDirFindings,
+} from "./cli/commands/validate-files.js";
+import type { ValidateKind } from "./cli/commands/types.js";
+import {
   loadProcessConfig,
-  loadRunConfig,
   processConfigSchema,
   processOverrideSchema,
   repoConfigSchema,
 } from "./kernel/config.js";
-import { classSchema } from "./kernel/flow-context.js";
-import { holdFileSchema } from "./kernel/mailbox.js";
-import { parseOutcome } from "./kernel/outcome.js";
-import { parseTaskFile, validateTaskGraph } from "./kernel/tasks.js";
-import type { TaskTypeDefinition } from "./kernel/types.js";
+import type { ProcessConfig } from "./kernel/types.js";
 
 let failed = false;
 let checked = 0;
 const missing: string[] = [];
 
-function report(file: string, message: string): void {
-  console.error(`${file}: ${message}`);
+/** Task types and flows; the tree's merged process layer, empty when unreadable. */
+let taskConfig: Pick<ProcessConfig, "taskTypes" | "flows"> = {
+  taskTypes: {},
+  flows: {},
+};
+
+function report(line: string): void {
+  console.error(line);
   failed = true;
 }
 
-function noteChecked(): void {
-  checked += 1;
+/** Reports one file's findings and counts it valid only when it has none. */
+function reportFindings(findings: string[]): void {
+  for (const finding of findings) report(finding);
+  if (findings.length === 0) checked += 1;
 }
 
 function validateYamlFile(file: string, schema: z.ZodType<unknown>): void {
-  let raw: unknown;
-  try {
-    raw = yaml.parse(fs.readFileSync(file, "utf8"));
-  } catch (err) {
-    report(file, `invalid YAML: ${(err as Error).message}`);
-    return;
-  }
-  const result = schema.safeParse(raw ?? {});
-  if (!result.success) {
-    for (const issue of result.error.issues) {
-      report(file, `${issue.path.join(".") || "(root)"}: ${issue.message}`);
-    }
-    return;
-  }
-  noteChecked();
+  reportFindings(schemaFindings(fs.readFileSync(file, "utf8"), file, schema));
 }
 
-/**
- * A run config is validated through its `extends` chain, exactly as a launch
- * reads it: the merged layer, with findings naming the file that owns the key.
- */
-function validateRunConfigFile(file: string): void {
-  try {
-    loadRunConfig(file);
-  } catch (err) {
-    if (err instanceof ConfigError) {
-      for (const finding of err.findings) {
-        report(finding.file, `${finding.key}: ${finding.message}`);
-      }
-    } else {
-      report(file, (err as Error).message);
-    }
-    return;
-  }
-  noteChecked();
+/** One file through the shared check list. */
+async function checkKind(
+  file: string,
+  kind: Parameters<typeof fileFindings>[0]["kind"],
+): Promise<void> {
+  reportFindings(
+    await fileFindings({
+      file,
+      text: fs.readFileSync(file, "utf8"),
+      kind,
+      process: () => taskConfig,
+      flows: false,
+    }),
+  );
 }
 
 function walk(dir: string, predicate: (file: string) => boolean): string[] {
@@ -112,8 +108,9 @@ if (fs.existsSync(treeFactoryDir)) {
     validateYamlFile(treeFiles.repo, repoConfigSchema);
   else missing.push(treeFiles.repo);
 
-  if (fs.existsSync(treeFiles.run)) validateRunConfigFile(treeFiles.run);
-  else missing.push(treeFiles.run);
+  if (fs.existsSync(treeFiles.run)) {
+    reportFindings(runConfigFindings(treeFiles.run));
+  } else missing.push(treeFiles.run);
 
   if (fs.existsSync(treeFiles.processOverride))
     validateYamlFile(treeFiles.processOverride, processOverrideSchema);
@@ -125,13 +122,15 @@ if (fs.existsSync(artifactFactoryDir)) {
   // The artifact checkout's merged process layer supplies the task types its
   // files name. Its repo/run files belong to another checkout, so only the
   // process layer is read; a broken process file is reported here too.
-  let taskTypes: Record<string, TaskTypeDefinition> = {};
   try {
-    taskTypes = loadProcessConfig(artifactRoot).taskTypes ?? {};
+    const processConfig = loadProcessConfig(artifactRoot);
+    taskConfig = {
+      taskTypes: processConfig.taskTypes ?? {},
+      flows: processConfig.flows,
+    };
   } catch (err) {
     report(
-      artifactFactoryDir,
-      `task types unavailable: ${(err as Error).message}`,
+      `${artifactFactoryDir}: task types unavailable: ${(err as Error).message}`,
     );
   }
 
@@ -139,71 +138,38 @@ if (fs.existsSync(artifactFactoryDir)) {
   const taskFiles = walk(artifactFactoryDir, (file) =>
     /\/tasks\/[^/]+\.md$/.test(file),
   );
-  const byDir = new Map<string, string[]>();
-  for (const file of taskFiles) {
-    const dir = path.dirname(file);
-    const list = byDir.get(dir) ?? [];
-    list.push(file);
-    byDir.set(dir, list);
-  }
-  for (const [dir, files] of byDir) {
-    const tasks = [];
-    for (const file of files.sort()) {
-      try {
-        tasks.push(
-          parseTaskFile(
-            fs.readFileSync(file, "utf8"),
-            path.basename(file, ".md"),
-            taskTypes,
-          ),
-        );
-      } catch (err) {
-        report(file, (err as Error).message);
-        continue;
-      }
-      noteChecked();
-    }
-    if (tasks.length > 0) {
-      const findings = validateTaskGraph(tasks);
-      for (const finding of findings) report(dir, finding);
-    }
+  const taskDirs = [
+    ...new Set(taskFiles.map((file) => path.dirname(file))),
+  ].sort();
+  for (const dir of taskDirs) {
+    const result = await taskDirFindings(dir, taskConfig.taskTypes);
+    for (const finding of result.findings) report(finding);
+    checked += result.checked;
   }
 
-  // Pending-steer holds: one YAML per steer, written by the PM's steer turn.
-  // Dotfiles are the writer's temp siblings, not holds `readHolds` would read.
-  for (const file of walk(
-    artifactFactoryDir,
-    (f) =>
-      /\/mailbox\/holds\/[^/]+\.ya?ml$/.test(f) &&
-      !path.basename(f).startsWith("."),
-  )) {
-    validateYamlFile(file, holdFileSchema);
-  }
-
-  // Class files.
-  for (const file of walk(
-    artifactFactoryDir,
-    (f) => path.basename(f) === "class.yaml",
-  )) {
-    validateYamlFile(file, classSchema);
-  }
-
-  // Outcome files.
-  for (const file of walk(
-    artifactFactoryDir,
-    (f) => path.basename(f) === "outcome.yaml",
-  )) {
-    try {
-      parseOutcome(fs.readFileSync(file, "utf8"));
-    } catch (err) {
-      report(file, (err as Error).message);
-      continue;
+  // Holds are one YAML per steer or open concern; dotfiles are the writer's
+  // temp siblings, not holds `readHolds` would read.
+  const artifactChecks: {
+    pattern: RegExp;
+    kind: ValidateKind;
+    skipDot?: true;
+  }[] = [
+    { pattern: /\/mailbox\/holds\/[^/]+\.ya?ml$/, kind: "hold", skipDot: true },
+    { pattern: /\/class\.yaml$/, kind: "class" },
+    { pattern: /\/infra\.yaml$/, kind: "infra" },
+    { pattern: /\/outcome\.yaml$/, kind: "outcome" },
+  ];
+  for (const { pattern, kind, skipDot } of artifactChecks) {
+    for (const file of walk(
+      artifactFactoryDir,
+      (f) => pattern.test(f) && !(skipDot && path.basename(f).startsWith(".")),
+    )) {
+      await checkKind(file, kind);
     }
-    noteChecked();
   }
 } else {
   missing.push(
-    `${artifactFactoryDir} (artifact-level: tasks, class, outcomes)`,
+    `${artifactFactoryDir} (artifact-level: tasks, class, infra, outcomes)`,
   );
 }
 
@@ -212,7 +178,7 @@ const envRunConfig = process.env.FACTORY_RUN_CONFIG;
 if (envRunConfig) {
   const file = path.resolve(treeRoot, envRunConfig);
   if (fs.existsSync(file)) {
-    validateRunConfigFile(file);
+    reportFindings(runConfigFindings(file));
   } else {
     missing.push(`${file} (FACTORY_RUN_CONFIG)`);
   }

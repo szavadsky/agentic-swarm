@@ -5,70 +5,16 @@
  */
 
 import { makeCause } from "./cause.js";
-import type { PendingChecks, TerminalFact } from "./derive-task-facts.js";
-import { isAcceptanceStep } from "./review.js";
 import type {
-  Cause,
-  FlowDefinition,
-  FlowStep,
-  ProgressRepeat,
-  ReviewVerdict,
-  StepRecord,
-  TaskFile,
-  TaskPhase,
-} from "./types.js";
-
-export interface ReduceContext {
-  task: TaskFile;
-  flow: FlowDefinition;
-  steps: FlowStep[];
-  flowIndex: Map<string, number>;
-  firstStep: string;
-}
-
-export interface ReduceState {
-  terminal: TerminalFact | null;
-  phase: TaskPhase;
-  round: number;
-  stepIndex: number;
-  verdict?: ReviewVerdict;
-  commit?: string;
-  park?: Cause;
-  loop?: ProgressRepeat;
-  gateFix: boolean;
-  gateLastCall: boolean;
-  gateFixCount: number;
-  gateFailure?: string;
-  /** Sorted actionable failing names behind the current gate fix. */
-  gateRed?: string[];
-  cleanlinessRevision: boolean;
-  cleanlinessRevised: boolean;
-  cleanlinessJustified: boolean;
-  /** The finding lines of the cleanliness red awaiting the author's answer. */
-  cleanlinessRedLines: string[];
-  /** The cleanliness finding lines the author's reply accepted. */
-  cleanlinessAccepted: string[];
-  /** The gate fix came from merged-result gates: green checks merge, skipping review. */
-  mergeFix: boolean;
-  /** The last review's `changes` still awaits its answer. */
-  changesPending: boolean;
-  /** The fix before the next review answered by replies alone. */
-  replyOnlyFix: boolean;
-  gatesFailures: number;
-  pendingChecks: PendingChecks | null;
-  /** The last green task-checks tree. */
-  lastChecksTree?: string;
-  lastTree?: string;
-  /** Tree of the last counted turn. */
-  countedTree?: string;
-  creationAdvance: { tree: string; headTree: string } | null;
-  seenCountedTurn: boolean;
-  turns: number;
-  resolveRan: boolean;
-  seen: Map<string, { step: string; round: number }>;
-  lastInfraStep?: string;
-  infraRepeatCount: number;
-}
+  PendingChecks,
+  ReduceContext,
+  ReduceState,
+  SignalResume,
+  TerminalFact,
+} from "./derive-types.js";
+import { DECIDE_STEP } from "./pending-signal.js";
+import { countLaunch, emptyLaunches, isAcceptanceStep } from "./review.js";
+import type { FlowStep, PendingSignal, StepRecord } from "./types.js";
 
 export function createReduceState(
   context: ReduceContext,
@@ -78,6 +24,9 @@ export function createReduceState(
     terminal,
     phase: context.firstStep,
     round: 1,
+    launches: {},
+    calls: {},
+    roundGrants: {},
     stepIndex: 0,
     gateFix: false,
     gateLastCall: false,
@@ -96,9 +45,18 @@ export function createReduceState(
     seenCountedTurn: false,
     turns: 0,
     resolveRan: false,
+    pendingSignal: null,
+    signalResume: null,
     seen: new Map(),
     infraRepeatCount: 0,
   };
+}
+
+/** Add one ended agent turn to its step's launch counts. */
+export function recordLaunch(state: ReduceState, rec: StepRecord): void {
+  const counts = state.launches[rec.step] ?? emptyLaunches();
+  state.launches[rec.step] = counts;
+  countLaunch(counts, rec);
 }
 
 /**
@@ -140,4 +98,19 @@ export function routeResolve(
   state.gateLastCall = false;
   state.mergeFix = false;
   state.changesPending = false;
+}
+
+/**
+ * Raises a mechanical signal instead of parking: the phase the next action
+ * reads becomes the decide turn, and the resume point says what an approve
+ * continues to.
+ */
+export function raisePendingSignal(
+  state: ReduceState,
+  signal: PendingSignal,
+  resume: SignalResume,
+): void {
+  state.pendingSignal = signal;
+  state.signalResume = resume;
+  state.phase = DECIDE_STEP;
 }

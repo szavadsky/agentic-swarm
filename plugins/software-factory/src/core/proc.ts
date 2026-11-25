@@ -1,7 +1,11 @@
 import { spawn } from "node:child_process";
 import { createActiveTimer, detectSuspend, getClock } from "./clock.js";
 import { childEnv } from "./env.js";
+import { sandboxedSpec } from "./sandbox.js";
 import { registerChildGroup, unregisterChildGroup } from "./shutdown.js";
+import type { ProcessResult } from "./types.js";
+
+export type { ProcessResult } from "./types.js";
 
 interface RunProcessOptions {
   cmd: string | string[];
@@ -16,19 +20,6 @@ interface RunProcessOptions {
   signal?: AbortSignal;
   /** Receives the child's pid once its process group exists; not on spawn failure. */
   onSpawn?: (pid: number) => void;
-}
-
-export interface ProcessResult {
-  code: number | null;
-  signal?: string;
-  stdout: string;
-  stderr: string;
-  timedOut: boolean;
-  /** The run ended because `signal` fired; the child was killed, not reaped. */
-  aborted: boolean;
-  durationMs: number;
-  suspendDetected?: boolean;
-  suspendGapMs?: number;
 }
 
 /** Grace period after process exit (or timeout kill) for stdio to flush. */
@@ -142,10 +133,10 @@ function killGroupNow(child: ReturnType<typeof spawn>): void {
 function commandSpec(
   cmd: string | string[],
 ): { executable: string; args: string[] } | { error: string } {
-  if (typeof cmd === "string") return { executable: "bash", args: ["-c", cmd] };
+  if (typeof cmd === "string") return sandboxedSpec("bash", ["-c", cmd]);
   const [executable, ...args] = cmd;
   if (executable === undefined) return { error: "Empty command array" };
-  return { executable, args };
+  return sandboxedSpec(executable, args);
 }
 
 /** The child environment: TMPDIR overrides plus the run config's allowlist. */

@@ -48,6 +48,7 @@ const CONFIGURED_PROMPTS = [
   "architect-repair",
   "architect-review-return",
   "architect-subarchitects",
+  "browser-qa",
   "delivery-repair",
   "digest",
   "front",
@@ -131,5 +132,83 @@ describe("factory prompts custom templates", () => {
 
     expect(result.code).toBe(0);
     expect(result.out).toContain("custom dry-run custom_value");
+  });
+});
+
+/** The harness-facing subarchitect prompts, rendered by one dry-run. */
+async function dryRunSubarchitects(runConfig: string): Promise<{
+  architect: string;
+  block: string;
+  agent: string;
+}> {
+  // The launch block exists only at depth 2, so every harness sample states it.
+  write(
+    ".factory/process.yaml",
+    "hierarchy:\n  depth: 2\n  subarchitect: { prompt: subarchitect, repairPrompt: architect-repair, deliverable: epic plan }\n",
+  );
+  const out = path.join(root, "renders-harness");
+  const result = await runPrompts([
+    "--dry-run",
+    "--repo",
+    root,
+    "--run-config",
+    runConfig,
+    "--out",
+    out,
+  ]);
+  expect(result.code).toBe(0);
+  const read = (name: string) => fs.readFileSync(path.join(out, name), "utf8");
+  return {
+    architect: read("architect.md"),
+    block: read("architect-subarchitects.md"),
+    agent: read("subarchitect-agent.md"),
+  };
+}
+
+describe("factory prompts harness condition", () => {
+  function runConfig(name: string, text: string): string {
+    const file = path.join(root, name);
+    fs.writeFileSync(file, text);
+    return file;
+  }
+
+  const ACPX = `aliases:
+  architect: { harness: acpx-arch, model: test-model }
+harnesses:
+  acpx-arch: { acpx: { agent: test-agent }, compaction: { enabled: false, reason: test prompt only } }
+`;
+
+  const NATIVE = `aliases:
+  architect: { harness: omp, model: test-model }
+`;
+
+  it("names no tool in the architect prompt for an acpx harness", async () => {
+    const { architect, block, agent } = await dryRunSubarchitects(
+      runConfig("acpx.yaml", ACPX),
+    );
+    for (const text of [architect, block, agent]) {
+      expect(text).not.toContain("`task` tool");
+      expect(text).not.toContain("agent://");
+      expect(text).not.toContain("`bash`");
+    }
+    expect(architect).toContain("## Architect register");
+    expect(architect).not.toContain("## Subarchitects in this session");
+    expect(block).toContain("as a subagent");
+  });
+
+  it("keeps the omp steering text in the architect prompt", async () => {
+    const { architect, block, agent } = await dryRunSubarchitects(
+      runConfig("native.yaml", NATIVE),
+    );
+    expect(architect).toContain("## Subarchitects in this session");
+    expect(architect).toContain("`task` tool");
+    expect(architect).toContain("`write agent://<name>`");
+    expect(architect).toContain("- epic `dry-run`");
+    expect(block).toContain("`task` tool");
+    expect(block).toContain("`write agent://<name>`");
+    expect(agent).toContain(
+      "tools: [read, grep, glob, edit, write, task, bash]",
+    );
+    expect(agent).toContain("run `bash` with a short `sleep`");
   });
 });

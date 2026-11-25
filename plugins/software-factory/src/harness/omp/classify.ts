@@ -1,27 +1,19 @@
 import { exitDetails, stopDetails, withDetails } from "../details.js";
-import type { Stop, Usage } from "../types.js";
+import type { Stop } from "../types.js";
+import type {
+  OmpPromptError,
+  OmpTurnFailure,
+  OmpTurnOutcomeInput,
+} from "./types.js";
 import { isTransportFailure } from "../transport.js";
 import { reportsUsage } from "../usage.js";
 
-/** Error object omp attaches to `prompt_result.status === "error"`. */
-export interface OmpPromptError {
-  message?: string;
-  provider?: string;
-  model?: string;
-  httpStatus?: number;
-  retryable?: boolean;
-  code?: string;
-}
-
-/** The `prompt_result` frame's data; only the fields the turn reads. */
-export interface OmpPromptResult {
-  /** Terminal status omp reports for the prompt. */
-  status?: "completed" | "error" | "aborted";
-  /** Error object omp attaches when `status` is "error". */
-  error?: OmpPromptError;
-  /** A subarchitect child keeps its session open after the prompt settles. */
-  sessionSettled?: boolean;
-}
+export type {
+  OmpPromptError,
+  OmpPromptResult,
+  OmpTurnFailure,
+  OmpTurnOutcomeInput,
+} from "./types.js";
 
 const AUTH =
   /unauthori[sz]ed|forbidden|invalid api key|no api key|missing api key|credential|model .*not found|no-route|model unavailable/i;
@@ -108,25 +100,6 @@ export function classifyOmpLaunchFailure(stderr: string): Stop {
     return { kind: "infra", cause: "network", details: stopDetails(stderr) };
   }
   return { kind: "infra", cause: "crash", details: stopDetails(stderr) };
-}
-
-export interface OmpTurnFailure {
-  /** Child process exit code, when omp died before a prompt_result. */
-  code?: number | null;
-  /** Child process exit signal, when omp died before a prompt_result. */
-  signal?: string | null;
-  stderr?: string;
-  /** The adapter's own wall/idle timer caused the kill. */
-  timedOut?: boolean;
-}
-
-export interface OmpTurnOutcomeInput {
-  abortReason?: "idle" | "wall";
-  failure?: OmpTurnFailure;
-  promptResult?: OmpPromptResult;
-  lastStopReason?: string;
-  usage?: Usage;
-  text?: string;
 }
 
 /** A completed prompt: its stop reason, a zero-usage glitch, or done. */

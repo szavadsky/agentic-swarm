@@ -19,7 +19,7 @@ export const REPAIR_PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema, narrowed to the fields this turn delivers; supplied by the repair ask",
+        "outcome examples from the kernel schema, narrowed to the fields this turn delivers; supplied by the repair ask",
     },
   },
   {
@@ -40,7 +40,7 @@ export const REPAIR_PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema, narrowed to the fields this turn delivers; supplied by the repair ask",
+        "outcome examples from the kernel schema, narrowed to the fields this turn delivers; supplied by the repair ask",
     },
   },
   {
@@ -62,7 +62,7 @@ export const REPAIR_PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       validate_cmd:
         "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
       outcome_schema:
-        "outcome YAML skeleton from the kernel schema; supplied by the turn",
+        "outcome examples from the kernel schema; supplied by the turn",
     },
   },
   {

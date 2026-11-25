@@ -4,13 +4,10 @@
  */
 import { makeCause } from "./cause.js";
 import { parkTask, taskMeta } from "./flow-meta.js";
+import type { Opened } from "./flow-types.js";
 import { scriptMeta } from "./record.js";
 import type { KernelRuntime, TaskFile, TaskState } from "./types.js";
 import { ensureTaskWorktree } from "./worktree.js";
-
-export type Job = Awaited<ReturnType<typeof ensureTaskWorktree>>;
-
-export type Opened = { ensured: Job } | { result: Record<string, never> };
 
 export async function openTaskWorktree(
   runtime: KernelRuntime,

@@ -5,23 +5,27 @@
  */
 import { countOutcomeRepairs } from "../harness/usage.js";
 import { makeCause } from "./cause.js";
+import { applyDecideTurn, checkTerminalStatus } from "./derive-task-decide.js";
 import { committedNothing } from "./derive-task-facts.js";
 import { recordInfraRepeat } from "./derive-task-gates.js";
-import {
-  type ReduceContext,
-  type ReduceState,
-  routeResolve,
-} from "./derive-task-state.js";
+import type {
+  DeferredFix,
+  ReduceContext,
+  ReduceState,
+} from "./derive-types.js";
+import { raisePendingSignal, routeResolve } from "./derive-task-state.js";
 import {
   advanceAfterQa,
   applyAdjudicator,
+  applyAnswer,
   applyReview,
   startFixRound,
 } from "./derive-task-verdict.js";
+import { DECIDE_STEP, isDecideStep } from "./pending-signal.js";
 import { isRecoveryCrash } from "./recovery-seal.js";
 import { stepFingerprint } from "./progress.js";
 import { qaReportOf } from "./qa.js";
-import { isAcceptanceStep, isLastReviewCall, isVerdictStep } from "./review.js";
+import { isLastReviewCall, isVerdictStep } from "./review.js";
 import type { FlowStep, StepRecord } from "./types.js";
 
 interface AgentTurn {
@@ -30,8 +34,6 @@ interface AgentTurn {
   answeredReview: boolean;
   replyCount: number;
 }
-
-type DeferredFix = { step: string; round: number };
 
 /**
  * One ended agent record: ignored infra turns first, then the counted turn,
@@ -82,18 +84,32 @@ export function applyAgentTurn(
     replyCount,
   );
 
-  if (rec.step === "resolve") {
-    // The in-flow resolve turn is a real task turn, not a flow step.
-    routeResolve(context, state, rec);
-    return;
-  }
-  if (!context.flowIndex.has(rec.step)) return;
-  applyFlowStepTurn(context, state, rec, {
+  routeCountedTurn(context, state, rec, {
     priorTree,
     carriedWork,
     answeredReview,
     replyCount,
   });
+}
+
+/** A counted turn's target: a kernel turn, a flow step, or a record to ignore here. */
+function routeCountedTurn(
+  context: ReduceContext,
+  state: ReduceState,
+  rec: StepRecord,
+  turn: AgentTurn,
+): void {
+  if (rec.step === "resolve") {
+    // The in-flow resolve turn is a real task turn, not a flow step.
+    routeResolve(context, state, rec);
+    return;
+  }
+  if (rec.step === DECIDE_STEP) {
+    applyDecideTurn(context, state, rec);
+    return;
+  }
+  if (context.flowIndex.has(rec.step))
+    applyFlowStepTurn(context, state, rec, turn);
 }
 
 /**
@@ -131,6 +147,7 @@ function trackFingerprint(
   carriedWork: boolean | null,
   replyCount: number,
 ): boolean {
+  if (isDecideStep(rec.step)) return false;
   const answeredIndex = context.flowIndex.get(rec.step);
   const answeredStep =
     answeredIndex === undefined ? undefined : context.steps[answeredIndex];
@@ -140,16 +157,23 @@ function trackFingerprint(
     !isVerdictStep(answeredStep) &&
     replyCount > 0 &&
     committedNothing(context.task.kind, rec, priorTree);
-  const emptyGateFix =
-    (state.gateFix || state.cleanlinessRevision) &&
-    !state.changesPending &&
-    carriedWork !== true &&
-    answeredStep !== undefined &&
-    !isVerdictStep(answeredStep) &&
-    committedNothing(context.task.kind, rec, priorTree);
+  // A turn that raises the empty-diff signal or defers to its following checks
+  // is not a no-progress repeat: the decider or those checks own its outcome.
+  const empty =
+    answeredStep === undefined
+      ? { kind: "none" as const }
+      : classifyEmptyDiff(
+          context,
+          state,
+          rec,
+          answeredStep,
+          priorTree,
+          carriedWork,
+          replyCount,
+        );
   const fp =
     answeredReview ||
-    emptyGateFix ||
+    empty.kind !== "none" ||
     (isVerdictStep(answeredStep) && state.replyOnlyFix)
       ? null
       : stepFingerprint(context.task.kind, rec, state.lastTree);
@@ -167,22 +191,6 @@ function trackFingerprint(
     }
   }
   return answeredReview;
-}
-
-function checkTerminalStatus(state: ReduceState, rec: StepRecord): boolean {
-  if (rec.stop?.kind === "refusal") {
-    state.park = makeCause("refused", rec.stop.details ?? "no details");
-    state.phase = "parked";
-    return true;
-  }
-  const status = rec.outcome?.status;
-  const summary = rec.outcome?.summary ?? "no summary";
-  if (status === "blocked" || status === "failed" || status === "upscope") {
-    state.park = makeCause(status, summary);
-    state.phase = "parked";
-    return true;
-  }
-  return false;
 }
 
 function checkCleanlinessJustification(
@@ -216,6 +224,9 @@ function applyFlowStepTurn(
   state.resolveRan = false;
 
   state.round = Math.max(state.round, rec.round);
+  // One counted turn is one call of this step's own budget: the acceptance
+  // bound counts its calls, never the task-wide round.
+  state.calls[rec.step] = (state.calls[rec.step] ?? 0) + 1;
   state.commit = rec.commit ?? state.commit;
   if (checkTerminalStatus(state, rec)) return;
 
@@ -230,7 +241,7 @@ function applyFlowStepTurn(
     turn.carriedWork,
     turn.replyCount,
   );
-  if (empty.parked) return;
+  if (empty.stopped) return;
   if (step.qa) {
     applyQa(context, state, rec, rec.outcome, idx);
     return;
@@ -244,13 +255,14 @@ function applyFlowStepTurn(
     return;
   }
   checkCleanlinessJustification(state, rec);
-  applyAnswer(context, state, idx, turn, empty.deferred);
+  applyAnswer(context, state, idx, turn.answeredReview, empty.deferred);
 }
 
 /**
- * An empty commit is its own no-progress signal unless it answers a `changes`
+ * An empty commit raises its no-progress signal unless it answers a `changes`
  * review with replies, carries a continuation's kept work, or defers to the
- * checks that follow an empty gate fix.
+ * checks that follow an empty gate fix. The turn stops at the signal either
+ * way: a signal is never a productive turn's advance.
  */
 function settleEmptyDiff(
   context: ReduceContext,
@@ -260,33 +272,76 @@ function settleEmptyDiff(
   priorTree: string | undefined,
   carriedWork: boolean | null,
   replyCount: number,
-): { deferred: DeferredFix | null; parked: boolean } {
+): { deferred: DeferredFix | null; stopped: boolean } {
+  const empty = classifyEmptyDiff(
+    context,
+    state,
+    rec,
+    step,
+    priorTree,
+    carriedWork,
+    replyCount,
+  );
+  if (empty.kind === "signal") {
+    raiseSignal(context, state, rec, empty.evidence);
+    return { deferred: null, stopped: true };
+  }
+  if (empty.kind === "deferred")
+    return { deferred: { step: rec.step, round: rec.round }, stopped: false };
+  return { deferred: null, stopped: false };
+}
+
+type EmptyDiff =
+  | { kind: "none" }
+  | { kind: "deferred" }
+  | { kind: "signal"; evidence: string };
+
+/**
+ * What an empty productive turn means: nothing, a fix that defers to its
+ * following checks, or the signal the decider answers.
+ */
+function classifyEmptyDiff(
+  context: ReduceContext,
+  state: ReduceState,
+  rec: StepRecord,
+  step: FlowStep,
+  priorTree: string | undefined,
+  carriedWork: boolean | null,
+  replyCount: number,
+): EmptyDiff {
   if (
     isVerdictStep(step) ||
-    !committedNothing(context.task.kind, rec, priorTree)
+    !committedNothing(context.task.kind, rec, priorTree) ||
+    carriedWork === true ||
+    (state.changesPending && replyCount > 0)
   )
-    return { deferred: null, parked: false };
-  if (carriedWork !== true && (!state.changesPending || replyCount === 0)) {
-    if (carriedWork === false) {
-      state.park = makeCause(
-        "empty-diff",
-        `${rec.step} r${rec.round} kept work is already on the head`,
-      );
-      state.phase = "parked";
-      return { deferred: null, parked: true };
-    }
-    if (state.gateFix || state.cleanlinessRevision) {
-      // The fix answered red checks with no diff; the following checks settle it.
-      return { deferred: { step: rec.step, round: rec.round }, parked: false };
-    }
-    state.park = makeCause(
-      "empty-diff",
-      `${rec.step} r${rec.round} committed no changes`,
-    );
-    state.phase = "parked";
-    return { deferred: null, parked: true };
-  }
-  return { deferred: null, parked: false };
+    return { kind: "none" };
+  if (carriedWork !== false && (state.gateFix || state.cleanlinessRevision))
+    return { kind: "deferred" };
+  return {
+    kind: "signal",
+    evidence:
+      carriedWork === false
+        ? `${rec.step} r${rec.round} kept work is already on the head`
+        : `${rec.step} r${rec.round} committed no changes`,
+  };
+}
+
+/** A mechanical signal replaces the kernel park: the decide turn owns the call. */
+function raiseSignal(
+  context: ReduceContext,
+  state: ReduceState,
+  rec: StepRecord,
+  evidence: string,
+): void {
+  raisePendingSignal(
+    state,
+    { kind: "empty-diff", evidence },
+    {
+      kind: "past-step",
+      index: context.flowIndex.get(rec.step) ?? state.stepIndex,
+    },
+  );
 }
 
 /** QA's verdict: accept advances, changes starts the next round, else park. */
@@ -325,7 +380,7 @@ function applyQaChanges(
   if (
     isLastReviewCall(
       context.steps[context.flowIndex.get(rec.step)!]!,
-      rec.round,
+      state.launches[rec.step]?.changeRequests ?? 0,
     )
   ) {
     // The outcome validator refuses this; a recorded changes on the last call
@@ -350,29 +405,4 @@ function applyQaChanges(
     state.verdict = "changes";
   }
   state.replyOnlyFix = false;
-}
-
-/** A productive turn answers the flow: checks before acceptance, else the next step. */
-function applyAnswer(
-  context: ReduceContext,
-  state: ReduceState,
-  idx: number,
-  turn: AgentTurn,
-  deferred: DeferredFix | null,
-): void {
-  state.replyOnlyFix = turn.answeredReview;
-  state.changesPending = false;
-  state.stepIndex = idx + 1;
-  const nextStep = context.steps[state.stepIndex];
-  if (!nextStep || isAcceptanceStep(nextStep)) {
-    state.pendingChecks = {
-      nextIndex: state.stepIndex,
-      mergeAfter: state.mergeFix,
-      ...(deferred ? { emptyFix: deferred } : {}),
-    };
-    state.phase = "checks";
-    return;
-  }
-  state.pendingChecks = null;
-  state.phase = nextStep.id;
 }

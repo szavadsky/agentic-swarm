@@ -102,7 +102,7 @@ Every recovery act is journaled and reported as an incident, so the architect ow
   Suggested intents — pick another small one if these are already done: trivial, *"Remove the unused `Caps.fork` flag from the harness types and adapters; gates stay green."*; task, *"Make the omp cache TTL a run-config key (default `short`) passed to the omp adapter; covered by a test."* Land `factory/<goal>` like `factory/self`. A misclassification is an incident, never a hand-written `class.yaml`.
 - A steer dropped into the goal mailbox while at least one task is running must get a `steer <id>:` answer while dispatch continues (no hold, running tasks unaffected), with the record ids journaled.
 - Stage B goals: `t-retention` — *"Session/transcript pruning keeps every transcript a record cites; covered by a test."*; `t-hygiene` — *"After implement, a cleanliness check flags new file extensions, oversized files and many added files; the author gets one follow-up prompt to fix or justify."* An escalation to bigger is a valid outcome.
-- Benchmark (`bootstrap/benchmark/README.md`, ~7 h): once at the end of Phase 1.
+- Benchmark: once at the end of Phase 1, as a goal compared with the v2 baseline.
 - A Go monthly 429 (quota exhausted) triggers the off-Go rotation: relaunch with `bootstrap/run/self-quota.yaml`, all roles on omp / agy / opencode-free, and revert when Go resets.
 
 ## Stage C: the whole intent

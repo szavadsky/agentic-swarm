@@ -14,10 +14,9 @@ import { derive } from "../../src/kernel/derive.js";
 import { writeMetrics } from "../../src/kernel/metrics.js";
 import {
   readWasteMetrics,
-  type WasteSpikeMetrics,
   wasteSpikeProposals,
 } from "../../src/kernel/metrics/recurring.js";
-import { PACK_PREP_STEP } from "../../src/kernel/pack-prep.js";
+import type { WasteSpikeMetrics } from "../../src/kernel/metrics/types.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type { StepRecord } from "../../src/kernel/types.js";
 import { emptyWasteCounts } from "../../src/kernel/waste.js";
@@ -331,7 +330,7 @@ function scriptBoundaryFollowThrough(
 }
 
 async function packAtThreshold(
-  opts: { threshold?: number; agentPack?: string; metricsText?: string } = {},
+  opts: { threshold?: number; metricsText?: string } = {},
 ) {
   const { repo, goalDir, goal } = setupFlowRepo(
     opts.threshold === undefined
@@ -347,21 +346,6 @@ async function packAtThreshold(
       fs.writeFileSync(path.join(goalDir, "metrics.yaml"), opts.metricsText);
     }
     scriptBoundaryFollowThrough(harness, runtime);
-    if (opts.agentPack !== undefined) {
-      const agentPack = opts.agentPack;
-      harness.script(
-        (req, ctx) => {
-          fs.writeFileSync(
-            path.join(goalDir, contextPackRelPath(2)),
-            agentPack,
-            "utf8",
-          );
-          ctx.writeOutcome(outcome({ summary: "prepared the index" }));
-          return fakeTurnResult(req);
-        },
-        { when: whenTurn({ step: PACK_PREP_STEP }) },
-      );
-    }
 
     const boundary = await runBoundary(runtime, {
       relaunch: false,
@@ -414,27 +398,6 @@ function registerNextPack(): void {
       });
       expect(pack).not.toContain("## Spike proposals");
       expect(data).toHaveLength(0);
-    });
-
-    it("adds the section to an agent pack that omitted it", async () => {
-      const { pack } = await packAtThreshold({
-        threshold: 3,
-        agentPack: "# Context pack\n\n## Tasks\n- alpha: ready\n",
-      });
-      expect(pack).toContain("# Context pack");
-      expect(pack).toContain(
-        "- complete implementer failure: 4 wasted turns in iterations 1, 2 (threshold 3)",
-      );
-    });
-
-    it("keeps one section when the agent pack carries it", async () => {
-      const { pack } = await packAtThreshold({
-        threshold: 3,
-        agentPack:
-          "# Context pack\n\n## Spike proposals (recurring waste at the configured threshold)\n- alpha: one line\n",
-      });
-      expect(pack.match(/## Spike proposals/g)).toHaveLength(1);
-      expect(pack).toContain("- alpha: one line");
     });
   });
 }

@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   existingPlans,
+  formatPlanDiff,
   formatPlanList,
   goalPlan,
   isPlanPath,
@@ -122,5 +123,78 @@ describe("plan list", () => {
     expect(isPlanPath("epics/auth.md")).toBe(true);
     expect(isPlanPath("epics/auth/plan.md")).toBe(false);
     expect(isPlanPath("tasks/plan.md")).toBe(false);
+  });
+});
+
+describe("plan diff", () => {
+  it("carries none on the first derived plan and states an unchanged plan", () => {
+    const plan = {
+      rel: "plan.md",
+      text: "# Plan\n\n- alpha — Create alpha.\n",
+    };
+    expect(formatPlanDiff([plan], null)).toBe("none");
+    expect(formatPlanDiff([plan], [plan])).toBe("empty (unchanged)");
+  });
+
+  it("keys added, changed and cancelled bullets by task slug", () => {
+    const previous = {
+      rel: "plan.md",
+      text: "# Plan\n\n- alpha — Alpha v1.\n- gamma — Gamma.\n",
+    };
+    const current = {
+      rel: "plan.md",
+      text: "# Plan\n\n- alpha — Alpha v2.\n- beta — Beta new.\ncancelled: gamma — obsolete\n",
+    };
+    const diff = formatPlanDiff([current], [previous]);
+    expect(diff).toContain("added:\n  - beta — Beta new.");
+    expect(diff).toContain("changed:\n  - alpha — Alpha v2.");
+    expect(diff).toContain("cancelled:\n  - gamma — obsolete");
+  });
+
+  it("reports a bullet removed without a cancellation line as cancelled", () => {
+    const diff = formatPlanDiff(
+      [{ rel: "plan.md", text: "# Plan\n\n- alpha — Alpha.\n" }],
+      [
+        {
+          rel: "plan.md",
+          text: "# Plan\n\n- alpha — Alpha.\n- beta — Beta.\n",
+        },
+      ],
+    );
+    expect(diff).toContain("cancelled:\n  - beta — removed");
+  });
+
+  it("reports a bullet without a slug by its heading, not dropped", () => {
+    const previous = {
+      rel: "plan.md",
+      text: "# Plan\n\n## Section One\n- alpha — Alpha.\n",
+    };
+    const current = {
+      rel: "plan.md",
+      text: "# Plan\n\n## Section One\n- alpha — Alpha.\n- Do something without a slug.\n",
+    };
+    const diff = formatPlanDiff([current], [previous]);
+    expect(diff).toContain(
+      'added:\n  - heading "Section One": - Do something without a slug.',
+    );
+  });
+});
+
+describe("plan diff across plans", () => {
+  it("keys one slug across plans and reports a plan's removed bullet", () => {
+    const previous = [
+      { rel: "plan.md", text: "# Plan\n\n- alpha — Alpha.\n" },
+      { rel: "epics/auth.md", text: "# Auth\n\n- beta — Beta.\n" },
+    ];
+    const current = [
+      { rel: "plan.md", text: "# Plan\n" },
+      {
+        rel: "epics/auth.md",
+        text: "# Auth\n\n- alpha — Alpha moved here.\n",
+      },
+    ];
+    const diff = formatPlanDiff(current, previous);
+    expect(diff).toContain("changed:\n  - alpha — Alpha moved here.");
+    expect(diff).toContain("cancelled:\n  - beta — removed");
   });
 });

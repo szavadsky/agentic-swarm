@@ -5,15 +5,19 @@
  */
 import type { LiveAgents, SessionRef } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
-import { resumableSession, snapshotPlan } from "./architect-session.js";
-import { infraCause, taskSnapshot } from "./boundary-context.js";
+import {
+  planOwnerSelector,
+  resumableSession,
+  snapshotPlan,
+} from "./architect-session.js";
+import { infraCause, ownedPlanText, taskSnapshot } from "./boundary-context.js";
+import { boundaryResult } from "./boundary-state.js";
 import {
   collectSteered,
   recordSteerFailures,
   steeredHosting,
-  type SteeredHosting,
 } from "./boundary-steer.js";
-import { boundaryResult, type ConsultContext } from "./boundary-state.js";
+import type { ConsultContext, SteeredHosting } from "./boundary-types.js";
 import {
   boundaryTarget,
   compactSession,
@@ -24,6 +28,7 @@ import { runBoundaryTurn } from "./integration-lock.js";
 import { formatSteers } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { snapshotPlans } from "./pm.js";
+import { sagaReminderVar } from "./saga-reminder.js";
 import { MAIN_ARCHITECT } from "./tasks.js";
 
 /** The architect's turn with one de-novo retry after an infra death. */
@@ -39,7 +44,7 @@ async function architectTurn(
     () =>
       runAgentTurn(context.runtime, {
         // Resolved per attempt: a quota death exhausts the alias.
-        target: boundaryTarget(context.runtime, "architect", context.iteration),
+        target: boundaryTarget(context.runtime, "architect"),
         cwd: context.runtime.paths.goalCheckout,
         meta: {
           iteration: context.iteration,
@@ -64,6 +69,10 @@ async function architectTurn(
           steers: formatSteers(context.forArchitect),
           depth: String(context.runtime.configs.process.hierarchy?.depth ?? 1),
           subarchitect_block: steered?.block ?? "",
+          saga_reminder: sagaReminderVar(
+            context.tasks.length,
+            context.runtime.configs.process.sagaTaskCount,
+          ),
         },
         expectation: KERNEL_TURN_STEPS.architect,
         session,
@@ -102,7 +111,7 @@ async function architectDelivery(
 ): Promise<"steer" | "report"> {
   const depth = runtime.configs.process.hierarchy?.depth ?? 1;
   if (depth !== 2) return "report";
-  return subarchitectDelivery(subarchitectTarget(runtime, context.iteration));
+  return subarchitectDelivery(subarchitectTarget(runtime));
 }
 
 /** Hosts steered children when the delivery route asks for them. */
@@ -116,12 +125,13 @@ async function hostSteered(
   return steeredHosting(runtime, {
     iteration: context.iteration,
     turn,
-    packRel: context.packRel!,
     goalPlanFile: context.plan,
+    planText: await ownedPlanText(runtime),
     ...(context.digestPath ? { digestPath: context.digestPath } : {}),
     tasks: context.tasks,
     state: context.state,
     records: context.records,
+    steers: context.forEpicArchitect,
   });
 }
 
@@ -207,7 +217,7 @@ export async function runArchitectStage(
   context: ConsultContext,
 ): Promise<ReturnType<typeof boundaryResult> | undefined> {
   const { runtime } = context;
-  const target = boundaryTarget(runtime, "architect", context.iteration);
+  const target = boundaryTarget(runtime, "architect");
   context.tasksBefore = await taskSnapshot(runtime.store);
   context.plansBefore = await snapshotPlans(
     runtime,
@@ -217,8 +227,9 @@ export async function runArchitectStage(
   const session = await resumableSession(
     runtime,
     context.records,
-    (record) => record.step === "architect",
+    planOwnerSelector(MAIN_ARCHITECT),
     target,
+    "the architect turn",
   );
   const turn = architectTurnKind(context.records, context.opts.relaunch);
   // Only a harness advertising `subagents: "steer"` hosts its subarchitects as

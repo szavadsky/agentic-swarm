@@ -2,17 +2,17 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { repositoryId } from "../kernel/config.js";
+import type {
+  AcquireRunLockOptions,
+  LockData,
+  RunLockHandle,
+} from "./types.js";
 
-export interface LockData {
-  pid: number;
-  host: string;
-  start: string;
-}
-
-export interface RunLockHandle {
-  lockPath: string;
-  release: () => void;
-}
+export type {
+  AcquireRunLockOptions,
+  LockData,
+  RunLockHandle,
+} from "./types.js";
 
 /**
  * Resolves the runtime directory outside the main repository checkout (§2, §7).
@@ -97,13 +97,6 @@ export function isRunLockFree(
     // Corrupt or unparseable lock file is considered free/takeover
     return { free: true };
   }
-}
-
-export interface AcquireRunLockOptions {
-  runtimeDir?: string;
-  worktreeRoot?: string;
-  taskDir?: string;
-  onTakeover?: (info: { previousLock?: LockData; newLock: LockData }) => void;
 }
 
 /** Creates the lock file atomically; undefined when it already exists. */

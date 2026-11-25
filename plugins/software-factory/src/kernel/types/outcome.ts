@@ -78,13 +78,21 @@ const optionalOutcomeSlugSchema = z.preprocess(
  * revision of its file), cancel spends it, replace and split continue the kept
  * branch under new slugs, leave defers to the architect.
  */
+export const stallDecisionSchema = z.enum([
+  "amend",
+  "cancel",
+  "replace",
+  "split",
+  "leave",
+]);
+export type StallDecision = z.infer<typeof stallDecisionSchema>;
+
 export const stallRouteEntrySchema = z.object({
   slug: outcomeSlugSchema,
-  action: z.enum(["amend", "cancel", "replace", "split", "leave"]),
+  action: stallDecisionSchema,
   reason: z.string().min(1),
 });
 export type StallRouteEntry = z.infer<typeof stallRouteEntrySchema>;
-export type StallDecision = StallRouteEntry["action"];
 
 /** One plan item's check result: what the checker inspected and what it showed. */
 export const planCheckEvidenceSchema = z.object({
@@ -118,6 +126,22 @@ export const planCheckFollowUpSchema = z.object({
 export type PlanCheckFollowUp = z.infer<typeof planCheckFollowUpSchema>;
 
 /**
+ * What the checker decided about one open concern: it answered the concern in
+ * its own check (`resolve`), or a follow-up it emits does the work (`task`,
+ * naming that follow-up's slug). Anything the checker leaves out is
+ * unresolved and reaches the architect.
+ */
+export const planCheckConcernSchema = z.object({
+  /** The concern's id from the checker's brief. */
+  id: z.string().min(1),
+  action: z.enum(["resolve", "task"]),
+  /** A `task` concern's follow-up slug; absent for `resolve`. */
+  slug: optionalOutcomeSlugSchema,
+  reason: z.string().min(1),
+});
+export type PlanCheckConcern = z.infer<typeof planCheckConcernSchema>;
+
+/**
  * The checker's report: the kernel resumes dispatch on `progress` and
  * consults the architect on `architect`. One enum, because the kernel
  * branches on it.
@@ -126,6 +150,7 @@ export const planCheckSchema = z.object({
   verdict: z.enum(["progress", "architect"]),
   evidence: z.array(planCheckEvidenceSchema).default([]),
   followUps: z.array(planCheckFollowUpSchema).default([]),
+  concerns: z.array(planCheckConcernSchema).default([]),
 });
 export type PlanCheck = z.infer<typeof planCheckSchema>;
 export type PlanCheckVerdict = PlanCheck["verdict"];
@@ -238,6 +263,16 @@ export const outcomeSchema = z.object({
     .enum(["continue", "done", "blocked"])
     .optional()
     .describe("architect step only"),
+  // The top's per-iteration direction choice at hierarchy depth 2: only these
+  // epics get the written top-down pass after its turn. A steer harness hosts
+  // live children for every active epic before the choice; absent keeps every
+  // active epic.
+  epicConsults: z
+    .array(z.string().min(1))
+    .optional()
+    .describe(
+      "architect step only: the epics that get this iteration's written top-down direction pass; a steer harness hosts every active epic live before the choice; absent consults every active epic",
+    ),
   // `yes` parks with cause upscope and (standalone only) rewrites the front
   // class to bigger; `no` and absent keep the normal verdict path.
   upscope: z

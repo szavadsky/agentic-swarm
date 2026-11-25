@@ -24,6 +24,7 @@ import type {
 } from "../../src/kernel/types.js";
 import { prepareIntegrationCheckout } from "../../src/kernel/worktree.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
+import { DECIDE_STEP } from "../../src/kernel/pending-signal.js";
 import { scriptKernelRoleFallbacks } from "./fake-defaults.js";
 
 export interface FlowRepoOptions {
@@ -33,10 +34,20 @@ export interface FlowRepoOptions {
     command: string;
     serial?: string[];
     env?: Record<string, string>;
-    format?: { junit?: string; pattern?: "pytest" | "jest" | "cargo" };
+    format?: {
+      junit?: string;
+      ctrf?: string;
+      sarif?: string;
+      regex?: { pattern: string; tool?: string; rule?: string }[];
+    };
     timeoutSec?: number;
   }[];
   setup?: string[];
+  /** Per-cause park defaults the PM's stall brief reads. */
+  parkRoutes?: Record<
+    string,
+    { action: string; reason: string; exception: string }
+  >;
   /** Raw `.factory/process.yaml` override. */
   process?: Record<string, unknown>;
   limits?: Record<string, unknown>;
@@ -50,11 +61,6 @@ export interface FlowRepoOptions {
       effort?: string;
       subscription?: string;
       escalateTo?: string;
-      rotate?: {
-        harness: string;
-        model: string;
-        effort?: string;
-      }[];
       fallbacks?: (
         | { alias: string }
         | {
@@ -148,6 +154,7 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
         ...(g.timeoutSec !== undefined ? { timeoutSec: g.timeoutSec } : {}),
       })),
       ...(opts.identity ? { identity: opts.identity } : {}),
+      ...(opts.parkRoutes ? { parkRoutes: opts.parkRoutes } : {}),
     }),
   );
   // The package default flow includes QA; a test that narrows its aliases
@@ -203,7 +210,7 @@ export async function makeRuntime(
     configs.run.aliases.qa = configs.run.aliases.reviewer;
   }
   const paths = resolveGoalPaths(configs, repo.dir, goal);
-  const store = createArtifactStore(paths, {});
+  const store = createArtifactStore(paths, configs.process.taskTypes);
   await store.ensureLayout();
   const runtime: KernelRuntime = {
     paths,
@@ -220,7 +227,6 @@ export async function makeRuntime(
       run: configs.run,
     }),
     limits: toLimits(configs),
-    provenCombinations: new Set(),
     exhaustedPools: new Map(),
     // Hermetic prices: the repo-local cache, never the network.
     priceSource: {
@@ -322,6 +328,20 @@ export function filePerTaskHandler(
  * dispatches that stall on purpose: the turn answers, the reasons land in
  * the stall-routes record, and dispatch ends at the boundary as today.
  */
+/** Binds the kernel decide turn's verdict; it persists for every decide call. */
+export function scriptDecider(
+  harness: FakeHarness,
+  patch: { summary: string; verdict: "approve" | "changes" | "reject" },
+): void {
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(outcome(patch));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: DECIDE_STEP }), fallback: true },
+  );
+}
+
 export function scriptStallLeave(
   harness: FakeHarness,
   slugs: string[],

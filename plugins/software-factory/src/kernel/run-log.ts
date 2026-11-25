@@ -7,19 +7,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { format } from "node:util";
+import type { RunLog } from "./run-log-types.js";
 
 /** Goal-relative directory of the launch logs; never artifact history. */
 const RUN_LOG_DIR = "logs";
 const RUN_LOG_PREFIX = "run-";
 const RUN_LOG_SUFFIX = ".log";
 const RUN_LOG_NAME = /^run-[^/]+\.log$/;
-
-export interface RunLog {
-  /** Goal-relative path the dashboard links. */
-  rel: string;
-  /** Absolute file the tee appends to. */
-  path: string;
-}
 
 function runLogPath(goalDir: string, launchId: string): RunLog {
   const rel = `${RUN_LOG_DIR}/${RUN_LOG_PREFIX}${launchId}${RUN_LOG_SUFFIX}`;

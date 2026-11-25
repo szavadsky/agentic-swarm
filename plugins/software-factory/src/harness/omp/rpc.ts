@@ -1,10 +1,14 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { childEnv } from "../../core/env.js";
+import { sandboxedSpec } from "../../core/sandbox.js";
 import {
   registerChildGroup,
   unregisterChildGroup,
 } from "../../core/shutdown.js";
 import { OmpRpcExit, OmpRpcTimeout } from "./errors.js";
+import type { OmpRpcOptions } from "./types.js";
+
+export type { OmpRpcOptions } from "./types.js";
 
 export { OmpRpcExit, OmpRpcTimeout };
 
@@ -16,17 +20,6 @@ const KEEP_FRAME_TYPES = new Set([
   "prompt_result",
   "session_settled",
 ]);
-
-export interface OmpRpcOptions {
-  binary: string;
-  args: string[];
-  cwd: string;
-  /** Names the run config allows this child to inherit. */
-  envAllowlist?: readonly string[];
-  /** Called for every retained frame; used for idle timers and usage fallback. */
-  onFrame?: (frame: any) => void;
-  maxStderrBytes?: number;
-}
 
 interface Waiter {
   match: (frame: any) => boolean;
@@ -56,7 +49,8 @@ export class OmpRpc {
   constructor(opts: OmpRpcOptions) {
     this.opts = opts;
     this.maxStderrBytes = opts.maxStderrBytes ?? 64 * 1024;
-    this.child = spawn(opts.binary, opts.args, {
+    const command = sandboxedSpec(opts.binary, opts.args);
+    this.child = spawn(command.executable, command.args, {
       cwd: opts.cwd,
       detached: true,
       stdio: ["pipe", "pipe", "pipe"],

@@ -1,8 +1,9 @@
 /**
- * The boundary's first half: task/state init, the plan checker, the digest,
- * steer partitioning and the scripted pack. The architect turn lives in
- * `boundary-architect.ts`; each phase either mutates the shared context or
- * returns the iteration's result.
+ * The boundary's first half: task/state init, the digest, steer partitioning
+ * and the scripted pack. The plan-checker pass lives in `boundary-checker.ts`,
+ * the architect turn in `boundary-architect.ts`, and the saga passes in
+ * `boundary-saga.ts`; each phase either mutates the shared context or returns
+ * the iteration's result.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -17,13 +18,12 @@ import {
   spikeFindings,
   unavailableAliases,
 } from "./boundary-context.js";
-import { contextCodeMap } from "./ingestion.js";
 import { runSpikeSteer } from "./boundary-spike.js";
-import type { BoundaryOptions } from "./boundary-state.js";
-import { boundaryResult, type ConsultContext } from "./boundary-state.js";
+import type { BoundaryOptions, ConsultContext } from "./boundary-types.js";
 import { makeCause } from "./cause.js";
 import {
   type ContextPackInput,
+  contextDataRelPath,
   forwardedConcerns,
   goalDebtRecords,
   type PlanReviewPack,
@@ -31,9 +31,10 @@ import {
   renderContextData,
   renderContextPack,
 } from "./context-pack.js";
-import { withSpikeProposals } from "./context-pack/append.js";
 import { derive, openDebts } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
+import { packGates } from "./infra.js";
+import { contextCodeMap } from "./ingestion.js";
 import { runKeptLand } from "./integrate.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import { carryIntentSteers, intentChanges } from "./intent.js";
@@ -54,16 +55,15 @@ import {
   wasteSpikeProposals,
 } from "./metrics/recurring.js";
 import { PACK_PREP_STEP, runPackPreparer } from "./pack-prep.js";
-import {
-  consultGate,
-  latestPlanCheck,
-  openWork,
-  PLAN_CHECK_STEP,
-  runPlanCheckRound,
-} from "./plan-check.js";
+import { latestPlanCheck } from "./plan-check.js";
 import { goalPlan } from "./plan-file.js";
 import { latestPlanReview } from "./plan-review.js";
-import { planBulletEditFindings, runSteerPm } from "./pm.js";
+import {
+  planBulletEditFindings,
+  runSteerPm,
+  steerEpicOf,
+  steerScopeGroups,
+} from "./pm.js";
 import { scriptMeta } from "./record.js";
 import type { KernelRuntime } from "./types.js";
 import { integrationHead } from "./worktree.js";
@@ -97,49 +97,10 @@ export async function prepareBoundary(
     steers,
     seenSteers: [],
     forArchitect: [],
+    forEpicArchitect: new Map(),
+    epicSteersAnswered: new Set(),
     pmAnswers: [],
   };
-}
-
-/** The plan checker runs before the architect; a follow-up skips the consult. */
-export async function runChecker(
-  context: ConsultContext,
-): Promise<ReturnType<typeof boundaryResult> | undefined> {
-  const { runtime } = context;
-  const gate = consultGate({
-    plan: await runtime.store.plans.exists(),
-    open: openWork(context.state),
-    steerWaiting: context.steers.length > 0,
-    records: context.records,
-    bound: runtime.limits.planCheckRounds,
-  });
-  if (gate !== "check") return undefined;
-  // `planCheckRounds` bounds the rounds one consult owns, wherever they ran.
-  const round =
-    context.records.filter(
-      (record) =>
-        record.iteration === context.iteration &&
-        record.actor === "agent" &&
-        record.step === PLAN_CHECK_STEP &&
-        record.endedAt,
-    ).length + 1;
-  const checked = await runBoundaryTurn(
-    runtime,
-    { iteration: context.iteration, step: PLAN_CHECK_STEP },
-    () =>
-      runPlanCheckRound(runtime, {
-        iteration: context.iteration,
-        round,
-        state: context.state,
-      }),
-  );
-  if (checked.status === "architect") {
-    return boundaryResult(context, "continue", {
-      cause: `PM ladder routed to the architect: ${checked.findings.join("; ")}`,
-    });
-  }
-  if (checked.continued.length > 0) return boundaryResult(context, "continue");
-  return undefined;
 }
 
 /** After a checker pass the consult reads the records it wrote. */
@@ -188,14 +149,19 @@ export async function routeUnroutedSteers(
   await runBoundaryTurn(
     context.runtime,
     { iteration: context.iteration, step: "pm" },
-    () =>
-      runSteerPm(context.runtime, {
-        iteration: context.iteration,
-        state: context.state,
-        tasks: context.tasks,
-        steers: claim,
-        cwd: context.runtime.paths.goalCheckout,
-      }),
+    async () => {
+      for (const group of steerScopeGroups(context.runtime, claim)) {
+        await runSteerPm(context.runtime, {
+          iteration: context.iteration,
+          state: context.state,
+          tasks: context.tasks,
+          steers: group.steers,
+          scope: group.scope,
+          cwd: context.runtime.paths.goalCheckout,
+        });
+      }
+      return undefined;
+    },
   );
   // A routed task or spike writes files the pack and the architect must see.
   context.records = await context.runtime.store.listRecords();
@@ -286,11 +252,25 @@ export async function partitionSteers(context: ConsultContext): Promise<void> {
     routes,
     recordsDir: context.runtime.store.recordsDir,
   });
+  const epicOf = steerEpicOf(context.runtime, context.steers);
   for (const steer of context.steers) {
     const action = await steerAction(context, routes, steer);
-    if (action === "architect") context.forArchitect.push(steer);
+    if (action !== "architect") continue;
+    const epic = epicOf.get(steer.id);
+    if (epic === undefined) {
+      context.forArchitect.push(steer);
+      continue;
+    }
+    const waiting = context.forEpicArchitect.get(epic) ?? [];
+    waiting.push(steer);
+    context.forEpicArchitect.set(epic, waiting);
   }
-  context.pmAnswers = formatPmAnswers(routes);
+  // The top pack reads the goal's own steer answers; an epic's answer is its
+  // architect's business, never the top's.
+  const goalAnswers = new Map(
+    [...routes].filter(([, route]) => route.architect === undefined),
+  );
+  context.pmAnswers = formatPmAnswers(goalAnswers);
 }
 
 /** Holds are advisory input; an unreadable file is logged, never fatal. */
@@ -333,6 +313,10 @@ async function packInput(context: ConsultContext): Promise<ContextPackInput> {
       context.iteration - 1,
     ),
     previousWaste: await previousWaste(runtime.store, context.iteration - 1),
+    dataPath: runtime.store.pathOf({
+      area: "goal",
+      rel: contextDataRelPath(context.iteration),
+    }),
     spikeProposals: wasteSpikeProposals(
       await readWasteMetrics(runtime.store),
       runtime.configs.process.wasteSpikeThreshold ??
@@ -374,7 +358,6 @@ function agedReady(
       context.tasks,
       context.state,
       context.records,
-      context.iteration,
     ),
   });
 }
@@ -400,7 +383,7 @@ async function packGovernance(
   const { runtime } = context;
   return {
     setup: runtime.configs.repo.setup,
-    gates: runtime.configs.repo.gates,
+    gates: packGates(runtime.store.goalDir, runtime.configs.repo.gates),
     baseGates: recordedBaseGates(context.records),
     forwarded: forwardedConcerns(context.records, {
       tasks: context.tasks,
@@ -440,47 +423,54 @@ async function planReviewWithKernel(
   };
 }
 
-/** Renders the pack: an agent index after iteration 1, the script render on failure. */
-export async function writePack(context: ConsultContext): Promise<void> {
+/**
+ * Renders the pack: one script render, briefed where the preparer decided. A
+ * refresh after the bottom-up report pass skips the preparer: its one turn
+ * already ran on the pre-report pack, and the reports must reach the top
+ * architect before its turn, not spend a second prep turn.
+ */
+export async function writePack(
+  context: ConsultContext,
+  opts: { prepare?: boolean } = {},
+): Promise<void> {
   if (context.opts.frontPack) return;
   const { runtime } = context;
   const input = await packInput(context);
-  const dataRel = runtime.store.iterations.rel(
-    context.iteration,
-    "context-data.json",
-  );
+  const dataRel = contextDataRelPath(context.iteration);
   await runtime.store.iterations.write(
     context.iteration,
     "context-data.json",
     renderContextData(input),
   );
-  const packRel = context.packRel!;
-  // After the first iteration a cheap agent turns the full status into the
-  // index. The script render is the first iteration's pack and every fallback.
-  const prepFailure =
-    context.iteration > 1
+  // After the first iteration a cheap agent reads the full status and returns
+  // the sections it judges better as a pointer and one line. The script
+  // renders the single index either way; the preparer never authors it.
+  const preparer =
+    opts.prepare !== false && context.iteration > 1
       ? await runBoundaryTurn(
           runtime,
           { iteration: context.iteration, step: PACK_PREP_STEP },
           () =>
             runPackPreparer(runtime, {
               iteration: context.iteration,
-              packRel,
               dataRel,
             }),
         )
       : undefined;
-  if (context.iteration === 1 || prepFailure !== undefined) {
-    await runtime.store.writeFile(packRel, renderContextPack(input));
-    if (prepFailure !== undefined)
-      await recordPackFallback(context, prepFailure);
-  } else {
-    const pack = await runtime.store.readFile(packRel);
-    if (pack !== null) {
-      const updated = withSpikeProposals(pack, input);
-      if (updated !== pack) await runtime.store.writeFile(packRel, updated);
-    }
-  }
+  const briefs =
+    opts.prepare === false
+      ? context.packBriefs
+      : preparer && "briefs" in preparer
+        ? preparer.briefs
+        : undefined;
+  if (opts.prepare !== false && preparer && "briefs" in preparer)
+    context.packBriefs = preparer.briefs;
+  await runtime.store.writeFile(
+    context.packRel!,
+    renderContextPack({ ...input, ...(briefs ? { briefs } : {}) }),
+  );
+  if (preparer !== undefined && "failure" in preparer)
+    await recordPackFallback(context, preparer.failure);
 }
 
 async function recordPackFallback(

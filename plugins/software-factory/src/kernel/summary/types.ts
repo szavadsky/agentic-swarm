@@ -1,16 +1,27 @@
 /** Summary input and the fact shapes the renderer reads. */
 
-import type { materialOpenDebts } from "../derive.js";
 import type { IterationMetrics, SteerLatency } from "../metrics.js";
 import type { PriceTable } from "../pricing.js";
 import type {
   Cause,
   CauseKind,
   GoalDecision,
+  IntentStatusEntry,
+  ReportDebt,
   State,
   StepRecord,
 } from "../types.js";
 import type { summaryNamedRows } from "./facts.js";
+
+/**
+ * The architect's per-section view from one iteration. An empty `sections`
+ * array is still an artifact — the architect reported no sections — and the
+ * dashboard renders it as unknown rather than inventing a task count.
+ */
+export interface IntentStatusArtifact {
+  iteration: number;
+  sections: IntentStatusEntry[];
+}
 
 export type SummaryStatus =
   | "goal-met"
@@ -37,21 +48,16 @@ export interface SummaryInput {
   humanInterventions?: number;
 }
 
-export interface SummaryTaskLists {
-  pending: string[];
-  parked: string[];
-  cancelled: string[];
-}
-
 /** The task/slug facts one summary renders. */
 export interface SummaryTaskFacts {
   merged: string[];
   finished: string[];
   parkedByKind: Map<CauseKind, { slug: string; detail: string }[]>;
   pending: string[];
-  parkedAll: string[];
+  parks: string[];
   cancelled: string[];
-  open: ReturnType<typeof materialOpenDebts>;
+  /** Material open debt after every recorded closure: the goal's distance. */
+  open: readonly ReportDebt[];
 }
 
 /** The remark/assumption/debt lines one summary renders. */

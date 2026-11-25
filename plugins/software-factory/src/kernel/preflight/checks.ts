@@ -1,13 +1,21 @@
-/** Escalation, fallback, follow-up and tmp-headroom checks. */
+/** Escalation, fallback, pool, portability, registration, scout and tmp-headroom checks. */
 
 import fs from "node:fs";
+import path from "node:path";
+import { OMP_ID } from "../../harness/omp/types.js";
 import { formatFindings } from "../findings.js";
 import type { Finding } from "../findings.js";
-import { FRONT_CLASS_FLOWS } from "../front.js";
+import {
+  fallbackChangesPrimary,
+  fallbackTierSubscription,
+} from "../flow-context-targets.js";
+import { FRONT_TRIVIAL_FLOW } from "../front.js";
 import { BOUNDARY_STEPS, BUILTIN_INGESTION_IDS } from "../types.js";
 import type {
   AliasConfig,
   BuiltinIngestionId,
+  ConfigBundle,
+  FallbackModelConfig,
   FlowDefinition,
   ProcessConfig,
 } from "../types.js";
@@ -151,9 +159,10 @@ export function fallbackAliasFindings(
 
 /**
  * Exactly the aliases process config names, each with the step that names it:
- * every boundary step, every architecture reviewer, every flow step, every step
- * alternate and every different-model follow-up. Nothing is derived from a role
- * name, so a renamed alias is the only requirement.
+ * every boundary step, every architecture reviewer, every architecture and PM
+ * flow step, every flow step, every step alternate and every different-model
+ * follow-up. Nothing is derived from a role name, so a renamed alias is the
+ * only requirement.
  */
 /** Every alias one flow names, with its step context. */
 function noteFlowAliases(
@@ -172,6 +181,43 @@ function noteFlowAliases(
   }
 }
 
+/** Every alias the architecture flow names, with its step context. */
+function noteArchitectureAliases(
+  note: (alias: string, ref: string) => void,
+  process: ProcessConfig,
+): void {
+  for (const alias of process.architecture.reviewers) {
+    note(alias, "architecture reviewer");
+  }
+  for (const flow of process.architecture.flows ?? []) {
+    for (const step of flow.steps) {
+      if (step.alias) note(step.alias, `architecture flow step "${step.id}"`);
+    }
+  }
+}
+
+/** Every alias a config-only PM flow step names. */
+function notePmAliases(
+  note: (alias: string, ref: string) => void,
+  process: ProcessConfig,
+): void {
+  for (const step of process.pm?.steps ?? []) {
+    if (step.alias) note(step.alias, `pm flow step "${step.id}"`);
+  }
+}
+
+/** Every alias a non-built-in ingestion step names. */
+function noteIngestionAliases(
+  note: (alias: string, ref: string) => void,
+  process: ProcessConfig,
+): void {
+  for (const step of process.ingestion ?? []) {
+    if (!BUILTIN_INGESTION_IDS.includes(step.id as BuiltinIngestionId)) {
+      note(step.alias ?? "pm", `ingestion step "${step.id}"`);
+    }
+  }
+}
+
 export function requiredAliases(process: ProcessConfig): Map<string, string> {
   const refs = new Map<string, string>();
   const note = (alias: string, ref: string): void => {
@@ -180,17 +226,12 @@ export function requiredAliases(process: ProcessConfig): Map<string, string> {
   for (const step of BOUNDARY_STEPS) {
     note(process.boundary[step].alias, `boundary step "${step}"`);
   }
-  for (const alias of process.architecture.reviewers) {
-    note(alias, "architecture reviewer");
-  }
+  noteArchitectureAliases(note, process);
+  notePmAliases(note, process);
   for (const [name, flow] of Object.entries(process.flows)) {
     noteFlowAliases(note, name, flow);
   }
-  for (const step of process.ingestion ?? []) {
-    if (!BUILTIN_INGESTION_IDS.includes(step.id as BuiltinIngestionId)) {
-      note(step.alias ?? "pm", `ingestion step "${step.id}"`);
-    }
-  }
+  noteIngestionAliases(note, process);
   return refs;
 }
 
@@ -204,7 +245,7 @@ export function trivialFollowUpFindings(
   process: ProcessConfig,
   file: string,
 ): Finding[] {
-  const flowName = FRONT_CLASS_FLOWS.trivial;
+  const flowName = FRONT_TRIVIAL_FLOW;
   const flow = process.flows[flowName];
   if (!flow) return [];
   return flow.steps
@@ -214,4 +255,217 @@ export function trivialFollowUpFindings(
       key: `flows.${flowName}.steps.${step.id}.followUp`,
       message: `step "${step.id}" of flow "${flowName}" declares a follow-up, but a trivial task implements in the front's session and never follows up`,
     }));
+}
+
+function registeredMessage(
+  harness: string,
+  registered: ReadonlySet<string>,
+): string {
+  return `harness "${harness}" is not registered (registered: ${[...registered].join(", ") || "none"})`;
+}
+
+/** Whether a binary is executable, by absolute path or through PATH. */
+export function isExecutable(value: string | undefined): boolean {
+  if (!value) return false;
+  if (!value.includes(path.sep)) return Bun.which(value) !== null;
+  try {
+    fs.accessSync(value, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A configured sandbox must be present on the machine before any child can
+ * start: a missing wrapper would otherwise surface mid-turn, after pre-flight.
+ */
+export function sandboxFindings(
+  configs: ConfigBundle,
+  file: string,
+): Finding[] {
+  const sandbox = configs.run.sandbox;
+  if (!sandbox || isExecutable(sandbox.binary)) return [];
+  return [
+    {
+      file,
+      key: "sandbox.binary",
+      message: `sandbox binary "${sandbox.binary}" is not executable or not on PATH`,
+    },
+  ];
+}
+
+/**
+ * A portability edge names the harness a session may cross from and to. An
+ * endpoint no harness registers is a typo that would otherwise parse clean and
+ * mean "no edge", so the crossing it was declared to allow would restart de
+ * novo with no finding.
+ */
+export function portabilityFindings(
+  configs: ConfigBundle,
+  file: string,
+  registered: ReadonlySet<string>,
+): Finding[] {
+  const findings: Finding[] = [];
+  for (const [index, edge] of (configs.run.portability ?? []).entries()) {
+    for (const side of ["from", "to"] as const) {
+      const harness = edge[side];
+      if (registered.has(harness)) continue;
+      findings.push({
+        file,
+        key: `portability.${index}.${side}`,
+        message: registeredMessage(harness, registered),
+      });
+    }
+  }
+  return findings;
+}
+
+/**
+ * An alias or explicit fallback tier naming a harness a launch does not
+ * register can never run. The check reads only the run config and the
+ * registered ids, so `validate` reports it and pre-flight skips that branch's
+ * model probe.
+ */
+export function harnessRegistrationFindings(
+  configs: ConfigBundle,
+  file: string,
+  registered: ReadonlySet<string>,
+): Finding[] {
+  const findings: Finding[] = [];
+  const check = (key: string, harness: string): void => {
+    if (registered.has(harness)) return;
+    findings.push({
+      file,
+      key,
+      message: registeredMessage(harness, registered),
+    });
+  };
+  for (const [name, alias] of Object.entries(configs.run.aliases)) {
+    check(`aliases.${name}.harness`, alias.harness);
+    for (const [index, fallback] of (alias.fallbacks ?? []).entries()) {
+      if ("alias" in fallback || fallback.harness === undefined) continue;
+      check(`aliases.${name}.fallbacks.${index}.harness`, fallback.harness);
+    }
+  }
+  return findings;
+}
+
+/**
+ * Whether some alias or literal fallback tier runs on omp. `scouts` is a
+ * subagent pin only the omp adapter reads.
+ */
+export function runsOnOmp(aliases: Record<string, AliasConfig>): boolean {
+  for (const alias of Object.values(aliases)) {
+    if (alias.harness === OMP_ID) return true;
+    for (const fallback of alias.fallbacks ?? []) {
+      if ("model" in fallback && fallback.harness === OMP_ID) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * `scouts` configures a model no harness reads when no alias or fallback tier
+ * runs on omp: the pin would parse clean and start nothing.
+ */
+export function scoutsConsumerFindings(
+  configs: ConfigBundle,
+  file: string,
+): Finding[] {
+  if (!configs.run.scouts || runsOnOmp(configs.run.aliases)) return [];
+  return [
+    {
+      file,
+      key: "scouts",
+      message: `scouts configures a subagent model, but no harness consumes it: no alias or fallback runs on harness "${OMP_ID}"`,
+    },
+  ];
+}
+
+function poolMessage(subscription: string): string {
+  return `subscription "${subscription}" names no limits.concurrency.perSubscription pool`;
+}
+
+/** One literal fallback tier's pool declarations against the configured pools. */
+function fallbackPoolFindings(
+  fallback: FallbackModelConfig,
+  alias: AliasConfig,
+  known: ReadonlySet<string>,
+  file: string,
+  tierKey: string,
+): Finding[] {
+  const findings: Finding[] = [];
+  const changesPrimary = fallbackChangesPrimary(fallback, alias);
+  const sharesPool = fallback.sharesPool === true;
+  if (sharesPool && alias.subscription === undefined) {
+    findings.push({
+      file,
+      key: `${tierKey}.sharesPool`,
+      message: "sharesPool: true needs the alias to name a subscription",
+    });
+  }
+  if (
+    changesPrimary &&
+    alias.subscription !== undefined &&
+    fallback.subscription === undefined &&
+    !sharesPool
+  ) {
+    findings.push({
+      file,
+      key: `${tierKey}.subscription`,
+      message: `fallback changes harness or model from the alias primary, so it cannot inherit subscription "${alias.subscription}"; name its own subscription or set sharesPool: true`,
+    });
+  }
+  const subscription = fallbackTierSubscription(
+    fallback,
+    alias.subscription,
+    changesPrimary,
+  );
+  if (subscription !== undefined && !known.has(subscription)) {
+    findings.push({
+      file,
+      key: `${tierKey}.subscription`,
+      message: poolMessage(subscription),
+    });
+  }
+  return findings;
+}
+
+/**
+ * Every pool an alias or one of its literal fallback tiers draws on must exist
+ * in `limits.concurrency.perSubscription`; an unknown name would only fail
+ * while resolving a turn, after the plan spent. A tier that changes the
+ * primary's harness or model cannot inherit the alias's pool silently.
+ */
+export function subscriptionPoolFindings(
+  aliases: Record<string, AliasConfig>,
+  pools: Record<string, number>,
+  file: string,
+): Finding[] {
+  const findings: Finding[] = [];
+  const known = new Set(Object.keys(pools));
+  for (const [name, alias] of Object.entries(aliases)) {
+    const key = `aliases.${name}`;
+    if (alias.subscription !== undefined && !known.has(alias.subscription)) {
+      findings.push({
+        file,
+        key: `${key}.subscription`,
+        message: poolMessage(alias.subscription),
+      });
+    }
+    for (const [index, fallback] of (alias.fallbacks ?? []).entries()) {
+      if (!("model" in fallback)) continue;
+      findings.push(
+        ...fallbackPoolFindings(
+          fallback,
+          alias,
+          known,
+          file,
+          `${key}.fallbacks.${index}`,
+        ),
+      );
+    }
+  }
+  return findings;
 }

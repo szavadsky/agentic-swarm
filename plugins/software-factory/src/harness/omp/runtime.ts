@@ -7,17 +7,14 @@ import type { ModelRef } from "../types.js";
 import { writeOmpOverlay } from "./overlay.js";
 import { OmpRpc } from "./rpc.js";
 import {
+  type OmpDirs,
   type OmpHarnessOptions,
   type OmpTurnOpaque,
   selectorOf,
 } from "./types.js";
 import type { CacheTtl } from "../types.js";
 
-export interface OmpDirs {
-  base: string;
-  sessions: string;
-  prompts: string;
-}
+export type { OmpDirs } from "./types.js";
 
 /** Process/filesystem plumbing shared by `turn` and `compact`. */
 export class OmpRuntime {

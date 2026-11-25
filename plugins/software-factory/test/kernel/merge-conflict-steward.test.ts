@@ -12,6 +12,7 @@ import { runDispatch } from "../../src/kernel/dispatch.js";
 import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
 import type { TmpRepo } from "../helpers/tmp-repo.js";
 import { task, cause, causeText } from "./helpers.js";
+import { commitIn, parkAlpha } from "./base-sync-helpers.js";
 import {
   cleanupFlowRepo,
   goalCheckout,
@@ -298,6 +299,103 @@ async function sendsResolveTurnSOutsideChangesPart2(
   );
 }
 
+/** Parks a continuation on base-conflict, then runs the wave end steward. */
+async function baseConflictRun(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  goal: string,
+  checkout: string,
+) {
+  const harness = new FakeHarness({ id: "fake" });
+  parkAlpha(harness, "clash.txt", "alpha\n");
+  scriptStallLeave(harness, ["alpha"]);
+  const runtime = await makeRuntime(repo, goal, { fake: harness });
+  await writeTask(runtime, task("alpha", { scope: ["clash.txt"] }));
+  await runDispatch(runtime, { iteration: 1 });
+
+  // The head gains a change the continuation branch cannot take in, and the
+  // first turn leaves the markers: the branch parks on base-conflict.
+  commitIn(
+    repo,
+    checkout,
+    "clash.txt",
+    "integration\n",
+    "factory: merge clashing task",
+  );
+  harness.script((req, ctx) => {
+    fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
+    ctx.writeOutcome(outcome({ summary: "beta left the conflict" }));
+    return fakeTurnResult(req);
+  });
+  const prompts: string[] = [];
+  harness.script(
+    (req, ctx) => {
+      prompts.push(req.prompt ?? "");
+      fs.writeFileSync(
+        path.join(req.cwd!, "clash.txt"),
+        "steward-resolved\n",
+        "utf8",
+      );
+      ctx.writeOutcome(
+        outcome({ summary: "steward resolved the base conflict" }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "steward" }) },
+  );
+  await writeTask(
+    runtime,
+    task("beta", { base: "alpha", scope: ["beta.txt"] }),
+  );
+  await runDispatch(runtime, { iteration: 2 });
+  return { runtime, prompts };
+}
+
+/** The park is the steward's, and its turn lands the resolution. */
+async function baseConflictAssert(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  scope: Awaited<ReturnType<typeof baseConflictRun>>,
+) {
+  const { runtime, prompts } = scope;
+  const records = await runtime.store.listRecords();
+  const parked = records.find((r) => r.slug === "beta" && r.step === "park");
+  expect(parked?.cause?.kind).toBe("base-conflict");
+  expect(prompts).toHaveLength(1);
+  expect(prompts[0]).toContain("You are the steward (merge agent)");
+  expect(prompts[0]).toContain("clash.txt");
+  expect(
+    records.find(
+      (r) => r.slug === "beta" && r.step === "steward" && r.actor === "agent",
+    ),
+  ).toBeDefined();
+  const state = derive(
+    await runtime.store.listTasks(),
+    records,
+    runtime.configs.process.flows,
+  );
+  expect(state.tasks.beta!.status).toBe("merged");
+  expect(repo.git(["show", "factory/demo:clash.txt"]).stdout.trim()).toBe(
+    "steward-resolved",
+  );
+}
+
+function registerBaseConflict(): void {
+  it("takes a base-conflict park at wave end and lands the resolution", async () => {
+    const { repo, goal } = setupFlowRepo({
+      aliases: stewardAliases,
+      limits: { concurrency: { overall: 1 } },
+    });
+    const checkout = goalCheckout(repo, goal);
+    try {
+      await baseConflictAssert(
+        repo,
+        await baseConflictRun(repo, goal, checkout),
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
 function registerStewardPart2(): void {
   it("resolves a parallel conflict in-flow and lands it without a steward turn", async () => {
     const { repo, goal } = setupFlowRepo({
@@ -343,4 +441,8 @@ function registerStewardPart2(): void {
 
 describe("steward", () => {
   registerStewardPart2();
+});
+
+describe("steward base conflict", () => {
+  registerBaseConflict();
 });

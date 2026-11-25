@@ -4,32 +4,41 @@
  * silently dropped. Task files are immutable outside amend, so the edit can
  * only be answered in the plan.
  */
+import type { SessionRef } from "../../harness/types.js";
 import { planBullets, planCancellations } from "../plan-file.js";
-import type {
-  KernelRuntime,
-  PlanReviewFinding,
-  State,
-  TaskFile,
-  TaskStatus,
+import {
+  type KernelRuntime,
+  normalizeSlug,
+  type PlanReviewFinding,
+  type State,
+  type TaskFile,
+  type TaskStatus,
 } from "../types.js";
+import { pmScopeKey } from "./scope.js";
+import type { PmScope } from "./types.js";
 
 /** The iteration file a derive turn writes its plan texts to. */
 const PLAN_BULLET_FILE = "plan-bullets.json";
 
 /** One plan's current text. Only plans a derive turn reads are baselined. */
-export interface PlanText {
+interface PlanText {
   /** Goal-relative path: `plan.md` or `epics/<epic>.md`. */
   rel: string;
   text: string;
 }
 
-/** Per plan, the bullet block each slug was derived from. */
+/** Per plan, the bullet block each slug was derived from, the plan text and the session. */
 interface BulletBaseline {
   plans: Record<string, Record<string, string>>;
+  texts?: Record<string, string>;
+  /** The goal PM's session, kept for baselines written before per-scope sessions. */
+  session?: SessionRef;
+  /** One compacted session per PM scope: the epic name, empty for the goal. */
+  sessions?: Record<string, SessionRef>;
 }
 
 /** A task file that exists; a terminal `status` makes its bullet history. */
-export interface OpenTask {
+interface OpenTask {
   slug: string;
   status?: TaskStatus;
 }
@@ -168,19 +177,40 @@ function bulletEditFindings(edits: readonly BulletEdit[]): PlanReviewFinding[] {
   }));
 }
 
-/** The open tasks the current plans claim, for the plan-return check. */
-async function planBulletEdits(
-  runtime: KernelRuntime,
-  tasks: readonly OpenTask[],
-): Promise<BulletEdit[]> {
-  const baseline = await latestBulletBaseline(runtime);
-  if (!baseline) return [];
-  return bulletEdits(await readPlanTexts(runtime), tasks, baseline);
+/** A merged task's bullet collapsed to its one line: `<slug> — merged`. */
+const COLLAPSED_MERGED_BULLET = /^-\s+\S+\s+—\s+merged\.?$/iu;
+
+/** Whether a merged bullet is already the one line the plan keeps. */
+function collapsedMergedBullet(text: string): boolean {
+  const lines = text.split(/\r?\n/).filter((line) => line.trim() !== "");
+  return lines.length === 1 && COLLAPSED_MERGED_BULLET.test(lines[0]!.trim());
 }
 
 /**
- * The kernel findings a plan return carries for the current plan texts. A
- * `plan` rel narrows them to one changed plan; absent covers every plan.
+ * The merged task bullets one plan still carries in full. A merged bullet's
+ * history lives in the records; the plan keeps only its one-line collapse.
+ */
+export function staleMergedFindings(
+  planRel: string,
+  text: string,
+  merged: ReadonlySet<string>,
+): PlanReviewFinding[] {
+  const findings: PlanReviewFinding[] = [];
+  for (const [raw, bullet] of planBullets(text)) {
+    const slug = normalizeSlug(raw);
+    if (!merged.has(slug) || collapsedMergedBullet(bullet.text)) continue;
+    findings.push({
+      planLine: `${planRel}:${bullet.line} (${slug})`,
+      finding: `merged task "${slug}" is still carried in full; collapse it to the one line \`- ${slug} — merged.\` and keep its what and done-when in the records`,
+    });
+  }
+  return findings;
+}
+
+/**
+ * The kernel findings a plan review carries for the current plan texts: an
+ * open bullet edited in place, and a merged bullet still carried in full. A
+ * `plan` rel narrows them to one plan; absent covers every plan.
  */
 export async function planBulletEditFindings(
   runtime: KernelRuntime,
@@ -188,10 +218,24 @@ export async function planBulletEditFindings(
   state: State,
   plan?: string,
 ): Promise<PlanReviewFinding[]> {
-  const edits = await planBulletEdits(runtime, openTasks(tasks, state));
-  return bulletEditFindings(
-    plan === undefined ? edits : edits.filter((edit) => edit.plan === plan),
+  const current = openTasks(tasks, state);
+  const plans = await readPlanTexts(runtime);
+  const edits = bulletEdits(
+    plans,
+    current,
+    await latestBulletBaseline(runtime),
   );
+  const merged = new Set(
+    current.filter((task) => task.status === "merged").map((task) => task.slug),
+  );
+  const narrowed =
+    plan === undefined ? plans : plans.filter((p) => p.rel === plan);
+  return [
+    ...bulletEditFindings(
+      plan === undefined ? edits : edits.filter((edit) => edit.plan === plan),
+    ),
+    ...narrowed.flatMap((p) => staleMergedFindings(p.rel, p.text, merged)),
+  ];
 }
 
 function parseBaseline(text: string): BulletBaseline {
@@ -227,6 +271,52 @@ async function latestBulletBaseline(
       PLAN_BULLET_FILE,
     );
     if (text !== null) return parseBaseline(text);
+  }
+  return null;
+}
+
+/** A baseline's plan texts; an older baseline without them rebuilds from bullets. */
+function baselinePlans(baseline: BulletBaseline): PlanText[] {
+  if (baseline.texts) {
+    return Object.entries(baseline.texts).map(([rel, text]) => ({ rel, text }));
+  }
+  return Object.keys(baseline.plans)
+    .sort()
+    .map((rel) => ({
+      rel,
+      text: Object.values(baseline.plans[rel] ?? {}).join("\n"),
+    }));
+}
+
+/**
+ * The plans the newest derive turn at or before `currentIteration` wrote task files
+ * from, with that iteration, or null when no earlier derive turn exists.
+ */
+export async function previousPlanBaseline(
+  runtime: KernelRuntime,
+  currentIteration: number,
+): Promise<{
+  iteration: number;
+  plans: PlanText[];
+  session?: SessionRef;
+  sessions?: Record<string, SessionRef>;
+} | null> {
+  for (const iteration of iterationNumbers(
+    await runtime.store.listDir("iterations"),
+  )) {
+    if (iteration > currentIteration) continue;
+    const text = await runtime.store.iterations.read(
+      iteration,
+      PLAN_BULLET_FILE,
+    );
+    if (text === null) continue;
+    const baseline = parseBaseline(text);
+    return {
+      iteration,
+      plans: baselinePlans(baseline),
+      ...(baseline.session ? { session: baseline.session } : {}),
+      ...(baseline.sessions ? { sessions: baseline.sessions } : {}),
+    };
   }
   return null;
 }
@@ -282,6 +372,8 @@ export async function storePlanBulletBaseline(
   iteration: number,
   plans: readonly PlanText[],
   tasks: readonly OpenTask[],
+  session?: SessionRef,
+  scope: PmScope = { kind: "goal" },
 ): Promise<void> {
   const previous = await latestBulletBaseline(runtime);
   const keep = new Map(
@@ -290,10 +382,54 @@ export async function storePlanBulletBaseline(
       { rel: edit.baselinePlan, text: edit.before },
     ]),
   );
-  const baseline = baselineOf(plans, keep, previous);
+  // One saga runs one PM per epic plus the top, so each PM updates only its
+  // own plan's bullets and session; the other scopes' entries are preserved.
+  const baseline = mergeBaseline(
+    runtime,
+    previous,
+    baselineOf(plans, keep, previous),
+    plans,
+    session,
+    scope,
+  );
   await runtime.store.iterations.write(
     iteration,
     PLAN_BULLET_FILE,
     `${JSON.stringify(baseline, null, 2)}\n`,
   );
+}
+
+/** This scope's fresh entries merged over the previous baseline, pruned to plans on disk. */
+function mergeBaseline(
+  runtime: KernelRuntime,
+  previous: BulletBaseline | null,
+  fresh: BulletBaseline,
+  plans: readonly PlanText[],
+  session: SessionRef | undefined,
+  scope: PmScope,
+): BulletBaseline {
+  const onDisk = new Set(
+    runtime.store.plans.filesOnDisk().map((plan) => plan.rel),
+  );
+  const kept = <T>(entries: Record<string, T>): Record<string, T> => {
+    const out: Record<string, T> = {};
+    for (const [rel, value] of Object.entries(entries)) {
+      if (onDisk.has(rel)) out[rel] = value;
+    }
+    return out;
+  };
+  const merged: BulletBaseline = {
+    plans: { ...kept(previous?.plans ?? {}), ...fresh.plans },
+  };
+  const texts = {
+    ...kept(previous?.texts ?? {}),
+    ...Object.fromEntries(plans.map((plan) => [plan.rel, plan.text])),
+  };
+  if (Object.keys(texts).length > 0) merged.texts = texts;
+  const sessions = { ...(previous?.sessions ?? {}) };
+  if (session) sessions[pmScopeKey(scope)] = session;
+  if (Object.keys(sessions).length > 0) merged.sessions = sessions;
+  const goalSession = sessions[""];
+  if (goalSession) merged.session = goalSession;
+  return merged;
 }

@@ -132,7 +132,7 @@ async function dispatchConflict(
   scopes: Record<string, string[]>,
 ): Promise<ConflictScope> {
   const runtime = await makeRuntime(repo, goal, { fake: harness });
-  runtime.exhaustedPools.set(GATED_POOL, Date.now() + 3_600_000);
+  runtime.exhaustedPools.set(GATED_POOL, { resetAt: Date.now() + 3_600_000 });
   for (const [slug, scope] of Object.entries(scopes))
     await writeTask(runtime, task(slug, { scope }));
   for (const slug of Object.keys(scopes))

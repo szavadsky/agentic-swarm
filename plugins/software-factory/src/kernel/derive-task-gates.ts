@@ -13,18 +13,22 @@ import {
   failingNames,
   mergeGateNames,
   parkedGateNames,
-  type PendingChecks,
   phaseAfter,
   redChecksText,
   sameFailingSet,
 } from "./derive-task-facts.js";
-import type { ReduceContext, ReduceState } from "./derive-task-state.js";
+import type {
+  PendingChecks,
+  ReduceContext,
+  ReduceState,
+} from "./derive-types.js";
+import { raisePendingSignal } from "./derive-task-state.js";
 import { attributedFailures, isInfraCheck } from "./gates.js";
 import { isRecoveryCrash } from "./recovery-seal.js";
 import { checksFixLimit, isLastChecksFixCall } from "./review.js";
 import type { Cause, StepRecord } from "./types.js";
 
-function advancePendingChecks(
+export function advancePendingChecks(
   context: ReduceContext,
   state: ReduceState,
   pending: PendingChecks,
@@ -125,23 +129,41 @@ function settleRedChecks(
   ) {
     // The fix changed nothing and the same checks still fail: a deterministic
     // red the fix did not address. A red without a comparable baseline (merge
-    // gates with no recorded checks) parks the same way; green and changed
+    // gates with no recorded checks) raises the same signal; green and changed
     // reds move on below.
-    state.park = makeCause(
-      "empty-diff",
-      state.gateFailure !== undefined
-        ? `${deferred.step} r${deferred.round} committed no changes after red checks: ${state.gateFailure}`
-        : `${deferred.step} r${deferred.round} committed no changes`,
+    raisePendingSignal(
+      state,
+      {
+        kind: "empty-diff",
+        evidence:
+          state.gateFailure !== undefined
+            ? `${deferred.step} r${deferred.round} committed no changes after red checks: ${state.gateFailure}`
+            : `${deferred.step} r${deferred.round} committed no changes`,
+      },
+      { kind: "past-step", index: context.flowIndex.get(deferred.step) ?? 0 },
     );
-    state.phase = "parked";
     return;
   }
   state.gateFixCount += 1;
   if (state.gateFixCount > checksFixLimit(context.flow)) {
-    state.park = makeCause("gates", parkedGateNames(context.task, red));
-    state.phase = "parked";
+    // The fix rounds are spent and the task checks are still red: the branch
+    // sits on a red base. The decider accepts the red, grants one more fix or
+    // parks; the kernel no longer parks on its own count.
+    const spent = state.gateFixCount - 1;
+    raisePendingSignal(
+      state,
+      {
+        kind: "gates",
+        evidence: `task checks red after ${spent} fix turn${spent === 1 ? "" : "s"}: ${parkedGateNames(context.task, red)}`,
+      },
+      { kind: "checks", pending },
+    );
     state.gateFix = false;
     state.gateLastCall = false;
+    state.gateFailure = failingChecksText(red);
+    state.gateRed = failingNames(red);
+    state.mergeFix = false;
+    state.pendingChecks = null;
     return;
   }
   state.gateFix = true;
@@ -187,7 +209,7 @@ export function applyMerge(
   }
 }
 
-/** A red merge's gate fix: one fix turn, then the recorded cause parks. */
+/** A red merge's gate fix: one fix turn, then the signal the decider answers. */
 function applyMergeGates(
   context: ReduceContext,
   state: ReduceState,
@@ -205,7 +227,7 @@ function applyMergeGates(
     state.mergeFix = true;
     state.gateFailure = redChecksText(rec);
     // No matched names (old records without checks) leaves no baseline: the
-    // deferred comparison then parks on any red.
+    // deferred comparison then signals on any red.
     const names = [...mergeGateNames(rec)].sort();
     state.gateRed = names.length > 0 ? names : undefined;
     // The fix answers the red gates, not the last review: no verdict awaits it.
@@ -215,10 +237,23 @@ function applyMergeGates(
     state.pendingChecks = null;
     return;
   }
-  state.park = cause;
-  state.phase = "parked";
+  // The merged result is still red after its gate fix: the goal branch the task
+  // would land on is red. The decider retries the landing, grants a fix or parks.
+  state.gateFailure = redChecksText(rec) ?? cause.detail;
+  const names = [...mergeGateNames(rec)].sort();
+  state.gateRed = names.length > 0 ? names : undefined;
+  raisePendingSignal(
+    state,
+    {
+      kind: "gates",
+      evidence: `merge gates red after the gate fix: ${state.gateFailure}`,
+    },
+    { kind: "merge" },
+  );
   state.gateFix = false;
   state.gateLastCall = false;
+  state.mergeFix = false;
+  state.pendingChecks = null;
 }
 
 /** A conflict either gets the flow's single resolve turn or parks. */

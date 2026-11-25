@@ -17,7 +17,7 @@ import {
   parseLayer,
   readLayer,
 } from "./load.js";
-import type { LoadConfigOptions } from "./load.js";
+import type { LoadConfigOptions } from "./types.js";
 import { processConfigSchema, runConfigSchema } from "./run-schema.js";
 import { expandHome } from "./paths.js";
 import { repoConfigSchema } from "./repo-schema.js";

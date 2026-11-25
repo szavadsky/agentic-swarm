@@ -219,9 +219,13 @@ describe("bullets the plan return does not report", () => {
 });
 
 describe("bullets that are history or a sanctioned leave", () => {
-  it("reports nothing for a merged bullet", async () => {
+  it("reports nothing for a merged bullet that collapses to its history line", async () => {
     await expectNoReturn(
-      (plan) => plan.replace("Create alpha.", "Create alpha later."),
+      (plan) =>
+        plan.replace(
+          "- alpha — Create alpha.\n  - order: at once.\n",
+          "- alpha — merged.\n",
+        ),
       (runtime) =>
         runtime.store.appendRecord(scriptMeta(1, "merge", { slug: "alpha" }), {
           ok: true,

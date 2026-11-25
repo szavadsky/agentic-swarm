@@ -4,27 +4,63 @@
  * the pure parser and validator; the boundary is the only caller, so nothing
  * here reads a goal directory except through the supplied `exists`.
  */
-export interface EpicRow {
-  epic: string;
-  architect: "main" | "subarchitect";
-  /** Goal-relative plan path: `plan.md` for main, `epics/<epic>.md` otherwise. */
-  plan: string;
-  /** One advisory glob for the epic, used for the main pack row and conflict awareness. */
-  scope: string;
-  opened: number;
-  /** Closed rows are history: parsed, validated for grammar, never consulted. */
-  closed?: { iteration: number; reason: string };
+import type {
+  ArchitectRegister,
+  EpicRow,
+  RegisterContext,
+  SagaPassPlan,
+} from "./register-types.js";
+export type {
+  EpicRow,
+  RegisterContext,
+  SagaPassPlan,
+} from "./register-types.js";
+
+/** Active epics owned by a subarchitect, bottom-to-top (epic order). */
+export function subarchitectRows(epics: readonly EpicRow[]): EpicRow[] {
+  return epics
+    .filter(
+      (row) => row.closed === undefined && row.architect === "subarchitect",
+    )
+    .sort((a, b) => a.epic.localeCompare(b.epic));
 }
 
-export interface RegisterContext {
-  depth: 1 | 2;
-  tasks: readonly { slug: string; epic?: string }[];
-  exists(rel: string): boolean;
-}
-
-export interface ArchitectRegister {
-  epics: EpicRow[];
-  findings: string[];
+/**
+ * The passes one iteration runs. The first iteration is top-down only: the top
+ * turn writes the register and the direction pass consults it. A middle
+ * iteration checks and reports bottom-to-top, then lets the top turn choose the
+ * direction subset. Once every active epic is done the iteration is the goal's
+ * last: checkers plus the bottom-up report, with no direction pass.
+ */
+export function sagaPassPlan(input: {
+  /** The goal has attempted a top architect turn: it has left its first iteration. */
+  started: boolean;
+  epics: readonly EpicRow[];
+  epicDone: (epic: string) => boolean;
+}): SagaPassPlan {
+  const epics = subarchitectRows(input.epics);
+  if (!input.started) {
+    return {
+      kind: "first",
+      checkerEpics: [],
+      reportEpics: [],
+      direction: true,
+    };
+  }
+  if (epics.length > 0 && epics.every((row) => input.epicDone(row.epic))) {
+    return {
+      kind: "done",
+      checkerEpics: epics,
+      reportEpics: epics,
+      direction: false,
+    };
+  }
+  return {
+    kind: "middle",
+    checkerEpics: epics,
+    reportEpics: epics.filter((row) => !input.epicDone(row.epic)),
+    direction: true,
+  };
 }
 
 const REGISTER_HEADING = /^##\s+architect register\s*$/i;

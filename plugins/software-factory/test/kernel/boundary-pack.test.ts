@@ -208,6 +208,15 @@ async function fallsBackScriptRenderRecordsGlitchPart1(
     },
     { when: whenTurn({ step: "pm" }) },
   );
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(
+        outcome({ status: "failed", summary: "could not read the data" }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: PACK_PREP_STEP }) },
+  );
 
   const boundary = await runBoundary(runtime, {
     relaunch: false,
@@ -238,11 +247,15 @@ async function fallsBackScriptRenderRecordsGlitchPart2(
   );
   expect(fallback?.ok).toBe(false);
   expect(fallback?.launchKind).toBe("glitch");
-  expect(causeText(fallback?.cause)).toContain("turn wrote no pack");
-  expect(causeText(fallback?.cause)).toContain("script render");
+  expect(causeText(fallback?.cause)).toContain(
+    "turn declared failed: could not read the data",
+  );
+  expect(causeText(fallback?.cause)).toContain(
+    "the script render is this iteration's pack",
+  );
 }
 
-async function hasPreparerWriteIndexPackFromFullPart1(
+async function hasPreparerReturnBriefsPart1(
   repo: ReturnType<typeof setupFlowRepo>["repo"],
   goal: string,
 ) {
@@ -252,7 +265,8 @@ async function hasPreparerWriteIndexPackFromFullPart1(
   fs.writeFileSync(path.join(runtime.store.goalDir, "plan.md"), PLAN, "utf8");
   const packRel = contextPackRelPath(2);
   const dataRel = contextDataRelPath(2);
-  const prepared = "# Prepared pack\n\n## Paths\n- plan: /goal/plan.md\n";
+  const brief = "the code map names src/kernel only this iteration";
+  const divergentPack = "# Prepared pack\n\n## Paths\n- plan: /goal/plan.md\n";
   const wasteRecord = "records/00001-i1-waste-turn-implement-r1";
   fs.mkdirSync(path.join(runtime.store.goalDir, "iterations/1"), {
     recursive: true,
@@ -273,29 +287,57 @@ async function hasPreparerWriteIndexPackFromFullPart1(
         expect.objectContaining({ slug: "alpha", status: "ready" }),
       );
       expect(data.paths.previousWaste).toContain(wasteRecord);
+      // A pack the preparer writes is never the index: the script overwrites it.
       fs.writeFileSync(
         path.join(runtime.store.goalDir, packRel),
-        prepared,
+        divergentPack,
         "utf8",
       );
-      ctx.writeOutcome(outcome({ summary: "prepared the index" }));
+      ctx.writeOutcome(
+        outcome({
+          summary: "prepared the briefs",
+          packBriefs: [{ section: "codeMap", summary: brief }],
+        }),
+      );
       return fakeTurnResult(req);
     },
     { when: whenTurn({ step: PACK_PREP_STEP }) },
   );
 
-  return { harness, runtime, packRel, dataRel, prepared, state };
+  return { harness, runtime, packRel, dataRel, brief, divergentPack, state };
 }
 
-async function hasPreparerWriteIndexPackFromFullPart2(
-  scope: Awaited<ReturnType<typeof hasPreparerWriteIndexPackFromFullPart1>>,
+function expectBriefedPack(
+  pack: string,
+  scope: {
+    brief: string;
+    dataPath: string;
+    divergentPack: string;
+    planPath: string;
+  },
+): void {
+  expect(pack).toContain("# Context pack — goal demo, iteration 2");
+  expect(pack).toContain("## Task status");
+  expect(pack).toContain(`- plan (architect edits this): ${scope.planPath}`);
+  expect(pack).toContain(`- ${scope.brief}`);
+  expect(pack).toContain(`- full: ${scope.dataPath} (#codeMap)`);
+  expect(pack).not.toContain(scope.divergentPack);
+}
+
+async function hasPreparerReturnBriefsPart2(
+  scope: Awaited<ReturnType<typeof hasPreparerReturnBriefsPart1>>,
 ) {
-  const { harness, runtime, packRel, prepared, state, dataRel } = scope;
+  const { harness, runtime, packRel, brief, divergentPack, state, dataRel } =
+    scope;
+  const dataPath = path.join(runtime.store.goalDir, dataRel);
+  const planPath = path.join(runtime.store.goalDir, "plan.md");
+  const expected = { brief, dataPath, divergentPack, planPath };
   harness.script(
     (req, ctx) => {
-      expect(
+      expectBriefedPack(
         fs.readFileSync(path.join(runtime.store.goalDir, packRel), "utf8"),
-      ).toBe(prepared);
+        expected,
+      );
       fs.appendFileSync(
         path.join(runtime.store.goalDir, "plan.md"),
         "\n## architect edit\n",
@@ -320,12 +362,16 @@ async function hasPreparerWriteIndexPackFromFullPart2(
   });
   expect(boundary.decision).toBe("continue");
   expect(boundary.packPath).toBe(packRel);
-  expect(
-    fs.readFileSync(path.join(runtime.store.goalDir, packRel), "utf8"),
-  ).toBe(prepared);
+  const pack = fs.readFileSync(
+    path.join(runtime.store.goalDir, packRel),
+    "utf8",
+  );
+  expectBriefedPack(pack, expected);
+  expect(pack).toContain("## Waste (previous iteration summary)");
   expect(state.prepPrompt).toContain("You prepare the context pack");
-  expect(state.prepPrompt).toContain(path.join(runtime.store.goalDir, dataRel));
-  expect(state.prepPrompt).toContain(path.join(runtime.store.goalDir, packRel));
+  expect(state.prepPrompt).toContain(dataPath);
+  expect(state.prepPrompt).toContain("packBriefs:");
+  expect(state.prepPrompt).not.toContain("context pack to write");
   const records = await runtime.store.listRecords();
   const prep = records.find(
     (record) => record.step === PACK_PREP_STEP && record.actor === "agent",
@@ -335,8 +381,8 @@ async function hasPreparerWriteIndexPackFromFullPart2(
   return { ...scope, records, prep };
 }
 
-async function hasPreparerWriteIndexPackFromFullPart3(
-  scope: Awaited<ReturnType<typeof hasPreparerWriteIndexPackFromFullPart2>>,
+async function hasPreparerReturnBriefsPart3(
+  scope: Awaited<ReturnType<typeof hasPreparerReturnBriefsPart2>>,
 ) {
   const { prep, records } = scope;
   expect(prep?.outcome?.status).toBe("done");
@@ -393,18 +439,18 @@ function registerBoundaryContextPackPart1(): void {
 }
 
 function registerBoundaryContextPackPart2(): void {
-  it("has the preparer write the index pack from the full status data", async () => {
+  it("renders the index the preparer briefed from the full status data", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
-      const scope1 = await hasPreparerWriteIndexPackFromFullPart1(repo, goal);
-      const scope2 = await hasPreparerWriteIndexPackFromFullPart2(scope1);
-      await hasPreparerWriteIndexPackFromFullPart3(scope2);
+      const scope1 = await hasPreparerReturnBriefsPart1(repo, goal);
+      const scope2 = await hasPreparerReturnBriefsPart2(scope1);
+      await hasPreparerReturnBriefsPart3(scope2);
     } finally {
       cleanupFlowRepo(repo);
     }
   }, 90_000);
 
-  it("falls back to the script render and records a glitch when the preparer writes no pack", async () => {
+  it("falls back to the script render and records a glitch when the preparer fails", async () => {
     const { repo, goal } = setupFlowRepo();
     try {
       const scope1 = await fallsBackScriptRenderRecordsGlitchPart1(repo, goal);

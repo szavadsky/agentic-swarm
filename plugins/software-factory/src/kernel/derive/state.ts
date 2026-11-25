@@ -2,15 +2,16 @@
 
 import { DEFAULT_FLOWS, reduceTask } from "../derive-task.js";
 import { isRecoveryCrash } from "../recovery-seal.js";
-import type {
-  EpicState,
-  FlowDefinition,
-  GoalDecision,
-  GoalStatus,
-  StepRecord,
-  TaskFile,
-  TaskState,
-  TaskStatus,
+import {
+  BUILTIN_INGESTION_IDS,
+  type EpicState,
+  type FlowDefinition,
+  type GoalDecision,
+  type GoalStatus,
+  type StepRecord,
+  type TaskFile,
+  type TaskState,
+  type TaskStatus,
 } from "../types.js";
 import {
   FRONT_STOP_STEP,
@@ -21,7 +22,6 @@ import {
   supersedingContinuation,
 } from "./shared.js";
 import type { OrphanReductions, TaskReduction } from "./types.js";
-import { hasOpenDebt } from "./debt.js";
 
 /** The goal decision a completed record carries: the architect's, or the front path's stop. */
 function recordedDecision(rec: StepRecord): GoalDecision | undefined {
@@ -31,6 +31,33 @@ function recordedDecision(rec: StepRecord): GoalDecision | undefined {
   if (rec.actor === "script" && rec.step === FRONT_STOP_STEP)
     return rec.outcome.decision;
   return undefined;
+}
+
+/** The steps every goal records before its first decision: the branch, then the classifier. */
+const INGESTION_STEPS: ReadonlySet<string> = new Set(BUILTIN_INGESTION_IDS);
+
+/** A task turn: an agent turn on a slug; kernel and boundary steps name none. */
+function isTaskTurn(rec: StepRecord): boolean {
+  return rec.actor === "agent" && rec.slug !== undefined;
+}
+
+/**
+ * Whether the iteration died inside its ingestion phase: it recorded its branch
+ * or classifier step, no decision followed, and no task turn ran. A front path
+ * that dispatched keeps its own iteration — the next one runs the architect — so
+ * task work ends the front phase even before a decision.
+ */
+export function ingestionInterrupted(
+  sorted: readonly StepRecord[],
+  iteration: number,
+): boolean {
+  const inIteration = sorted.filter((rec) => rec.iteration === iteration);
+  if (inIteration.some((rec) => recordedDecision(rec) !== undefined))
+    return false;
+  if (inIteration.some(isTaskTurn)) return false;
+  return inIteration.some(
+    (rec) => rec.endedAt !== undefined && INGESTION_STEPS.has(rec.step),
+  );
 }
 
 /** The latest numbered iteration; a quarantine rides along without numbering one. */
@@ -109,7 +136,6 @@ function standinTask(slug: string): TaskFile {
     kind: "development",
     flow: "implement-review",
     deps: [],
-    scope: [],
     revision: 0,
     source: "orphan terminal record",
     body: "",
@@ -161,11 +187,15 @@ function taskStateFor(
   return {
     status,
     ...(task.epic !== undefined ? { epic: task.epic } : {}),
+    deps: task.deps,
     cause: terminal?.cause ?? reduction.park,
     turns: reduction.turns,
+    started: reduction.started,
     round: reduction.round,
+    launches: reduction.launches,
     kind: task.kind,
     flow: task.flow,
+    ...(task.promote ? { promote: true } : {}),
     ...(supersededBy !== undefined ? { supersededBy } : {}),
     phase: terminal ? "done" : reduction.phase,
     commit: terminal?.commit ?? reduction.commit,
@@ -176,6 +206,7 @@ function taskStateFor(
     gateLastCall: terminal ? undefined : reduction.gateLastCall,
     cleanlinessRevision: terminal ? undefined : reduction.cleanlinessRevision,
     cleanlinessJustified: terminal ? undefined : reduction.cleanlinessJustified,
+    pendingSignal: terminal ? undefined : reduction.pendingSignal,
   };
 }
 
@@ -229,7 +260,9 @@ export function addOrphanTaskStates(
       status: terminal.status,
       cause: terminal.cause,
       turns: reduction.turns,
+      started: reduction.started,
       round: reduction.round,
+      launches: reduction.launches,
       kind: "development",
       flow: "implement-review",
       phase: "done",
@@ -281,13 +314,11 @@ export function settleGoal(
   for (const rec of sorted) {
     const decision = recordedDecision(rec);
     if (!decision) continue;
-    // Done sees open debt and open epics: a done recorded while either is
-    // open is refused — the goal stays active so the next boundary plans the
-    // removers or lets an epic's architect close it. The check reads records
-    // up to this decision, so a later close needs a later done to land.
+    // Done sees open epics only: a done recorded while one is open is refused,
+    // so the next boundary lets the epic's architect close it. Debt is the
+    // architect's to own — the kernel never drops a done over it; the summary
+    // lists what remains open.
     if (decision === "done") {
-      const prior = sorted.filter((r) => r.seq <= rec.seq);
-      if (hasOpenDebt(prior)) continue;
       if (Object.values(epics).some((epic) => !epic.done)) continue;
       goal = "done";
     } else if (decision === "blocked") {

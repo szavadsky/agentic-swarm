@@ -49,11 +49,13 @@ const frontVars = {
       flow: "implement-review",
       kind: "development",
       schema: "outcome",
+      useWhen: "work that lands after review",
     },
     trivial: {
       flow: "just-implement",
       kind: "development",
       schema: "outcome",
+      useWhen: "a small fully understood change",
     },
   }),
 };
@@ -68,12 +70,16 @@ async function setup() {
 
 const pmVars = {
   iteration: "1",
+  epic: "",
+  epic_scoped: "false",
   intent_path: "/g/intent.md",
   plans: "- goal: /g/plan.md",
+  plan_diff: "none",
   tasks_dir: "/g/tasks",
   existing_tasks: "none",
   repair: "",
   steers: "none",
+  concerns: "none",
   holds_dir: "/g/mailbox/holds",
   stalls: "none",
   plan_checks: "none",
@@ -226,7 +232,8 @@ function registerDeliveryGuardPart6(): void {
       expect(repair).toContain(
         "You are the architect. Your turn did not deliver its plan edit or stop decision.",
       );
-      expect(repair).toContain("decision: continue | done | blocked");
+      expect(repair).toContain("decision: continue");
+      expect(repair).toContain("decision: done");
       expect(repair).not.toContain("verdict:");
       expect(result.outcome?.decision).toBe("done");
     } finally {

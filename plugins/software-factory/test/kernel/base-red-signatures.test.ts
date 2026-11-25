@@ -353,6 +353,7 @@ function registerInheritedRedIsMatchedPerSignatureNotPerGatePart6(): void {
             ],
           },
         },
+        store: { goalDir: root },
       } as unknown as KernelRuntime;
       const [run] = await runGates(runtime, root);
       expect([...gateSignatures(run!)]).toEqual([

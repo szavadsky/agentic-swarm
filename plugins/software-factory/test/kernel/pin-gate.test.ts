@@ -4,8 +4,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import yaml from "yaml";
-import { parseCliArgs } from "../../src/cli/dispatch.js";
 import { writePinGate } from "../../src/cli/commands/promote.js";
+import { parseCliArgs } from "../../src/cli/dispatch.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { runGoal } from "../../src/kernel/launch.js";
 import {
@@ -13,17 +13,17 @@ import {
   pinBuildOf,
   pinGateSchema,
   pinRefusal,
-  type PinGate,
 } from "../../src/kernel/preflight/pin.js";
+import type { PinGate } from "../../src/kernel/preflight/types.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type { StepRecord } from "../../src/kernel/types.js";
 import { testPriceSource } from "../helpers/price-source.js";
 import {
   cleanup,
   DEFAULT_RUN_YAML,
+  type E2EGoal,
   makeGoal,
   outcome,
-  type E2EGoal,
 } from "./e2e-helpers.js";
 import { scriptKernelRoleFallbacks } from "./fake-defaults.js";
 
@@ -83,7 +83,14 @@ function doneHarness(): FakeHarness {
 function fakePin(pins: string, rev: string): string {
   const pin = path.join(pins, rev);
   fs.mkdirSync(pin, { recursive: true });
-  for (const entry of ["bin", "src", "config", "prompts", "package.json"]) {
+  for (const entry of [
+    "bin",
+    "src",
+    "config",
+    "prompts",
+    "schemas",
+    "package.json",
+  ]) {
     fs.cpSync(path.join(PACKAGE_ROOT, entry), path.join(pin, entry), {
       recursive: true,
     });
@@ -101,7 +108,13 @@ function writePin(
   typecheck: PinGate["typecheck"],
   tests: PinGate["tests"],
 ): void {
-  writePinGate(build, REV, typecheck, tests);
+  writePinGate(build, REV, {
+    typecheck,
+    tests,
+    format: "pass",
+    lint: "pass",
+    schemaValidation: "pass",
+  });
 }
 
 function runPin(
@@ -223,7 +236,7 @@ describe("pin gate record validation", () => {
 
       expect(() =>
         writePin(build, "maybe" as PinGate["typecheck"], "pass"),
-      ).toThrow("--typecheck must be pass or fail");
+      ).toThrow("typecheck must be pass or fail");
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

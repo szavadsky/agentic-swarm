@@ -1,37 +1,21 @@
 /**
  * The boundary's second half: the architect's ownership reconcile, steer
- * answers, the task-file guard, the epic consults, the plan review and the PM
- * turn. Each stage either returns the iteration's result or leaves the context
- * ready for the next.
+ * answers, the task-file guard, the plan review and the PM turn. The saga
+ * passes around the top turn live in `boundary-saga.ts`; each stage here either
+ * returns the iteration's result or leaves the context ready for the next.
  */
-import fs from "node:fs";
 import { missingPlanFinding, snapshotPlan } from "./architect-session.js";
-import {
-  type ConsultFailure,
-  type EpicConsult,
-  reconcileForeignPlans,
-  runEpicConsult,
-  writeEpicPack,
-} from "./boundary-consult.js";
-import {
-  epicJobDone,
-  epicPlan,
-  ownedPlanText,
-  parseRegister,
-  rungTrace,
-  snapshotDiff,
-  taskSnapshot,
-} from "./boundary-context.js";
-import {
-  type BoundaryResult,
-  boundaryResult,
-  type ConsultContext,
-} from "./boundary-state.js";
+import { reconcileForeignPlans } from "./boundary-consult.js";
+import { rungTrace, snapshotDiff, taskSnapshot } from "./boundary-context.js";
+import { boundaryResult } from "./boundary-state.js";
+import type { BoundaryResult, ConsultContext } from "./boundary-types.js";
 import { makeCause } from "./cause.js";
+import { openConcernIds } from "./context-pack/misc.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import {
   expireHold,
   markProcessed,
+  readHolds,
   type Steer,
   steerResponses,
   writeOutbox,
@@ -42,9 +26,14 @@ import {
   runArchitectReturn,
   runPlanReview,
 } from "./plan-review.js";
-import { planBulletEditFindings, runPm } from "./pm.js";
+import {
+  epicPmScopes,
+  GOAL_PM_SCOPE,
+  planBulletEditFindings,
+  runScopedPmFlow,
+} from "./pm.js";
 import { scriptMeta } from "./record.js";
-import type { StepRecord } from "./types.js";
+import type { Outcome, StepRecord } from "./types.js";
 
 /** The architect's post-turn checks: ownership, steer answers, task files, decision, plan. */
 export async function settleArchitectStage(
@@ -128,9 +117,13 @@ async function deliverSteerAnswer(
 async function recordSteerPresented(
   context: ConsultContext,
   steer: Steer,
+  architect?: string,
 ): Promise<void> {
   await context.runtime.store.appendRecord(
-    scriptMeta(context.iteration, "steer-presented", { slug: steer.id }),
+    scriptMeta(context.iteration, "steer-presented", {
+      slug: steer.id,
+      ...(architect ? { architect } : {}),
+    }),
     {
       ok: false,
       cause: makeCause(
@@ -145,6 +138,7 @@ async function recordSteerPresented(
 async function expireUnansweredSteer(
   context: ConsultContext,
   steer: Steer,
+  architect?: string,
 ): Promise<void> {
   const { runtime } = context;
   await expireHold(runtime.store, steer.id);
@@ -155,7 +149,10 @@ async function expireUnansweredSteer(
     `# Steer ${steer.id}\n\n${reason}\n\nSource: ${steer.relPath}`,
   );
   await runtime.store.appendRecord(
-    scriptMeta(context.iteration, "steer-unanswered", { slug: steer.id }),
+    scriptMeta(context.iteration, "steer-unanswered", {
+      slug: steer.id,
+      ...(architect ? { architect } : {}),
+    }),
     {
       ok: false,
       cause: makeCause(
@@ -179,19 +176,29 @@ async function expireUnansweredSteer(
   );
 }
 
-/** A steer stays pending when unanswered; the first miss only records it. */
-async function answerSteers(context: ConsultContext): Promise<void> {
-  const result = context.architect!;
-  const responses = result.outcome
+/**
+ * A steer stays pending when unanswered; the first miss only records it, and
+ * the second expires its hold. Returns the steers still waiting, so an epic
+ * consult later in the same iteration does not present an answered steer again.
+ */
+async function answerSteersFor(
+  context: ConsultContext,
+  steers: readonly Steer[],
+  outcome: Outcome | undefined,
+  architect?: string,
+): Promise<Steer[]> {
+  if (steers.length === 0) return [];
+  const responses = outcome
     ? steerResponses(
-        result.outcome,
-        context.forArchitect.map((steer) => steer.id),
+        outcome,
+        steers.map((steer) => steer.id),
       )
     : new Map<string, string>();
   const prior = await context.runtime.store.listRecords();
   const presented = recordSlugs(prior, "steer-presented");
   const expired = recordSlugs(prior, "steer-unanswered");
-  for (const steer of context.forArchitect) {
+  const remaining: Steer[] = [];
+  for (const steer of steers) {
     const answer = responses.get(steer.id);
     if (answer) {
       await deliverSteerAnswer(context, steer, answer);
@@ -199,138 +206,79 @@ async function answerSteers(context: ConsultContext): Promise<void> {
     }
     if (expired.has(steer.id)) continue;
     if (!presented.has(steer.id)) {
-      await recordSteerPresented(context, steer);
+      await recordSteerPresented(context, steer, architect);
+      remaining.push(steer);
       continue;
     }
-    await expireUnansweredSteer(context, steer);
+    await expireUnansweredSteer(context, steer, architect);
   }
+  return remaining;
 }
 
-type ConsultStep = { result: BoundaryResult } | { consult: EpicConsult };
+/** The top architect's steers, after its turn closed. */
+async function answerSteers(context: ConsultContext): Promise<void> {
+  await answerSteersFor(
+    context,
+    context.forArchitect,
+    context.architect?.outcome,
+  );
+}
 
-/** One epic's pack and consult; its failure belongs to the whole iteration. */
-async function consultEpic(
+/**
+ * One epic's waiting steers, after its report or direction consult. The
+ * iteration's first consult presents or answers them; later passes skip the
+ * epic, so a steer presented in the report is not expired by the direction.
+ */
+export async function answerEpicSteers(
   context: ConsultContext,
   epic: string,
-  records: StepRecord[],
-  planText: string,
-): Promise<ConsultStep> {
-  const { runtime } = context;
-  const prior = records.some(
-    (record) =>
-      record.step === "subarchitect" &&
-      record.architect === epic &&
-      record.endedAt,
-  );
-  const epicTurn = !prior
-    ? "first"
-    : context.opts.relaunch
-      ? "relaunch"
-      : "boundary";
-  const packRel = await writeEpicPack(runtime, {
-    iteration: context.iteration,
-    epic,
-    goalPlanFile: context.plan,
-    records,
-    turn: epicTurn,
-    tasks: context.tasks,
-    state: context.state,
-    planText,
-    ...(context.opts.runConfigPath
-      ? { runConfigPath: context.opts.runConfigPath }
-      : {}),
-  });
-  const consult = await runEpicConsult(runtime, {
-    iteration: context.iteration,
-    epic,
-    packRel,
-    goalPlanFile: context.plan,
-    ...(context.digestPath ? { digestPath: context.digestPath } : {}),
-    records,
-    turn: epicTurn,
-  });
-  if (consult.failure)
-    return { result: consultFailureResult(context, consult.failure) };
-  return { consult: consult.consult! };
+  outcome: Outcome | undefined,
+): Promise<void> {
+  const waiting = context.forEpicArchitect.get(epic) ?? [];
+  // A later consult may still answer a steer the report pass only presented;
+  // that answer is delivered even though this iteration already showed it.
+  const answered =
+    outcome?.steerAnswers?.some((entry) =>
+      waiting.some((steer) => steer.id === entry.steer),
+    ) ?? false;
+  if (!answered && context.epicSteersAnswered.has(epic)) return;
+  context.epicSteersAnswered.add(epic);
+  const remaining = await answerSteersFor(context, waiting, outcome, epic);
+  context.forEpicArchitect.set(epic, remaining);
 }
 
-function consultFailureResult(
-  context: ConsultContext,
-  failure: ConsultFailure,
-): BoundaryResult {
-  return boundaryResult(context, "blocked", {
-    cause: failure.cause,
-    ...(failure.stop ? { stop: failure.stop } : {}),
-    outcome: context.architect?.outcome,
-  });
-}
-
-/** Depth 2: one subarchitect consult per active epic, then every epic plan must exist. */
-export async function runConsults(
-  context: ConsultContext,
-): Promise<BoundaryResult | undefined> {
-  const { runtime } = context;
-  const depth = runtime.configs.process.hierarchy?.depth ?? 1;
-  const register = parseRegister(
-    context.plan,
-    depth,
-    context.tasks,
-    context.state,
-  );
-  if (register.findings.length > 0) {
-    return boundaryResult(context, "blocked", {
-      cause: `architect register: ${register.findings.join("; ")}`,
-      outcome: context.architect?.outcome,
-    });
-  }
-  const active = register.epics
-    .filter(
-      (row) => row.closed === undefined && row.architect === "subarchitect",
-    )
-    .sort((a, b) => a.epic.localeCompare(b.epic));
-  const records = await runtime.store.listRecords();
-  const planText = await ownedPlanText(runtime);
-  const consults: EpicConsult[] = [];
-  for (const row of active) {
-    // A steered child already ran this epic's consult inside the architect's
-    // session; its record is on disk and its plan edit is the consult's.
-    const delivered = context.steeredDone?.get(row.epic);
-    if (delivered) {
-      consults.push(delivered);
-      continue;
-    }
-    if (epicJobDone(context.state, row.epic)) continue;
-    const step = await consultEpic(context, row.epic, records, planText);
-    if ("result" in step) return step.result;
-    consults.push(step.consult);
-  }
-  const missing = active.find(
-    (row) => !fs.existsSync(epicPlan(runtime.store.goalDir, row.epic).path),
-  );
-  if (missing) {
-    const epic = epicPlan(runtime.store.goalDir, missing.epic);
-    return boundaryResult(context, "blocked", {
-      cause: `epic "${missing.epic}" plan "${epic.rel}" does not exist after its consult; the subarchitect creates it`,
-      outcome: context.architect?.outcome,
-    });
-  }
-  context.consults = consults;
-  return undefined;
-}
-
-/** Every plan that changed this consult gets a second reading, then its owner answers. */
+/**
+ * Every plan that changed this consult gets a second reading, then its owner
+ * answers. Epic plans review first bottom-to-top; the goal plan reviews last,
+ * after the plans it depends on. The two passes can both touch one epic, so a
+ * plan reviews once, with any pass's change counting.
+ */
 export async function reviewChangedPlans(
   context: ConsultContext,
 ): Promise<void> {
-  const changed: Array<{ plan: typeof context.plan; architect?: string }> = [];
-  if (snapshotPlan(context.plan.path) !== context.planBefore)
-    changed.push({ plan: context.plan });
+  const changed = new Map<
+    string,
+    { plan: typeof context.plan; architect?: string }
+  >();
   for (const consult of context.consults ?? []) {
-    if (consult.changed)
-      changed.push({ plan: consult.plan, architect: consult.epic });
+    if (!consult.changed) continue;
+    const prior = changed.get(consult.plan.rel);
+    if (prior) continue;
+    changed.set(consult.plan.rel, {
+      plan: consult.plan,
+      architect: consult.epic,
+    });
   }
+  const epics = [...changed.values()]
+    .filter((entry) => entry.architect !== undefined)
+    .sort((a, b) => a.plan.rel.localeCompare(b.plan.rel));
+  const goal: Array<{ plan: typeof context.plan; architect?: string }> =
+    snapshotPlan(context.plan.path) !== context.planBefore
+      ? [{ plan: context.plan }]
+      : [];
+  const ordered = [...epics, ...goal];
   const policy = context.runtime.configs.process.architecture.architectReturn;
-  for (const entry of changed) {
+  for (const entry of ordered) {
     const review = await runBoundaryTurn(
       context.runtime,
       { iteration: context.iteration, step: PLAN_REVIEW_STEP },
@@ -375,22 +323,55 @@ export async function runPmStage(
   context: ConsultContext,
 ): Promise<BoundaryResult> {
   const { runtime } = context;
+  await releaseConcernMarks(context);
   const pm = await runBoundaryTurn(
     runtime,
     { iteration: context.iteration, step: "pm" },
     () =>
-      runPm(runtime, {
-        iteration: context.iteration,
-        state: context.state,
-        cwd: runtime.paths.goalCheckout,
-      }),
+      runScopedPmFlow(
+        runtime,
+        {
+          iteration: context.iteration,
+          state: context.state,
+          cwd: runtime.paths.goalCheckout,
+        },
+        [...epicPmScopes(runtime), GOAL_PM_SCOPE],
+      ),
   );
   return pmResult(context, pm);
 }
 
+/**
+ * A blocking concern's mark decides the wave it was written in, not every
+ * later one: the architect's consult read the mark in its pack and ruled on
+ * the concern, so the next iteration's dispatch is not withheld by a mark
+ * nobody revisits. A passed-on concern's empty mark stays — it is the "judged"
+ * record that keeps the concern off later wave-end briefs. Resolution tracking
+ * narrows the blocking release later; until then the consult is the release.
+ * A hold directory that cannot be read is dispatch's infra finding, not the
+ * boundary's.
+ */
+async function releaseConcernMarks(context: ConsultContext): Promise<void> {
+  const open = openConcernIds(context.records);
+  if (open.size === 0) return;
+  let holds: Awaited<ReturnType<typeof readHolds>>["holds"];
+  try {
+    ({ holds } = await readHolds(context.runtime.store));
+  } catch (err) {
+    console.warn(
+      `[factory] holds unreadable for concern-mark release: ${(err as Error).message}`,
+    );
+    return;
+  }
+  for (const hold of holds) {
+    if (!open.has(hold.steer) || hold.slugs.length === 0) continue;
+    await expireHold(context.runtime.store, hold.steer);
+  }
+}
+
 function pmResult(
   context: ConsultContext,
-  pm: Awaited<ReturnType<typeof runPm>>,
+  pm: Awaited<ReturnType<typeof runScopedPmFlow>>,
 ): BoundaryResult {
   const outcome = context.architect?.outcome;
   if (pm.status === "asked") {
@@ -414,6 +395,13 @@ function pmResult(
       : "";
     return boundaryResult(context, "blocked", {
       cause: `PM ladder stopped on infrastructure${where}: ${infraCause(pm.stop)}`,
+      stop: { cause: pm.stop.cause, details: pm.stop.details },
+      outcome,
+    });
+  }
+  if (pm.status === "step-infra") {
+    return boundaryResult(context, "blocked", {
+      cause: `PM step "${pm.step}" stopped on infrastructure: ${infraCause(pm.stop)}`,
       stop: { cause: pm.stop.cause, details: pm.stop.details },
       outcome,
     });

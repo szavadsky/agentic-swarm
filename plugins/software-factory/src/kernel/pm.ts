@@ -4,22 +4,37 @@
  * ladders. The implementation is split by concern under `pm/`.
  */
 export { runPm } from "./pm/ladder.js";
-export { planBulletEditFindings } from "./pm/plan-bullets.js";
+export {
+  planBulletEditFindings,
+  staleMergedFindings,
+} from "./pm/plan-bullets.js";
 export { existingTasks } from "./pm/prompts.js";
 export {
-  type PlanSnapshot,
   restorePlans,
   restoreTasks,
   restoreTurn,
   snapshotPlans,
   snapshotTurn,
-  type TurnSnapshot,
 } from "./pm/reconcile.js";
-export {
-  type PlanCheckPmResult,
-  runPlanCheckPm,
-} from "./pm/routes/plan-check.js";
+export { runPlanCheckPm } from "./pm/routes/plan-check.js";
 export { runStallPm } from "./pm/routes/stall.js";
-export { runSteerPm, type SteerPmRun } from "./pm/routes/steer.js";
-export { PLAN_CHECK_ROUTES_STEP, STALL_ROUTES_STEP } from "./pm/steps.js";
-export type { PmRung } from "./pm/types.js";
+export { runSteerPm } from "./pm/routes/steer.js";
+export {
+  epicPmScopes,
+  GOAL_PM_SCOPE,
+  steerEpicOf,
+  steerScopeGroups,
+} from "./pm/scope.js";
+export {
+  PLAN_CHECK_ROUTES_STEP,
+  runPmFlow,
+  runScopedPmFlow,
+  STALL_ROUTES_STEP,
+} from "./pm/steps.js";
+export type {
+  PlanCheckPmResult,
+  PlanSnapshot,
+  PmRung,
+  SteerPmRun,
+  TurnSnapshot,
+} from "./pm/types.js";

@@ -8,6 +8,7 @@ import {
 } from "../../src/harness/fake/index.js";
 import { runBoundary } from "../../src/kernel/boundary.js";
 import { numberedPlanFindings } from "../../src/kernel/context-pack.js";
+import { PLAN_CHECK_STEP } from "../../src/kernel/plan-check.js";
 import {
   latestPlanReview,
   PLAN_RETURN_STEP,
@@ -264,7 +265,8 @@ function scriptArchitectureFlowTurns(
       expect(req.prompt).toContain("## What the plan carries");
       expect(req.prompt).toContain("## Turn order");
       expect(req.prompt).toContain("Temporary debt only with a named remover");
-      expect(req.prompt).toContain("planReview: {technical:");
+      expect(req.prompt).toContain("planReview:");
+      expect(req.prompt).toContain("planNotes:");
       expect(req.prompt).not.toContain("verdict:");
       ctx.writeOutcome(reviewed("reviewed", FINDINGS));
       return fakeTurnResult(req);
@@ -316,6 +318,7 @@ function registerArchitectureFlowPart1(): void {
       const first = await runBoundary(runtime, { relaunch: false });
       expect(first.decision).toBe("continue");
       expect(harness.calls.map((call) => fakeTurnIdentity(call).step)).toEqual([
+        PLAN_CHECK_STEP,
         "architect",
         PLAN_REVIEW_STEP,
         PLAN_RETURN_STEP,

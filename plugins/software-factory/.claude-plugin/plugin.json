@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "software-factory",
+  "version": "0.1.0",
+  "description": "Agentic software factory: place an intent, plan it, dispatch bounded task iterations with review, merge worktrees, and report status, cost and a static dashboard. Skills carry the whole operator flow.",
+  "author": {
+    "name": "Vyacheslav Zavadsky"
+  },
+  "repository": "https://github.com/szavadsky/agentic-swarm",
+  "license": "MIT",
+  "keywords": ["orchestration", "agents", "worktrees", "goal"],
+  "skills": "./skills/"
+}

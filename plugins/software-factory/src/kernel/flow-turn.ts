@@ -18,6 +18,7 @@ import {
   resumeNote,
 } from "./flow-context.js";
 import { parkTask, recordBaseAdvance, taskMeta } from "./flow-meta.js";
+import { isDecideStep } from "./pending-signal.js";
 import type { StepRun, TaskActionResult } from "./flow-state.js";
 import { trackHarnessTimeouts } from "./flow-timeouts.js";
 import {
@@ -34,6 +35,7 @@ import { qaOutcomeSchema } from "./qa.js";
 import {
   isAcceptanceStep,
   isLastReviewCall,
+  launchCounts,
   reviewRoundLimit,
 } from "./review.js";
 import { materialHash } from "./task-material.js";
@@ -98,8 +100,15 @@ async function setRangeVars(run: StepRun, vars: Record<string, string>) {
 /** The acceptance's round budget and last-call flag, or the gate fix's last call. */
 function setLastCallVars(run: StepRun, vars: Record<string, string>): void {
   const { step, state } = run;
-  run.lastCall = isAcceptanceStep(step) && isLastReviewCall(step, state.round);
-  if (isAcceptanceStep(step)) {
+  // The decide turn carries no last call: every verdict stays available.
+  const acceptance = isAcceptanceStep(step) && !isDecideStep(step);
+  run.lastCall =
+    acceptance &&
+    isLastReviewCall(
+      step,
+      launchCounts(state.launches, step.id).changeRequests,
+    );
+  if (acceptance) {
     vars.max_rounds = String(reviewRoundLimit(step));
     vars.last_call = String(run.lastCall);
   } else if (state.gateFix && state.gateLastCall) {

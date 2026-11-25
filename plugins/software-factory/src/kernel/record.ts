@@ -16,6 +16,7 @@ import type {
   TaskFile,
   WorkEdits,
 } from "./types.js";
+import type { GateFlake } from "./record-types.js";
 
 export function scriptMeta(
   iteration: number,
@@ -78,12 +79,6 @@ export async function finishChecks(
     wallMs,
     ...(opts.tree !== undefined ? { tree: opts.tree } : {}),
   });
-}
-
-/** One gate that went red, then green on the same tree: its red-run failures. */
-export interface GateFlake {
-  gate: string;
-  tests: string[];
 }
 
 /**
@@ -232,7 +227,7 @@ export async function appendFinish(
   // A spike's report has one copy: the one its commit carries. The record
   // references `<commit>:<report path>`; nothing is copied into the goal.
   const report =
-    task.kind === "spike" && commit
+    task.kind === "spike" && !task.nogit && commit
       ? await spikeFinishReport(store.goalDir, task.slug, commit)
       : undefined;
   await store.appendRecord(scriptMeta(meta.iteration, "finish", meta), {

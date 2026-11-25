@@ -8,6 +8,7 @@ import { derive, FRONT_STOP_STEP } from "./derive.js";
 import { writeEpicSummaries } from "./epic-summary.js";
 import { rolesByStep, writeMetrics } from "./metrics.js";
 import { loadPriceTable } from "./openrouter.js";
+import { reportView } from "./report-view.js";
 import { scriptMeta } from "./record.js";
 import { statusSource, writeStatus } from "./status.js";
 import { writeIterationSummary } from "./summary.js";
@@ -24,10 +25,9 @@ export function unfinishedTasks(state: State): string[] {
 
 /** Non-terminal tasks, as `slug status`: work the goal still owes. */
 export function openTasks(state: State): string[] {
-  return Object.entries(state.tasks)
-    .filter(([, task]) => task.status === "pending" || task.status === "ready")
-    .map(([slug, task]) => `${slug} ${task.status}`)
-    .sort();
+  return reportView({ state }).groups.pending.map(
+    (task) => `${task.slug} ${task.status}`,
+  );
 }
 
 /**
@@ -59,19 +59,22 @@ export function infraCause(stop: { cause: string; details?: string }): string {
 
 /**
  * The iteration status follows the launch result, not the architect's claim.
- * A done refused for open debt (derive stays active) reports in-progress, so
- * the summary's distance explains why the goal continues. Infra and signal
+ * A done refused for an open epic (derive stays active) reports in-progress,
+ * so the summary's distance explains why the goal continues. Infra and signal
  * stops win over any decision; a front-path blocked stop (unfinished tasks,
  * not a user block) reports stopped-with-debt.
  */
 export function statusForIteration(opts: {
   decision: GoalDecision;
-  ended: "infra" | "cancelled" | undefined;
+  ended: "infra" | "cancelled" | "promote" | undefined;
   stopped: boolean;
   signalsStopped: boolean;
   goal: State["goal"];
 }): "goal-met" | "in-progress" | "blocked-by-user" | "stopped-with-debt" {
   if (opts.ended === "infra") return "stopped-with-debt";
+  // A promote stop hands the build to the operator; it is neither debt nor a
+  // signal, and the goal continues once the operator promotes and relaunches.
+  if (opts.ended === "promote") return "in-progress";
   if (opts.signalsStopped || opts.stopped) return "stopped-with-debt";
   if (opts.decision === "done")
     return opts.goal === "done" ? "goal-met" : "in-progress";

@@ -3,21 +3,29 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import yaml from "yaml";
+import { promotePin, writePinGate } from "../../src/cli/commands/promote.js";
 import {
   PIN_GATE_FILE,
   pinGateSchema,
   pinRefusal,
 } from "../../src/kernel/preflight/pin.js";
-import { writePinGate } from "../../src/cli/commands/promote.js";
-import { promotePin } from "../../src/cli/commands/promote.js";
+import type { PinGate } from "../../src/kernel/preflight/types.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 
 const OK_TEST =
   'import { expect, it } from "bun:test";\nit("ok", () => { expect(1).toBe(1); });\n';
 
-/** A repo whose plugin gates pass with only bun builtins. */
-function fakeRepo(): TmpRepo {
-  const repo = createTmpRepo();
+/** The fake package's gate scripts; every gate is green unless overridden. */
+const GREEN_SCRIPTS: Record<string, string> = {
+  typecheck: "true",
+  "test:gate": "bun test",
+  format: "true",
+  lint: "true",
+  "schema-validation": "true",
+};
+
+/** Writes the fake package's gate scripts, one override making a gate red. */
+function writeScripts(repo: TmpRepo, scripts: Record<string, string>): void {
   repo.writeFile(
     "plugins/software-factory/package.json",
     `${JSON.stringify(
@@ -25,12 +33,18 @@ function fakeRepo(): TmpRepo {
         name: "fake-pin",
         private: true,
         type: "module",
-        scripts: { typecheck: "true" },
+        scripts: { ...GREEN_SCRIPTS, ...scripts },
       },
       null,
       2,
     )}\n`,
   );
+}
+
+/** A repo whose plugin gates pass with only bun builtins. */
+function fakeRepo(scripts: Record<string, string> = {}): TmpRepo {
+  const repo = createTmpRepo();
+  writeScripts(repo, scripts);
   repo.writeFile("plugins/software-factory/test/ok.test.ts", OK_TEST);
   repo.writeFile("bootstrap/run/tree.yaml", "aliases: {}\n");
   repo.writeFile("bootstrap/promote.sh", 'exec true "$@"\n');
@@ -38,7 +52,7 @@ function fakeRepo(): TmpRepo {
   return repo;
 }
 
-function gateAt(build: string): unknown {
+function gateAt(build: string): PinGate {
   return pinGateSchema.parse(
     yaml.parse(fs.readFileSync(path.join(build, PIN_GATE_FILE), "utf8")),
   );
@@ -84,6 +98,9 @@ describe("promote gates a clean export", () => {
         rev,
         typecheck: "pass",
         tests: "pass",
+        format: "pass",
+        lint: "pass",
+        schemaValidation: "pass",
       });
       expect(pinRefusal(build)).toBeUndefined();
       expect(fs.existsSync(path.join(build, "UNCOMMITTED.txt"))).toBe(false);
@@ -122,22 +139,94 @@ describe("promote prunes old builds", () => {
   }, 60_000);
 });
 
+describe("promote runs every declared gate", () => {
+  it("keeps a format-red tree off current and records the red gate", async () => {
+    const repo = fakeRepo();
+    const pins = fs.mkdtempSync(path.join(os.tmpdir(), "factory-promote-"));
+    try {
+      const greenRev = repo
+        .git(["rev-parse", "--short=12", "HEAD"])
+        .stdout.trim();
+      expect(await runPromote(repo, pins)).toBe(0);
+      const green = path.join(pins, greenRev);
+
+      writeScripts(repo, { format: "false" });
+      const redRev = repo.commit("format-red pin package").slice(0, 12);
+
+      expect(await runPromote(repo, pins)).toBe(1);
+      const build = path.join(pins, redRev);
+      expect(gateAt(build)).toMatchObject({
+        rev: redRev,
+        typecheck: "pass",
+        tests: "pass",
+        format: "fail",
+        lint: "pass",
+        schemaValidation: "pass",
+      });
+      expect(pinRefusal(build)).toContain("gate red: format fail");
+      // A red build is recorded, never linked: the launch would read this pin.
+      expect(fs.realpathSync(path.join(pins, "current"))).toBe(
+        fs.realpathSync(green),
+      );
+    } finally {
+      repo.cleanup();
+      fs.rmSync(pins, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("keeps a lint-red or schema-red tree off current too", async () => {
+    const reds = [
+      { script: "lint", key: "lint" },
+      { script: "schema-validation", key: "schemaValidation" },
+    ] as const;
+    for (const { script, key } of reds) {
+      const repo = fakeRepo({ [script]: "false" });
+      const pins = fs.mkdtempSync(path.join(os.tmpdir(), "factory-promote-"));
+      try {
+        const rev = repo.git(["rev-parse", "--short=12", "HEAD"]).stdout.trim();
+        expect(await runPromote(repo, pins)).toBe(1);
+        const build = path.join(pins, rev);
+        expect(gateAt(build)[key]).toBe("fail");
+        expect(pinRefusal(build)).toContain("gate red");
+        expect(fs.existsSync(path.join(pins, "current"))).toBe(false);
+      } finally {
+        repo.cleanup();
+        fs.rmSync(pins, { recursive: true, force: true });
+      }
+    }
+  }, 60_000);
+});
+
 describe("writePinGate", () => {
   it("writes the gate and rejects a bad verdict", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "factory-gate-"));
+    const green = {
+      typecheck: "pass",
+      tests: "pass",
+      format: "pass",
+      lint: "pass",
+      schemaValidation: "pass",
+    } as const;
     try {
-      writePinGate(dir, "0123456789ab", "pass", "fail");
+      writePinGate(dir, "0123456789ab", {
+        ...green,
+        tests: "fail",
+        lint: "fail",
+      });
       expect(gateAt(dir)).toMatchObject({
         rev: "0123456789ab",
         typecheck: "pass",
         tests: "fail",
+        format: "pass",
+        lint: "fail",
+        schemaValidation: "pass",
       });
-      expect(() => writePinGate(dir, "x", "yes" as never, "pass")).toThrow(
-        "--typecheck must be pass or fail",
-      );
-      expect(() => writePinGate(dir, "x", "pass", "no" as never)).toThrow(
-        "--tests must be pass or fail",
-      );
+      expect(() =>
+        writePinGate(dir, "x", { ...green, typecheck: "yes" as never }),
+      ).toThrow("typecheck must be pass or fail");
+      expect(() =>
+        writePinGate(dir, "x", { ...green, schemaValidation: "no" as never }),
+      ).toThrow("schemaValidation must be pass or fail");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

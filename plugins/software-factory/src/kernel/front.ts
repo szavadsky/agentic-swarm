@@ -6,6 +6,7 @@ import {
   frontTarget,
   readFrontClass,
 } from "./flow-context.js";
+import { attachInfraToPack, gateCommandsText, InfraError } from "./infra.js";
 import {
   CODE_MAP_FILE,
   type IngestionResult,
@@ -23,23 +24,11 @@ import {
 import type {
   KernelRuntime,
   State,
-  StepRecord,
   TaskFile,
   TaskTypeDefinition,
 } from "./types.js";
-
-/** What the launch does after the front turn (or after reading an existing class). */
-type FrontAction = "boundary" | "dispatch" | "blocked" | "infra";
-
-export interface FrontResult {
-  action: FrontAction;
-  /** Goal-relative front pack, only when this turn prepared one for a bigger goal. */
-  packPath?: string;
-  /** Why the front ended the launch as blocked or infra. */
-  cause?: string;
-  /** Which ingestion step the stop came from: a step, or the classifier, or a runner error. */
-  step?: string;
-}
+import type { FrontResult } from "./front-types.js";
+export type { FrontResult } from "./front-types.js";
 
 interface FrontRunOptions {
   iteration: number;
@@ -50,28 +39,72 @@ interface FrontRunOptions {
 const CLASS_FILE = "class.yaml";
 
 /**
- * The flow each front class writes, enforced by `validateFrontTasks` and
- * rendered into the front prompt as `class_types`: the configured task type
- * whose flow matches, so the front names a type instead of pairing flow/kind.
+ * The flow a front class cannot do without: a trivial goal implements in the
+ * front's own session, one implement turn and no review, which is this flow.
+ * Every other class runs the development type its task names, so a repo's own
+ * type is dispatched instead of a flow the kernel hardcodes.
  */
-export const FRONT_CLASS_FLOWS = {
-  trivial: "just-implement",
-  task: "implement-review",
-} as const;
+export const FRONT_TRIVIAL_FLOW = "just-implement";
 
-/** The `class_types` prompt variable: the task type each class writes. */
+/** The configured development types, in config order. */
+function developmentTypes(
+  taskTypes: Record<string, TaskTypeDefinition> | undefined,
+): [string, TaskTypeDefinition][] {
+  return Object.entries(taskTypes ?? {}).filter(
+    ([, definition]) => definition.kind === "development",
+  );
+}
+
+/**
+ * The `class_types` prompt variable: the configured development types each
+ * front class may write. `trivial` is the type on the kernel's trivial flow;
+ * `task` is every other development type, so the front picks a repo's own type
+ * by its use-when rather than only the built-in one.
+ */
 export function frontClassTypesVar(
   taskTypes: Record<string, TaskTypeDefinition> | undefined,
 ): string {
-  return Object.entries(FRONT_CLASS_FLOWS)
-    .map(([cls, flow]) => {
-      const type = Object.entries(taskTypes ?? {}).find(
-        ([, definition]) =>
-          definition.kind === "development" && definition.flow === flow,
-      )?.[0];
-      return type ? `\`${type}\` for ${cls}` : `none for ${cls}`;
-    })
-    .join(", ");
+  const development = developmentTypes(taskTypes);
+  const trivial = development.find(
+    ([, definition]) => definition.flow === FRONT_TRIVIAL_FLOW,
+  );
+  const task = development.filter(
+    ([, definition]) => definition.flow !== FRONT_TRIVIAL_FLOW,
+  );
+  return [
+    trivial ? `\`${trivial[0]}\` for trivial` : "none for trivial",
+    task.length > 0
+      ? `${task.map(([name]) => `\`${name}\``).join(" or ")} for task`
+      : "none for task",
+  ].join(", ");
+}
+
+/**
+ * The flow finding for a front task whose class it does not fit: `trivial`
+ * needs the kernel's trivial flow, and `task` needs a configured development
+ * type's flow (never the trivial one, whose class carries the front-session
+ * behaviour). An unconfigured type never reaches here: `parseTaskFile` refuses
+ * it, so the front's turn can repair the type instead of the launch falling
+ * back to a default flow.
+ */
+function frontTaskFlowFinding(
+  runtime: KernelRuntime,
+  cls: FrontClass["class"],
+  task: TaskFile,
+): string | undefined {
+  // A bigger class writes no task; the count check owns a stray file.
+  if (cls === "bigger") return undefined;
+  if (cls === "trivial") {
+    return task.flow === FRONT_TRIVIAL_FLOW
+      ? undefined
+      : `front task "${task.slug}" uses flow "${task.flow}"; class "trivial" needs "${FRONT_TRIVIAL_FLOW}"`;
+  }
+  const flows = developmentTypes(runtime.configs.process.taskTypes)
+    .map(([, definition]) => definition.flow)
+    .filter((flow) => flow !== FRONT_TRIVIAL_FLOW);
+  return flows.includes(task.flow)
+    ? undefined
+    : `front task "${task.slug}" uses flow "${task.flow}"; class "task" needs a configured development type's flow`;
 }
 
 /** A front output the script refuses; the launch ends as infra, never as a default class. */
@@ -80,6 +113,52 @@ class FrontError extends Error {
     super(message);
     this.name = "FrontError";
   }
+}
+
+/**
+ * One front task file's class finding, or its unconfigured type. Any other
+ * malformation is the post-turn validation's finding and reads as none here.
+ */
+function frontTaskFinding(
+  runtime: KernelRuntime,
+  cls: FrontClass["class"],
+  slug: string,
+  text: string,
+): string | undefined {
+  let task: TaskFile;
+  try {
+    task = parseTaskFile(text, slug, runtime.configs.process.taskTypes);
+  } catch (err) {
+    if (!(err instanceof TaskFileError)) throw err;
+    return err.kind === "unconfigured-type" ? err.message : undefined;
+  }
+  return frontTaskFlowFinding(runtime, cls, task);
+}
+
+/**
+ * The class and type findings a front turn can repair in-session, so a task
+ * naming a type no config carries earns the delivery-repair ask instead of
+ * ending the launch as infra. Unreadable artefacts and graph findings stay
+ * with `validateFrontTasks`: this names only what the front's own files say
+ * about its class, and the repair asks it to correct them.
+ */
+async function frontTypeFindings(runtime: KernelRuntime): Promise<string[]> {
+  let cls: FrontClass | null;
+  try {
+    cls = readFrontClass(runtime);
+  } catch (err) {
+    // A malformed class.yaml is the post-turn check's finding.
+    if (err instanceof FrontClassError) return [];
+    throw err;
+  }
+  // A bigger class writes no task, so it has no front file to check.
+  if (!cls || cls.class === "bigger") return [];
+  const findings: string[] = [];
+  for (const [slug, text] of await runtime.store.tasks.texts()) {
+    const finding = frontTaskFinding(runtime, cls.class, slug, text);
+    if (finding) findings.push(finding);
+  }
+  return findings;
 }
 
 async function readTasks(runtime: KernelRuntime): Promise<TaskFile[]> {
@@ -100,7 +179,7 @@ async function readTasks(runtime: KernelRuntime): Promise<TaskFile[]> {
 
 /**
  * The front's task file gets the same `tasks.ts` validation as a PM file: parse,
- * graph (slug, scope, deps, base), and the run-config tier pre-flight would have
+ * graph (slug, deps, base), and the run-config tier pre-flight would have
  * checked had the file existed before launch.
  */
 async function validateFrontTasks(
@@ -126,20 +205,13 @@ async function validateFrontTasks(
       `class.yaml names slug "${cls.slug}" but ${runtime.store.tasks.path(cls.slug ?? "")} does not exist`,
     );
   }
-  const expectedFlow =
-    cls.class === "trivial"
-      ? FRONT_CLASS_FLOWS.trivial
-      : FRONT_CLASS_FLOWS.task;
   if (task.kind !== "development") {
     throw new FrontError(
       `front task "${task.slug}" has kind "${task.kind}"; the front writes a development task`,
     );
   }
-  if (task.flow !== expectedFlow) {
-    throw new FrontError(
-      `front task "${task.slug}" uses flow "${task.flow}"; class "${cls.class}" needs "${expectedFlow}"`,
-    );
-  }
+  const flowFinding = frontTaskFlowFinding(runtime, cls.class, task);
+  if (flowFinding) throw new FrontError(flowFinding);
   if (
     task.tier &&
     task.tier !== "default" &&
@@ -149,14 +221,6 @@ async function validateFrontTasks(
       `front task "${task.slug}" names tier "${task.tier}", which is not a run-config alias`,
     );
   }
-}
-
-export function gateCommands(runtime: KernelRuntime): string {
-  return (
-    runtime.configs.repo.gates
-      .map((gate) => `- ${gate.id}: ${gate.command}`)
-      .join("\n") || "none"
-  );
 }
 
 async function resultFor(
@@ -207,7 +271,10 @@ function frontTurnVars(
     pack_path: packPath,
     checkout: runtime.paths.goalCheckout,
     setup_command: runtime.configs.repo.setup.join(" && ") || "none",
-    gate_commands: gateCommands(runtime),
+    gate_commands: gateCommandsText(
+      runtime.store.goalDir,
+      runtime.configs.repo.gates,
+    ),
     class_types: frontClassTypesVar(runtime.configs.process.taskTypes),
     code_map_path: codeMapPath,
   };
@@ -231,6 +298,7 @@ async function runFrontTurn(
         meta: { iteration: opts.iteration, step: "front", round: 1 },
         vars: frontTurnVars(runtime, opts, packPath, codeMapPath),
         expectation: KERNEL_TURN_STEPS.front,
+        validate: () => frontTypeFindings(runtime),
       }),
   );
 }
@@ -286,7 +354,7 @@ async function classifyFront(
   runtime: KernelRuntime,
   opts: FrontRunOptions,
 ): Promise<FrontResult> {
-  const target = frontTarget(runtime, opts.iteration);
+  const target = frontTarget(runtime);
   // The front writes its pack; the script owns the directory so the agent
   // never has to create a path outside the goal artifacts.
   const packPath = await runtime.store.localPath({
@@ -318,6 +386,9 @@ async function classifyFront(
   }
   const after = await runIngestionSteps(runtime, opts.iteration, true);
   if (after.cause) return ingestionStop(after);
+  // The infra step runs after the front in the shipped sequence: put the gates
+  // and their observed status into the pack the architect reads next.
+  await attachInfraToPack(runtime, packPath);
   return await resultFor(runtime, cls, {
     ran: true,
     iteration: opts.iteration,
@@ -349,7 +420,11 @@ export async function runFront(
       ? await resumeClassified(runtime, opts, existing)
       : await classifyFront(runtime, opts);
   } catch (err) {
-    if (err instanceof FrontError || err instanceof FrontClassError) {
+    if (
+      err instanceof FrontError ||
+      err instanceof FrontClassError ||
+      err instanceof InfraError
+    ) {
       return { action: "infra", cause: err.message };
     }
     throw err;

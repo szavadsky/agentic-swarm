@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { derive, hasOpenDebt, openDebts } from "../../src/kernel/derive.js";
+import { derive, openDebts } from "../../src/kernel/derive.js";
 import type { StepRecord } from "../../src/kernel/types.js";
 import { rec, script, task, cause, causeText } from "./helpers.js";
 
@@ -110,12 +110,13 @@ function stillLoopsImplementerWhenRedCheckPart2(
       ],
     }),
   ]);
-  expect(parked.tasks.a!.phase).toBe("parked");
-  expect(parked.tasks.a!.park).toEqual(
-    cause(
-      "empty-diff: implement r1 committed no changes after red checks: unit (exit 1)",
-    ),
-  );
+  expect(parked.tasks.a!.phase).toBe("decide");
+  expect(parked.tasks.a!.park).toBeUndefined();
+  expect(parked.tasks.a!.pendingSignal).toEqual({
+    kind: "empty-diff",
+    evidence:
+      "implement r1 committed no changes after red checks: unit (exit 1)",
+  });
 }
 
 function registerDerivePart28(): void {
@@ -290,7 +291,7 @@ function registerDerivePart32(): void {
 }
 
 function registerDerivePart33(): void {
-  it("refuses done while material debt is open", () => {
+  it("lands the architect's done with material debt still open", () => {
     const debt = rec(1, {
       slug: "a",
       step: "review",
@@ -321,9 +322,10 @@ function registerDerivePart33(): void {
       },
     });
     const state = derive([task("a")], [debt, done]);
-    expect(hasOpenDebt([debt, done])).toBe(true);
-    expect(state.goal).toBe("active");
-    expect(state.terminal).toBe(false);
+    // The debt stays in the register; the architect's done is not overridden.
+    expect(openDebts([debt, done])).toHaveLength(1);
+    expect(state.goal).toBe("done");
+    expect(state.terminal).toBe(true);
   });
 }
 

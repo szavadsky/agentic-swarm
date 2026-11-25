@@ -1,7 +1,9 @@
 /** Pack paths and the two renderers. */
 
 import { makeCause } from "../cause.js";
-import type { ContextPackInput } from "./types.js";
+import { reportView } from "../report-view.js";
+import type { ContextPackInput, PackSection } from "./types.js";
+import type { ReportView, TaskFile } from "../types.js";
 import {
   appendAgedReady,
   appendBaseGates,
@@ -23,6 +25,7 @@ import {
   appendWaste,
   parkedLines,
   pendingLines,
+  SECTION_HEADINGS,
   short,
 } from "./append.js";
 
@@ -60,14 +63,61 @@ function recordedHash(hash: string | undefined): string {
 }
 
 /**
+ * The longest one-line brief the index prints. A cap shortens the text only;
+ * the pointer line that follows it always renders.
+ */
+export const PACK_BRIEF_SUMMARY_MAX = 280;
+
+function cappedSummary(summary: string): string {
+  const text = summary.trim().replace(/\s+/g, " ");
+  if (text.length <= PACK_BRIEF_SUMMARY_MAX) return text;
+  return `${text.slice(0, PACK_BRIEF_SUMMARY_MAX - 1)}…`;
+}
+
+/**
+ * Appends one section whole, or — when the preparer briefed it — its heading,
+ * the preparer's one-line summary and the pointer to the full status data.
+ * A section the input would not render stays absent rather than becoming an
+ * empty brief.
+ */
+function appendWholeOrBrief(
+  lines: string[],
+  section: PackSection,
+  input: ContextPackInput,
+  append: (out: string[]) => void,
+): void {
+  const brief = input.briefs?.find((entry) => entry.section === section);
+  if (!brief) {
+    append(lines);
+    return;
+  }
+  const full: string[] = [];
+  append(full);
+  if (full.length === 0) return;
+  if (!input.dataPath) {
+    throw new Error(`pack brief for \`${section}\` needs the status data path`);
+  }
+  lines.push(
+    "",
+    SECTION_HEADINGS[section],
+    `- ${cappedSummary(brief.summary)}`,
+    `- full: ${input.dataPath} (#${section})`,
+  );
+}
+
+/**
  * Deterministic index, never pasted content (KERNEL0 §5): status, hashes,
  * rounds, infra commands and paths the architect can drill into. The render
  * reads no clock; volatile admission facts (a pending hold, a pool's reset
  * time) arrive through the input, so the same input renders the same pack.
- * Uncapped: the status table and every pointer section render whole on every
- * pack.
+ * One renderer for every pack: a section the preparer briefed renders its
+ * heading, one line and a pointer, and every other section renders whole.
+ * Uncapped: the status table and every pointer section render whole unless a
+ * brief replaces them, and a capped summary never drops its pointer.
  */
 export function renderContextPack(input: ContextPackInput): string {
+  const view = packView(input);
+  const deps = taskDeps(input.tasks);
   const epicScope = input.epic ? `, epic \`${input.epic}\`` : "";
   const lines: string[] = [
     `# Context pack — goal ${input.goal}${epicScope}, iteration ${input.iteration}`,
@@ -86,85 +136,66 @@ export function renderContextPack(input: ContextPackInput): string {
     "| slug | status | kind | round | turns | deps | commit |",
     "|---|---|---|---|---|---|---|",
   ];
-  appendTaskStatus(lines, input);
+  appendTaskStatus(lines, input, view.tasks, deps);
   appendSection(
     lines,
     "## Parked by cause (terminal; continue via a new slug)",
-    parkedLines(input),
+    parkedLines(view.groups.allParked),
   );
-  appendSection(lines, "## Pending", pendingLines(input));
-  appendAgedReady(lines, input);
-  appendPlanCheck(lines, input);
-  appendPlanReview(lines, input);
-  appendWaste(lines, input);
-  appendSpikeProposals(lines, input);
-  appendForwarded(lines, input);
-  appendDebts(lines, input);
-  appendOpenRecords(lines, input);
-  appendCodeMap(lines, input);
-  appendInfra(lines, input);
-  appendBaseGates(lines, input);
-  appendSteers(lines, input);
-  appendPmAnswers(lines, input);
-  appendIntentChanges(lines, input);
-  appendSpikeFindings(lines, input);
-  appendTaskFiles(lines, input);
+  appendSection(
+    lines,
+    "## Pending",
+    pendingLines(input.state, view.groups.pending, deps),
+  );
+  appendIndexBody(lines, input);
   return `${lines.join("\n")}\n`;
 }
 
-/**
- * The derived state behind the pack as JSON: every task, hold, debt and
- * pointer, with no cap. The pack preparer reads it to decide what the index
- * keeps in full and what it names with a pointer and a summary; the fallback
- * render above consumes the same input.
- */
-/** Every task with its derived run-state, sorted by slug. */
-function contextTaskStatuses(input: ContextPackInput) {
-  return [...input.tasks]
-    .sort((a, b) => a.slug.localeCompare(b.slug))
-    .map((task) => {
-      const state = input.state.tasks[task.slug];
-      return {
-        slug: task.slug,
-        title: task.title,
-        scope: task.scope,
-        status: input.running?.includes(task.slug)
-          ? "running"
-          : (state?.status ?? "unknown"),
-        kind: task.kind,
-        round: state?.round ?? 1,
-        turns: state?.turns ?? 0,
-        deps: task.deps,
-        commit: state?.commit ?? null,
-        cause: state?.cause ?? null,
-      };
-    });
+/** The one view the pack's markdown and its data both read. */
+function packView(input: ContextPackInput): ReportView {
+  return reportView({
+    state: input.state,
+    tasks: input.tasks,
+    slugs: input.tasks.map((task) => task.slug),
+    ...(input.running ? { running: input.running } : {}),
+  });
 }
 
-/** Parked tasks with the cause a reader needs, defaulted when none recorded. */
-function contextParked(statuses: ReturnType<typeof contextTaskStatuses>) {
-  return statuses
-    .filter((task) => task.status === "parked")
-    .map((task) => ({
-      slug: task.slug,
-      cause: task.cause ?? makeCause("unknown", "no recorded cause"),
-    }));
+/** Task deps by slug: the row carries the status, the file carries what it waits on. */
+function taskDeps(tasks: readonly TaskFile[]): Map<string, readonly string[]> {
+  return new Map(tasks.map((task) => [task.slug, task.deps]));
 }
 
-/** Pending/ready tasks and the deps still keeping them waiting. */
-function contextPending(
-  input: ContextPackInput,
-  statuses: ReturnType<typeof contextTaskStatuses>,
-) {
-  return statuses
-    .filter((task) => task.status === "pending" || task.status === "ready")
-    .map((task) => {
-      const waitsOn = task.deps.filter((dep) => {
-        const status = input.state.tasks[dep]?.status;
-        return status !== "merged" && status !== "finished";
-      });
-      return { slug: task.slug, waitsOn };
-    });
+/** Everything after the status table: whole unless the preparer briefed it. */
+function appendIndexBody(lines: string[], input: ContextPackInput): void {
+  appendAgedReady(lines, input);
+  appendWholeOrBrief(lines, "planCheck", input, (out) =>
+    appendPlanCheck(out, input),
+  );
+  appendWholeOrBrief(lines, "planReview", input, (out) =>
+    appendPlanReview(out, input),
+  );
+  appendWaste(lines, input);
+  appendSpikeProposals(lines, input);
+  appendWholeOrBrief(lines, "forwarded", input, (out) =>
+    appendForwarded(out, input),
+  );
+  appendDebts(lines, input);
+  appendOpenRecords(lines, input);
+  appendWholeOrBrief(lines, "codeMap", input, (out) =>
+    appendCodeMap(out, input),
+  );
+  appendInfra(lines, input);
+  appendBaseGates(lines, input);
+  appendSteers(lines, input);
+  appendWholeOrBrief(lines, "pmAnswers", input, (out) =>
+    appendPmAnswers(out, input),
+  );
+  appendIntentChanges(lines, input);
+  appendWholeOrBrief(lines, "spikeFindings", input, (out) =>
+    appendSpikeFindings(out, input),
+  );
+  appendTaskFiles(lines, input);
 }
 
 /** Steers with the hold that blocks them, when one does. */
@@ -202,37 +233,44 @@ function contextPaths(input: ContextPackInput) {
   };
 }
 
-/** Spike findings sorted by slug. */
-function contextSpikeFindings(input: ContextPackInput) {
-  return [...(input.spikeFindings ?? [])].sort((a, b) =>
-    a.slug.localeCompare(b.slug),
-  );
-}
-
-/** Task files sorted by slug, each at its goal-relative path. */
-function contextTaskFiles(input: ContextPackInput) {
-  return [...input.tasks]
-    .sort((a, b) => a.slug.localeCompare(b.slug))
-    .map((task) => ({
-      slug: task.slug,
-      path: `${input.tasksDir}/${task.slug}.md`,
-    }));
-}
-
+/**
+ * The derived state behind the pack as JSON: every task, hold, debt and
+ * pointer, with no cap. The pack preparer reads it and returns the sections it
+ * judges better as a brief; the render above places them and consumes the same
+ * input. Every brief's pointer names this file and its section.
+ */
 export function renderContextData(input: ContextPackInput): string {
-  const statuses = contextTaskStatuses(input);
-  const parked = contextParked(statuses);
-  const pending = contextPending(input, statuses);
+  const view = packView(input);
+  const deps = taskDeps(input.tasks);
   const steers = contextSteers(input);
   const data = {
     goal: input.goal,
     iteration: input.iteration,
     epic: input.epic ?? null,
     paths: contextPaths(input),
-    tasks: statuses,
+    tasks: view.tasks.map((task) => ({
+      slug: task.slug,
+      title: task.title,
+      status: task.status,
+      kind: task.kind,
+      round: task.round,
+      turns: task.turns,
+      deps: deps.get(task.slug) ?? [],
+      commit: task.commit ?? null,
+      cause: task.cause ?? null,
+    })),
     epics: input.state.epics,
-    parked,
-    pending,
+    parked: view.groups.allParked.map((task) => ({
+      slug: task.slug,
+      cause: task.cause ?? makeCause("unknown", "no recorded cause"),
+    })),
+    pending: view.groups.pending.map((task) => ({
+      slug: task.slug,
+      waitsOn: (deps.get(task.slug) ?? []).filter((dep) => {
+        const status = input.state.tasks[dep]?.status;
+        return status !== "merged" && status !== "finished";
+      }),
+    })),
     agedReady: input.agedReady ?? null,
     planCheck: input.planCheck ?? null,
     planReview: input.planReview ?? null,
@@ -245,8 +283,15 @@ export function renderContextData(input: ContextPackInput): string {
     baseGates: input.baseGates ?? null,
     steers,
     pmAnswers: input.pmAnswers ?? [],
-    spikeFindings: contextSpikeFindings(input),
-    taskFiles: contextTaskFiles(input),
+    spikeFindings: [...(input.spikeFindings ?? [])].sort((a, b) =>
+      a.slug.localeCompare(b.slug),
+    ),
+    taskFiles: [...input.tasks]
+      .sort((a, b) => a.slug.localeCompare(b.slug))
+      .map((task) => ({
+        slug: task.slug,
+        path: `${input.tasksDir}/${task.slug}.md`,
+      })),
   };
   return `${JSON.stringify(data, null, 2)}\n`;
 }

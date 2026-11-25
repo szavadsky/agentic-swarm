@@ -4,8 +4,8 @@ import type { SessionRef } from "../../harness/types.js";
 import { preexistingRed, recordedBaseGates } from "../baseline.js";
 import { formatCause, makeCause } from "../cause.js";
 import { derive } from "../derive.js";
-import { isInfraCheck, newGateFailures } from "../gates.js";
-import { mergeTask } from "../integrate.js";
+import { newRedChecks } from "../gates.js";
+import { type GoalHeadJudgement, mergeTask } from "../integrate.js";
 import { scriptMeta } from "../record.js";
 import type {
   ArtifactStore,
@@ -22,6 +22,7 @@ import type {
   StewardAttempt,
   StewardCandidate,
   StewardCandidateOutcome,
+  StewardPark,
   StewardResult,
 } from "./types.js";
 
@@ -58,16 +59,16 @@ async function ensurePointer(
 /**
  * End-of-wave steward: the one agent that owns cross-task merge state. Runs
  * once per wave end; skipped (and recorded) when no task parks on a merge
- * conflict or on a red merged result. Each candidate gets one steward turn in
- * the shared steward session (compacted at settle), then the merge queue lands
- * it with gates; failures hold the task and leave an architect pointer
+ * conflict, a base conflict or a red gate. Each candidate gets one steward turn
+ * in the shared steward session (compacted at settle), then the merge queue
+ * lands it with gates; failures hold the task and leave an architect pointer
  * (status, worktree, branch) as a forwarded concern. A red-after-merge
- * candidate's turn receives the red gate log and repairs the merged result on
- * that branch; the queue then re-runs its gates on the repair. A candidate
- * whose leg stops on infra is reported as dead and the remaining candidates
- * still run; only a frozen slug (its bounded re-dispatches spent, or a fatal
- * cause) is left for the next launch. Unmerged tasks relaunch via
- * continuations on the new head through the existing `base:` path.
+ * candidate's turn receives the gate log to repair: the goal head's own red
+ * when the head is red, else the merged result's. A candidate whose leg stops
+ * on infra is reported as dead and the remaining candidates still run; only a
+ * frozen slug (its bounded re-dispatches spent, or a fatal cause) is left for
+ * the next launch. Unmerged tasks relaunch via continuations on the new head
+ * through the existing `base:` path.
  */
 export function attemptedThisWave(
   records: readonly StepRecord[],
@@ -92,7 +93,8 @@ export function attemptedThisWave(
  * verdict there, and a steward turn would re-queue the same merge with the
  * same evidence. Kept-land claims the tip when the newest approve covers it,
  * or — under a review-less flow — green checks ran after it. `own` is in seq
- * order.
+ * order. Once kept-land has attempted or ruled out the tip, the claim is spent:
+ * the steward is the remaining repair route for a red or conflicting branch.
  */
 function keptLandOwnsTip(own: readonly StepRecord[]): boolean {
   const tip = own.filter((r) => r.actor === "agent" && r.commit).at(-1)?.commit;
@@ -101,36 +103,127 @@ function keptLandOwnsTip(own: readonly StepRecord[]): boolean {
     .filter((r) => r.actor === "agent" && r.outcome?.verdict === "approve")
     .at(-1);
   if (approved) return approved.commit === tip;
-  const tipIndex = own.findLastIndex((r) => r.commit === tip);
+  const tipIndex = own.findLastIndex(
+    (r) =>
+      r.actor === "agent" &&
+      r.commit === tip &&
+      // A verdict turn (a review, or the decider the kernel raises) reads the
+      // tip; it never moves it, so green checks between the code turn and the
+      // verdict still cover the branch.
+      r.outcome?.verdict === undefined,
+  );
+  if (tipIndex < 0) return false;
   return own
     .slice(tipIndex + 1)
     .some((r) => r.step === "checks" && r.ok === true);
 }
 
 /**
- * A parked branch whose last merged result ran red is a red-after-merge
- * candidate: the goal branch is red while this branch waits on its gate-fix,
- * and that fix is spent (the park derives only once a merge has failed twice).
- * Inherited reds and infra reds never judge: the gate run is new only when a
- * failure is not in the base's pre-existing set. No single task needs to
- * match the failing signature — the ring's red is the candidate's.
+ * The cause that kept a kept-land pass from landing, per slug, for one
+ * iteration. A landing clears an earlier pass; a skipped tip counts too, since
+ * kept-land will not retry it before the next boundary.
+ */
+export function keptLandLeft(
+  records: readonly StepRecord[],
+  iteration: number,
+): Map<string, Cause> {
+  const left = new Map<string, Cause>();
+  for (const record of records
+    .filter(
+      (r) => r.step === "kept-land" && r.iteration === iteration && r.endedAt,
+    )
+    .sort((a, b) => a.seq - b.seq)) {
+    if (record.slug === undefined) continue;
+    if (record.commit !== undefined) left.delete(record.slug);
+    else
+      left.set(
+        record.slug,
+        record.cause ?? makeCause("unknown", "left without a recorded cause"),
+      );
+  }
+  return left;
+}
+
+/** A kept-land cause's park kind: the merge cause names what the steward repairs. */
+function keptLandParkKind(
+  cause: Cause | undefined,
+): StewardPark["kind"] | undefined {
+  if (cause?.kind === "conflict" || cause?.kind === "base-conflict")
+    return "conflict";
+  if (cause?.kind === "gates") return "gates";
+  return undefined;
+}
+
+/**
+ * Parks a steward turn may own this wave: a merge conflict (the merge or the
+ * kept-land left the branch unresolved) and a base conflict (the branch could
+ * not take the head in — the same merge caught one step earlier, so the same
+ * turn owns it). A gates park is listed too; whether it is a candidate is the
+ * gate evidence's call.
+ */
+export function stewardParks(
+  tasks: readonly TaskFile[],
+  state: ReturnType<typeof derive>,
+  attempted: ReadonlySet<string>,
+  frozen: ReadonlySet<string> | undefined,
+  keptLeft: ReadonlyMap<string, Cause> = new Map(),
+): StewardPark[] {
+  const parks: StewardPark[] = [];
+  for (const t of tasks) {
+    if (attempted.has(t.slug) || frozen?.has(t.slug)) continue;
+    const s = state.tasks[t.slug];
+    if (s?.status !== "parked") continue;
+    // The kept-land attempt is the fresher evidence: a branch it could not land
+    // keeps the cause that stopped it, whatever the park that parked it said.
+    const kept = keptLandParkKind(keptLeft.get(t.slug));
+    if (kept) {
+      parks.push({ slug: t.slug, kind: kept });
+      continue;
+    }
+    const cause = s.cause?.kind;
+    if (cause === "conflict" || cause === "base-conflict")
+      parks.push({ slug: t.slug, kind: "conflict" });
+    else if (cause === "gates") parks.push({ slug: t.slug, kind: "gates" });
+  }
+  return parks.sort((a, b) => a.slug.localeCompare(b.slug));
+}
+
+/**
+ * A gates park whose red is still on the goal head, or on the branch's own
+ * merged result. Head redness comes from the goal-head gate run — a result
+ * keyed by the head's tree — never from a task's merge-check, which judges a
+ * merged result that did not land. A branch whose merged result ran red on a
+ * green head is still the steward's: the merge split it, not either side.
+ * Inherited and infra reds never judge. The head's log wins when both are red:
+ * it is the state the branch has to merge onto. `keptLeft` carries the
+ * kept-land attempt for this iteration: once it exists, the tip is no longer
+ * kept-land's alone and the steward owns the red.
  */
 function redAfterMerge(
   slug: string,
   records: readonly StepRecord[],
   preexisting: ReadonlySet<string>,
   store: ArtifactStore | undefined,
+  goalHead: GoalHeadJudgement | undefined,
+  keptLeft: ReadonlyMap<string, Cause>,
 ): StewardCandidate | undefined {
   const own = records
     .filter((r) => r.slug === slug && r.endedAt)
     .sort((a, b) => a.seq - b.seq);
+  const left = keptLeft.has(slug);
+  if (!left && keptLandOwnsTip(own)) return undefined;
+  if (goalHead && goalHead.red.length > 0) {
+    return {
+      slug,
+      kind: "red-after-merge",
+      gateLogPath: store
+        ? store.records.file(goalHead.record, "end.yaml")
+        : undefined,
+    };
+  }
   const last = own.filter((r) => r.step === "merge-checks").at(-1);
-  if (keptLandOwnsTip(own)) return undefined;
   if (!last?.checks) return undefined;
-  const red = newGateFailures(last.checks, preexisting).filter(
-    (check) => !isInfraCheck(check),
-  );
-  if (red.length === 0) return undefined;
+  if (newRedChecks(last.checks, preexisting).length === 0) return undefined;
   return {
     slug,
     kind: "red-after-merge",
@@ -139,9 +232,11 @@ function redAfterMerge(
 }
 
 /**
- * Parked conflicts and red merged results this wave may attempt, in slug
- * order. A conflict candidate needs no gate evidence, so records stay
- * optional for tests that only ask for it.
+ * Parked conflicts, base conflicts and red gates this wave may attempt, in
+ * slug order. A conflict candidate needs no gate evidence, so records stay
+ * optional for tests that only ask for it. `keptLeft` is the kept-land
+ * exit for this iteration; its gates parks are judged by the same evidence as
+ * a merge red, with the kept-land claim spent.
  */
 export function stewardCandidates(
   tasks: readonly TaskFile[],
@@ -150,23 +245,27 @@ export function stewardCandidates(
   frozen: ReadonlySet<string> | undefined,
   records: readonly StepRecord[] = [],
   store?: ArtifactStore,
+  goalHead?: GoalHeadJudgement,
+  keptLeft: ReadonlyMap<string, Cause> = new Map(),
 ): StewardCandidate[] {
   const preexisting = preexistingRed(recordedBaseGates(records));
   const candidates: StewardCandidate[] = [];
-  for (const t of tasks) {
-    if (attempted.has(t.slug) || frozen?.has(t.slug)) continue;
-    const s = state.tasks[t.slug];
-    if (s?.status !== "parked") continue;
-    if (s.cause?.kind === "conflict") {
-      candidates.push({ slug: t.slug, kind: "conflict" });
+  for (const park of stewardParks(tasks, state, attempted, frozen, keptLeft)) {
+    if (park.kind === "conflict") {
+      candidates.push({ slug: park.slug, kind: "conflict" });
       continue;
     }
-    if (s.cause?.kind === "gates") {
-      const candidate = redAfterMerge(t.slug, records, preexisting, store);
-      if (candidate) candidates.push(candidate);
-    }
+    const candidate = redAfterMerge(
+      park.slug,
+      records,
+      preexisting,
+      store,
+      goalHead,
+      keptLeft,
+    );
+    if (candidate) candidates.push(candidate);
   }
-  return candidates.sort((a, b) => a.slug.localeCompare(b.slug));
+  return candidates;
 }
 
 async function recordSkippedSteward(

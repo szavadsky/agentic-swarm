@@ -1,6 +1,6 @@
 import type { CheckResult } from "../core/checks/types.js";
 import type { ParsedJunit } from "../core/checks/junit.js";
-import type { GatePattern } from "./types.js";
+import type { Finding } from "../core/checks/findings.js";
 import {
   ANSI,
   BUN_BANNER,
@@ -15,73 +15,48 @@ import {
   TSC_PAREN,
   TSC_SUMMARY,
   caseLabel,
+  findingDetails,
   gateCheckMeta,
   junitDetails,
   normaliseRoots,
 } from "./gates-normalise.js";
 
-/**
- * pytest's `FAILED tests/a.py::test - assertion detail` summary and its verbose
- * `tests/a.py::test FAILED` line. The assertion text after ` - ` drifts with
- * the values under test, so the node id is the identity.
- */
-function pytestSignatures(lines: readonly string[]): Set<string> {
-  const signatures = new Set<string>();
-  for (const line of lines) {
-    const summary = /^(?:FAILED|ERROR)\s+(\S+?)(?:\s+-\s+.*)?$/.exec(line);
-    if (summary) {
-      signatures.add(summary[1]!);
-      continue;
-    }
-    const verbose = /^(\S+)\s+(?:FAILED|ERROR)(?:\s|$)/.exec(line);
-    if (verbose) signatures.add(verbose[1]!);
-  }
-  return signatures;
+/** The failures a report names; a `log` finding is console text, not a report finding. */
+function reportFailures(findings: readonly Finding[]): Finding[] {
+  return findings.filter(
+    (finding) => finding.tool !== "log" && finding.severity === "error",
+  );
+}
+
+/** A report finding's human label; the matching identity is its fingerprint. */
+function findingGateSignatures(
+  check: CheckResult,
+  findings: readonly Finding[],
+): Set<string> | undefined {
+  const failures = reportFailures(findings);
+  if (failures.length === 0) return undefined;
+  return new Set(
+    failures.map((finding) => {
+      const label =
+        finding.rule !== undefined
+          ? [finding.file, finding.rule].filter(Boolean).join(" > ")
+          : [finding.file, finding.message].filter(Boolean).join(" > ");
+      return `${check.name} > ${label}`;
+    }),
+  );
 }
 
 /**
- * jest's `FAIL src/a.test.ts` header followed by `● suite › test` bullets. The
- * bullet repeats before each assertion of one failure; the set keeps one.
+ * A report's failure fingerprints: the finding model's stable identity, which a
+ * later run matches against the base. The log fallback names no report finding,
+ * so it keeps the raw-output reader's identities instead.
  */
-function jestSignatures(lines: readonly string[]): Set<string> {
-  const signatures = new Set<string>();
-  let file = "";
-  for (const line of lines) {
-    const failedFile = /^FAIL\s+(\S+)$/.exec(line);
-    if (failedFile) {
-      file = failedFile[1]!;
-      continue;
-    }
-    const bullet = /^[●✕]\s+(.+)$/u.exec(line);
-    if (bullet) {
-      signatures.add(file ? `${file} > ${bullet[1]}` : `test: ${bullet[1]}`);
-    }
-  }
-  return signatures;
-}
-
-/** libtest's `test tests::alpha ... FAILED`; passed tests name no failure. */
-function cargoSignatures(lines: readonly string[]): Set<string> {
-  const signatures = new Set<string>();
-  for (const line of lines) {
-    const failed = /^test\s+(.+?)\s+\.\.\.\s+FAILED$/.exec(line);
-    if (failed) signatures.add(failed[1]!);
-  }
-  return signatures;
-}
-
-function patternSignatures(
-  pattern: GatePattern,
-  lines: readonly string[],
-): Set<string> {
-  switch (pattern) {
-    case "pytest":
-      return pytestSignatures(lines);
-    case "jest":
-      return jestSignatures(lines);
-    case "cargo":
-      return cargoSignatures(lines);
-  }
+function gateFindingFingerprints(check: CheckResult): Set<string> | undefined {
+  const findings = findingDetails(check);
+  if (!findings) return undefined;
+  const failures = reportFailures(findings);
+  if (failures.length === 0) return undefined;
+  return new Set(failures.map((finding) => finding.fingerprint));
 }
 
 /** A red JUnit gate's failure identities; undefined when the report names none. */
@@ -242,32 +217,34 @@ function scanBunTscLines(
 }
 
 /**
- * Failure identities of one gate run: tsc diagnostics collapse to
- * `file:line code`, bun failures to `file > test`, bun's file-level load errors
- * to `file > error`, and any other output line outside a reporter block is
- * kept as `line: ...` after its run root is normalised. A red gate is inherited
- * only for the signatures it was red for, so a new failure under the same gate
- * still counts.
+ * Human-readable failure signatures of one gate run: a report's findings when
+ * it names one (`test > file > name`, `tool > file > rule`), otherwise tsc
+ * diagnostics collapse to `file:line code`, bun failures to `file > test`,
+ * bun's file-level load errors to `file > error`, and any other output line
+ * outside a reporter block is kept as `line: ...` after its run root is
+ * normalised. Pre-existing matching prefers the finding model's fingerprint
+ * (`gateFailureIdentities`) and reads these signatures only for a gate that
+ * named no report failure.
  *
- * A JUnit report or a declared `format.pattern` is the identity when it names a
- * failure: its case names survive timing and assertion-value drift, which raw
- * output lines do not. A report with no failure and a pattern that matched
- * nothing fall back to the output lines, so a gate that exits red for a reason
- * no case records is still identifiable.
+ * Legacy records that stored `details.junit` are still read; new records carry
+ * `details.findings`, and a report with no failure falls back to the output
+ * lines, so a gate that exits red for a reason no report records is still
+ * identifiable.
  */
 export function gateSignatures(check: CheckResult): Set<string> {
   const meta = gateCheckMeta(check);
   const lines = check.output
     .split("\n")
     .map((line) => normaliseRoots(line.replace(ANSI, "").trim(), meta.roots));
+  const findings = findingDetails(check);
+  if (findings) {
+    const fromFindings = findingGateSignatures(check, findings);
+    if (fromFindings) return fromFindings;
+  }
   const junit = junitDetails(check);
   if (junit) {
     const fromJunit = junitGateSignatures(check, junit);
     if (fromJunit) return fromJunit;
-  }
-  if (meta.pattern) {
-    const fromPattern = patternSignatures(meta.pattern, lines);
-    if (fromPattern.size > 0) return fromPattern;
   }
   return scanBunTscLines(lines, meta.truncated);
 }
@@ -278,6 +255,22 @@ export function gateSignatures(check: CheckResult): Set<string> {
  */
 export function gateSignatureKey(gate: string, signature: string): string {
   return `${gate}\u0000${signature}`;
+}
+
+/**
+ * The identities a run is matched on against the base: a report's finding
+ * fingerprints when it names failures (the finding model's stable identity),
+ * otherwise the output-line signatures keyed by their gate. Empty when the gate
+ * named no failure at all.
+ */
+export function gateFailureIdentities(check: CheckResult): Set<string> {
+  const fingerprints = gateFindingFingerprints(check);
+  if (fingerprints) return fingerprints;
+  return new Set(
+    [...gateSignatures(check)].map((signature) =>
+      gateSignatureKey(check.name, signature),
+    ),
+  );
 }
 
 /** A red gate that printed nothing: the only identity it offers is its name. */

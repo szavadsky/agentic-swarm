@@ -9,6 +9,7 @@ import type { SessionRef } from "../harness/types.js";
 import { runAgentTurn } from "./agent.js";
 import {
   missingPlanFinding,
+  planOwnerSelector,
   resumableSession,
   snapshotPlan,
 } from "./architect-session.js";
@@ -24,6 +25,12 @@ import {
   spikeFindings,
   taskSnapshot,
 } from "./boundary-context.js";
+import type {
+  ConsultFailure,
+  EpicConsult,
+  EpicConsultOptions,
+  EpicPackOptions,
+} from "./boundary-types.js";
 import { makeCause } from "./cause.js";
 import {
   type ConcernAudience,
@@ -35,42 +42,15 @@ import {
 } from "./context-pack.js";
 import { openDebts } from "./derive.js";
 import { compactSession, subarchitectTarget } from "./flow-context.js";
+import { packGates } from "./infra.js";
 import { contextCodeMap } from "./ingestion.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import type { PlanFile } from "./plan-file.js";
 import { type PlanSnapshot, snapshotPlans } from "./pm.js";
 import { scriptMeta } from "./record.js";
-import type { KernelRuntime, State, StepRecord, TaskFile } from "./types.js";
+import type { KernelRuntime, StepRecord, TaskFile } from "./types.js";
 import { integrationHead } from "./worktree.js";
-
-export interface EpicConsult {
-  epic: string;
-  plan: PlanFile;
-  changed: boolean;
-}
-
-export interface ConsultFailure {
-  cause: string;
-  stop?: { cause: string; details?: string };
-}
-
-export interface EpicConsultOptions {
-  iteration: number;
-  epic: string;
-  packRel: string;
-  goalPlanFile: PlanFile;
-  digestPath?: string;
-  records: readonly StepRecord[];
-  turn: string;
-}
-
-export interface EpicPackOptions extends Omit<EpicConsultOptions, "packRel"> {
-  tasks: readonly TaskFile[];
-  state: State;
-  planText: string;
-  runConfigPath?: string;
-}
 
 /** The epic's pack input: its tasks, its plan, and the goal's shared facts. */
 async function epicPackInput(
@@ -106,9 +86,9 @@ async function epicPackInput(
       [...epicTasks],
     ),
     codeMap: await contextCodeMap(runtime),
-    steers: [],
+    steers: [...(opts.steers ?? [])],
     setup: runtime.configs.repo.setup,
-    gates: runtime.configs.repo.gates,
+    gates: packGates(runtime.store.goalDir, runtime.configs.repo.gates),
     baseGates: recordedBaseGates([...opts.records]),
     forwarded: forwardedConcerns([...opts.records], {
       tasks: opts.tasks,
@@ -161,9 +141,9 @@ async function prepareConsult(
   const session = await resumableSession(
     runtime,
     opts.records,
-    (record) =>
-      record.step === "subarchitect" && record.architect === opts.epic,
+    planOwnerSelector(opts.epic),
     target,
+    `the subarchitect "${opts.epic}"`,
   );
   return {
     planBefore: snapshotPlan(plan.path) ?? undefined,
@@ -197,7 +177,7 @@ async function runSubarchitectTurn(
   plan: PlanFile,
   session: SessionRef | undefined,
 ) {
-  const target = subarchitectTarget(runtime, opts.iteration);
+  const target = subarchitectTarget(runtime);
   return runBoundaryTurn(
     runtime,
     { iteration: opts.iteration, step: "subarchitect" },
@@ -213,6 +193,7 @@ async function runSubarchitectTurn(
         },
         vars: {
           turn: opts.turn,
+          pass: opts.pass,
           iteration: String(opts.iteration),
           epic: opts.epic,
           intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
@@ -288,7 +269,7 @@ function consultFailure(
       cause: `subarchitect ${opts.epic} produced no decision: ${result.outcome?.summary ?? "no outcome"}`,
     };
   }
-  if (decision === "continue") {
+  if (decision === "continue" && opts.pass === "direction") {
     const finding = missingPlanFinding(
       plan.path,
       decision,
@@ -311,7 +292,7 @@ export async function runEpicConsult(
   opts: EpicConsultOptions,
 ): Promise<{ consult?: EpicConsult; failure?: ConsultFailure }> {
   const plan = epicPlan(runtime.store.goalDir, opts.epic);
-  const target = subarchitectTarget(runtime, opts.iteration);
+  const target = subarchitectTarget(runtime);
   const setup = await prepareConsult(runtime, opts, plan, target);
   const result = await runSubarchitectTurn(runtime, opts, plan, setup.session);
   await reconcileForeignPlans(
@@ -334,6 +315,7 @@ export async function runEpicConsult(
       epic: opts.epic,
       plan,
       changed: snapshotPlan(plan.path) !== setup.planBefore,
+      ...(result.outcome ? { outcome: result.outcome } : {}),
     },
   };
 }

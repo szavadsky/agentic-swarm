@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { git } from "../../core/git/exec.js";
+import { type StatusEntry, porcelainStatus } from "../../core/git/status.js";
 import { isPlanPath } from "../plan-file.js";
 import type {
   Cause,
@@ -14,24 +15,23 @@ import type {
 import type { WorktreeState } from "./types.js";
 
 /**
- * Porcelain lines outside the artifact root. A same-repo artifact commit
+ * Porcelain entries outside the artifact root. A same-repo artifact commit
  * changes the main checkout's HEAD and dirty set; both are the store's writes,
  * not the operator's, so containment compares only what lies outside the store.
+ * A rename stays visible because its line names a pair, not one artifact path.
  */
 export function statusOutsideArtifacts(
-  status: string,
+  entries: readonly StatusEntry[],
   repoRoot: string,
   artifactRoot: string,
-): string {
+): readonly StatusEntry[] {
   const rel = path.relative(repoRoot, artifactRoot).split(path.sep).join("/");
-  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) return status;
-  return status
-    .split("\n")
-    .filter((line) => {
-      const file = line.slice(3);
-      return file !== rel && !file.startsWith(`${rel}/`);
-    })
-    .join("\n");
+  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel))
+    return entries;
+  const inside = (file: string) => file === rel || file.startsWith(`${rel}/`);
+  return entries.filter(
+    (entry) => entry.from !== undefined || !inside(entry.path),
+  );
 }
 
 export async function worktreeState(dir: string): Promise<WorktreeState> {
@@ -39,11 +39,13 @@ export async function worktreeState(dir: string): Promise<WorktreeState> {
     allowFail: true,
   });
   const head = await git(dir, ["rev-parse", "HEAD"], { allowFail: true });
-  const status = await git(dir, ["status", "--porcelain"], { allowFail: true });
+  // `normal` keeps the old collapsed untracked-directory shape while `-z`
+  // avoids C-quoting paths with spaces or quotes.
+  const entries = await porcelainStatus(dir, { untracked: "normal" });
   return {
     branch: branch.stdout.trim(),
     head: head.stdout.trim(),
-    status: status.stdout,
+    entries,
   };
 }
 
@@ -155,6 +157,52 @@ export function steerTurnWroteDuring(
         r.step === "intent") &&
       r.startedAt <= now &&
       (!r.endedAt || r.endedAt >= at),
+  );
+}
+
+/** The goal-checkout paths a record active at `at` declared it writes. */
+export function checkoutWritesAt(
+  records: readonly StepRecord[],
+  at: string,
+): Set<string> {
+  const paths = new Set<string>();
+  for (const record of records) {
+    if (record.startedAt > at) continue;
+    if (record.endedAt !== undefined && record.endedAt < at) continue;
+    for (const rel of record.checkoutWrites ?? []) paths.add(rel);
+  }
+  return paths;
+}
+
+/**
+ * The goal-checkout paths a record still open now declared it writes. The
+ * intent turn records its repo source before it starts, so a task settling
+ * beside it does not read that source's edit or commit as its own; once the
+ * record closes, its commit is on the record and its path is not exempt.
+ */
+export function openCheckoutWrites(
+  records: readonly StepRecord[],
+  now: string,
+): Set<string> {
+  const paths = new Set<string>();
+  for (const record of records) {
+    if (record.endedAt !== undefined || record.startedAt > now) continue;
+    for (const rel of record.checkoutWrites ?? []) paths.add(rel);
+  }
+  return paths;
+}
+
+/**
+ * Porcelain entries without entries whose exact path is an explained write.
+ * A rename is not exempt: its entry names a pair, not the declared path.
+ */
+export function statusWithoutPaths(
+  entries: readonly StatusEntry[],
+  exempt: ReadonlySet<string>,
+): readonly StatusEntry[] {
+  if (exempt.size === 0) return entries;
+  return entries.filter(
+    (entry) => entry.from !== undefined || !exempt.has(entry.path),
   );
 }
 

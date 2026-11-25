@@ -1,5 +1,8 @@
 import { runProcess } from "../proc.js";
 import { tailCap } from "./types.js";
+import type { SetupResult } from "./types.js";
+
+export type { SetupResult } from "./types.js";
 
 /**
  * Dependency/bootstrap setup for a worktree before verification gates (§9).
@@ -18,19 +21,6 @@ import { tailCap } from "./types.js";
  * setup commands are idempotent by contract, and a stale cache would validate
  * gates against dependencies that no longer match the tree.
  */
-export interface SetupResult {
-  ok: boolean;
-  /** Commands declared (possibly empty). */
-  commands: string[];
-  /** Commands that ran to success before any failure. */
-  ran: string[];
-  durationMs: number;
-  /** First failing command, when ok=false. */
-  failedCommand?: string;
-  /** Timed-out/failure detail, when ok=false. */
-  error?: string;
-}
-
 export async function runWorktreeSetup(opts: {
   commands: string[];
   cwd: string;

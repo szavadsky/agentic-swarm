@@ -7,7 +7,6 @@
 import { iterationSpend, iterationStart, settledTurns } from "./dispatch.js";
 import {
   collectSteerRoutes,
-  type Hold,
   isArchitectRoute,
   readHolds,
   scanInbox,
@@ -16,11 +15,7 @@ import type { GoalRun } from "./launch-run.js";
 import { loadPriceTable } from "./openrouter.js";
 import { resumeVerdict } from "./resume.js";
 import type { KernelRuntime, State, StepRecord } from "./types.js";
-
-export interface ResumeGate {
-  holds: Hold[];
-  refusal?: string;
-}
+import type { ResumeGate } from "./launch-resume-types.js";
 
 /**
  * Holds decide which ready work is runnable, so a hold read that fails refuses

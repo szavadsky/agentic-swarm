@@ -3,12 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   FakeHarness,
+  type FakeTurnHandler,
   fakeTurnIdentity,
   fakeTurnResult,
 } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { createDrainController } from "../../src/kernel/signals.js";
+import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
 import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
@@ -16,6 +18,7 @@ import {
   outcome,
   setupFlowRepo,
   scriptStallLeave,
+  whenTurn,
   writeTask,
 } from "./s2-helpers.js";
 
@@ -342,7 +345,147 @@ function registerScriptCrashBudgetPart3(): void {
   }, 60_000);
 }
 
+type WorkTurn = { slug: string; step: string };
+
+/** Every task turn in start order: implement writes its file, the verdicts accept. */
+function scriptOrderedWork(harness: FakeHarness, turns: WorkTurn[]): void {
+  const handler: FakeTurnHandler = (req, ctx) => {
+    const { slug, step } = fakeTurnIdentity(req);
+    turns.push({ slug: slug!, step: step! });
+    if (step === "implement") {
+      fs.writeFileSync(path.join(req.cwd!, `${slug}.txt`), `${slug}\n`, "utf8");
+      ctx.writeOutcome(outcome({ summary: `${slug} implemented` }));
+    } else if (step === "qa") {
+      ctx.writeOutcome(
+        outcome({ summary: `${slug} qa accepted`, qa: { verdict: "accept" } }),
+      );
+    } else {
+      ctx.writeOutcome(
+        outcome({ summary: `${slug} approved`, verdict: "approve" }),
+      );
+    }
+    return fakeTurnResult(req);
+  };
+  for (const step of ["implement", "qa", "review"]) {
+    harness.script(handler, { when: whenTurn({ step }), fallback: true });
+  }
+}
+
+/** One real implement turn behind a task: started work with its own branch. */
+async function seedStartedTask(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  runtime: Awaited<ReturnType<typeof makeRuntime>>,
+  slug: string,
+): Promise<void> {
+  const worktree = await ensureTaskWorktree(
+    runtime,
+    task(slug, { scope: [`${slug}.txt`] }),
+  );
+  if (worktree.error) throw new Error(worktree.error);
+  fs.writeFileSync(
+    path.join(worktree.path, `${slug}.txt`),
+    `${slug}\n`,
+    "utf8",
+  );
+  repo.git(["add", "-A"], { cwd: worktree.path });
+  repo.git(["commit", "-m", `${slug} work`], { cwd: worktree.path });
+  const tree = repo
+    .git(["rev-parse", "HEAD^{tree}"], { cwd: worktree.path })
+    .stdout.trim();
+  await runtime.store.appendRecord(
+    {
+      iteration: 1,
+      slug,
+      step: "implement",
+      round: 1,
+      actor: "agent",
+      alias: "implementer",
+      model: { id: "fake" },
+    },
+    {
+      stop: { kind: "done" },
+      commit: repo
+        .git(["rev-parse", "HEAD"], { cwd: worktree.path })
+        .stdout.trim(),
+      tree,
+      outcome: outcome({ summary: `${slug} implemented` }),
+    },
+  );
+  await runtime.store.appendRecord(
+    { iteration: 1, slug, step: "checks", round: 1, actor: "script" },
+    { ok: true, checks: [], tree },
+  );
+}
+
+async function dispatchesStartedTaskFirst(): Promise<void> {
+  const { repo, goal } = setupFlowRepo({
+    limits: { concurrency: { overall: 1 } },
+  });
+  try {
+    const harness = new FakeHarness({ id: "fake" });
+    const turns: WorkTurn[] = [];
+    scriptOrderedWork(harness, turns);
+    const runtime = await makeRuntime(repo, goal, { fake: harness });
+    await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+    await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
+    await seedStartedTask(repo, runtime, "beta");
+    const result = await runDispatch(runtime, { iteration: 1 });
+    expect(result.reason).toBe("boundary");
+    expect(turns[0]).toEqual({ slug: "beta", step: "qa" });
+  } finally {
+    cleanupFlowRepo(repo);
+  }
+}
+
+async function dispatchesMostDependentsFirst(): Promise<void> {
+  const { repo, goal } = setupFlowRepo({
+    limits: { concurrency: { overall: 1 } },
+  });
+  try {
+    const harness = new FakeHarness({ id: "fake" });
+    const turns: WorkTurn[] = [];
+    scriptOrderedWork(harness, turns);
+    const runtime = await makeRuntime(repo, goal, { fake: harness });
+    const deps: Record<string, string[]> = {
+      alpha: [],
+      beta: [],
+      gamma: [],
+      delta: ["gamma"],
+      epsilon: ["gamma"],
+    };
+    for (const [slug, taskDeps] of Object.entries(deps)) {
+      await writeTask(
+        runtime,
+        task(slug, { deps: taskDeps, scope: [`${slug}.txt`] }),
+      );
+    }
+    const result = await runDispatch(runtime, { iteration: 1 });
+    expect(result.reason).toBe("boundary");
+    expect(turns[0]).toEqual({ slug: "gamma", step: "implement" });
+    const state = derive(
+      await runtime.store.listTasks(),
+      await runtime.store.listRecords(),
+      runtime.configs.process.flows,
+    );
+    expect(state.tasks.delta!.status).toBe("merged");
+    expect(state.tasks.epsilon!.status).toBe("merged");
+  } finally {
+    cleanupFlowRepo(repo);
+  }
+}
+
 describe("dispatch admission", () => {
+  it(
+    "dispatches a started task before an unstarted one when one slot is free",
+    dispatchesStartedTaskFirst,
+    60_000,
+  );
+  it(
+    "dispatches the unstarted task that unblocks the most dependents first",
+    dispatchesMostDependentsFirst,
+    60_000,
+  );
+
   registerDispatchAdmissionPart5();
 
   registerDispatchAdmissionPart6();

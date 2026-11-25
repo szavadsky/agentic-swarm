@@ -2,24 +2,23 @@ import fs from "node:fs";
 import path from "node:path";
 import { Liquid } from "liquidjs";
 import { DASHBOARD_TEMPLATE } from "./dashboard-template.js";
+import { formatSteerRoute } from "./mailbox/routes.js";
 import type {
   StatusCost,
   StatusDocument,
+  StatusOpenConcern,
+  StatusSteer,
+  StatusStop,
   StatusTask,
   StatusWork,
+  SteerState,
 } from "./status.js";
-import type { IntentStatusArtifact } from "./summary/intent-status.js";
+import type { IntentStatusArtifact } from "./summary/types.js";
 import type { ArtifactStore, IntentStatusEntry } from "./types.js";
+import type { DashboardAsset } from "./dashboard-types.js";
 
 /** Goal-relative path of the static dashboard written beside status.json. */
 export const DASHBOARD_REL_PATH = "dashboard.html";
-
-export interface DashboardAsset {
-  /** Goal-relative path the page links. */
-  rel: string;
-  /** Plugin-relative source checked into the factory. */
-  source: string;
-}
 
 /**
  * The page's only external loads. Both are MIT-licensed browser bundles kept in
@@ -94,12 +93,49 @@ interface IntentView {
   chartJson: string;
 }
 
+/** The lead paragraph plus who wrote it, so the page never presents a guess as a PM summary. */
+interface StatusView {
+  text: string;
+  attribution: string;
+  record: string | null;
+}
+
+/** One open concern row; a missing record renders as a dash, never a broken link. */
+interface OpenConcernRow {
+  id: string | null;
+  kind: string;
+  calibration: string;
+  text: string;
+  evidence: string | null;
+  source: string;
+  record: string | null;
+}
+
+/** One steer row: state, the PM's route and the answer it carries. */
+interface SteerRow {
+  id: string;
+  state: SteerState;
+  route: string | null;
+  answer: string | null;
+  record: string | null;
+}
+
+/** The stop badge the header shows, with the cause the launch printed. */
+interface StopView {
+  reason: string;
+  label: string;
+  detail: string | null;
+  /** Done and blocked already read from the goal badge; only the others add a badge. */
+  shows: boolean;
+}
+
 /**
  * The dashboard's derived view: Liquid stays a template language, so counts,
  * percentages, money, number formatting and chart JSON are settled here and
  * tested as values rather than re-derived inside markup.
  */
 interface DashboardSummary {
+  status: StatusView;
   intent: IntentView;
   tasks: StatusTask[];
   spend: {
@@ -116,6 +152,17 @@ interface DashboardSummary {
   workRoles: WorkRow[];
   workModels: WorkRow[];
   epics: { name: string; tasks: string[] }[];
+  openConcerns: OpenConcernRow[];
+  concerns: { open: number; recorded: number; debt: number };
+  steers: {
+    total: number;
+    waiting: number;
+    routed: number;
+    answered: number;
+    processed: number;
+    rows: SteerRow[];
+  };
+  stop: StopView | null;
 }
 
 const INT = new Intl.NumberFormat("en-US");
@@ -134,6 +181,15 @@ const INTENT_LABEL: Record<IntentStatusEntry["status"], string> = {
   works: "works",
   "not-built": "not built",
   friction: "friction",
+};
+
+const STOP_LABEL: Record<string, string> = {
+  done: "done",
+  blocked: "blocked",
+  "iteration-limit": "iteration limit",
+  promote: "awaiting promotion",
+  interrupted: "interrupted",
+  infra: "infrastructure stop",
 };
 
 function count(value: number): string {
@@ -183,6 +239,17 @@ function workTotals(work: StatusDocument["work"]): WorkTotals {
   };
 }
 
+function statusView(summary: StatusDocument["summary"]): StatusView {
+  return {
+    text: summary.text,
+    attribution:
+      summary.source === "pm"
+        ? `PM summary, iteration ${summary.iteration}`
+        : "kernel-derived mechanical status",
+    record: summary.record ?? null,
+  };
+}
+
 function intentView(artifact: IntentStatusArtifact | undefined): IntentView {
   const rows: IntentRow[] = (artifact?.sections ?? []).map((entry) => ({
     section: entry.section,
@@ -215,7 +282,9 @@ function summaryOf(status: StatusDocument): DashboardSummary {
     (sum, row) => sum + row.tokens,
     0,
   );
+  const steers = status.steers ?? [];
   return {
+    status: statusView(status.summary),
     intent: intentView(status.intentStatus),
     tasks: [
       ...status.tasks.open,
@@ -241,6 +310,55 @@ function summaryOf(status: StatusDocument): DashboardSummary {
       name,
       tasks,
     })),
+    openConcerns: status.openConcerns.map((concern) => concernRow(concern)),
+    concerns: {
+      open: status.openConcerns.length,
+      recorded: status.concerns.length,
+      debt: status.distance.openDebt.length,
+    },
+    steers: {
+      total: steers.length,
+      waiting: steers.filter((steer) => steer.state === "waiting").length,
+      routed: steers.filter((steer) => steer.state === "routed").length,
+      answered: steers.filter((steer) => steer.state === "answered").length,
+      processed: steers.filter((steer) => steer.state === "processed").length,
+      rows: steers.map(steerRow),
+    },
+    stop: stopView(status.stop),
+  };
+}
+
+function concernRow(concern: StatusOpenConcern): OpenConcernRow {
+  return {
+    id: concern.id ?? null,
+    kind: concern.kind,
+    calibration: concern.calibration,
+    text: concern.text,
+    evidence: concern.evidence ?? null,
+    source: concern.source,
+    record: concern.record ?? null,
+  };
+}
+
+function steerRow(steer: StatusSteer): SteerRow {
+  return {
+    id: steer.id,
+    state: steer.state,
+    route: steer.route ? formatSteerRoute(steer.route) : null,
+    answer: steer.answer ?? null,
+    record: steer.record ?? null,
+  };
+}
+
+function stopView(stop: StatusStop | undefined): StopView | null {
+  if (!stop) return null;
+  return {
+    reason: stop.reason,
+    label: `stopped: ${STOP_LABEL[stop.reason] ?? stop.reason}`,
+    detail:
+      stop.cause ??
+      (stop.interruptedBy ? `signal ${stop.interruptedBy}` : null),
+    shows: stop.reason !== "done" && stop.reason !== "blocked",
   };
 }
 

@@ -1,7 +1,13 @@
 import { exitWithDetails, lastNonBannerLine, withDetails } from "../details.js";
 import { isTransportFailure } from "../transport.js";
 import type { Stop } from "../types.js";
-import type { AcpxError, AcpxTurnSummary } from "./types.js";
+import type {
+  AcpxError,
+  AcpxTurnClassificationInput,
+  AcpxTurnSummary,
+} from "./types.js";
+
+export type { AcpxTurnClassificationInput } from "./types.js";
 
 function errorText(error: AcpxError): string {
   const data = error.data ?? {};
@@ -138,15 +144,6 @@ export function classifyAcpxError(
   if (!exit || stop.kind !== "infra" || stop.cause !== "crash") return stop;
   const details = exitWithDetails(exit.code, exit.signal, errorText(error));
   return details ? { ...stop, details } : stop;
-}
-
-export interface AcpxTurnClassificationInput {
-  summary: AcpxTurnSummary;
-  code: number | null;
-  signal: string | null;
-  timedOut: boolean;
-  /** Raw stderr; only reached when stdout carried no error frame. */
-  stderr?: string;
 }
 
 /**

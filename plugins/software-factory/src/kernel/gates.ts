@@ -1,28 +1,29 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { Finding } from "../core/checks/findings.js";
 import type { CheckAttribution, CheckResult } from "../core/checks/types.js";
-import {
-  capJunit,
-  parseJunit,
-  type ParsedJunit,
-} from "../core/checks/junit.js";
 import { fingerprintText } from "../core/fingerprint.js";
 import { KeyedMutex } from "../core/mutex.js";
-import { runProcess, type ProcessResult } from "../core/proc.js";
+import { type ProcessResult, runProcess } from "../core/proc.js";
+import type { CappedGateOutput, DeclaredGateRun } from "./gates-types.js";
 import { trackGateGroup } from "./gate-processes.js";
 import {
-  GATE_OUTPUT_CAP,
   capGateOutput,
-  caseLabel,
+  gateReportPaths,
+  GATE_OUTPUT_CAP,
+  isAdvisoryCheck,
   isInfraCheck,
-  type CappedGateOutput,
+  normaliseFindings,
+  readGateReports,
 } from "./gates-normalise.js";
 import {
-  UNIDENTIFIED_GATE_FAILURE,
+  gateFailureIdentities,
   gateSignatureKey,
   gateSignatures,
+  UNIDENTIFIED_GATE_FAILURE,
 } from "./gates-signatures.js";
-import type { GateConfig, GatePattern, KernelRuntime } from "./types.js";
+import { resolveGates } from "./infra.js";
+import type { GateConfig, KernelRuntime } from "./types.js";
 
 export const GATE_TIMEOUT_SEC = 900;
 
@@ -39,27 +40,29 @@ export function gateTimeoutSec(gate: Pick<GateConfig, "timeoutSec">): number {
     : GATE_TIMEOUT_SEC;
 }
 
+export { reapGateProcesses } from "./gate-processes.js";
+export type { GateInfra } from "./gates-types.js";
 export {
-  GATE_OUTPUT_CAP,
   capGateOutput,
+  GATE_OUTPUT_CAP,
+  isAdvisoryCheck,
   isInfraCheck,
   isStaleGateCheck,
-  type GateInfra,
 } from "./gates-normalise.js";
 export {
-  UNIDENTIFIED_GATE_FAILURE,
+  gateFailureIdentities,
   gateSignatureKey,
   gateSignatures,
+  UNIDENTIFIED_GATE_FAILURE,
 } from "./gates-signatures.js";
-export { reapGateProcesses } from "./gate-processes.js";
 
 /**
  * Branch checks and merged-result gates share ports, caches and build dirs only
  * as far as a repo declares; a gate that names a mutex in `serial` holds it for
- * its own command, and a gate that names none never waits. Keyed by the
- * worktree, so concurrent runs in different worktrees of the same repo never
- * serialize on each other; only two gates in the same worktree naming the same
- * mutex wait.
+ * its own command, and a gate that names none never waits. Keyed by the repo
+ * root and the declared name, so two worktrees of one repo naming the same
+ * mutex wait for each other while gates of different repos and gates naming
+ * none stay parallel.
  */
 const gateMutexes = new KeyedMutex();
 
@@ -92,12 +95,14 @@ function gateEnvDirs(
  * Runs one declared gate command with its env dirs created and the mutexes it
  * names held. Names are taken in sorted order, so two gates naming the same
  * pair in different order cannot deadlock; a gate holds them only for its own
- * command, so the rest of the run — and every other worktree's run — proceeds.
+ * command, so the rest of the run — and every other repo's run — proceeds.
+ * Mutexes are scoped to `repoRoot`, so worktrees of one repo share them.
  */
 function runGateCommand(
   cwd: string,
   gate: GateConfig,
   command: string,
+  repoRoot: string,
   extraEnv?: Record<string, string>,
 ): Promise<ProcessResult> {
   const ordered = [...new Set(gate.serial)].sort();
@@ -134,8 +139,9 @@ function runGateCommand(
       });
       return run.finally(() => release?.());
     }
-    return gateMutexes.runExclusive(`${cwd}\u0000${name}`, () =>
-      launch(index + 1),
+    return gateMutexes.runExclusive(
+      `${path.resolve(repoRoot)}\u0000${name}`,
+      () => launch(index + 1),
     );
   };
   return launch(0);
@@ -146,94 +152,59 @@ const SUMMARY_CASES = 5;
 /** Characters of one case name in a summary. */
 const SUMMARY_NAME_CHARS = 120;
 
-/** A red gate's summary names what failed; `exit 0` says nothing. */
-function junitSummary(parsed: ParsedJunit, code: number | null): string {
-  const failing = parsed.cases
-    .filter((c) => c.status === "fail")
-    .map(caseLabel);
-  if (failing.length > 0) {
-    const shown = failing
-      .slice(0, SUMMARY_CASES)
-      .map((name) => name.slice(0, SUMMARY_NAME_CHARS));
-    const rest = failing.length - shown.length;
-    return `${failing.length} failing: ${shown.join(", ")}${rest > 0 ? `, +${rest} more` : ""}`;
-  }
-  if (parsed.suiteFailed) return "suite failure";
-  if (parsed.cases.length === 0) return "empty JUnit report";
-  return `exit ${code}`;
+/** A finding's stable display label: its file, then its rule or message. */
+function findingLabel(finding: Finding): string {
+  const name = finding.rule ?? finding.message;
+  return finding.file ? `${finding.file} > ${name}` : name;
 }
 
-/** A red JUnit gate's identity: its failing cases, never its passing ones. */
-function junitIdentity(parsed: ParsedJunit | undefined): string {
-  if (!parsed) return "";
-  const failing = parsed.cases
-    .filter((c) => c.status === "fail")
-    .map(caseLabel)
-    .sort();
-  if (failing.length > 0) return failing.join(",");
-  return parsed.suiteFailed ? "suite-failure" : "";
+/** A red test report's summary names what failed; other gates keep exit code. */
+function reportSummary(findings: readonly Finding[]): string {
+  const failing = findings.filter((finding) => finding.severity === "error");
+  const shown = failing
+    .slice(0, SUMMARY_CASES)
+    .map((finding) => findingLabel(finding).slice(0, SUMMARY_NAME_CHARS));
+  const rest = failing.length - shown.length;
+  return `${failing.length} failing: ${shown.join(", ")}${rest > 0 ? `, +${rest} more` : ""}`;
 }
 
-/** One declared gate run: its command result and the check built from it. */
-export interface DeclaredGateRun {
-  res: ProcessResult;
-  check: CheckResult;
-}
-
-/** The JUnit report a gate wrote, or why it is missing or unreadable. */
-function readJunitReport(junitPath: string | undefined): {
-  parsed?: ParsedJunit;
-  error?: string;
-} {
-  if (!junitPath) return {};
-  try {
-    if (!fs.existsSync(junitPath))
-      return { error: "JUnit report not generated" };
-    return { parsed: parseJunit(fs.readFileSync(junitPath, "utf8")) };
-  } catch (error) {
-    return {
-      error: `JUnit report unreadable: ${error instanceof Error ? error.message : String(error)}`,
-    };
-  } finally {
-    fs.rmSync(junitPath, { force: true });
-  }
-}
-
-/** A gate is green only when the command, its report and every case agree. */
+/** A gate is green only when the command and its test report agree. */
 function gatePassed(
   res: ProcessResult,
-  parsed: ParsedJunit | undefined,
-  junitError: string | undefined,
+  findings: readonly Finding[],
+  reportError: string | undefined,
+  testReport: boolean,
 ): boolean {
-  if (res.timedOut || res.code !== 0 || junitError !== undefined) return false;
-  if (parsed?.suiteFailed) return false;
-  if (parsed?.cases.some((c) => c.status === "fail")) return false;
-  return !(parsed !== undefined && parsed.cases.length === 0);
+  if (res.timedOut || res.code !== 0 || reportError !== undefined) return false;
+  if (!testReport) return true;
+  return !findings.some((finding) => finding.severity === "error");
 }
 
 /** The one line a fix turn reads: why the gate is red, or `pass`. */
 function gateSummary(
   gate: GateConfig,
   res: ProcessResult,
-  parsed: ParsedJunit | undefined,
-  junitError: string | undefined,
+  findings: readonly Finding[],
+  reportError: string | undefined,
   ok: boolean,
+  testReport: boolean,
 ): string {
   if (ok) return "pass";
   if (res.timedOut) return `timed out after ${gateTimeoutSec(gate)}s`;
   if (res.code === 126 || res.code === 127) return `exit ${res.code}`;
-  if (junitError) return junitError;
-  if (parsed) return junitSummary(parsed, res.code);
+  if (reportError) return reportError;
+  if (testReport && findings.some((finding) => finding.severity === "error"))
+    return reportSummary(findings);
   return `exit ${res.code}`;
 }
 
-/** What the record keeps of one gate run: roots, capped output and its report. */
+/** What the record keeps of one gate run: roots, capped output and findings. */
 function gateDetails(
   gate: GateConfig,
   cwd: string,
   capped: CappedGateOutput,
-  parsed: ParsedJunit | undefined,
-  junitError: string | undefined,
+  findings: readonly Finding[],
+  reportError: string | undefined,
   res?: ProcessResult,
 ): Record<string, unknown> {
   const details: Record<string, unknown> = {
@@ -247,61 +218,91 @@ function gateDetails(
     details.kind = "infra";
     details.cause = `exit ${res.code}`;
   }
-  if (gate.format?.pattern) details.pattern = gate.format.pattern;
-  // The record keeps a capped report; the verdict above read every case.
-  if (parsed) details.junit = capJunit(parsed);
-  if (junitError) details.error = junitError;
+  if (findings.length > 0) details.findings = findings;
+  if (reportError) details.error = reportError;
   return details;
 }
 
 /**
- * Runs one gate as declared and records what it produced. A `format.junit`
- * gate writes its report to the declared worktree-relative path — the kernel
- * exports the absolute path as `FACTORY_JUNIT_PATH` for runners that honour it
- * and reads the same file for the case identities. A `format.pattern` gate's
- * runner is recorded so `gateSignatures` reads its printed failures. Both
- * `runGates` and the baseline use this, so a gate executes and is recorded
- * identically on base and in a task worktree.
+ * Runs one gate as declared and records what it produced. A declared report is
+ * written to its worktree-relative path — `junit` is also exported as
+ * `FACTORY_JUNIT_PATH` for runners that honour it — and read once into the one
+ * findings model; a gate with no report falls back to its log and exit code.
+ * Both `runGates` and the baseline use this, so a gate executes and is recorded
+ * identically on base and in a task worktree. `repoRoot` names the repository
+ * whose worktrees share the gate's `serial` mutexes; it defaults to `cwd` for
+ * a caller running one tree in isolation.
  */
 export async function runDeclaredGate(
   cwd: string,
   gate: GateConfig,
+  repoRoot = cwd,
 ): Promise<DeclaredGateRun> {
-  const junitPath = gate.format?.junit
-    ? path.resolve(cwd, gate.format.junit)
-    : undefined;
-  if (junitPath) fs.rmSync(junitPath, { force: true });
+  const paths = gateReportPaths(gate, cwd);
+  for (const file of Object.values(paths)) {
+    if (file) fs.rmSync(file, { force: true });
+  }
   const res = await runGateCommand(
     cwd,
     gate,
     gate.command,
-    junitPath ? { FACTORY_JUNIT_PATH: junitPath } : undefined,
+    repoRoot,
+    paths.junit ? { FACTORY_JUNIT_PATH: paths.junit } : undefined,
   );
 
-  const { parsed, error: junitError } = readJunitReport(junitPath);
+  const reports = readGateReports(cwd, gate);
   const capped = capGateOutput(`${res.stdout}\n${res.stderr}`, [cwd]);
-  const ok = gatePassed(res, parsed, junitError);
+  let findings: Finding[] = [];
+  let reportError = reports.error;
+  if (!reportError) {
+    try {
+      findings = await normaliseFindings(gate, {
+        ...reports.contents,
+        exitCode: res.code,
+        log: capped.output,
+      });
+    } catch (error) {
+      reportError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  const ok = gatePassed(res, findings, reportError, reports.testReport);
   return {
     res,
     check: {
       name: gate.id,
       ok,
-      summary: gateSummary(gate, res, parsed, junitError, ok),
+      summary: gateSummary(
+        gate,
+        res,
+        findings,
+        reportError,
+        ok,
+        reports.testReport,
+      ),
       output: capped.output,
       fingerprint: fingerprintText(
-        `${gate.id}:${junitIdentity(parsed) || capped.output}`,
+        `${gate.id}:${
+          findings.length > 0
+            ? findings
+                .map((finding) => finding.fingerprint)
+                .sort()
+                .join(",")
+            : capped.output
+        }`,
         { lowercase: false },
       ),
-      details: gateDetails(gate, cwd, capped, parsed, junitError, res),
+      ...(gate.advisory && !ok ? { advisory: true } : {}),
+      details: gateDetails(gate, cwd, capped, findings, reportError, res),
     },
   };
 }
 
 /**
- * Runs the repo-config gates in `cwd`. Gates are commands, not the v2 check
- * pipeline: kernel-0 only needs a red/green signal and the output a fix turn
- * must read. `only` re-runs a subset after a red run. Runs in different
- * worktrees are independent; only mutexes a gate declares make it wait.
+ * Runs the repo-config and discovered gates in `cwd`. Gates are commands, not
+ * the v2 check pipeline: kernel-0 only needs a red/green signal and the output
+ * a fix turn must read. `only` re-runs a subset after a red run. Runs in
+ * different worktrees of one repo still wait on the mutexes a gate declares;
+ * gates naming none run in parallel.
  */
 export async function runGates(
   runtime: KernelRuntime,
@@ -310,12 +311,16 @@ export async function runGates(
 ): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
   const only = opts.only;
+  const declared = resolveGates(
+    runtime.store.goalDir,
+    runtime.configs.repo.gates,
+  );
   const gates =
     only === undefined
-      ? runtime.configs.repo.gates
-      : runtime.configs.repo.gates.filter((gate) => only.has(gate.id));
+      ? declared
+      : declared.filter((gate) => only.has(gate.id));
   for (const gate of gates) {
-    const { check } = await runDeclaredGate(cwd, gate);
+    const { check } = await runDeclaredGate(cwd, gate, runtime.paths.repoRoot);
     results.push(check);
   }
   return results;
@@ -323,6 +328,21 @@ export async function runGates(
 
 export function failingChecks(checks: readonly CheckResult[]): CheckResult[] {
   return checks.filter((c) => !c.ok);
+}
+
+/** The reds that block: every failure except an advisory one. */
+function blockingFailures(checks: readonly CheckResult[]): CheckResult[] {
+  return failingChecks(checks).filter((c) => !isAdvisoryCheck(c));
+}
+
+/**
+ * Marks every red of a task's run advisory. The task still records and shows
+ * the output; no gate, fix round or merge charges it.
+ */
+export function advisoryChecks(checks: readonly CheckResult[]): CheckResult[] {
+  return checks.map((check) =>
+    check.ok || isAdvisoryCheck(check) ? check : { ...check, advisory: true },
+  );
 }
 
 /**
@@ -337,7 +357,7 @@ export function stampAttribution(
 ): CheckResult[] {
   const own = new Set(newGateFailures(checks, preexisting));
   return checks.map((check) => {
-    if (check.ok || isInfraCheck(check)) return check;
+    if (check.ok || isInfraCheck(check) || isAdvisoryCheck(check)) return check;
     const attribution: CheckAttribution = own.has(check) ? "new" : "inherited";
     return { ...check, attribution };
   });
@@ -351,7 +371,7 @@ export function stampAttribution(
 export function attributedFailures(
   checks: readonly CheckResult[] | undefined,
 ): CheckResult[] {
-  return failingChecks(checks ?? []).filter(
+  return blockingFailures(checks ?? []).filter(
     (check) => check.attribution !== "inherited",
   );
 }
@@ -369,35 +389,52 @@ export function formatFailingChecks(
 ): string {
   if (!checks || checks.length === 0) return "";
   return failingChecks(checks)
-    .map((c) => `### ${c.name}: ${c.summary}\n${c.output}`)
+    .map(
+      (c) =>
+        `### ${c.name}${isAdvisoryCheck(c) ? " (advisory)" : ""}: ${c.summary}\n${c.output}`,
+    )
     .join("\n\n");
 }
 
 /**
  * Failing gates that are the task's own: an inherited failure is dropped only
- * when every signature it fails for was already red on base (KERNEL0 §6); one
- * new signature under the same gate name still forces a fix round and blocks
- * the merge.
+ * when every identity it fails for is already in the base's pre-existing set
+ * (KERNEL0 §6); one new identity under the same gate name still forces a fix
+ * round and blocks the merge. The identity is the finding model's fingerprint
+ * when the run named report failures, else the output-line signature.
  */
 export function newGateFailures(
   checks: readonly CheckResult[],
   preexisting: ReadonlySet<string>,
 ): CheckResult[] {
-  return failingChecks(checks).filter((check) => {
-    const signatures = gateSignatures(check);
+  return blockingFailures(checks).filter((check) => {
+    const identities = gateFailureIdentities(check);
     // A silent red gate offers only its name, exactly as before signature
     // matching: there is no evidence that this run's failure is a new one.
-    if (signatures.size === 0) {
+    if (identities.size === 0) {
       return !preexisting.has(
         gateSignatureKey(check.name, UNIDENTIFIED_GATE_FAILURE),
       );
     }
-    for (const signature of signatures) {
-      if (!preexisting.has(gateSignatureKey(check.name, signature)))
-        return true;
+    for (const identity of identities) {
+      if (!preexisting.has(identity)) return true;
     }
     return false;
   });
+}
+
+/**
+ * The red a gate run charges its tree: the failures that are new against the
+ * base's pre-existing set, minus infra stops — a gate that could not start is
+ * no verdict on the tree.
+ */
+export function newRedChecks(
+  checks: readonly CheckResult[],
+  preexisting: ReadonlySet<string>,
+): CheckResult[] {
+  return newGateFailures(checks, preexisting).filter(
+    (check) => !isInfraCheck(check),
+  );
 }
 
 /**

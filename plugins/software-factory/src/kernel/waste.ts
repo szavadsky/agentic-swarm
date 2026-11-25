@@ -1,30 +1,23 @@
 import { countOutcomeRepairs } from "../harness/usage.js";
-import { formatCause } from "./cause.js";
+import { formatCause, stopDetail } from "./cause.js";
 import { isGlitchTurn } from "./glitch.js";
 import { recordDirName } from "./store.js";
 import { KERNEL_STEPS } from "./types.js";
 import type { Cause, CauseKind, StepRecord } from "./types.js";
-
-/**
- * Why a turn was wasted. Rebutted reviews are not a reason: a change review
- * asked to improve is the accepted tax, counted apart from waste.
- */
-export interface WasteCounts {
-  /** The implementer spent tokens and landed nothing. */
-  implementerFailure: number;
-  /** The outcome/verdict protocol failed: refusal, truncation, invalid outcome. */
-  structureProtocol: number;
-  /** A containment breach refused the turn's work. */
-  structureContainment: number;
-  /** Outcome-repair calls were needed before the turn delivered. */
-  structureOutcomeChannel: number;
-  /** Infra stopped the turn or a gate could not run. */
-  structureInfra: number;
-  /** A gate red rejected the turn, the same tree then passed. */
-  flakyTestRejection: number;
-}
-
-export type WasteReason = keyof WasteCounts;
+import { isQuotaStop, quotaStopsOf } from "./waste-quota.js";
+import { rebuttedReviewsOf } from "./waste-rebutted.js";
+import type {
+  WasteCounts,
+  WasteReason,
+  WasteEntry,
+  WasteAccounting,
+  WasteInput,
+} from "./waste-types.js";
+export type {
+  WasteAccounting,
+  WasteCounts,
+  WasteReason,
+} from "./waste-types.js";
 
 /** Stable reason order for every table, line and metric. */
 export const WASTE_REASONS: readonly WasteReason[] = [
@@ -56,55 +49,14 @@ export function emptyWasteCounts(): WasteCounts {
   };
 }
 
-/** One wasted turn; the record names the turn and the evidence names its proof. */
-export interface WasteEntry {
-  reason: WasteReason;
-  /** Goal-relative record directory of the wasted turn. */
-  record: string;
-  role: string;
-  alias: string;
-  slug?: string;
-  step: string;
-  round: number;
-  /** Goal-relative record directory that proves the classification. */
-  evidence: string;
-  detail: string;
-}
-
-/** A review turn whose verdict was `changes`: accepted tax, never waste. */
-export interface RebuttedReview {
-  record: string;
-  role: string;
-  alias: string;
-  slug?: string;
-  step: string;
-  round: number;
-  summary: string;
-}
-
-export interface WasteAccounting {
-  /** Wasted turns in this iteration: one entry per turn. */
-  turns: number;
-  counts: WasteCounts;
-  entries: WasteEntry[];
-  /** Review turns whose verdict was `changes`; counted apart from waste. */
-  rebuttedReviews: RebuttedReview[];
-}
-
 export function emptyWasteAccounting(): WasteAccounting {
   return {
     turns: 0,
     counts: emptyWasteCounts(),
     entries: [],
+    quotaStops: [],
     rebuttedReviews: [],
   };
-}
-
-export interface WasteInput {
-  /** The iteration's records, in any order. */
-  records: readonly StepRecord[];
-  /** The role a step's prompt names, for the per-role counts. */
-  roleOf(step: string): string;
 }
 
 interface Candidate {
@@ -136,18 +88,6 @@ function recordPath(rec: StepRecord): string {
 function summaryLine(text: string, max = 160): string {
   const line = text.replace(/\s+/g, " ").trim();
   return line.length <= max ? line : `${line.slice(0, max - 1)}…`;
-}
-
-function stopDetail(rec: StepRecord): string {
-  if (!rec.stop) return "no recorded stop";
-  if (rec.stop.kind === "infra") {
-    return `infra: ${rec.stop.cause}${rec.stop.details ? ` (${rec.stop.details})` : ""}`;
-  }
-  if (rec.stop.kind === "refusal") {
-    return `refusal${rec.stop.details ? `: ${rec.stop.details}` : ""}`;
-  }
-  if (rec.stop.kind === "truncated") return `truncated: ${rec.stop.cause}`;
-  return rec.stop.kind;
 }
 
 /** A task-flow turn: not a boundary role and not a review carrying a verdict. */
@@ -311,7 +251,7 @@ function parkCandidate(
   const rule = parkRule(park.cause);
   if (!rule) return undefined;
   const turn = turnForPark(ordered, park);
-  if (!turn) return undefined;
+  if (!turn || isQuotaStop(turn)) return undefined;
   if (rule.productiveOnly && !isTaskTurn(turn, roleOf(turn.step))) {
     return undefined;
   }
@@ -347,7 +287,7 @@ function ownCandidate(rec: StepRecord, role: string): Candidate | undefined {
       reason: "structureInfra",
       priority: PRIORITY.infra,
       evidence: rec,
-      detail: summaryLine(stopDetail(rec)),
+      detail: summaryLine(stopDetail(rec.stop)),
     };
   }
   if (
@@ -358,7 +298,7 @@ function ownCandidate(rec: StepRecord, role: string): Candidate | undefined {
       reason: "structureProtocol",
       priority: PRIORITY.protocol,
       evidence: rec,
-      detail: summaryLine(stopDetail(rec)),
+      detail: summaryLine(stopDetail(rec.stop)),
     };
   }
   if (
@@ -394,10 +334,9 @@ function collectCandidates(
   roleOf: (step: string) => string,
 ): Map<number, Candidate> {
   const candidates = new Map<number, Candidate>();
-  for (const rec of ordered) {
-    if (!isAgentTurn(rec) || rec.outcome?.verdict === "changes") continue;
-    addOwnCandidate(candidates, rec, ownCandidate(rec, roleOf(rec.step)));
-  }
+  const counted = ordered.filter(
+    (rec) => isAgentTurn(rec) && !isQuotaStop(rec),
+  );
   for (const park of ordered) {
     if (park.actor !== "script" || park.step !== "park" || !park.endedAt) {
       continue;
@@ -405,8 +344,9 @@ function collectCandidates(
     const found = parkCandidate(ordered, park, roleOf);
     if (found) addOwnCandidate(candidates, found.turn, found.candidate);
   }
-  for (const rec of ordered) {
-    if (!isAgentTurn(rec) || rec.outcome?.verdict === "changes") continue;
+  for (const rec of counted) {
+    if (rec.outcome?.verdict === "changes") continue;
+    addOwnCandidate(candidates, rec, ownCandidate(rec, roleOf(rec.step)));
     addOwnCandidate(
       candidates,
       rec,
@@ -448,35 +388,10 @@ function wasteEntries(
     });
 }
 
-function rebuttedOf(
-  ordered: readonly StepRecord[],
-  wasted: ReadonlySet<string>,
-  roleOf: (step: string) => string,
-): RebuttedReview[] {
-  return ordered
-    .filter(
-      (rec) =>
-        isAgentTurn(rec) &&
-        rec.outcome?.verdict === "changes" &&
-        !wasted.has(recordPath(rec)),
-    )
-    .map((review) => {
-      const role = roleOf(review.step);
-      return {
-        record: recordPath(review),
-        role,
-        alias: review.alias ?? role,
-        ...(review.slug ? { slug: review.slug } : {}),
-        step: review.step,
-        round: review.round,
-        summary: summaryLine(review.outcome?.summary ?? "no summary"),
-      };
-    });
-}
-
 /**
- * The iteration's wasted turns by reason, per role and alias input. A review
- * whose verdict is `changes` is a rebutted review unless a structure failure
+ * The iteration's wasted turns by reason, per role and alias input. A review's
+ * `changes` is a rebutted review only when the author answered it with replies
+ * alone and the next review accepted that answer, and no structure failure
  * (park, stop) also names it; rebutted reviews are counted apart, never as waste.
  */
 export function wasteAccounting(input: WasteInput): WasteAccounting {
@@ -493,6 +408,15 @@ export function wasteAccounting(input: WasteInput): WasteAccounting {
     turns: entries.length,
     counts,
     entries,
-    rebuttedReviews: rebuttedOf(ordered, wasted, input.roleOf),
+    quotaStops: quotaStopsOf(ordered, input.roleOf, recordPath, (rec) =>
+      summaryLine(stopDetail(rec.stop)),
+    ),
+    rebuttedReviews: rebuttedReviewsOf({
+      ordered,
+      wasted,
+      roleOf: input.roleOf,
+      recordOf: recordPath,
+      summaryOf: summaryLine,
+    }),
   };
 }

@@ -1,57 +1,52 @@
-# Sandbox assumption
+# Sandbox
 
-The factory is built to run inside a sandbox — bubblewrap, a container or a
-VM. Nothing in this package creates or enforces that sandbox. The assumption is
-documented so an operator can supply one and so a failure that comes from a
-shared host reads as an isolation bug, not a logic bug.
+The run supports one process-level sandbox, configured in the run layer. It
+wraps every child a launch starts, pre-flight's probes and base gates included:
+`git`, setup and gate commands, and the harness processes (omp RPC, acpx
+dispatcher and prompt children). The factory process and its in-process
+artifact writes stay outside; the wrapper's binary is checked before the
+sandbox is entered.
 
-Building the sandbox, and sandboxing individual harnesses, is out of scope.
+```yaml
+sandbox:
+  binary: /usr/bin/bwrap
+  args:
+    - --ro-bind
+    - /
+    - /
+    - --dev
+    - /dev
+    - --proc
+    - /proc
+    - --unshare-all
+    - --share-net
+    - --die-with-parent
+    - --bind
+    - /home/operator/.local/share/factory/worktrees
+    - /home/operator/.local/share/factory/worktrees
+```
 
-## Why the whole process needs one
+- `binary` is required; pre-flight refuses a missing or non-executable wrapper
+  with `sandbox.binary`. `args` are passed verbatim, then `--`, then the
+  child's original argv. A bwrap profile therefore ends with its writable
+  binds; a wrapper that takes its program after `--` works unchanged.
+- Bind the paths the run writes: the target checkout, `worktreeRoot`,
+  `sessions.dir` and `TMPDIR`. Git's commit signing writes a temporary file
+  under `TMPDIR`, and a read-only temp root fails the commit with
+  `could not create temporary file`; bind `TMPDIR` read-write.
+- Harness state directories are writable only when the profile binds them:
+  omp needs `~/.omp`, an acpx dispatcher needs `~/.acpx`, and a raw acpx agent
+  needs its own state directory (`~/.codex`, `~/.claude`, `~/.pi`, …). The
+  path sets the spike recorded in
+  `factory-task/full/sandbox-spike` `.factory/spikes/sandbox-spike.md` are the
+  starting point.
+- `--unshare-all --share-net` keeps model APIs reachable; this is write
+  containment, not a read boundary. `--die-with-parent` prevents a dead
+  factory from orphaning a model-spending child.
+- A run without a `sandbox` block behaves exactly as before; both
+  configurations are covered by the test suite.
+- Per-flow or per-agent wrappers are not built: the run has one wrapper, and a
+  harness that needs extra writable folders adds them to its profile.
 
-- Agent turns execute arbitrary commands in task worktrees.
-- `setup` and every gate run repository commands on task branches.
-- The run layer keeps sessions, worktrees, locks and temp files outside the
-  repo; two runs on one host share `os.tmpdir()` and the checkout's parent
-  unless the operator separates them.
-- A harness can reach any provider key or file visible to the factory process.
-
-## What must be inside
-
-- The target checkout and the run layer's `worktreeRoot` (default
-  `../.factory-worktrees/<repo-id>`), plus `sessions.dir` (default
-  `<worktreeRoot>/.sessions`). Pre-flight refuses a root inside the repo or a
-  root it cannot write.
-- A private temp directory: set `TMPDIR` for `run`. The kernel checks free
-  space there against `limits.minTmpFreeBytes` (default 2 GiB) and gives each
-  gate its own worktree-relative `env` directories.
-- Only the intended network: harness providers, and the OpenRouter model list
-  when prices are fetched live; gate and setup commands need whatever their
-  builds need.
-- No host credentials except names in the run config's `envAllowlist` and an
-  acpx harness entry's `options.env`. Every child starts from a fixed base
-  environment (`PATH`, `HOME`, temp dirs, bun/node caches, git optional locks,
-  locale), not the factory's environment.
-
-## Observed isolation failures
-
-- Package tests and a live run shared temp state: preflight-probe worktrees
-  collided with test-helper purges. The helper now sweeps only entries older
-  than an hour, but separate temp roots remain the real fix.
-- An operator commit during a live iteration changed the checkout under a
-  running turn and parked a task: containment treats outside changes as
-  interference. One checkout, one live run.
-
-## Operating check
-
-Before a launch:
-
-1. `pgrep -af "factory.ts run"` prints nothing for the same checkout.
-2. The checkout is clean; no edits or commits land while the run is live.
-3. `TMPDIR`, `worktreeRoot` and `sessions.dir` are private to this run and
-   outside the repo.
-4. Entries in `envAllowlist` are the credentials the harnesses actually need,
-   nothing more.
-
-See [../../README.md](../../README.md) for the config layers and
-[SKILL.md](SKILL.md) for the run walkthrough.
+See [config.md](config.md) for the run layer and [SKILL.md](SKILL.md) for the
+run walkthrough.

@@ -4,21 +4,13 @@
  */
 import fs from "node:fs";
 import yaml from "yaml";
-import { z } from "zod";
+import { issueText } from "./findings.js";
 import { bySeq } from "./flow-context-history.js";
-import { boundaryTarget, type TurnTarget } from "./flow-context-targets.js";
+import { boundaryTarget } from "./flow-context-targets.js";
+import { classSchema, type FrontClass, type TurnTarget } from "./flow-types.js";
 import type { KernelRuntime, StepRecord, TaskFile } from "./types.js";
 
 const CLASS_FILE = "class.yaml";
-
-export const classSchema = z
-  .object({
-    class: z.enum(["trivial", "task", "bigger"]),
-    slug: z.string().min(1).optional(),
-  })
-  .strict();
-
-export type FrontClass = z.infer<typeof classSchema>;
 
 /** A class.yaml the launch refuses; runFront turns it into an infra result. */
 export class FrontClassError extends Error {
@@ -42,9 +34,7 @@ export function readFrontClass(runtime: KernelRuntime): FrontClass | null {
   }
   const parsed = classSchema.safeParse(raw);
   if (!parsed.success) {
-    const findings = parsed.error.issues.map(
-      (issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`,
-    );
+    const findings = parsed.error.issues.map((issue) => issueText(issue));
     throw new FrontClassError(`class.yaml is invalid: ${findings.join("; ")}`);
   }
   if (parsed.data.class !== "bigger" && !parsed.data.slug) {
@@ -56,11 +46,8 @@ export function readFrontClass(runtime: KernelRuntime): FrontClass | null {
 }
 
 /** The front's configured boundary target. */
-export function frontTarget(
-  runtime: KernelRuntime,
-  iteration?: number,
-): TurnTarget {
-  return boundaryTarget(runtime, "front", iteration);
+export function frontTarget(runtime: KernelRuntime): TurnTarget {
+  return boundaryTarget(runtime, "front");
 }
 
 export function lastFrontRecord(records: StepRecord[]): StepRecord | undefined {

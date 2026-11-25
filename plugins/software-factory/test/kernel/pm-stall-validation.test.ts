@@ -7,6 +7,7 @@ import { contextPackRelPath } from "../../src/kernel/context-pack.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runStallPm } from "../../src/kernel/pm.js";
 import { scriptMeta } from "../../src/kernel/record.js";
+import { renderTaskFile } from "../../src/kernel/tasks.js";
 import { outcome } from "./e2e-helpers.js";
 import { cause, causeText } from "./helpers.js";
 import { withKernelRoleFallbacks } from "./fake-defaults.js";
@@ -18,7 +19,7 @@ import {
   whenTurn,
 } from "./s2-helpers.js";
 
-async function stallFixture(slugs: string[]) {
+async function stallFixture(slugs: string[], cancelled: string[] = []) {
   const { repo, goal } = setupFlowRepo({
     limits: {
       concurrency: { overall: 1, perSubscription: {}, perModel: {} },
@@ -41,6 +42,18 @@ async function stallFixture(slugs: string[]) {
     await runtime.store.appendRecord(
       scriptMeta(1, "park", { slug, round: 1 }),
       { ok: true, cause: cause(`blocked: ${slug} stuck`) },
+    );
+  }
+  for (const slug of cancelled) {
+    await runtime.store.writeTask(
+      task(slug, {
+        scope: [`${slug}.txt`],
+        body: `Do ${slug}.\nDone when: ${slug} works.`,
+      }),
+    );
+    await runtime.store.appendRecord(
+      scriptMeta(1, "cancel", { slug, round: 1 }),
+      { ok: true, cause: cause(`${slug} was superseded`) },
     );
   }
   const state = derive(
@@ -289,6 +302,182 @@ function registerStallPMValidationPart8(): void {
   }, 60_000);
 }
 
+/** The stall turn's continuation of the parked alpha, with its dependencies. */
+function stallTask(
+  slug: string,
+  deps: string[],
+): { slug: string; text: string } {
+  return {
+    slug,
+    text: renderTaskFile(
+      task(slug, {
+        scope: ["alpha.txt"],
+        base: "alpha",
+        deps,
+        source: "stall: 1",
+        body: "Retry with the records.\nDone when: alpha works.",
+      }),
+    ),
+  };
+}
+
+/**
+ * A scripted stall route that writes the given task files, so a rejected rung
+ * rolls them back like any other turn write.
+ */
+function scriptStallWrite(
+  runtime: Awaited<ReturnType<typeof stallFixture>>["runtime"],
+  harness: FakeHarness,
+  files: { slug: string; text: string }[],
+  stallRoutes: { slug: string; action: string; reason: string }[],
+): void {
+  for (let i = 0; i < 2; i++) {
+    harness.script(
+      (req, ctx) => {
+        for (const file of files) {
+          fs.writeFileSync(
+            path.join(runtime.store.tasksDir, `${file.slug}.md`),
+            file.text,
+            "utf8",
+          );
+        }
+        ctx.writeOutcome(outcome({ summary: "route the park", stallRoutes }));
+        return fakeTurnResult(req);
+      },
+      { when: whenTurn({ step: "pm" }) },
+    );
+  }
+}
+
+function registerStallPMValidationPart9(): void {
+  it("rejects a replacement chained behind the parked slug it continues", async () => {
+    const { repo, runtime, harness, state } = await stallFixture(["alpha"]);
+    try {
+      scriptStallWrite(
+        runtime,
+        harness,
+        [stallTask("alpha-2", ["alpha"])],
+        [
+          {
+            slug: "alpha",
+            action: "replace",
+            reason: "retry with the records",
+          },
+        ],
+      );
+      const result = await runStallPm(runtime, {
+        iteration: 1,
+        state,
+        slugs: ["alpha"],
+        cwd: runtime.paths.goalCheckout,
+      });
+      expect(result).toEqual({ continued: [], left: ["alpha"] });
+      expect(await runtime.store.listDir("tasks")).toEqual(["alpha.md"]);
+      const finding =
+        'task "alpha-2" depends on "alpha", which is parked with no landed continuation; a parked dependency is satisfied only by one that landed';
+      const records = await runtime.store.listRecords();
+      expect(
+        causeText(records.find((r) => r.step === "pm-validate")!.cause),
+      ).toContain(finding);
+      // The refused rung's finding is what the retry turn repairs.
+      expect(harness.calls.some((call) => call.prompt.includes(finding))).toBe(
+        true,
+      );
+      expect(
+        records.filter((r) => r.step === "stall-routes").every((r) => !r.ok),
+      ).toBe(true);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+function registerStallPMValidationPart10(): void {
+  it("rejects a dependency on a cancelled slug no continuation carries", async () => {
+    const { repo, runtime, harness, state } = await stallFixture(
+      ["alpha"],
+      ["gamma"],
+    );
+    try {
+      expect(state.tasks.gamma!.status).toBe("cancelled");
+      scriptStallWrite(
+        runtime,
+        harness,
+        [stallTask("alpha-2", ["gamma"])],
+        [
+          {
+            slug: "alpha",
+            action: "replace",
+            reason: "retry with the records",
+          },
+        ],
+      );
+      const result = await runStallPm(runtime, {
+        iteration: 1,
+        state,
+        slugs: ["alpha"],
+        cwd: runtime.paths.goalCheckout,
+      });
+      expect(result).toEqual({ continued: [], left: ["alpha"] });
+      expect(await runtime.store.listDir("tasks")).toEqual([
+        "alpha.md",
+        "gamma.md",
+      ]);
+      expect(
+        causeText(
+          (await runtime.store.listRecords()).find(
+            (r) => r.step === "pm-validate",
+          )!.cause,
+        ),
+      ).toContain(
+        'task "alpha-2" depends on "gamma", which is cancelled with no continuation that can land; the edge can never be satisfied',
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+function registerStallPMValidationPart11(): void {
+  it("rejects a split whose parts depend on each other", async () => {
+    const { repo, runtime, harness, state } = await stallFixture(["alpha"]);
+    try {
+      scriptStallWrite(
+        runtime,
+        harness,
+        [
+          stallTask("alpha-one", ["alpha-two"]),
+          stallTask("alpha-two", ["alpha-one"]),
+        ],
+        [
+          {
+            slug: "alpha",
+            action: "split",
+            reason: "two separable outcomes",
+          },
+        ],
+      );
+      const result = await runStallPm(runtime, {
+        iteration: 1,
+        state,
+        slugs: ["alpha"],
+        cwd: runtime.paths.goalCheckout,
+      });
+      expect(result).toEqual({ continued: [], left: ["alpha"] });
+      expect(await runtime.store.listDir("tasks")).toEqual(["alpha.md"]);
+      expect(
+        causeText(
+          (await runtime.store.listRecords()).find(
+            (r) => r.step === "pm-validate",
+          )!.cause,
+        ),
+      ).toContain("dependency cycle");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
 describe("stall PM validation", () => {
   registerStallPMValidationPart5();
 
@@ -297,4 +486,10 @@ describe("stall PM validation", () => {
   registerStallPMValidationPart7();
 
   registerStallPMValidationPart8();
+
+  registerStallPMValidationPart9();
+
+  registerStallPMValidationPart10();
+
+  registerStallPMValidationPart11();
 });

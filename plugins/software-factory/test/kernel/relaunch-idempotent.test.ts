@@ -1,11 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import {
-  FakeHarness,
-  fakeTurnIdentity,
-  fakeTurnResult,
-} from "../../src/harness/fake/index.js";
+import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { createDrainController } from "../../src/kernel/signals.js";
 import { createFolderStore } from "../../src/kernel/store.js";
@@ -15,11 +11,10 @@ import {
   ALPHA,
   BETA,
   PLAN,
-  isDigestSteerTurn,
   outcome,
-  queueDigestSteer,
   setupRepo,
   silenceWarn,
+  turnsBeforeFirstTask,
 } from "./resume-helpers.js";
 
 const GAMMA = `---
@@ -112,20 +107,6 @@ function expectOnlyRecordTreeChanges(
   expect(diff.changed.filter((rel) => rel.startsWith("records/"))).toEqual([]);
 }
 
-/** The agent turns a launch ran before its first task turn. */
-function turnsBeforeFirstTask(harness: FakeHarness): {
-  step: string | undefined;
-  digest: boolean;
-}[] {
-  const turns: { step: string | undefined; digest: boolean }[] = [];
-  for (const call of harness.calls) {
-    const identity = fakeTurnIdentity(call);
-    if (identity.slug !== undefined) break;
-    turns.push({ step: identity.step, digest: isDigestSteerTurn(call) });
-  }
-  return turns;
-}
-
 describe("relaunch is idempotent by script", () => {
   it("two relaunches resume the same iteration without rewriting task files or config", async () => {
     const { repo, goalDir, taskDir } = setupRepo();
@@ -204,11 +185,10 @@ async function twoRelaunchesResumeSameIterationPart1(
   expect(interrupted.tasks.beta!.status).toBe("ready");
   expect(interrupted.tasks.gamma!.status).toBe("ready");
 
-  // Relaunch 1: resume iteration 1. The digest reaches the PM, then beta
-  // lands; the SIGINT while beta's implement turn is in flight drains the
-  // pass before gamma starts, so the iteration stays interrupted.
+  // Relaunch 1: resume iteration 1 script-only. Beta lands; the SIGINT while
+  // beta's implement turn is in flight drains the pass before gamma starts, so
+  // the iteration stays interrupted.
   const second = new FakeHarness({ id: "fake" });
-  queueDigestSteer(second);
 
   return { interruptedTree, store, second };
 }
@@ -221,43 +201,13 @@ async function twoRelaunchesResumeSameIterationPart2(
   const { second } = scope;
   second.script(
     (req, ctx) => {
-      fs.appendFileSync(
-        path.join(goalDir, "plan.md"),
-        "\n## architect ruling after the resume\n",
-        "utf8",
-      );
-      const id = /- (digest-\S+) \(mailbox\/inbox\//.exec(req.prompt)?.[1];
-      ctx.writeOutcome(
-        outcome({
-          summary: "digest ruled: continue",
-          decision: "continue",
-          forward: id
-            ? [`steer ${id}: noted; the digest is in the record.`]
-            : [],
-        }),
-      );
+      secondDrain.handleSignal("SIGINT");
+      fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
+      ctx.writeOutcome(outcome({ summary: "beta added" }));
       return fakeTurnResult(req);
     },
-    { when: whenTurn({ step: "architect" }) },
+    { when: whenTurn({ slug: "beta", step: "implement" }) },
   );
-  second.script(
-    (req, ctx) => {
-      ctx.writeOutcome(outcome({ summary: "no task changes" }));
-      return fakeTurnResult(req);
-    },
-    {
-      when: (req) =>
-        whenTurn({ step: "pm" })(req) &&
-        req.prompt.includes("pending steers: `none`") &&
-        req.prompt.includes("stalled parks: `none`"),
-    },
-  );
-  second.script((req, ctx) => {
-    secondDrain.handleSignal("SIGINT");
-    fs.writeFileSync(path.join(req.cwd!, "beta.txt"), "beta\n", "utf8");
-    ctx.writeOutcome(outcome({ summary: "beta added" }));
-    return fakeTurnResult(req);
-  });
 }
 
 async function twoRelaunchesResumeSameIterationPart3(
@@ -267,10 +217,15 @@ async function twoRelaunchesResumeSameIterationPart3(
   scope: Awaited<ReturnType<typeof twoRelaunchesResumeSameIterationPart1>>,
 ) {
   const { second, store, interruptedTree } = scope;
-  second.script((req, ctx) => {
-    ctx.writeOutcome(outcome({ summary: "beta approved", verdict: "approve" }));
-    return fakeTurnResult(req);
-  });
+  second.script(
+    (req, ctx) => {
+      ctx.writeOutcome(
+        outcome({ summary: "beta approved", verdict: "approve" }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ slug: "beta", step: "review" }) },
+  );
   await expectDispatch(130, ["run", "--repo", repo.dir, "--goal", "demo"], {
     harnesses: { fake: second },
     signals: secondDrain,
@@ -288,24 +243,12 @@ async function twoRelaunchesResumeSameIterationPart3(
     "plan.md",
   ]);
 
-  // No front turn precedes dispatch on a resume: the digest scout, the PM
-  // turn that routes the digest steer, and the boundary its architect route
-  // summons are the whole prefix.
-  const firstRelaunchTurns = turnsBeforeFirstTask(second);
-  expect(firstRelaunchTurns.map((turn) => turn.step)).toEqual([
-    "digest",
-    "pm",
-    "architect",
-    "planreview",
-    "pm",
-  ]);
-  expect(firstRelaunchTurns[0]).toEqual({ step: "digest", digest: false });
-  expect(firstRelaunchTurns[1]).toEqual({ step: "pm", digest: true });
+  // A clean resume is script-only: no agent turn precedes beta's task turn.
+  expect(turnsBeforeFirstTask(second)).toEqual([]);
 
   // Relaunch 2: resume the same iteration again; gamma lands and the
   // iteration closes.
   const third = new FakeHarness({ id: "fake" });
-  queueDigestSteer(third);
 
   return { ...scope, third };
 }
@@ -317,46 +260,59 @@ async function twoRelaunchesResumeSameIterationPart4(
   const { third } = scope;
   third.script(
     (req, ctx) => {
-      fs.appendFileSync(
-        path.join(goalDir, "plan.md"),
-        "\n## second architect ruling after the resume\n",
-        "utf8",
+      fs.writeFileSync(path.join(req.cwd!, "gamma.txt"), "gamma\n", "utf8");
+      ctx.writeOutcome(outcome({ summary: "gamma added" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ slug: "gamma", step: "implement" }) },
+  );
+  third.script(
+    (req, ctx) => {
+      ctx.writeOutcome(
+        outcome({ summary: "gamma approved", verdict: "approve" }),
       );
-      const id = /- (digest-\S+) \(mailbox\/inbox\//.exec(req.prompt)?.[1];
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ slug: "gamma", step: "review" }) },
+  );
+  third.script(
+    (req, ctx) => {
       ctx.writeOutcome(
         outcome({
-          summary: "digest ruled again",
-          decision: "continue",
-          forward: id ? [`steer ${id}: noted again.`] : [],
+          summary: "needs the architect",
+          planCheck: { verdict: "architect", evidence: [], followUps: [] },
         }),
       );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "plancheck" }) },
+  );
+  third.script(
+    (req, ctx) => {
+      fs.appendFileSync(
+        path.join(goalDir, "plan.md"),
+        "\n## architect ruling after the resume\n\n## second architect ruling after the resume\n",
+        "utf8",
+      );
+      ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
       return fakeTurnResult(req);
     },
     { when: whenTurn({ step: "architect" }) },
   );
   third.script(
     (req, ctx) => {
-      ctx.writeOutcome(outcome({ summary: "no task changes" }));
+      ctx.writeOutcome(outcome({ summary: "no plan changes" }));
       return fakeTurnResult(req);
     },
-    {
-      when: (req) =>
-        whenTurn({ step: "pm" })(req) &&
-        req.prompt.includes("pending steers: `none`") &&
-        req.prompt.includes("stalled parks: `none`"),
-    },
+    { when: whenTurn({ step: "planreview" }) },
   );
-  third.script((req, ctx) => {
-    fs.writeFileSync(path.join(req.cwd!, "gamma.txt"), "gamma\n", "utf8");
-    ctx.writeOutcome(outcome({ summary: "gamma added" }));
-    return fakeTurnResult(req);
-  });
-  third.script((req, ctx) => {
-    ctx.writeOutcome(
-      outcome({ summary: "gamma approved", verdict: "approve" }),
-    );
-    return fakeTurnResult(req);
-  });
+  third.script(
+    (req, ctx) => {
+      ctx.writeOutcome(outcome({ summary: "nothing to file" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "pm" }) },
+  );
 }
 
 async function twoRelaunchesResumeSameIterationPart5(
@@ -364,29 +320,14 @@ async function twoRelaunchesResumeSameIterationPart5(
   scope: Awaited<ReturnType<typeof twoRelaunchesResumeSameIterationPart3>>,
 ) {
   const { third, store } = scope;
-  third.script((req, ctx) => {
-    ctx.writeOutcome(outcome({ summary: "goal met", decision: "done" }));
-    return fakeTurnResult(req);
-  });
   await expectDispatch(
     0,
     ["run", "--repo", repo.dir, "--goal", "demo", "--iterations", "3"],
     { harnesses: { fake: third } },
   );
 
-  const secondRelaunchTurns = turnsBeforeFirstTask(third);
-  expect(secondRelaunchTurns.map((turn) => turn.step)).toEqual([
-    "digest",
-    "pm",
-    "architect",
-    "planreview",
-    "pm",
-  ]);
-  expect(secondRelaunchTurns[0]).toEqual({
-    step: "digest",
-    digest: false,
-  });
-  expect(secondRelaunchTurns[1]).toEqual({ step: "pm", digest: true });
+  // Script-only again: gamma's task turn is the first agent turn.
+  expect(turnsBeforeFirstTask(third)).toEqual([]);
 
   const records = await store.listRecords();
   const state = derive(await store.listTasks(), records);
@@ -403,12 +344,18 @@ async function twoRelaunchesResumeSameIterationPart5(
     "resume attempt 2 of iteration 1",
   ]);
   expect(records.some((r) => r.step === "resume-refused")).toBe(false);
-  // One architect from the first launch and one boundary ruling per resume.
+  // One architect from the first launch, then the resuming pass's plan-check
+  // gave its budget back: the closing boundary rules once in iteration 2.
   expect(
     records.filter(
       (r) => r.iteration === 1 && r.actor === "agent" && r.step === "architect",
     ),
-  ).toHaveLength(3);
+  ).toHaveLength(1);
+  expect(
+    records.filter(
+      (r) => r.iteration === 2 && r.actor === "agent" && r.step === "architect",
+    ),
+  ).toHaveLength(1);
 
   return { ...scope, records };
 }
