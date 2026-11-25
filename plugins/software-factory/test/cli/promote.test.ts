@@ -6,10 +6,10 @@ import yaml from "yaml";
 import { promotePin, writePinGate } from "../../src/cli/commands/promote.js";
 import {
   PIN_GATE_FILE,
-  type PinGate,
   pinGateSchema,
   pinRefusal,
 } from "../../src/kernel/preflight/pin.js";
+import type { PinGate } from "../../src/kernel/preflight/types.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 
 const OK_TEST =

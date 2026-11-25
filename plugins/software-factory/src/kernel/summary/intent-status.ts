@@ -3,19 +3,10 @@
 import { z } from "zod";
 import type { ArtifactStore } from "../types.js";
 import { type IntentStatusEntry, intentStatusEntrySchema } from "../types.js";
+import type { IntentStatusArtifact } from "./types.js";
 
 /** File name under the iteration directory. */
 export const INTENT_STATUS_FILE = "intent-status.json";
-
-/**
- * The artifact: the architect's per-section view from one iteration. An empty
- * `sections` array is still an artifact — the architect reported no sections —
- * and the dashboard renders it as unknown rather than inventing a task count.
- */
-export interface IntentStatusArtifact {
-  iteration: number;
-  sections: IntentStatusEntry[];
-}
 
 export const intentStatusArtifactSchema = z.object({
   iteration: z.number().int().positive(),

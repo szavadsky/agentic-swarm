@@ -3,7 +3,7 @@
 import type { Steer } from "../mailbox.js";
 import { goalPlan, type PlanFile, resolvePlan } from "../plan-file.js";
 import type { KernelRuntime } from "../types.js";
-import type { PmScope } from "./types.js";
+import type { PmScope, SteerScopeGroup } from "./types.js";
 
 /** The goal-level PM, the scope a depth-1 goal has and every saga's top turn. */
 export const GOAL_PM_SCOPE: PmScope = { kind: "goal" };
@@ -91,11 +91,6 @@ export function steerEpicOf(
     if (epic !== undefined) out.set(steer.id, epic);
   }
   return out;
-}
-
-export interface SteerScopeGroup {
-  scope: PmScope;
-  steers: Steer[];
 }
 
 /**

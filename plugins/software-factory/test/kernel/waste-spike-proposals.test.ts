@@ -14,9 +14,9 @@ import { derive } from "../../src/kernel/derive.js";
 import { writeMetrics } from "../../src/kernel/metrics.js";
 import {
   readWasteMetrics,
-  type WasteSpikeMetrics,
   wasteSpikeProposals,
 } from "../../src/kernel/metrics/recurring.js";
+import type { WasteSpikeMetrics } from "../../src/kernel/metrics/types.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type { StepRecord } from "../../src/kernel/types.js";
 import { emptyWasteCounts } from "../../src/kernel/waste.js";

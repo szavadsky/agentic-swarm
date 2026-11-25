@@ -7,7 +7,7 @@
  */
 
 import type { EpicConsult } from "./boundary-consult.js";
-import type { PackBrief } from "./context-pack/sections.js";
+import type { PackBrief } from "./context-pack/types.js";
 import type { IntentChange } from "./context-pack.js";
 import type { Steer } from "./mailbox.js";
 import type { PlanFile } from "./plan-file.js";

@@ -13,7 +13,7 @@ import type {
   StatusWork,
   SteerState,
 } from "./status.js";
-import type { IntentStatusArtifact } from "./summary/intent-status.js";
+import type { IntentStatusArtifact } from "./summary/types.js";
 import type { ArtifactStore, IntentStatusEntry } from "./types.js";
 
 /** Goal-relative path of the static dashboard written beside status.json. */

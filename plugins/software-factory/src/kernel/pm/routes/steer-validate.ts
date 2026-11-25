@@ -17,12 +17,8 @@ import {
   selfHoldProblem,
   stallHoldProblem,
 } from "../holds.js";
-import {
-  type PlanSnapshot,
-  reconcileTurn,
-  scopeWriteFindings,
-} from "../reconcile.js";
-import type { PmScope, SteerRouteEntry } from "../types.js";
+import { reconcileTurn, scopeWriteFindings } from "../reconcile.js";
+import type { PlanSnapshot, PmScope, SteerRouteEntry } from "../types.js";
 import { scopeEpic, steerEpicOf } from "../scope.js";
 import { steerWriteFindings } from "./steer-writes.js";
 

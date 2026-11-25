@@ -21,20 +21,7 @@ import type {
   TaskTypeDefinition,
 } from "../types.js";
 import { scopeEpic } from "./scope.js";
-import type { PmScope } from "./types.js";
-
-/** One plan and its bytes before a turn; an absent plan is restored by deleting it. */
-export interface PlanSnapshot {
-  plan: PlanFile;
-  text: string;
-  exists: boolean;
-}
-
-/** The plans and every task file as they stood before a turn. */
-export interface TurnSnapshot {
-  plans: PlanSnapshot[];
-  tasks: Map<string, string>;
-}
+import type { PlanSnapshot, PmScope, TurnSnapshot } from "./types.js";
 
 async function snapshotTasks(
   runtime: KernelRuntime,
@@ -411,7 +398,7 @@ export async function readTasks(runtime: KernelRuntime): Promise<{
 }
 
 /** What a PM turn left behind: the reconcile findings, its texts and tasks. */
-export interface ReconciledTurn {
+interface ReconciledTurn {
   findings: string[];
   texts: Map<string, string>;
   tasks: TaskFile[];

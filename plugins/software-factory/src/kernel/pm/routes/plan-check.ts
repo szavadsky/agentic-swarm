@@ -16,7 +16,6 @@ import type {
 import {
   failureReasons,
   NO_TURN_INPUTS,
-  type PmTurnSetup,
   recordPmRejection,
   rungSteps,
   runPmTurn,
@@ -25,7 +24,6 @@ import {
 import { planCheckLadderNote, planCheckPmBrief } from "../prompts.js";
 import {
   introducedFindings,
-  type PlanSnapshot,
   readTasks,
   reconcileTurn,
   scopeWriteFindings,
@@ -33,7 +31,12 @@ import {
 } from "../reconcile.js";
 import { scopeEpic } from "../scope.js";
 import { PLAN_CHECK_ROUTES_STEP } from "../steps.js";
-import type { PmScope } from "../types.js";
+import type {
+  PlanCheckPmResult,
+  PlanSnapshot,
+  PmScope,
+  PmTurnSetup,
+} from "../types.js";
 import {
   amendsUsed,
   cancelRoutes,
@@ -45,25 +48,6 @@ import {
   depFixFindings,
   depRewriteFindings,
 } from "./plan-check-deps.js";
-
-/**
- * Which follow-up slugs a plan-check turn resumed; a cancel spends its slug
- * and a leave keeps it for the architect. `architect` is the exit for a clean
- * turn the graph still contradicts: its routes are committed, and the findings
- * no rung introduced travel to the architect like the other PM ladders.
- */
-export type PlanCheckPmResult =
-  | { status: "routed"; continued: string[]; left: string[] }
-  | {
-      status: "architect";
-      continued: string[];
-      left: string[];
-      findings: string[];
-    }
-  /** A rung ended on an infra stop; the writes are rolled back for the boundary. */
-  | { status: "infra"; continued: []; left: string[] }
-  /** Every tier failed both of its turns; the boundary reads the attempts. */
-  | { status: "exhausted"; continued: []; left: string[] };
 
 async function validatePlanCheckTurn(
   runtime: KernelRuntime,

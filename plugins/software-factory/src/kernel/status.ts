@@ -36,10 +36,8 @@ import {
   type StatusSummary,
   type StatusTaskCounts,
 } from "./status-summary.js";
-import {
-  type IntentStatusArtifact,
-  readLatestIntentStatus,
-} from "./summary/intent-status.js";
+import { readLatestIntentStatus } from "./summary/intent-status.js";
+import type { IntentStatusArtifact } from "./summary/types.js";
 import type {
   ArtifactStore,
   FlowDefinition,

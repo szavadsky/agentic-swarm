@@ -1,11 +1,12 @@
 /** The context pack's input and the packs it renders. */
 
+import type { z } from "zod";
 import type { BaseGateState } from "../baseline.js";
 import type { OpenDebt } from "../derive.js";
 import type { PackGate } from "../infra.js";
 import type { Steer } from "../mailbox.js";
-import type { WasteSpikeProposal } from "../metrics/recurring.js";
-import type { PackBrief } from "./sections.js";
+import type { WasteSpikeProposal } from "../metrics/types.js";
+import type { PACK_SECTIONS, packBriefSchema } from "./sections.js";
 import type {
   PlanCheckEvidence,
   PlanReviewFinding,
@@ -13,6 +14,12 @@ import type {
   StepRecord,
   TaskFile,
 } from "../types.js";
+
+/** One index section the preparer may brief; every other section renders whole. */
+export type PackSection = (typeof PACK_SECTIONS)[number];
+
+/** One section the preparer judged better as a brief; the script places it. */
+export type PackBrief = z.infer<typeof packBriefSchema>;
 
 export interface ForwardedConcern {
   /** Stable identity: the hold file the PM's mark writes and the pack line share it. */

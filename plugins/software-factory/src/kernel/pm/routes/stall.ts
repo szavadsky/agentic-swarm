@@ -15,19 +15,13 @@ import type {
 } from "../../types.js";
 import {
   failureReasons,
-  type PmTurnSetup,
   recordPmRejection,
   runPmTurn,
   rungSteps,
   setupPmTurn,
 } from "../ladder.js";
 import { openConcernBrief, stallBrief, stallLadderNote } from "../prompts.js";
-import {
-  introducedFindings,
-  type PlanSnapshot,
-  readTasks,
-  reconcileTurn,
-} from "../reconcile.js";
+import { introducedFindings, readTasks, reconcileTurn } from "../reconcile.js";
 import {
   concernHoldProblem,
   concernsToJudge,
@@ -35,6 +29,7 @@ import {
   markPassedConcerns,
 } from "../holds.js";
 import { STALL_ROUTES_STEP } from "../steps.js";
+import type { PlanSnapshot, PmTurnSetup } from "../types.js";
 import { amendsUsed, cancelRoutes, decisionFindings } from "../validation.js";
 
 /** The open concerns no wave-end turn has marked yet, read once before the ladder. */
@@ -52,7 +47,7 @@ async function unmarkedConcerns(
  * Which parked slugs a stall turn resumed (amend, replace, split); a leave
  * stays parked with its reason and a cancel spends the slug.
  */
-export interface StallResult {
+interface StallResult {
   continued: string[];
   left: string[];
 }

@@ -25,6 +25,16 @@ export interface StewardDead {
   details?: string;
 }
 
+/**
+ * A park the wave-end steward may attempt, in slug order, before its gate
+ * evidence is read. `conflict` owns a branch the integration head must merge
+ * into; `gates` waits on a red the head has to establish.
+ */
+export interface StewardPark {
+  slug: string;
+  kind: "conflict" | "gates";
+}
+
 export interface StewardResult {
   skipped: boolean;
   attempted: string[];

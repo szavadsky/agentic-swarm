@@ -10,11 +10,11 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { runGoal } from "../../src/kernel/launch.js";
 import {
   PIN_GATE_FILE,
-  type PinGate,
   pinBuildOf,
   pinGateSchema,
   pinRefusal,
 } from "../../src/kernel/preflight/pin.js";
+import type { PinGate } from "../../src/kernel/preflight/types.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type { StepRecord } from "../../src/kernel/types.js";
 import { testPriceSource } from "../helpers/price-source.js";

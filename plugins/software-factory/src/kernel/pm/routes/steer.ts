@@ -18,8 +18,6 @@ import { ensureSteerHold } from "../holds.js";
 import {
   failureReasons,
   NO_TURN_INPUTS,
-  type PmRungStep,
-  type PmTurnSetup,
   recordPmRejection,
   rungSteps,
   runPmTurn,
@@ -30,7 +28,6 @@ import {
   introducedFindings,
   readTasks,
   restoreTurn,
-  type TurnSnapshot,
   unfixedBaseline,
 } from "../reconcile.js";
 import {
@@ -39,24 +36,15 @@ import {
   scopeEpic,
   steerScopeOf,
 } from "../scope.js";
-import type { PmInfraStop, PmScope } from "../types.js";
+import type {
+  PmRungStep,
+  PmScope,
+  PmTurnSetup,
+  SteerPmRun,
+  TurnSnapshot,
+} from "../types.js";
 import { SteerClaim } from "./steer-claim.js";
 import { validateSteerTurn } from "./steer-validate.js";
-
-/**
- * A steer turn's result. `architect` is the outlet for anything the PM cannot
- * decide: a claimed steer routed there, a graph finding no rung can derive
- * away, or a ladder that exhausted with no route at all. The boundary is the
- * only consumer of those, so the caller runs it before dispatch.
- */
-export type SteerPmRun =
-  | { status: "routed"; routes: NonNullable<Outcome["steerRoutes"]> }
-  | {
-      status: "architect";
-      routes: NonNullable<Outcome["steerRoutes"]>;
-      findings: string[];
-    }
-  | { status: "infra"; stop: PmInfraStop };
 
 /** One steer PM run: the claimed batch, the snapshot's state and its cwd. */
 interface SteerPmOpts {

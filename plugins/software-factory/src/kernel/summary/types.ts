@@ -6,11 +6,22 @@ import type {
   Cause,
   CauseKind,
   GoalDecision,
+  IntentStatusEntry,
   ReportDebt,
   State,
   StepRecord,
 } from "../types.js";
 import type { summaryNamedRows } from "./facts.js";
+
+/**
+ * The architect's per-section view from one iteration. An empty `sections`
+ * array is still an artifact — the architect reported no sections — and the
+ * dashboard renders it as unknown rather than inventing a task count.
+ */
+export interface IntentStatusArtifact {
+  iteration: number;
+  sections: IntentStatusEntry[];
+}
 
 export type SummaryStatus =
   | "goal-met"

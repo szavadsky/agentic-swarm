@@ -2,39 +2,15 @@
 
 import yaml from "yaml";
 import type { ArtifactStore } from "../types.js";
-import {
-  WASTE_REASON_LABEL,
-  WASTE_REASONS,
-  type WasteCounts,
-  type WasteReason,
-} from "../waste.js";
+import { WASTE_REASON_LABEL, WASTE_REASONS } from "../waste.js";
+import type {
+  IterationWaste,
+  WasteSpikeMetrics,
+  WasteSpikeProposal,
+} from "./types.js";
 
 /** Wasted turns of one cause across iterations at which the pack proposes a spike. */
 export const DEFAULT_WASTE_SPIKE_THRESHOLD = 2;
-
-/** One iteration's waste facts; an older metrics file may omit them. */
-interface IterationWaste {
-  n: number;
-  waste?: { counts?: Partial<WasteCounts> };
-}
-
-/** The metrics facts proposals read: every iteration's waste counts. */
-export interface WasteSpikeMetrics {
-  iterations: readonly IterationWaste[];
-}
-
-/** A waste cause at or above the threshold: the pack proposes a spike, never a task. */
-export interface WasteSpikeProposal {
-  reason: WasteReason;
-  /** The cause's label, the one name every table and line uses. */
-  label: string;
-  /** Wasted turns of this cause, summed over the goal's iterations. */
-  count: number;
-  /** Iterations carrying at least one such turn. */
-  iterations: number[];
-  /** The configured count at which a cause becomes a proposal. */
-  threshold: number;
-}
 
 /** A metrics entry the proposals can read: numeric `n`, numeric waste counts. */
 function isIterationWaste(value: unknown): value is IterationWaste {

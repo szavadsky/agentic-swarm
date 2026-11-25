@@ -5,7 +5,31 @@ import type { PriceTable } from "../pricing.js";
 import type { QaCatches } from "../qa.js";
 import type { SummaryStatus } from "../summary.js";
 import type { State, StepRecord } from "../types.js";
-import type { WasteAccounting, WasteCounts } from "../waste.js";
+import type { WasteAccounting, WasteCounts, WasteReason } from "../waste.js";
+
+/** One iteration's waste facts a proposal reads; an older metrics file may omit them. */
+export interface IterationWaste {
+  n: number;
+  waste?: { counts?: Partial<WasteCounts> };
+}
+
+/** The metrics facts proposals read: every iteration's waste counts. */
+export interface WasteSpikeMetrics {
+  iterations: readonly IterationWaste[];
+}
+
+/** A waste cause at or above the threshold: the pack proposes a spike, never a task. */
+export interface WasteSpikeProposal {
+  reason: WasteReason;
+  /** The cause's label, the one name every table and line uses. */
+  label: string;
+  /** Wasted turns of this cause, summed over the goal's iterations. */
+  count: number;
+  /** Iterations carrying at least one such turn. */
+  iterations: number[];
+  /** The configured count at which a cause becomes a proposal. */
+  threshold: number;
+}
 
 /** Incident launches by kind; `unknown` is an old record without a stored kind. */
 export interface LaunchCounts {

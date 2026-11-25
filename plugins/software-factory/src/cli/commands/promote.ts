@@ -17,7 +17,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { PinGate } from "../../kernel/preflight/pin.js";
+import type { PinGate } from "../../kernel/preflight/types.js";
 
 /** Tree paths the suite and the schema gate read: the rev's copy, never the operator's. */
 export const PROMOTE_TREE_PATHS: readonly string[] = [

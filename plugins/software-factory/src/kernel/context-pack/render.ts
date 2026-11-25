@@ -2,8 +2,7 @@
 
 import { makeCause } from "../cause.js";
 import { reportView } from "../report-view.js";
-import type { ContextPackInput } from "./types.js";
-import type { PackSection } from "./sections.js";
+import type { ContextPackInput, PackSection } from "./types.js";
 import type { ReportView, TaskFile } from "../types.js";
 import {
   appendAgedReady,

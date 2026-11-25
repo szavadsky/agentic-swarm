@@ -6,10 +6,10 @@ import path from "node:path";
 import yaml from "yaml";
 import {
   PIN_GATE_FILE,
-  type PinGate,
   pinGateSchema,
   pinRefusal,
 } from "../../src/kernel/preflight/pin.js";
+import type { PinGate } from "../../src/kernel/preflight/types.js";
 import { treeFile } from "../helpers/run-configs.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
 

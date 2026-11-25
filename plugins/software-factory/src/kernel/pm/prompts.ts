@@ -23,9 +23,9 @@ import type {
   TaskStatus,
 } from "../types.js";
 import { integrationHead, taskBranchName } from "../worktree.js";
-import { isFrozenStatus, type PlanSnapshot } from "./reconcile.js";
+import { isFrozenStatus } from "./reconcile.js";
 import { scopeEpic } from "./scope.js";
-import type { PmMandate, PmScope } from "./types.js";
+import type { PlanSnapshot, PmMandate, PmScope } from "./types.js";
 import { amendsUsed } from "./validation.js";
 
 /** A cancelled slug is spent: reconcile restores it and the PM must not reuse it. */
@@ -44,7 +44,7 @@ export function existingTasks(state: State, tasks: TaskFile[]): string {
 }
 
 /** The prompt inputs every PM turn renders, the derive ladder and config steps alike. */
-export interface PmPromptInput {
+interface PmPromptInput {
   planList: string;
   planDiff?: string;
   tasks: TaskFile[];

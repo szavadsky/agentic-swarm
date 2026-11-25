@@ -5,10 +5,13 @@ import { OPEN_TASK_STATUSES } from "../derive.js";
 import type { OpenDebt } from "../derive.js";
 import { renderInfraSection } from "../infra.js";
 import { spikeReportPath } from "../spike-report.js";
-import type { WasteSpikeProposal } from "../metrics/recurring.js";
+import type { WasteSpikeProposal } from "../metrics/types.js";
 import type { ReportTask, State } from "../types.js";
-import type { ContextPackInput, ForwardedConcern } from "./types.js";
-import type { PackSection } from "./sections.js";
+import type {
+  ContextPackInput,
+  ForwardedConcern,
+  PackSection,
+} from "./types.js";
 import { formatPlanFinding, numberedPlanFindings } from "./plan-findings.js";
 
 /** The headings a full section and its brief share, so only the content differs. */

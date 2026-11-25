@@ -292,6 +292,25 @@ describe("interface lint", () => {
   });
 });
 
+describe("interface lint kernel scope", () => {
+  it("holds every kernel subfolder to the rule with no exclusion", () => {
+    const kernelDirs = fs
+      .readdirSync(path.join(PACKAGE, "src", "kernel"), {
+        withFileTypes: true,
+      })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => `kernel/${entry.name}`);
+
+    expect(kernelDirs.length).toBeGreaterThan(0);
+    const scope: readonly string[] = SCOPE;
+    for (const dir of kernelDirs) expect(scope).toContain(dir);
+  });
+
+  it("finds no exported type in the real tree's scoped folders", () => {
+    expect(interfaceLintProblems(PACKAGE)).toEqual([]);
+  }, 30_000);
+});
+
 /** Exit-0 biome and knip stand-ins and a sound manifest, so the gate reaches the interface check. */
 function stubLintGate(): void {
   writeFixture(

@@ -35,7 +35,7 @@ export function baseContinuations(
  * The two records a park's retirement compares: its own last park and each
  * slug's last verified merge.
  */
-export interface LandingFacts {
+interface LandingFacts {
   parks: ReadonlyMap<string, StepRecord>;
   merges: ReadonlyMap<string, StepRecord>;
 }

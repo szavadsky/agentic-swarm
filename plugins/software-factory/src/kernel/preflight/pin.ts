@@ -11,6 +11,7 @@ import path from "node:path";
 import yaml from "yaml";
 import { z } from "zod";
 import { issueText } from "../findings.js";
+import type { PinGate } from "./types.js";
 
 /** The record promote writes at the pin build's root. */
 export const PIN_GATE_FILE = "gate.yaml";
@@ -37,8 +38,6 @@ export const pinGateSchema = z
     at: z.iso.datetime(),
   })
   .strict();
-
-export type PinGate = z.infer<typeof pinGateSchema>;
 
 /** Every verdict key, in the order a red gate names them. */
 type PinGateVerdictKey = Exclude<keyof PinGate, "rev" | "at">;

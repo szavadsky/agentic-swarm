@@ -29,22 +29,23 @@ import {
   findingKey,
   graphFindings,
   introducedFindings,
-  type PlanSnapshot,
   readTasks,
   restoreTurn,
   scopeWriteFindings,
   snapshotPlans,
   snapshotTurn,
-  type TurnSnapshot,
   unfixedBaseline,
 } from "./reconcile.js";
 import { pmScopeKey, scopeEpic, scopePlanFile } from "./scope.js";
-import type { PmMandate, PmRun, PmRung, PmScope } from "./types.js";
-
-export interface PmRungStep {
-  alias: string;
-  mandate: PmMandate;
-}
+import type {
+  PmMandate,
+  PmRungStep,
+  PmRun,
+  PmRung,
+  PmScope,
+  PmTurnSetup,
+  TurnSnapshot,
+} from "./types.js";
 
 /**
  * The ladder is the alias chain from the PM alias through `escalateTo`, two
@@ -93,24 +94,6 @@ export function failureReasons(
   reasons.push(...findings);
   if (!outcome) reasons.push(`no outcome (${formatStop(record.stop)})`);
   return reasons;
-}
-
-export interface PmTurnSetup {
-  snapshot: TurnSnapshot;
-  /** Every plan on disk: the ownership snapshot a turn is rolled back against. */
-  plansBefore: PlanSnapshot[];
-  /** The plan(s) this PM owns: the goal plan, or one epic's plan. */
-  scopePlans: PlanSnapshot[];
-  scope: PmScope;
-  planList: string;
-  planDiff: string;
-  /** The current derive iteration; its own baseline is the previous one on a re-derive. */
-  iteration: number;
-  /** That scope's compacted session, resumed when the target can. */
-  priorSession?: SessionRef;
-  taskSnapshot: Map<string, string>;
-  baseline: string[];
-  baselineKeys: Set<string>;
 }
 
 /**

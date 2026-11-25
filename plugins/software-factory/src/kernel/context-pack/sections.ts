@@ -15,8 +15,6 @@ export const PACK_SECTIONS = [
   "codeMap",
 ] as const;
 
-export type PackSection = (typeof PACK_SECTIONS)[number];
-
 /** One section the preparer judged better as a brief; the script places it. */
 export const packBriefSchema = z.object({
   section: z.enum(PACK_SECTIONS),
@@ -27,5 +25,3 @@ export const packBriefSchema = z.object({
       "one line: what the section says and why it does not change this iteration's plan",
     ),
 });
-
-export type PackBrief = z.infer<typeof packBriefSchema>;

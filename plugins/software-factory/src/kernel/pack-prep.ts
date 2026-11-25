@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { runAgentTurn } from "./agent.js";
-import type { PackBrief } from "./context-pack/sections.js";
+import type { PackBrief } from "./context-pack/types.js";
 import { packBriefSchema } from "./context-pack/sections.js";
 import { boundaryTarget } from "./flow-context.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";

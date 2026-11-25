@@ -1,9 +1,11 @@
 /** The preflight input and result. */
 
+import type { z } from "zod";
 import type { Harness } from "../../harness/types.js";
 import type { BaselineResult } from "../baseline.js";
 import type { Finding } from "../findings.js";
 import type { ModelCatalog } from "../preflight-aliases.js";
+import type { pinGateSchema } from "./pin.js";
 import type {
   ArtifactStore,
   ConfigBundle,
@@ -11,6 +13,9 @@ import type {
   GoalPaths,
   GoalRoots,
 } from "../types.js";
+
+/** One pin's gate result, read back from its `gate.yaml`. */
+export type PinGate = z.infer<typeof pinGateSchema>;
 
 export interface PreflightInput {
   configs: ConfigBundle;

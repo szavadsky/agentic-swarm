@@ -21,7 +21,7 @@ import type { PmScope } from "./types.js";
 const PLAN_BULLET_FILE = "plan-bullets.json";
 
 /** One plan's current text. Only plans a derive turn reads are baselined. */
-export interface PlanText {
+interface PlanText {
   /** Goal-relative path: `plan.md` or `epics/<epic>.md`. */
   rel: string;
   text: string;
@@ -38,7 +38,7 @@ interface BulletBaseline {
 }
 
 /** A task file that exists; a terminal `status` makes its bullet history. */
-export interface OpenTask {
+interface OpenTask {
   slug: string;
   status?: TaskStatus;
 }
