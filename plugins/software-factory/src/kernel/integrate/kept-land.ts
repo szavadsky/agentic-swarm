@@ -110,18 +110,6 @@ async function qualifiesForKeptLand(
   return true;
 }
 
-/**
- * R10: a kept green branch lands without a new task and without an agent
- * turn. Every parked task whose kept branch still carries its approve (or
- * green checks under a review-less flow) gets one end-of-wave merge attempt;
- * a conflict or a repeated red leaves it parked. Deterministic reds are
- * skipped before the attempt. A landing, a failed attempt and a
- * deterministic-red skip each write a `kept-land` record: the landing has no
- * task flow records of its own, and the evidence needs one. Spikes never land
- * (their product is the finding, not a merge), and neither does a `base`
- * another task continues: the continuation already carries the work, and PM
- * validation reads a landed base as a broken continuation.
- */
 /** The `kept-land` record meta for one task. */
 function keptLandMeta(
   iteration: number,
@@ -238,6 +226,19 @@ function keptLandCandidate(
   );
 }
 
+/**
+ * R10: a kept green branch lands without a new task and without an agent
+ * turn. Every parked task whose kept branch still carries its approve (or
+ * green checks under a review-less flow) gets one merge attempt at each landing
+ * point — the wave end first, the boundary last — and a conflict or a repeated
+ * red leaves it parked for the steward. Deterministic reds are skipped before
+ * the attempt. A landing, a failed attempt and a deterministic-red skip each
+ * write a `kept-land` record: the landing has no task flow records of its own,
+ * and the evidence needs one. Spikes never land (their product is the finding,
+ * not a merge), and neither does a `base` another task continues: the
+ * continuation already carries the work, and PM validation reads a landed base
+ * as a broken continuation.
+ */
 export async function runKeptLand(
   runtime: KernelRuntime,
   iteration: number,
@@ -269,6 +270,7 @@ export async function runKeptLand(
     ).stdout.trim();
     if (!(await qualifiesForKeptLand(runtime, task, records, tip))) continue;
     if (deterministicRed(records, task.slug, tip)) {
+      attempted.push(task.slug);
       await recordKeptLand(runtime, iteration, task, taskState.round, {
         ok: true,
         cause: makeCause("note", "skipped: deterministic-red"),

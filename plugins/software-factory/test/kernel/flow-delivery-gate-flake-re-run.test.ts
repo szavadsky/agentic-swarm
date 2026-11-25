@@ -148,8 +148,14 @@ async function parksReviewUpscopeYesRewritesClassPart1(
 
   const store = createFolderStore(goal.goalDir, undefined, {});
   const escalated = await stateOf(goal.goalDir);
-  expect(escalated.tasks.solo!.status).toBe("parked");
-  expect(causeText(escalated.tasks.solo!.cause)).toMatch(/^upscope: /);
+  // The review approved the work and recorded the escalation park: the wave
+  // end lands the green branch, so the next launch plans from landed state.
+  expect(escalated.tasks.solo!.status).toBe("merged");
+  const parks = (await store.listRecords()).filter(
+    (r) => r.slug === "solo" && r.step === "park",
+  );
+  expect(parks).toHaveLength(1);
+  expect(causeText(parks[0]!.cause)).toMatch(/^upscope: /);
   expect(escalated.goal).toBe("active");
   expect(escalated.terminal).toBe(false);
   expect(readClass(goal.goalDir)).toEqual({ class: "bigger" });

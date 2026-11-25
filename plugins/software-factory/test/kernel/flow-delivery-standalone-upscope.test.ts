@@ -17,6 +17,7 @@ import {
   stateOf,
   writeTask as writeGoalTask,
 } from "./e2e-helpers.js";
+import type { KernelRuntime } from "../../src/kernel/types.js";
 import { workCalls } from "./fake-defaults.js";
 import {
   cleanupFlowRepo,
@@ -76,6 +77,30 @@ function registerStandaloneUpscopePart2(): void {
   }, 60_000);
 }
 
+/**
+ * The escalation is recorded, not honoured for a planned task: its reviewed,
+ * green branch still lands at the wave end.
+ */
+async function expectPlannedUpscopeLanded(
+  runtime: KernelRuntime,
+  goalDir: string,
+): Promise<void> {
+  const records = await runtime.store.listRecords();
+  const state = derive(
+    await runtime.store.listTasks(),
+    records,
+    runtime.configs.process.flows,
+  );
+  expect(state.tasks.planned?.status).toBe("merged");
+  const parks = records.filter(
+    (r) => r.slug === "planned" && r.step === "park",
+  );
+  expect(parks).toHaveLength(1);
+  expect(causeText(parks[0]?.cause)).toMatch(/^upscope: /);
+  expect(causeText(parks[0]?.cause)).toContain("hallucinated escalation");
+  expect(fs.existsSync(path.join(goalDir, "class.yaml"))).toBe(false);
+}
+
 function registerStandaloneUpscopePart3(): void {
   it("never escalates tasks inside an architect plan", async () => {
     const { repo, goal, goalDir } = setupFlowRepo();
@@ -115,17 +140,7 @@ function registerStandaloneUpscopePart3(): void {
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
 
-      const state = derive(
-        await runtime.store.listTasks(),
-        await runtime.store.listRecords(),
-        runtime.configs.process.flows,
-      );
-      expect(state.tasks.planned!.status).toBe("parked");
-      expect(causeText(state.tasks.planned!.cause)).toMatch(/^upscope: /);
-      expect(causeText(state.tasks.planned!.cause)).toContain(
-        "hallucinated escalation",
-      );
-      expect(fs.existsSync(path.join(goalDir, "class.yaml"))).toBe(false);
+      await expectPlannedUpscopeLanded(runtime, goalDir);
     } finally {
       cleanupFlowRepo(repo);
     }

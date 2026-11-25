@@ -150,8 +150,10 @@ async function refusesMergeWhoseIntegrationHeadPart2(
   const failed = records.filter(
     (r) => r.slug === "task" && r.step === "merge" && r.ok === false,
   );
-  expect(failed).toHaveLength(1);
-  expect(failed[0]!.cause?.kind).toBe("integration-moved");
+  // The dispatch merge and the wave-end kept-land retry both hit the moved
+  // head, and neither overwrote the outside commit.
+  expect(failed.length).toBeGreaterThanOrEqual(1);
+  expect(failed.every((r) => r.cause?.kind === "integration-moved")).toBe(true);
   expect(causeText(failed[0]!.cause)).toMatch(/^integration-moved: expected /);
   expect(
     repo.git(["log", "-1", "--format=%s", "factory/demo"]).stdout.trim(),

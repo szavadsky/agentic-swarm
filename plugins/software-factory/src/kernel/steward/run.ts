@@ -14,6 +14,7 @@ import type {
 } from "./types.js";
 import {
   attemptedThisWave,
+  keptLandLeft,
   skipStewardWave,
   stewardCandidate,
   stewardCandidateState,
@@ -45,7 +46,11 @@ export async function runSteward(
   // A turn that stopped on infra is not an attempt: its slug gets the
   // task-turn backoff, so a later wave retries it instead of skipping it.
   const attempted = attemptedThisWave(records, iteration);
-  const parks = stewardParks(tasks, state, attempted, frozen);
+  // A kept branch the wave-end kept-land could not land is the steward's: the
+  // merge cause names the repair, and kept-land will not retry before the next
+  // boundary.
+  const keptLeft = keptLandLeft(records, iteration);
+  const parks = stewardParks(tasks, state, attempted, frozen, keptLeft);
   if (parks.length === 0)
     return await skipStewardWave(runtime, records, iteration);
   // A gates park needs the head's own verdict before it can be a candidate:
@@ -61,6 +66,7 @@ export async function runSteward(
     records,
     runtime.store,
     goalHead,
+    keptLeft,
   );
   if (candidates.length === 0)
     return await skipStewardWave(runtime, records, iteration);

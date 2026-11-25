@@ -20,7 +20,10 @@ export interface MergeOptions {
 export interface KeptLandResult {
   /** Parked slugs whose kept branch landed on the integration head. */
   landed: string[];
-  /** Parked slugs attempted this boundary, landed or still parked. */
+  /**
+   * Parked slugs kept-land handled this pass: attempted, or ruled out on this
+   * tip. Anything but a landing leaves the branch parked for the steward.
+   */
   attempted: string[];
 }
 

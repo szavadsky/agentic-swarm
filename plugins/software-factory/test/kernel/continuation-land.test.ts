@@ -93,7 +93,7 @@ async function skipsBaseAnotherTaskContinuesPart2(
   expect(workCalls(harness)).toHaveLength(7);
 }
 
-async function landsWhenBoundaryReRunFlipsRedGatePart1(
+async function landsWhenWaveEndReRunFlipsRedGatePart1(
   repo: ReturnType<typeof setupFlowRepo>["repo"],
   goal: string,
 ) {
@@ -104,7 +104,7 @@ async function landsWhenBoundaryReRunFlipsRedGatePart1(
     return fakeTurnResult(req);
   });
   scriptDecider(harness, {
-    summary: "the merged gate is red; the boundary re-run owns the verdict",
+    summary: "the merged gate is red; the wave-end re-run owns the verdict",
     verdict: "reject",
   });
   scriptStallLeave(harness, ["kept-flip"]);
@@ -117,19 +117,17 @@ async function landsWhenBoundaryReRunFlipsRedGatePart1(
   expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
     "boundary",
   );
-  expect((await stateOf(runtime)).tasks["kept-flip"]!.status).toBe("parked");
-  expect(workCalls(harness)).toHaveLength(5);
-
-  scriptContinueBoundary(harness, runtime);
-  const boundary = await runBoundary(runtime, { relaunch: false });
-  expect(boundary.decision).toBe("continue");
+  // The wave end re-runs the merge gates: the flake's third run is green and
+  // the kept branch lands without waiting for the boundary.
   expect((await stateOf(runtime)).tasks["kept-flip"]!.status).toBe("merged");
+  expect(workCalls(harness)).toHaveLength(5);
 
   const records = await runtime.store.listRecords();
   const kept = records.filter(
     (r) => r.slug === "kept-flip" && r.step === "kept-land",
   );
   expect(kept).toHaveLength(1);
+  expect(kept[0]!.iteration).toBe(1);
   expect(kept[0]!.ok).toBe(true);
   const flakes = records.filter(
     (r) => r.slug === "kept-flip" && r.step === "gate-flake",
@@ -140,10 +138,9 @@ async function landsWhenBoundaryReRunFlipsRedGatePart1(
   expect(
     records.filter((r) => r.slug === "kept-flip" && r.actor === "agent"),
   ).toHaveLength(4);
-  expect(workCalls(harness)).toHaveLength(7);
 }
 
-async function landsWhenBoundaryReRunFlipsRedGatePart2(
+async function landsWhenWaveEndReRunFlipsRedGatePart2(
   repo: ReturnType<typeof setupFlowRepo>["repo"],
 ) {
   expect(repo.git(["show", "factory/demo:feature.txt"]).stdout.trim()).toBe(
@@ -182,11 +179,8 @@ async function landsJustImplementBranchGreenPart1(
   expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
     "boundary",
   );
-  expect((await stateOf(runtime)).tasks["kept-simple"]!.status).toBe("parked");
-
-  scriptContinueBoundary(harness, runtime);
-  const boundary = await runBoundary(runtime, { relaunch: false });
-  expect(boundary.decision).toBe("continue");
+  // A review-less flow's green branch checks still qualify: the wave end lands
+  // it without waiting for the boundary.
   expect((await stateOf(runtime)).tasks["kept-simple"]!.status).toBe("merged");
 
   const records = await runtime.store.listRecords();
@@ -194,8 +188,9 @@ async function landsJustImplementBranchGreenPart1(
     (r) => r.slug === "kept-simple" && r.step === "kept-land",
   );
   expect(kept).toHaveLength(1);
+  expect(kept[0]!.iteration).toBe(1);
   expect(kept[0]!.ok).toBe(true);
-  expect(workCalls(harness)).toHaveLength(6);
+  expect(workCalls(harness)).toHaveLength(4);
 }
 
 async function landsJustImplementBranchGreenPart2(
@@ -328,7 +323,7 @@ function registerKeptLandPart2(): void {
 }
 
 function registerKeptLandPart3(): void {
-  it("lands when the boundary re-run flips a red gate to green", async () => {
+  it("lands when the wave-end re-run flips a red gate to green", async () => {
     const counter = freshCounter();
     const { repo, goal } = setupFlowRepo({
       limits: { concurrency: { overall: 1 } },
@@ -340,8 +335,8 @@ function registerKeptLandPart3(): void {
       ],
     });
     try {
-      await landsWhenBoundaryReRunFlipsRedGatePart1(repo, goal);
-      await landsWhenBoundaryReRunFlipsRedGatePart2(repo);
+      await landsWhenWaveEndReRunFlipsRedGatePart1(repo, goal);
+      await landsWhenWaveEndReRunFlipsRedGatePart2(repo);
     } finally {
       rmCounter(counter);
       cleanupFlowRepo(repo);

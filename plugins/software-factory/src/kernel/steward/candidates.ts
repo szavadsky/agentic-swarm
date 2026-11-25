@@ -92,7 +92,8 @@ export function attemptedThisWave(
  * verdict there, and a steward turn would re-queue the same merge with the
  * same evidence. Kept-land claims the tip when the newest approve covers it,
  * or — under a review-less flow — green checks ran after it. `own` is in seq
- * order.
+ * order. Once kept-land has attempted or ruled out the tip, the claim is spent:
+ * the steward is the remaining repair route for a red or conflicting branch.
  */
 function keptLandOwnsTip(own: readonly StepRecord[]): boolean {
   const tip = own.filter((r) => r.actor === "agent" && r.commit).at(-1)?.commit;
@@ -117,6 +118,42 @@ function keptLandOwnsTip(own: readonly StepRecord[]): boolean {
 }
 
 /**
+ * The cause that kept a kept-land pass from landing, per slug, for one
+ * iteration. A landing clears an earlier pass; a skipped tip counts too, since
+ * kept-land will not retry it before the next boundary.
+ */
+export function keptLandLeft(
+  records: readonly StepRecord[],
+  iteration: number,
+): Map<string, Cause> {
+  const left = new Map<string, Cause>();
+  for (const record of records
+    .filter(
+      (r) => r.step === "kept-land" && r.iteration === iteration && r.endedAt,
+    )
+    .sort((a, b) => a.seq - b.seq)) {
+    if (record.slug === undefined) continue;
+    if (record.commit !== undefined) left.delete(record.slug);
+    else
+      left.set(
+        record.slug,
+        record.cause ?? makeCause("unknown", "left without a recorded cause"),
+      );
+  }
+  return left;
+}
+
+/** A kept-land cause's park kind: the merge cause names what the steward repairs. */
+function keptLandParkKind(
+  cause: Cause | undefined,
+): StewardPark["kind"] | undefined {
+  if (cause?.kind === "conflict" || cause?.kind === "base-conflict")
+    return "conflict";
+  if (cause?.kind === "gates") return "gates";
+  return undefined;
+}
+
+/**
  * A park the wave-end steward may attempt, in slug order, before its gate
  * evidence is read. `conflict` owns a branch the integration head must merge
  * into; `gates` waits on a red the head has to establish.
@@ -138,12 +175,20 @@ export function stewardParks(
   state: ReturnType<typeof derive>,
   attempted: ReadonlySet<string>,
   frozen: ReadonlySet<string> | undefined,
+  keptLeft: ReadonlyMap<string, Cause> = new Map(),
 ): StewardPark[] {
   const parks: StewardPark[] = [];
   for (const t of tasks) {
     if (attempted.has(t.slug) || frozen?.has(t.slug)) continue;
     const s = state.tasks[t.slug];
     if (s?.status !== "parked") continue;
+    // The kept-land attempt is the fresher evidence: a branch it could not land
+    // keeps the cause that stopped it, whatever the park that parked it said.
+    const kept = keptLandParkKind(keptLeft.get(t.slug));
+    if (kept) {
+      parks.push({ slug: t.slug, kind: kept });
+      continue;
+    }
     const cause = s.cause?.kind;
     if (cause === "conflict" || cause === "base-conflict")
       parks.push({ slug: t.slug, kind: "conflict" });
@@ -159,7 +204,9 @@ export function stewardParks(
  * merged result that did not land. A branch whose merged result ran red on a
  * green head is still the steward's: the merge split it, not either side.
  * Inherited and infra reds never judge. The head's log wins when both are red:
- * it is the state the branch has to merge onto.
+ * it is the state the branch has to merge onto. `keptLeft` carries the
+ * kept-land attempt for this iteration: once it exists, the tip is no longer
+ * kept-land's alone and the steward owns the red.
  */
 function redAfterMerge(
   slug: string,
@@ -167,11 +214,13 @@ function redAfterMerge(
   preexisting: ReadonlySet<string>,
   store: ArtifactStore | undefined,
   goalHead: GoalHeadJudgement | undefined,
+  keptLeft: ReadonlyMap<string, Cause>,
 ): StewardCandidate | undefined {
   const own = records
     .filter((r) => r.slug === slug && r.endedAt)
     .sort((a, b) => a.seq - b.seq);
-  if (keptLandOwnsTip(own)) return undefined;
+  const left = keptLeft.has(slug);
+  if (!left && keptLandOwnsTip(own)) return undefined;
   if (goalHead && goalHead.red.length > 0) {
     return {
       slug,
@@ -194,7 +243,9 @@ function redAfterMerge(
 /**
  * Parked conflicts, base conflicts and red gates this wave may attempt, in
  * slug order. A conflict candidate needs no gate evidence, so records stay
- * optional for tests that only ask for it.
+ * optional for tests that only ask for it. `keptLeft` is the kept-land
+ * exit for this iteration; its gates parks are judged by the same evidence as
+ * a merge red, with the kept-land claim spent.
  */
 export function stewardCandidates(
   tasks: readonly TaskFile[],
@@ -204,10 +255,11 @@ export function stewardCandidates(
   records: readonly StepRecord[] = [],
   store?: ArtifactStore,
   goalHead?: GoalHeadJudgement,
+  keptLeft: ReadonlyMap<string, Cause> = new Map(),
 ): StewardCandidate[] {
   const preexisting = preexistingRed(recordedBaseGates(records));
   const candidates: StewardCandidate[] = [];
-  for (const park of stewardParks(tasks, state, attempted, frozen)) {
+  for (const park of stewardParks(tasks, state, attempted, frozen, keptLeft)) {
     if (park.kind === "conflict") {
       candidates.push({ slug: park.slug, kind: "conflict" });
       continue;
@@ -218,6 +270,7 @@ export function stewardCandidates(
       preexisting,
       store,
       goalHead,
+      keptLeft,
     );
     if (candidate) candidates.push(candidate);
   }

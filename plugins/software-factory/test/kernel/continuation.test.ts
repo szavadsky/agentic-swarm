@@ -16,6 +16,7 @@ import {
   scriptDecider,
   scriptStallLeave,
   setupFlowRepo,
+  whenTurn,
   writeTask,
 } from "./s2-helpers.js";
 import {
@@ -29,7 +30,6 @@ import {
   scriptImplementApprove,
   implementThenLand,
 } from "./continuation-helpers.js";
-import { formatCause } from "../../src/kernel/cause.js";
 
 describe("parked continuation", () => {
   it("continues a task with base from the parked task's kept branch", async () => {
@@ -47,7 +47,7 @@ describe("parked continuation", () => {
 
 describe("kept-land", () => {
   registerKeptLandPart1();
-  registerKeptLandPart2();
+  registerKeptLandRedHandover();
   registerKeptLandPart3();
 });
 
@@ -75,13 +75,8 @@ async function landsFlakeParkedKeptBranchNoNewPart1(
   expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
     "boundary",
   );
-  expect((await stateOf(runtime)).tasks["kept-flake"]!.status).toBe("parked");
-  expect((await stateOf(runtime)).tasks["kept-flake"]!.cause?.kind).toBe(
-    "gates",
-  );
-  expect(
-    causeText((await stateOf(runtime)).tasks["kept-flake"]!.cause),
-  ).toContain("unit (exit 1)");
+  // The wave end lands the kept branch: no boundary, no new task, no agent turn.
+  expect((await stateOf(runtime)).tasks["kept-flake"]!.status).toBe("merged");
   expect(workCalls(harness)).toHaveLength(5);
 
   scriptContinueBoundary(harness, runtime);
@@ -94,6 +89,7 @@ async function landsFlakeParkedKeptBranchNoNewPart1(
     (r) => r.slug === "kept-flake" && r.step === "kept-land",
   );
   expect(kept).toHaveLength(1);
+  expect(kept[0]!.iteration).toBe(1);
   expect(kept[0]!.ok).toBe(true);
   expect(await runtime.store.listTasks()).toHaveLength(1);
   expect(
@@ -124,26 +120,27 @@ async function leavesConflictedKeptBranchParkedPart1(
 ) {
   const harness = new FakeHarness({ id: "fake" });
   scriptImplementApprove(harness, "feature.txt", "task side\n");
-  harness.script((req, ctx) => {
-    ctx.writeOutcome(outcome({ summary: "nothing to fix" }));
-    return fakeTurnResult(req);
-  });
-  scriptDecider(harness, {
-    summary: "the conflict stays red; the branch cannot land as it stands",
-    verdict: "reject",
-  });
-  scriptStallLeave(harness, ["kept-conflict"]);
   const runtime = await makeRuntime(repo, goal, { fake: harness });
   const file = task("kept-conflict", { scope: ["feature.txt"] });
   await writeTask(runtime, file);
   writePlan(runtime, ["kept-conflict"]);
   await implementThenLand(runtime, file, ["implement", "review"], repo);
 
-  expect((await runDispatch(runtime, { iteration: 1 })).reason).toBe(
-    "boundary",
-  );
-  expect((await stateOf(runtime)).tasks["kept-conflict"]!.status).toBe(
-    "parked",
+  // Parks the approved branch the way dispatch does, then moves the head under
+  // it: the boundary is the later landing point and owns this conflict.
+  const tip = repo
+    .git(["rev-parse", "factory-task/demo/kept-conflict"])
+    .stdout.trim();
+  await runtime.store.appendRecord(
+    {
+      iteration: 1,
+      slug: "kept-conflict",
+      round: 1,
+      step: "park",
+      actor: "script",
+      commit: tip,
+    },
+    { ok: true, cause: cause("gates: unit (exit 1)") },
   );
 
   const checkout = goalCheckout(repo, goal);
@@ -173,16 +170,23 @@ async function leavesConflictedKeptBranchParkedPart2(
   scope: Awaited<ReturnType<typeof leavesConflictedKeptBranchParkedPart1>>,
 ) {
   const { records, harness, runtime } = scope;
-  expect(
-    records.filter(
-      (r) =>
-        r.slug === "kept-conflict" && r.step === "merge" && r.iteration === 2,
-    ),
-  ).toHaveLength(1);
+  const merge = records.find(
+    (r) =>
+      r.slug === "kept-conflict" && r.step === "merge" && r.iteration === 2,
+  );
+  expect(merge?.ok).toBe(false);
+  expect(merge?.cause?.kind).toBe("conflict");
+  const kept = records.filter(
+    (r) =>
+      r.slug === "kept-conflict" && r.step === "kept-land" && r.iteration === 2,
+  );
+  expect(kept).toHaveLength(1);
+  expect(kept[0]!.ok).toBe(false);
+  expect(kept[0]!.cause?.kind).toBe("conflict");
   expect(
     records.filter((r) => r.slug === "kept-conflict" && r.actor === "agent"),
-  ).toHaveLength(4);
-  expect(workCalls(harness)).toHaveLength(7);
+  ).toHaveLength(2);
+  expect(workCalls(harness)).toHaveLength(4);
   const pack = fs.readFileSync(
     path.join(runtime.store.goalDir, contextPackRelPath(2)),
     "utf8",
@@ -269,7 +273,21 @@ async function continuesTaskBaseFromParkedTaskSPart2(
   ).toBe(0);
 }
 
-async function leavesRepeatRedKeptBranchParkedPart1(
+/**
+ * A steward turn that repairs nothing: it leaves the merged result as red as it
+ * found it, so the attempt holds with a pointer instead of landing.
+ */
+function scriptStewardNoRepair(harness: FakeHarness): void {
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(outcome({ summary: "steward found no repair" }));
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ step: "steward" }) },
+  );
+}
+
+async function handsRedKeptBranchToStewardPart1(
   repo: ReturnType<typeof setupFlowRepo>["repo"],
   goal: string,
 ) {
@@ -280,10 +298,11 @@ async function leavesRepeatRedKeptBranchParkedPart1(
     return fakeTurnResult(req);
   });
   scriptDecider(harness, {
-    summary: "the red repeats on this tip; keep the branch for the steward",
+    summary: "the red repeats on this tip; the steward owns the repair",
     verdict: "reject",
   });
   scriptStallLeave(harness, ["kept-red"]);
+  scriptStewardNoRepair(harness);
   const runtime = await makeRuntime(repo, goal, { fake: harness });
   const file = task("kept-red", { scope: ["feature.txt"] });
   await writeTask(runtime, file);
@@ -295,72 +314,69 @@ async function leavesRepeatRedKeptBranchParkedPart1(
   );
   expect((await stateOf(runtime)).tasks["kept-red"]!.status).toBe("parked");
 
-  scriptContinueBoundary(harness, runtime);
-  const boundary = await runBoundary(runtime, { relaunch: false });
-  expect(boundary.decision).toBe("continue");
-  expect((await stateOf(runtime)).tasks["kept-red"]!.status).toBe("parked");
-
   const records = await runtime.store.listRecords();
-  // Attempted (fresh merge-checks) but the red repeated on re-run, so the
-  // failed attempt is observable as a kept-land record carrying the merge
-  // cause.
-  expect(
-    records.filter(
-      (r) =>
-        r.slug === "kept-red" && r.step === "merge-checks" && r.iteration === 2,
-    ).length,
-  ).toBeGreaterThan(0);
-  const merge = records.find(
-    (r) => r.slug === "kept-red" && r.step === "merge" && r.iteration === 2,
-  );
-  expect(merge?.ok).toBe(false);
-  const failed = records.filter(
-    (r) => r.slug === "kept-red" && r.step === "kept-land" && r.iteration === 2,
-  );
-  expect(failed).toHaveLength(1);
-  expect(failed[0]!.ok).toBe(false);
-  expect(failed[0]!.cause).toEqual(merge!.cause!);
-  expect(causeText(failed[0]!.cause)).toContain("gates: unit");
-  expect(workCalls(harness)).toHaveLength(7);
-
-  return { harness, runtime };
+  return { harness, records, runtime };
 }
 
-async function leavesRepeatRedKeptBranchParkedPart2(
-  scope: Awaited<ReturnType<typeof leavesRepeatRedKeptBranchParkedPart1>>,
+async function handsRedKeptBranchToStewardPart2(
+  repo: ReturnType<typeof setupFlowRepo>["repo"],
+  scope: Awaited<ReturnType<typeof handsRedKeptBranchToStewardPart1>>,
 ) {
-  const { runtime, harness } = scope;
-  const pack = fs.readFileSync(
-    path.join(runtime.store.goalDir, contextPackRelPath(2)),
-    "utf8",
+  const { harness, records } = scope;
+  // The wave-end kept-land attempt re-ran the merge gates on the same tip and
+  // red again: its failure carries the merge cause as evidence.
+  const kept = records.filter(
+    (r) => r.slug === "kept-red" && r.step === "kept-land" && r.iteration === 1,
   );
-  expect(pack).toContain("| kept-red | parked |");
-  // A second boundary makes no new attempt: the red already proved
-  // deterministic on this tip.
-  scriptContinueBoundary(harness, runtime);
-  const second = await runBoundary(runtime, { relaunch: false });
-  expect(second.decision).toBe("continue");
-  expect((await stateOf(runtime)).tasks["kept-red"]!.status).toBe("parked");
-  const again = await runtime.store.listRecords();
-  expect(
-    again.filter(
-      (r) => r.slug === "kept-red" && r.step === "merge" && r.iteration === 3,
-    ),
-  ).toHaveLength(0);
-  expect(
-    again.filter(
-      (r) =>
-        r.slug === "kept-red" && r.step === "merge-checks" && r.iteration === 3,
-    ),
-  ).toHaveLength(0);
-  // The skip is recorded, not silent: the red is deterministic on this tip.
-  const skipped = again.filter(
-    (r) => r.slug === "kept-red" && r.step === "kept-land" && r.iteration === 3,
+  expect(kept).toHaveLength(1);
+  expect(kept[0]!.ok).toBe(false);
+  expect(kept[0]!.cause?.kind).toBe("gates");
+  expect(kept[0]!.cause).toBeDefined();
+  // The red goes to the steward: its turn ran on this branch and held it.
+  const stewardTurn = records.filter(
+    (r) => r.slug === "kept-red" && r.step === "steward" && r.actor === "agent",
   );
-  expect(skipped).toHaveLength(1);
-  expect(skipped[0]!.ok).toBe(true);
-  expect(skipped[0]!.cause).toEqual(cause("skipped: deterministic-red"));
-  expect(workCalls(harness)).toHaveLength(9);
+  expect(stewardTurn).toHaveLength(1);
+  expect(stewardTurn[0]!.iteration).toBe(1);
+  const held = records.filter(
+    (r) =>
+      r.slug === "kept-red" && r.step === "steward" && r.actor === "script",
+  );
+  expect(held).toHaveLength(1);
+  expect(causeText(held[0]!.cause)).toContain("held");
+  expect(
+    records.filter((r) => r.slug === "kept-red" && r.actor === "agent"),
+  ).toHaveLength(5);
+  expect(workCalls(harness)).toHaveLength(6);
+  // Nothing merged: the red is never waived.
+  expect(
+    repo.git(["show", "factory/demo:feature.txt"], { allowFail: true }).code,
+  ).not.toBe(0);
+  const merges = records.filter(
+    (r) => r.slug === "kept-red" && r.step === "merge",
+  );
+  expect(merges.length).toBeGreaterThanOrEqual(2);
+  expect(merges.every((r) => r.ok === false)).toBe(true);
+}
+
+function registerKeptLandRedHandover(): void {
+  it("hands a red kept branch to the steward at wave end", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: { concurrency: { overall: 1 } },
+      gates: [
+        {
+          id: "unit",
+          command: mergeOnlyGate("kept-red", "echo still-red; exit 1"),
+        },
+      ],
+    });
+    try {
+      const scope1 = await handsRedKeptBranchToStewardPart1(repo, goal);
+      await handsRedKeptBranchToStewardPart2(repo, scope1);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 90_000);
 }
 
 function registerKeptLandPart1(): void {
@@ -400,26 +416,6 @@ function registerKeptLandPart1(): void {
       await leavesConflictedKeptBranchParkedPart2(scope1);
     } finally {
       rmCounter(counter);
-      cleanupFlowRepo(repo);
-    }
-  }, 90_000);
-}
-
-function registerKeptLandPart2(): void {
-  it("leaves a repeat-red kept branch parked", async () => {
-    const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: { overall: 1 } },
-      gates: [
-        {
-          id: "unit",
-          command: mergeOnlyGate("kept-red", "echo still-red; exit 1"),
-        },
-      ],
-    });
-    try {
-      const scope1 = await leavesRepeatRedKeptBranchParkedPart1(repo, goal);
-      await leavesRepeatRedKeptBranchParkedPart2(scope1);
-    } finally {
       cleanupFlowRepo(repo);
     }
   }, 90_000);

@@ -277,9 +277,11 @@ through QA and review before it lands. The wave-end steward runs when a merge
 conflicts or when the goal branch is red: a parked branch whose last merged
 result ran red is a red-after-merge candidate — its turn receives the red gate
 log and repairs the merged result on that branch, then the merge queue re-runs
-its gates. A branch the boundary's kept-land pass can still land (its approve
-covers the tip, or its review-less flow's checks are green) stays with
-kept-land. A step that names no `repairPrompt`
+its gates. A branch the kept-land pass can still land (its approve covers the
+tip, or its review-less flow's checks are green) stays with kept-land until its
+wave-end attempt; kept-land runs there first and at the boundary last, and a
+branch that attempt cannot land — a conflict or a red — is the steward's on the
+same pass. A step that names no `repairPrompt`
 renders the process-level `repairPrompt` (default `delivery-repair`).
 The architect names `architect-repair` because its ask also requires the plan
 edit on disk; the default template then carries no role branch.

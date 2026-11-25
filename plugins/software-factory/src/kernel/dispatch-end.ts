@@ -1,7 +1,7 @@
 /**
  * The end of a dispatch wave: a transient retry, the drained stop, the
- * steward, the stall PM and the plan checker. Only when every stage declines
- * does the iteration end at the boundary or as infra.
+ * steward, the stall PM, kept-land and the plan checker. Only when every stage
+ * declines does the iteration end at the boundary or as infra.
  */
 import { formatCause, makeCause } from "./cause.js";
 import { derive } from "./derive.js";
@@ -20,6 +20,7 @@ import {
   settledTurns,
 } from "./dispatch-state.js";
 import { executeTaskAction } from "./flow.js";
+import { runKeptLand } from "./integrate.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import {
   openWork,
@@ -111,6 +112,20 @@ async function runStallStage(state: DispatchState): Promise<Wave | undefined> {
       cause: makeCause("error", holdError),
     });
   }
+  return "continue";
+}
+
+/**
+ * Kept green branches land at wave end, not only at the boundary a restart may
+ * never reach. The boundary stays the latest point. A landing or an attempt
+ * changes what the next pass must read: the head has moved, or a red or
+ * conflicting kept branch is now the steward's.
+ */
+async function runKeptLandStage(
+  state: DispatchState,
+): Promise<Wave | undefined> {
+  const kept = await runKeptLand(state.runtime, state.iteration);
+  if (kept.landed.length === 0 && kept.attempted.length === 0) return undefined;
   return "continue";
 }
 
@@ -289,6 +304,8 @@ export async function waveEnd(
   if (steward !== undefined) return steward;
   const stall = await runStallStage(state);
   if (stall !== undefined) return stall;
+  const kept = await runKeptLandStage(state);
+  if (kept !== undefined) return kept;
   const planCheck = await runPlanCheckStage(state);
   if (planCheck !== undefined) return planCheck;
   const turns = await freshTurns(state);
