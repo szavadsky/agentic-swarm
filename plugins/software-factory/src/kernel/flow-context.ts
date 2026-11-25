@@ -4,9 +4,9 @@
  * `flow-context-*.ts` own the bodies; importers keep using this path.
  */
 
-export type { FrontClass } from "./flow-context-front.js";
+export type { FrontClass, TurnTarget } from "./flow-types.js";
+export { classSchema } from "./flow-types.js";
 export {
-  classSchema,
   escalateFrontClassToBigger,
   FrontClassError,
   frontTarget,
@@ -34,7 +34,6 @@ export {
   isTrivialImplementTurn,
   stepTarget,
 } from "./flow-context-step.js";
-export type { TurnTarget } from "./flow-context-targets.js";
 export {
   architectureTarget,
   boundaryTarget,

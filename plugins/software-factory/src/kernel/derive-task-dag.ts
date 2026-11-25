@@ -5,7 +5,7 @@
  * when every step has completed it is the pending checks at the tail.
  */
 import { firstReadyStep } from "./dag.js";
-import type { ReduceContext, ReduceState } from "./derive-task-state.js";
+import type { ReduceContext, ReduceState } from "./derive-types.js";
 import { agentSteps, isAdjudicatorStep, isVerdictStep } from "./review.js";
 import type { StepRecord } from "./types.js";
 

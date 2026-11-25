@@ -7,20 +7,11 @@
 import { answerSettledSpikeSteers } from "./boundary-spike.js";
 import { openConcernIds } from "./context-pack/misc.js";
 import { activeHolds } from "./dispatch-holds.js";
-import type { ActiveHolds, DispatchState } from "./dispatch-state.js";
-import type { SteerWatch } from "./dispatch-watch.js";
+import type { DispatchState, SteerPoll, SteerWatch } from "./dispatch-types.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import { readHolds, type Steer, scanInbox } from "./mailbox.js";
 import { runSteerPm, steerScopeGroups } from "./pm.js";
 import type { State, StepRecord, TaskFile } from "./types.js";
-
-export interface SteerPoll {
-  hold: ActiveHolds;
-  steerTurn: boolean;
-  /** An inbox read failed: the iteration ends as an infra stop. */
-  error?: string;
-  urgent?: string;
-}
 
 /** First sight: a stable file is claimed now, a growing one waits on its hash. */
 async function claimFirstSight(

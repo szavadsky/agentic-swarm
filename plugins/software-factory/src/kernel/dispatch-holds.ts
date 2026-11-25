@@ -4,7 +4,7 @@
  * turn has decided yet.
  */
 import { makeCause } from "./cause.js";
-import type { ActiveHolds } from "./dispatch-state.js";
+import type { ActiveHolds } from "./dispatch-types.js";
 import type { Hold } from "./mailbox.js";
 import { STALL_ROUTES_STEP } from "./pm.js";
 import type { Cause, State, StepRecord } from "./types.js";

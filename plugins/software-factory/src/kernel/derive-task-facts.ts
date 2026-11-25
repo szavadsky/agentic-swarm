@@ -6,6 +6,11 @@
  */
 import type { CheckResult } from "../core/checks/types.js";
 import { makeCause } from "./cause.js";
+import type {
+  PendingChecks,
+  TaskReduction,
+  TerminalFact,
+} from "./derive-types.js";
 import { attributedFailures, checksAttributed, isInfraCheck } from "./gates.js";
 import {
   agentSteps,
@@ -16,15 +21,10 @@ import { SPIKE_REPORT_CHECK, spikeReportPath } from "./spike-report.js";
 import type {
   Cause,
   FlowDefinition,
-  PendingSignal,
-  ProgressRepeat,
-  ReviewVerdict,
-  StepLaunches,
   StepRecord,
   TaskFile,
   TaskKind,
   TaskPhase,
-  TaskStatus,
 } from "./types.js";
 
 export { revisionStart } from "./revision-start.js";
@@ -70,43 +70,6 @@ export const DEFAULT_FLOWS: Record<string, FlowDefinition> = {
     ],
   },
 };
-
-export interface TerminalFact {
-  status: TaskStatus;
-  cause?: Cause;
-  commit?: string;
-}
-
-export interface TaskReduction {
-  terminal: TerminalFact | null;
-  phase: TaskPhase;
-  round: number;
-  launches: Record<string, StepLaunches>;
-  turns: number;
-  /** An agent turn on this slug has started, ended or not. */
-  started: boolean;
-  verdict?: ReviewVerdict;
-  commit?: string;
-  park?: Cause;
-  loop?: ProgressRepeat;
-  gateFix?: boolean;
-  gateLastCall?: boolean;
-  cleanlinessRevision?: boolean;
-  cleanlinessJustified?: boolean;
-  pendingSignal?: PendingSignal;
-}
-
-export interface PendingChecks {
-  nextIndex: number;
-  mergeAfter: boolean;
-  /**
-   * An empty gate-fix turn whose park awaits these checks: green carries on,
-   * an identical red parks, a changed set loops the fix. Riding pendingChecks
-   * keeps the deferral with the turn it settles: a review, merge or newer
-   * turn clears both together, so a stale deferral can never mis-park.
-   */
-  emptyFix?: { step: string; round: number };
-}
 
 /**
  * The last terminal fact a slug's records carry. The single source for

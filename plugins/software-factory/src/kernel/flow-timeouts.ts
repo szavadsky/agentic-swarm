@@ -4,19 +4,7 @@
  * tracker sees the orphan and waits a bounded grace for it before a reset.
  */
 import type { Harness, TurnRequest, TurnResult } from "../harness/types.js";
-
-/**
- * A harness turn that outlives the wall bound keeps running after the agent's
- * race synthesizes its timeout result. The tracker sees the orphan the agent
- * abandoned: still pending at settle, or finished past the bound. An adapter
- * that reports timeout promptly (elapsed under the bound) is not an orphan;
- * its writes are final and settle commits them through the kept-outcome rule.
- */
-export interface TimeoutTracker {
-  harnesses: Harness[];
-  timedOut: () => boolean;
-  waitSettled: () => Promise<void>;
-}
+import type { TimeoutTracker } from "./flow-types.js";
 
 /**
  * Bound on settling orphaned turns after the wall bound fired: the agent

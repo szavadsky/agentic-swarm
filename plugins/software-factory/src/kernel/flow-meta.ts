@@ -3,17 +3,10 @@
  * a park with the task's revision, and the post-advance tree derive uses as
  * the empty-diff baseline.
  */
+import type { TaskMeta } from "./flow-types.js";
 import { appendPark, scriptMeta } from "./record.js";
 import { taskArchitect } from "./tasks.js";
 import type { Cause, KernelRuntime, TaskFile, TaskState } from "./types.js";
-
-export interface TaskMeta {
-  iteration: number;
-  slug: string;
-  round: number;
-  revision: number;
-  architect?: string;
-}
 
 export function taskMeta(
   task: TaskFile,

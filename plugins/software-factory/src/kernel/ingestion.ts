@@ -10,7 +10,8 @@ import { git } from "../core/git/exec.js";
 import { runAgentTurn } from "./agent.js";
 import { shallowCodeMap } from "./context-pack.js";
 import { FrontClassError, readFrontClass } from "./flow-context.js";
-import { resolveTurn, type TurnTarget } from "./flow-context-targets.js";
+import { resolveTurn } from "./flow-context-targets.js";
+import type { TurnTarget } from "./flow-types.js";
 import { frontClassTypesVar } from "./front.js";
 import {
   gateCommandsText,

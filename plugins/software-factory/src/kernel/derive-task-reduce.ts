@@ -3,11 +3,12 @@
  * and agent rule modules, then the terminal fact and pending work folded into
  * the phase the caller acts on.
  */
-import {
-  revisionStart,
-  type TaskReduction,
-  terminalFactFromRecords,
-} from "./derive-task-facts.js";
+import { revisionStart, terminalFactFromRecords } from "./derive-task-facts.js";
+import type {
+  ReduceContext,
+  ReduceState,
+  TaskReduction,
+} from "./derive-types.js";
 import {
   applyChecks,
   applyMerge,
@@ -16,8 +17,6 @@ import {
 import { settleDag } from "./derive-task-dag.js";
 import {
   createReduceState,
-  type ReduceContext,
-  type ReduceState,
   recordLaunch,
   routeResolve,
 } from "./derive-task-state.js";

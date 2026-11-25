@@ -5,7 +5,7 @@
  */
 import { makeCause } from "./cause.js";
 import { advancePendingChecks } from "./derive-task-gates.js";
-import type { ReduceContext, ReduceState } from "./derive-task-state.js";
+import type { ReduceContext, ReduceState } from "./derive-types.js";
 import { applyAnswer, startFixRound } from "./derive-task-verdict.js";
 import type { StepRecord } from "./types.js";
 

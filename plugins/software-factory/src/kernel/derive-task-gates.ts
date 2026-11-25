@@ -13,12 +13,15 @@ import {
   failingNames,
   mergeGateNames,
   parkedGateNames,
-  type PendingChecks,
   phaseAfter,
   redChecksText,
   sameFailingSet,
 } from "./derive-task-facts.js";
-import type { ReduceContext, ReduceState } from "./derive-task-state.js";
+import type {
+  PendingChecks,
+  ReduceContext,
+  ReduceState,
+} from "./derive-types.js";
 import { raisePendingSignal } from "./derive-task-state.js";
 import { attributedFailures, isInfraCheck } from "./gates.js";
 import { isRecoveryCrash } from "./recovery-seal.js";

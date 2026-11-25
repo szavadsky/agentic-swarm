@@ -11,8 +11,9 @@ import {
   readFrontClass,
 } from "./flow-context.js";
 import { redGateCause, runTaskGates } from "./flow-gates.js";
-import { type TaskMeta, taskMeta } from "./flow-meta.js";
+import { taskMeta } from "./flow-meta.js";
 import type { TaskActionResult } from "./flow-state.js";
+import type { TaskMeta } from "./flow-types.js";
 import { isDecideStep } from "./pending-signal.js";
 import { qaReportOf } from "./qa.js";
 import { appendDebt, appendPark } from "./record.js";

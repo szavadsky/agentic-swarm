@@ -8,18 +8,17 @@ import { makeCause } from "./cause.js";
 import { applyDecideTurn, checkTerminalStatus } from "./derive-task-decide.js";
 import { committedNothing } from "./derive-task-facts.js";
 import { recordInfraRepeat } from "./derive-task-gates.js";
-import {
-  type ReduceContext,
-  type ReduceState,
-  raisePendingSignal,
-  routeResolve,
-} from "./derive-task-state.js";
+import type {
+  DeferredFix,
+  ReduceContext,
+  ReduceState,
+} from "./derive-types.js";
+import { raisePendingSignal, routeResolve } from "./derive-task-state.js";
 import {
   advanceAfterQa,
   applyAdjudicator,
   applyAnswer,
   applyReview,
-  type DeferredFix,
   startFixRound,
 } from "./derive-task-verdict.js";
 import { DECIDE_STEP, isDecideStep } from "./pending-signal.js";

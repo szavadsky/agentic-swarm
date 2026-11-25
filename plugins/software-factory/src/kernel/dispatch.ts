@@ -13,16 +13,17 @@ import type {
   DispatchOptions,
   DispatchResult,
   DispatchState,
-} from "./dispatch-state.js";
+  SteerWatch,
+} from "./dispatch-types.js";
 import { readInitialHolds, settledTurns } from "./dispatch-state.js";
-import { createSteerWatch, type SteerWatch } from "./dispatch-watch.js";
+import { createSteerWatch } from "./dispatch-watch.js";
 import { scanInbox } from "./mailbox.js";
 import { next } from "./next.js";
 import { LiveSteerSessions } from "./sessions.js";
 import type { Action, KernelRuntime } from "./types.js";
 
 export { INFRA_REDISPATCH_DELAYS_MS } from "./dispatch-start.js";
-export type { DispatchOptions, DispatchResult } from "./dispatch-state.js";
+export type { DispatchOptions, DispatchResult } from "./dispatch-types.js";
 export {
   iterationSpend,
   iterationStart,

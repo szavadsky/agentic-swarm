@@ -4,7 +4,11 @@
  */
 import { makeCause } from "./cause.js";
 import { phaseAfter } from "./derive-task-facts.js";
-import type { ReduceContext, ReduceState } from "./derive-task-state.js";
+import type {
+  DeferredFix,
+  ReduceContext,
+  ReduceState,
+} from "./derive-types.js";
 import { raisePendingSignal } from "./derive-task-state.js";
 import {
   adjudicationDue,
@@ -16,9 +20,6 @@ import {
   reviewRoundLimit,
 } from "./review.js";
 import type { FlowStep, ReviewVerdict, StepRecord } from "./types.js";
-
-/** A gate fix that changed nothing and defers to the checks that follow it. */
-export type DeferredFix = { step: string; round: number };
 
 /** A productive turn answers the flow: checks before acceptance, else the next step. */
 export function applyAnswer(

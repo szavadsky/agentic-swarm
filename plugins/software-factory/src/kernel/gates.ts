@@ -5,9 +5,9 @@ import type { CheckAttribution, CheckResult } from "../core/checks/types.js";
 import { fingerprintText } from "../core/fingerprint.js";
 import { KeyedMutex } from "../core/mutex.js";
 import { type ProcessResult, runProcess } from "../core/proc.js";
+import type { CappedGateOutput, DeclaredGateRun } from "./gates-types.js";
 import { trackGateGroup } from "./gate-processes.js";
 import {
-  type CappedGateOutput,
   capGateOutput,
   gateReportPaths,
   GATE_OUTPUT_CAP,
@@ -41,10 +41,10 @@ export function gateTimeoutSec(gate: Pick<GateConfig, "timeoutSec">): number {
 }
 
 export { reapGateProcesses } from "./gate-processes.js";
+export type { GateInfra } from "./gates-types.js";
 export {
   capGateOutput,
   GATE_OUTPUT_CAP,
-  type GateInfra,
   isAdvisoryCheck,
   isInfraCheck,
   isStaleGateCheck,
@@ -166,12 +166,6 @@ function reportSummary(findings: readonly Finding[]): string {
     .map((finding) => findingLabel(finding).slice(0, SUMMARY_NAME_CHARS));
   const rest = failing.length - shown.length;
   return `${failing.length} failing: ${shown.join(", ")}${rest > 0 ? `, +${rest} more` : ""}`;
-}
-
-/** One declared gate run: its command result and the check built from it. */
-export interface DeclaredGateRun {
-  res: ProcessResult;
-  check: CheckResult;
 }
 
 /** A gate is green only when the command and its test report agree. */

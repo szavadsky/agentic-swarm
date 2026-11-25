@@ -4,22 +4,13 @@
  */
 import fs from "node:fs";
 import yaml from "yaml";
-import { z } from "zod";
 import { issueText } from "./findings.js";
 import { bySeq } from "./flow-context-history.js";
-import { boundaryTarget, type TurnTarget } from "./flow-context-targets.js";
+import { boundaryTarget } from "./flow-context-targets.js";
+import { classSchema, type FrontClass, type TurnTarget } from "./flow-types.js";
 import type { KernelRuntime, StepRecord, TaskFile } from "./types.js";
 
 const CLASS_FILE = "class.yaml";
-
-export const classSchema = z
-  .object({
-    class: z.enum(["trivial", "task", "bigger"]),
-    slug: z.string().min(1).optional(),
-  })
-  .strict();
-
-export type FrontClass = z.infer<typeof classSchema>;
 
 /** A class.yaml the launch refuses; runFront turns it into an infra result. */
 export class FrontClassError extends Error {

@@ -292,8 +292,59 @@ describe("interface lint", () => {
   });
 });
 
-describe("interface lint kernel scope", () => {
-  it("holds every kernel subfolder to the rule with no exclusion", () => {
+describe("interface lint scope widening", () => {
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "interface-lint-scope-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("covers the task-side kernel direct files by pattern", () => {
+    // Each migrated file, one exported type apiece: the pattern must reach all.
+    const files = [
+      "src/kernel/flow-context-front.ts",
+      "src/kernel/derive-task-facts.ts",
+      "src/kernel/dispatch-state.ts",
+      "src/kernel/next.ts",
+      "src/kernel/gates-normalise.ts",
+    ];
+    for (const file of files) {
+      writeFixture(
+        file,
+        ["export interface Handle {", "  id: string;", "}", ""].join("\n"),
+      );
+    }
+
+    expect(interfaceLintProblems(root)).toEqual(
+      [...files]
+        .sort()
+        .map(
+          (file) =>
+            `interface lint: ${file}:1 exports interface "Handle"; a type module carries the declaration`,
+        ),
+    );
+  });
+
+  it("leaves the remaining kernel direct files and the migrated type modules alone", () => {
+    // A pattern covers its own files only: a sibling the rest of the migration
+    // owns is not pulled in, and the `-types.ts` modules stay clean.
+    writeFixture(
+      "src/kernel/baseline.ts",
+      ["export interface Handle {", "  id: string;", "}", ""].join("\n"),
+    );
+    writeFixture(
+      "src/kernel/flow-types.ts",
+      ["export interface Handle {", "  id: string;", "}", ""].join("\n"),
+    );
+
+    expect(interfaceLintProblems(root)).toEqual([]);
+  });
+});
+
+describe("interface lint on the package", () => {
+  it("holds every kernel subfolder in scope with no exclusion", () => {
     const kernelDirs = fs
       .readdirSync(path.join(PACKAGE, "src", "kernel"), {
         withFileTypes: true,
@@ -306,7 +357,7 @@ describe("interface lint kernel scope", () => {
     for (const dir of kernelDirs) expect(scope).toContain(dir);
   });
 
-  it("finds no exported type in the real tree's scoped folders", () => {
+  it("holds the whole scope clean, the task-side kernel files included", () => {
     expect(interfaceLintProblems(PACKAGE)).toEqual([]);
   }, 30_000);
 });

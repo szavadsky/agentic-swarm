@@ -5,91 +5,16 @@
  */
 
 import { makeCause } from "./cause.js";
-import type { PendingChecks, TerminalFact } from "./derive-task-facts.js";
+import type {
+  PendingChecks,
+  ReduceContext,
+  ReduceState,
+  SignalResume,
+  TerminalFact,
+} from "./derive-types.js";
 import { DECIDE_STEP } from "./pending-signal.js";
 import { countLaunch, emptyLaunches, isAcceptanceStep } from "./review.js";
-import type {
-  Cause,
-  FlowDefinition,
-  FlowStep,
-  PendingSignal,
-  ProgressRepeat,
-  ReviewVerdict,
-  StepLaunches,
-  StepRecord,
-  TaskFile,
-  TaskPhase,
-} from "./types.js";
-
-export interface ReduceContext {
-  task: TaskFile;
-  flow: FlowDefinition;
-  steps: FlowStep[];
-  flowIndex: Map<string, number>;
-  firstStep: string;
-}
-
-/**
- * How the decider's approve resumes from the point a signal stopped: past the
- * flow step that raised it, into the checks it gated, or into a fresh landing.
- */
-export type SignalResume =
-  | { kind: "past-step"; index: number }
-  | { kind: "checks"; pending: PendingChecks }
-  | { kind: "merge" };
-
-export interface ReduceState {
-  terminal: TerminalFact | null;
-  phase: TaskPhase;
-  round: number;
-  launches: Record<string, StepLaunches>;
-  /** Acceptance calls each flow step ran: one counted turn that judged the tree. */
-  calls: Record<string, number>;
-  /** Acceptance calls a decider's `changes` bought past a step's own bound, by step. */
-  roundGrants: Record<string, number>;
-  stepIndex: number;
-  verdict?: ReviewVerdict;
-  commit?: string;
-  park?: Cause;
-  loop?: ProgressRepeat;
-  gateFix: boolean;
-  gateLastCall: boolean;
-  gateFixCount: number;
-  gateFailure?: string;
-  /** Sorted actionable failing names behind the current gate fix. */
-  gateRed?: string[];
-  cleanlinessRevision: boolean;
-  cleanlinessRevised: boolean;
-  cleanlinessJustified: boolean;
-  /** The finding lines of the cleanliness red awaiting the author's answer. */
-  cleanlinessRedLines: string[];
-  /** The cleanliness finding lines the author's reply accepted. */
-  cleanlinessAccepted: string[];
-  /** The gate fix came from merged-result gates: green checks merge, skipping review. */
-  mergeFix: boolean;
-  /** The last review's `changes` still awaits its answer. */
-  changesPending: boolean;
-  /** The fix before the next review answered by replies alone. */
-  replyOnlyFix: boolean;
-  gatesFailures: number;
-  pendingChecks: PendingChecks | null;
-  /** The last green task-checks tree. */
-  lastChecksTree?: string;
-  lastTree?: string;
-  /** Tree of the last counted turn. */
-  countedTree?: string;
-  creationAdvance: { tree: string; headTree: string } | null;
-  seenCountedTurn: boolean;
-  turns: number;
-  resolveRan: boolean;
-  /** A mechanical signal awaiting its decide turn. */
-  pendingSignal: PendingSignal | null;
-  /** Where the signal stopped the flow; its decide turn's approve resumes there. */
-  signalResume: SignalResume | null;
-  seen: Map<string, { step: string; round: number }>;
-  lastInfraStep?: string;
-  infraRepeatCount: number;
-}
+import type { FlowStep, PendingSignal, StepRecord } from "./types.js";
 
 export function createReduceState(
   context: ReduceContext,

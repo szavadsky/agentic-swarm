@@ -11,6 +11,7 @@
  * Nothing is announced before a plan exists: the PM routes nothing without one,
  * so the steer waits for the plan instead of waking the loop to no end.
  */
+import type { SteerWatch, SteerWatchOptions } from "./dispatch-types.js";
 import { type Steer, scanInbox } from "./mailbox.js";
 import type { ArtifactStore } from "./types.js";
 
@@ -18,35 +19,6 @@ import type { ArtifactStore } from "./types.js";
 export const STEER_WATCH_TICK_MS = 5_000;
 /** How long a stable steer waits before it interrupts a running turn. */
 export const STEER_DEBOUNCE_MS = 60_000;
-
-export interface SteerWatchOptions {
-  /** Timer cadence; defaults to `STEER_WATCH_TICK_MS`. */
-  tickMs?: number;
-  /** Stable-window before an announcement; defaults to `STEER_DEBOUNCE_MS`. */
-  debounceMs?: number;
-  /**
-   * Tries to hand a due steer to the live session before waking the loop. True
-   * means the running turn took it; false (or absent) leaves it for the loop's
-   * own PM turn, which is the queue path.
-   */
-  deliver?: (steer: Steer) => Promise<boolean>;
-}
-
-export interface SteerWatch {
-  /**
-   * Resolves on the next announcement, or at once when one is still pending.
-   * One wait at a time: each pass re-arms it after `take`.
-   */
-  wake(): Promise<void>;
-  /**
-   * Consumes the pending wake for this pass and returns a scan failure since
-   * the last call. `pollSteers` calls it once per pass; a failed scan ends the
-   * iteration as an infra stop instead of vanishing inside the timer.
-   */
-  take(): string | undefined;
-  /** Stops the timer; a dispatch that ends must not leave it running. */
-  stop(): void;
-}
 
 interface Sighting {
   hash: string;

@@ -4,19 +4,18 @@
  * split. Admission never parks a task; holds only keep unstarted work out.
  */
 import { makeCause } from "./cause.js";
-import type { SteerPoll } from "./dispatch-poll.js";
+import type {
+  ActiveHolds,
+  DispatchState,
+  SteerPoll,
+} from "./dispatch-types.js";
 import {
   dispatchable,
   noteInfra,
   runTerminalAction,
   startAction,
 } from "./dispatch-start.js";
-import {
-  type ActiveHolds,
-  type DispatchState,
-  iterationSpend,
-  iterationStart,
-} from "./dispatch-state.js";
+import { iterationSpend, iterationStart } from "./dispatch-state.js";
 import { stepTarget } from "./flow-context.js";
 import { loadPriceTable } from "./openrouter.js";
 import type {

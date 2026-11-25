@@ -4,7 +4,7 @@
  */
 import { isTransientInfraCause } from "../harness/fallback.js";
 import { makeCause } from "./cause.js";
-import type { DispatchState, InfraFault } from "./dispatch-state.js";
+import type { DispatchState, InfraFault } from "./dispatch-types.js";
 import type { TaskActionResult } from "./flow.js";
 import { executeTaskAction } from "./flow.js";
 import type { MergeResult } from "./integrate.js";

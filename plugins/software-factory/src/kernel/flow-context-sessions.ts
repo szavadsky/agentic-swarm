@@ -12,25 +12,24 @@ import { makeCause } from "./cause.js";
 import { frontTarget, lastFrontRecord } from "./flow-context-front.js";
 import { bySeq } from "./flow-context-history.js";
 import { findStep, flowOf } from "./flow-context-step.js";
+import type {
+  CompactionReview,
+  ResumeNoteOptions,
+  ResumeReason,
+  TrivialResume,
+  TurnTarget,
+} from "./flow-types.js";
 import { DECIDE_STEP } from "./pending-signal.js";
-import type { TurnTarget } from "./flow-context-targets.js";
 import { scriptMeta } from "./record.js";
 import type { PromptLibrary } from "./prompts.js";
 import { sessionCacheHot } from "./sessions.js";
 import type {
-  Cause,
   FlowStep,
   FollowUp,
   KernelRuntime,
   StepRecord,
   TaskFile,
 } from "./types.js";
-
-/** The review turn whose ended session is being compacted: step role and 1-based round. */
-export interface CompactionReview {
-  review: boolean;
-  round: number;
-}
 
 /** Script record: a follow-up session could not resume, so the turn started de novo. */
 export const RESUME_FALLBACK_STEP = "resume-fallback";
@@ -245,9 +244,6 @@ export function priorStepCommit(
     .at(-1)?.commit;
 }
 
-/** The session a trivial implement turn resumes, or why the task parks instead. */
-export type TrivialResume = { session: SessionRef } | { cause: Cause };
-
 /**
  * The front's own session for a trivial implement turn: the front record's
  * session on a first turn, the last session on the front alias on a fix turn.
@@ -350,16 +346,6 @@ function keptSession(
     portable(ref.harness, target.harness.id, runtime.configs.run.portability)
     ? ref
     : undefined;
-}
-
-/** Why a turn is rendered the resume fragment. */
-export type ResumeReason = "relaunch" | "fallback" | "trivial";
-
-/** The facts the resume fragment renders; empty strings for the parts a reason does not use. */
-export interface ResumeNoteOptions {
-  branch?: string;
-  worktree?: string;
-  sessionCwd?: string;
 }
 
 /**

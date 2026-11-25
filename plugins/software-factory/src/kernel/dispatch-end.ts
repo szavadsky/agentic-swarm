@@ -12,13 +12,12 @@ import {
   INFRA_REDISPATCH_DELAYS_MS,
   noteInfra,
 } from "./dispatch-start.js";
-import {
-  type ActiveHolds,
-  type DispatchResult,
-  type DispatchState,
-  planCheckCause,
-  settledTurns,
-} from "./dispatch-state.js";
+import type {
+  ActiveHolds,
+  DispatchResult,
+  DispatchState,
+} from "./dispatch-types.js";
+import { planCheckCause, settledTurns } from "./dispatch-state.js";
 import { executeTaskAction } from "./flow.js";
 import { runKeptLand } from "./integrate.js";
 import { runBoundaryTurn } from "./integration-lock.js";

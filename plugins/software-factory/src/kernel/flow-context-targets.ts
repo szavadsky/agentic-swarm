@@ -3,25 +3,15 @@
  * kernel/architecture boundary targets resolved from process config.
  */
 import type { Harness, ModelRef } from "../harness/types.js";
+import type { ResolvedTier, TurnTarget } from "./flow-types.js";
 import { poolExhausted } from "./quota-pools.js";
 import type {
   BoundaryStep,
   FallbackModelConfig,
   KernelRuntime,
   RepairSpec,
-  Timeouts,
   TurnSpec,
 } from "./types.js";
-
-/** One resolved fallback tier: the harness, model, effort and quota pool one call draws on. */
-export interface ResolvedTier {
-  harness: Harness;
-  model: ModelRef;
-  effort?: string;
-  subscription?: string;
-  /** Harness configuration passed through `TurnRequest.opaque`. */
-  opaque?: unknown;
-}
 
 /** Pool key for quota tracking: explicit subscription, or harness+model when none. */
 export function tierPoolKey(tier: {
@@ -63,40 +53,6 @@ export function fallbackTierSubscription(
   if (fallback.subscription !== undefined) return fallback.subscription;
   if (changesPrimary && fallback.sharesPool !== true) return undefined;
   return aliasSubscription;
-}
-
-/** Everything one turn needs to run: the resolved prompt, alias, harness, model and its own limits. */
-export interface TurnTarget {
-  /** Prompt template the turn renders; the role the agent acts as. */
-  prompt: string;
-  alias: string;
-  /** Repair template the step named; absent renders `delivery-repair`. */
-  repairPrompt?: string;
-  /** Ask for a turn that settled no outcome at all; absent keeps the repair ask. */
-  unfinishedPrompt?: string;
-  /** Product the step named; absent derives from the turn's expectation. */
-  deliverable?: string;
-  harness: Harness;
-  model: ModelRef;
-  effort?: string;
-  subscription?: string;
-  /**
-   * Effective fallback chain, primary first: tiers whose quota pool is recorded
-   * in `exhaustedPools` are dropped, so `[0]` mirrors the fields above. Empty
-   * when every tier is exhausted: no call may run, and `unavailable` says why.
-   */
-  tiers: ResolvedTier[];
-  /**
-   * Why no tier can serve this turn: every tier's quota pool is exhausted.
-   * `harness`, `model` and `opaque` name the chain's last tier for bookkeeping,
-   * but a turn must not call it; dispatch defers the work under this cause.
-   */
-  unavailable?: string;
-  /** Chain index `tiers[0]` had in the alias's configured chain before exhausted tiers were dropped; the chain length when none is left. */
-  tierOffset: number;
-  timeouts?: Timeouts;
-  /** Harness configuration passed through `TurnRequest.opaque`. */
-  opaque?: unknown;
 }
 
 /**

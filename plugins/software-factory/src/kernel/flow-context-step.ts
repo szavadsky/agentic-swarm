@@ -8,7 +8,7 @@ import { DECIDE_STEP, decideStep, isDecideStep } from "./pending-signal.js";
 import { isRecoveryCrash } from "./recovery-seal.js";
 import { frontTarget, frontTaskClass } from "./flow-context-front.js";
 import { bySeq } from "./flow-context-history.js";
-import type { TurnTarget } from "./flow-context-targets.js";
+import type { TurnTarget } from "./flow-types.js";
 import { repairFields, resolveTurn } from "./flow-context-targets.js";
 import { launchKindOf } from "./metrics.js";
 import { agentSteps, isAcceptanceStep, isVerdictStep } from "./review.js";

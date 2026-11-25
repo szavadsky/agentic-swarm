@@ -4,6 +4,12 @@ import type { CheckResult } from "../core/checks/types.js";
 import type { ParsedCase, ParsedJunit } from "../core/checks/junit.js";
 import { ctrfFindings, parseCtrfReport } from "../core/checks/ctrf.js";
 import { capFindings, type Finding } from "../core/checks/findings.js";
+import type {
+  CappedGateOutput,
+  GateArtifacts,
+  GateCheckMeta,
+  GateReports,
+} from "./gates-types.js";
 import { junitFindings } from "../core/checks/junit-findings.js";
 import { logFindings, regexFindings } from "../core/checks/log-findings.js";
 import { parseSarifLog, sarifFindings } from "../core/checks/sarif.js";
@@ -79,13 +85,6 @@ export function normaliseRoots(line: string, roots: readonly string[]): string {
 }
 
 /** What a gate producer knows about its own run but the signature reader cannot. */
-export interface GateCheckMeta {
-  /** Absolute directories the gate ran from; their prefixes are not identity. */
-  roots: string[];
-  /** The output is the tail of a longer report; its head is gone. */
-  truncated: boolean;
-}
-
 export function gateCheckMeta(check: CheckResult): GateCheckMeta {
   const details = check.details;
   if (typeof details !== "object" || details === null)
@@ -97,12 +96,6 @@ export function gateCheckMeta(check: CheckResult): GateCheckMeta {
       : [],
     truncated: meta.truncated === true,
   };
-}
-
-export interface CappedGateOutput {
-  output: string;
-  /** The head was dropped; a bun report resumes at its next file header. */
-  truncated: boolean;
 }
 
 /**
@@ -138,12 +131,6 @@ export function capGateOutput(
   return boundary === -1
     ? { output: "", truncated: true }
     : { output: normalised.slice(boundary + 1), truncated: true };
-}
-
-/** A check that could not run; the baseline never records one as red. */
-export interface GateInfra {
-  kind: "infra";
-  cause: string;
 }
 
 /** A red the task is shown but never charged: an advisory gate or task. */
@@ -199,18 +186,6 @@ export function junitDetails(check: CheckResult): ParsedJunit | undefined {
 /** A case's identity within its gate: the report's file, then its name. */
 export function caseLabel(c: ParsedCase): string {
   return c.file ? `${c.file} > ${c.name}` : c.name;
-}
-
-/** One gate's declared artifacts, already read and root-normalised by the caller. */
-export interface GateArtifacts {
-  /** The gate's exit code; null when it was killed or timed out. */
-  exitCode: number | null;
-  /** The raw report texts the gate declared and wrote, keyed by format. */
-  junit?: string;
-  ctrf?: string;
-  sarif?: string;
-  /** The capped, root-normalised gate output. */
-  log: string;
 }
 
 /**
@@ -280,13 +255,6 @@ export function gateReportPaths(gate: GateConfig, cwd: string) {
       ? path.resolve(cwd, gate.format.sarif)
       : undefined,
   };
-}
-
-export interface GateReports {
-  contents: Pick<GateArtifacts, "junit" | "ctrf" | "sarif">;
-  error?: string;
-  /** A test report's failing cases are part of the verdict; SARIF is not. */
-  testReport: boolean;
 }
 
 function readReport(
