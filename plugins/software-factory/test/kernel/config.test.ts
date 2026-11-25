@@ -56,7 +56,10 @@ function threeConfigLayersPart2() {
     const root = tmpRepo();
     fs.mkdirSync(path.join(root, ".factory"), { recursive: true });
     const run = path.join(root, ".factory/run.yaml");
-    expect(loadConfigs(root).run.quota).toEqual({ resetMinutes: 300 });
+    expect(loadConfigs(root).run.quota).toEqual({
+      resetMinutes: 300,
+      perSubscription: {},
+    });
     fs.writeFileSync(
       run,
       "quota: { resetMinutes: 45, maxResetMinutes: 600 }\n",
@@ -64,6 +67,7 @@ function threeConfigLayersPart2() {
     expect(loadConfigs(root).run.quota).toEqual({
       resetMinutes: 45,
       maxResetMinutes: 600,
+      perSubscription: {},
     });
     fs.writeFileSync(run, "quota: { resetMinutes: 45, capMinutes: 600 }\n");
     expect(() => loadConfigs(root)).toThrow(ConfigError);

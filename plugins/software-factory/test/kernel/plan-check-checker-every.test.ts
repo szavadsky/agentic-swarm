@@ -105,7 +105,9 @@ function registerInfraCheckerReason(): void {
       const harness = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await nothingOpenGoal(runtime);
-      runtime.exhaustedPools.set("fake+fake-check", Date.now() + 60 * 60_000);
+      runtime.exhaustedPools.set("fake+fake-check", {
+        resetAt: Date.now() + 60 * 60_000,
+      });
       scriptArchitectDone(harness);
 
       const boundary = await runBoundary(runtime, {

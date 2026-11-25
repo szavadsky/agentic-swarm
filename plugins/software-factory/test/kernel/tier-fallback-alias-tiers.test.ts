@@ -65,7 +65,7 @@ function quota() {
 
 /** Latch a pool as if it answered quota a moment ago. */
 function latchPool(runtime: KernelRuntime, pool: string): void {
-  runtime.exhaustedPools.set(pool, Date.now() + 60_000);
+  runtime.exhaustedPools.set(pool, { resetAt: Date.now() + 60_000 });
 }
 
 async function skipsExhaustedPoolRestDispatchPart1(
@@ -185,7 +185,7 @@ function registerAliasFallbackTiersPart10(): void {
       const fake = new FakeHarness({ id: "fake" });
       const runtime = await makeRuntime(repo, goal, { fake });
       const resetAt = Date.now() + 60 * 60_000;
-      runtime.exhaustedPools.set("fake+fake-impl", resetAt);
+      runtime.exhaustedPools.set("fake+fake-impl", { resetAt });
       await writeTask(runtime, task("alpha", { scope: ["alpha-area"] }));
 
       const result = await runDispatch(runtime, { iteration: 1 });

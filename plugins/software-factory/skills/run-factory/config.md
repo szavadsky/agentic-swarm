@@ -146,7 +146,7 @@ limits:
   concurrency: { overall: 3, perSubscription: { opencode-go: 2 }, perModel: {} }
   iterationUsd: 5
 sessions: { dir: ~/.local/share/factory/sessions, keepRuns: 5, retention: short }
-quota: { resetMinutes: 300, maxResetMinutes: 1440 }
+quota: { resetMinutes: 300, maxResetMinutes: 1440, perSubscription: { opencode-go: 60 } }
 worktreeRoot: ~/.local/share/factory/worktrees
 lsp: true
 priceIds: { opencode/beam-free: reflection/beam-1.0-501b-a23b }
@@ -172,6 +172,12 @@ envAllowlist: [ANTHROPIC_API_KEY]
   `resumeAttempts`, `parkAmends`, `turns`, `wallMinutes`, `iterationUsd`,
   `turnMinutes`, `iterationMinutes`, `steerDebounceSeconds`,
   `minTmpFreeBytes`.
+- `quota`: a quota stop's pool is latched until the provider-stated reset
+  (capped by `maxResetMinutes`), or for the pool's `perSubscription` interval
+  when the stop states none, else `resetMinutes` (default 300). The latches
+  live in `<sessions.dir>/quota-pools.yaml`, outside every goal directory, so
+  another goal on this machine skips the same pool; a pool whose interval
+  passes is probed once, and a serving probe frees it.
 - `worktreeRoot` defaults to `../.factory-worktrees/<repo-id>` beside the
   checkout; `sessions.dir` defaults to `<worktreeRoot>/.sessions`. Both must be
   outside the repo and writable.

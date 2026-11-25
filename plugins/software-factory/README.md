@@ -447,20 +447,25 @@ limit.
 A tier that answers quota latches its pool. The stop's stated reset
 (`Resets in 130h19m23s`, `Resets in 33m53s`, `retry-after-ms=38240413`) sets
 that pool's cooldown, capped by `quota.maxResetMinutes` when the run config sets
-one; a stop whose text names no parseable reset falls back to
-`quota.resetMinutes` (default 300) from the stop. A quota stop is final for the
-pool: a stated wait inside the retry window (`maxDelayMs`, 8 s) sleeps in full
-and retries once, and a quota stop again on that retry latches; a stop naming no
-wait, or a wait beyond the window, latches at once after one call. Every retry
-and every tier call reads the latch, so a latched pool makes no call and a
-later, shorter reset never shortens the stored one. A later tier drawing on a
-different pool is still called. The latch is visible in memory before the store
-write. The launch stores the reset time in the goal's session store
-(`quota-pools.yaml` beside the launch directories, so rotation keeps it), and a
-relaunch before that time skips the pool and starts on the next tier. An alias
-whose every tier is exhausted is unavailable: no harness call is made, and
-dispatch defers that work under a cause naming the dead pools and their reset
-times instead of probing the last dead tier.
+one; a stop whose text names no parseable reset falls back to that pool's own
+`quota.perSubscription` interval, else `quota.resetMinutes` (default 300), from
+the stop. A quota stop is final for the pool: a stated wait inside the retry
+window (`maxDelayMs`, 8 s) sleeps in full and retries once, and a quota stop
+again on that retry latches; a stop naming no wait, or a wait beyond the
+window, latches at once after one call. Every retry and every tier call reads
+the latch, so a latched pool makes no call and a later, shorter reset never
+shortens the stored one. A later tier drawing on a different pool is still
+called. The latch is visible in memory before the store write. The launch
+stores the latch in the machine's session store
+(`<sessions.dir>/quota-pools.yaml`), outside every goal directory, so a
+relaunch or another goal on this machine skips the pool before that time and
+starts on the next tier. A pool whose interval has passed is due one probe: the
+first tier call claims it, every other leg reads the claim as a latch and falls
+back meanwhile, and a probe that serves frees the pool while a probe that
+answers quota latches it again. An alias whose every tier is exhausted is
+unavailable: no harness call is made, and dispatch defers that work under a
+cause naming the dead pools and their reset times instead of probing the last
+dead tier.
 
 An alias may carry `rotate: [{ harness, model, effort }]` to change its primary
 per iteration: iteration N resolves `rotate[N % rotate.length]`, so iteration 1

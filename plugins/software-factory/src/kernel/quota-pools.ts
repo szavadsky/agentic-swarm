@@ -7,8 +7,16 @@ import { writeYamlAtomic } from "../core/records/io.js";
 import { statedWaitMs } from "../harness/stated-wait.js";
 import type { GoalPaths, RunConfig } from "./types.js";
 
-/** Pool key -> epoch ms at which the pool may serve again. */
-export type PoolResets = Map<string, number>;
+/** One pool's stored latch: when it may serve again, and a probe in flight. */
+export interface PoolReset {
+  /** Epoch ms at which the pool may serve again; a past time leaves a probe due. */
+  resetAt: number;
+  /** An admitted probe has not reported yet: the pool serves no one until it does. */
+  probing?: true;
+}
+
+/** Pool key -> its stored latch. */
+export type PoolResets = Map<string, PoolReset>;
 
 /**
  * Minutes a pool stays skipped after a quota stop when neither the stop's
@@ -38,30 +46,26 @@ export class QuotaPoolsError extends Error {
 }
 
 /**
- * `quota-pools.yaml` beside the launch directories in the goal's session
- * store: `<sessions.dir>/<goal>/`. Launch rotation only removes directories,
- * so a pool's reset outlives the launch that recorded it.
+ * `quota-pools.yaml` at the root of the machine's session store:
+ * `<sessions.dir>/quota-pools.yaml`. Pool keys name subscriptions or
+ * harness+model combinations, not goals, so one file carries every goal's
+ * latch: a pool a goal exhausted is skipped by the next goal on this machine
+ * and outlives the launch and the goal that recorded it.
  */
-export function quotaPoolsPath(
-  paths: Pick<GoalPaths, "sessionsDir" | "goalDir">,
-): string {
-  return path.join(
-    paths.sessionsDir,
-    path.basename(paths.goalDir),
-    QUOTA_POOLS_FILE,
-  );
+export function quotaPoolsPath(paths: Pick<GoalPaths, "sessionsDir">): string {
+  return path.join(paths.sessionsDir, QUOTA_POOLS_FILE);
 }
 
 /** Serializes writers per file: two quota stops in one dispatch must not overwrite each other. */
 const writes = new KeyedMutex();
 
 /**
- * The session store's pool resets, with the ones already past dropped. A
- * missing file is an empty set: the first launch of a goal has no history.
+ * The machine's pool latches. A missing file is an empty set. A latch whose
+ * reset already passed stays, because it means the pool's next call is its one
+ * probe; only a served probe clears it.
  */
 export async function loadPoolResets(
-  paths: Pick<GoalPaths, "sessionsDir" | "goalDir">,
-  now = Date.now(),
+  paths: Pick<GoalPaths, "sessionsDir">,
 ): Promise<PoolResets> {
   const file = quotaPoolsPath(paths);
   let text: string;
@@ -94,32 +98,98 @@ export async function loadPoolResets(
         `${file}: pool "${pool}" has an unreadable resetAt "${entry.resetAt}"`,
       );
     }
-    if (resetAt > now) pools.set(pool, resetAt);
+    pools.set(pool, { resetAt });
   }
   return pools;
 }
 
-/** True while the pool's stored reset time is ahead; an unknown pool is available. */
+/**
+ * True while the pool serves no one: its reset time is ahead, or a probe is in
+ * flight. An unknown pool is available.
+ */
 export function poolExhausted(
-  pools: ReadonlyMap<string, number>,
+  pools: ReadonlyMap<string, PoolReset>,
   pool: string,
   now = Date.now(),
 ): boolean {
-  const resetAt = pools.get(pool);
-  return resetAt !== undefined && resetAt > now;
+  const stored = pools.get(pool);
+  return (
+    stored !== undefined && (stored.probing === true || stored.resetAt > now)
+  );
+}
+
+/** What one tier call may do with its pool. */
+export type PoolCall =
+  | { kind: "free" }
+  | { kind: "latched" }
+  | { kind: "probe"; claim: PoolReset };
+
+/**
+ * Decides one tier call for `pool`: a latch refuses it, and a latch whose
+ * interval has passed yields exactly one probe. The claim lands in memory
+ * before the call, so every other leg reads the pool as latched and the pool
+ * is probed once per interval instead of by every turn that finds it due.
+ */
+export function takePoolCall(
+  pools: PoolResets,
+  pool: string,
+  now = Date.now(),
+): PoolCall {
+  const stored = pools.get(pool);
+  if (stored === undefined) return { kind: "free" };
+  if (stored.probing === true || stored.resetAt > now)
+    return { kind: "latched" };
+  const claim: PoolReset = { resetAt: stored.resetAt, probing: true };
+  pools.set(pool, claim);
+  return { kind: "probe", claim };
+}
+
+/**
+ * Settles a probe: a served probe clears the latch, an inconclusive one leaves
+ * the pool due, and a quota stop has already replaced the claim with its own
+ * reset. A later latch another leg stored is never dropped. Returns whether the
+ * claim was still the pool's state.
+ */
+export function settlePoolProbe(
+  pools: PoolResets,
+  pool: string,
+  claim: PoolReset,
+  served: boolean,
+): boolean {
+  if (pools.get(pool) !== claim) return false;
+  if (served) pools.delete(pool);
+  else pools.set(pool, { resetAt: claim.resetAt });
+  return true;
+}
+
+/**
+ * The pool's retry interval in minutes: its `quota.perSubscription` entry when
+ * the run config names one, else `quota.resetMinutes`, else the common
+ * subscription window.
+ */
+export function poolResetMinutes(
+  run: Pick<RunConfig, "quota">,
+  pool: string,
+): number {
+  return (
+    run.quota?.perSubscription?.[pool] ??
+    run.quota?.resetMinutes ??
+    DEFAULT_POOL_RESET_MINUTES
+  );
 }
 
 /**
  * The reset time a quota stop stores: the provider's stated wait when the
  * stop text names one (`Resets in 130h19m23s` or `retry-after-ms=38240413`),
  * capped by `quota.maxResetMinutes` when the run config sets a cap; otherwise
- * the run config's `resetMinutes`. An unparseable text falls back like no text
- * at all.
+ * the `pool`'s own interval from `quota.perSubscription`, or the run config's
+ * `resetMinutes`. An unparseable text falls back like no text at all.
  */
 export function poolResetAt(
   run: Pick<RunConfig, "quota">,
   now = Date.now(),
   resetText?: string,
+  pool = "",
 ): number {
   const stated = statedWaitMs(resetText);
   if (stated !== undefined) {
@@ -127,22 +197,27 @@ export function poolResetAt(
     const wait = cap === undefined ? stated : Math.min(stated, cap * 60_000);
     return now + wait;
   }
-  const minutes = run.quota?.resetMinutes ?? DEFAULT_POOL_RESET_MINUTES;
-  return now + minutes * 60_000;
+  return now + poolResetMinutes(run, pool) * 60_000;
 }
 
 /**
  * Latches `pool` until the later of any stored reset and `resetAt`, and returns
- * the stored value. Synchronous, so a reader sees the latch before any write.
+ * the stored value. A probe's claim is no reset evidence, so a quota answer
+ * replaces it: a stated reset shorter than the interval wins. Synchronous, so a
+ * reader sees the latch before any write.
  */
 export function latchPool(
   pools: PoolResets,
   pool: string,
   resetAt: number,
 ): number {
-  const stored = Math.max(pools.get(pool) ?? 0, resetAt);
-  pools.set(pool, stored);
-  return stored;
+  const stored = pools.get(pool);
+  const next =
+    stored === undefined || stored.probing === true
+      ? resetAt
+      : Math.max(stored.resetAt, resetAt);
+  pools.set(pool, { resetAt: next });
+  return next;
 }
 
 /**
@@ -152,18 +227,31 @@ export function latchPool(
  * write, and concurrent stops keep each other's pool.
  */
 export async function markPoolExhausted(opts: {
-  paths: Pick<GoalPaths, "sessionsDir" | "goalDir">;
+  paths: Pick<GoalPaths, "sessionsDir">;
   pools: PoolResets;
   pool: string;
   resetAt: number;
 }): Promise<void> {
-  const file = quotaPoolsPath(opts.paths);
   latchPool(opts.pools, opts.pool, opts.resetAt);
+  await writePoolResets(opts.paths, opts.pools);
+}
+
+/**
+ * Writes the latch set so a relaunch or another goal reads the same pools. The
+ * snapshot is taken inside the lock, so concurrent writers keep each other's
+ * pools. A probe in flight keeps the reset the pool was latched with: another
+ * launch reads the pool as due and takes its own probe.
+ */
+export async function writePoolResets(
+  paths: Pick<GoalPaths, "sessionsDir">,
+  pools: PoolResets,
+): Promise<void> {
+  const file = quotaPoolsPath(paths);
   await writes.runExclusive(file, async () => {
-    const pools: Record<string, { resetAt: string }> = {};
-    for (const [pool, resetAt] of opts.pools) {
-      pools[pool] = { resetAt: new Date(resetAt).toISOString() };
+    const stored: Record<string, { resetAt: string }> = {};
+    for (const [pool, latch] of pools) {
+      stored[pool] = { resetAt: new Date(latch.resetAt).toISOString() };
     }
-    await writeYamlAtomic(file, { pools });
+    await writeYamlAtomic(file, { pools: stored });
   });
 }

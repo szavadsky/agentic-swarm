@@ -113,10 +113,11 @@ export function noLiveTierCause(
 ): string {
   const pools = [...new Set(chain.map((tier) => tierPoolKey(tier)))].map(
     (pool) => {
-      const resetAt = runtime.exhaustedPools.get(pool);
-      return resetAt === undefined
-        ? pool
-        : `${pool} resets at ${new Date(resetAt).toISOString()}`;
+      const stored = runtime.exhaustedPools.get(pool);
+      if (stored === undefined) return pool;
+      return stored.probing === true
+        ? `${pool} probe in flight`
+        : `${pool} resets at ${new Date(stored.resetAt).toISOString()}`;
     },
   );
   return `alias "${aliasName}" has no live tier: its quota pools are exhausted (${pools.join("; ")})`;

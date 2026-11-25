@@ -10,15 +10,21 @@ import type {
   TurnResult,
   Usage,
 } from "../../harness/types.js";
-import { addUsage, reportsUsage, zeroUsage } from "../../harness/usage.js";
-import { noLiveTierCause, resumeNote, tierPoolKey } from "../flow-context.js";
+import { addUsage, zeroUsage } from "../../harness/usage.js";
+import { resumeNote, tierPoolKey } from "../flow-context.js";
 import {
   latchPool,
   markPoolExhausted,
   poolExhausted,
+  type PoolCall,
+  type PoolReset,
   poolResetAt,
+  settlePoolProbe,
+  takePoolCall,
+  writePoolResets,
 } from "../quota-pools.js";
 import type { KernelRuntime } from "../types.js";
+import { absorbChainCall, chainOutcome } from "./chain-result.js";
 import type { AgentTurnSpec, ChainResult, ChainState, Tier } from "./types.js";
 
 /**
@@ -179,11 +185,24 @@ export function mergeServed(
  * The tier's quota pool, read before every retry, fallback and tier call.
  * `dead()` latches in memory at once; the store write follows in
  * `markTierQuota`, so another leg's reader sees the decision first.
+ *
+ * A probe reports its own claim live: it is the call that finds out whether
+ * the pool recovered, so the harness may still sit out a stated quota wait or
+ * a transient backoff inside it. Any other latch — another leg's, or the
+ * probe's own `dead()` replacement — reads dead.
  */
-function tierPool(runtime: KernelRuntime, tier: Tier): PoolLatch {
+function tierPool(
+  runtime: KernelRuntime,
+  tier: Tier,
+  call: PoolCall,
+): PoolLatch {
   const pool = tierPoolKey(tier);
+  const claim = call.kind === "probe" ? call.claim : undefined;
   return {
-    live: () => !poolExhausted(runtime.exhaustedPools, pool),
+    live: () =>
+      claim === undefined
+        ? !poolExhausted(runtime.exhaustedPools, pool)
+        : runtime.exhaustedPools.get(pool) === claim,
     dead: (stop) =>
       latchPool(
         runtime.exhaustedPools,
@@ -192,6 +211,7 @@ function tierPool(runtime: KernelRuntime, tier: Tier): PoolLatch {
           runtime.configs.run,
           Date.now(),
           stop.kind === "infra" ? stop.details : undefined,
+          pool,
         ),
       ),
   };
@@ -202,6 +222,7 @@ async function runChainTier(
   runtime: KernelRuntime,
   spec: AgentTurnSpec,
   tier: Tier,
+  call: PoolCall,
   ask: string,
   current: SessionRef | undefined,
   outcomePath: string,
@@ -219,30 +240,9 @@ async function runChainTier(
     outcomePath,
     timeouts,
     opaque: turnOpaque(tier.opaque, spec.opaque),
-    pool: tierPool(runtime, tier),
+    pool: tierPool(runtime, tier, call),
     ...(spec.onLive ? { onLive: spec.onLive } : {}),
   });
-}
-
-function absorbChainCall(
-  state: ChainState,
-  result: TurnResult,
-  harnessId: string,
-): void {
-  for (const attempt of result.attempts ?? []) {
-    state.attempts.push({ ...attempt, harness: harnessId });
-  }
-  state.usage = state.usage
-    ? addUsage(state.usage, result.usage)
-    : result.usage;
-  if (result.served && (result.attempts?.length ?? 0) <= 1) {
-    state.served.push(...result.served);
-  } else if (result.served || reportsUsage(result.usage)) {
-    // A split covers one call's usage; with retried calls in the same harness
-    // turn their usage is outside it, so the aggregate stays. A call that
-    // measured tokens without a split makes the launch unsplittable.
-    state.servedOpen = false;
-  }
 }
 
 /** A quota stop records its pool in the launch's exhausted set. */
@@ -252,34 +252,18 @@ async function markTierQuota(
   result: TurnResult,
 ): Promise<void> {
   if (result.stop.kind !== "infra" || result.stop.cause !== "quota") return;
+  const pool = tierPoolKey(tier);
   await markPoolExhausted({
     paths: runtime.paths,
     pools: runtime.exhaustedPools,
-    pool: tierPoolKey(tier),
-    resetAt: poolResetAt(runtime.configs.run, Date.now(), result.stop.details),
+    pool,
+    resetAt: poolResetAt(
+      runtime.configs.run,
+      Date.now(),
+      result.stop.details,
+      pool,
+    ),
   });
-}
-
-/**
- * The turn no longer has a live tier: every pool latched after the target was
- * resolved. No harness call may run; the record carries the same cause the
- * resolver would have named.
- */
-function noLiveTierResult(
-  runtime: KernelRuntime,
-  spec: AgentTurnSpec,
-): TurnResult {
-  return {
-    stop: {
-      kind: "infra",
-      cause: "unavailable",
-      details: noLiveTierCause(runtime, spec.target.alias, spec.target.tiers),
-    },
-    text: "",
-    usage: zeroUsage(),
-    model: spec.target.model,
-    attempts: [],
-  };
 }
 
 /** The worktree's HEAD and porcelain status before the first tier call. */
@@ -334,6 +318,61 @@ function fallbackAsk(
 }
 
 /**
+ * Settles a probe: a served one drops the latch from the store too, so the next
+ * launch starts on a pool known to work; an inconclusive after a throw leaves
+ * the pool due. A quota answer already replaced the claim, so nothing lands.
+ */
+async function settleProbe(
+  runtime: KernelRuntime,
+  pool: string,
+  claim: PoolReset,
+  served: boolean,
+): Promise<void> {
+  const settled = settlePoolProbe(runtime.exhaustedPools, pool, claim, served);
+  if (settled && served)
+    await writePoolResets(runtime.paths, runtime.exhaustedPools);
+}
+
+/**
+ * One tier call with its pool decision: a latched pool makes no call, and a
+ * probe is settled before the chain reads the next tier. A quota answer has
+ * already replaced the claim with its own reset, so settling keeps it.
+ */
+async function runTierCall(
+  runtime: KernelRuntime,
+  spec: AgentTurnSpec,
+  tier: Tier,
+  call: PoolCall,
+  tierAsk: string,
+  current: SessionRef | undefined,
+  outcomePath: string,
+  timeouts: { idleMs: number; wallMs: number },
+): Promise<TurnResult> {
+  const pool = tierPoolKey(tier);
+  let result: TurnResult;
+  try {
+    result = await runChainTier(
+      runtime,
+      spec,
+      tier,
+      call,
+      tierAsk,
+      current,
+      outcomePath,
+      timeouts,
+    );
+  } catch (err) {
+    if (call.kind === "probe")
+      await settleProbe(runtime, pool, call.claim, false);
+    throw err;
+  }
+  await markTierQuota(runtime, tier, result);
+  if (call.kind === "probe")
+    await settleProbe(runtime, pool, call.claim, result.stop.kind !== "infra");
+  return result;
+}
+
+/**
  * Walks the alias's tiers from `fromIndex`: one harness call per live tier,
  * each with its own model, effort and opaque config, advancing on
  * infrastructure stops the tier's own retries could not cure. A tier whose
@@ -366,15 +405,19 @@ export async function callChain(
   let result: TurnResult | undefined;
   for (;;) {
     const tier = spec.target.tiers[index]!;
-    if (poolExhausted(runtime.exhaustedPools, tierPoolKey(tier))) {
+    // A latch refuses the call; one whose interval passed yields this leg the
+    // pool's single probe, and the claim keeps every other leg off it.
+    const call = takePoolCall(runtime.exhaustedPools, tierPoolKey(tier));
+    if (call.kind === "latched") {
       if (index + 1 >= spec.target.tiers.length) break;
       index += 1;
       continue;
     }
-    result = await runChainTier(
+    result = await runTierCall(
       runtime,
       spec,
       tier,
+      call,
       tierAsk,
       current,
       outcomePath,
@@ -382,7 +425,6 @@ export async function callChain(
     );
     absorbChainCall(state, result, tier.harness.id);
     current = result.session;
-    await markTierQuota(runtime, tier, result);
     if (result.stop.kind !== "infra" || index + 1 >= spec.target.tiers.length) {
       break;
     }
@@ -393,19 +435,7 @@ export async function callChain(
       await worktreeEdited(spec.cwd, spec.meta.base, startState),
     );
   }
-  if (result === undefined) {
-    result = noLiveTierResult(runtime, spec);
-    absorbChainCall(state, result, spec.target.harness.id);
-  }
-  return {
-    result,
-    endIndex: index,
-    attempts: state.attempts,
-    usage: state.usage!,
-    ...(state.servedOpen && state.served.length > 0
-      ? { served: state.served }
-      : {}),
-  };
+  return chainOutcome(runtime, spec, state, index, result);
 }
 
 const HALTING_STOPS: ReadonlySet<Stop["kind"]> = new Set([

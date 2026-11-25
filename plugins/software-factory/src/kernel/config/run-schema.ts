@@ -289,15 +289,23 @@ export const runConfigSchema = z
     /**
      * Quota-pool cooldown. A quota stop's stated reset ("Resets in 130h") sets
      * the pool's cooldown, capped by `maxResetMinutes` when set; without a
-     * stated reset the window is `resetMinutes` from the stop.
+     * stated reset the window is the pool's `perSubscription` entry, else
+     * `resetMinutes` from the stop. A latch that expires buys one probe.
      */
     quota: z
       .object({
         resetMinutes: z.number().positive().default(DEFAULT_POOL_RESET_MINUTES),
         maxResetMinutes: z.number().positive().optional(),
+        /** Pool key (subscription, or harness+model) -> its own retry interval. */
+        perSubscription: z
+          .record(z.string(), z.number().positive())
+          .default({}),
       })
       .strict()
-      .default(() => ({ resetMinutes: DEFAULT_POOL_RESET_MINUTES })),
+      .default(() => ({
+        resetMinutes: DEFAULT_POOL_RESET_MINUTES,
+        perSubscription: {},
+      })),
     worktreeRoot: z.string().min(1).optional(),
     /**
      * Enable artifact LSP where the harness supports it. omp runs without

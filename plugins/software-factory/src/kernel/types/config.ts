@@ -3,6 +3,7 @@
 import type { Repo } from "../../core/git/repo.js";
 import type { CacheTtl, Harness } from "../../harness/types.js";
 import type { PriceSource } from "../openrouter.js";
+import type { PoolReset } from "../quota-pools.js";
 import type { PromptLibrary } from "../prompts.js";
 import type {
   ArchitectureConfig,
@@ -253,9 +254,15 @@ export interface RunConfig {
   /**
    * Quota-pool cooldown: a quota stop's stated reset sets the pool's skip
    * window, capped by `maxResetMinutes` when set; without a stated reset the
-   * window is `resetMinutes` from the stop (default 300).
+   * window is the pool's `perSubscription` entry, else `resetMinutes` (default
+   * 300) from the stop.
    */
-  quota?: { resetMinutes: number; maxResetMinutes?: number };
+  quota?: {
+    resetMinutes: number;
+    maxResetMinutes?: number;
+    /** Pool key (subscription, or harness+model) -> its own retry interval. */
+    perSubscription?: Record<string, number>;
+  };
   worktreeRoot?: string;
   /** Enable artifact LSP where the harness supports it. */
   lsp?: boolean;
@@ -309,11 +316,11 @@ export interface KernelRuntime {
   provenCombinations?: Set<string>;
   /**
    * Quota pool keys (subscription, or harness+model when none) latched by a
-   * quota stop, mapped to the epoch ms they may serve again. Loaded from the
-   * session store at launch, so a relaunch before a stored reset skips the
-   * pool; turns skip tiers drawing on a pool until its reset time.
+   * quota stop, with the epoch ms they may serve again and a probe in flight.
+   * Loaded from the machine's session store at launch, so a relaunch or another
+   * goal skips the pool before a stored reset and probes a due one once.
    */
-  exhaustedPools: Map<string, number>;
+  exhaustedPools: Map<string, PoolReset>;
   /** Price cache and fetcher; undefined means the shared cache plus network. */
   priceSource?: PriceSource;
 }
