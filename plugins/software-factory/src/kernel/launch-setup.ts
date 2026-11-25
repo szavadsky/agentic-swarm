@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { acquireRunLock, type RunLockHandle } from "../cli/lock.js";
 import { Repo } from "../core/git/repo.js";
+import { runInSandbox } from "../core/sandbox.js";
 import type { Harness } from "../harness/types.js";
 import { artifactLspConfigPath } from "./artifact-lsp.js";
 import { makeCause } from "./cause.js";
@@ -32,6 +33,7 @@ import {
   preflight,
   pinBuildOf,
   pinRefusal,
+  sandboxFindings,
   tmpHeadroom,
 } from "./preflight.js";
 import { loadCanaryProven } from "./canary.js";
@@ -246,6 +248,17 @@ export async function prepareLaunch(
   opts: RunGoalOptions,
 ): Promise<PreparedLaunch> {
   const setup = resolveLaunch(opts);
+  const files = setup.configs.files ?? configFilePaths(setup.repoRoot);
+  const sandboxProblems = sandboxFindings(setup.configs, files.run);
+  if (sandboxProblems.length > 0) throw new PreflightError(sandboxProblems);
+  return runInSandbox(setup.configs.run.sandbox, () => prepareRun(opts, setup));
+}
+
+/** Pre-flight and launch setup, inside the sandbox once its binary is present. */
+async function prepareRun(
+  opts: RunGoalOptions,
+  setup: LaunchSetup,
+): Promise<PreparedLaunch> {
   const refusal = pinRefusalFor(opts);
   const override = opts.pinGateOverride?.trim();
   if (refusal !== undefined && override === undefined)

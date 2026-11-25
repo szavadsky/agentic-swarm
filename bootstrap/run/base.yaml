@@ -140,3 +140,23 @@ sessions:
 worktreeRoot: ~/.local/share/factory/worktrees
 
 lsp: true
+
+# One process-level sandbox for every child this run starts. Machine paths are
+# operator-specific, so the example stays commented: bind the checkout,
+# worktreeRoot, sessions.dir and TMPDIR writable, and keep model APIs reachable.
+# sandbox:
+#   binary: /usr/bin/bwrap
+#   args:
+#     - --ro-bind
+#     - /
+#     - /
+#     - --dev
+#     - /dev
+#     - --proc
+#     - /proc
+#     - --unshare-all
+#     - --share-net
+#     - --die-with-parent
+#     - --bind
+#     - /home/operator/.local/share/factory/worktrees
+#     - /home/operator/.local/share/factory/worktrees

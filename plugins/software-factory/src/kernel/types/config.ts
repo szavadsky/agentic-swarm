@@ -1,6 +1,7 @@
 /** Repository, run and fallback configuration shapes. */
 
 import type { Repo } from "../../core/git/repo.js";
+import type { SandboxCommand } from "../../core/sandbox.js";
 import type { CacheTtl, Harness } from "../../harness/types.js";
 import type { PriceSource } from "../openrouter.js";
 import type { PoolReset } from "../quota-pools.js";
@@ -220,6 +221,8 @@ export interface HarnessConfig {
 
 export interface RunConfig {
   aliases: Record<string, AliasConfig>;
+  /** One predefined process-level wrapper every child of this run starts in. */
+  sandbox?: SandboxCommand;
   /** Harness id -> adapter binding, binary override or opaque options. */
   harnesses?: Record<string, HarnessConfig>;
   /** Extra environment names a spawned harness or agent inherits. */

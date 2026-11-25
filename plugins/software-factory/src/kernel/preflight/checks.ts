@@ -264,6 +264,36 @@ function registeredMessage(
 }
 
 /**
+ * A configured sandbox must be present on the machine before any child can
+ * start: a missing wrapper would otherwise surface mid-turn, after pre-flight.
+ */
+export function sandboxFindings(
+  configs: ConfigBundle,
+  file: string,
+): Finding[] {
+  const sandbox = configs.run.sandbox;
+  if (!sandbox) return [];
+  const present = sandbox.binary.includes("/")
+    ? (() => {
+        try {
+          fs.accessSync(sandbox.binary, fs.constants.X_OK);
+          return true;
+        } catch {
+          return false;
+        }
+      })()
+    : Bun.which(sandbox.binary) !== null;
+  if (present) return [];
+  return [
+    {
+      file,
+      key: "sandbox.binary",
+      message: `sandbox binary "${sandbox.binary}" is not executable or not on PATH`,
+    },
+  ];
+}
+
+/**
  * A portability edge names the harness a session may cross from and to. An
  * endpoint no harness registers is a typo that would otherwise parse clean and
  * mean "no edge", so the crossing it was declared to allow would restart de

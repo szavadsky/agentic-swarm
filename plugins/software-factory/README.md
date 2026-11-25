@@ -89,7 +89,7 @@ dashboard is. Its resources are [kernel.md](skills/run-factory/kernel.md)
 [config.md](skills/run-factory/config.md) (the three layers); its walkthrough
 commands run green on the fake harness in the test suite.
 [sandbox.md](skills/run-factory/sandbox.md) documents the
-run-inside-a-sandbox assumption.
+run-config `sandbox` wrapper and the paths its profile must leave writable.
 
 ## Configuration
 

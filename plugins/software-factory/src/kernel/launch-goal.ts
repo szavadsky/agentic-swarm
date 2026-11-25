@@ -7,11 +7,13 @@
 import { writeArtifactLsp } from "./artifact-lsp.js";
 import { formatCause, makeCause } from "./cause.js";
 import { derive } from "./derive.js";
+import { runInSandbox } from "../core/sandbox.js";
 import { safeSummary } from "./launch-facts.js";
 import { prepareIteration, runIteration } from "./launch-phases.js";
 import { steersWaiting } from "./launch-resume.js";
 import type { GoalRun } from "./launch-run.js";
 import { prepareLaunch, recoverOrInfra } from "./launch-setup.js";
+import type { PreparedLaunch } from "./launch-setup.js";
 import { drainHeldNotes } from "./mailbox.js";
 import { landStoreCommits } from "./store-backend.js";
 import { statusSource, writeStatus } from "./status.js";
@@ -99,8 +101,19 @@ async function launchResult(
  * derived; relaunching after a kill runs the same code path.
  */
 export async function runGoal(opts: RunGoalOptions): Promise<LaunchResult> {
+  const prepared = await prepareLaunch(opts);
+  return runInSandbox(prepared.setup.configs.run.sandbox, () =>
+    runPreparedLaunch(opts, prepared),
+  );
+}
+
+/** The launch body; every child it starts inherits the configured wrapper. */
+async function runPreparedLaunch(
+  opts: RunGoalOptions,
+  prepared: PreparedLaunch,
+): Promise<LaunchResult> {
   const { setup, store, runtime, signals, uninstall, lock, closeRunLog } =
-    await prepareLaunch(opts);
+    prepared;
 
   try {
     const interrupted = (await store.listRecords()).filter(

@@ -9,6 +9,7 @@ export {
   DEFAULT_MIN_TMP_FREE_BYTES,
   PreflightError,
   fallbackAliasFindings,
+  sandboxFindings,
   tmpHeadroom,
 } from "./preflight/checks.js";
 export { acpxOptionFindings, usedHarnesses } from "./preflight/config.js";

@@ -2,6 +2,7 @@
 
 import { spawn } from "node:child_process";
 import { childEnv } from "../../../core/env.js";
+import { sandboxedSpec } from "../../../core/sandbox.js";
 import {
   isChildGroupAlive,
   registerChildGroup,
@@ -88,19 +89,19 @@ class PromptProcessRun {
 
   private spawnChild(): boolean {
     try {
-      this.child = spawn(
-        this.runtime.command.binary,
-        [...this.runtime.command.prefix, ...this.args],
-        {
-          cwd: this.cwd,
-          detached: true,
-          stdio: ["ignore", "pipe", "pipe"],
-          env: childEnv({
-            allow: this.runtime.envAllowlist,
-            set: this.config.env,
-          }),
-        },
-      );
+      const command = sandboxedSpec(this.runtime.command.binary, [
+        ...this.runtime.command.prefix,
+        ...this.args,
+      ]);
+      this.child = spawn(command.executable, command.args, {
+        cwd: this.cwd,
+        detached: true,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: childEnv({
+          allow: this.runtime.envAllowlist,
+          set: this.config.env,
+        }),
+      });
     } catch (error) {
       this.resolve({
         code: null,

@@ -10,7 +10,11 @@ import {
   unconfiguredTaskFindings,
   uniqueFindings,
 } from "./config.js";
-import { harnessRegistrationFindings, portabilityFindings } from "./checks.js";
+import {
+  harnessRegistrationFindings,
+  portabilityFindings,
+  sandboxFindings,
+} from "./checks.js";
 import type { NonModelInput, NonModelResult } from "./types.js";
 
 interface NonModelCheck {
@@ -44,6 +48,12 @@ const NON_MODEL_CHECKS: readonly NonModelCheck[] = [
         ),
         ...portabilityFindings(input.configs, input.files.run, input.harnesses),
       );
+    },
+  },
+  {
+    id: "sandbox",
+    run(input, result) {
+      result.findings.push(...sandboxFindings(input.configs, input.files.run));
     },
   },
   {

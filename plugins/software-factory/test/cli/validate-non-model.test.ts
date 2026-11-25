@@ -179,3 +179,23 @@ describe("factory validate: non-model pre-flight checks", () => {
     }),
   );
 });
+
+describe("factory validate: sandbox pre-flight", () => {
+  it(
+    "reports a configured sandbox whose binary is missing",
+    withTmp(async (root) => {
+      writeFile(root, ".factory/repo.yaml", "baseBranch: main\n");
+      const runFile = writeFile(
+        root,
+        ".factory/run.yaml",
+        `${validRunConfig()}sandbox: { binary: /nonexistent/factory-sandbox }\n`,
+      );
+      const result = await runValidate(path.join(root, ".factory/repo.yaml"));
+      expect(result.code).toBe(1);
+      expect(result.out).toBe("");
+      expect(result.err.split("\n")).toEqual([
+        `${runFile}: sandbox.binary: sandbox binary "/nonexistent/factory-sandbox" is not executable or not on PATH`,
+      ]);
+    }),
+  );
+});

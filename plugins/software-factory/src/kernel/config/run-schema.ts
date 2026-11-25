@@ -209,6 +209,14 @@ export const harnessEntrySchema = z
     "acpx compaction enabled needs acpx.compact: true",
   );
 
+/** The whole-run process wrapper; `args` precede the command after `--`. */
+export const sandboxSchema = z
+  .object({
+    binary: z.string().min(1),
+    args: z.array(z.string()).default([]),
+  })
+  .strict();
+
 const concurrencySchema = z
   .object({
     overall: z.number().int().positive().default(2),
@@ -259,6 +267,8 @@ export const limitsSchema = z
 export const runConfigSchema = z
   .object({
     aliases: z.record(z.string(), aliasSchema).default({}),
+    /** One process-level wrapper for every child this run starts. */
+    sandbox: sandboxSchema.optional(),
     /** Harness id -> adapter binding; a harness id is a config name. */
     harnesses: z.record(z.string(), harnessEntrySchema).default({}),
     /**

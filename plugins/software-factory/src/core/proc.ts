@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createActiveTimer, detectSuspend, getClock } from "./clock.js";
 import { childEnv } from "./env.js";
+import { sandboxedSpec } from "./sandbox.js";
 import { registerChildGroup, unregisterChildGroup } from "./shutdown.js";
 
 interface RunProcessOptions {
@@ -142,10 +143,10 @@ function killGroupNow(child: ReturnType<typeof spawn>): void {
 function commandSpec(
   cmd: string | string[],
 ): { executable: string; args: string[] } | { error: string } {
-  if (typeof cmd === "string") return { executable: "bash", args: ["-c", cmd] };
+  if (typeof cmd === "string") return sandboxedSpec("bash", ["-c", cmd]);
   const [executable, ...args] = cmd;
   if (executable === undefined) return { error: "Empty command array" };
-  return { executable, args };
+  return sandboxedSpec(executable, args);
 }
 
 /** The child environment: TMPDIR overrides plus the run config's allowlist. */

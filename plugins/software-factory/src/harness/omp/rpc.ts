@@ -1,5 +1,6 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { childEnv } from "../../core/env.js";
+import { sandboxedSpec } from "../../core/sandbox.js";
 import {
   registerChildGroup,
   unregisterChildGroup,
@@ -56,7 +57,8 @@ export class OmpRpc {
   constructor(opts: OmpRpcOptions) {
     this.opts = opts;
     this.maxStderrBytes = opts.maxStderrBytes ?? 64 * 1024;
-    this.child = spawn(opts.binary, opts.args, {
+    const command = sandboxedSpec(opts.binary, opts.args);
+    this.child = spawn(command.executable, command.args, {
       cwd: opts.cwd,
       detached: true,
       stdio: ["pipe", "pipe", "pipe"],

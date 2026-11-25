@@ -151,6 +151,7 @@ worktreeRoot: ~/.local/share/factory/worktrees
 lsp: true
 priceIds: { opencode/beam-free: reflection/beam-1.0-501b-a23b }
 envAllowlist: [ANTHROPIC_API_KEY]
+sandbox: { binary: /usr/bin/bwrap, args: [--ro-bind, /, /, --dev, /dev, --proc, /proc, --unshare-all, --share-net, --die-with-parent] }
 ```
 
 - `extends` composes from a base; the path resolves from the file that names
@@ -181,6 +182,12 @@ envAllowlist: [ANTHROPIC_API_KEY]
   live in `<sessions.dir>/quota-pools.yaml`, outside every goal directory, so
   another goal on this machine skips the same pool; a pool whose interval
   passes is probed once, and a serving probe frees it.
+- `sandbox` names one process-level wrapper for every child the run starts,
+  pre-flight included (`binary`, plus `args` passed before `--` and the child's
+  argv). Pre-flight refuses a missing binary; a run without the block behaves
+  as before. Bind the repo, `worktreeRoot`, `sessions.dir` and `TMPDIR`
+  writable, plus per-harness state directories (`~/.omp`, `~/.acpx`, an agent's
+  own); see [sandbox.md](sandbox.md).
 - `worktreeRoot` defaults to `../.factory-worktrees/<repo-id>` beside the
   checkout; `sessions.dir` defaults to `<worktreeRoot>/.sessions`. Both must be
   outside the repo and writable.
