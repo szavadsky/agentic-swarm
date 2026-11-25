@@ -1,5 +1,8 @@
 /** Merge and kept-land result shapes. */
 
+import type { CheckResult } from "../../core/checks/types.js";
+import type { StepRecord } from "../types.js";
+
 export interface MergeResult {
   infra?: { kind: "infra"; cause: string; details?: string };
   cancelled?: boolean;
@@ -19,4 +22,12 @@ export interface KeptLandResult {
   landed: string[];
   /** Parked slugs attempted this boundary, landed or still parked. */
   attempted: string[];
+}
+
+/** The integration head's own gate verdict, keyed by the tree it judged. */
+export interface GoalHeadJudgement {
+  /** The gate run that judged that tree: this wave's, or the reused one. */
+  record: StepRecord;
+  /** New failures on the head's tree; empty when the head is green. */
+  red: CheckResult[];
 }

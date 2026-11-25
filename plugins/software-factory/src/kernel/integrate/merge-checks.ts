@@ -1,13 +1,15 @@
 /** The merge's gate checks, kept-gate reruns and landing a merged task. */
 
-import type { CheckResult } from "../../core/checks/types.js";
 import { runWorktreeSetup } from "../../core/checks/setup.js";
+import type { CheckResult } from "../../core/checks/types.js";
+import { git } from "../../core/git/exec.js";
 import { preexistingRed, recordedBaseGates } from "../baseline.js";
 import { makeCause } from "../cause.js";
 import {
   gateFlakeTests,
   isInfraCheck,
   newGateFailures,
+  newRedChecks,
   runGates,
   stampAttribution,
 } from "../gates.js";
@@ -26,17 +28,24 @@ import type {
   TaskFile,
   TaskState,
 } from "../types.js";
-import { headSha, removeMergeScratch, treeSha } from "../worktree.js";
 import {
-  IntegrationMovedError,
+  headSha,
+  integrationHead,
+  removeMergeScratch,
+  resetMergeScratch,
+  treeSha,
+} from "../worktree.js";
+import {
+  bySeq,
   failMerge,
+  IntegrationMovedError,
   judgedChecks,
   recoverOpenMerge,
   refMove,
   squashTaskBranch,
   syncCheckout,
 } from "./merge.js";
-import type { MergeOptions, MergeResult } from "./types.js";
+import type { GoalHeadJudgement, MergeOptions, MergeResult } from "./types.js";
 
 /** The recorded green run for this tree, when the merge may reuse it. */
 function judgedMergeChecks(
@@ -120,7 +129,7 @@ async function mergeChecks(
       preexisting,
     );
   }
-  await finishChecks(gate, ran, { preexisting });
+  await finishChecks(gate, ran, { preexisting, tree: mergedTree });
   const red = newGateFailures(ran, preexisting);
   if (red.length > 0) {
     // The merge record closes outside `finishChecks`, so stamp its checks
@@ -273,5 +282,99 @@ async function rerunRedKeptGates(
     const next = fresh.get(check.name);
     if (!next || (!next.ok && isInfraCheck(next))) return check;
     return next;
+  });
+}
+
+/** Record step of the gate run on the integration head itself. */
+const GOAL_HEAD_STEP = "goal-head";
+
+/** Whether a gate record judged its tree: green, or red for a reason of its own. */
+function judgedTree(
+  record: StepRecord,
+  preexisting: ReadonlySet<string>,
+): boolean {
+  if (!record.checks) return false;
+  return (
+    record.ok === true || newRedChecks(record.checks, preexisting).length > 0
+  );
+}
+
+/**
+ * The last recorded gate run that already judged `tree`, for reuse. Tree
+ * identity is the whole key: every gate record carries the tree it ran on (a
+ * task's checks, a merge's gates, an earlier goal-head run), so an unchanged
+ * head never runs the same gates twice. A run that stopped on infra judged
+ * nothing and is not reused.
+ */
+function judgedGoalHead(
+  records: readonly StepRecord[],
+  tree: string,
+  preexisting: ReadonlySet<string>,
+): StepRecord | undefined {
+  return records
+    .filter(
+      (record) =>
+        record.actor === "script" &&
+        record.tree === tree &&
+        record.endedAt !== undefined &&
+        judgedTree(record, preexisting),
+    )
+    .sort(bySeq)
+    .at(-1);
+}
+
+/**
+ * The integration head's gate verdict — the one place head redness is
+ * established. A task's merge-check judges a merged result that never landed,
+ * so it cannot speak for the head; gating the head can. The head's tree is the
+ * key: a tree an earlier run already judged (the merge that just landed gated
+ * the tree the head now has) reuses that run, so a wave end pays for the gates
+ * once per head tree. The gates run in a detached scratch at the head, never
+ * in the goal checkout, which the boundary also uses.
+ */
+export async function judgeGoalHead(
+  runtime: KernelRuntime,
+  iteration: number,
+  records: readonly StepRecord[],
+): Promise<GoalHeadJudgement | undefined> {
+  const head = await integrationHead(runtime);
+  const tree = (
+    await git(runtime.paths.repoRoot, ["rev-parse", `${head}^{tree}`])
+  ).stdout.trim();
+  const preexisting = preexistingRed(recordedBaseGates(records));
+  const judged = judgedGoalHead(records, tree, preexisting);
+  if (judged)
+    return {
+      record: judged,
+      red: newRedChecks(judged.checks ?? [], preexisting),
+    };
+
+  return integrationExclusive(runtime, async () => {
+    const scratch = await resetMergeScratch(runtime, head);
+    try {
+      const setup = await runWorktreeSetup({
+        commands: runtime.configs.repo.setup,
+        cwd: scratch,
+      });
+      if (!setup.ok) {
+        await runtime.store.appendRecord(
+          scriptMeta(iteration, GOAL_HEAD_STEP),
+          {
+            ok: false,
+            cause: makeCause("setup", setup.error ?? "unknown"),
+            tree,
+          },
+        );
+        return undefined;
+      }
+      const turn = await runtime.store.startRecord(
+        scriptMeta(iteration, GOAL_HEAD_STEP),
+      );
+      const checks = await runGates(runtime, scratch);
+      const record = await finishChecks(turn, checks, { preexisting, tree });
+      return { record, red: newRedChecks(checks, preexisting) };
+    } finally {
+      await removeMergeScratch(runtime);
+    }
   });
 }

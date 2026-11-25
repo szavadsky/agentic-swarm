@@ -1,26 +1,26 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { CheckAttribution, CheckResult } from "../core/checks/types.js";
 import {
   capJunit,
-  parseJunit,
   type ParsedJunit,
+  parseJunit,
 } from "../core/checks/junit.js";
+import type { CheckAttribution, CheckResult } from "../core/checks/types.js";
 import { fingerprintText } from "../core/fingerprint.js";
 import { KeyedMutex } from "../core/mutex.js";
-import { runProcess, type ProcessResult } from "../core/proc.js";
+import { type ProcessResult, runProcess } from "../core/proc.js";
 import { trackGateGroup } from "./gate-processes.js";
 import {
-  GATE_OUTPUT_CAP,
+  type CappedGateOutput,
   capGateOutput,
   caseLabel,
+  GATE_OUTPUT_CAP,
   isInfraCheck,
-  type CappedGateOutput,
 } from "./gates-normalise.js";
 import {
-  UNIDENTIFIED_GATE_FAILURE,
   gateSignatureKey,
   gateSignatures,
+  UNIDENTIFIED_GATE_FAILURE,
 } from "./gates-signatures.js";
 import { resolveGates } from "./infra.js";
 import type { GateConfig, GatePattern, KernelRuntime } from "./types.js";
@@ -40,19 +40,19 @@ export function gateTimeoutSec(gate: Pick<GateConfig, "timeoutSec">): number {
     : GATE_TIMEOUT_SEC;
 }
 
+export { reapGateProcesses } from "./gate-processes.js";
 export {
-  GATE_OUTPUT_CAP,
   capGateOutput,
+  GATE_OUTPUT_CAP,
+  type GateInfra,
   isInfraCheck,
   isStaleGateCheck,
-  type GateInfra,
 } from "./gates-normalise.js";
 export {
-  UNIDENTIFIED_GATE_FAILURE,
   gateSignatureKey,
   gateSignatures,
+  UNIDENTIFIED_GATE_FAILURE,
 } from "./gates-signatures.js";
-export { reapGateProcesses } from "./gate-processes.js";
 
 /**
  * Branch checks and merged-result gates share ports, caches and build dirs only
@@ -411,6 +411,20 @@ export function newGateFailures(
     }
     return false;
   });
+}
+
+/**
+ * The red a gate run charges its tree: the failures that are new against the
+ * base's pre-existing set, minus infra stops — a gate that could not start is
+ * no verdict on the tree.
+ */
+export function newRedChecks(
+  checks: readonly CheckResult[],
+  preexisting: ReadonlySet<string>,
+): CheckResult[] {
+  return newGateFailures(checks, preexisting).filter(
+    (check) => !isInfraCheck(check),
+  );
 }
 
 /**

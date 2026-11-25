@@ -1,6 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
+import { derive } from "../../src/kernel/derive.js";
+import { executeTaskAction } from "../../src/kernel/flow.js";
+import type { KernelRuntime, TaskFile } from "../../src/kernel/types.js";
 import type { TmpRepo } from "../helpers/tmp-repo.js";
 import { outcome } from "./s2-helpers.js";
 
@@ -40,4 +43,29 @@ export function parkAlpha(
     );
     return fakeTurnResult(req);
   });
+}
+
+/**
+ * Runs a continuation's implement turn the way dispatch would, without the
+ * wave end: a test that inspects the park a turn produces must not also run the
+ * wave-end steward, whose turn moves the branch the assertions name.
+ */
+export async function runImplementStep(
+  runtime: KernelRuntime,
+  file: TaskFile,
+  iteration: number,
+): Promise<void> {
+  const state = derive(
+    await runtime.store.listTasks(),
+    await runtime.store.listRecords(),
+    runtime.configs.process.flows,
+  ).tasks[file.slug];
+  if (!state) throw new Error(`no derived state for ${file.slug}`);
+  await executeTaskAction(
+    runtime,
+    file,
+    { kind: "step", slug: file.slug, step: "implement", round: state.round },
+    iteration,
+    state,
+  );
 }

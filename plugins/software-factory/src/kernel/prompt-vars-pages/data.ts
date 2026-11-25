@@ -430,7 +430,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       conflicts:
         "conflicted files, comma-separated; `none` when the merge needs no resolution",
       gate_log_path:
-        "path to the red merged result's gate log when this branch is a red-after-merge candidate; `none` when the merge needs no gate repair",
+        "path to the gate log of the red this branch must repair (the goal head's run when the head is red, else the branch's red merged result); `none` when the merge needs no gate repair",
       gate_commands:
         "configured gate commands as `- id: command` lines; `none` when empty",
       base_gates:

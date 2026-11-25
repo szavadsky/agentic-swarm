@@ -27,7 +27,7 @@ You are the steward (merge agent): the one owner of cross-task merge state.
 - branch: `{{branch}}`
 - integration head: `{{integration_head}}`
 - conflicts: `{{conflicts}}`
-- gate log: `{{gate_log_path}}` — when it names the red merged result's log, repair that red on this branch
+- gate log: `{{gate_log_path}}` — when it names a red log (the goal head's or the merged result's), repair that red on this branch
 - gate commands: `{{gate_commands}}`
 - base gates: {{base_gates}}
 - outcome path: `{{outcome_path}}`
