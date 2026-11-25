@@ -170,3 +170,247 @@ export function formatPlanList(plans: readonly PlanFile[]): string {
     )
     .join("\n  ");
 }
+
+/** A plan's text, keyed by its goal-relative path. */
+export interface PlanDocument {
+  rel: string;
+  text: string;
+}
+
+interface PlanDiffBullet {
+  slug?: string;
+  heading?: string;
+  text: string;
+}
+
+interface PlanDiffCancellation {
+  slug?: string;
+  heading?: string;
+  reason: string;
+}
+
+interface PlanDiff {
+  added: PlanDiffBullet[];
+  changed: PlanDiffBullet[];
+  cancelled: PlanDiffCancellation[];
+}
+
+interface ParsedPlan {
+  bullets: Map<string, PlanDiffBullet>;
+  unslugged: PlanDiffBullet[];
+  cancellations: Map<string, string>;
+}
+
+interface ParseState {
+  heading: string;
+  open?: { slug?: string; heading: string; lines: string[] };
+}
+
+const HEADING_LINE = /^#{1,6}\s+(.+)$/;
+const BULLET_START = /^-\s+/u;
+
+function normalizePlanText(text: string): string {
+  return text.trim().replace(/\s+/g, " ");
+}
+
+function emitOpenBullet(plan: ParsedPlan, state: ParseState): void {
+  if (!state.open) return;
+  const text = state.open.lines.join("\n");
+  if (state.open.slug) {
+    if (!plan.bullets.has(state.open.slug)) {
+      plan.bullets.set(state.open.slug, {
+        slug: state.open.slug,
+        text,
+      });
+    }
+  } else {
+    plan.unslugged.push({ heading: state.open.heading, text });
+  }
+  state.open = undefined;
+}
+
+function processPlanLine(
+  line: string,
+  plan: ParsedPlan,
+  state: ParseState,
+): void {
+  const heading = HEADING_LINE.exec(line);
+  if (heading) {
+    emitOpenBullet(plan, state);
+    state.heading = heading[1]!.trim();
+    return;
+  }
+  const task = TASK_BULLET.exec(line);
+  if (task) {
+    emitOpenBullet(plan, state);
+    state.open = { slug: task[1]!, heading: state.heading, lines: [line] };
+    return;
+  }
+  if (BULLET_START.test(line)) {
+    emitOpenBullet(plan, state);
+    state.open = { heading: state.heading, lines: [line] };
+    return;
+  }
+  if (state.open && (line.trim() === "" || /^\s+\S/u.test(line))) {
+    state.open.lines.push(line);
+  } else {
+    emitOpenBullet(plan, state);
+  }
+}
+
+/** One plan's bullets and explicit cancellations, with each bullet's heading. */
+function parsePlan(text: string): ParsedPlan {
+  const plan: ParsedPlan = {
+    bullets: new Map(),
+    unslugged: [],
+    cancellations: planCancellations(text),
+  };
+  const state: ParseState = { heading: "(none)" };
+  for (const line of text.split(/\r?\n/)) {
+    processPlanLine(line, plan, state);
+  }
+  emitOpenBullet(plan, state);
+  return plan;
+}
+
+/** All plans as one set of bullets, the first plan carrying a slug winning. */
+function parsePlans(plans: readonly PlanDocument[]): ParsedPlan {
+  const combined: ParsedPlan = {
+    bullets: new Map(),
+    unslugged: [],
+    cancellations: new Map(),
+  };
+  for (const doc of plans) {
+    const parsed = parsePlan(doc.text);
+    for (const [slug, bullet] of parsed.bullets) {
+      if (!combined.bullets.has(slug)) combined.bullets.set(slug, bullet);
+    }
+    for (const [slug, reason] of parsed.cancellations) {
+      if (!combined.cancellations.has(slug)) {
+        combined.cancellations.set(slug, reason);
+      }
+    }
+    combined.unslugged.push(...parsed.unslugged);
+  }
+  return combined;
+}
+
+function diffSlugged(
+  current: ParsedPlan,
+  previous: ParsedPlan,
+  diff: PlanDiff,
+): void {
+  for (const [slug, bullet] of current.bullets) {
+    const before = previous.bullets.get(slug);
+    if (!before) {
+      diff.added.push({ slug, text: bullet.text });
+    } else if (
+      normalizePlanText(bullet.text) !== normalizePlanText(before.text)
+    ) {
+      diff.changed.push({ slug, text: bullet.text });
+    }
+  }
+}
+
+function diffCancellations(
+  current: ParsedPlan,
+  previous: ParsedPlan,
+  diff: PlanDiff,
+): void {
+  for (const [slug, reason] of current.cancellations) {
+    if (!previous.cancellations.has(slug)) {
+      diff.cancelled.push({ slug, reason });
+    }
+  }
+  for (const slug of previous.bullets.keys()) {
+    if (!current.bullets.has(slug) && !current.cancellations.has(slug)) {
+      diff.cancelled.push({ slug, reason: "removed" });
+    }
+  }
+}
+
+function diffUnslugged(
+  current: ParsedPlan,
+  previous: ParsedPlan,
+  diff: PlanDiff,
+): void {
+  const matched = new Set<number>();
+  for (const bullet of current.unslugged) {
+    const index = previous.unslugged.findIndex(
+      (before, i) =>
+        !matched.has(i) &&
+        bullet.heading === before.heading &&
+        normalizePlanText(bullet.text) === normalizePlanText(before.text),
+    );
+    if (index === -1) {
+      diff.added.push({ heading: bullet.heading, text: bullet.text });
+    } else {
+      matched.add(index);
+    }
+  }
+  for (const [index, before] of previous.unslugged.entries()) {
+    if (matched.has(index)) continue;
+    diff.cancelled.push({
+      heading: before.heading,
+      reason: `${before.text} (removed)`,
+    });
+  }
+}
+
+function sortDiff<T extends { slug?: string; heading?: string }>(
+  items: T[],
+): T[] {
+  return items.sort((a, b) =>
+    (a.slug ?? a.heading ?? "").localeCompare(b.slug ?? b.heading ?? ""),
+  );
+}
+
+/**
+ * The bullets that differ between the current plans and the last derived plan,
+ * keyed by task slug: added, changed, and cancelled. An absent previous plan
+ * is the first derive turn; a bullet without a slug is keyed by its heading.
+ */
+export function formatPlanDiff(
+  current: readonly PlanDocument[],
+  previous: readonly PlanDocument[] | null,
+): string {
+  if (!previous) return "none";
+  const diff: PlanDiff = { added: [], changed: [], cancelled: [] };
+  const now = parsePlans(current);
+  const before = parsePlans(previous);
+  diffSlugged(now, before, diff);
+  diffCancellations(now, before, diff);
+  diffUnslugged(now, before, diff);
+  const added = sortDiff(diff.added);
+  const changed = sortDiff(diff.changed);
+  const cancelled = sortDiff(diff.cancelled);
+  if (added.length + changed.length + cancelled.length === 0) {
+    return "empty (unchanged)";
+  }
+  const lines: string[] = [];
+  if (added.length > 0) {
+    lines.push("added:");
+    for (const item of added) lines.push(diffItemLine(item));
+  }
+  if (changed.length > 0) {
+    lines.push("changed:");
+    for (const item of changed) lines.push(diffItemLine(item));
+  }
+  if (cancelled.length > 0) {
+    lines.push("cancelled:");
+    for (const item of cancelled) {
+      lines.push(
+        item.slug
+          ? `- ${item.slug} — ${item.reason}`
+          : `- heading "${item.heading}": ${item.reason}`,
+      );
+    }
+  }
+  return `\n  ${lines.join("\n  ")}`;
+}
+
+function diffItemLine(item: PlanDiffBullet): string {
+  return item.slug
+    ? `- ${item.text.replace(/^-\s*/, "")}`
+    : `- heading "${item.heading}": ${item.text}`;
+}

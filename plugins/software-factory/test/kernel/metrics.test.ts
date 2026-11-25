@@ -180,10 +180,10 @@ async function matchesUsageRecordsScriptedRunPart3(
   const one = metrics.iterations[0]!;
   expect(one.n).toBe(1);
   expect(one.tokens).toBe(fromRecords);
-  // 473 scripted turn tokens plus four recorded compactions (architect,
+  // 473 scripted turn tokens plus five recorded compactions (architect, PM,
   // implement, QA, review); the mandatory plan review reports zero usage,
   // and nothing was open, so the plan checker did not turn.
-  expect(one.tokens).toBe(34_073);
+  expect(one.tokens).toBe(42_473);
   expect(one.usage.costUsd).toBeCloseTo(costFromRecords, 10);
   expect(one.usage.costUsd).toBeCloseTo(0.43, 10);
   expect(one.merged).toEqual(["alpha"]);
@@ -201,7 +201,7 @@ async function matchesUsageRecordsScriptedRunPart3(
   expect(one.roles.implementer!.edits).toBeGreaterThanOrEqual(1);
   expect(one.commitWallMs).toBeGreaterThan(0);
   expect(one.roles.architect).toMatchObject({ turns: 1, tokens: 8_510 });
-  expect(one.roles.pm).toMatchObject({ turns: 1, tokens: 55 });
+  expect(one.roles.pm).toMatchObject({ turns: 1, tokens: 8_455 });
   expect(one.roles.infra).toMatchObject({ turns: 1, tokens: 0 });
   expect(one.roles.scout).toMatchObject({ turns: 1, tokens: 0 });
   expect(one.roles.implementer).toMatchObject({ turns: 1, tokens: 8_620 });
@@ -219,12 +219,12 @@ async function matchesUsageRecordsScriptedRunPart4(
   expect(one.architect.turns).toBe(1);
   expect(one.architect.tokens).toBe(8_510);
   expect(one.architect.costShare).toBeCloseTo(0.1 / 0.43, 10);
-  expect(one.architect.tokenShare).toBeCloseTo(8_510 / 34_073, 10);
+  expect(one.architect.tokenShare).toBeCloseTo(8_510 / 42_473, 10);
   expect(one.architect.turnShare).toBeCloseTo(1 / 8, 10);
 
   expect(metrics.totals.iterations).toBe(1);
   expect(metrics.totals.turns).toBe(8);
-  expect(metrics.totals.tokens).toBe(34_073);
+  expect(metrics.totals.tokens).toBe(42_473);
   expect(metrics.totals.merged).toEqual(["alpha"]);
   expect(metrics.totals.usage.costUsd).toBeCloseTo(0.43, 10);
   expect(metrics.totals.architect.turns).toBe(1);

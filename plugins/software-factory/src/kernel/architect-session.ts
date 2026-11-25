@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import path from "node:path";
-import { portable, type SessionRef } from "../harness/types.js";
+import type { SessionRef } from "../harness/types.js";
 import type { TurnTarget } from "./flow-context.js";
+import { resumableRef } from "./sessions.js";
 import { MAIN_ARCHITECT } from "./tasks.js";
 import type { KernelRuntime, Outcome, StepRecord } from "./types.js";
 
@@ -87,30 +87,5 @@ export async function resumableSession(
     .sort((a, b) => a.seq - b.seq)
     .at(-1);
   if (!last?.session) return undefined;
-  const { harness, model } = target;
-  const miss = (reason: string): undefined => {
-    console.warn(`[factory] ${who} starts de novo: ${reason}`);
-    return undefined;
-  };
-  let resume: boolean;
-  try {
-    resume = (await harness.caps(model)).resume;
-  } catch (err) {
-    return miss(
-      `harness "${harness.id}" did not report its capabilities: ${(err as Error).message}`,
-    );
-  }
-  if (!resume) return miss(`harness "${harness.id}" cannot resume a session`);
-  const session = last.session;
-  if (!portable(session.harness, harness.id, runtime.configs.run.portability))
-    return miss(
-      `a "${session.harness}" session is not portable to "${harness.id}"`,
-    );
-  if (path.resolve(session.cwd) !== path.resolve(runtime.paths.goalCheckout))
-    return miss(
-      `session cwd "${session.cwd}" is not the goal checkout "${runtime.paths.goalCheckout}"`,
-    );
-  if (session.model.id !== model.id)
-    return miss(`session model "${session.model.id}" is not "${model.id}"`);
-  return session;
+  return resumableRef(runtime, last.session, target, who);
 }

@@ -343,7 +343,7 @@ async function storesCompactedRefReDerivesAfterPart1(
   const records = await store.listRecords();
   const architect = records.find((r) => r.step === "architect");
   expect(architect?.session?.compacted).toBe(true);
-  expect(first.compactions).toHaveLength(1);
+  expect(first.compactions).toHaveLength(2);
   const sessionId = architect!.session!.id;
 
   // A hard kill after the records, before the summary: backfill owns it.

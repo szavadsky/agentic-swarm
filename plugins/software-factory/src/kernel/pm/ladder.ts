@@ -1,7 +1,12 @@
 import { type AgentTurnResult, runAgentTurn } from "../agent.js";
 import { formatStop, makeCause } from "../cause.js";
-import { boundaryTarget, type TurnTarget } from "../flow-context.js";
-import type { LiveAgents } from "../../harness/types.js";
+import { resumableRef } from "../sessions.js";
+import {
+  boundaryTarget,
+  compactSession,
+  type TurnTarget,
+} from "../flow-context.js";
+import type { LiveAgents, SessionRef } from "../../harness/types.js";
 import { holdsDir } from "../mailbox.js";
 import { KERNEL_TURN_STEPS } from "../outcome.js";
 import { formatPlanList } from "../plan-file.js";
@@ -14,8 +19,12 @@ import type {
   StepRecord,
   TaskFile,
 } from "../types.js";
-import { existingTasks, pmLadderNote } from "./prompts.js";
-import { openTaskTexts, storePlanBulletBaseline } from "./plan-bullets.js";
+import { existingTasks, planDiffPrompt, pmLadderNote } from "./prompts.js";
+import {
+  openTaskTexts,
+  previousPlanBaseline,
+  storePlanBulletBaseline,
+} from "./plan-bullets.js";
 import {
   cancelPlanNamed,
   findingKey,
@@ -88,6 +97,11 @@ export interface PmTurnSetup {
   snapshot: TurnSnapshot;
   plansBefore: PlanSnapshot[];
   planList: string;
+  planDiff: string;
+  /** The current derive iteration; its own baseline is the previous one on a re-derive. */
+  iteration: number;
+  /** That derive's compacted session, resumed when the target can. */
+  priorSession?: SessionRef;
   taskSnapshot: Map<string, string>;
   baseline: string[];
   baselineKeys: Set<string>;
@@ -107,6 +121,8 @@ export async function setupPmTurn(
   const planList = formatPlanList(
     plansBefore.filter((before) => before.exists).map((before) => before.plan),
   );
+  const previous = await previousPlanBaseline(runtime, opts.iteration);
+  const planDiff = planDiffPrompt(plansBefore, previous?.plans ?? null);
   const taskSnapshot = snapshot.tasks;
   const baseline = await graphFindings(
     runtime,
@@ -118,6 +134,9 @@ export async function setupPmTurn(
     snapshot,
     plansBefore,
     planList,
+    planDiff,
+    iteration: opts.iteration,
+    ...(previous?.session ? { priorSession: previous.session } : {}),
     taskSnapshot,
     baseline,
     baselineKeys: new Set(baseline.map(findingKey)),
@@ -147,19 +166,20 @@ export async function runPm(
   let failure: string[] = [];
 
   for (const [index, rung] of rungSteps(runtime).entries()) {
-    const round = index + 1;
     const target = boundaryTarget(runtime, "pm", opts.iteration, rung.alias);
-    const { tasks } = await readTasks(runtime);
-    const result = await runPmTurn(runtime, opts, target, {
-      round,
-      planList: setup.planList,
-      tasks,
-      repair: round === 1 ? "" : pmLadderNote(rung, target, failure),
-      ...NO_TURN_INPUTS,
-    });
+    const result = await runPmTurn(
+      runtime,
+      opts,
+      target,
+      await rungTurnInput(runtime, setup, target, {
+        round: index + 1,
+        rung,
+        failure,
+      }),
+    );
     const findings = await graphFindings(
       runtime,
-      { iteration: opts.iteration, state: opts.state, round },
+      { iteration: opts.iteration, state: opts.state, round: index + 1 },
       setup.plansBefore,
       setup.taskSnapshot,
     );
@@ -174,6 +194,7 @@ export async function runPm(
         setup.baseline,
         findings,
         outcome,
+        result.record.session,
         rungs,
       );
     }
@@ -184,7 +205,7 @@ export async function runPm(
       setup.snapshot,
       target,
       rung,
-      round,
+      index + 1,
       reasons,
       result,
       rungs,
@@ -194,6 +215,51 @@ export async function runPm(
   }
 
   return { status: "exhausted", rungs };
+}
+
+/** One rung's prompt inputs: its plan diff, task files and de-novo retry note. */
+async function rungTurnInput(
+  runtime: KernelRuntime,
+  setup: PmTurnSetup,
+  target: TurnTarget,
+  opts: { round: number; rung: PmRungStep; failure: string[] },
+): Promise<PmTurnInput> {
+  const { tasks } = await readTasks(runtime);
+  const session =
+    opts.round === 1 ? await priorPmSession(runtime, setup, target) : undefined;
+  return {
+    round: opts.round,
+    planList: setup.planList,
+    planDiff: setup.planDiff,
+    tasks,
+    repair:
+      opts.round === 1 ? "" : pmLadderNote(opts.rung, target, opts.failure),
+    ...(session ? { session } : {}),
+    compact: true,
+    ...NO_TURN_INPUTS,
+  };
+}
+
+/**
+ * The first derive turn of an iteration continues the accepted session of the
+ * last derived plan, compacted at that turn's acceptance. Retries start de
+ * novo, and a harness that cannot resume the recorded session starts de novo
+ * with the plan diff.
+ */
+async function priorPmSession(
+  runtime: KernelRuntime,
+  setup: PmTurnSetup,
+  target: TurnTarget,
+): Promise<SessionRef | undefined> {
+  if (!setup.priorSession) {
+    return undefined;
+  }
+  return resumableRef(
+    runtime,
+    setup.priorSession,
+    target,
+    `the PM derive turn for iteration ${setup.iteration}`,
+  );
 }
 
 /**
@@ -239,6 +305,7 @@ async function acceptPmTurn(
   baseline: string[],
   findings: string[],
   outcome: Outcome,
+  live: SessionRef | undefined,
   rungs: PmRung[],
 ): Promise<PmRun> {
   await cancelPlanNamed(runtime, opts.state, plansBefore, opts.iteration);
@@ -249,6 +316,7 @@ async function acceptPmTurn(
       .filter((before) => before.exists)
       .map((before) => ({ rel: before.plan.rel, text: before.text })),
     openTaskTexts(taskSnapshot, opts.state),
+    live,
   );
   const remaining = unfixedBaseline(baseline, findings);
   if (remaining.length > 0) {
@@ -302,14 +370,35 @@ export const NO_TURN_INPUTS = {
 interface PmTurnInput {
   round: number;
   planList: string;
+  /** A derive rung's plan diff; every route that has no plan baseline passes none. */
+  planDiff?: string;
   tasks: TaskFile[];
   repair: string;
   steers: string;
   stalls: string;
   planChecks: string;
   concerns: string;
+  /** The session this turn continues; a first derive turn resumes the last accepted one. */
+  session?: SessionRef;
+  /** A derive rung compacts its ended session for the next derive to resume. */
+  compact?: boolean;
   /** A steer turn only: the live session handle, for injecting a late steer. */
   onLive?: (agents: LiveAgents) => void;
+}
+
+/** A delivered derive turn compacts its session, usage included in its record. */
+async function compactPmTurn(
+  runtime: KernelRuntime,
+  outcome: Outcome | undefined,
+  live: SessionRef | undefined,
+) {
+  if (!live || outcome?.status !== "done") return {};
+  const compacted = await compactSession(runtime, live);
+  if (!compacted) return {};
+  return {
+    session: compacted.session,
+    ...(compacted.usage ? { compactUsage: compacted.usage } : {}),
+  };
 }
 
 /** Runs one PM rung on the shared prompt contract every route uses. */
@@ -327,6 +416,7 @@ export async function runPmTurn(
       iteration: String(opts.iteration),
       intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
       plans: input.planList,
+      plan_diff: input.planDiff ?? "none",
       tasks_dir: runtime.store.tasks.dir,
       existing_tasks: existingTasks(opts.state, input.tasks),
       repair: input.repair,
@@ -337,6 +427,13 @@ export async function runPmTurn(
       concerns: input.concerns,
     },
     expectation: KERNEL_TURN_STEPS.pm,
+    ...(input.session ? { session: input.session } : {}),
     ...(input.onLive ? { onLive: input.onLive } : {}),
+    ...(input.compact
+      ? {
+          settle: (_record, outcome, live) =>
+            compactPmTurn(runtime, outcome, live),
+        }
+      : {}),
   });
 }

@@ -4,6 +4,7 @@
  * silently dropped. Task files are immutable outside amend, so the edit can
  * only be answered in the plan.
  */
+import type { SessionRef } from "../../harness/types.js";
 import { planBullets, planCancellations } from "../plan-file.js";
 import {
   type KernelRuntime,
@@ -24,9 +25,11 @@ export interface PlanText {
   text: string;
 }
 
-/** Per plan, the bullet block each slug was derived from. */
+/** Per plan, the bullet block each slug was derived from, the plan text and the session. */
 interface BulletBaseline {
   plans: Record<string, Record<string, string>>;
+  texts?: Record<string, string>;
+  session?: SessionRef;
 }
 
 /** A task file that exists; a terminal `status` makes its bullet history. */
@@ -267,6 +270,50 @@ async function latestBulletBaseline(
   return null;
 }
 
+/** A baseline's plan texts; an older baseline without them rebuilds from bullets. */
+function baselinePlans(baseline: BulletBaseline): PlanText[] {
+  if (baseline.texts) {
+    return Object.entries(baseline.texts).map(([rel, text]) => ({ rel, text }));
+  }
+  return Object.keys(baseline.plans)
+    .sort()
+    .map((rel) => ({
+      rel,
+      text: Object.values(baseline.plans[rel] ?? {}).join("\n"),
+    }));
+}
+
+/**
+ * The plans the newest derive turn at or before `currentIteration` wrote task files
+ * from, with that iteration, or null when no earlier derive turn exists.
+ */
+export async function previousPlanBaseline(
+  runtime: KernelRuntime,
+  currentIteration: number,
+): Promise<{
+  iteration: number;
+  plans: PlanText[];
+  session?: SessionRef;
+} | null> {
+  for (const iteration of iterationNumbers(
+    await runtime.store.listDir("iterations"),
+  )) {
+    if (iteration > currentIteration) continue;
+    const text = await runtime.store.iterations.read(
+      iteration,
+      PLAN_BULLET_FILE,
+    );
+    if (text === null) continue;
+    const baseline = parseBaseline(text);
+    return {
+      iteration,
+      plans: baselinePlans(baseline),
+      ...(baseline.session ? { session: baseline.session } : {}),
+    };
+  }
+  return null;
+}
+
 function sortedEntries(
   entries: Record<string, string>,
 ): Record<string, string> {
@@ -318,6 +365,7 @@ export async function storePlanBulletBaseline(
   iteration: number,
   plans: readonly PlanText[],
   tasks: readonly OpenTask[],
+  session?: SessionRef,
 ): Promise<void> {
   const previous = await latestBulletBaseline(runtime);
   const keep = new Map(
@@ -327,6 +375,10 @@ export async function storePlanBulletBaseline(
     ]),
   );
   const baseline = baselineOf(plans, keep, previous);
+  baseline.texts = Object.fromEntries(
+    plans.map((plan) => [plan.rel, plan.text]),
+  );
+  if (session) baseline.session = session;
   await runtime.store.iterations.write(
     iteration,
     PLAN_BULLET_FILE,

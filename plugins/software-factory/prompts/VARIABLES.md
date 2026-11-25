@@ -118,6 +118,7 @@ The turn's record carries the unified diff of the edit; the next architect pack 
 - `iteration` — 1-based iteration number of this launch
 - `intent_path` — path to the goal's `intent.md`, for resolving wording only
 - `plans` — the active plans, one `- goal: <path>` or ``- epic `<epic>`: <path>`` line each; derive every bullet from the plan that carries it; read-only to the PM
+- `plan_diff` — diff of the plan keyed by task slug against the previous derived plan (`none` on the first iteration or when the previous plan is missing)
 - `tasks_dir` — directory where task files are written, one `<slug>.md` per task
 - `existing_tasks` — existing task files as `- slug | status | hash | deps: a,b` lines (`none` when empty); merged/finished lines end `frozen (read-only)`, cancelled `read-only (spent)`, steer tasks `steer <id>`, stall continuations `stall <n>`, plan-check follow-ups `plan-check <n>`
 - `repair` — the script validator's findings from the previous ask; empty string on the first ask and on steer turns

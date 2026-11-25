@@ -10,6 +10,7 @@ import {
   steerProvenance,
 } from "../mailbox.js";
 import { formatParkDefault } from "../park-route.js";
+import { formatPlanDiff, type PlanDocument } from "../plan-file.js";
 import { doneWhen, materialHash } from "../task-material.js";
 import type {
   Cause,
@@ -21,7 +22,7 @@ import type {
   TaskStatus,
 } from "../types.js";
 import { integrationHead, taskBranchName } from "../worktree.js";
-import { isFrozenStatus } from "./reconcile.js";
+import { isFrozenStatus, type PlanSnapshot } from "./reconcile.js";
 import type { PmMandate } from "./types.js";
 import { amendsUsed } from "./validation.js";
 
@@ -38,6 +39,17 @@ export function existingTasks(state: State, tasks: TaskFile[]): string {
     .sort((a, b) => a.slug.localeCompare(b.slug))
     .map((task) => existingTaskLine(state, task))
     .join("\n");
+}
+
+/** The plan diff since the last derived plan, or `none` on the first derive. */
+export function planDiffPrompt(
+  plansBefore: readonly PlanSnapshot[],
+  previous: readonly PlanDocument[] | null,
+): string {
+  const current = plansBefore
+    .filter((before) => before.exists)
+    .map((before) => ({ rel: before.plan.rel, text: before.text }));
+  return formatPlanDiff(current, previous);
 }
 
 function existingTaskLine(state: State, task: TaskFile): string {

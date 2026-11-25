@@ -148,6 +148,8 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       intent_path: "path to the goal's `intent.md`, for resolving wording only",
       plans:
         "the active plans, one `- goal: <path>` or ``- epic `<epic>`: <path>`` line each; derive every bullet from the plan that carries it; read-only to the PM",
+      plan_diff:
+        "diff of the plan keyed by task slug against the previous derived plan (`none` on the first iteration or when the previous plan is missing)",
       tasks_dir:
         "directory where task files are written, one `<slug>.md` per task",
       existing_tasks:

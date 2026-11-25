@@ -100,6 +100,7 @@ const ROLES: Record<string, Record<string, string>> = {
     iteration: "3",
     intent_path: "/goal/intent.md",
     plans: "- goal: /goal/plan.md\n  - epic `auth`: /goal/epics/auth.md",
+    plan_diff: "none",
     tasks_dir: "/goal/tasks",
     existing_tasks: "- alpha | merged | abcdef1234 | deps: none | frozen",
     repair: '- task "beta" depends on missing task "ghost"',

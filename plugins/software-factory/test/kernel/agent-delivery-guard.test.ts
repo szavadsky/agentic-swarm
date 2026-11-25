@@ -72,6 +72,7 @@ const pmVars = {
   iteration: "1",
   intent_path: "/g/intent.md",
   plans: "- goal: /g/plan.md",
+  plan_diff: "none",
   tasks_dir: "/g/tasks",
   existing_tasks: "none",
   repair: "",

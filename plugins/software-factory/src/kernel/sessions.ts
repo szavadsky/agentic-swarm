@@ -1,9 +1,16 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { CacheTtl, SessionRef } from "../harness/types.js";
+import {
+  type CacheTtl,
+  type Harness,
+  type ModelRef,
+  portable,
+  type SessionRef,
+} from "../harness/types.js";
 import { writeYamlAtomic } from "../core/records/io.js";
 import type { Steer } from "./mailbox.js";
+import type { KernelRuntime } from "./types.js";
 
 export interface LaunchSessions {
   launchId: string;
@@ -41,6 +48,44 @@ export function sessionCacheHot(
   const lastRequest = Date.parse(session.lastRequestStartedAt);
   if (!Number.isFinite(lastRequest)) return false;
   return now.getTime() - lastRequest < ttl;
+}
+
+/**
+ * The ref when this target can resume it, or undefined with the blocker named.
+ * Resume needs the harness's capability, a portability edge, the same checkout
+ * and the same model: a harness session is cwd- and model-bound.
+ */
+export async function resumableRef(
+  runtime: KernelRuntime,
+  session: SessionRef,
+  target: { harness: Harness; model: ModelRef },
+  who: string,
+): Promise<SessionRef | undefined> {
+  const { harness, model } = target;
+  const miss = (reason: string): undefined => {
+    console.warn(`[factory] ${who} starts de novo: ${reason}`);
+    return undefined;
+  };
+  let resume: boolean;
+  try {
+    resume = (await harness.caps(model)).resume;
+  } catch (err) {
+    return miss(
+      `harness "${harness.id}" did not report its capabilities: ${(err as Error).message}`,
+    );
+  }
+  if (!resume) return miss(`harness "${harness.id}" cannot resume a session`);
+  if (!portable(session.harness, harness.id, runtime.configs.run.portability))
+    return miss(
+      `a "${session.harness}" session is not portable to "${harness.id}"`,
+    );
+  if (path.resolve(session.cwd) !== path.resolve(runtime.paths.goalCheckout))
+    return miss(
+      `session cwd "${session.cwd}" is not the goal checkout "${runtime.paths.goalCheckout}"`,
+    );
+  if (session.model.id !== model.id)
+    return miss(`session model "${session.model.id}" is not "${model.id}"`);
+  return session;
 }
 
 async function directories(dir: string): Promise<string[]> {

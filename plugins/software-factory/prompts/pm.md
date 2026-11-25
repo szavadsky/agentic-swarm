@@ -126,6 +126,7 @@ The outcome file is the only other file you may write. Concerns are entries in t
 - intent: `{{intent_path}}`
 - plans:
   {{plans}}
+- plan diff: {{plan_diff}}
 - tasks directory: `{{tasks_dir}}`
 - existing task files with status: `{{existing_tasks}}`
 - validator findings: `{{repair}}` — empty on the first ask
