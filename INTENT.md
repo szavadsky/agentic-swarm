@@ -1,34 +1,34 @@
 # Agentic software factory — INTENT
 
-**Mechanics** are the HOW, shiftable on real behavior. Everything above **Mechanics** is user intent, must be built and tested.
+**Mechanics** are the HOW, shiftable on real behavior. Everything above **Mechanics** is user intent and must be built and tested.
 
 ## High-level intent
 
 Modern harnesses deliver a decent story (several hundred lines of code). The agentic software factory is an orchestration framework on top of harnesses that delivers up to a saga (an entire product) or a major refactoring — token-efficient, slop-free, steerable, observable, autonomous, scalable from a trivial edit to a saga. One goal may span many epics and tens of tasks per iteration, across multiple resumable iterations; no size ceiling.
 
-- Stop in the middle, relaunch — it keeps going; avoid duplicate work and keep token economics.
-- Auto scales from "trivial" to "task" to "epic" to "saga"
-- Harness agnostic 
-- Configurable for different flows and types of projects, from
-   - software delivery: stack, testing and build framework agnostic
-   - Silicon and industrial design
-   - Deep research
-   - Loop-based optimization — e.g. architect selects most promising directions to try, PM creates tasks to research and implement approaches; they are merged; architect decides what to do next (including pruning of not-promising tasks)
-   - For project types other than software delivery the requirement is a design constraint: nothing software-specific is required by the kernel — every flow works with a check's exit code and log alone; runner-specific parsers (pytest, jest, JUnit, …) may stay in the kernel as optional helpers. Shown by review, no presets or runs required.
+- Stop in the middle, relaunch — it keeps going; avoid duplicate work and preserve token economics.
+- Automatically scales from "trivial" to "task" to "epic" to "saga".
+- Harness agnostic
+- Configurable for different flows and project types, from:
+    - software delivery: stack, testing and build framework agnostic
+    - Silicon and industrial design
+    - Deep research
+    - Loop-based optimization — e.g. architect selects most promising directions to try, PM creates tasks to research and implement approaches; they are merged; architect decides what to do next (including pruning of not-promising tasks)
+    - For project types other than software delivery, the requirement is a design constraint: nothing software-specific is required by the kernel — every flow works with a check's exit code and log alone; runner-specific parsers (pytest, jest, JUnit, …) may stay in the kernel as optional helpers. Demonstrated by review, no presets or runs required.
 - Every flow assumes committed artifacts, git worktrees and shell scripts for deterministic checks. Minimum common denominator for a check is a shell script; no JUnit or runner-specific format required.
 
 ### Model economics
 
-The cost (or subscription use) between frontier models (Opus, Fable, Astra) and capable implementer models (DeepSeek/Qwen Flash, Haiku, Luna, Sol on Low) is ~40–80x; plus sometimes there are "free" up-to-limit models. The speed also varies dramatically, sometimes 10x.
-For humans, even with global pay differentials, the price delta is 30%–5x (with sometimes a 10x performance delta). The agentic factory needs to aggressively leverage cheaper models — focused tasks, context preparation for expensive models, etc. Per call, the architect may dominate the bill.
+The cost (or subscription use) gap between frontier models (Opus, Fable, Astra) and capable implementer models (DeepSeek/Qwen Flash, Haiku, Luna, Sol on Low) is ~40–80x; sometimes there are "free" up-to-limit models. The speed also varies dramatically, sometimes 10x.
+For humans, even with global pay differentials, the price delta is 30%–5x (sometimes with a 10x performance delta). The agentic factory needs to aggressively leverage cheaper models — focused tasks, context preparation for expensive models, etc. Per call, the architect may dominate the bill.
 
-- Eliminate any waste — tokens, time, infra. E.g. built i1-i5 wasted 44% of turns (outcome-file repair, infra); that costs more than any model choice.
+- Eliminate any waste — tokens, time, infra. For example, building i1–i5 wasted 44% of turns (outcome-file repair, infra); that costs more than any model choice.
 - Reported costs vary (subscriptions, subsidies, provider reports). For analysis, assume relative cost per unit of work: cheapest 0.1–1x, decent task level 2x, task escalation 20x, architect 50x. This is why the factory is designed with rare architect involvement and focused context for tasks, where Flash-class models are very capable.
 - Yardsticks: relative cost, tokens and wall time per merged task; wasted-turn share.
 
-For the purpose of design, we consider the following models:
+For design purposes, we consider the following models:
 
-- **Architect** (expensive) models do only what a human architect does: convert intent into actionable but directional plans, directional interfaces, key-algorithm direction, tradeoffs above task level. They are called with a prepared context pack and work agentically and subagentically — launching scouts/tasks and waiting for them is fine, with no limits on them. Subagents are the architect harness's own mechanism; the prompt stays generic (e.g. "explore with cheap subagents"). They write no code beyond key interfaces and no verbose documents. Each architect produces one markdown plan, written for architect/reviewer friendliness and efficiency — maintaining file schemas is not architect work. Difference between human architect and agentic architect: as an agentic architect needs to build context (expensive), he doubles down as reviewer of a project at high level (does not need to go to implementation details, but interfaces, key tests, edge-case handling, code compaction and readability) — and uses it to define the plan.
+- **Architect** (expensive) models do only what a human architect does: convert intent into actionable but directional plans, directional interfaces, key-algorithm direction, tradeoffs above task level. They are called with a prepared context pack and work agentically and subagentically — launching scouts/tasks and waiting for them is fine, with no limits on them. Subagents are the architect harness's own mechanism; the prompt stays generic (e.g. "explore with cheap subagents"). They write no code beyond key interfaces and no verbose documents. Each architect produces one markdown plan, written for architect/reviewer friendliness and efficiency — maintaining file schemas is not architect work. The difference between a human architect and an agentic architect is that an agentic architect needs to build context (expensive), so he doubles as a high-level project reviewer (he does not need to go into implementation details, but interfaces, key tests, edge-case handling, code compaction and readability) — and uses that to define the plan.
 
 - **Sr. Implementer/Workhorse** — focused task, code review, debugging, research, etc.
 
@@ -36,57 +36,58 @@ For the purpose of design, we consider the following models:
 
 - **KERNEL** is not a model, it is a deterministic orchestration application (the "script" below) responsible for overall orchestration flows, launching agents, sending prompts, git mechanics, etc. Compact code is a goal, tests included — both size and run time.
 
-- The architect's plan is reviewed for impracticality, unclarity and rule violations — real bugs are not unusual even for task-tier reviews. Which model reviews is config: task tier or frontier.
+- The architect's plan is reviewed for impracticality, lack of clarity and rule violations — real bugs are not unusual even for task-tier reviews. Which model reviews is set by config: task tier or frontier.
 - For all reviews, the context is different from the implementer context, even if the model is at the same tier.
 - The review is advisory input, not a veto: the author considers it, and "consider" spans the full range — from ignoring it on a factual judgement, to clarifying the plan, to realizing "oops" and changing it. During self-improvement the architect samples whether the review was helpful (one issue caught earlier reduces work 10x).
-- The same agent (architect/implementer after review, reviewer to look post-review, PM on subsequent invocation from the same task) is started from pre-compacted (compaction when the cache is still hot) context. This enables both token economy (no turns to build the same context) and a fresher look — context, but no reasoning.
+- The same agent (architect/implementer after review, reviewer to look post-review, PM on subsequent invocation from the same task) is restarted from pre-compacted (compaction when the cache is still hot) context. This enables both token economy (no turns to build the same context) and a fresher look — context, but no reasoning.
 
-- Orchestration agent launches are delayed until non-blocked tasks are exhausted, a user steer arrives, or an agentic concern may render the task list moot. Expensive models are used after cheaper-model context prep and funnel concerns.
+- Launches of orchestration agents are delayed until non-blocked tasks are exhausted, a user steer arrives, or an agentic concern may render the task list moot. Expensive models are used after cheaper-model context prep and funnel concerns.
 
-### How Factory works
+### How the factory works
 #### Patterns we avoid
    - "Smart orchestrator top" swarms agents — it sometimes works for medium-scoped tasks, but considerable research shows that it is not always cheaper than a smart model doing end-to-end. In our experience, in addition to burning a lot of tokens on trivial orchestration mechanics, if something goes non-trivial, the orchestrator tends to overtake all the work.
-   - "Smart planner" — in our experience, the plan sometimes gets more detailed than the code. Also, it assumes a smart planner can think everything to perfection. In reality, all development must be experimental and test-driven.
-   - "Smart reviewer" — although it is beneficial to have a smart reviewer, we found that
+   - "Smart planner" — in our experience, the plan sometimes gets more detailed than the code. Also, it assumes a smart planner can think through everything perfectly. In reality, all development must be experimental and test-driven.
+   - "Smart reviewer" — although it is beneficial to have a smart reviewer, we found that:
       - A Flash-class model with focused context does decent reviews.
       - The context the reviewer has to build is not different from what the planner has to build, and the review result is not different from a plan.
 #### Immutable part coded in orchestration kernel
 ##### Key players
-   - The key orchestration player is the script **kernel**. It invokes harnesses with agents, reads structured artifacts prepared by agents and checks steers by users, executes the commands infra defines (setup, compile, lint, tests), git commits and merges, worktree setup and cleanup.
-   - To enable parallel operations, rollbacks, etc., we leverage git, git worktrees or compatible modern performance alternatives.
+   - The key orchestration player is the script **kernel**. It invokes harnesses with agents, reads structured artifacts prepared by agents and checks user steers, executes the commands infra defines (setup, compile, lint, tests), git commits and merges, worktree setup and cleanup.
+   - To enable parallel operations and rollbacks, we use git, git worktrees or compatible modern performance alternatives.
    - Our key technical player is the "architect" (aka principal engineer). His responsibility is to derive technical direction (directional, but not detailed plans), ensure code quality and readability — he defines "what has to be done directionally, in roughly what order, how to act on important concerns brought by engineers or steers by the user." The architect reviews the status of the project and defines/edits the directional plan once per iteration: the architect flow is launched once per iteration and may include review; for a saga, subarchitects with their reviews. The architect launch is a configurable flow; the flow depends on the reason for launch (initial, concerns, iteration done, steer, etc.). The flow may hold separate agents — designer, security architect, functional safety, etc. That includes code review (the same context is leveraged). The architect owns the "directional plan that defines WHAT has to be done (subject to yet unknowns) to bring the project to the desired state (as per INTENT) without adding technical debt or quality issues." Architect involvement is subject to a configurable "architect flow" — context preparation, deciding which flow to use if many apply, the architect itself, subarchitects, review, etc.
-   - Once the architect has defined the "plan", whether the plan is complete or extra work needs to be done more or less in scope of the architect's technical decisions is owned by the *plan completeness checker*. He also makes simple technical decisions to address concerns — emitting extra tasks (see Concerns funnel).
+   - Once the architect has defined the "plan", whether the plan is complete or extra work needs to be done more or less in scope of the architect's technical decisions is decided by the *plan completeness checker*. He also makes simple technical decisions to address concerns — emitting extra tasks (see Concerns funnel).
    - Our key agentic orchestration player is the "PM". His job is to convert the plan to specific tasks in a DAG. He repairs artifacts/figures out status when KERNEL cannot, and triages steers.
    - **steward** is invoked when merges to the goal branch create conflicts, CI/CD failures, etc. The goal branch `factory/<goal>` is cut from the repo's current branch into its own worktree; the user's checkout is never touched and the user keeps working. The goal branch may receive merges from outside the factory (user, operator); new task branches are always cut from its tip. Self-build adds protection on top: the factory runs from the pinned build in a separate worktree, promoted by the operator after each launch (see bootstrap).
    - **infra** agent is part of the ingestion flow. It outputs what commands the kernel needs to run in scope of the goal (fast/slow tests, worktree preparation, compile, lint, etc.) — discovered from the repo or taken from config — and their status (yellow/red, specific failures, flakiness). If required, it wraps commands so the kernel can execute them.
    - **task flows** — a number of tasks arranged in DAGs.
    - **ingestion flow** at goal start: create goal branch and its worktree, front agent triage (trivial / task / bigger), infra agent (commands + status), context pack, scouts map existing code (bigger only), extra steps as configured (e.g. a separate agent to retrieve requirements).
+
 ### Scalability
-Factory auto-scales and is capable of handling
+The factory auto-scales to handle
    - trivial — entire task handled by one cheap model launch
    - "task" — a configured flow (may be one of several configured) including implementer, reviewer, etc.
    - "epic" — multiple interdependent tasks, each handled in a separate branch, with review, etc.
-   - "saga" — complex project where high-level goals are associated with software layers; split into a hierarchy, and orchestration agents (architects, PMs, plan completeness checkers) are instantiated per underlying epic. For now we have 2 limitations in case of a saga:
+   - "saga" — complex project where high-level goals are associated with software layers; split into a hierarchy, and orchestration agents (architects, PMs, plan completeness checkers) are instantiated per underlying epic. For now, sagas have two limitations:
        - only one level down
        - all tasks merge to the goal branch (single steward), no per-epic branch
 #### Scope Escalation ladder (triage)
 - One cheap-but-capable agent classifies the goal: trivial / task / bigger (epic, saga). It is not smart enough to decide how big "bigger" is — that is the architect's call.
 - Trivial: the same agent implements, in the same session (reusing the context it already built): after receiving the classification, the kernel sends a follow-up prompt with the location/branch. No loop.
-- Standalone task: does not reach the architect. If multiple types of tasks are supported and the triage agent classified the intent as a task, a follow-up prompt is sent to produce a YAML file with the task type. Then normal mechanical orchestration is followed for the given task type. To the last agent in the chain — the one that produces the merge decision/concerns — extra is added to the prompt/schema, including the same task scope definition that triage/architect/PM/architect reviewer etc. has, and asks whether delivery is in scope. If not, the "bigger-based" flow is launched.
+- Standalone task: does not reach the architect. If multiple types of tasks are supported and the triage agent classified the intent as a task, a follow-up prompt is sent to produce a YAML file with the task type. Then the normal mechanical orchestration for that task type runs. The last agent in the chain — the one that produces the merge decision/concerns — also receives in its prompt/schema the same task scope definition that triage/architect/PM/architect reviewer etc. has, and is asked whether delivery is in scope. If not, the "bigger-based" flow is launched.
 
 - Task or bigger: the same agent prepares the context pack — current status, relevant code facts; commands and their status come from the infra agent (ingestion flow). No separate triage/context-pack steps: same context, same agent.
 #### Scope escalation (architect)
-  - part of the architect prompt is the option to define epics, write high-level intent and define the scope of each responsible architect. In this case, the "top" architect is responsible for the intent as a whole and may have individual tasks/spikes (not preferable). The top architect may add subarchitects at any iteration, and defines intent at any iteration (if any for a subarchitect).
-     - Those intents also form a DAG.
-     - Subarchitects are launched with their intents to plan.
-     - KERNEL orchestrates, launching a PM per top/sub architect, task flows, plan completeness checkers for sub-intents applicable to the iteration, steward when needed.
-     - Steering is propagated from the top PM to sub PMs (and sideways to their architects).
-     - Plan completeness checkers are executed bottom-to-top.
-     - Once the pre-architect orchestration flow is exhausted, architects run in two passes: bottom-to-top identifies what has been done and what the gaps, follow-ups and debt are; top-to-bottom defines what to do. The first iteration has only top-to-bottom, the last one (done) only bottom-to-top, the iterations in the middle both.
+    - part of the architect prompt is the option to define epics, write high-level intent and define the scope of each responsible architect. In this case, the "top" architect is responsible for the intent as a whole and may have individual tasks/spikes (not preferable). The top architect may add subarchitects at any iteration, and defines intent at any iteration (if any for a subarchitect).
+       - Those intents also form a DAG.
+       - Subarchitects are launched with their intents to plan.
+       - KERNEL orchestrates, launching a PM per top/sub architect, task flows, plan completeness checkers for sub-intents applicable to the iteration, steward when needed.
+       - Steering is propagated from the top PM to sub PMs (and sideways to their architects).
+       - Plan completeness checkers are executed bottom-to-top.
+       - Once the pre-architect orchestration flow is exhausted, architects run in two passes: bottom-to-top identifies what has been done and what the gaps, follow-ups and debt are; top-to-bottom defines what to do. The first iteration has only top-to-bottom, the last one (done) only bottom-to-top, the iterations in the middle both.
     - At each iteration, the top architect decides which subarchitects need to be involved.
 
 ##### Overall flow
-   - idempotent state stored to restart at any time
+   - Idempotent state is stored so the run can restart at any time.
 ```mermaid
 flowchart TD
     launch["launch"] --> preflight["pre-flight: config schemas, aliases"]
@@ -117,56 +118,55 @@ flowchart TD
 
 #### Concerns funnel
 
-- Concerns include discovered technical debt, issues with the plan, pre-existing test failures, issues with implementation and pre-existing code
+- Concerns include discovered technical debt, issues with the plan, pre-existing test failures, issues with implementation and pre-existing code.
 - Funnel order:
     - inside a task, as per the configurable task flow: the reviewer adds concerns that go to the implementer; the reviewer checks concerns raised by previous agents and can gate them as immaterial;
     - PM decides if any concern blocks the rest (makes the remaining work wasteful);
     - plan checker makes simple technical decisions to address concerns (emits extra tasks);
     - once exhausted, concerns not filtered out, with their resolutions, go to the architect.
-- implementer → reviewer → PM / plan checker → architect → [top architect] → human. Each stage filters.
+- Implementer → reviewer → PM / plan checker → architect → [top architect] → human. Each stage filters.
 - Each stage sees a different scope: the implementer sees one task, the reviewer its diff against the task, the architect the epic's interactions, layers and sequence. That perspective gap is the point — it holds even between same-class models (or humans), which is why the task flow uses separate steps rather than one agent doing everything. Sample and investigate whether it works as intended.
-- Implementers tend to over-report trivia; the reviewer decides what is different/additive to the plan and worth architecture attention. Even a same-model reviewer with a different focus adds a lot.
-- In our default config, task reviewer is still task level agent.
-- The reviewer's context differs from developer/QA: tailored to the focus of the review, not the implementation context — not the implementer's edits, not its reasoning about what to edit. Its prompt is mostly the author's prompt, included whole through the templating engine so the common part is the same text — the same assignment, bounds and standard — plus the review focus and verdict. This holds for every reviewer, the plan reviewer included.
+- Implementers tend to over-report trivia; the reviewer decides what is different or additive to the plan and worth architecture attention. Even a same-model reviewer with a different focus adds a lot.
+- In our default config, task reviewer is still a task-level agent.
+- The reviewer's context differs from developer/QA: tailored to the focus of the review, not the implementation context — not the implementer's edits, not its reasoning about what to edit. The reviewer's prompt is mostly the author's prompt, included whole through the templating engine so the common part is the same text — the same assignment, bounds and standard — plus the review focus and verdict. This holds for every reviewer, the plan reviewer included.
 - Concerns (technical debt, risks, uncertainties, design choices) and remarkables propagate up the chain; calibration lives in config prompts: FYI-only / blocked-by-architect / blocked-by-user. Not spam. The remarkable at each level always includes "what is achieved" and "what is of concern".
 - Files stay on disk; the architect can scout/read instead of receiving pasted content.
 
-##### Schemas known to kernel
+##### Schemas known to the kernel
 
 - Agent outputs the kernel reads and validates: task file (`tasks/*.md` front matter), step outcome (`outcome.yaml`; QA has its own outcome schema), steer hold (`mailbox/holds/*.yaml`), triage class (`class.yaml`).
 - The plan is markdown, no schema.
 
 #### Configurable part
 - Each task type gets a configurable orchestration flow (e.g. researchers -> PoC agents; test/interface developer -> developer -> review; developer -> compute-use QA -> automated-test QA -> review); each task kind is described as "when to use" and auto-inserted into the architect's and other relevant (PM, Plan Checker) prompts.
-- architect flows (depending on project state: ingestion, return after uncertainty resolution, declared done by plan checker, concerns to resolve); extra steps per project — e.g. previous-run assessment (self-build), integration test as a user, visual review, design review
-- what harnesses/models (aliases) to use for each element in the flow (support aliases in config)
-- CI/CD (or discovered by infra)
-- generic coding rules or project-specific ones
-- prompt options for all agents
-- harnesses are already configured (skills, agents, lsps - etc) for production project (config for orchestration files is propagated by Kernel): factory uses the repo's harness setup as is; kernel only adds what orchestration needs (JSON Schemas + LSP mapping for artifact files, transient agents like subarchitects) and never overwrites the repo's setup.
-- what harnesses to use, what arguments
+- Architect flows (depending on project state: ingestion, return after uncertainty resolution, declared done by plan checker, concerns to resolve); extra steps per project — e.g. previous-run assessment (self-build), integration test as a user, visual review, design review.
+- Which harnesses/models (aliases) to use for each element in the flow (support aliases in config).
+- CI/CD commands (or discovery by infra).
+- Generic coding rules or project-specific ones.
+- Prompt options for all agents.
+- Harnesses are already configured (skills, agents, LSPs, etc.) for the production project (Kernel propagates config for orchestration files): factory uses the repo's harness setup as is; kernel only adds what orchestration needs (JSON Schemas + LSP mapping for artifact files, transient agents like subarchitects) and never overwrites the repo's setup.
+- Which harnesses to use and with what arguments.
 
 ##### Config-driven KERNEL
 - Three config layers, separated by concern: each concern lives in exactly one layer, and no layer restates another's.
     - Repo config: locations, paths, gates — the repo's CI/CD, defined as commands; whether a red gate was already broken before the task may be judged agentically (by the reviewer).
     - Factory (process) config: bounded flows as DAGs (the architecture flow with its plan review included), task types, agents and prompts, which kernel schema each output follows, calibration, and model alternation — all expressed with aliases, never with models. It names the aliases it requires.
     - Local config (the run config): the one config that defines the available harnesses and models (or harness-level aliases), fallbacks with their own effort, and their mapping to aliases, plus extra opaque acpx-compatible options passed through to the harness untouched. Some aliases are mandatory for the kernel (e.g. architect); others are required by the factory config. For special harnesses such as omp it is rendered into a transient run config. It also holds what is specific to the machine and its subscriptions: concurrency per subscription, session and worktree paths with retention, and the price cache; launch limits (architect iterations, plan checker rounds, time, budget) and stop-or-retry on infra are launch arguments with defaults here. Binary resolution is config-only: rely on acpx unless a custom adapter is the default; binaries are expected on PATH already; config override possible.
-- All 3 layers have a schema; KERNEL has a validate option to check the 3 not just for schema, but for consistency (short of model calls, but everything else).
+- All three layers have a schema; KERNEL has a validate option to check all three not just for schema, but for consistency (short of model calls, but everything else).
 - Not a single model is hardcoded anywhere in code — neither in the kernel nor in a harness adapter. Not a single harness is hardcoded unless it has a justified custom adapter. Models and acpx harnesses appear only in the local config.
 - Harnesses, models and subscriptions evolve: nothing hardcodes a real name of a harness, model or subscription beyond a justified harness adapter (omp) — completely model agnostic. Tests use fake names only and do not check run configs.
 - Flows are defined: e.g. "just implement", "implement/review", "TDD: ingest → record known problems → stubs → implement/QA/review/security review". Adding an agent to ingestion, a task-type flow, or the PM flow is a config edit; agent types and task flows can be added or commented out. More spike/agent types are configurable — e.g. for a dashboard: computer-use tests, design/usability review. Templating serves the architect flow too. The script surface is the kernel's fixed set of schemas: agent produces, script reads. A new schema is a kernel change, not a config edit.
 - Each task flow has a short description as part of config ("use when") — injected into the prompt of agents that define tasks.
 - Prompts are assembled from shared fragments and single-definition templates — never copy-pasted. Use a well-established templating engine, not DIY: LiquidJS (strict TypeScript, `{{ var | filter }}`, CLI `npx liquidjs`, custom filters, async tags), Eta (TypeScript-native, ~3.5 KB, partials, plugins) or Nunjucks (Jinja2-like macros, block inheritance). Single definition extends to what prompts say about the kernel and config: output shapes, task-file fields, and flow and alias names are rendered from the kernel schemas and the factory config, never retyped in prompt text.
-- Prompt templating is documented and examples are provided; ability to dry-run and see all prompts.
-- Prompt templating might be conditional on harness/agents.
-- Part of repo/CI-CD runs a simple anti-duplicate check (find reusable TypeScript lib/utility) to prevent duplicates. Deterministic checks prove no fragment or prompt is dead. Prefer existing tools.
-
-- Review retries configurable, with follow-up options: same agent on compacted context, different model, or de novo.
+- Prompt templating is documented and examples are provided, with the ability to dry-run and see all prompts.
+- Prompt templating may be conditional on harness/agents.
+- Part of repo/CI/CD runs a simple anti-duplicate check (find reusable TypeScript lib/utility) to prevent duplicates. Deterministic checks prove no fragment or prompt is dead. Prefer existing tools.
+- Review retries are configurable, with follow-up options: same agent on compacted context, different model, or de novo.
 - Task review: max three review retries by default, configurable — the reviewer may request changes on the first two, and the third is the last call. Change-request bounds are per agent, in config: for each agent in a config-defined agentic flow that can request changes, the maximum number of change requests is part of the config (for the reviewer it is 2). On the last call the agent receives a different prompt — ship with concerns recorded (net positive) or park.
     - Counting: the kernel keeps, idempotently, a count of each agent's launches in the flow, and keeps three kinds apart — technical glitches (e.g. a fallback), bona fide change requests and bona fide failures. Each agent gets up to a configured number of reminders (default 1) to produce its output.
     - Park is an agentic decision, never a kernel turn counter; a total number of turns (8) is not what is intended. A mechanical signal — empty diff, red base, round limit, failed turn — means something is wrong, not a park: the kernel routes it through the funnel to an agent with structured output (e.g. the task's reviewer session reused), which fixes it, beyond the output if needed, or parks with concerns going up the funnel. If parked, the DAG continues until all unblocked items are done (the PM calls what is blocked/unblocked); the plan completeness checker (task level) can emit a task/steer to run to completion.
     - Review is not gospel: a separate adjudication agent that re-reviews all findings and may discard them is supported as configuration (another agent taking the review input and producing review-schema output before the harness sees it, on any review cycle or only the last one — most practical only on the last one, since the developer prompt already says to consider findings, apply them if net positive and in scope, else explain why in reply).
-    - The last round decides: negative value → park, keeping the branch, until architect feedback; or record concerns/technical debt and go ahead. What becomes of a parked task is an agentic decision within the decider's scope of ownership: the PM and the plan checker ensure the plan progresses, the architect that the project does. The decider normally either amends the task (same slug) or cancels, replaces or splits it (new slugs). A kept branch that is complete and green lands at the next boundary without a new task.
+    - The last round decides: negative value → park, keeping the branch, until architect feedback; or records concerns/technical debt and goes ahead. What becomes of a parked task is an agentic decision within the decider's scope of ownership: the PM and the plan checker ensure the plan progresses, the architect that the project does. The decider normally either amends the task (same slug) or cancels, replaces or splits it (new slugs). A kept branch that is complete and green lands at the next boundary without a new task.
 - Deterministic checks might be advisory (specific checks, specific failure, sometimes for a specific task), not gating; pre-existing failures noted; the architect may temporarily create a failure (e.g. new lint rules, then plans tasks to fix). End shape: all green unless explicitly noted in the intent. Reviewer and steward adjudicate.
 - Concurrency in the local config: an overall limit plus limits per subscription — the quota pool a session draws on, whichever harness reaches it (e.g. in parallel 1 session on OpenCode free, 2 on OpenCode Go, 1 on Antigravity). Dispatch throttles per subscription and falls back.
 - Merges land one at a time. Gates run in parallel, each task in its isolated worktree; tests that cannot run in parallel (e.g. integration-level) are serialized through the factory setup — e.g. a per-worktree dir declared in the environment, declared mutexes.
@@ -306,11 +306,11 @@ flowchart TD
 - Harness adapters: a custom adapter only when the harness offers substantially more than ACP exposes (omp is that case: RPC, yield, compaction, overlays). Otherwise drive the harness through acpx (OpenCode included), or at worst plain ACP — never a bespoke CLI wrapper for what the protocol already covers. No code: the config uses acpx naming (and opaque config), and that is it. Where acpx already supports a harness through a built-in adapter, an existing custom adapter needs a solid recorded justification — what improvements the bespoke adapter provides that acpx does not — or the harness moves to the generic acpx path.
 - acpx is the enabler of agnosticism: an acpx-compatible harness is expected to be added by configuration alone, with no code change. A direct layer for such a harness is allowed later only on measured evidence that ACP loses something needed.
 
-### Traceability 
- - INTENT provided to kernel is an md file
- - For "Bigger" tasks Each separately analyzeable slice is marked with unique slice slug [[SliceSlug]] or [[ctxOnly:SliceSlug]] in subsection or beginning of paragraph
- - If annotation is missing, it is noted during triage and intent edited in place (dedicated agent)
- - It responsibility of architect flow -eg. output of architect, reviewer, or dedicated agents -  (supported by determenistic check/reminder ) to review delivery vs what is required, and provide output with status or plan to address it with tasks.  This "status footnote to the plan" of the plan. It shall explain, for each slug, either key user inspectable artefacts (front facing interfaces, config files, test  case links with explanation), or telegraphically explain how.what tasks (reminder - many to many relatioship between intent slugs  and tasks: non triviil relatiship, foudnational layers, platform coden traces many reqs) would adress it, or say TBD (spikes, foundational layers)
+### Traceability
+- INTENT provided to the kernel is an `.md` file.
+- For "bigger" tasks, each separately analyzable slice is marked with a unique slice slug `[[SliceSlug]]` or `[[ctxOnly:SliceSlug]]` in a subsection or at the beginning of a paragraph.
+- If annotation is missing, it is noted during triage and the intent is edited in place (dedicated agent).
+- It is the responsibility of the architect flow — e.g. output of the architect, reviewer, or dedicated agents — (supported by a deterministic check/reminder) to review delivery against what is required, and provide output with status or a plan to address it with tasks. This is a "status footnote to the plan". It shall explain, for each slug, either key user-inspectable artifacts (front-facing interfaces, config files, test-case links with explanation), or telegraphically explain how/what tasks (reminder: many-to-many relationship between intent slugs and tasks — non-trivial relationship, foundational layers, platform code traces many requirements) would address it, or say TBD (spikes, foundational layers).
  
 ### Sandbox
   - The sandbox is one predefined process-level wrapper for the whole run (e.g. bwrap, sandbox-runtime), shipped as config. A configured sandbox must be present on the machine. Configurations with and without sandbox are both tested.
@@ -336,10 +336,10 @@ flowchart TD
 - A turn with no usage and no output is a technical glitch — retried or failed over; it spends no reminder and is never the task's failure.
 
 ### CI/CD failure, flakiness, speed
-  - Failures/flakiness on current feature branched are traced
-  - When kernel mechnically run ci/cd and it fails, it must be retried/adjuducated agentically (dedicated agent) - may be it got broken, trivial fix in place; or pre-exisiting
-  - Noted failures are brought trhough concern funnel
-  - all tests runs by KERNEL are timed. runtime of succesfull tests are tracked. Numbers (current vs start of goal) are on architect table. his prompt include invitation to reduce test times while keeping tests on merits here
+- Failures/flakiness on the current feature branch are traced.
+- When the kernel mechanically runs CI/CD and it fails, it must be retried/adjudicated agentically (dedicated agent) — maybe it got broken (trivial fix in place), or it is pre-existing.
+- Noted failures are brought through the concern funnel.
+- All test runs by KERNEL are timed, and runtimes of successful tests are tracked. Numbers (current vs start of goal) are on the architect's table; his prompt includes an invitation to reduce test times while keeping tests on their merits.
 
 ### Structured output
 - Strict schema (tool/yield) only for small, simple outputs. The plan is markdown; the PM derives task files from it.
@@ -356,10 +356,10 @@ flowchart TD
 - A task leaves only by an explicit decision of its owner (amend, cancel, replace, split); the plan carries open work; history stays in records and summaries.
 
 ### KERNEL CLI
-  - kernel cli self documented, include options to query status of project with schema defined output (json/yaml), artefacts cleanup, stats and cost extraction, log level , etc - whatever is required for efficient implementation
-  - Core KERNEL journal is jsonl with documented schema, can be easily queries
-  - Generate prompts (so user can see entire collection of promts for given config)
-  - CLI re-reads factory configs frequently (on each launch, etc)
+- Kernel CLI is self-documented and includes options to query project status with schema-defined output (JSON/YAML), artifact cleanup, stats and cost extraction, log level, etc. — whatever is required for efficient implementation.
+- Core KERNEL journal is JSONL with a documented schema and can be easily queried.
+- Generate prompts (so the user can see the entire collection of prompts for a given config).
+- CLI re-reads factory configs frequently (on each launch, etc.).
 
 ### Boundary: plan review and plan checker
 - Plan review is the architecture flow of the factory config — its reviewers, its findings schema, the architect's turns on technical concerns — and it completes before the PM derives tasks.
@@ -425,17 +425,18 @@ flowchart TD
 - The operator session gives requirements — which subset of the intent is the current phase — operates, recovers from major issues, and reports bugs and incidents as steers. It does not prescribe milestones or plans.
 - During self-improvement the architect is concerned with both mechanical solidity and agentic behavior — e.g. how useful review feedback was — and may plan spikes that investigate previous sessions' behavior.
 
-#### Tasks flow configured during self build
-nogit - means that task  MIGHT specified to produce file outside of git
-* - means escalation of implementer is supported
-  - "fact finder" nogit-> delivers md, document behavior, research libraries, best practices, single agent
-  - "PoC"* nogit - develop something without production intent (one of many options), implementer -> reviewer
-  - Normal* : implementer (implement, automated test) -> QA (might request changes up to 2x): ensure no regressions in automated tests, simplify/reduce code size  tests, add tests for edge cases as needed, ensure interface separate and have right amount of doc -> reviewer (correctness, scope, plan adherence (or reasons to diverge)) 
-  - ComputerUse: Same as above, but extra agent for browser tests 
-  - trivial - one off assigment requiring no review, eg rollback
-  - noqa* - implementer + reviewer (docs only, no func changes)
-## architect flows
-  - rotate between options when architect owns overall status, and when separate dedicated agent (stil architect level) adversarially review status and architect take it as inouyt and adjudicare 
+#### Task flows configured during self-build
+- `nogit` — means that the task MIGHT be specified to produce files outside of git.
+- `*` — means escalation of the implementer is supported.
+  - "fact finder" (`nogit`) → delivers md, documents behavior, researches libraries and best practices; single agent.
+  - "PoC"\* (`nogit`) — develop something without production intent (one of many options); implementer → reviewer.
+  - Normal\*: implementer (implement, automated test) → QA (might request changes up to 2x): ensure no regressions in automated tests, simplify/reduce code size of tests, add tests for edge cases as needed, ensure interfaces are separate and have the right amount of docs → reviewer (correctness, scope, plan adherence or reasons to diverge).
+  - ComputerUse: same as above, but with an extra agent for browser tests.
+  - trivial — one-off assignment requiring no review, e.g. rollback.
+  - noqa\* — implementer + reviewer (docs only, no functional changes).
+
+#### Architect flows
+- Rotate between options: when the architect owns overall status, and when a separate dedicated agent (still architect-level) adversarially reviews status and the architect takes it as input and adjudicates.
 
 #### Bootstrap subscription models/harness
  (config shall eventually be able to express it as fallbacks)
