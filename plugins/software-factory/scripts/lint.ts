@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { duplicateHelperProblems } from "./duplicate-helpers.js";
+import { interfaceLintProblems } from "./interface-lint.js";
 import { pluginManifestProblems } from "./plugin-manifest.js";
 import { promptProblems } from "./prompt-lint.js";
 
@@ -16,6 +17,7 @@ const BIN = path.join(ROOT, "node_modules", ".bin");
 const problems = [
   ...promptProblems(ROOT),
   ...duplicateHelperProblems(ROOT),
+  ...interfaceLintProblems(ROOT),
   ...pluginManifestProblems(ROOT),
 ];
 for (const problem of problems) console.error(problem);

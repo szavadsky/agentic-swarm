@@ -4,6 +4,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { GATE_OUTPUT_CAP } from "../../src/kernel/gates.js";
+import { interfaceLintProblems, SCOPE } from "../../scripts/interface-lint.js";
+import { MANIFEST } from "../../scripts/plugin-manifest.js";
 
 const PACKAGE = path.join(import.meta.dir, "..", "..");
 const BIOME = path.join(PACKAGE, "node_modules", ".bin", "biome");
@@ -99,7 +101,16 @@ describe("lint ratchet", () => {
   });
 });
 
+/** A scoped folder the fixtures use; its membership pins the check's reach. */
+const SCOPED_DIR = "kernel/agent";
+
 let root: string;
+
+function writeFixture(file: string, text: string): void {
+  const full = path.join(root, file);
+  fs.mkdirSync(path.dirname(full), { recursive: true });
+  fs.writeFileSync(full, text);
+}
 
 function run(): ReturnType<typeof spawnSync> {
   return spawnSync(process.execPath, [SIZE_CHECK, root], {
@@ -222,3 +233,113 @@ function registerCheckFileSizePart1(): void {
     expect(result.stderr).toContain('remover "later" is not a split-* task');
   });
 }
+
+describe("interface lint", () => {
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "interface-lint-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("fails an exported type declared in a scoped implementation module", () => {
+    expect(SCOPE).toContain(SCOPED_DIR);
+    writeFixture(
+      `src/${SCOPED_DIR}/run.ts`,
+      [
+        'const id = "x";',
+        "export interface Handle {",
+        "  id: string;",
+        "}",
+        "export type Runner = () => void;",
+        "",
+      ].join("\n"),
+    );
+
+    expect(interfaceLintProblems(root)).toEqual([
+      `interface lint: src/${SCOPED_DIR}/run.ts:2 exports interface "Handle"; a type module carries the declaration`,
+      `interface lint: src/${SCOPED_DIR}/run.ts:5 exports type "Runner"; a type module carries the declaration`,
+    ]);
+  });
+
+  it("accepts the declarations in a type module and a re-export from the implementation module", () => {
+    writeFixture(
+      `src/${SCOPED_DIR}/types.ts`,
+      [
+        "export interface Handle {",
+        "  id: string;",
+        "}",
+        "export type Runner = () => void;",
+        "",
+      ].join("\n"),
+    );
+    writeFixture(
+      `src/${SCOPED_DIR}/run.ts`,
+      'export type { Handle, Runner } from "./types.js";\n',
+    );
+
+    expect(interfaceLintProblems(root)).toEqual([]);
+  });
+
+  it("ignores an exported type in a folder outside the scope", () => {
+    writeFixture(
+      "src/cli/run.ts",
+      ["export interface Handle {", "  id: string;", "}", ""].join("\n"),
+    );
+
+    expect(interfaceLintProblems(root)).toEqual([]);
+  });
+});
+
+/** Exit-0 biome and knip stand-ins and a sound manifest, so the gate reaches the interface check. */
+function stubLintGate(): void {
+  writeFixture(
+    MANIFEST,
+    JSON.stringify({ name: "fixture-plugin", skills: "./skills/" }),
+  );
+  writeFixture(
+    "skills/run/SKILL.md",
+    "---\nname: run\ndescription: Run it.\n---\n",
+  );
+  for (const tool of ["biome", "knip"]) {
+    writeFixture(`node_modules/.bin/${tool}`, "#!/usr/bin/env bash\nexit 0\n");
+    fs.chmodSync(path.join(root, "node_modules", ".bin", tool), 0o755);
+  }
+}
+
+function lintGate(): { code: number; output: string } {
+  const result = spawnSync(process.execPath, [LINT_GATE, root], {
+    encoding: "utf8",
+  });
+  return {
+    code: result.status ?? -1,
+    output: `${result.stdout ?? ""}${result.stderr ?? ""}`,
+  };
+}
+
+describe("interface lint in the lint gate", () => {
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "interface-lint-gate-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("passes a clean scoped folder and rejects a new exported type in it", () => {
+    stubLintGate();
+    expect(lintGate().code).toBe(0);
+
+    writeFixture(
+      `src/${SCOPED_DIR}/run.ts`,
+      ["export interface Handle {", "  id: string;", "}", ""].join("\n"),
+    );
+    const result = lintGate();
+
+    expect(result.code).toBe(1);
+    expect(result.output).toContain(
+      `interface lint: src/${SCOPED_DIR}/run.ts:1`,
+    );
+  }, 20_000);
+});
