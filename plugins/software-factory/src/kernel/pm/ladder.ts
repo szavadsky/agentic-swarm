@@ -7,7 +7,6 @@ import {
   type TurnTarget,
 } from "../flow-context.js";
 import type { LiveAgents, SessionRef } from "../../harness/types.js";
-import { holdsDir } from "../mailbox.js";
 import { KERNEL_TURN_STEPS } from "../outcome.js";
 import { formatPlanList } from "../plan-file.js";
 import { scriptMeta } from "../record.js";
@@ -19,7 +18,7 @@ import type {
   StepRecord,
   TaskFile,
 } from "../types.js";
-import { existingTasks, planDiffPrompt, pmLadderNote } from "./prompts.js";
+import { planDiffPrompt, pmLadderNote, pmTurnVars } from "./prompts.js";
 import {
   openTaskTexts,
   previousPlanBaseline,
@@ -412,20 +411,7 @@ export async function runPmTurn(
     target,
     cwd: opts.cwd,
     meta: { iteration: opts.iteration, step: "pm", round: input.round },
-    vars: {
-      iteration: String(opts.iteration),
-      intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
-      plans: input.planList,
-      plan_diff: input.planDiff ?? "none",
-      tasks_dir: runtime.store.tasks.dir,
-      existing_tasks: existingTasks(opts.state, input.tasks),
-      repair: input.repair,
-      steers: input.steers,
-      holds_dir: holdsDir(runtime.store),
-      stalls: input.stalls,
-      plan_checks: input.planChecks,
-      concerns: input.concerns,
-    },
+    vars: pmTurnVars(runtime, opts, input),
     expectation: KERNEL_TURN_STEPS.pm,
     ...(input.session ? { session: input.session } : {}),
     ...(input.onLive ? { onLive: input.onLive } : {}),

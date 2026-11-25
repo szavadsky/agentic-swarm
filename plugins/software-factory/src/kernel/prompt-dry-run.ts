@@ -12,7 +12,7 @@ import { qaOutcomeSchema } from "./qa.js";
 import { loadPrompts } from "./prompts.js";
 import { sagaReminderVar } from "./saga-reminder.js";
 import { outcomeSchema } from "./types.js";
-import type { ArchitectureFlow, ConfigBundle } from "./types.js";
+import type { ArchitectureFlow, ConfigBundle, PmFlowStep } from "./types.js";
 
 export interface PromptRender {
   /** Prompt template name the kernel renders. */
@@ -45,10 +45,19 @@ export function architectureFlowPromptNames(
   return names;
 }
 
+/** Every prompt a PM flow's custom steps can render. */
+export function pmFlowPromptNames(steps: readonly PmFlowStep[]): Set<string> {
+  const names = new Set<string>();
+  for (const step of steps) {
+    addPrompt(names, step.prompt, step.repairPrompt, step.unfinishedPrompt);
+  }
+  return names;
+}
+
 /**
  * Every prompt the config can render: flows, boundary turns, the architecture
- * flow, the hierarchy consult, the process repair default, and the two blocks
- * the steered hierarchy renders directly.
+ * flow, the PM flow, the hierarchy consult, the process repair default, and the
+ * two blocks the steered hierarchy renders directly.
  */
 export function promptNamesForConfig(configs: ConfigBundle): string[] {
   const { process } = configs;
@@ -76,6 +85,9 @@ export function promptNamesForConfig(configs: ConfigBundle): string[] {
   for (const name of architectureFlowPromptNames(
     process.architecture.flows ?? [],
   )) {
+    names.add(name);
+  }
+  for (const name of pmFlowPromptNames(process.pm?.steps ?? [])) {
     names.add(name);
   }
   addPrompt(

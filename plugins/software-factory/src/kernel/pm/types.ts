@@ -32,5 +32,10 @@ export type PmRun =
   /** Every tier failed both of its turns. */
   | { status: "exhausted"; rungs: PmRung[] };
 
+/** The PM stage's result: the ladder's, or a config-only step's infra stop. */
+export type PmFlowRun =
+  | PmRun
+  | { status: "step-infra"; step: string; stop: PmInfraStop };
+
 /** One entry of a steer turn's `steerRoutes`. */
 export type SteerRouteEntry = NonNullable<Outcome["steerRoutes"]>[number];

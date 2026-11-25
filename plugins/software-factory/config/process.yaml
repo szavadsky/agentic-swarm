@@ -125,6 +125,13 @@ architecture:
         - id: architect
         - id: planreview
         - id: pm
+# The PM stage's step list. The built-in `derive` id runs the PM ladder; any
+# other id runs one PM-role agent turn and names its prompt and alias, so a
+# project adds an agent before or after the derive turn without a kernel
+# change. Steps run in list order and exactly one `derive` is required.
+pm:
+  steps:
+    - id: derive
 # Hierarchy depth: 1 is the norm (one architect); 2 adds one subarchitect
 # consult per active epic in the architect register, on the architect's alias.
 # At depth 1 nothing in this block runs.

@@ -69,7 +69,9 @@ export {
   BOUNDARY_STEPS,
   BUILTIN_ARCHITECTURE_FLOW_STEPS,
   BUILTIN_INGESTION_IDS,
+  BUILTIN_PM_FLOW_STEPS,
   DEFAULT_ARCHITECTURE_FLOWS,
+  DEFAULT_PM_FLOW_STEPS,
   DEFAULT_TIMEOUTS,
   KERNEL_STEPS,
 } from "./types/flow.js";
@@ -88,6 +90,7 @@ export type {
   KernelStep,
   LaunchKind,
   Limits,
+  PmFlowStep,
   RepairSpec,
   Timeouts,
   TurnSpec,

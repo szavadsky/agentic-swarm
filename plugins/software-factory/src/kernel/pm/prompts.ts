@@ -4,6 +4,7 @@ import type { ForwardedConcern } from "../context-pack/types.js";
 import type { TurnTarget } from "../flow-context.js";
 import {
   formatSteerTurn,
+  holdsDir,
   planCheckProvenance,
   type Steer,
   stallProvenance,
@@ -39,6 +40,40 @@ export function existingTasks(state: State, tasks: TaskFile[]): string {
     .sort((a, b) => a.slug.localeCompare(b.slug))
     .map((task) => existingTaskLine(state, task))
     .join("\n");
+}
+
+/** The prompt inputs every PM turn renders, the derive ladder and config steps alike. */
+export interface PmPromptInput {
+  planList: string;
+  planDiff?: string;
+  tasks: TaskFile[];
+  repair: string;
+  steers: string;
+  stalls: string;
+  planChecks: string;
+  concerns: string;
+}
+
+/** The variables a PM-role turn renders, whichever step of the PM flow runs it. */
+export function pmTurnVars(
+  runtime: KernelRuntime,
+  opts: { iteration: number; state: State },
+  input: PmPromptInput,
+): Record<string, string> {
+  return {
+    iteration: String(opts.iteration),
+    intent_path: runtime.store.pathOf({ area: "goal", rel: "intent.md" }),
+    plans: input.planList,
+    plan_diff: input.planDiff ?? "none",
+    tasks_dir: runtime.store.tasks.dir,
+    existing_tasks: existingTasks(opts.state, input.tasks),
+    repair: input.repair,
+    steers: input.steers,
+    holds_dir: holdsDir(runtime.store),
+    stalls: input.stalls,
+    plan_checks: input.planChecks,
+    concerns: input.concerns,
+  };
 }
 
 /** The plan diff since the last derived plan, or `none` on the first derive. */

@@ -422,6 +422,37 @@ function registerFactoryValidatePart15(): void {
   );
 }
 
+function registerFactoryValidatePart16(): void {
+  it(
+    "refuses a pm flow's unknown prompt and alias",
+    withTmp(async (root) => {
+      const file = writeFile(
+        root,
+        ".factory/process.yaml",
+        "pm:\n  steps:\n    - id: derive\n    - id: postaudit\n      prompt: ghost\n      alias: reviewer-b\n",
+      );
+      const flow = await runValidate(file);
+      expect(flow.code).toBe(1);
+      expect(flow.err).toContain('Prompt fragment "ghost" not found');
+      expect(flow.err).toContain(
+        'aliases.reviewer-b: required by pm flow step "postaudit" but missing',
+      );
+
+      writeFile(
+        root,
+        ".factory/process.yaml",
+        "pm:\n  steps:\n    - id: derive\n    - id: postaudit\n      prompt: pm\n      alias: pm\n      repairPrompt: ghost-repair\n      unfinishedPrompt: ghost-unfinished\n",
+      );
+      const repairs = await runValidate(file);
+      expect(repairs.code).toBe(1);
+      expect(repairs.err).toContain('Prompt fragment "ghost-repair" not found');
+      expect(repairs.err).toContain(
+        'Prompt fragment "ghost-unfinished" not found',
+      );
+    }),
+  );
+}
+
 describe("factory validate", () => {
   registerFactoryValidatePart10();
 
@@ -434,4 +465,6 @@ describe("factory validate", () => {
   registerFactoryValidatePart14();
 
   registerFactoryValidatePart15();
+
+  registerFactoryValidatePart16();
 });

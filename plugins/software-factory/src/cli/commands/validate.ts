@@ -26,7 +26,10 @@ import {
   outcomeSchemaNames,
 } from "../../kernel/outcome-schemas.js";
 import { PLAN_CHECK_STEP } from "../../kernel/plan-check.js";
-import { architectureFlowPromptNames } from "../../kernel/prompt-dry-run.js";
+import {
+  architectureFlowPromptNames,
+  pmFlowPromptNames,
+} from "../../kernel/prompt-dry-run.js";
 import { loadPrompts } from "../../kernel/prompts.js";
 import {
   PLAN_REVIEW_STEP,
@@ -346,25 +349,33 @@ function crossLayerFindings(
     ...crossLayerTaskTypeFindings(bundleOrError),
     ...crossLayerPoolFindings(bundleOrError),
     ...crossLayerChainFindings(bundleOrError),
-    ...crossLayerArchitecturePromptFindings(bundleOrError),
+    ...crossLayerPromptFindings(
+      bundleOrError,
+      architectureFlowPromptNames(
+        bundleOrError.process.architecture.flows ?? [],
+      ),
+      "architecture.flows",
+    ),
+    ...crossLayerPromptFindings(
+      bundleOrError,
+      pmFlowPromptNames(bundleOrError.process.pm?.steps ?? []),
+      "pm.steps",
+    ),
   ];
 }
 
-/** Every architect-flow prompt template the repo's prompt layers can resolve. */
-function crossLayerArchitecturePromptFindings(
+/** Every prompt template the repo's prompt layers can resolve, or its findings. */
+function crossLayerPromptFindings(
   bundle: CrossLayerBundle,
+  names: ReadonlySet<string>,
+  label: string,
 ): string[] {
-  const names = architectureFlowPromptNames(
-    bundle.process.architecture.flows ?? [],
-  );
   if (names.size === 0) return [];
   let library: ReturnType<typeof loadPrompts>;
   try {
     library = loadPrompts(bundle.process, bundle.root);
   } catch (err) {
-    return [
-      `${bundle.processFile}: architecture.flows: ${(err as Error).message}`,
-    ];
+    return [`${bundle.processFile}: ${label}: ${(err as Error).message}`];
   }
   const findings: string[] = [];
   for (const name of [...names].sort()) {
@@ -372,7 +383,7 @@ function crossLayerArchitecturePromptFindings(
       library.placeholders(name);
     } catch (err) {
       findings.push(
-        `${bundle.processFile}: architecture.flows: ${(err as Error).message}`,
+        `${bundle.processFile}: ${label}: ${(err as Error).message}`,
       );
     }
   }

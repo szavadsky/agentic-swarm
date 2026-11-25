@@ -151,9 +151,10 @@ export function fallbackAliasFindings(
 
 /**
  * Exactly the aliases process config names, each with the step that names it:
- * every boundary step, every architecture reviewer, every flow step, every step
- * alternate and every different-model follow-up. Nothing is derived from a role
- * name, so a renamed alias is the only requirement.
+ * every boundary step, every architecture reviewer, every architecture and PM
+ * flow step, every flow step, every step alternate and every different-model
+ * follow-up. Nothing is derived from a role name, so a renamed alias is the
+ * only requirement.
  */
 /** Every alias one flow names, with its step context. */
 function noteFlowAliases(
@@ -172,14 +173,11 @@ function noteFlowAliases(
   }
 }
 
-export function requiredAliases(process: ProcessConfig): Map<string, string> {
-  const refs = new Map<string, string>();
-  const note = (alias: string, ref: string): void => {
-    if (!refs.has(alias)) refs.set(alias, ref);
-  };
-  for (const step of BOUNDARY_STEPS) {
-    note(process.boundary[step].alias, `boundary step "${step}"`);
-  }
+/** Every alias the architecture flow names, with its step context. */
+function noteArchitectureAliases(
+  note: (alias: string, ref: string) => void,
+  process: ProcessConfig,
+): void {
   for (const alias of process.architecture.reviewers) {
     note(alias, "architecture reviewer");
   }
@@ -188,14 +186,44 @@ export function requiredAliases(process: ProcessConfig): Map<string, string> {
       if (step.alias) note(step.alias, `architecture flow step "${step.id}"`);
     }
   }
-  for (const [name, flow] of Object.entries(process.flows)) {
-    noteFlowAliases(note, name, flow);
+}
+
+/** Every alias a config-only PM flow step names. */
+function notePmAliases(
+  note: (alias: string, ref: string) => void,
+  process: ProcessConfig,
+): void {
+  for (const step of process.pm?.steps ?? []) {
+    if (step.alias) note(step.alias, `pm flow step "${step.id}"`);
   }
+}
+
+/** Every alias a non-built-in ingestion step names. */
+function noteIngestionAliases(
+  note: (alias: string, ref: string) => void,
+  process: ProcessConfig,
+): void {
   for (const step of process.ingestion ?? []) {
     if (!BUILTIN_INGESTION_IDS.includes(step.id as BuiltinIngestionId)) {
       note(step.alias ?? "pm", `ingestion step "${step.id}"`);
     }
   }
+}
+
+export function requiredAliases(process: ProcessConfig): Map<string, string> {
+  const refs = new Map<string, string>();
+  const note = (alias: string, ref: string): void => {
+    if (!refs.has(alias)) refs.set(alias, ref);
+  };
+  for (const step of BOUNDARY_STEPS) {
+    note(process.boundary[step].alias, `boundary step "${step}"`);
+  }
+  noteArchitectureAliases(note, process);
+  notePmAliases(note, process);
+  for (const [name, flow] of Object.entries(process.flows)) {
+    noteFlowAliases(note, name, flow);
+  }
+  noteIngestionAliases(note, process);
   return refs;
 }
 

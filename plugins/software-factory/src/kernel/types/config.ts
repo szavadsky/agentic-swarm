@@ -11,6 +11,7 @@ import type {
   HierarchyConfig,
   IngestionStepConfig,
   Limits,
+  PmConfig,
   Timeouts,
   TurnSpec,
 } from "./flow.js";
@@ -115,6 +116,8 @@ export interface ProcessConfig {
   ingestion?: IngestionStepConfig[];
   /** The plan review flow that completes before the PM derives tasks. */
   architecture: ArchitectureConfig;
+  /** The PM stage's step list: the derive ladder and any turns around it. */
+  pm?: PmConfig;
   /** Hierarchy depth and the epic architect's prompt; absent reads as depth 1. */
   hierarchy?: HierarchyConfig;
   /** Repair template a step renders when it names none; defaults to `delivery-repair`. */

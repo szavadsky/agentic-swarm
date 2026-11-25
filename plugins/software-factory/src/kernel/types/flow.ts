@@ -147,6 +147,29 @@ export const DEFAULT_ARCHITECTURE_FLOWS: ArchitectureFlow[] = [
   },
 ];
 
+/** The kernel step a PM flow binds to the PM ladder in its derive turn. */
+export const BUILTIN_PM_FLOW_STEPS = ["derive"] as const;
+
+/**
+ * One step of the PM flow. `derive` runs the kernel's PM ladder; any other id
+ * runs one agent turn and must name its prompt and alias.
+ */
+export interface PmFlowStep extends RepairSpec {
+  id: string;
+  /** Prompt template under `prompts/`; required for a non-built-in step. */
+  prompt?: string;
+  /** Run-config alias; required for a non-built-in step. */
+  alias?: string;
+}
+
+/** The PM stage's step list: the derive turn and any configured turns around it. */
+export interface PmConfig {
+  steps: PmFlowStep[];
+}
+
+/** Today's PM stage: the derive ladder and nothing else. */
+export const DEFAULT_PM_FLOW_STEPS: PmFlowStep[] = [{ id: "derive" }];
+
 /**
  * Hierarchy depth and the epic architect's prompt. Depth 1 (the default) is
  * one architect; depth 2 adds one subarchitect consult per active epic. The

@@ -17,6 +17,7 @@ import {
   ingestionSchema,
   taskTypeSchema,
 } from "./flow-schema.js";
+import { DEFAULT_PM_FLOW, pmSchema } from "./pm-schema.js";
 
 /** Process layer: package default deep-merged with an optional repo override. */
 export const processConfigSchema = z
@@ -28,6 +29,8 @@ export const processConfigSchema = z
     ingestion: ingestionSchema.default(DEFAULT_INGESTION_STEPS),
     /** The plan review flow that completes before the PM derives tasks. */
     architecture: architectureSchema,
+    /** The PM stage's step list: the derive ladder and any turns around it. */
+    pm: pmSchema.default(DEFAULT_PM_FLOW),
     /** Depth and the epic architect's prompt; depth 1 is one architect. */
     hierarchy: hierarchySchema.default({
       depth: 1,
@@ -68,6 +71,7 @@ export const processConfigSchema = z
 export const processOverrideSchema = processConfigSchema.extend({
   boundary: boundaryOverrideSchema.optional(),
   architecture: architectureOverrideSchema.optional(),
+  pm: pmSchema.optional(),
   hierarchy: hierarchyOverrideSchema.optional(),
   ingestion: ingestionSchema.optional(),
 });

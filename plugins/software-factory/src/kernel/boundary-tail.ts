@@ -44,7 +44,7 @@ import {
   runArchitectReturn,
   runPlanReview,
 } from "./plan-review.js";
-import { planBulletEditFindings, runPm } from "./pm.js";
+import { planBulletEditFindings, runPmFlow } from "./pm.js";
 import { scriptMeta } from "./record.js";
 import type { StepRecord } from "./types.js";
 
@@ -382,7 +382,7 @@ export async function runPmStage(
     runtime,
     { iteration: context.iteration, step: "pm" },
     () =>
-      runPm(runtime, {
+      runPmFlow(runtime, {
         iteration: context.iteration,
         state: context.state,
         cwd: runtime.paths.goalCheckout,
@@ -421,7 +421,7 @@ async function releaseConcernMarks(context: ConsultContext): Promise<void> {
 
 function pmResult(
   context: ConsultContext,
-  pm: Awaited<ReturnType<typeof runPm>>,
+  pm: Awaited<ReturnType<typeof runPmFlow>>,
 ): BoundaryResult {
   const outcome = context.architect?.outcome;
   if (pm.status === "asked") {
@@ -445,6 +445,13 @@ function pmResult(
       : "";
     return boundaryResult(context, "blocked", {
       cause: `PM ladder stopped on infrastructure${where}: ${infraCause(pm.stop)}`,
+      stop: { cause: pm.stop.cause, details: pm.stop.details },
+      outcome,
+    });
+  }
+  if (pm.status === "step-infra") {
+    return boundaryResult(context, "blocked", {
+      cause: `PM step "${pm.step}" stopped on infrastructure: ${infraCause(pm.stop)}`,
       stop: { cause: pm.stop.cause, details: pm.stop.details },
       outcome,
     });

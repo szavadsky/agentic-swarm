@@ -2,6 +2,7 @@
 
 export { packageRoot, repoConfigSchema } from "./config/repo-schema.js";
 export { architectureSchema } from "./config/flow-schema.js";
+export { pmSchema } from "./config/pm-schema.js";
 export {
   DEFAULT_PARK_AMENDS,
   processConfigSchema,

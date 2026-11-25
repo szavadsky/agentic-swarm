@@ -24,5 +24,9 @@ export {
 } from "./pm/routes/plan-check.js";
 export { runStallPm } from "./pm/routes/stall.js";
 export { runSteerPm, type SteerPmRun } from "./pm/routes/steer.js";
-export { PLAN_CHECK_ROUTES_STEP, STALL_ROUTES_STEP } from "./pm/steps.js";
+export {
+  PLAN_CHECK_ROUTES_STEP,
+  runPmFlow,
+  STALL_ROUTES_STEP,
+} from "./pm/steps.js";
 export type { PmRung } from "./pm/types.js";

@@ -222,6 +222,11 @@ architecture:                   # the plan review flow, before the PM derives ta
         - { id: pm }
         # A custom id runs one agent turn on its prompt and alias:
         # - { id: assess, prompt: previous-run-assessment, alias: architect }
+pm:
+  steps:
+    - { id: derive }            # the built-in ladder that writes the task files
+    # A custom id runs one agent turn on its prompt and alias:
+    # - { id: postaudit, prompt: postaudit, alias: pm }
 hierarchy:                      # 1 architect (the norm), or 2 with one subarchitect per epic
   depth: 1
   subarchitect: { prompt: subarchitect, repairPrompt: architect-repair, deliverable: "epic plan edit or stop decision" }
@@ -299,6 +304,11 @@ that edits the plan and marks every finding; the findings never block the
 iteration. With `never`, the findings reach the next architect's pack, which
 asks for the same marks. The return runs on the architect boundary step's
 alias; its prompt is `planReturn.prompt`.
+
+The `pm` stage runs its own `steps` list; the built-in `derive` step runs the
+PM ladder and takes no turn fields; any other id runs one agent turn and must
+name a `prompt` and `alias`, so an assessment before the derive or an audit
+after it is a config edit. The flow names exactly one `derive` step.
 
 The kernel adds one technical finding of its own: an in-place edit to the
 bullet of a task whose file already exists. A task file is immutable outside
