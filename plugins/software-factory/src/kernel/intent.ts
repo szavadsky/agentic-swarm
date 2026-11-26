@@ -6,6 +6,7 @@ import { porcelainStatus } from "../core/git/status.js";
 import { runAgentTurn } from "./agent.js";
 import type { IntentChange } from "./context-pack.js";
 import { boundaryTarget } from "./flow-context.js";
+import { unifiedDiff } from "./intent-diff.js";
 import { formatSteerTurn, type Steer } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { recordDirName } from "./store.js";
@@ -20,7 +21,6 @@ import type {
 const INTENT_STEP = "intent";
 
 const INTENT_FILE = "intent.md";
-const DIFF_CONTEXT = 3;
 
 /**
  * Phrases that make a path in the goal note the intent's source rather than a
@@ -134,111 +134,6 @@ async function revertForeignChanges(
     if (!entry.code.startsWith("??")) continue;
     fs.rmSync(path.join(checkout, entry.path), { force: true });
   }
-}
-
-interface DiffLine {
-  kind: " " | "-" | "+";
-  text: string;
-  /** 1-based line in the pre-turn text; absent on an insertion. */
-  old?: number;
-  /** 1-based line in the post-turn text; absent on a deletion. */
-  next?: number;
-}
-
-/** Lengths of the longest common suffix runs; the diff walks it forward. */
-function lcsTable(
-  before: readonly string[],
-  after: readonly string[],
-): number[][] {
-  const table: number[][] = Array.from({ length: before.length + 1 }, () =>
-    new Array<number>(after.length + 1).fill(0),
-  );
-  for (let i = before.length - 1; i >= 0; i--) {
-    for (let j = after.length - 1; j >= 0; j--) {
-      table[i]![j] =
-        before[i] === after[j]
-          ? table[i + 1]![j + 1]! + 1
-          : Math.max(table[i + 1]![j]!, table[i]![j + 1]!);
-    }
-  }
-  return table;
-}
-
-/** The next diff op: an equal line, a removal, or an insertion. */
-function nextKind(
-  before: readonly string[],
-  after: readonly string[],
-  lcs: readonly number[][],
-  i: number,
-  j: number,
-): " " | "-" | "+" {
-  if (i < before.length && j < after.length && before[i] === after[j])
-    return " ";
-  if (j >= after.length) return "-";
-  if (i >= before.length) return "+";
-  return lcs[i + 1]![j]! >= lcs[i]![j + 1]! ? "-" : "+";
-}
-
-/** Longest-common-subsequence line diff; line numbers are 1-based. */
-function diffLines(
-  before: readonly string[],
-  after: readonly string[],
-): DiffLine[] {
-  const lcs = lcsTable(before, after);
-  const lines: DiffLine[] = [];
-  let i = 0;
-  let j = 0;
-  while (i < before.length || j < after.length) {
-    const kind = nextKind(before, after, lcs, i, j);
-    if (kind === " ") {
-      lines.push({ kind, text: before[i]!, old: i + 1, next: j + 1 });
-      i += 1;
-      j += 1;
-    } else if (kind === "-") {
-      lines.push({ kind, text: before[i]!, old: i + 1 });
-      i += 1;
-    } else {
-      lines.push({ kind, text: after[j]!, next: j + 1 });
-      j += 1;
-    }
-  }
-  return lines;
-}
-
-/** One changed line per hunk neighbourhood, three context lines each side. */
-function hunkRanges(lines: readonly DiffLine[]): [number, number][] {
-  const ranges: [number, number][] = [];
-  for (const [index, line] of lines.entries()) {
-    if (line.kind === " ") continue;
-    const start = Math.max(0, index - DIFF_CONTEXT);
-    const end = Math.min(lines.length - 1, index + DIFF_CONTEXT);
-    const last = ranges.at(-1);
-    if (last && start <= last[1] + 1) last[1] = Math.max(last[1], end);
-    else ranges.push([start, end]);
-  }
-  return ranges;
-}
-
-/** A unified diff of two intent texts, three context lines per hunk. */
-function unifiedDiff(before: string, after: string, rel: string): string {
-  const lines = diffLines(before.split("\n"), after.split("\n"));
-  const out: string[] = [`--- ${rel}`, `+++ ${rel}`];
-  for (const [start, end] of hunkRanges(lines)) {
-    let oldBefore = 0;
-    let newBefore = 0;
-    for (const line of lines.slice(0, start)) {
-      if (line.old !== undefined) oldBefore += 1;
-      if (line.next !== undefined) newBefore += 1;
-    }
-    const hunk = lines.slice(start, end + 1);
-    const oldCount = hunk.filter((line) => line.old !== undefined).length;
-    const newCount = hunk.filter((line) => line.next !== undefined).length;
-    const oldStart = oldCount === 0 ? oldBefore : oldBefore + 1;
-    const newStart = newCount === 0 ? newBefore : newBefore + 1;
-    out.push(`@@ -${oldStart},${oldCount} +${newStart},${newCount} @@`);
-    for (const line of hunk) out.push(`${line.kind}${line.text}`);
-  }
-  return out.join("\n");
 }
 
 function latestIntentRecord(
