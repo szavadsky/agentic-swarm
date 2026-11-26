@@ -176,15 +176,14 @@ export function planChecksSinceConsult(
  * Whether a boundary spends a checker round before the architect. The
  * checker runs before every consult with a plan, including when nothing is
  * open: its clean record is the architect's evidence that the plan still
- * holds. The scope's own exhausted repeat bound, its last `architect` verdict
- * and a steer only the architect can answer also skip the check: the consult
- * is their resolver.
+ * holds. A waiting steer is no exception: the checker still runs before the
+ * consult that answers it. The scope's own exhausted repeat bound and its
+ * last `architect` verdict also skip the check: the consult is their
+ * resolver.
  */
 export function consultGate(input: {
   /** A plan exists to verify. */
   plan: boolean;
-  /** An unprocessed inbox steer waits: the architect is its consumer. */
-  steerWaiting: boolean;
   records: StepRecord[];
   /** `limits.planCheckRounds`: checker turns allowed before one consult. */
   bound: number;
@@ -192,7 +191,6 @@ export function consultGate(input: {
   architect?: string;
 }): "check" | "consult" {
   if (!input.plan) return "consult";
-  if (input.steerWaiting) return "consult";
   const checks = planChecksSinceConsult(input.records, input.architect);
   if (checks.length >= input.bound) return "consult";
   if (checks.at(-1)?.outcome?.planCheck?.verdict === "architect")

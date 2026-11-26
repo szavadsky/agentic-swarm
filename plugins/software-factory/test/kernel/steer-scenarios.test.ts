@@ -331,6 +331,18 @@ function pmSteerRouteTurns(records: readonly StepRecord[]) {
   );
 }
 
+/**
+ * Asserts a plancheck turn ran before the architect that answers the steer.
+ */
+function planCheckPrecedesArchitect(harness: FakeHarness): void {
+  const steps = harness.calls.map((call) => fakeTurnIdentity(call).step);
+  const lastPlanCheck = steps.lastIndexOf("plancheck");
+  const firstArchitect = steps.indexOf("architect");
+  expect(lastPlanCheck).toBeGreaterThanOrEqual(0);
+  expect(firstArchitect).toBeGreaterThanOrEqual(0);
+  expect(lastPlanCheck).toBeLessThan(firstArchitect);
+}
+
 const SCENARIOS: SteerScenario[] = [
   {
     name: "pre-launch: the first architect takes the steer into the plan and answers it",
@@ -413,10 +425,11 @@ const SCENARIOS: SteerScenario[] = [
     script: (harness, runtime, scenario) => {
       harness.script(pmStalls(runtime), { when: steerPm(scenario.steer) });
     },
-    assert: async ({ dispatched, runtime }) => {
+    assert: async ({ dispatched, harness, runtime }) => {
       expect(dispatched!.reason).toBe("drained");
       expect(causeText(dispatched!.cause)).toBe("steer: s1 goal hold");
       expect((await stateOf(runtime)).tasks.beta!.status).toBe("ready");
+      planCheckPrecedesArchitect(harness);
     },
   },
   {
@@ -425,13 +438,14 @@ const SCENARIOS: SteerScenario[] = [
     arrival: "in-flight",
     answerBy: "architect",
     answer: "rolling back the rollout",
-    assert: async ({ dispatched, runtime }) => {
+    assert: async ({ dispatched, harness, runtime }) => {
       expect(dispatched!.reason).toBe("drained");
       expect(causeText(dispatched!.cause)).toBe("steer: s1 marked urgent");
       // Urgency is the owner's exception: no PM turn ever routes this steer.
       expect(pmSteerRouteTurns(await runtime.store.listRecords())).toHaveLength(
         0,
       );
+      planCheckPrecedesArchitect(harness);
     },
   },
   {
