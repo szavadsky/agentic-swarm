@@ -296,10 +296,11 @@ export interface Limits {
 export type StepActor = "agent" | "script";
 
 /**
- * Why a launch ran again: a technical glitch (infra stop or fallback hop),
- * a bona fide change request (a review `changes`), a QA finding that sent the
- * work back, or a bona fide failure (agent `failed`/`blocked` or no outcome
- * after reminders).
+ * Why a launch ran again: a technical glitch (a zero-usage, no-output infra
+ * stop, or a fallback hop), a bona fide change request (a review `changes`), a
+ * QA finding that sent the work back, or a bona fide failure (agent
+ * `failed`/`blocked` or no outcome after reminders). A genuine infra stop (a
+ * crash, quota, timeout, …) is no glitch and stores no launch kind.
  */
 export type LaunchKind = "glitch" | "change-request" | "qa-finding" | "failure";
 

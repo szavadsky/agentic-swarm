@@ -71,6 +71,8 @@ function turnRecordEnd(
     outcome: state.outcome ?? undefined,
     attempts: state.attempts,
     repairFindings: state.repairFindings,
+    usage: pricing.pricedTop,
+    edits: settled.edits,
   });
   // The final outcome passed the same checks the reminders named, so every
   // finding that triggered one is closed.

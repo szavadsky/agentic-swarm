@@ -224,6 +224,89 @@ function registerGlitchTurnPart(): void {
   });
 }
 
+/** One tier only: nothing to fail over to, so no fallback hop can excuse it. */
+async function runSingleTierTurn(
+  root: string,
+  fake: FakeHarness,
+  runtime: KernelRuntime,
+  stop: StepRecord["stop"],
+  slug: string,
+) {
+  fake.script((req) => fakeTurnResult(req, { stop }));
+  return runAgentTurn(runtime, {
+    target: {
+      ...resolveTurn(runtime, "implementer", "implementer"),
+      tiers: [{ harness: fake, model: { id: "fake-a" } }],
+    },
+    cwd: root,
+    meta: { iteration: 1, slug, step: "implement", round: 1 },
+    vars: implementerVars,
+    expectation: "any",
+  });
+}
+
+/** Both classes come from the one predicate, on a turn with no fallback hop. */
+function registerSingleTierGlitchParts(): void {
+  it("keeps a single-tier zero-usage glitch a glitch with no waste", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      const turn = await runSingleTierTurn(
+        root,
+        fake,
+        runtime,
+        GLITCH_STOP,
+        "glitchy",
+      );
+      expect(fake.calls).toHaveLength(1);
+      expect(turn.record.launchKind).toBe("glitch");
+
+      const metrics = await metricsOf(runtime, [turn.record]);
+      const one = metrics.iterations[0]!;
+      expect(one.waste.turns).toBe(0);
+      expect(one.waste.counts.structureInfra).toBe(0);
+      expect(one.waste.entries).toEqual([]);
+      expect(one.roles.implementer!.launches.glitch).toBe(1);
+      expect(one.incidents.fallbackHops).toBe(0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("counts a genuine crash as waste and stores no glitch kind", async () => {
+    const { root, fake, runtime } = await setup();
+    try {
+      const turn = await runSingleTierTurn(
+        root,
+        fake,
+        runtime,
+        { kind: "infra", cause: "crash", details: "exit 1, signal none" },
+        "crashed",
+      );
+      // No tier to fail over to: the crash ends the turn itself, so it is no
+      // fallback hop that could excuse the launch as a glitch.
+      expect(fake.calls).toHaveLength(1);
+      expect(turn.record.stop).toMatchObject({
+        kind: "infra",
+        cause: "crash",
+      });
+      expect(reportsUsage(turn.record.usage!)).toBe(false);
+      expect(turn.record.launchKind).toBeUndefined();
+
+      const metrics = await metricsOf(runtime, [turn.record]);
+      const one = metrics.iterations[0]!;
+      expect(one.waste.turns).toBe(1);
+      expect(one.waste.counts.structureInfra).toBe(1);
+      expect(one.waste.entries.map((entry) => entry.reason)).toEqual([
+        "structureInfra",
+      ]);
+      expect(one.roles.implementer!.launches.glitch).toBe(0);
+      expect(metrics.totals.aliases.implementer!.launches.glitch).toBe(0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
 function registerGlitchBoundaryPart(): void {
   it("keeps a genuine infra failure and an outcome-bearing zero-usage turn out of the glitch class", async () => {
     const { root, runtime } = await setup();
@@ -268,6 +351,8 @@ function registerGlitchBoundaryPart(): void {
 
 describe("glitch turns", () => {
   registerGlitchTurnPart();
+
+  registerSingleTierGlitchParts();
 
   registerGlitchBoundaryPart();
 });
