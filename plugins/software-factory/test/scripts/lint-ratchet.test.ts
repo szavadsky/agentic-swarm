@@ -9,39 +9,30 @@ import { MANIFEST } from "../../scripts/plugin-manifest.js";
 
 const PACKAGE = path.join(import.meta.dir, "..", "..");
 const BIOME = path.join(PACKAGE, "node_modules", ".bin", "biome");
+const BIOME_CONFIG = path.join(PACKAGE, "biome.json");
 const LINT_GATE = path.join(PACKAGE, "scripts", "lint.ts");
 const SIZE_CHECK = path.join(PACKAGE, "scripts", "check-file-size.ts");
 
-/** A fresh directory under `scripts/` so the real biome.json includes the fixture. */
-function fixtureDir(): string {
-  const dir = path.join(
-    PACKAGE,
-    "scripts",
-    `.lint-ratchet-${process.pid}-${Date.now()}`,
-  );
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
+function lintInTempConfig(relPath: string, source: string) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lint-ratchet-"));
+  try {
+    fs.copyFileSync(BIOME_CONFIG, path.join(dir, "biome.json"));
+    const file = path.join(dir, relPath);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, source);
+    return spawnSync(
+      BIOME,
+      ["lint", "--colors=off", "--vcs-enabled=false", relPath],
+      { cwd: dir, encoding: "utf8" },
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
-function lint(file: string) {
-  return spawnSync(BIOME, ["lint", "--colors=off", file], {
-    cwd: PACKAGE,
-    encoding: "utf8",
-  });
-}
-
-function nestedIfs(lines: number): string {
-  const body = Array.from(
-    { length: lines },
-    (_, i) => `${"  ".repeat(i + 1)}if (x) {`,
-  );
-  const close = Array.from(
-    { length: lines },
-    (_, i) => `${"  ".repeat(lines - i)}}`,
-  );
-  return [`export function complex(x: boolean) {`, ...body, ...close, "}"].join(
-    "\n",
-  );
+function sequentialIfs(count: number): string {
+  const body = Array.from({ length: count }, () => "  if (x) console.log(x);");
+  return [`export function complex(x: boolean) {`, ...body, "}"].join("\n");
 }
 
 function straightLines(lines: number): string {
@@ -49,55 +40,62 @@ function straightLines(lines: number): string {
   return [`export function long(x: boolean) {`, ...body, "}"].join("\n");
 }
 
+function expectThresholdExceeded(
+  relPath: string,
+  source: string,
+  expectedRule: string,
+  unexpectedRule: string,
+): void {
+  const result = lintInTempConfig(relPath, source);
+  const output = `${result.stdout}${result.stderr}`;
+  expect(result.status).not.toBe(0);
+  expect(output).toContain(expectedRule);
+  expect(output).not.toContain(unexpectedRule);
+}
+
 describe("lint ratchet", () => {
-  let fixtures: string[] = [];
-
-  beforeEach(() => {
-    fixtures = [];
+  it("enforces source thresholds (120 lines, 20 complexity) in src and scripts", () => {
+    for (const dir of ["src/nested", "scripts"]) {
+      expect(
+        lintInTempConfig(`${dir}/ok-len.ts`, straightLines(120)).status,
+      ).toBe(0);
+      expect(
+        lintInTempConfig(`${dir}/ok-cplx.ts`, sequentialIfs(20)).status,
+      ).toBe(0);
+      expectThresholdExceeded(
+        `${dir}/long.ts`,
+        straightLines(121),
+        "noExcessiveLinesPerFunction",
+        "noExcessiveCognitiveComplexity",
+      );
+      expectThresholdExceeded(
+        `${dir}/complex.ts`,
+        sequentialIfs(21),
+        "noExcessiveCognitiveComplexity",
+        "noExcessiveLinesPerFunction",
+      );
+    }
   });
 
-  afterEach(() => {
-    for (const dir of fixtures)
-      fs.rmSync(dir, { recursive: true, force: true });
-  });
-
-  it("fails a fixture over the complexity threshold", () => {
-    const dir = fixtureDir();
-    fixtures.push(dir);
-    const file = path.join(dir, "complex.ts");
-    fs.writeFileSync(file, nestedIfs(16));
-
-    const result = lint(file);
-    const output = `${result.stdout}${result.stderr}`;
-
-    expect(result.status).not.toBe(0);
-    expect(output).toContain("noExcessiveCognitiveComplexity");
-    expect(output).not.toContain("noExcessiveLinesPerFunction");
-  });
-
-  it("fails a fixture over the function-length threshold", () => {
-    const dir = fixtureDir();
-    fixtures.push(dir);
-    const file = path.join(dir, "long.ts");
-    fs.writeFileSync(file, straightLines(60));
-
-    const result = lint(file);
-    const output = `${result.stdout}${result.stderr}`;
-
-    expect(result.status).not.toBe(0);
-    expect(output).toContain("noExcessiveLinesPerFunction");
-    expect(output).not.toContain("noExcessiveCognitiveComplexity");
-  });
-
-  it("passes a fixture under both thresholds", () => {
-    const dir = fixtureDir();
-    fixtures.push(dir);
-    const file = path.join(dir, "ok.ts");
-    fs.writeFileSync(file, nestedIfs(1));
-
-    const result = lint(file);
-
-    expect(result.status).toBe(0);
+  it("enforces test overrides (300 lines, 50 complexity) in test", () => {
+    expect(
+      lintInTempConfig("test/nested/ok-len.ts", straightLines(300)).status,
+    ).toBe(0);
+    expect(
+      lintInTempConfig("test/nested/ok-cplx.ts", sequentialIfs(50)).status,
+    ).toBe(0);
+    expectThresholdExceeded(
+      "test/nested/long.ts",
+      straightLines(301),
+      "noExcessiveLinesPerFunction",
+      "noExcessiveCognitiveComplexity",
+    );
+    expectThresholdExceeded(
+      "test/nested/complex.ts",
+      sequentialIfs(51),
+      "noExcessiveCognitiveComplexity",
+      "noExcessiveLinesPerFunction",
+    );
   });
 });
 
