@@ -45,6 +45,7 @@ import { compactSession, subarchitectTarget } from "./flow-context.js";
 import { packGates } from "./infra.js";
 import { contextCodeMap } from "./ingestion.js";
 import { runBoundaryTurn } from "./integration-lock.js";
+import { architectIntentStatusFindings } from "./intent-slugs.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import type { PlanFile } from "./plan-file.js";
 import { type PlanSnapshot, snapshotPlans } from "./pm.js";
@@ -204,6 +205,8 @@ async function runSubarchitectTurn(
           digest_path: opts.digestPath ?? "",
         },
         expectation: KERNEL_TURN_STEPS.subarchitect,
+        validate: (outcome) =>
+          architectIntentStatusFindings(runtime.store, outcome),
         session,
         settle: (_record, outcome, live) =>
           compactDecidedConsult(runtime, outcome, live),

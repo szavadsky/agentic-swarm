@@ -40,7 +40,8 @@ const PROMPT_OUTCOME_FIELDS: Record<string, string[]> = {
 /** Sample prose per schema leaf; the path includes `[]` for an array's items. */
 const SAMPLE_TEXT: Readonly<Record<string, string>> = {
   summary: "the requested work is complete and the gates pass",
-  "intentStatus[].section": "M1 — Work is never lost to the kernel",
+  "intentStatus[].slug": "KernelCore",
+  "intentStatus[].section": "KernelCore",
   "intentStatus[].note": "every flow step renders a filled outcome example",
   "concerns[].text": "the retry path has no test without a live harness",
   "concerns[].evidence": "test/prompts.test.ts",

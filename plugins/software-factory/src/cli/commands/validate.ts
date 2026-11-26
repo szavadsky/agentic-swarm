@@ -9,6 +9,7 @@ import {
   loadConfigs,
   resolveRoots,
 } from "../../kernel/config.js";
+import { architectIntentStatusFindings } from "../../kernel/intent-slugs.js";
 import {
   expectationForStep,
   flowStepFor,
@@ -166,6 +167,17 @@ async function recordFacts(
 }
 
 /**
+ * The goal directory an outcome's record belongs to, for
+ * `<goal>/records/<record>/outcome.yaml`; undefined for any other file.
+ */
+function recordGoalDir(abs: string): string | undefined {
+  const recordDir = path.dirname(abs);
+  const recordsDir = path.dirname(recordDir);
+  if (path.basename(recordsDir) !== "records") return undefined;
+  return path.dirname(recordsDir);
+}
+
+/**
  * One outcome's findings for the step it was given for: `--step` wins, the
  * record's `started.yaml` supplies it otherwise. Without either, only the
  * schema is enforced and the caller reports the narrower check.
@@ -206,6 +218,17 @@ async function outcomeResult(
       lastCall,
       ...(records ? { records, excludeRecordId: recordId } : {}),
     });
+    if (expectation === "architect") {
+      const goalDir = recordGoalDir(abs);
+      if (goalDir) {
+        const store = createFolderStore(
+          goalDir,
+          undefined,
+          process.taskTypes ?? {},
+        );
+        delivery.push(...(await architectIntentStatusFindings(store, outcome)));
+      }
+    }
     if (step === PLAN_REVIEW_STEP) {
       delivery.push(...validatePlanReviewDelivery(outcome));
     }

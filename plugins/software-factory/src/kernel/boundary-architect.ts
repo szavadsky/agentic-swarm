@@ -25,6 +25,7 @@ import {
 } from "./flow-context.js";
 import { subarchitectDelivery } from "./hierarchy.js";
 import { runBoundaryTurn } from "./integration-lock.js";
+import { architectIntentStatusFindings } from "./intent-slugs.js";
 import { formatSteers } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { snapshotPlans } from "./pm.js";
@@ -76,6 +77,8 @@ async function architectTurn(
           ),
         },
         expectation: KERNEL_TURN_STEPS.architect,
+        validate: (outcome) =>
+          architectIntentStatusFindings(context.runtime.store, outcome),
         session,
         ...(steered
           ? {

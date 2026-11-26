@@ -312,9 +312,7 @@ describe("status dashboard assets", () => {
   it("writes the vendored assets the dashboard links", async () => {
     const { root, store } = await fixtureStore();
     try {
-      await writeIntentStatus(store, 1, [
-        { section: "Status", status: "works" },
-      ]);
+      await writeIntentStatus(store, 1, [{ slug: "Status", status: "works" }]);
       await writeStatus({
         store,
         flows: {},
@@ -344,7 +342,7 @@ describe("status intent artifact", () => {
     const { root, store } = await fixtureStore();
     try {
       await writeIntentStatus(store, 1, [
-        { section: "Sandbox", status: "not-built", note: "no bwrap" },
+        { slug: "Sandbox", status: "not-built", note: "no bwrap" },
       ]);
       await writeStatus({
         store,
@@ -355,9 +353,7 @@ describe("status intent artifact", () => {
       const parsed = JSON.parse(stored!);
       expect(parsed.intentStatus).toEqual({
         iteration: 1,
-        sections: [
-          { section: "Sandbox", status: "not-built", note: "no bwrap" },
-        ],
+        sections: [{ slug: "Sandbox", status: "not-built", note: "no bwrap" }],
       });
       const dashboard = fs.readFileSync(
         path.join(store.goalDir, DASHBOARD_REL_PATH),

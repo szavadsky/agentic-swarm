@@ -246,13 +246,13 @@ describe("dashboard escaping", () => {
     expect(html).not.toContain("<img");
   });
 
-  it("escapes an intent section name and note", () => {
+  it("escapes an intent slug name and note", () => {
     const doc = fixture();
     doc.intentStatus = {
       iteration: 3,
       sections: [
         {
-          section: '<script>alert("section")</script>',
+          slug: '<script>alert("section")</script>',
           status: "friction",
           note: "<img src=x onerror=alert(1)>",
         },
@@ -268,6 +268,20 @@ describe("dashboard escaping", () => {
     expect(intent).toContain("&lt;img src=x onerror=alert(1)&gt;");
     expect(intent).not.toContain('<script>alert("section")');
     expect(intent).not.toContain("<img");
+  });
+
+  it("renders a pre-slug artifact's section heading as the row key", () => {
+    const doc = fixture();
+    doc.intentStatus = {
+      iteration: 1,
+      sections: [{ section: "Sandbox", status: "not-built" }],
+    };
+
+    const html = renderDashboard(doc);
+    const intent = intentSection(html);
+
+    expect(intent).toContain('<code class="slug">Sandbox</code>');
+    expect(intent).not.toContain('<span class="title">Sandbox</span>');
   });
 });
 

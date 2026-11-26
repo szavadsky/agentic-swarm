@@ -213,7 +213,14 @@ export type PlanReviewOutcome = z.infer<typeof planReviewOutcomeSchema>;
  * is not built yet, or where the owner meets friction.
  */
 export const intentStatusEntrySchema = z.object({
-  section: z.string().min(1).describe("intent section heading"),
+  // The parser accepts a pre-slug entry (`section` only) so historical records
+  // stay valid; `intentStatusSlugFindings` reports a missing slug on new outcomes.
+  slug: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("intent slug from a [[Slug]] annotation"),
+  section: z.string().min(1).optional().describe("intent section heading"),
   status: z.enum(["works", "not-built", "friction"]),
   note: z.string().optional().describe("short evidence or friction detail"),
 });

@@ -142,7 +142,8 @@ A complete outcome for this step:
 status: done
 summary: the requested work is complete and the gates pass
 intentStatus:
-  - section: M1 — Work is never lost to the kernel
+  - slug: KernelCore
+    section: KernelCore
     status: works
     note: every flow step renders a filled outcome example
 concerns:
@@ -168,7 +169,8 @@ The other decision is also valid:
 status: done
 summary: the requested work is complete and the gates pass
 intentStatus:
-  - section: M1 — Work is never lost to the kernel
+  - slug: KernelCore
+    section: KernelCore
     status: works
     note: every flow step renders a filled outcome example
 concerns:
@@ -2236,7 +2238,8 @@ A complete outcome for this step:
 status: done
 summary: the requested work is complete and the gates pass
 intentStatus:
-  - section: M1 — Work is never lost to the kernel
+  - slug: KernelCore
+    section: KernelCore
     status: works
     note: every flow step renders a filled outcome example
 concerns:
@@ -2262,7 +2265,8 @@ The other decision is also valid:
 status: done
 summary: the requested work is complete and the gates pass
 intentStatus:
-  - section: M1 — Work is never lost to the kernel
+  - slug: KernelCore
+    section: KernelCore
     status: works
     note: every flow step renders a filled outcome example
 concerns:
@@ -2840,7 +2844,8 @@ A complete outcome for this step:
 status: done
 summary: the requested work is complete and the gates pass
 intentStatus:
-  - section: M1 — Work is never lost to the kernel
+  - slug: KernelCore
+    section: KernelCore
     status: works
     note: every flow step renders a filled outcome example
 concerns:
@@ -2866,7 +2871,8 @@ The other decision is also valid:
 status: done
 summary: the requested work is complete and the gates pass
 intentStatus:
-  - section: M1 — Work is never lost to the kernel
+  - slug: KernelCore
+    section: KernelCore
     status: works
     note: every flow step renders a filled outcome example
 concerns:
@@ -3444,7 +3450,8 @@ A complete outcome for this step:
 status: done
 summary: the requested work is complete and the gates pass
 intentStatus:
-  - section: M1 — Work is never lost to the kernel
+  - slug: KernelCore
+    section: KernelCore
     status: works
     note: every flow step renders a filled outcome example
 concerns:
@@ -3470,7 +3477,8 @@ The other decision is also valid:
 status: done
 summary: the requested work is complete and the gates pass
 intentStatus:
-  - section: M1 — Work is never lost to the kernel
+  - slug: KernelCore
+    section: KernelCore
     status: works
     note: every flow step renders a filled outcome example
 concerns:
