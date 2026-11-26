@@ -145,6 +145,7 @@ flowchart TD
 - [[PromptTemplatingEngine]] Prompts are assembled from shared fragments and single-definition templates — never copy-pasted. Use a well-established templating engine, not DIY: LiquidJS (strict TypeScript, `{{ var | filter }}`, CLI `npx liquidjs`, custom filters, async tags), Eta (TypeScript-native, ~3.5 KB, partials, plugins) or Nunjucks (Jinja2-like macros, block inheritance). Single definition extends to what prompts say about the kernel and config: output shapes, task-file fields, and flow and alias names are rendered from the kernel schemas and the factory config, never retyped in prompt text.
     - Prompt templating is documented and examples are provided, with the ability to dry-run and see all prompts.
     - Prompt templating may be conditional on harness/agents.
+    - [[PromptOverlay]] Any file used to build prompt (NEVER A HARDCODED PROMPT IN KERNEL) can be overlayed for particular factory config, documented command line to render all prompts (and follow up prompts/reminders) so user can inspect.
 - [[CiAntiDuplicateAndDeadPromptCheck]] Part of repo/CI-CD runs a simple anti-duplicate check (find reusable TypeScript lib/utility) to prevent duplicates. Deterministic checks prove no fragment or prompt is dead. Prefer existing tools.
 - [[ReviewRetryModes]] Review retries are configurable, with follow-up options: same agent on compacted context, different model, or de novo.
 - [[ReviewBoundsAndLaunchAccounting]] Task review: max three review retries by default, configurable — the reviewer may request changes on the first two, and the third is the last call. Change-request bounds are per agent, in config: for each agent in a config-defined agentic flow that can request changes, the maximum number of change requests is part of the config (for the reviewer it is 2). On the last call the agent receives a different prompt — ship with concerns recorded (net positive) or park.
@@ -166,7 +167,7 @@ flowchart TD
 - Any model, small or large — including the author's own model — can perfectly review results, even those of a larger model. At the end of the day, the job of the smarter actor is to make sure results AND motivation are understandable to small actors.
 - Consequence: well-defined planning and review work may go to task-tier models.
 
-### No useless ceremony [[ctxOnly:NoUselessCeremony]]
+### No useless ceremony [[NoUselessCeremony]]
 - All agents, especially the architect, focus on technical work.
 
 ### Extra
@@ -272,7 +273,7 @@ flowchart TD
 - A high-quality HTML dashboard (use reputable JS/CSS frameworks to minimize organic code) efficiently presents mechanical status, costs, and intent completion. Either html/json files updated by the kernel at least after each agent launch or finish, or an HTTP server on localhost that supports parallel builds (e.g. different ports). As much "use", not build, as possible. Library files are vendored next to the dashboard in the artifact folder and linked locally. The dashboard reports what is available — tokens, turns, $ where reported; relative weights (Model economics) are for analysis.
 
 ### Clean code and architecture
-- [[ctxOnly:CleanCodeGuidelines]] Guidelines for output quality and build priorities:
+- [[CleanCodeGuidelines]] Part of default prompt Guidelines for output quality and build priorities:
     - Test real behavior.
     - These rules specify the result; the build approach is separate: bottom-up implementation, vertical slices, iterative. Build priorities: uncertainties, then layers handling edge cases, then tested slices of user-visible functionality; exact ordering is decided case by case.
     - Edge cases, security posture, failure propagation/containment, observability, performance are architectural direction from day one.
@@ -303,12 +304,15 @@ flowchart TD
 - The sandbox is one predefined process-level wrapper for the whole run (e.g. bwrap, sandbox-runtime), shipped as config. A configured sandbox must be present on the machine. Configurations with and without sandbox are both tested.
 - Per-flow or per-agent overrides only on evidence: each harness may need extra ro/rw folders configured separately, which is not trivial.
 - bwrap is used during bootstrap.
+- [[MultiOS]] bear in mind multi-os compatibility; at least tested with/without bwrap
 
 ### Delivery
 - [[FactoryPluginDelivery]] The factory is a plugin with a skill "run factory": where to put the intent, how to configure, what to launch, what to see, where the user sees the HTML; kernel and config are skill resources. Harness agnostic: Claude Code plugin manifest format and SKILL.md skills.
+- [[PromptGuide]] SKILL's config guide explain how to change in config and overlay prompts
+- [[README]] Points to SKILL, and docs, absolute minimum
 - [[SelfImprovementPlugin]] The repo contains an extra plugin -> self improvements: the bootstrap-specific, reusable part (flows) plus an extra skill for the self-improvement runner; machine-specific config (harnesses, subscriptions, folders, sandbox) only as an example.
 - [[RepoFactoryConfig]] The repo has its own factory config — commented, as an example (repo-specific layer).
-- [[ContributingDoc]] Documentation: minimum `CONTRIBUTING.md`.
+- [[ContributingDoc]] Documentation: minimum `CONTRIBUTING.md` - make sure short, not bloated
 - [[PitchDocument]] Pitch document (written as task by escalation model), including SVG diagram showing key actors.
 
 
@@ -392,6 +396,13 @@ flowchart TD
 - [[MechanicalCommitsAndHashContext]] Mechanical commit between agents (worktree), short hashes passed so the next agent reads diffs. Give agents relevant hashes (e.g. architect needs to know the hash before the goal, the hash before the last iteration).
 - [[WorkspaceCleanlinessHeuristic]] Cleanliness: heuristic check for the unusual — large files, new file extensions, temp files/model weights/huge outputs — an extra check for an agent that forgot `.gitignore` while mechanical commits are allowed. On a hit the author gets a follow-up prompt: clean up, change `.gitignore`, or write an explicit `.yaml` with the file list (override). Not a constraint by script: no loop; the agent may clean up or override. Tasks have no file scope (no `task.scope` file list or fence). Prefer OSS; where nothing exists, something simple. Prompt reminder to clean scaffolds; `.gitignore` is the hard floor.
 - [[IdempotentWorktreeCleanup]] Idempotently clean up all worktrees created by KERNEL: at every launch and at goal end, remove worktrees of merged/cancelled tasks and finished spikes; parked/unmerged tasks keep their worktree.
+
+### Multi-repo projects support [[multirepo]]
+ - project config need to be able to include many repos. Prefer to use industry standard, eg repo manifest. 
+ - if multirepo config (prompts/schema depend on it, through template), ideal behavior
+     - effective (eg bwrap overlay, git workstree), library/utility to handle to minimize 
+     - efficient, copy on write copy to agent of entire tree
+     - atomic merges 
 
 ### Orchestration artifacts
 - [[ArtifactStorageBackends]] Storage is an interface. Backends: plain folder (gitignored under the repo, or outside it), separate GitHub repo, same-repo folder — all built and tested.
