@@ -29,14 +29,20 @@ export function formatPlanFinding(finding: NumberedPlanFinding): string {
 
 /**
  * One open concern line for the checker's brief: the id it names in
- * `planCheck.concerns`, what the concern is, and where it was raised.
+ * `planCheck.concerns`, what the concern is, any tasks the PM marked held, and
+ * where it was raised.
  */
-export function formatOpenConcern(concern: ForwardedConcern): string {
+export function formatOpenConcern(
+  concern: ForwardedConcern,
+  held: readonly string[] = [],
+): string {
   const repeats =
     concern.occurrences && concern.occurrences > 1
       ? ` x${concern.occurrences}`
       : "";
+  const holds =
+    held.length > 0 ? ` · holds ${[...held].sort().join(", ")}` : "";
   return `- ${concern.id} [${concern.kind}/${concern.calibration}]${repeats}: ${concern.text}${
     concern.evidence ? ` (${concern.evidence})` : ""
-  } — ${concern.source}`;
+  }${holds} — ${concern.source}`;
 }

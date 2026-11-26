@@ -11,6 +11,7 @@ import type {
   StallDecision,
   StallRouteEntry,
   State,
+  StepRecord,
   TaskFile,
 } from "../../types.js";
 import {
@@ -20,7 +21,12 @@ import {
   rungSteps,
   setupPmTurn,
 } from "../ladder.js";
-import { openConcernBrief, stallBrief, stallLadderNote } from "../prompts.js";
+import {
+  concernsLadderNote,
+  openConcernBrief,
+  stallBrief,
+  stallLadderNote,
+} from "../prompts.js";
 import { introducedFindings, readTasks, reconcileTurn } from "../reconcile.js";
 import {
   concernHoldProblem,
@@ -33,14 +39,17 @@ import type { PlanSnapshot, PmTurnSetup } from "../types.js";
 import { amendsUsed, cancelRoutes, decisionFindings } from "../validation.js";
 
 /** The open concerns no wave-end turn has marked yet, read once before the ladder. */
-async function unmarkedConcerns(
+export async function unmarkedConcerns(
   runtime: KernelRuntime,
+  records?: readonly StepRecord[],
+  tasks?: readonly TaskFile[],
 ): Promise<ForwardedConcern[]> {
-  const records = await runtime.store.listRecords();
+  const recs = records ?? (await runtime.store.listRecords());
+  const taskFiles = tasks ?? (await runtime.store.listTasks());
   const judged = new Set(
     (await readHolds(runtime.store)).holds.map((hold) => hold.steer),
   );
-  return concernsToJudge(records, judged);
+  return concernsToJudge(recs, judged, taskFiles);
 }
 
 /**
@@ -78,13 +87,13 @@ async function validateStallTurn(
   const used = amendsUsed(await runtime.store.listRecords(), opts.iteration);
 
   const routes = outcome?.stallRoutes;
-  if (!routes) {
+  if (!routes && opts.slugs.length > 0) {
     findings.push(
       `stall turn lists no stallRoutes; route each parked slug (${opts.slugs.join(", ")}) as amend|cancel|replace|split|leave`,
     );
     return [...new Set(findings)];
   }
-  const scan = scanStallRoutes(routes, opts.slugs, texts);
+  const scan = scanStallRoutes(routes ?? [], opts.slugs, texts);
   findings.push(...scan.findings);
   if (parseFindings.length === 0) {
     findings.push(
@@ -123,7 +132,9 @@ function scanStallRoutes(
     actionOf.set(entry.slug, entry.action);
     if (!claimed.has(entry.slug)) {
       findings.push(
-        `slug "${entry.slug}" is not in this stall; route only ${slugs.join(", ")}`,
+        slugs.length > 0
+          ? `slug "${entry.slug}" is not in this stall; route only ${slugs.join(", ")}`
+          : `slug "${entry.slug}" is not in this stall; there are no parked slugs to route`,
       );
     }
     if (!entry.reason.trim()) {
@@ -235,7 +246,10 @@ export async function runStallPm(
   const left = [...opts.slugs].sort();
   const setup = await setupPmTurn(runtime, opts);
   const concerns = await unmarkedConcerns(runtime);
-  const brief = await stallBrief(runtime, opts);
+  const brief =
+    opts.slugs.length > 0 ? await stallBrief(runtime, opts) : "none";
+  const ladderNote =
+    opts.slugs.length > 0 ? stallLadderNote : concernsLadderNote;
   let failure: string[] = [];
 
   for (const [index, rung] of rungSteps(runtime).entries()) {
@@ -247,9 +261,7 @@ export async function runStallPm(
       planList: setup.planList,
       tasks,
       repair:
-        round === 1
-          ? ""
-          : stallLadderNote(runtime.prompts, rung, target, failure),
+        round === 1 ? "" : ladderNote(runtime.prompts, rung, target, failure),
       steers: "none",
       stalls: brief,
       planChecks: "none",
@@ -284,7 +296,9 @@ export async function runStallPm(
     if (exit) return exit;
     failure = reasons;
   }
-  await recordStallFailure(runtime, opts.iteration, failure.join("; "));
+  if (opts.slugs.length > 0) {
+    await recordStallFailure(runtime, opts.iteration, failure.join("; "));
+  }
   return { continued: [], left };
 }
 
@@ -310,17 +324,25 @@ async function rejectStallRung(
     setup.snapshot,
   );
   if (result.record.stop?.kind !== "infra") return undefined;
-  await recordStallFailure(runtime, opts.iteration, reasons.join("; "), round);
+  if (opts.slugs.length > 0) {
+    await recordStallFailure(
+      runtime,
+      opts.iteration,
+      reasons.join("; "),
+      round,
+    );
+  }
   return { continued: [], left: [...opts.slugs].sort() };
 }
 
 /** Commits the accepted routes and returns what dispatch resumes or leaves. */
 async function acceptStallRoutes(
   runtime: KernelRuntime,
-  opts: { iteration: number; state: State },
+  opts: { iteration: number; state: State; slugs: string[] },
   routes: readonly StallRouteEntry[],
   round: number,
 ): Promise<StallResult> {
+  if (opts.slugs.length === 0) return { continued: [], left: [] };
   const accepted = [...routes].sort((a, b) => a.slug.localeCompare(b.slug));
   // A cancelled park is spent by a kernel record, not a task write.
   await cancelRoutes(

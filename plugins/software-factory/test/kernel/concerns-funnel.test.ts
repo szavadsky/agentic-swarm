@@ -2,22 +2,33 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { openConcerns } from "../../src/kernel/context-pack.js";
+import { derive } from "../../src/kernel/derive.js";
 import {
   activeHolds,
   heldBoundaryCause,
 } from "../../src/kernel/dispatch-holds.js";
 import { readHolds } from "../../src/kernel/mailbox.js";
+import { runStallPm } from "../../src/kernel/pm.js";
 import { cleanupFlowRepo, whenTurn } from "../kernel/s2-helpers.js";
-import { cause } from "./helpers.js";
+import { cause, task } from "./helpers.js";
 import {
   CONCERN_ID,
   CONCERN_TEXT,
   hold,
   liveHolds,
+  recordConcern,
   runStall,
   stallLeave,
   stallWithConcern,
 } from "./concerns-funnel-helpers.js";
+import { fakeTurnResult, FakeHarness } from "../../src/harness/fake/index.js";
+import {
+  makeRuntime,
+  outcome,
+  setupFlowRepo,
+  writeTask,
+} from "./s2-helpers.js";
+import { writeHold, writePlan } from "./steer-holds-helpers.js";
 
 function registerConcernHoldGating(): void {
   it("holds the tasks a concern names while it is open and none after it closes", () => {
@@ -153,9 +164,84 @@ function registerConcernMarkInvalid(): void {
   }, 60_000);
 }
 
+function registerConcernOnlyPm(): void {
+  it("judges open concerns without parks, forbids task edits, and retries with the concerns contract", async () => {
+    const { repo, goal } = setupFlowRepo({
+      limits: {
+        concurrency: { overall: 1, perSubscription: {}, perModel: {} },
+      },
+    });
+    const harness = new FakeHarness({ id: "fake" });
+    const runtime = await makeRuntime(repo, goal, { fake: harness });
+    try {
+      writePlan(runtime);
+      await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
+      await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
+      await recordConcern(runtime, "beta");
+      await runtime.store.appendRecord(
+        {
+          iteration: 1,
+          slug: "beta",
+          step: "merge",
+          round: 1,
+          actor: "script",
+        },
+        { ok: true },
+      );
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
+      let retryPrompt = "";
+      harness.script(
+        (req, ctx) => {
+          expect(req.prompt).toContain("stalled parks: `none`");
+          expect(req.prompt).toContain(
+            `- ${CONCERN_ID} [risk/architect]: ${CONCERN_TEXT}`,
+          );
+          // Editing a task file on a concern-only turn must be rejected.
+          fs.appendFileSync(
+            path.join(runtime.store.tasksDir, "alpha.md"),
+            "\nEdited.\n",
+            "utf8",
+          );
+          ctx.writeOutcome(outcome({ summary: "illegal edit" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          retryPrompt = req.prompt;
+          writeHold(runtime, CONCERN_ID, ["alpha"]);
+          ctx.writeOutcome(outcome({ summary: "marked blocking concern" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "pm" }) },
+      );
+      const res = await runStallPm(runtime, {
+        iteration: 1,
+        state,
+        slugs: [],
+        cwd: runtime.paths.goalCheckout,
+      });
+      expect(res).toEqual({ continued: [], left: [] });
+      expect(retryPrompt).toContain("Restated PM concerns contract:");
+      expect(retryPrompt).not.toContain("Route every parked slug");
+      expect([...(await liveHolds(runtime)).slugs.keys()]).toEqual(["alpha"]);
+      const records = await runtime.store.listRecords();
+      expect(records.filter((r) => r.step === "stall-routes")).toEqual([]);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
 describe("concerns funnel", () => {
   registerConcernHoldGating();
   registerConcernMarkBlocking();
   registerConcernMarkPassed();
   registerConcernMarkInvalid();
+  registerConcernOnlyPm();
 });

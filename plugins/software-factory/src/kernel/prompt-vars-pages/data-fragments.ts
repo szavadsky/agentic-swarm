@@ -46,9 +46,9 @@ export const FRAGMENT_PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     file: "pm-ladder.md",
     prompt: "pm-ladder",
     intro:
-      "The escalation/retry restatement rendered into `repair` on round 2+ of a PM, PM steer, PM stall, or PM plan-check turn.",
+      "The escalation/retry restatement rendered into `repair` on round 2+ of a PM, PM steer, PM stall, PM concerns, or PM plan-check turn.",
     variables: {
-      mode: "`plan`, `steer`, `stall`, or `plan-check`",
+      mode: "`plan`, `steer`, `stall`, `concerns`, or `plan-check`",
       escalated:
         '`"true"` when the rung holds an escalated mandate, else empty',
       retry: '`"true"` when the rung is a fresh rolled-back retry, else empty',

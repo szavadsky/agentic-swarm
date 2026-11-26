@@ -102,8 +102,11 @@ export async function selfHoldProblem(
 export function concernsToJudge(
   records: readonly StepRecord[],
   judged: ReadonlySet<string>,
+  tasks?: readonly TaskFile[],
 ): ForwardedConcern[] {
-  return openConcerns(records).filter((concern) => !judged.has(concern.id));
+  return openConcerns(records, tasks).filter(
+    (concern) => !judged.has(concern.id),
+  );
 }
 
 /**

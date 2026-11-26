@@ -264,7 +264,6 @@ export async function runDispatch(
       const ended = await waveEnd(
         state,
         read.snapshot,
-        stage.polled.hold,
         stage.turnsUsed,
         read.runningAtRead,
       );

@@ -117,7 +117,7 @@ export function pmLadderNote(
 
 function ladderNote(
   prompts: PromptLibrary,
-  mode: "plan" | "steer" | "stall" | "plan-check",
+  mode: "plan" | "steer" | "stall" | "concerns" | "plan-check",
   rung: { alias: string; mandate: PmMandate },
   target: TurnTarget,
   failure: string[],
@@ -266,6 +266,15 @@ export function stallLadderNote(
   failure: string[],
 ): string {
   return ladderNote(prompts, "stall", rung, target, failure);
+}
+
+export function concernsLadderNote(
+  prompts: PromptLibrary,
+  rung: { alias: string; mandate: PmMandate },
+  target: TurnTarget,
+  failure: string[],
+): string {
+  return ladderNote(prompts, "concerns", rung, target, failure);
 }
 /**
  * One brief entry per checker follow-up: its kind, slug, dead dep and reason,

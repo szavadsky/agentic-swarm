@@ -3,7 +3,8 @@
 import type { ConcernKind } from "../../core/concern-types.js";
 import { concernFingerprint, recordedConcernId } from "../../core/concerns.js";
 import { indexDismissals, isConcernDismissed } from "../concern-dismissal.js";
-import type { StepRecord } from "../types.js";
+import { baseContinuations } from "../derive/shared.js";
+import type { StepRecord, TaskFile } from "../types.js";
 import type { ConcernScope, ForwardedConcern } from "./types.js";
 import { epicByTask, visibleToAudience } from "./debt.js";
 
@@ -115,13 +116,43 @@ function raisedAt(
 }
 
 /**
+ * Latest verified merge sequence for `slug` or any task continuing it
+ * transitively through `base`, strictly after `afterSeq`.
+ */
+function followUpMergeSeq(
+  slug: string,
+  afterSeq: number,
+  merged: ReadonlyMap<string, number>,
+  continuations: ReadonlyMap<string, readonly string[]>,
+): number | undefined {
+  let latest: number | undefined;
+  const pending = [slug];
+  const seen = new Set<string>();
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (seen.has(current)) continue;
+    seen.add(current);
+    const seq = merged.get(current);
+    if (seq !== undefined && seq > afterSeq) {
+      latest = latest === undefined ? seq : Math.max(latest, seq);
+    }
+    for (const next of continuations.get(current) ?? []) {
+      pending.push(next);
+    }
+  }
+  return latest;
+}
+
+/**
  * When each concern was last answered: a checker's own check, or the merge of
- * the follow-up task it named. An answer names a concern once, so the first
- * record wins; a later answer only moves the position forward.
+ * the follow-up task it named (or its `base:` continuation). An answer names a
+ * concern once, so the first record wins; a later answer only moves the
+ * position forward.
  */
 function answeredAt(
   records: readonly StepRecord[],
   merged: ReadonlyMap<string, number>,
+  continuations: ReadonlyMap<string, readonly string[]>,
 ): Map<string, number> {
   const answered = new Map<string, number>();
   for (const rec of records) {
@@ -130,7 +161,7 @@ function answeredAt(
         entry.action === "resolve"
           ? rec.seq
           : entry.slug
-            ? merged.get(entry.slug)
+            ? followUpMergeSeq(entry.slug, rec.seq, merged, continuations)
             : undefined;
       if (seq === undefined) continue;
       answered.set(entry.id, Math.max(answered.get(entry.id) ?? -1, seq));
@@ -146,9 +177,14 @@ function answeredAt(
 function resolvedConcernIds(
   records: readonly StepRecord[],
   dismissals: ReturnType<typeof indexDismissals>,
+  tasks: readonly TaskFile[] = [],
 ): Set<string> {
   const raised = raisedAt(records, dismissals);
-  const answered = answeredAt(records, mergedAt(records));
+  const answered = answeredAt(
+    records,
+    mergedAt(records),
+    baseContinuations(tasks),
+  );
   return new Set(
     [...answered.entries()]
       .filter(([id, seq]) => seq > (raised.get(id) ?? -1))
@@ -206,7 +242,7 @@ export function forwardedConcerns(
 ): ForwardedConcern[] {
   const visible = audienceFilter(scope);
   const dismissals = indexDismissals(records);
-  const resolved = resolvedConcernIds(records, dismissals);
+  const resolved = resolvedConcernIds(records, dismissals, scope.tasks);
   const byFingerprint = new Map<string, ForwardedConcern>();
   for (const rec of records) {
     if (!rec.outcome || !visible(rec)) continue;
@@ -261,13 +297,17 @@ function recordConcerns(
  */
 export function openConcerns(
   records: readonly StepRecord[],
+  tasks?: readonly TaskFile[],
 ): ForwardedConcern[] {
-  return forwardedConcerns(records).filter(
+  return forwardedConcerns(records, tasks ? { tasks } : {}).filter(
     (concern) => concern.kind !== "forward",
   );
 }
 
 /** The ids of every open concern: a hold named by one is a live block. */
-export function openConcernIds(records: readonly StepRecord[]): Set<string> {
-  return new Set(openConcerns(records).map((concern) => concern.id));
+export function openConcernIds(
+  records: readonly StepRecord[],
+  tasks?: readonly TaskFile[],
+): Set<string> {
+  return new Set(openConcerns(records, tasks).map((concern) => concern.id));
 }

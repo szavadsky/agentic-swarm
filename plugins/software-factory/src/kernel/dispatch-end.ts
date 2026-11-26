@@ -4,8 +4,13 @@
  * declines does the iteration end at the boundary or as infra.
  */
 import { formatCause, makeCause } from "./cause.js";
+import { openConcernIds } from "./context-pack/misc.js";
 import { derive } from "./derive.js";
-import { heldBoundaryCause, undecidedParked } from "./dispatch-holds.js";
+import {
+  activeHolds,
+  heldBoundaryCause,
+  undecidedParked,
+} from "./dispatch-holds.js";
 import { reloadHolds } from "./dispatch-poll.js";
 import {
   dispatchable,
@@ -21,13 +26,14 @@ import { planCheckCause, settledTurns } from "./dispatch-state.js";
 import { executeTaskAction } from "./flow.js";
 import { runKeptLand } from "./integrate.js";
 import { runBoundaryTurn } from "./integration-lock.js";
+import { scanInbox } from "./mailbox.js";
 import {
   openWork,
   PLAN_CHECK_STEP,
   planChecksSinceConsult,
   runPlanCheckRound,
 } from "./plan-check.js";
-import { runStallPm } from "./pm.js";
+import { runStallPm, unmarkedConcerns } from "./pm.js";
 import { runSteward } from "./steward.js";
 import type { Cause, State } from "./types.js";
 import { headSha } from "./worktree.js";
@@ -84,14 +90,28 @@ async function runStewardStage(
   return steward.skipped ? undefined : "continue";
 }
 
-/** Wave-end stall: parks no stall turn has decided get one PM decision each. */
+/** Tasks that could still start or become ready: a concern hold only gates these. */
+function hasBlockableWork(snapshot: State): boolean {
+  return Object.values(snapshot.tasks).some(
+    (task) => task.status === "pending" || task.status === "ready",
+  );
+}
+
+/**
+ * Wave-end stall and concern judgement: undecided parks get one PM decision
+ * each, and when no park waits, unmarked open concerns still get judged if
+ * pending or ready work remains for them to block.
+ */
 async function runStallStage(state: DispatchState): Promise<Wave | undefined> {
   if (state.opts.signals?.shouldStop()) return undefined;
   const tasks = await state.runtime.store.listTasks();
   const records = await state.runtime.store.listRecords();
   const snapshot = derive(tasks, records, state.runtime.configs.process.flows);
   const slugs = undecidedParked(records, snapshot, state.iteration);
-  if (slugs.length === 0) return undefined;
+  const concerns = await unmarkedConcerns(state.runtime, records, tasks);
+  const judgeConcernsOnly =
+    slugs.length === 0 && concerns.length > 0 && hasBlockableWork(snapshot);
+  if (slugs.length === 0 && !judgeConcernsOnly) return undefined;
   const stalled = await runBoundaryTurn(
     state.runtime,
     { iteration: state.iteration, step: "pm" },
@@ -103,15 +123,15 @@ async function runStallStage(state: DispatchState): Promise<Wave | undefined> {
         cwd: state.runtime.paths.goalCheckout,
       }),
   );
-  if (stalled.continued.length === 0) return undefined;
-  // The turn may have marked concerns: a resumed wave reads the new holds.
+  // The turn may have marked concerns even when no park continued: reload so
+  // the next stages and boundary see any newly written holds.
   const holdError = await reloadHolds(state, "holds after the stall turn");
   if (holdError) {
     return result(state, "infra", await freshTurns(state), {
       cause: makeCause("error", holdError),
     });
   }
-  return "continue";
+  return stalled.continued.length > 0 ? "continue" : undefined;
 }
 
 /**
@@ -264,6 +284,24 @@ function boundaryResult(
   });
 }
 
+/** Re-derives snapshot and active holds after wave-end PM/checker mutations. */
+async function refreshedBoundaryView(
+  state: DispatchState,
+): Promise<{ hold: ActiveHolds; snapshot: State }> {
+  const tasks = await state.runtime.store.listTasks();
+  const records = await state.runtime.store.listRecords();
+  const snapshot = derive(tasks, records, state.runtime.configs.process.flows);
+  const pending = new Set(
+    (await scanInbox(state.runtime.store, { settleMs: 0 })).map(
+      (steer) => steer.id,
+    ),
+  );
+  return {
+    hold: activeHolds(state.holds, pending, openConcernIds(records, tasks)),
+    snapshot,
+  };
+}
+
 /**
  * Nothing is running and no candidate started. A task seen at the read
  * snapshot may have settled meanwhile, so that re-derives first. A transient
@@ -273,7 +311,6 @@ function boundaryResult(
 export async function waveEnd(
   state: DispatchState,
   snapshot: State,
-  hold: ActiveHolds,
   turnsUsed: number,
   runningAtRead: ReadonlySet<string>,
 ): Promise<Wave> {
@@ -317,5 +354,6 @@ export async function waveEnd(
       cause: makeCause("boundary", causes.join("; ")),
     });
   }
-  return boundaryResult(state, hold, snapshot, turns);
+  const end = await refreshedBoundaryView(state);
+  return boundaryResult(state, end.hold, end.snapshot, turns);
 }

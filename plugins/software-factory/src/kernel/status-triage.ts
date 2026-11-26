@@ -14,6 +14,7 @@ import type {
   ReportDebt,
   StepRecord,
   SteerRoute,
+  TaskFile,
 } from "./types.js";
 import type {
   StatusConcern,
@@ -89,9 +90,10 @@ function concernRecords(records: readonly StepRecord[]): Map<string, string> {
 export function openConcernEntries(
   records: readonly StepRecord[],
   debts: readonly ReportDebt[],
+  tasks?: readonly TaskFile[],
 ): StatusOpenConcern[] {
   const recordsById = concernRecords(records);
-  const forwarded: StatusOpenConcern[] = openConcerns(records).map(
+  const forwarded: StatusOpenConcern[] = openConcerns(records, tasks).map(
     (concern) => ({
       id: concern.id,
       kind: concern.kind as Concern["kind"],

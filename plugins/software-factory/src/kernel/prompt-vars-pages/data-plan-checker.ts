@@ -15,7 +15,7 @@ export const PLAN_CHECKER_PAGE: PromptVariablesPage = {
     existing_tasks:
       "existing task files as `- slug | status | hash | deps: a,b` lines (`none` when empty), then parked slugs with their cause",
     open_concerns:
-      "the open concerns a merged follow-up or an earlier check has not answered, one `- <id> [kind/calibration]: <text> — <source>` line each; debt-kind concerns stay in the pack's debt register, not this list; `none` when empty",
+      "the open concerns a merged follow-up or an earlier check has not answered, one `- <id> [kind/calibration]: <text>` line each, then `· holds <slugs>` when the PM marked it, then ` — <source>`; debt-kind concerns stay in the pack's debt register, not this list; `none` when empty",
     gate_record_path:
       "`end.yaml` of the newest record that ran gates, to read instead of running them; `none recorded` when no gate has run",
     outcome_path:

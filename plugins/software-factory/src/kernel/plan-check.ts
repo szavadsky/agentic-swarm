@@ -3,6 +3,7 @@ import { formatCause, makeCause } from "./cause.js";
 import type { PlanCheckPack } from "./context-pack.js";
 import { formatOpenConcern, openConcerns } from "./context-pack.js";
 import { boundaryTarget } from "./flow-context.js";
+import { readHolds } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { formatPlanList, planBullets } from "./plan-file.js";
 import {
@@ -245,10 +246,35 @@ export function planCheckBrief(
   return lines.join("\n");
 }
 
-/** The open concerns the checker judges, one line per concern, or `none`. */
-function openConcernLines(records: readonly StepRecord[]): string {
-  const open = openConcerns(records);
-  return open.length > 0 ? open.map(formatOpenConcern).join("\n") : "none";
+/** Holds keyed by concern id, empty on read error so a corrupt hold never blocks the check. */
+async function heldByConcern(
+  store: ArtifactStore,
+): Promise<ReadonlyMap<string, readonly string[]>> {
+  try {
+    const { holds } = await readHolds(store);
+    return new Map(
+      holds.filter((h) => h.slugs.length > 0).map((h) => [h.steer, h.slugs]),
+    );
+  } catch (err) {
+    console.warn(
+      `[factory] holds unreadable for plan-checker brief: ${(err as Error).message}`,
+    );
+    return new Map();
+  }
+}
+
+/** The open concerns the checker judges, carrying any PM hold mark, or `none`. */
+function openConcernLines(
+  records: readonly StepRecord[],
+  tasks: readonly TaskFile[],
+  heldBy: ReadonlyMap<string, readonly string[]>,
+): string {
+  const open = openConcerns(records, tasks);
+  return open.length > 0
+    ? open
+        .map((concern) => formatOpenConcern(concern, heldBy.get(concern.id)))
+        .join("\n")
+    : "none";
 }
 
 /** The template variables of one plan-checker turn. */
@@ -259,6 +285,7 @@ function planCheckVars(
   tasks: Awaited<ReturnType<KernelRuntime["store"]["listTasks"]>>,
   gateRecord: string | undefined,
   records: readonly StepRecord[],
+  heldBy: ReadonlyMap<string, readonly string[]>,
 ): Record<string, string> {
   return {
     iteration: String(opts.iteration),
@@ -267,7 +294,7 @@ function planCheckVars(
     checkout: runtime.paths.goalCheckout,
     tasks_dir: runtime.store.tasks.dir,
     existing_tasks: planCheckBrief(opts.state, tasks, opts.epic),
-    open_concerns: openConcernLines(records),
+    open_concerns: openConcernLines(records, tasks, heldBy),
     gate_record_path: gateRecord ?? "none recorded",
   };
 }
@@ -359,6 +386,7 @@ export async function runPlanCheck(
   const snapshot = await snapshotTurn(runtime, allPlans);
   const tasks = await runtime.store.listTasks();
   const records = await runtime.store.listRecords();
+  const heldBy = await heldByConcern(runtime.store);
   const gateRecord = lastGateRecord(records, runtime.store);
   const result = await runAgentTurn(runtime, {
     target: boundaryTarget(runtime, "plancheck"),
@@ -369,13 +397,21 @@ export async function runPlanCheck(
       round: opts.round,
       ...(opts.epic ? { architect: opts.epic } : {}),
     },
-    vars: planCheckVars(runtime, opts, plans, tasks, gateRecord, records),
+    vars: planCheckVars(
+      runtime,
+      opts,
+      plans,
+      tasks,
+      gateRecord,
+      records,
+      heldBy,
+    ),
     expectation: KERNEL_TURN_STEPS[PLAN_CHECK_STEP],
     validate: (outcome) =>
       validatePlanCheck(
         texts,
         outcome,
-        new Set(openConcerns(records).map((concern) => concern.id)),
+        new Set(openConcerns(records, tasks).map((concern) => concern.id)),
       ),
   });
   await recordDiscardedWrites(

@@ -196,7 +196,7 @@ export async function pollSteers(
     };
   }
   const pending = new Set(steers.map((steer) => steer.id));
-  const openConcerns = openConcernIds(records);
+  const openConcerns = openConcernIds(records, tasks);
   const hold = activeHolds(state.holds, pending, openConcerns);
   const urgent = steers.find((steer) => steer.urgent)?.id;
   if (state.cancelled) {
