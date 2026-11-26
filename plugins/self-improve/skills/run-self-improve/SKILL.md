@@ -179,7 +179,8 @@ operator rule, not owner intent.
 - **Benchmark** — run once at the end of the phase, and compare it with the
   previous baseline.
 - **Quota rotation** — when a paid pool is exhausted, relaunch with the
-  off-subscription run config; revert when it resets.
+  off-subscription run config; revert when it resets. Fallback and rotation
+  rules, with the owner's machine as an example: `run-config-example.md`.
 
 ## 9. Pitfalls
 
