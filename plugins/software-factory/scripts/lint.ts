@@ -4,6 +4,7 @@ import { duplicateHelperProblems } from "./duplicate-helpers.js";
 import { interfaceLintProblems } from "./interface-lint.js";
 import { pluginManifestProblems } from "./plugin-manifest.js";
 import { promptProblems } from "./prompt-lint.js";
+import { promptProseProblems } from "./prompt-prose-lint.js";
 
 /**
  * The lint gate. A red record keeps only the tail of the gate output
@@ -16,6 +17,7 @@ const ROOT = path.resolve(process.argv[2] ?? path.join(import.meta.dir, ".."));
 const BIN = path.join(ROOT, "node_modules", ".bin");
 const problems = [
   ...promptProblems(ROOT),
+  ...promptProseProblems(ROOT),
   ...duplicateHelperProblems(ROOT),
   ...interfaceLintProblems(ROOT),
   ...pluginManifestProblems(ROOT),

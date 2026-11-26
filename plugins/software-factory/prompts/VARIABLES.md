@@ -437,9 +437,63 @@ The architect's repair ask, named by the architect boundary step's `repairPrompt
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome examples from the kernel schema, narrowed to the fields this turn delivers; supplied by the repair ask
 
+## bootstrap-assignment.md
+
+The dispatch message passed to a bootstrapped agent slot by `bootstrap-dispatch`. Read directly from the repo override or package `prompts/` directory without LiquidJS because an operator checkout may have no `node_modules`.
+
+- `name` — assignment file basename under `bootstrap/assignments/<name>.md`
+- `worktree` — absolute path to the slot's git worktree
+
+## digest-steer.md
+
+The synthetic steer body posted to PM on resume when an interrupted iteration leaves a launch digest.
+
+- `iteration` — 1-based iteration number being resumed
+- `digest` — trimmed markdown content of `digest.md`
+- `digest_rel` — goal-relative path to `digest.md`
+
+## gate-last-call.md
+
+The final-round ask prepended to `findings` when a checks fix turn reaches its last call.
+
+## merge-conflict.md
+
+The merge-conflict resolution ask prepended to `findings` before an integration resolve turn.
+
+- `integration_head` — short commit hash of the current integration head
+- `conflicts` — comma-separated conflicted paths, or fallback message when none
+
+## pm-ladder.md
+
+The escalation/retry restatement rendered into `repair` on round 2+ of a PM, PM steer, PM stall, or PM plan-check turn.
+
+- `mode` — `plan`, `steer`, `stall`, or `plan-check`
+- `escalated` — `"true"` when the rung holds an escalated mandate, else empty
+- `retry` — `"true"` when the rung is a fresh rolled-back retry, else empty
+- `alias` — target alias running this rung
+- `model` — model ID behind `alias`
+- `findings` — formatted `- <reason>` rejection lines from the prior round, or empty
+
+## pm-steer-inject.md
+
+The mid-turn message injected into a live PM steer turn when another steer arrives for the same scope.
+
+- `steer` — formatted steer block for the newly arrived steer
+
 ## resume.md
 
 - `branch` — task branch the relaunch continues; empty when none
 - `reason` — `relaunch` after an interruption, `fallback` for a tier that continues edited work, `trivial` in the front's session
 - `session_cwd` — directory the resumed session's tools run in; trivial turns only
 - `worktree` — absolute worktree a trivial turn must use; trivial turns only
+
+## saga-reminder.md
+
+The optional architect reminder rendered into `saga_reminder` when open task count exceeds `process.sagaTaskCount`.
+
+- `task_count` — number of open and ready tasks in the goal
+- `threshold` — configured `process.sagaTaskCount` limit
+
+## standalone-upscope.md
+
+The standalone-task scope question rendered into `upscope_ask` for delivery acceptance when no architect planned the task.

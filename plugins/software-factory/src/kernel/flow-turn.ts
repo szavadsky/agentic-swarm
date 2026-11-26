@@ -138,6 +138,7 @@ function setResumeNote(run: StepRun, vars: Record<string, string>): void {
 function setResolveAsk(run: StepRun, vars: Record<string, string>): void {
   if (!run.pendingResolve) return;
   const ask = mergeConflictAsk(
+    run.runtime.prompts,
     run.pendingResolve.head,
     run.pendingResolve.paths,
   );

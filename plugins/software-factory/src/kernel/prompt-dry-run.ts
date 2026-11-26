@@ -93,10 +93,19 @@ export function promptNamesForConfig(configs: ConfigBundle): string[] {
     process.hierarchy?.subarchitect.unfinishedPrompt,
   );
   names.add(process.repairPrompt ?? "delivery-repair");
-  // The flow renders the rescue ask directly, not through a step's config key.
+  // The flow renders the rescue ask and runtime fragments directly, not through a step's config key.
   names.add("rescue-turn");
   names.add("architect-subarchitects");
   names.add("subarchitect-agent");
+  names.add("bootstrap-assignment");
+  names.add("digest-steer");
+  names.add("gate-last-call");
+  names.add("merge-conflict");
+  names.add("pm-ladder");
+  names.add("pm-steer-inject");
+  names.add("resume");
+  names.add("saga-reminder");
+  names.add("standalone-upscope");
   return [...names].sort();
 }
 
@@ -292,6 +301,15 @@ function recordVars(
     parent_plan_path: path.join(goal, "plan.md"),
     steer: "none",
     context_data_path: path.join(goal, "status.json"),
+    digest: "# Launch digest\n\nNo findings.",
+    digest_rel: "iterations/1/digest.md",
+    task_count: String(SAGA_SAMPLE_TASKS),
+    threshold: String(configs.process.sagaTaskCount ?? 20),
+    mode: "plan",
+    escalated: "true",
+    retry: "true",
+    alias: "pm",
+    model: "dry-run-model",
   };
 }
 
@@ -304,6 +322,7 @@ const SAGA_SAMPLE_TASKS = 24;
 function sampleVars(
   configs: ConfigBundle,
   repoRoot: string,
+  library: ReturnType<typeof loadPrompts>,
 ): Record<string, string> {
   const artifacts = path.resolve(repoRoot, configs.repo.artifactRoot);
   const goal = path.join(artifacts, "dry-run");
@@ -312,9 +331,13 @@ function sampleVars(
     ...goalVars(goal),
     ...taskVars(configs, goal, worktree),
     ...recordVars(configs, goal),
+    name: "dry-run",
+    reason: "relaunch",
+    session_cwd: worktree,
     depth: String(configs.process.hierarchy?.depth ?? 1),
     subagents: sampledSubagents(configs),
     saga_reminder: sagaReminderVar(
+      library,
       SAGA_SAMPLE_TASKS,
       configs.process.sagaTaskCount,
     ),
@@ -347,7 +370,7 @@ export function dryRunPrompts(
     aliases: configs.run.aliases,
     run: configs.run,
   });
-  const vars = sampleVars(configs, repoRoot);
+  const vars = sampleVars(configs, repoRoot, library);
   const block = subarchitectBlock(library, vars);
   return promptNamesForConfig(configs).map((name) => {
     const promptVars: Record<string, string> = { ...vars };

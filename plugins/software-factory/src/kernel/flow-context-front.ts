@@ -86,13 +86,7 @@ export function standaloneUpscopeAsk(
   task: TaskFile,
 ): string {
   if (!isStandaloneTask(runtime, task)) return "";
-  return (
-    "This is a standalone task: no architect planned it. Is the real scope " +
-    "substantially higher than the front's predicted area above, and does the " +
-    "result require architecture input? Answer `upscope: yes` to park and " +
-    "escalate the goal to bigger, or `upscope: no` to judge normally. Always " +
-    "include your verdict; an upscope yes parks regardless of it."
-  );
+  return runtime.prompts.render("standalone-upscope", {}).trim();
 }
 
 /** Rewrites the front class to bigger so the next launch runs the architect. */

@@ -70,6 +70,7 @@ async function architectTurn(
           depth: String(context.runtime.configs.process.hierarchy?.depth ?? 1),
           subarchitect_block: steered?.block ?? "",
           saga_reminder: sagaReminderVar(
+            context.runtime.prompts,
             context.tasks.length,
             context.runtime.configs.process.sagaTaskCount,
           ),

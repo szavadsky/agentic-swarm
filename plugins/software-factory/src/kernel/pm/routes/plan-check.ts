@@ -286,7 +286,10 @@ export async function runPlanCheckPm(
       round,
       planList: setup.planList,
       tasks,
-      repair: round === 1 ? "" : planCheckLadderNote(rung, target, failure),
+      repair:
+        round === 1
+          ? ""
+          : planCheckLadderNote(runtime.prompts, rung, target, failure),
       ...NO_TURN_INPUTS,
       planChecks: brief,
     });

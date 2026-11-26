@@ -246,7 +246,10 @@ export async function runStallPm(
       round,
       planList: setup.planList,
       tasks,
-      repair: round === 1 ? "" : stallLadderNote(rung, target, failure),
+      repair:
+        round === 1
+          ? ""
+          : stallLadderNote(runtime.prompts, rung, target, failure),
       steers: "none",
       stalls: brief,
       planChecks: "none",

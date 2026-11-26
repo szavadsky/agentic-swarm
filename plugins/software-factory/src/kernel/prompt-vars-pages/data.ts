@@ -1,6 +1,7 @@
 /** The prompt-variable descriptors, one entry per template variable. */
 
 import { DECIDER_PAGE } from "./data-decider.js";
+import { FRAGMENT_PROMPT_VARIABLES } from "./data-fragments.js";
 import { INFRA_PROMPT_VARIABLES } from "./data-infra.js";
 import { PLAN_CHECKER_PAGE } from "./data-plan-checker.js";
 import { REPAIR_PROMPT_VARIABLES } from "./data-repair.js";
@@ -424,16 +425,5 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
   },
   INFRA_PROMPT_VARIABLES,
   ...REPAIR_PROMPT_VARIABLES,
-  {
-    file: "resume.md",
-    prompt: "resume",
-    variables: {
-      branch: "task branch the relaunch continues; empty when none",
-      reason:
-        "`relaunch` after an interruption, `fallback` for a tier that continues edited work, `trivial` in the front's session",
-      session_cwd:
-        "directory the resumed session's tools run in; trivial turns only",
-      worktree: "absolute worktree a trivial turn must use; trivial turns only",
-    },
-  },
+  ...FRAGMENT_PROMPT_VARIABLES,
 ];
