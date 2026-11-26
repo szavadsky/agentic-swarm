@@ -10,6 +10,7 @@ import { z } from "zod";
 import { issueText } from "./findings.js";
 import {
   infraGateSchema,
+  infraIncidentSchema,
   type InfraReport,
   type PackGate,
 } from "./infra-types.js";
@@ -20,7 +21,10 @@ export const INFRA_FILE = "infra.yaml";
 
 /** The infra turn's output shape; `factory schemas` exports it for editors. */
 export const infraSchema = z
-  .object({ gates: z.array(infraGateSchema) })
+  .object({
+    gates: z.array(infraGateSchema),
+    incident: infraIncidentSchema.optional(),
+  })
   .strict()
   .refine(
     (report) =>
@@ -29,13 +33,22 @@ export const infraSchema = z
     "gate names must not repeat",
   );
 
-export type { InfraReport, PackGate } from "./infra-types.js";
+export type {
+  InfraReport,
+  PackGate,
+} from "./infra-types.js";
 
 /** An infra artifact that does not parse as `infra.yaml`; the path names it. */
 export class InfraError extends Error {}
 
 export function infraPath(goalDir: string): string {
   return path.join(goalDir, INFRA_FILE);
+}
+
+/** Raw contents of `infra.yaml`, or `"none"` when absent. */
+export function readInfraRaw(goalDir: string): string {
+  const file = infraPath(goalDir);
+  return fs.existsSync(file) ? fs.readFileSync(file, "utf8").trimEnd() : "none";
 }
 
 /** The infra turn's report, or undefined when it wrote none. */

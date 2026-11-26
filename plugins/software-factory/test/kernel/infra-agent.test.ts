@@ -200,6 +200,54 @@ describe("infra.yaml schema", () => {
   });
 });
 
+describe("infra.yaml incident schema", () => {
+  it("validates incident verdicts: infra requires handling, red forbids handling, gates stays required", () => {
+    const infraValid: InfraReport = {
+      gates: [],
+      incident: {
+        verdict: "infra",
+        handling: "stop-task-types",
+        taskTypes: ["computer-use"],
+        fix: {
+          layer: "repo",
+          path: ".factory/repo.yaml",
+          summary: "increase timeout",
+        },
+      },
+    };
+    expect(infraSchema.parse(infraValid)).toEqual(infraValid);
+
+    const redValid: InfraReport = {
+      gates: [],
+      incident: {
+        verdict: "red",
+        fix: {
+          layer: "run",
+          path: "src/app.ts",
+          summary: "task introduced infinite loop",
+        },
+      },
+    };
+    expect(infraSchema.parse(redValid)).toEqual(redValid);
+
+    expect(
+      infraSchema.safeParse({ gates: [], incident: { verdict: "infra" } })
+        .success,
+    ).toBe(false);
+    expect(
+      infraSchema.safeParse({
+        gates: [],
+        incident: { verdict: "red", handling: "stop" },
+      }).success,
+    ).toBe(false);
+    expect(
+      infraSchema.safeParse({
+        incident: { verdict: "infra", handling: "retry" },
+      }).success,
+    ).toBe(false);
+  });
+});
+
 describe("infra discovery drives the kernel", () => {
   it("runs the discovered gates when the repo config declares none", async () => {
     const { repo, goalDir, runtime, result } = await runBiggerFront({

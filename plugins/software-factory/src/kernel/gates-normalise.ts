@@ -140,12 +140,10 @@ export function isAdvisoryCheck(check: CheckResult): boolean {
 
 export function isInfraCheck(check: CheckResult): boolean {
   const details = check.details;
-  if (
-    typeof details === "object" &&
-    details !== null &&
-    (details as { kind?: unknown }).kind === "infra"
-  ) {
-    return true;
+  if (typeof details === "object" && details !== null) {
+    const record = details as { kind?: unknown; verdict?: unknown };
+    if (record.verdict === "red") return false;
+    if (record.kind === "infra") return true;
   }
   // A missing gate runner reports `exit 127` with no details at all (00801):
   // the summary is kernel-owned — a failing task cannot forge it — so the

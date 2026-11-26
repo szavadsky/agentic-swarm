@@ -7,6 +7,7 @@ import { commitAll } from "../../src/core/git/commit.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { executeTaskAction } from "../../src/kernel/flow.js";
+import { infraPath } from "../../src/kernel/infra.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type {
   Action,
@@ -23,6 +24,7 @@ import {
   outcome,
   scriptStallLeave,
   setupFlowRepo,
+  whenTurn,
   writeTask,
 } from "./s2-helpers.js";
 import {
@@ -319,13 +321,26 @@ function registerGateFlakeReRunPart3(): void {
 }
 
 function registerGateFlakeReRunPart4(): void {
-  it("keeps infra reds on their own path without a re-run", async () => {
+  it("keeps infra reds off the gate-flake re-run and routes to infra adjudication", async () => {
     const probe = makeProbe();
-    const { repo, goal } = setupFlowRepo({
+    const { repo, goalDir, goal } = setupFlowRepo({
       gates: [{ id: "typecheck", command: infraCommand(probe) }],
     });
     try {
-      const runtime = await makeRuntime(repo, goal, {});
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script(
+        (req, ctx) => {
+          fs.writeFileSync(
+            infraPath(goalDir),
+            "gates: []\nincident:\n  verdict: infra\n  handling: stop\n",
+            "utf8",
+          );
+          ctx.writeOutcome(outcome({ summary: "infra stop" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "infra" }) },
+      );
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
       const file = task("a", { scope: ["a.txt"] });
       await writeTask(runtime, file);
       await driveAction(runtime, file, { kind: "checks", slug: "a" });
@@ -340,6 +355,7 @@ function registerGateFlakeReRunPart4(): void {
       expect(
         records.filter((r) => r.slug === "a" && r.step === "gate-flake"),
       ).toHaveLength(0);
+      expect(harness.calls).toHaveLength(1);
       expect(runs(probe)).toBe(1);
     } finally {
       cleanupFlowRepo(repo);

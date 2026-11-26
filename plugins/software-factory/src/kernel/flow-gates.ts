@@ -8,60 +8,23 @@ import { commitAll } from "../core/git/commit.js";
 import { makeCause } from "./cause.js";
 import { runCleanlinessCheck } from "./cleanliness.js";
 import { firstBase, revisionBase } from "./flow-context.js";
+import type { TaskActionResult, TaskGateRun } from "./flow-types.js";
 import {
   advisoryChecks,
-  gateFlakeTests,
   isInfraCheck,
   newGateFailures,
   runGates,
 } from "./gates.js";
 import {
-  appendGateFlake,
-  appendPark,
-  finishChecks,
-  scriptMeta,
-  startChecks,
-} from "./record.js";
+  adjudicateInfraChecks,
+  isTimeoutGate,
+  markInfraGates,
+  rerunGateSubset,
+} from "./infra-verdict.js";
+import { appendPark, finishChecks, scriptMeta, startChecks } from "./record.js";
 import { checkSpikeReport } from "./spike-report.js";
 import type { Cause, KernelRuntime, StepRecord, TaskFile } from "./types.js";
 import { headSha, integrationHead, treeSha } from "./worktree.js";
-
-/**
- * Infra gate evidence the kernel itself owns: the gate's own wall timeout and
- * the shell's cannot-execute codes. Gate output is not evidence — a failing
- * task may print anything, so output is never consulted.
- */
-function isInfraGate(check: {
-  ok: boolean;
-  summary: string;
-  details?: unknown;
-}): boolean {
-  if (check.ok) return false;
-  const summary = check.summary.toLowerCase();
-  if (summary.includes("timed out")) return true;
-  if (/exit 12[67]/.test(summary)) return true;
-  if (
-    typeof check.details === "object" &&
-    check.details !== null &&
-    (check.details as { kind?: unknown }).kind === "infra"
-  )
-    return true;
-  return false;
-}
-
-/** Stamps gates that could not start so derive parks infra instead of looping the task. */
-function markInfraGates(checks: CheckResult[]): void {
-  for (const check of checks) {
-    if (!check.ok && isInfraGate(check)) {
-      check.details = {
-        ...(typeof check.details === "object" && check.details
-          ? check.details
-          : {}),
-        kind: "infra",
-      };
-    }
-  }
-}
 
 /** The park cause for actionable red checks, or undefined when every red is infra. */
 export function redGateCause(
@@ -77,18 +40,24 @@ export function redGateCause(
 }
 
 /**
- * One re-run for red gates on the same tree, one per gate per tree: green on
- * the re-run records a `gate-flake`; red again keeps the fix route. Infra reds
- * and inherited reds never re-run.
+ * One re-run for red gates on the same tree and one retry for timed-out
+ * gates: green on the re-run records a `gate-flake`; red again keeps the fix
+ * route; a second timeout goes to the infra verdict turn.
  */
-async function rerunRedGates(
+async function rerunRedOrTimedOutGates(
   runtime: KernelRuntime,
-  meta: { iteration: number; slug: string; round: number },
+  meta: {
+    iteration: number;
+    slug: string;
+    round: number;
+    architect?: string;
+  },
   worktree: string,
-  red: readonly CheckResult[],
+  checks: CheckResult[],
+  preexisting: ReadonlySet<string>,
   prior: readonly StepRecord[],
   tree: string,
-): Promise<Map<string, CheckResult>> {
+): Promise<CheckResult[]> {
   const reran = prior.some(
     (rec) =>
       rec.slug === meta.slug &&
@@ -96,32 +65,23 @@ async function rerunRedGates(
       rec.endedAt &&
       rec.tree === tree,
   );
-  if (red.length === 0 || reran) return new Map();
-  const rerun = await runGates(runtime, worktree, {
-    only: new Set(red.map((check) => check.name)),
+  const failing = newGateFailures(checks, preexisting);
+  const red = reran ? [] : failing.filter((check) => !isInfraCheck(check));
+  const timedOut = failing.filter(isTimeoutGate);
+  const targets = new Set([
+    ...red.map((check) => check.name),
+    ...timedOut.map((check) => check.name),
+  ]);
+  return rerunGateSubset(runtime, worktree, tree, checks, targets, {
+    meta,
+    replaceInfraFor: new Set(timedOut.map((check) => check.name)),
   });
-  markInfraGates(rerun);
-  const fresh = new Map(rerun.map((check) => [check.name, check]));
-  const flipped = red.filter((check) => fresh.get(check.name)?.ok === true);
-  if (flipped.length > 0) {
-    await appendGateFlake(runtime.store, meta, {
-      tree,
-      flakes: flipped.map((check) => ({
-        gate: check.name,
-        tests: gateFlakeTests(check),
-      })),
-      checks: flipped,
-    });
-  }
-  return fresh;
 }
 
 /**
- * Task gates with one flake re-run: a red gate re-runs once on the same tree
- * before any fix turn. Green on re-run closes the checks record green with a
- * `gate-flake` record naming the gate and its red-run failing tests; red again
- * keeps the existing fix route. The re-run keys on the tree, consumes no round,
- * and baseline/merge-checks runs never reach this helper.
+ * Task gates with one flake/timeout re-run: a red gate re-runs once per tree
+ * and a timed-out gate retries once before any fix turn or infra verdict.
+ * Persistent timeouts and cannot-start failures route to the infra turn.
  */
 export async function runTaskGates(
   runtime: KernelRuntime,
@@ -135,7 +95,7 @@ export async function runTaskGates(
   worktree: string,
   preexisting: ReadonlySet<string>,
   prior: readonly StepRecord[],
-): Promise<CheckResult[]> {
+): Promise<TaskGateRun> {
   const tree = await treeSha(worktree);
   const gate = await startChecks(runtime.store, meta);
   let checks = await runGates(runtime, worktree);
@@ -154,19 +114,15 @@ export async function runTaskGates(
   );
   if (!cleanliness.ok) checks.push(cleanliness);
 
-  const red = newGateFailures(checks, preexisting).filter(
-    (check) => !isInfraCheck(check),
+  checks = await rerunRedOrTimedOutGates(
+    runtime,
+    meta,
+    worktree,
+    checks,
+    preexisting,
+    prior,
+    tree,
   );
-  const fresh = await rerunRedGates(runtime, meta, worktree, red, prior, tree);
-  if (fresh.size > 0) {
-    checks = checks.map((check) => {
-      const next = fresh.get(check.name);
-      // An infra re-run is inconclusive, not a verdict: the fix turn still
-      // reads the red run, and a test red never becomes an infra park.
-      if (!next || (!next.ok && isInfraCheck(next))) return check;
-      return next;
-    });
-  }
   // A spike's product is its committed report, gated like a repo gate but
   // never re-run: it reads the commit, which a re-run cannot change. A
   // `nogit` type delivers outside git, so it has no report to gate.
@@ -176,8 +132,22 @@ export async function runTaskGates(
     );
   }
   if (task.advisory) checks = advisoryChecks(checks);
+  const adjudicated = await adjudicateInfraChecks(
+    runtime,
+    meta.iteration,
+    "checks",
+    worktree,
+    checks,
+    preexisting,
+    { slug: meta.slug, round: meta.round, lock: true },
+  );
+  checks = adjudicated.checks;
   await finishChecks(gate, checks, { preexisting, tree });
-  return checks;
+  return {
+    checks,
+    ...(adjudicated.infra ? { infra: adjudicated.infra } : {}),
+    ...(adjudicated.cancelled ? { cancelled: true } : {}),
+  };
 }
 
 /**
@@ -198,7 +168,7 @@ export async function finishCleanResolve(
   worktree: string,
   preexisting: ReadonlySet<string>,
   prior: readonly StepRecord[],
-): Promise<Record<string, never>> {
+): Promise<TaskActionResult> {
   const before = await headSha(worktree);
   const committed = await commitAll(
     runtime.repo,
@@ -221,7 +191,7 @@ export async function finishCleanResolve(
       ),
     },
   );
-  const checks = await runTaskGates(
+  const gated = await runTaskGates(
     runtime,
     task,
     meta,
@@ -229,7 +199,9 @@ export async function finishCleanResolve(
     preexisting,
     prior,
   );
-  const red = redGateCause(checks, preexisting);
+  if (gated.infra) return { infra: gated.infra };
+  if (gated.cancelled) return { cancelled: true };
+  const red = redGateCause(gated.checks, preexisting);
   if (red) await appendPark(runtime.store, meta, red);
   return {};
 }

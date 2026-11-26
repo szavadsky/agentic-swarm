@@ -106,6 +106,10 @@ export interface TaskActionResult {
   cancelled?: boolean;
 }
 
+export interface TaskGateRun extends TaskActionResult {
+  checks: import("../core/checks/types.js").CheckResult[];
+}
+
 type Contained = Awaited<
   ReturnType<typeof import("./worktree.js").containmentSnapshot>
 >;

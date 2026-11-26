@@ -10,6 +10,7 @@ import type { TurnResult } from "../../src/harness/types.js";
 import { formatCause } from "../../src/kernel/cause.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
+import { infraPath } from "../../src/kernel/infra.js";
 import { ensureTaskWorktree, treeSha } from "../../src/kernel/worktree.js";
 import { cause, causeText, task } from "./helpers.js";
 import {
@@ -18,6 +19,7 @@ import {
   outcome,
   scriptStallLeave,
   setupFlowRepo,
+  whenTurn,
   writeTask,
 } from "./s2-helpers.js";
 import {
@@ -211,26 +213,40 @@ function registerTurnFailuresOutcomeCrashAndWallClockHandlingPart3(): void {
 }
 
 function registerTurnFailuresOutcomeCrashAndWallClockHandlingPart4(): void {
-  it("records an unstartable gate as infra and parks as infra, never empty-diff", async () => {
-    const { repo, goal } = setupFlowRepo({
+  it("routes an unstartable gate through the infra verdict instead of empty-diff or gate-could-not-start park", async () => {
+    const { repo, goalDir, goal } = setupFlowRepo({
       gates: [{ id: "typecheck", command: "factory-missing-command-xyz-123" }],
       limits: { concurrency: { overall: 1 } },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
-      harness.script((req, ctx) => {
-        fs.writeFileSync(path.join(req.cwd!, "a.txt"), "a\n", "utf8");
-        ctx.writeOutcome(outcome({ summary: "a implemented" }));
-        return fakeTurnResult(req);
-      });
-      scriptStallLeave(harness, ["a"]);
+      harness.script(
+        (req, ctx) => {
+          fs.writeFileSync(path.join(req.cwd!, "a.txt"), "a\n", "utf8");
+          ctx.writeOutcome(outcome({ summary: "a implemented" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "implement" }) },
+      );
+      harness.script(
+        (req, ctx) => {
+          fs.writeFileSync(
+            infraPath(goalDir),
+            "gates: []\nincident:\n  verdict: infra\n  handling: stop\n",
+            "utf8",
+          );
+          ctx.writeOutcome(outcome({ summary: "unstartable gate is infra" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "infra" }) },
+      );
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       await writeTask(runtime, task("a", { scope: ["a.txt"] }));
 
-      await runDispatch(runtime, { iteration: 1 });
-      // One implement turn plus the stall turn that leaves the infra park for the architect.
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("infra");
       expect(harness.calls).toHaveLength(2);
-      expect(fakeTurnIdentity(harness.calls[1]!).step).toBe("pm");
+      expect(fakeTurnIdentity(harness.calls[1]!).step).toBe("infra");
       const records = await runtime.store.listRecords();
       const checks = records.find((r) => r.slug === "a" && r.step === "checks");
       expect(checks?.ok).toBe(false);
@@ -242,15 +258,11 @@ function registerTurnFailuresOutcomeCrashAndWallClockHandlingPart4(): void {
         records,
         runtime.configs.process.flows,
       );
-      expect(state.tasks.a!.status).toBe("parked");
-      expect(causeText(state.tasks.a!.cause)).toContain(
-        "infra: gate could not start: typecheck",
-      );
+      expect(state.tasks.a!.status).not.toBe("parked");
       expect(causeText(state.tasks.a!.cause)).not.toContain("empty-diff");
-      const park = records.find((r) => r.slug === "a" && r.step === "park");
-      expect(causeText(park?.cause)).toContain(
-        "infra: gate could not start: typecheck",
-      );
+      expect(
+        records.filter((r) => r.slug === "a" && r.step === "park"),
+      ).toHaveLength(0);
     } finally {
       cleanupFlowRepo(repo);
     }

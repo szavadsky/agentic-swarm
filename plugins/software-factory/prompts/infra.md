@@ -18,6 +18,14 @@ Run each gate once in the checkout when that is safe. Report `green` when it pas
 
 Running a gate must not change the checkout. When a gate writes files, run it in a scratch copy or report its status from a recorded run and say which in `notes`.
 
+## Incident
+
+When `incident evidence` is not `none`, a gate timed out twice or could not start during the run. Re-emit `gates` in `{{infra_path}}` from the current `infra.yaml` (changed only by any fix) and add an `incident` block:
+
+- `verdict`: `red` if the task's own change caused the failure or hang; `infra` if the environment, runner, or gate configuration is at fault.
+- `handling`: required when `verdict` is `infra` (`retry | ignore | fallback | stop-task-types | stop | escalate`), and omitted when `verdict` is `red`. Include `taskTypes` when `handling` is `stop-task-types`.
+- `fix` (optional, for `infra` fixes): `{ layer: repo | factory | run, path, summary }`.
+
 ## Write
 
 ```yaml
@@ -34,12 +42,12 @@ gates:
     notes: one case hit a timeout, then passed on the same tree
 ```
 
-Every configured gate appears exactly once; `name` is unique, `speed` is `fast | slow`, `status` is `green | yellow | red`. An empty list is honest when the project runs nothing.
+Every configured gate appears exactly once; `name` is unique, `speed` is `fast | slow`, `status` is `green | yellow | red`. An empty list is honest when the project runs nothing. For an incident turn, include `incident` alongside `gates`.
 
 ## Rules
 
 - Write only `{{infra_path}}` in the goal area; create nothing else besides the outcome.
-- Never edit the checkout, the plan, a task file or a record.
+- Never edit the checkout during ingestion; during an incident, only edit config or scripts named in `incident.fix`, and never edit the plan, a task file or a record.
 - Validate the file before ending the turn: `{{validate_cmd}} {{infra_path}}`.
 
 ## Calibration
@@ -58,5 +66,9 @@ Every configured gate appears exactly once; `name` is unique, `speed` is `fast |
 - setup: `{{setup_command}}`
 - configured gates (authoritative unless `none`):
   {{gate_commands}}
+- current infra.yaml:
+  {{current_infra}}
+- incident evidence:
+  {{incident_evidence}}
 - infra file to write: `{{infra_path}}`
 - outcome path: `{{outcome_path}}`

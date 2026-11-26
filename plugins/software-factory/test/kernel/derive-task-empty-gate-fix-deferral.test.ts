@@ -217,7 +217,7 @@ function emptyGateFixDeferralPart5(
   scope: ReturnType<typeof emptyGateFixDeferralPart2>,
 ) {
   const { failedChecks, infraChecks, passedChecks } = scope;
-  it("infra-only reds after an empty gate fix keep the infra path", () => {
+  it("infra-only reds after an empty gate fix never park as empty-diff or gate could not start", () => {
     const t = task("a");
     const flow = DEFAULT_FLOWS["implement-review"]!;
     const reduction = reduceTask(
@@ -230,10 +230,9 @@ function emptyGateFixDeferralPart5(
       ],
       flow,
     );
-    expect(reduction.phase).toBe("parked");
-    expect(causeText(reduction.park)).toContain(
-      "infra: gate could not start: typecheck",
-    );
+    expect(reduction.phase).toBe("checks");
+    expect(reduction.park).toBeUndefined();
+    expect(reduction.pendingSignal).toBeUndefined();
   });
 
   it("defers an empty gate fix in a later round after a changes verdict", () => {

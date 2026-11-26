@@ -98,13 +98,9 @@ export function applyChecks(
   // task's, so it never opens a revision, a fix or a park.
   const charged = attributedFailures(rec.checks);
   if (rec.ok === false && charged.length > 0 && charged.every(isInfraCheck)) {
-    // A gate that could not start is not a red verdict on the task: looping
-    // the implementer ends in an empty-diff park (B6).
-    state.park = makeCause(
-      "infra",
-      `gate could not start: ${charged.map((check) => check.name).join(", ")}`,
-    );
-    state.phase = "parked";
+    // Persistent infra checks are routed to the infra verdict turn, never
+    // parked as "gate could not start". Keep pendingChecks so phase stays checks.
+    return;
   } else if (rec.ok === false) {
     settleChecksVerdict(context, state, charged, pending);
   } else {
@@ -198,6 +194,7 @@ export function applyMerge(
   if (cause?.kind === "gates") applyMergeGates(context, state, rec, cause);
   else if (cause?.kind === "conflict")
     applyMergeConflict(context, state, cause);
+  else if (cause?.kind === "infra") return;
   else if (cause?.kind === "no-progress" || cause?.kind === "merge-failed") {
     state.park = cause;
     state.phase = "parked";
