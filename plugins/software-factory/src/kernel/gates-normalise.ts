@@ -2,15 +2,20 @@ import fs from "node:fs";
 import path from "node:path";
 import type { CheckResult } from "../core/checks/types.js";
 import type { ParsedCase, ParsedJunit } from "../core/checks/junit.js";
-import { ctrfFindings, parseCtrfReport } from "../core/checks/ctrf.js";
+import {
+  ctrfFindings,
+  ctrfTestRuntimes,
+  parseCtrfReport,
+} from "../core/checks/ctrf.js";
 import { capFindings, type Finding } from "../core/checks/findings.js";
 import type {
   CappedGateOutput,
   GateArtifacts,
   GateCheckMeta,
   GateReports,
+  NormalisedGateReports,
 } from "./gates-types.js";
-import { junitFindings } from "../core/checks/junit-findings.js";
+import { junitToCtrf } from "../core/checks/junit-findings.js";
 import { logFindings, regexFindings } from "../core/checks/log-findings.js";
 import { parseSarifLog, sarifFindings } from "../core/checks/sarif.js";
 import type { GateConfig } from "./types.js";
@@ -186,6 +191,61 @@ export function caseLabel(c: ParsedCase): string {
   return c.file ? `${c.file} > ${c.name}` : c.name;
 }
 
+function nonEmptyRuntimes(
+  runtimes: Record<string, number>,
+): Record<string, number> | undefined {
+  return Object.keys(runtimes).length > 0 ? runtimes : undefined;
+}
+
+/**
+ * Normalises a gate's reports into the shared finding model and extracts
+ * passing per-test runtimes when CTRF (or JUnit converted to CTRF) is present.
+ */
+export async function normaliseGateReports(
+  gate: GateConfig,
+  artifacts: GateArtifacts,
+  cwd?: string,
+): Promise<NormalisedGateReports> {
+  let testRuntimes: Record<string, number> | undefined;
+  if (artifacts.ctrf) {
+    const report = parseCtrfReport(artifacts.ctrf);
+    testRuntimes = nonEmptyRuntimes(ctrfTestRuntimes(report, cwd));
+    const findings = ctrfFindings(gate.id, report);
+    if (findings.length > 0) {
+      return {
+        findings: capFindings(findings),
+        ...(testRuntimes ? { testRuntimes } : {}),
+      };
+    }
+  }
+  if (artifacts.junit) {
+    const report = await junitToCtrf(gate.id, artifacts.junit);
+    testRuntimes ??= nonEmptyRuntimes(ctrfTestRuntimes(report, cwd));
+    const findings = ctrfFindings(gate.id, report);
+    if (findings.length > 0) {
+      return {
+        findings: capFindings(findings),
+        ...(testRuntimes ? { testRuntimes } : {}),
+      };
+    }
+  }
+  const withRuntimes = (findings: Finding[]): NormalisedGateReports => ({
+    findings: capFindings(findings),
+    ...(testRuntimes ? { testRuntimes } : {}),
+  });
+  if (artifacts.sarif) {
+    const findings = sarifFindings(gate.id, parseSarifLog(artifacts.sarif));
+    if (findings.length > 0) return withRuntimes(findings);
+  }
+  const fromRegex = regexFindings(
+    gate.id,
+    artifacts.log,
+    gate.format?.regex ?? [],
+  );
+  if (fromRegex.length > 0) return withRuntimes(fromRegex);
+  return withRuntimes(logFindings(gate.id, artifacts.log, artifacts.exitCode));
+}
+
 /**
  * One model for a gate's findings. A native CTRF report wins, a JUnit report
  * is converted to CTRF, and a SARIF log is validated against the OASIS 2.1.0
@@ -198,25 +258,7 @@ export async function normaliseFindings(
   gate: GateConfig,
   artifacts: GateArtifacts,
 ): Promise<Finding[]> {
-  if (artifacts.ctrf) {
-    const findings = ctrfFindings(gate.id, parseCtrfReport(artifacts.ctrf));
-    if (findings.length > 0) return capFindings(findings);
-  }
-  if (artifacts.junit) {
-    const findings = await junitFindings(gate.id, artifacts.junit);
-    if (findings.length > 0) return capFindings(findings);
-  }
-  if (artifacts.sarif) {
-    const findings = sarifFindings(gate.id, parseSarifLog(artifacts.sarif));
-    if (findings.length > 0) return capFindings(findings);
-  }
-  const fromRegex = regexFindings(
-    gate.id,
-    artifacts.log,
-    gate.format?.regex ?? [],
-  );
-  if (fromRegex.length > 0) return capFindings(fromRegex);
-  return capFindings(logFindings(gate.id, artifacts.log, artifacts.exitCode));
+  return (await normaliseGateReports(gate, artifacts)).findings;
 }
 
 /** Findings a check record keeps, when it carries the new model. */

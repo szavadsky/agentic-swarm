@@ -372,8 +372,8 @@ describe("preset snapshots", () => {
  * lower a ceiling when its prompt shrinks.
  */
 const ROLE_BYTE_BUDGETS: Record<string, number> = {
-  architect: 11964,
-  subarchitect: 10652,
+  architect: 12069,
+  subarchitect: 10773,
   front: 6456,
   pm: 16247,
   implementer: 7011,
@@ -385,7 +385,7 @@ const ROLE_BYTE_BUDGETS: Record<string, number> = {
   "plan-checker": 8254,
   "pack-preparer": 5393,
   scout: 3570,
-  "review-architect": 12132,
+  "review-architect": 12253,
   "architect-review-return": 4749,
 };
 

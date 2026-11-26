@@ -65,6 +65,7 @@ import {
   steerScopeGroups,
 } from "./pm.js";
 import { scriptMeta } from "./record.js";
+import { testRuntimeComparison } from "./test-runtimes.js";
 import type { KernelRuntime } from "./types.js";
 import { integrationHead } from "./worktree.js";
 
@@ -367,6 +368,7 @@ type PackGovernance = Pick<
   | "setup"
   | "gates"
   | "baseGates"
+  | "testRuntimes"
   | "forwarded"
   | "debts"
   | "openRecords"
@@ -381,10 +383,12 @@ async function packGovernance(
   planText: string,
 ): Promise<PackGovernance> {
   const { runtime } = context;
+  const testRuntimes = testRuntimeComparison(context.records);
   return {
     setup: runtime.configs.repo.setup,
     gates: packGates(runtime.store.goalDir, runtime.configs.repo.gates),
     baseGates: recordedBaseGates(context.records),
+    ...(testRuntimes ? { testRuntimes } : {}),
     forwarded: forwardedConcerns(context.records, {
       tasks: context.tasks,
       audience: { kind: "goal" },
