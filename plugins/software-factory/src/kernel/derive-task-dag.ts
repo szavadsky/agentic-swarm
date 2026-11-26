@@ -38,8 +38,9 @@ function completedRounds(
 
 /**
  * Whether a verdict turn (review, QA or adjudicator) already ran in `round`.
- * Its verdict is what ended the round; a green checks landing on `merge` or
- * `finish` after one is the round's final phase, never a walk's stop.
+ * A walk with no ready step lands on `merge` or `finish` without a new tail
+ * check, while a ready step still runs after the verdict and
+ * `settleDagEndPhase` hands it the phase.
  */
 function judgedThisRound(
   context: ReduceContext,

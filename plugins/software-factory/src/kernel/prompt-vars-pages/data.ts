@@ -154,7 +154,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       class_types:
         "the configured development types each front class may write, rendered by the front turn",
       code_map_path:
-        "path of the code map a `when: [bigger]` scout step wrote; `none` when no scout ran",
+        "absolute path of the code map a `when: [bigger]` scout step writes; the file may not exist yet when the front runs",
     },
   },
   {
@@ -250,7 +250,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
   {
     file: "cleanliness-revision.md",
     intro:
-      "The cleanliness revision follow-up instruction (fix or justify), included by `implementer.md` on a cleanliness revision turn. It contains no turn variables.",
+      "The cleanliness revision follow-up instruction (clean up, ignore or override), included by `implementer.md` on a cleanliness revision turn. It contains no turn variables.",
     variables: {},
   },
   {
