@@ -469,7 +469,11 @@ Pre-flight refuses an alias that names a subscription and such a tier with
 neither declaration. A tier that keeps the primary's harness and model keeps
 inheriting the alias's subscription. A turn that lands on a tier keeps the
 launch on it, and dispatch throttles each pool and model within the overall
-limit.
+limit. Admission remembers the leg it chose by identity — harness, model and
+pool, not its position — and the step resolves that identity again when it
+starts, so a chain reordered by a pool latching in between still runs the
+admitted leg; when the admitted leg itself latched, the turn moves to the next
+live leg after it and never back to one admission left at its cap.
 
 A tier that answers quota latches its pool. The stop's stated reset
 (`Resets in 130h19m23s`, `Resets in 33m53s`, `retry-after-ms=38240413`) sets

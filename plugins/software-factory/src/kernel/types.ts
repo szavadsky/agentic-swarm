@@ -55,6 +55,7 @@ export type {
 export { causeSchema } from "./types/state.js";
 export type {
   Action,
+  AdmittedTier,
   Cause,
   CauseKind,
   EpicState,

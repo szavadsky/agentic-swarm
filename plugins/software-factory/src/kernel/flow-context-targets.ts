@@ -6,6 +6,7 @@ import type { Harness, ModelRef } from "../harness/types.js";
 import type { ResolvedTier, TurnTarget } from "./flow-types.js";
 import { poolExhausted } from "./quota-pools.js";
 import type {
+  AdmittedTier,
   BoundaryStep,
   FallbackModelConfig,
   KernelRuntime,
@@ -24,6 +25,72 @@ export function tierPoolKey(tier: {
     typeof tier.harness === "string" ? tier.harness : tier.harness.id;
   const modelId = typeof tier.model === "string" ? tier.model : tier.model.id;
   return `${harnessId}+${modelId}`;
+}
+
+/** The identity admission stores for one resolved tier: its harness, model and pool. */
+export function tierIdentity(tier: ResolvedTier): AdmittedTier {
+  return {
+    harness: tier.harness.id,
+    model: tier.model,
+    ...(tier.subscription !== undefined
+      ? { subscription: tier.subscription }
+      : {}),
+  };
+}
+
+/** Whether one resolved tier is the leg an identity names. */
+function sameTier(tier: ResolvedTier, admitted: AdmittedTier): boolean {
+  return (
+    tier.harness.id === admitted.harness &&
+    tier.model.id === admitted.model.id &&
+    tier.model.effort === admitted.model.effort &&
+    tier.subscription === admitted.subscription
+  );
+}
+
+/** The target starting at `index` of a freshly resolved chain. */
+function chainFrom(target: TurnTarget, index: number): TurnTarget {
+  const tier = target.tiers[index]!;
+  return {
+    ...target,
+    harness: tier.harness,
+    model: tier.model,
+    effort: tier.effort,
+    subscription: tier.subscription,
+    opaque: tier.opaque,
+    tiers: target.tiers.slice(index),
+    // The offset keeps the tier index absolute across the slice.
+    tierOffset: target.tierOffset + index,
+  };
+}
+
+/**
+ * The target a step starts on: the leg admission chose, matched by identity in
+ * the freshly resolved chain, so a list reordered between admission and start
+ * cannot shift it. The match is the quota re-check; a leg that latched since
+ * admission is skipped for the next live leg after it, never for one admission
+ * left at its cap. With no live leg at or after it, the target is unavailable
+ * and no call may run.
+ */
+export function admittedTarget(
+  runtime: KernelRuntime,
+  target: TurnTarget,
+  admitted: AdmittedTier,
+): TurnTarget {
+  const index = target.tiers.findIndex((tier) => sameTier(tier, admitted));
+  if (index >= 0) return chainFrom(target, index);
+  const chain = resolveChain(runtime, target.alias);
+  const from = chain.findIndex((tier) => sameTier(tier, admitted));
+  for (let cursor = from + 1; cursor < chain.length; cursor += 1) {
+    const identity = tierIdentity(chain[cursor]!);
+    const live = target.tiers.findIndex((tier) => sameTier(tier, identity));
+    if (live >= 0) return chainFrom(target, live);
+  }
+  return {
+    ...target,
+    tiers: [],
+    unavailable: `the admitted leg ${admitted.harness}/${admitted.model.id} (${tierPoolKey(admitted)}) latched since admission and no live tier follows it`,
+  };
 }
 
 /**

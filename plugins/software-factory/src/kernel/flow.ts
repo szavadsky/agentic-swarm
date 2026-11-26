@@ -35,7 +35,7 @@ export async function executeTaskAction(
       iteration,
       step,
       flow,
-      tierIndex: action.tierIndex,
+      tier: action.tier,
     });
   }
   if (action.kind === "checks") {

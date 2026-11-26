@@ -4,7 +4,7 @@
  * `flow-context-*.ts` own the bodies; importers keep using this path.
  */
 
-export type { FrontClass, TurnTarget } from "./flow-types.js";
+export type { FrontClass, ResolvedTier, TurnTarget } from "./flow-types.js";
 export { classSchema } from "./flow-types.js";
 export {
   escalateFrontClassToBigger,
@@ -35,11 +35,13 @@ export {
   stepTarget,
 } from "./flow-context-step.js";
 export {
+  admittedTarget,
   architectureTarget,
   boundaryTarget,
   noLiveTierCause,
   resolveTurn,
   subarchitectTarget,
+  tierIdentity,
   tierPoolKey,
 } from "./flow-context-targets.js";
 export { promptVars } from "./flow-context-vars.js";
