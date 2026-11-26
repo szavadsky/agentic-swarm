@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { git, GitError } from "../core/git/exec.js";
+import { hostOs } from "../core/os/index.js";
 import { porcelainStatus } from "../core/git/status.js";
 import { KeyedMutex } from "../core/mutex.js";
 import { type ArtifactWriter, createFolderStore } from "./store.js";
@@ -44,7 +45,7 @@ export const STORE_COMMIT_TRAILER = "Factory-Store-Commit";
 
 /** True for a repo-relative path no backend may commit. */
 export function isPrivateArtifact(rel: string): boolean {
-  const parts = rel.split("/");
+  const parts = hostOs().repoPathParts(rel);
   if (parts.some((part) => PRIVATE_COMPONENTS.has(part))) return true;
   if (parts.some((part) => part.endsWith(".tmp"))) return true;
   return PRIVATE_SUFFIX.test(rel);
@@ -333,10 +334,9 @@ export function createArtifactStore(
     return createFolderStore(paths.goalDir, location.root, taskTypes);
   }
   if (location.backend === "same-repo") {
-    const relRoot = path
-      .relative(paths.repoRoot, location.root)
-      .split(path.sep)
-      .join("/");
+    const relRoot = hostOs().repoPath(
+      path.relative(paths.repoRoot, location.root),
+    );
     return createFolderStore(
       paths.goalDir,
       undefined,

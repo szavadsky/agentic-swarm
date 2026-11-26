@@ -2,6 +2,8 @@
  * Child process-group registry used by signal handling and the process runner.
  */
 
+import { hostOs } from "./os/index.js";
+
 const activeChildGroups = new Set<number>();
 
 /**
@@ -25,13 +27,7 @@ export function unregisterChildGroup(pid: number): void {
  * group exists but belongs to another user; only `ESRCH` proves it is gone.
  */
 export function isChildGroupAlive(pid: number): boolean {
-  if (pid <= 0) return false;
-  try {
-    process.kill(-pid, 0);
-    return true;
-  } catch (err: unknown) {
-    return (err as NodeJS.ErrnoException).code !== "ESRCH";
-  }
+  return pid > 0 && hostOs().isGroupAlive(pid);
 }
 
 /**
@@ -42,16 +38,7 @@ function terminateChildGroup(
   pid: number,
   signal: "SIGTERM" | "SIGKILL" = "SIGTERM",
 ): void {
-  if (pid <= 0) return;
-  try {
-    process.kill(-pid, signal);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException | null | undefined)?.code !== "ESRCH") {
-      try {
-        process.kill(pid, signal);
-      } catch {}
-    }
-  }
+  hostOs().killGroup(pid, signal);
 }
 
 /**

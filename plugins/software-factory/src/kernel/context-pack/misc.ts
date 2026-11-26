@@ -1,6 +1,7 @@
 /** Code map, calibration and forwarded concerns. */
 
 import type { ConcernKind } from "../../core/concern-types.js";
+import { hostOs } from "../../core/os/index.js";
 import { concernFingerprint, recordedConcernId } from "../../core/concerns.js";
 import { indexDismissals, isConcernDismissed } from "../concern-dismissal.js";
 import { baseContinuations } from "../derive/shared.js";
@@ -27,19 +28,20 @@ interface CodeMapEntry {
  * what the index shows.
  */
 export function shallowCodeMap(paths: string[]): string[] {
+  const os = hostOs();
   const clean = paths
-    .map((raw) => raw.replace(/\\/g, "/").replace(/^\.\//, ""))
+    .map((raw) => os.repoPath(raw))
     .filter((path) => {
       if (!path) return false;
-      const top = path.split("/")[0];
+      const top = os.repoPathParts(path)[0];
       return top !== "node_modules" && top !== ".git";
     });
 
   const packageCounts = new Map<string, number>();
   for (const path of clean) {
-    const parts = path.split("/");
+    const parts = os.repoPathParts(path);
     if (parts.length < 3) continue;
-    const pkg = `${parts[0]}/${parts[1]}`;
+    const pkg = os.joinRepoPath(...parts.slice(0, 2));
     packageCounts.set(pkg, (packageCounts.get(pkg) ?? 0) + 1);
   }
 
@@ -50,12 +52,12 @@ export function shallowCodeMap(paths: string[]): string[] {
     entries.set(label, entry);
   };
   for (const path of clean) {
-    const parts = path.split("/");
+    const parts = os.repoPathParts(path);
     if (parts.length === 1) {
       count("(root)", true);
       continue;
     }
-    const pkg = `${parts[0]}/${parts[1]}`;
+    const pkg = os.joinRepoPath(...parts.slice(0, 2));
     const split =
       parts.length > 2 &&
       (packageCounts.get(pkg) ?? 0) >= PACKAGE_SPLIT_MIN_FILES;
@@ -63,7 +65,7 @@ export function shallowCodeMap(paths: string[]): string[] {
     if (parts.length <= depth) {
       count(path, false);
     } else {
-      count(`${parts.slice(0, depth).join("/")}/`, true);
+      count(`${os.joinRepoPath(...parts.slice(0, depth))}/`, true);
     }
   }
   return [...entries.entries()]

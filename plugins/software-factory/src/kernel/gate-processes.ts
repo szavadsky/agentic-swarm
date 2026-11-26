@@ -1,18 +1,15 @@
 /**
  * Gate process groups and the worktree each runs in. A gate runs detached in
- * its own group, so killing the group kills its whole tree; this module names
- * the groups a live gate run owns and finds groups whose owner died with the
- * factory, which a worktree removal must stop before the directory goes away.
+ * its own group; a timed-out or cancelled run, and a worktree removal, must
+ * kill the whole tree, including grandchildren that outlive their leader.
  */
 
 import fs from "node:fs";
 import path from "node:path";
+import { hostOs } from "../core/os/index.js";
 
 /** Grace between SIGTERM and SIGKILL on a reaped group. */
 const REAP_GRACE_MS = 200;
-
-/** `/proc` renders a working directory that no longer exists with this suffix. */
-const DELETED_SUFFIX = " (deleted)";
 
 /** Live gate groups, by the resolved worktree they run in. */
 const gateGroups = new Map<string, Set<number>>();
@@ -39,30 +36,6 @@ export function trackGateGroup(worktree: string, group: number): () => void {
   };
 }
 
-/** A process's group id from /proc; comm may contain spaces and parentheses. */
-function processGroup(pid: number): number | undefined {
-  try {
-    const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
-    const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-    const group = Number(fields[2]);
-    return Number.isInteger(group) && group > 1 ? group : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/** A process's working directory, without the kernel's deleted marker. */
-function processCwd(pid: number): string | undefined {
-  try {
-    const link = fs.readlinkSync(`/proc/${pid}/cwd`);
-    return link.endsWith(DELETED_SUFFIX)
-      ? link.slice(0, -DELETED_SUFFIX.length)
-      : link;
-  } catch {
-    return undefined;
-  }
-}
-
 /** True when `cwd` is `root` or below it. */
 function below(cwd: string, root: string): boolean {
   return cwd === root || cwd.startsWith(`${root}${path.sep}`);
@@ -74,41 +47,16 @@ function below(cwd: string, root: string): boolean {
  * process is gone and whose group is unknown to the registry.
  */
 function groupsUnder(roots: readonly string[]): number[] {
-  let entries: string[];
-  try {
-    entries = fs.readdirSync("/proc");
-  } catch {
-    return [];
-  }
-  const own = processGroup(process.pid);
+  const processes = hostOs().processes();
+  const own = processes.find((entry) => entry.pid === process.pid)?.pgid;
   const groups: number[] = [];
-  for (const entry of entries) {
-    if (!/^\d+$/.test(entry)) continue;
-    const pid = Number(entry);
-    if (pid === process.pid) continue;
-    const cwd = processCwd(pid);
+  for (const entry of processes) {
+    if (entry.pid === process.pid) continue;
+    const cwd = entry.cwd;
     if (cwd === undefined || !roots.some((root) => below(cwd, root))) continue;
-    const group = processGroup(pid);
-    if (group !== undefined && group !== own) groups.push(group);
+    if (entry.pgid > 1 && entry.pgid !== own) groups.push(entry.pgid);
   }
   return groups;
-}
-
-function signalGroup(group: number, signal: NodeJS.Signals): void {
-  try {
-    process.kill(-group, signal);
-  } catch {
-    // The group is gone, which is the outcome the caller wants.
-  }
-}
-
-function groupAlive(group: number): boolean {
-  try {
-    process.kill(-group, 0);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -130,9 +78,10 @@ export async function reapGateProcesses(worktree: string): Promise<void> {
   for (const group of groupsUnder(roots)) groups.add(group);
   gateGroups.delete(absolute);
   if (groups.size === 0) return;
-  for (const group of groups) signalGroup(group, "SIGTERM");
+  const os = hostOs();
+  for (const group of groups) os.killGroup(group, "SIGTERM");
   await new Promise((resolve) => setTimeout(resolve, REAP_GRACE_MS));
   for (const group of groups) {
-    if (groupAlive(group)) signalGroup(group, "SIGKILL");
+    if (os.isGroupAlive(group)) os.killGroup(group, "SIGKILL");
   }
 }
