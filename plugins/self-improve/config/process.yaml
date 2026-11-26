@@ -1,11 +1,18 @@
 # Self-improvement process overlay: copy this file to the target repo's
 # `.factory/process.yaml`. Everything it does not name is the package default;
-# its one difference is the previous-run assessment, a separate configured
-# agent that runs before the architect once a launch has a run to read.
+# its differences are the previous-run assessment and the adversarial status
+# review, both configured agents that run before the architect.
+#
+# Two architect flows rotate by iteration parity. Even iterations keep the
+# architect's ownership of the goal's status; odd iterations put the
+# adversarial architect-level status review before the architect, which
+# adjudicates every finding it makes. The flows share their launch reasons, so
+# the parity alone decides which one runs.
 #
 # The `assess` alias belongs to the run layer, which stays on the operator's
 # machine. Bind it there: the shipped example binds it to a cheap model, never
-# to the architect's.
+# to the architect's. The status review runs on the architect's own alias: it
+# is architect-level work, a separate turn on the same model.
 architecture:
   flows:
     # The first consult of a goal has no previous launch; nothing to assess.
@@ -17,12 +24,31 @@ architecture:
     # Every later consult reads the run that ended first. The step is a plain
     # agent turn on `assess-run`, so a committed run's friction and waste reach
     # the architect through the assessment it leaves beside the context pack.
+    # Even iterations stop there: the architect owns the status it reports.
     - when: [concerns, iteration-done, steer, relaunch]
+      parity: even
       steps:
         - id: assess
           prompt: assess-run
           alias: assess
           deliverable: "previous-run assessment"
+        - id: architect
+        - id: planreview
+        - id: pm
+    # Odd iterations add the adversarial review: a separate architect-level
+    # agent tests the previous status claims against the records and the plan;
+    # the architect answers every finding in its outcome before it plans.
+    - when: [concerns, iteration-done, steer, relaunch]
+      parity: odd
+      steps:
+        - id: assess
+          prompt: assess-run
+          alias: assess
+          deliverable: "previous-run assessment"
+        - id: statusreview
+          prompt: status-review
+          alias: architect
+          deliverable: "adversarial status review"
         - id: architect
         - id: planreview
         - id: pm

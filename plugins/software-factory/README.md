@@ -257,6 +257,8 @@ architecture:                   # the plan review flow, before the PM derives ta
         - { id: pm }
         # A custom id runs one agent turn on its prompt and alias:
         # - { id: assess, prompt: previous-run-assessment, alias: architect }
+    # Two flows sharing a reason rotate by iteration parity:
+    # - { when: [concerns, iteration-done, steer, relaunch], parity: odd, steps: [...] }
 pm:
   steps:
     - { id: derive }            # the built-in ladder that writes the task files
@@ -334,11 +336,15 @@ and keeps today's single-architect flow.
 
 The `architecture` flow completes before the PM derives tasks. `flows` holds
 one step list per launch reason (`initial`, `concerns`, `iteration-done`,
-`steer`, `relaunch`); a reason no list names runs the `initial` flow. The
-built-in ids `architect`, `planreview` and `pm` run the kernel's own stages
-and take no prompt, alias or repair fields; any other id runs one agent turn and
-must name a `prompt` and `alias`, so an assessment before the architect or
-another reviewer after it is a config edit.
+`steer`, `relaunch`); a reason no list names runs the `initial` flow. A flow
+may also name `parity: even` or `parity: odd`: among the flows naming the same
+reason, the one whose parity matches the iteration wins, and a flow without a
+parity runs on either. That is how two consult flows rotate from iteration to
+iteration. The built-in ids `architect`, `planreview` and `pm` run the
+kernel's own stages and take no prompt, alias or repair fields; any other id
+runs one agent turn and must name a `prompt` and `alias`, so an assessment or
+an adversarial reviewer before the architect, or another reviewer after it, is
+a config edit.
 Each alias in `reviewers` gets one fresh read-only review turn that delivers
 `planReview` findings (`technical`, `planNotes`) and no verdict. With `architectReturn:
 on-technical-concerns`, technical findings get one `planReturn` architect turn

@@ -162,6 +162,10 @@ epicConsults:
 planReviewMarks:
   - finding: 1
     mark: helpful
+statusReviewAnswers:
+  - finding: 1
+    adjudication: upheld
+    answer: the task merged in iteration 2; record 00042 carries the review verdict
 \`\`\`
 
 The other decision is also valid:
@@ -189,6 +193,10 @@ epicConsults:
 planReviewMarks:
   - finding: 1
     mark: helpful
+statusReviewAnswers:
+  - finding: 1
+    adjudication: upheld
+    answer: the task merged in iteration 2; record 00042 carries the review verdict
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -202,6 +210,13 @@ planReviewMarks:
 ## Plan review marks
 
 In \`## Plan review\`, mark every numbered finding in your outcome \`planReviewMarks\`. One \`{finding, mark}\` entry per numbered finding: \`helpful\` or \`unhelpful\`. \`helpful\` means it changed or clarified the plan or caught a real issue; \`unhelpful\` means it was wrong, stale or noise. Findings are advisory: you decide; the mark records whether the finding helped, not whether you obeyed it.
+## Status review
+
+When the pack carries a \`## Status review\` section, read the review it names
+and adjudicate every numbered finding in \`statusReviewAnswers\`: \`upheld\` when
+it stands — correct the plan or the status you report — and \`dismissed\` with
+the evidence that refutes it. One entry per finding.
+
 - \`verdict\` is used on review steps, \`decision\` on the architect step.
 
 
@@ -2261,6 +2276,10 @@ epicConsults:
 planReviewMarks:
   - finding: 1
     mark: helpful
+statusReviewAnswers:
+  - finding: 1
+    adjudication: upheld
+    answer: the task merged in iteration 2; record 00042 carries the review verdict
 \`\`\`
 
 The other decision is also valid:
@@ -2288,6 +2307,10 @@ epicConsults:
 planReviewMarks:
   - finding: 1
     mark: helpful
+statusReviewAnswers:
+  - finding: 1
+    adjudication: upheld
+    answer: the task merged in iteration 2; record 00042 carries the review verdict
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -2301,6 +2324,13 @@ planReviewMarks:
 ## Plan review marks
 
 In \`## Plan review\`, mark every numbered finding in your outcome \`planReviewMarks\`. One \`{finding, mark}\` entry per numbered finding: \`helpful\` or \`unhelpful\`. \`helpful\` means it changed or clarified the plan or caught a real issue; \`unhelpful\` means it was wrong, stale or noise. Findings are advisory: you decide; the mark records whether the finding helped, not whether you obeyed it.
+## Status review
+
+When the pack carries a \`## Status review\` section, read the review it names
+and adjudicate every numbered finding in \`statusReviewAnswers\`: \`upheld\` when
+it stands — correct the plan or the status you report — and \`dismissed\` with
+the evidence that refutes it. One entry per finding.
+
 - \`verdict\` is used on review steps, \`decision\` on the architect step.
 
 
@@ -2869,6 +2899,10 @@ epicConsults:
 planReviewMarks:
   - finding: 1
     mark: helpful
+statusReviewAnswers:
+  - finding: 1
+    adjudication: upheld
+    answer: the task merged in iteration 2; record 00042 carries the review verdict
 \`\`\`
 
 The other decision is also valid:
@@ -2896,6 +2930,10 @@ epicConsults:
 planReviewMarks:
   - finding: 1
     mark: helpful
+statusReviewAnswers:
+  - finding: 1
+    adjudication: upheld
+    answer: the task merged in iteration 2; record 00042 carries the review verdict
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -2909,6 +2947,13 @@ planReviewMarks:
 ## Plan review marks
 
 In \`## Plan review\`, mark every numbered finding in your outcome \`planReviewMarks\`. One \`{finding, mark}\` entry per numbered finding: \`helpful\` or \`unhelpful\`. \`helpful\` means it changed or clarified the plan or caught a real issue; \`unhelpful\` means it was wrong, stale or noise. Findings are advisory: you decide; the mark records whether the finding helped, not whether you obeyed it.
+## Status review
+
+When the pack carries a \`## Status review\` section, read the review it names
+and adjudicate every numbered finding in \`statusReviewAnswers\`: \`upheld\` when
+it stands — correct the plan or the status you report — and \`dismissed\` with
+the evidence that refutes it. One entry per finding.
+
 - \`verdict\` is used on review steps, \`decision\` on the architect step.
 
 
@@ -3477,6 +3522,10 @@ epicConsults:
 planReviewMarks:
   - finding: 1
     mark: helpful
+statusReviewAnswers:
+  - finding: 1
+    adjudication: upheld
+    answer: the task merged in iteration 2; record 00042 carries the review verdict
 \`\`\`
 
 The other decision is also valid:
@@ -3504,6 +3553,10 @@ epicConsults:
 planReviewMarks:
   - finding: 1
     mark: helpful
+statusReviewAnswers:
+  - finding: 1
+    adjudication: upheld
+    answer: the task merged in iteration 2; record 00042 carries the review verdict
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -3517,6 +3570,13 @@ planReviewMarks:
 ## Plan review marks
 
 In \`## Plan review\`, mark every numbered finding in your outcome \`planReviewMarks\`. One \`{finding, mark}\` entry per numbered finding: \`helpful\` or \`unhelpful\`. \`helpful\` means it changed or clarified the plan or caught a real issue; \`unhelpful\` means it was wrong, stale or noise. Findings are advisory: you decide; the mark records whether the finding helped, not whether you obeyed it.
+## Status review
+
+When the pack carries a \`## Status review\` section, read the review it names
+and adjudicate every numbered finding in \`statusReviewAnswers\`: \`upheld\` when
+it stands — correct the plan or the status you report — and \`dismissed\` with
+the evidence that refutes it. One entry per finding.
+
 - \`verdict\` is used on review steps, \`decision\` on the architect step.
 
 

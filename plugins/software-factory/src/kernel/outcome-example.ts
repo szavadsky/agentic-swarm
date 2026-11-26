@@ -27,7 +27,12 @@ const BASE_OUTCOME_FIELDS = [
  * the upscope ask.
  */
 const PROMPT_OUTCOME_FIELDS: Record<string, string[]> = {
-  architect: ["planReviewMarks", "intentStatus", "epicConsults"],
+  architect: [
+    "planReviewMarks",
+    "intentStatus",
+    "epicConsults",
+    "statusReviewAnswers",
+  ],
   "architect-review-return": ["planReviewMarks"],
   implementer: ["replies"],
   "pack-preparer": ["packBriefs"],
@@ -48,6 +53,8 @@ const SAMPLE_TEXT: Readonly<Record<string, string>> = {
   "steerAnswers[].steer": "s1",
   "steerAnswers[].answer": "the API stays stable",
   "replies[].reply": "fixed in the code; the test covers it",
+  "statusReviewAnswers[].answer":
+    "the task merged in iteration 2; record 00042 carries the review verdict",
   "packBriefs[].summary": "the checker's follow-ups all landed; no plan change",
   "steerRoutes[].steer": "s1",
   "steerRoutes[].answer": "the API stays stable",

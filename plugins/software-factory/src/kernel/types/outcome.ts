@@ -180,6 +180,20 @@ export const planReviewMarkSchema = z.object({
 });
 export type PlanReviewMark = z.infer<typeof planReviewMarkSchema>;
 
+/**
+ * One architect adjudication of an adversarial status-review finding: the
+ * finding's 1-based number, whether it stands, and the evidence that decides it.
+ */
+const statusReviewAnswerSchema = z.object({
+  finding: z.number().int().positive(),
+  adjudication: z
+    .enum(["upheld", "dismissed"])
+    .describe(
+      "upheld: the claim was wrong; dismissed: the evidence refutes it",
+    ),
+  answer: z.string().min(1),
+});
+
 /** One plan-review finding: the plan line it concerns and what would satisfy it. */
 export const planReviewFindingSchema = z.object({
   planLine: z.string().min(1).describe("the plan line or bullet it concerns"),
@@ -319,6 +333,12 @@ export const outcomeSchema = z.object({
     .array(planReviewMarkSchema)
     .optional()
     .describe("architect step only: one mark per plan-review finding"),
+  statusReviewAnswers: z
+    .array(statusReviewAnswerSchema)
+    .optional()
+    .describe(
+      "architect step only: one adjudication per adversarial status-review finding",
+    ),
 });
 
 export type Concern = z.infer<typeof concernSchema>;

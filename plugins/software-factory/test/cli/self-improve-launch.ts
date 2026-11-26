@@ -10,9 +10,10 @@ import type { TmpRepo } from "../helpers/tmp-repo.js";
 import { scriptKernelRoleFallbacks } from "../kernel/fake-defaults.js";
 import { whenTurn } from "../kernel/s2-helpers.js";
 
-/** Which iterations' architect saw an assessment pointer in its pack. */
-export interface AssessmentVisibility {
+/** What the fake architect saw in its pack on each iteration. */
+export interface LaunchVisibility {
   assessmentInPack: Map<number, boolean>;
+  statusReviewInPack: Map<number, boolean>;
 }
 
 const PLAN = `# Milestone 1 — alpha
@@ -39,6 +40,37 @@ Done when: alpha.txt exists.
 
 function outcome(value: Record<string, unknown> = {}) {
   return { status: "done", summary: "ok", concerns: [], forward: [], ...value };
+}
+
+/** A status review with two numbered findings, as its prompt asks for. */
+const STATUS_REVIEW = `# Status review
+
+## Checked
+
+- the goal decision: \`records/\`
+
+## Findings
+
+1. the decision claims open work the records do not hold — \`records/\`
+2. an intent status claims a merge no record carries — \`records/\`
+
+## Held
+
+none
+`;
+
+/** The numbered findings a status review lists. */
+function numberedFindings(review: string): number[] {
+  return review
+    .split("\n")
+    .map((line) => /^(\d+)\.\s/.exec(line)?.[1])
+    .filter((value): value is string => value !== undefined)
+    .map(Number);
+}
+
+/** The review file a pack's status-review section names, when it carries one. */
+function statusReviewOf(pack: string): string | undefined {
+  return /^- status review: (.+?)(?: — |$)/m.exec(pack)?.[1]?.trim();
 }
 
 export function writeLaunchRepo(repo: TmpRepo): void {
@@ -143,24 +175,68 @@ function assessTurn(): FakeTurnHandler {
   };
 }
 
-/** The architect reads the pack it was handed; the test checks what it saw. */
+/**
+ * The status review turn does what its prompt asks: it reads the pack it is
+ * handed, writes numbered findings beside it and points the pack at them.
+ */
+function statusReviewTurn(): FakeTurnHandler {
+  return (req, ctx) => {
+    if (!req.prompt.includes("adversarial status reviewer")) {
+      throw new Error(
+        "statusreview turn did not receive the status-review prompt",
+      );
+    }
+    const named = /^- Context pack: `([^`]+)`/m.exec(req.prompt);
+    if (!named) throw new Error("status review prompt names no context pack");
+    const pack = named[1]!;
+    if (!fs.existsSync(pack)) {
+      throw new Error(`status review prompt names a missing pack: ${pack}`);
+    }
+    const review = path.join(path.dirname(pack), "status-review.md");
+    fs.writeFileSync(review, STATUS_REVIEW);
+    fs.appendFileSync(
+      pack,
+      `\n## Status review\n\n- status review: ${review} — two claims do not hold\n`,
+    );
+    ctx.writeOutcome(outcome({ summary: "reviewed the status" }));
+    return fakeTurnResult(req);
+  };
+}
+
+/** The architect reads the pack it was handed and adjudicates a review it holds. */
 function architectTurn(
   goalDir: string,
-  seen: { assessmentInPack: Map<number, boolean> },
+  seen: LaunchVisibility,
 ): FakeTurnHandler {
   return (req, ctx) => {
     const iteration = iterationOf(req);
     const pack = packFile(goalDir, iteration);
+    const packText = fs.existsSync(pack) ? fs.readFileSync(pack, "utf8") : "";
     seen.assessmentInPack.set(
       iteration,
-      fs.existsSync(pack) &&
-        fs.readFileSync(pack, "utf8").includes("## Previous-run assessment"),
+      packText.includes("## Previous-run assessment"),
     );
-    fs.writeFileSync(path.join(goalDir, "plan.md"), PLAN);
+    const review = statusReviewOf(packText);
+    seen.statusReviewInPack.set(iteration, review !== undefined);
+    const answers =
+      review === undefined
+        ? []
+        : numberedFindings(fs.readFileSync(review, "utf8")).map((finding) => ({
+            finding,
+            adjudication: finding % 2 === 0 ? "dismissed" : "upheld",
+            answer: `finding ${finding} checked against the records`,
+          }));
+    // Each iteration edits the plan: a continue with a byte-identical plan is
+    // the delivery failure the kernel repairs, not a successful turn.
+    fs.writeFileSync(
+      path.join(goalDir, "plan.md"),
+      `${PLAN}\n<!-- iteration ${iteration} -->\n`,
+    );
     ctx.writeOutcome(
       outcome({
         summary: `planned iteration ${iteration}`,
         decision: "continue",
+        ...(answers.length > 0 ? { statusReviewAnswers: answers } : {}),
       }),
     );
     return fakeTurnResult(req);
@@ -200,11 +276,14 @@ function reviewTurn(): FakeTurnHandler {
 export function launchHarness(
   goalDir: string,
   taskDir: string,
-  seen: { assessmentInPack: Map<number, boolean> },
+  seen: LaunchVisibility,
 ): FakeHarness {
   const harness = new FakeHarness({ id: "fake" });
   harness.script(frontTurn(goalDir), { when: whenTurn({ step: "front" }) });
   harness.script(assessTurn(), { when: whenTurn({ step: "assess" }) });
+  harness.script(statusReviewTurn(), {
+    when: whenTurn({ step: "statusreview" }),
+  });
   harness.script(architectTurn(goalDir, seen), {
     when: whenTurn({ step: "architect" }),
   });

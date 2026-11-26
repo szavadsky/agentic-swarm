@@ -6,6 +6,13 @@
 
 In `## Plan review`, mark every numbered finding in your outcome `planReviewMarks`. {% include 'plan-review-marks' -%}
 
+## Status review
+
+When the pack carries a `## Status review` section, read the review it names
+and adjudicate every numbered finding in `statusReviewAnswers`: `upheld` when
+it stands — correct the plan or the status you report — and `dismissed` with
+the evidence that refutes it. One entry per finding.
+
 {% include 'verdict' %}
 
 ## This turn

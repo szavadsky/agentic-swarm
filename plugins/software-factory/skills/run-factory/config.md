@@ -100,8 +100,16 @@ architecture:                    # plan review, before the PM derives tasks
   reviewers: [plan-reviewer]
   architectReturn: on-technical-concerns
   planReturn: { prompt: architect-review-return, deliverable: "plan edit and marks" }
+  flows:                         # the consult's steps, selected by launch reason
+    - { when: [initial], steps: [{ id: architect }, { id: planreview }, { id: pm }] }
+    - { when: [concerns, iteration-done, steer, relaunch], parity: even, steps: [...] }
+    - { when: [concerns, iteration-done, steer, relaunch], parity: odd, steps: [...] }
 ```
 
+- An `architecture.flows` entry may name `parity: even` or `parity: odd`; among
+  the entries naming the same launch reason, the parity-matching one wins, so
+  two consult flows alternate by iteration. An entry without a parity runs on
+  either iteration.
 - A flow step names the prompt it renders and the run-config alias it runs on.
   `alternates: [alias…]` changes the model after a failure-kind launch;
   `followUp` chooses `same-session` (default), `de-novo` or `different-model`.
