@@ -7,6 +7,7 @@ Commands:
   init                     Create the repo config, goal directory and intent
   run                      Run bounded iterations of one goal
   status                   Show derived state, parked causes and the last summary
+  records                  Query the goal's records by step, role, cause or iteration
   steer                    Drop a steering file into the goal inbox
   validate                 Validate one schema-enforced file with the gate's validators
   schemas                  Write every kernel schema as JSON Schema
@@ -50,6 +51,16 @@ factory status --repo <path> --goal <name> [--json]
 Prints the state derived from task files and records, every parked cause, and
 the path of the last iteration summary. --json prints status.json, the
 kernel's machine-readable snapshot written after each agent launch and finish.
+`;
+
+const RECORDS_USAGE = `
+factory records --repo <path> --goal <name> [--step <id>] [--role <role>]
+                [--cause <kind>] [--iteration <n>] [--json]
+
+Prints the goal's append-only step records in append order, including a turn
+that started but has not ended. --step filters by step id, --role by the prompt
+the step ran as, --cause by the typed cause kind and --iteration by iteration.
+Output is YAML; --json prints a JSON array. Exit: 0 printed, 1 error.
 `;
 
 const STEER_USAGE = `
@@ -99,8 +110,9 @@ const SCHEMAS_USAGE = `
 factory schemas --out <dir>
 
 Writes every kernel file schema as JSON Schema, one <name>.schema.json per
-artifact: task, outcome, hold, class, repo, run, process and gate. Creates the
-directory. Editors and the artifact LSP consume these files. Exit: 0 written,
+artifact: task, outcome, qa, hold, class, infra, repo, run, process, gate and
+record. Creates the directory. Editors and the artifact LSP consume these
+files; the record schema is the shape factory records prints. Exit: 0 written,
 1 error.
 `;
 
@@ -108,6 +120,7 @@ export function usageFor(command: string | undefined): string {
   if (command === "init") return INIT_USAGE;
   if (command === "run") return RUN_USAGE;
   if (command === "status") return STATUS_USAGE;
+  if (command === "records") return RECORDS_USAGE;
   if (command === "steer") return STEER_USAGE;
   if (command === "validate") return VALIDATE_USAGE;
   if (command === "schemas") return SCHEMAS_USAGE;

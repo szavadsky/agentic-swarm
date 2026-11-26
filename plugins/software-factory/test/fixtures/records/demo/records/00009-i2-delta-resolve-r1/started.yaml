@@ -1,0 +1,9 @@
+iteration: 2
+slug: delta
+step: resolve
+round: 1
+actor: agent
+architect: main
+alias: steward
+seq: 9
+startedAt: 2026-01-02T04:12:00.000Z

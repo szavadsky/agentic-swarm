@@ -1,4 +1,4 @@
-/** The CLI's goal, steer and validate commands; the implementation is split by concern under `commands/`. */
+/** The CLI's goal, records, steer and validate commands; the implementation is split by concern under `commands/`. */
 
 export {
   initGoal,
@@ -6,4 +6,5 @@ export {
   statusGoal,
   steerGoal,
 } from "./commands/goal.js";
+export { queryRecords } from "./commands/records.js";
 export { validateFile } from "./commands/validate.js";

@@ -11,6 +11,7 @@ import { infraSchema } from "./infra.js";
 import { holdFileSchema } from "./mailbox.js";
 import { pinGateSchema } from "./preflight/pin.js";
 import { qaOutcomeSchema } from "./qa.js";
+import { stepRecordSchema } from "./record-schema.js";
 import { taskFrontmatterSchema } from "./tasks.js";
 import { outcomeSchema } from "./types.js";
 
@@ -80,10 +81,9 @@ function runLayerSchema(): JsonNode {
 }
 
 /**
- * Every file shape the kernel validates, by the artifact name the file
- * carries. The same set the schema-validation gate enforces, except `run`:
- * the gate validates a config's merged layer while an authored file is one
- * link of an `extends` chain.
+ * Every file shape the kernel owns, by the artifact name the file carries.
+ * The schema-validation gate enforces the authored subset: `run` is an
+ * unresolved layer while `record` is kernel-written history.
  * `gate` is the pin's own record, outside any repo, so it is validated only
  * when a launch reads it.
  */
@@ -98,6 +98,7 @@ const kernelSchemas = {
   repo: () => inputSchema(repoConfigSchema),
   run: runLayerSchema,
   process: () => inputSchema(processOverrideSchema),
+  record: () => inputSchema(stepRecordSchema),
 } satisfies Record<string, () => JsonNode>;
 
 /**

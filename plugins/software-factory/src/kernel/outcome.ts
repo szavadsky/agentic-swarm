@@ -11,6 +11,7 @@ import {
   type Outcome,
   outcomeSchema,
 } from "./types.js";
+import { migrateStallRoutes } from "./types/outcome.js";
 import {
   type ExpectationOptions,
   KERNEL_TURN_STEPS,
@@ -33,28 +34,6 @@ function zodFindings(error: unknown): string[] {
   ).issues;
   if (!issues) return [(error as Error).message];
   return issues.map((issue) => issueText(issue, "outcome"));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * A recorded outcome from before the park decision vocabulary spells the
- * acted-on park `continue`. It wrote one continuation task, which the current
- * vocabulary calls a replace, so the retired spelling reads as one: recorded
- * outcomes stay valid under the current schema, and no live prompt offers it.
- */
-function migrateStallRoutes(raw: unknown): unknown {
-  if (!isRecord(raw) || !Array.isArray(raw.stallRoutes)) return raw;
-  return {
-    ...raw,
-    stallRoutes: raw.stallRoutes.map((route) =>
-      isRecord(route) && route.action === "continue"
-        ? { ...route, action: "replace" }
-        : route,
-    ),
-  };
 }
 
 /** Parses one YAML/JSON outcome body; zod is the only validator. */

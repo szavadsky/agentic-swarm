@@ -1,0 +1,9 @@
+iteration: 2
+slug: beta
+step: qa
+round: 1
+actor: agent
+architect: main
+alias: qa
+seq: 6
+startedAt: 2026-01-02T04:08:30.000Z

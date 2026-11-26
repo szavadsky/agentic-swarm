@@ -1,0 +1,9 @@
+iteration: 1
+slug: alpha
+step: review
+round: 1
+actor: agent
+architect: main
+alias: reviewer
+seq: 3
+startedAt: 2026-01-02T03:16:30.000Z

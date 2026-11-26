@@ -97,6 +97,23 @@ function expectKernelSchemaContent(out: string) {
   expect(gate.required).toEqual(["rev", "typecheck", "tests", "at"]);
   expect(gate.properties?.typecheck?.enum).toEqual(["pass", "fail"]);
   expect(gate.additionalProperties).toBe(false);
+
+  const record = JSON.parse(
+    fs.readFileSync(path.join(out, "record.schema.json"), "utf8"),
+  ) as JsonSchema;
+  expect(record.required).toEqual(
+    expect.arrayContaining([
+      "seq",
+      "iteration",
+      "step",
+      "round",
+      "actor",
+      "startedAt",
+    ]),
+  );
+  expect(record.properties?.cause).toBeDefined();
+  expect(record.properties?.outcome).toBeDefined();
+  expect(record.additionalProperties).toBe(false);
 }
 
 function factorySchemasPart1() {

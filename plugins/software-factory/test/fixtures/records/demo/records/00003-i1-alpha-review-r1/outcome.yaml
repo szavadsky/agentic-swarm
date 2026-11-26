@@ -1,0 +1,8 @@
+status: done
+summary: approved with one recorded debt
+concerns:
+  - kind: debt
+    calibration: fyi
+    text: the review path has no negative fixture
+    evidence: test/fixtures/records/demo
+    id: record-3#1

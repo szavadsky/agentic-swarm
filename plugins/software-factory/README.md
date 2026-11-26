@@ -31,6 +31,8 @@ bun bin/factory.ts init   --repo <path> --goal <name> [--intent <file>]
 bun bin/factory.ts run    --repo <path> --goal <name> --run-config <file> [--iterations N]
                           [--pin-gate-override <reason>]
 bun bin/factory.ts status --repo <path> --goal <name> [--json]
+bun bin/factory.ts records --repo <path> --goal <name> [--step <id>] [--role <role>]
+                          [--cause <kind>] [--iteration <n>] [--json]
 bun bin/factory.ts steer  --repo <path> --goal <name> <file | ->
 bun bin/factory.ts validate [--step <id>] [--run-config <file>] [<file>]
 bun bin/factory.ts schemas --out <dir>
@@ -48,7 +50,9 @@ derived state and parked causes; `--json` prints `status.json`, the snapshot
 the kernel rewrites after each agent launch and finish, together with the
 static `dashboard.html` rendered beside it and the page's vendored `vendor/`
 assets;
-`steer` drops a file into the inbox atomically. `validate` checks one
+`records` queries the append-only step records by step, role, cause kind and
+iteration, printing YAML or, with `--json`, a JSON array. `steer` drops a file
+into the inbox atomically. `validate` checks one
 schema-enforced file with the gate's validators (tasks/*.md with its
 directory's dependency graph and flow existence against the merged process
 config, class.yaml, outcome.yaml keyed by the step in the sibling
@@ -57,8 +61,8 @@ process.yaml, infra.yaml) and, for a repo, process or run file, the non-model
 pre-flight checks without launching a harness or probing a model; exit 0 valid,
 1 invalid or unknown kind. `schemas`
 writes every kernel file schema as JSON Schema (`task`, `outcome`, `qa`, `hold`,
-`class`, `infra`, `repo`, `run`, `process`, `gate`) into `--out` for editors and
-the artifact LSP. `variables`
+`class`, `infra`, `repo`, `run`, `process`, `gate`, `record`) into `--out` for
+editors and the artifact LSP. `variables`
 renders `prompts/VARIABLES.md` from the typed prompt-variable descriptor; the
 prompt tests fail when the committed file differs from that render.
 
