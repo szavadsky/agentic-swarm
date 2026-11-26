@@ -12,7 +12,7 @@ What differs from [INTENT.md](INTENT.md) on `main` after goal `delta` landed (75
 
 ### Actors and goal start
 
-- **[[InfraAgent]]** — *partial*. Ingestion only: `prompts/infra.md` writes `infra.yaml` (`src/kernel/ingestion.ts:261-273`). On an infra failure no agent runs: dispatch returns `infra` and the launch stops (`src/kernel/dispatch-end.ts:71,110,316`, `launch-goal.ts:58-65`); nothing fixes config or prescribes retry / ignore / fall back / stop task types / escalate. *[run]* 11 of 14 parks were tests-gate timeouts that only a config change (timeout or semaphore) would have prevented.
+- **[[InfraAgent]]** — *partial*. Ingestion only: `prompts/infra.md` writes `infra.yaml` (`src/kernel/ingestion.ts:261-273`). On an infra failure no agent runs: dispatch returns `infra` and the launch stops (`src/kernel/dispatch-end.ts:71,110,316`, `launch-goal.ts:58-65`); nothing decides infra vs really red, fixes config, or prescribes retry / ignore / fall back / stop task types / escalate in structured output. *[run]* 11 of 14 parks were tests-gate timeouts that only a config change (timeout or semaphore) would have prevented.
 - **[[GoalBranchAndSteward]]** — *differs*. The goal branch is cut from `repo.baseBranch`, set once at `goal init`, not from the repo's current branch at goal start (`src/cli/commands/goal.ts:47-56`, `src/kernel/worktree/checkout.ts:57-63,208`).
 - **[[StandaloneTaskUpscope]]** — *partial*. The last reviewer gets "the front's predicted area above" (`src/kernel/flow-context-front.ts:84-96`), but its prompt carries neither that area nor the trivial/task/bigger definitions, which live only in `prompts/front.md:9-15` (`prompts/review-implementer-turn.md:6`). A flow that ends without a reviewer is never asked.
 
