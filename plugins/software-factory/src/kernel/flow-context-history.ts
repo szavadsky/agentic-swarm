@@ -3,6 +3,8 @@
  * acceptance, checks and merge-checks, the task's base commits, and the red
  * gate request count. Pure reads over the record list.
  */
+import { recordedConcernId } from "../core/concerns.js";
+import { indexDismissals, isConcernDismissed } from "./concern-dismissal.js";
 import { DECIDE_STEP } from "./pending-signal.js";
 import { formatFixDispositions } from "./record.js";
 import { isVerdictStep } from "./review.js";
@@ -81,6 +83,47 @@ export function fixDispositions(
   const fix = lastProductiveTurn(records, slug, flow);
   if (!fix || fix.round !== round || !fix.outcome) return "";
   return formatFixDispositions(fix.outcome);
+}
+
+/**
+ * Non-dismissed concerns raised by the task's author (implementer) and QA
+ * turns, deduplicated by concern fingerprint so each reaches the reviewer.
+ */
+export function authorConcerns(
+  records: readonly StepRecord[],
+  slug: string,
+  flow: FlowDefinition,
+): string {
+  const authorStepIds = new Set(
+    flow.steps
+      .filter(
+        (s) => !s.review && s.adjudicate === undefined && s.id !== "resolve",
+      )
+      .map((s) => s.id),
+  );
+  const authorRecords = records
+    .filter(
+      (r) =>
+        r.slug === slug &&
+        r.actor === "agent" &&
+        r.outcome &&
+        authorStepIds.has(r.step),
+    )
+    .sort(bySeq);
+  const dismissals = indexDismissals(records);
+  const byId = new Map<string, string>();
+  for (const rec of authorRecords) {
+    for (const concern of rec.outcome?.concerns ?? []) {
+      if (isConcernDismissed(dismissals, rec, concern)) continue;
+      byId.set(
+        recordedConcernId(concern),
+        `- [${concern.kind}/${concern.calibration}] ${concern.text}${
+          concern.evidence ? ` (${concern.evidence})` : ""
+        } — ${rec.step} r${rec.round}`,
+      );
+    }
+  }
+  return [...byId.values()].join("\n");
 }
 
 /** The latest decide turn's outcome, the findings a `changes` decision hands on. */

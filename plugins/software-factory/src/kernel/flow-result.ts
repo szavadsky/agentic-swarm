@@ -268,9 +268,14 @@ async function reviewStepOutcome(
   } else if (
     lastCall &&
     outcome?.verdict === "approve" &&
-    outcome.concerns.length > 0
+    outcome.concerns.some((c) => c.dismiss !== "immaterial")
   ) {
-    await appendDebt(runtime.store, meta, outcome.concerns, outcome.summary);
+    await appendDebt(
+      runtime.store,
+      meta,
+      outcome.concerns.filter((c) => c.dismiss !== "immaterial"),
+      outcome.summary,
+    );
   }
   // No `else`: a done review always carries a verdict — outcome repair fails
   // the turn otherwise — so a missing verdict never reaches settle.
@@ -287,11 +292,14 @@ async function adjudicateStepOutcome(
       meta,
       makeCause("review-rejected", outcome.summary),
     );
-  } else if (outcome?.verdict === "approve" && outcome.concerns.length > 0) {
+  } else if (
+    outcome?.verdict === "approve" &&
+    outcome.concerns.some((c) => c.dismiss !== "immaterial")
+  ) {
     await appendDebt(
       runtime.store,
       meta,
-      outcome.concerns,
+      outcome.concerns.filter((c) => c.dismiss !== "immaterial"),
       outcome.summary,
       "adjudicated review concerns recorded as debt",
     );

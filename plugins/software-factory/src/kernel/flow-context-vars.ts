@@ -12,6 +12,7 @@ import {
 } from "./baseline.js";
 import { frontPack, standaloneUpscopeAsk } from "./flow-context-front.js";
 import {
+  authorConcerns,
   bySeq,
   countRedGateRequests,
   fixDispositions,
@@ -219,6 +220,7 @@ export function promptVars(
       state,
     ),
     prior_findings: priorFindings(qaStep, acceptance, review),
+    prior_concerns: qaStep ? "" : authorConcerns(records, task.slug, flow),
     fix_dispositions: fixDispositions(records, task.slug, flow, round, state),
     front_pack: frontPack(runtime, task, records) ?? "",
     // The standalone escalation ask for the reviewer; empty when this task is

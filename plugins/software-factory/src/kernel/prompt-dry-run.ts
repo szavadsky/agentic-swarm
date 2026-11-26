@@ -254,6 +254,7 @@ function taskVars(
     round: "1",
     max_rounds: "3",
     prior_findings: "",
+    prior_concerns: "",
     upscope_ask: "",
   };
 }

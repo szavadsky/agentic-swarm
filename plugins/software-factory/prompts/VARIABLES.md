@@ -253,6 +253,7 @@ The ship-or-park decision, included by `review-implementer.md` on the last call.
 - `max_rounds` — this review step's total review calls: its change-request bound plus the last call
 - `base_gates` — the base tree's recorded gate result, and the only evidence a red gate predates the task: commit plus `green`, the pre-existing failing checks, or `not recorded`; a claimed pre-existing failure is a finding unless this record lists it
 - `prior_findings` — previous round's numbered summary and concerns, plus any legacy forward lines (summary first); empty string in round 1
+- `prior_concerns` — undismissed concerns raised by implementer and QA turns on this task; empty string when none
 - `upscope_ask` — escalation ask for a standalone task review, answered as `upscope: yes|no` with the verdict; empty string when this task is part of an architect plan
 - `fix_dispositions` — the current fix round's summary plus one numbered reply per prior finding; round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; renderer default
 

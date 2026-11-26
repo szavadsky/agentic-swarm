@@ -2,6 +2,7 @@
 
 import type { ConcernKind } from "../../core/concern-types.js";
 import { concernFingerprint, recordedConcernId } from "../../core/concerns.js";
+import { indexDismissals, isConcernDismissed } from "../concern-dismissal.js";
 import type { StepRecord } from "../types.js";
 import type { ConcernScope, ForwardedConcern } from "./types.js";
 import { epicByTask, visibleToAudience } from "./debt.js";
@@ -97,12 +98,16 @@ function mergedAt(records: readonly StepRecord[]): Map<string, number> {
   return merged;
 }
 
-/** When each concern was last raised; FYI entries never travel. */
-function raisedAt(records: readonly StepRecord[]): Map<string, number> {
+/** When each non-dismissed concern was last raised; FYI entries never travel. */
+function raisedAt(
+  records: readonly StepRecord[],
+  dismissals: ReturnType<typeof indexDismissals>,
+): Map<string, number> {
   const raised = new Map<string, number>();
   for (const rec of records) {
     for (const concern of rec.outcome?.concerns ?? []) {
       if (concern.calibration === "fyi") continue;
+      if (isConcernDismissed(dismissals, rec, concern)) continue;
       raised.set(recordedConcernId(concern), rec.seq);
     }
   }
@@ -138,8 +143,11 @@ function answeredAt(
  * The concerns a checker answered: raised before the answer, never after it,
  * so a later raise of the same id is open again.
  */
-function resolvedConcernIds(records: readonly StepRecord[]): Set<string> {
-  const raised = raisedAt(records);
+function resolvedConcernIds(
+  records: readonly StepRecord[],
+  dismissals: ReturnType<typeof indexDismissals>,
+): Set<string> {
+  const raised = raisedAt(records, dismissals);
   const answered = answeredAt(records, mergedAt(records));
   return new Set(
     [...answered.entries()]
@@ -197,11 +205,12 @@ export function forwardedConcerns(
   scope: ConcernScope = {},
 ): ForwardedConcern[] {
   const visible = audienceFilter(scope);
-  const resolved = resolvedConcernIds(records);
+  const dismissals = indexDismissals(records);
+  const resolved = resolvedConcernIds(records, dismissals);
   const byFingerprint = new Map<string, ForwardedConcern>();
   for (const rec of records) {
     if (!rec.outcome || !visible(rec)) continue;
-    for (const concern of recordConcerns(rec)) {
+    for (const concern of recordConcerns(rec, dismissals)) {
       if (!resolved.has(concern.id)) addForwarded(byFingerprint, concern);
     }
   }
@@ -210,15 +219,22 @@ export function forwardedConcerns(
 
 /**
  * One record's concerns and forward lines as they travel: non-FYI, non-debt
- * concerns keep their kind, a forwarded remark travels as its own `forward`
- * entry. The debt register, not this section, lists debt-kind concerns.
+ * non-dismissed concerns keep their kind, a forwarded remark travels as its
+ * own `forward` entry. The debt register, not this section, lists debt-kind
+ * concerns.
  */
-function recordConcerns(rec: StepRecord): ForwardedConcern[] {
+function recordConcerns(
+  rec: StepRecord,
+  dismissals: ReturnType<typeof indexDismissals>,
+): ForwardedConcern[] {
   if (!rec.outcome) return [];
   const source = `${rec.slug ?? rec.architect ?? "goal"} ${rec.step} r${rec.round}`;
   const concerns = rec.outcome.concerns
     .filter(
-      (concern) => concern.calibration !== "fyi" && concern.kind !== "debt",
+      (concern) =>
+        concern.calibration !== "fyi" &&
+        concern.kind !== "debt" &&
+        !isConcernDismissed(dismissals, rec, concern),
     )
     .map((concern) => ({
       id: recordedConcernId(concern),

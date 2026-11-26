@@ -7,6 +7,12 @@ export const concernSchema = z.object({
   calibration: z.enum(["fyi", "architect", "owner"]),
   text: z.string().min(1),
   evidence: z.string().optional(),
+  dismiss: z
+    .enum(["immaterial"])
+    .optional()
+    .describe(
+      "review steps only: dismiss an author or QA concern as immaterial",
+    ),
 });
 
 /** One ingested concern's kernel-assigned id: `<recordId>#<n>`, 1-based in the record's outcome. */

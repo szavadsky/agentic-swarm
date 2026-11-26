@@ -274,15 +274,17 @@ export function formatFixDispositions(outcome: Outcome): string {
   return lines.join("\n");
 }
 
-/** Review findings for prompts: summary first, then concerns and forward lines. */
+/** Review findings for prompts: summary first, then non-dismissed concerns and forward lines. */
 export function formatReviewFindings(outcome: Outcome): string {
   const lines: string[] = [];
   const summary = outcome.summary.trim();
   if (summary) lines.push(summary);
-  for (const c of outcome.concerns)
+  for (const c of outcome.concerns) {
+    if (c.dismiss === "immaterial") continue;
     lines.push(
       `- [${c.kind}/${c.calibration}] ${c.text}${c.evidence ? ` (${c.evidence})` : ""}`,
     );
+  }
   lines.push(...outcome.forward.map((f) => `- forward: ${f}`));
   return lines.join("\n");
 }

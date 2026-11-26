@@ -1091,6 +1091,7 @@ concerns:
     calibration: fyi
     text: the retry path has no test without a live harness
     evidence: test/prompts.test.ts
+    dismiss: immaterial
 debtClosed: []
 steerAnswers:
   - steer: s1
@@ -1109,6 +1110,7 @@ concerns:
     calibration: fyi
     text: the retry path has no test without a live harness
     evidence: test/prompts.test.ts
+    dismiss: immaterial
 debtClosed: []
 steerAnswers:
   - steer: s1
@@ -1164,6 +1166,7 @@ Forward only what the calibration calls remarkable.
 - round: \`1\` of \`3\`
 - base gates: base abc1234def: green — the base tree's recorded gate result: commit plus \`green\`, the pre-existing failing checks, or \`not recorded\`; a claimed "pre-existing" failure is a finding unless this record lists it; when it is \`not recorded\`, every such claim is a finding
 - prior findings: \`\` — empty in round 1; numbered, each answered by a change, a reply, or both
+- prior concerns: \`\` — empty when none; author and QA concerns on this task — copy each immaterial concern's \`kind\`, \`calibration\`, \`text\` (and \`evidence\` when present) into \`concerns\` with \`dismiss: immaterial\`, and leave material ones undismissed
 - standalone upscope: \`\` — empty when this task is part of an architect plan; then give no upscope field
 - fix dispositions: \`\` — round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty. Re-judge each finding against the diff or its reply; a reply is judged on its argument, not on whether the diff evidences it.
 - checks: \`pass\`

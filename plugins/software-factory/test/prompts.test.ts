@@ -214,11 +214,15 @@ function promptsOutcomeExamplesNested() {
       ["planReviewMarks", planReviewMarkSchema],
     ];
     for (const [field, schema] of nested) {
-      const example = examples.find((candidate) => field in candidate) as
-        | Record<string, unknown>
-        | undefined;
-      expect(example, `${field} has no example`).toBeDefined();
-      const text = yaml.stringify(example![field], { lineWidth: 0 });
+      const matches = examples.filter((candidate) => field in candidate);
+      expect(matches.length, `${field} has no example`).toBeGreaterThan(0);
+      const text = matches
+        .map((candidate) =>
+          yaml.stringify((candidate as Record<string, unknown>)[field], {
+            lineWidth: 0,
+          }),
+        )
+        .join("\n");
       for (const key of Object.keys(schema.shape)) {
         expect(text, `${field} is missing nested key ${key}`).toContain(key);
       }

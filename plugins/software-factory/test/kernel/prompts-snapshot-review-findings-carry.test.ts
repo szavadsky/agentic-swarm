@@ -171,6 +171,7 @@ const ROLES: Record<string, Record<string, string>> = {
     checks_tree: "3ba247e47772a8ba5874d089990419f572432df8",
     checks_log: "/goal/records/1/alpha/checks",
     prior_findings: "",
+    prior_concerns: "",
     upscope_ask: "",
     fix_dispositions: "",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",

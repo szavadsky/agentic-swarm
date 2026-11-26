@@ -307,6 +307,7 @@ export function loadPrompts(
       cleanliness_revision: "false",
       // A task with no environment notes renders none; promptVars supplies them per task.
       env_notes: "",
+      prior_concerns: "",
       fix_dispositions: "",
       outcome_schema: outcomeExampleVar(DEFAULT_PROMPT_AUTHOR, "any"),
       task_frontmatter: taskFrontmatterVar(),

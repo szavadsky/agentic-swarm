@@ -246,6 +246,18 @@ function debtFindings(outcome: Outcome, opts: ExpectationOptions): string[] {
     );
 }
 
+/** Only review steps may mark a concern `dismiss: immaterial`. */
+function dismissFindings(
+  expectation: OutcomeExpectation,
+  outcome: Outcome,
+): string[] {
+  if (expectation === "review") return [];
+  if (outcome.concerns.some((c) => c.dismiss !== undefined)) {
+    return ["concerns[].dismiss is only allowed on review steps"];
+  }
+  return [];
+}
+
 /** Per-step contract the schema alone cannot express. */
 export function validateExpectation(
   outcome: Outcome,
@@ -259,6 +271,7 @@ export function validateExpectation(
     ...verdictFindings(field, outcome, lastCall),
     ...qaFindings(field, outcome, lastCall),
     ...debtFindings(outcome, opts),
+    ...dismissFindings(expectation, outcome),
   ];
 }
 

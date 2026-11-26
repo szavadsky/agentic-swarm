@@ -9,6 +9,7 @@ import { runArchitectStage } from "./boundary-architect.js";
 import { boundaryPassPlan, infraCause } from "./boundary-context.js";
 import { boundaryResult } from "./boundary-state.js";
 import type { BoundaryResult, ConsultContext } from "./boundary-types.js";
+import { indexDismissals, isConcernDismissed } from "./concern-dismissal.js";
 import {
   reviewChangedPlans,
   runPmStage,
@@ -28,14 +29,17 @@ import type {
 } from "./types.js";
 import { DEFAULT_ARCHITECTURE_FLOWS } from "./types.js";
 
-/** Non-FYI concerns the previous iteration recorded. */
+/** Non-FYI, non-dismissed concerns the previous iteration recorded. */
 function previousConcerns(context: ConsultContext): boolean {
+  const dismissals = indexDismissals(context.records);
   return context.records.some(
     (record) =>
       record.iteration === context.iteration - 1 &&
       record.endedAt !== undefined &&
       (record.outcome?.concerns ?? []).some(
-        (concern) => concern.calibration !== "fyi",
+        (concern) =>
+          concern.calibration !== "fyi" &&
+          !isConcernDismissed(dismissals, record, concern),
       ),
   );
 }

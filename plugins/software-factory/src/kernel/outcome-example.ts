@@ -186,6 +186,11 @@ function sampleOutcome(
   if (expectation === "qa") {
     sample.qa = { verdict: "accept", findings: [] };
   }
+  if (expectation !== "review" && Array.isArray(sample.concerns)) {
+    sample.concerns = (sample.concerns as Record<string, unknown>[]).map(
+      ({ dismiss: _dismiss, ...concern }) => concern,
+    );
+  }
   return sample;
 }
 
