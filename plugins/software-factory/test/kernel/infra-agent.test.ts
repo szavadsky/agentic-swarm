@@ -116,6 +116,12 @@ async function runBiggerFront(opts: {
     classYaml: null,
     gates: opts.gates ?? [],
   });
+  // An annotated intent keeps these turns on infra, not slug triage.
+  fs.writeFileSync(
+    path.join(goalDir, "intent.md"),
+    "# Goal\n\n[[Demo]] Test goal.\n",
+    "utf8",
+  );
   const harness = new FakeHarness({ id: "fake" });
   harness.script(biggerFront(goalDir), { when: whenTurn({ step: "front" }) });
   harness.script(infraTurn(goalDir, opts.infra), {

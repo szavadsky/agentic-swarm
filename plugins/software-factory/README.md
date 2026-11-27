@@ -285,8 +285,12 @@ observed. The kernel runs those gates when none are configured and appends the
 report to the front's pack, so the architect reads a red or flaky gate before
 its turn. The shipped `scout` step runs for bigger goals and writes the code map
 the context packs carry; without a scout step the packs keep the shallow
-directory index. Adding an ingestion agent (e.g. a requirements step) is a
-config edit, and its turn is recorded like any flow step.
+directory index. A bigger goal's unannotated intent gets one intent-agent turn
+before those steps: the front notes the missing `[[Slug]]` annotations in its
+pack, and the intent agent adds them in place without changing the intent's
+wording, so the architect's per-slug `intentStatus` validates against the
+intent. Adding an ingestion agent (e.g. a requirements step) is a config edit,
+and its turn is recorded like any flow step.
 
 A step may name `repairPrompt` (the template its in-session repair ask
 renders) and `deliverable` (the product the ask and the missing-outcome finding

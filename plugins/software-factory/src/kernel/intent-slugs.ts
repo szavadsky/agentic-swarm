@@ -47,6 +47,26 @@ export function parseIntentSlugs(md: string): IntentSlug[] {
 }
 
 /**
+ * The intent's text with its annotations removed and its whitespace settled:
+ * two intents with the same prose differ only in which slugs they annotate.
+ * The slug-triage turn must leave this unchanged — it adds annotations in
+ * place, never words.
+ */
+export function intentProse(md: string): string {
+  return md
+    .split("\n")
+    .map((line) =>
+      line
+        .replace(/\[\[[^\[\]\n]*\]\]/g, "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
  * An intent status keyed by slug, against the intent's parsed set. An absent
  * or empty status carries no claim; a duplicate names one slug twice; an
  * entry with no slug (a pre-slug record) has no key to check and is a finding.

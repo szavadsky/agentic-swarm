@@ -3,10 +3,11 @@ import path from "node:path";
 import { commitAll } from "../core/git/commit.js";
 import { git } from "../core/git/exec.js";
 import { porcelainStatus } from "../core/git/status.js";
-import { runAgentTurn } from "./agent.js";
+import { type AgentTurnResult, runAgentTurn } from "./agent.js";
 import type { IntentChange } from "./context-pack.js";
 import { boundaryTarget } from "./flow-context.js";
 import { unifiedDiff } from "./intent-diff.js";
+import { intentProse, parseIntentSlugs } from "./intent-slugs.js";
 import { formatSteerTurn, type Steer } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { recordDirName } from "./store.js";
@@ -17,10 +18,17 @@ import type {
   SteerRoute,
 } from "./types.js";
 
-/** The intent agent's record step; the steer id is its record slug. */
+/** The intent agent's record step; a steer id names a carried steer's record. */
 const INTENT_STEP = "intent";
 
 const INTENT_FILE = "intent.md";
+
+/**
+ * The front's triage note: a bigger goal's intent carries no slug annotation,
+ * so the architect has no per-slug intent status to validate against it.
+ */
+const SLUG_TRIAGE_NOTE =
+  "the goal intent carries no [[Slug]] annotations; add them in place";
 
 /**
  * Phrases that make a path in the goal note the intent's source rather than a
@@ -165,7 +173,10 @@ interface IntentTurn {
   repoRel?: string;
   /** Checkout paths already dirty before the turn; never blamed on it. */
   dirtyBefore: readonly string[];
-  steer: string;
+  /** What the commit message names: the steer id, or the front's triage. */
+  label: string;
+  /** An annotation turn: the front found the intent has no slug annotation. */
+  annotate?: boolean;
 }
 
 /**
@@ -200,10 +211,29 @@ async function settleIntent(
   const commit = await commitAll(
     runtime.repo,
     runtime.paths.goalCheckout,
-    `factory: ${turn.steer} intent change`,
+    `factory: ${turn.label} intent change`,
     { paths: [turn.repoRel] },
   );
   return commit === null ? { diff } : { diff, commit };
+}
+
+/**
+ * A triage edit adds slugs in place: at least one annotation, and not a word
+ * changed. The prose comparison is the deterministic form of "no
+ * interpretation": the intent's words, headings and requirements survive.
+ */
+function annotationFindings(turn: IntentTurn, after: string): string[] {
+  if (parseIntentSlugs(after).length === 0) {
+    return [
+      `the intent ${turn.rel} still has no [[Slug]] annotation; mark each separately analyzable slice`,
+    ];
+  }
+  if (intentProse(after) !== intentProse(turn.before)) {
+    return [
+      `the intent ${turn.rel} changed beyond its slug annotations; add annotations in place and keep every word`,
+    ];
+  }
+  return [];
 }
 
 /** Findings for a delivered intent edit that is missing, unchanged or foreign. */
@@ -216,12 +246,20 @@ async function intentFindings(
   const after = readFile(turn.file);
   if (after === null)
     return [
-      `the intent file ${turn.rel} is missing; restore it and carry the steer`,
+      turn.annotate
+        ? `the intent file ${turn.rel} is missing; restore it and add the slug annotations`
+        : `the intent file ${turn.rel} is missing; restore it and carry the steer`,
     ];
   if (after === turn.before)
     return [
-      `the intent ${turn.rel} is unchanged; carry the steer's words into it`,
+      turn.annotate
+        ? `the intent ${turn.rel} is unchanged; add a [[Slug]] annotation to each separately analyzable slice`
+        : `the intent ${turn.rel} is unchanged; carry the steer's words into it`,
     ];
+  if (turn.annotate) {
+    const findings = annotationFindings(turn, after);
+    if (findings.length > 0) return findings;
+  }
   if (
     turn.repoRel !== undefined &&
     readFile(turn.notePath) !== turn.noteBefore
@@ -239,24 +277,43 @@ async function intentFindings(
     : [`the intent turn changed ${foreign.join(", ")}; edit only ${turn.rel}`];
 }
 
+/** What one intent-agent turn carries: a routed steer, or the front's triage note. */
+interface IntentTurnRequest {
+  /** The steer id; absent on a triage turn, which is neither a task nor a steer. */
+  slug?: string;
+  /** The prompt's `steer`: the formatted steer, or `none` on a triage turn. */
+  steer: string;
+  /** The front's note on a triage turn; absent when carrying a steer. */
+  triageNote?: string;
+}
+
 /**
- * Carries one routed steer into the goal's intent with the configured intent
- * agent: it preserves the owner's wording, consolidates superseded text and
- * adds no interpretation. When the goal note points at a tracked repo file as
- * the intent's source of truth, the turn edits that file and consolidates it
- * on the goal branch; the note stays untouched. A turn that delivers `done`
+ * One intent turn with the configured intent agent: it preserves the owner's
+ * wording, consolidates superseded text and adds no interpretation. When the
+ * goal note points at a tracked repo file as the intent's source of truth, the
+ * turn edits that file and consolidates it on the goal branch; the note stays
+ * untouched. A triage turn adds slug annotations in place instead of carrying
+ * a steer, and runs only on an intent with none. A turn that delivers `done`
  * must have changed the intent; the reminder asks it again, and a still-
  * unchanged outcome fails.
  */
 async function runIntentTurn(
   runtime: KernelRuntime,
   iteration: number,
-  steer: Steer,
-): Promise<void> {
+  request: IntentTurnRequest,
+): Promise<AgentTurnResult | undefined> {
+  const annotate = request.triageNote !== undefined;
   const notePath = intentPath(runtime);
-  const noteBefore = fs.readFileSync(notePath, "utf8");
+  const noteBefore = annotate
+    ? readFile(notePath)
+    : fs.readFileSync(notePath, "utf8");
+  // A goal with no intent page has nothing to annotate.
+  if (noteBefore === null) return undefined;
   const source = await intentSource(runtime, noteBefore);
   const file = source?.abs ?? notePath;
+  const before = fs.readFileSync(file, "utf8");
+  // An annotated intent needs no triage; a relaunch after the annotation is a no-op.
+  if (annotate && parseIntentSlugs(before).length > 0) return undefined;
   const dirtyBefore = (await porcelainStatus(runtime.paths.goalCheckout)).map(
     (entry) => entry.path,
   );
@@ -265,17 +322,18 @@ async function runIntentTurn(
     noteBefore,
     file,
     rel: source?.rel ?? INTENT_FILE,
-    before: fs.readFileSync(file, "utf8"),
+    before,
     ...(source ? { repoRel: source.rel } : {}),
     dirtyBefore,
-    steer: steer.id,
+    label: request.slug ?? "front triage",
+    ...(annotate ? { annotate } : {}),
   };
-  await runAgentTurn(runtime, {
+  return await runAgentTurn(runtime, {
     target: boundaryTarget(runtime, INTENT_STEP),
     cwd: runtime.paths.goalCheckout,
     meta: {
       iteration,
-      slug: steer.id,
+      ...(request.slug ? { slug: request.slug } : {}),
       step: INTENT_STEP,
       round: 1,
       // The source path is declared before the turn so a task settling beside
@@ -285,12 +343,40 @@ async function runIntentTurn(
     vars: {
       iteration: String(iteration),
       intent_path: file,
-      steer: formatSteerTurn([steer]),
+      steer: request.steer,
+      annotate: annotate ? "true" : "false",
+      triage_note: request.triageNote ?? "",
     },
     expectation: KERNEL_TURN_STEPS.intent,
     validate: (outcome) => intentFindings(runtime, turn, outcome),
     settle: async (_record, outcome) => settleIntent(runtime, turn, outcome),
   });
+}
+
+/**
+ * The front's slug triage: a bigger goal whose intent carries no `[[Slug]]`
+ * annotation gets one intent turn that adds them in place. Returns undefined
+ * when the intent is absent or already annotated; otherwise the turn's stop
+ * when it did not deliver, so the front phase reports it instead of letting
+ * the architect read an intent it cannot key a status by.
+ */
+export async function triageIntentSlugs(
+  runtime: KernelRuntime,
+  iteration: number,
+): Promise<{ cause: string; blocked: boolean } | undefined> {
+  const result = await runIntentTurn(runtime, iteration, {
+    steer: "none",
+    triageNote: SLUG_TRIAGE_NOTE,
+  });
+  if (result === undefined || result.outcome?.status === "done")
+    return undefined;
+  const outcome = result.outcome;
+  return {
+    cause: outcome
+      ? `slug triage ended ${outcome.status}: ${outcome.summary}`
+      : "slug triage produced no outcome",
+    blocked: outcome?.status === "blocked",
+  };
 }
 
 /**
@@ -313,7 +399,10 @@ export async function carryIntentSteers(
     // One attempt per steer: an attempt that delivered nothing is reported
     // to the architect, never retried blindly.
     if (latestIntentRecord(opts.records, steer.id) !== undefined) continue;
-    await runIntentTurn(runtime, opts.iteration, steer);
+    await runIntentTurn(runtime, opts.iteration, {
+      slug: steer.id,
+      steer: formatSteerTurn([steer]),
+    });
   }
 }
 

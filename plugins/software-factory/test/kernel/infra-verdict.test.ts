@@ -72,6 +72,12 @@ function writeInfraYaml(
 }
 
 function scriptBiggerFront(harness: FakeHarness, goalDir: string): void {
+  // An annotated intent keeps these turns on infra, not slug triage.
+  fs.writeFileSync(
+    path.join(goalDir, "intent.md"),
+    "# Goal\n\n[[Demo]] Test goal.\n",
+    "utf8",
+  );
   harness.script(
     (req, ctx) => {
       const pack = path.join(goalDir, contextPackRelPath(1));

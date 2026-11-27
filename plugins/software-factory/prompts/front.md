@@ -29,7 +29,7 @@ When in doubt, choose `bigger`. A class changes only by escalation.
 
 For the front's file: `type` ({{class_types}}; a class with no configured type is `bigger`), `deps: []`, `source: front`, a unique slug, no missing dependency, and a `tier` naming `default` or a configured alias. Body: the brief with a `Done when:` line.
 
-3. The context pack at the pack path, for every class: a deterministic index — paths, risks, open questions; never paste file bodies. On `trivial` or `task`, carry the area and risks the task file leaves implicit.
+3. The context pack at the pack path, for every class: a deterministic index — paths, risks, open questions; never paste file bodies. On `trivial` or `task`, carry the area and risks the task file leaves implicit. On `bigger`, when the intent carries no `[[Slug]]` annotation, note it in the pack; the intent agent adds the annotations in place and you never edit the intent.
 
 Write only `class.yaml`, the one task file, the pack and the outcome. Never change the checkout. Validate `class.yaml` and the task file before ending the turn: `{{validate_cmd}} <file>`.
 

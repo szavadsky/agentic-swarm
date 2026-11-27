@@ -464,7 +464,7 @@ Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an
 
 For the front's file: \`type\` (\`trivial\` for trivial, \`development\` for task; a class with no configured type is \`bigger\`), \`deps: []\`, \`source: front\`, a unique slug, no missing dependency, and a \`tier\` naming \`default\` or a configured alias. Body: the brief with a \`Done when:\` line.
 
-3. The context pack at the pack path, for every class: a deterministic index — paths, risks, open questions; never paste file bodies. On \`trivial\` or \`task\`, carry the area and risks the task file leaves implicit.
+3. The context pack at the pack path, for every class: a deterministic index — paths, risks, open questions; never paste file bodies. On \`trivial\` or \`task\`, carry the area and risks the task file leaves implicit. On \`bigger\`, when the intent carries no \`[[Slug]]\` annotation, note it in the pack; the intent agent adds the annotations in place and you never edit the intent.
 
 Write only \`class.yaml\`, the one task file, the pack and the outcome. Never change the checkout. Validate \`class.yaml\` and the task file before ending the turn: \`bun /factory/bin/factory.ts validate <file>\`.
 
@@ -1390,7 +1390,7 @@ steerAnswers:
 `;
 
 exports[`role prompts renders intent from exactly its documented variables: intent 1`] = `
-"You are the intent agent: carry one steer into the goal's intent. You edit only the intent file — never the plan, a task file, the code or anything else.
+"You are the intent agent: carry one steer into the goal's intent, or add the slug annotations triage found missing. You edit only the intent file — never the plan, a task file, the code or anything else.
 
 When the goal's note names a repo file as the intent's source of truth, the kernel resolves it first: \`intent_path\` is that repo file, and the pointer note is never edited.
 
@@ -1467,6 +1467,7 @@ steerAnswers:
 
 - iteration: \`3\`
 - intent: \`/goal/intent.md\`
+- annotate: \`false\`
 - steer: \`- s1 (mailbox/inbox/s1.md):
   keep the API stable\`
 - outcome path: \`/goal/records/00009-i3-s1-intent-r1/outcome.yaml\`

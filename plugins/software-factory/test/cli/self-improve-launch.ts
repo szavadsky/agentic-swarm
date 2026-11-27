@@ -77,7 +77,7 @@ export function writeLaunchRepo(repo: TmpRepo): void {
   fs.writeFileSync(path.join(repo.dir, "README.md"), "# demo\n", "utf8");
   fs.writeFileSync(
     path.join(repo.dir, "INTENT.md"),
-    "# Goal\n\nCreate alpha.txt.\n",
+    "# Goal\n\n[[Alpha]] Create alpha.txt.\n",
     "utf8",
   );
   repo.writeFile(

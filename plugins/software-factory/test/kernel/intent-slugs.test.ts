@@ -6,6 +6,7 @@ import { validateFile } from "../../src/cli/commands.js";
 import { packageRoot } from "../../src/kernel/config.js";
 import {
   architectIntentStatusFindings,
+  intentProse,
   intentStatusSlugFindings,
   parseIntentSlugs,
 } from "../../src/kernel/intent-slugs.js";
@@ -61,6 +62,18 @@ describe("parseIntentSlugs", () => {
 
   it("ignores empty annotations", () => {
     expect(parseIntentSlugs("nothing [[ ]] here [[]].")).toEqual([]);
+  });
+});
+
+describe("intentProse", () => {
+  it("ignores annotation placement and whitespace, never wording", () => {
+    expect(intentProse("# Goal\n\n- [[A]] One.\n")).toBe(
+      intentProse("# Goal\n\n- One."),
+    );
+    expect(intentProse("## Title [[ctxOnly:T]]\n\n[[A]] Text.\n")).toBe(
+      intentProse("## Title\n\nText."),
+    );
+    expect(intentProse("[[A]] One.")).not.toBe(intentProse("[[A]] Two."));
   });
 });
 

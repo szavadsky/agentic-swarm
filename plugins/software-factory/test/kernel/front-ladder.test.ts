@@ -226,6 +226,18 @@ function registerFrontLadderPart6(): void {
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
+        // The bigger goal's unannotated intent gets one triage turn before
+        // the architect; the pack itself is the front's.
+        expect(req.prompt).toContain("## Annotate");
+        fs.writeFileSync(
+          path.join(goal.goalDir, "intent.md"),
+          "# Goal\n\n[[Demo]] Build the demo.\n",
+          "utf8",
+        );
+        ctx.writeOutcome(outcome({ summary: "annotated the intent" }));
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
         expect(req.prompt).toContain(`context pack: \`${packPath}\``);
         expect(fs.readFileSync(packPath, "utf8")).toBe(frontPack);
         writePlan(goal.goalDir, "# Plan\n\n## alpha\nCreate alpha.\n");
@@ -244,7 +256,7 @@ function registerFrontLadderPart6(): void {
       expect(fs.readFileSync(packPath, "utf8")).toBe(frontPack);
       expect(architect?.packBytes).toBe(Buffer.byteLength(frontPack, "utf8"));
       expect(records.filter((r) => r.step === "pm")).toEqual([]);
-      expect(workCalls(harness)).toHaveLength(2);
+      expect(workCalls(harness)).toHaveLength(3);
     } finally {
       cleanup(goal);
     }

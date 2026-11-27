@@ -108,12 +108,14 @@ One epic's architect, below the top architect: the same bounds, turn order, plan
 
 - `iteration` — 1-based iteration number of the consult that carries the steer
 - `intent_path` — path to the goal's `intent.md`, the only file the turn may edit
-- `steer` — the pending steer as `- <id> (<relPath>):` plus its full indented text
+- `steer` — the pending steer as `- <id> (<relPath>):` plus its full indented text; `none` on a slug-triage turn
+- `annotate` — `true` on a slug-triage turn: add `[[Slug]]` annotations in place; `false` on a steer turn
+- `triage_note` — the front's note that the goal intent carries no `[[Slug]]` annotations; empty on a steer turn
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome examples from the kernel schema; renderer default
 
-The turn's record carries the unified diff of the edit; the next architect pack renders it beside the pending steer.
+The turn's record carries the unified diff of the edit; the next architect pack renders a steer's diff beside the pending steer, while a slug-triage turn's record is the annotation diff the architect's intent already carries.
 
 ## pm.md
 
