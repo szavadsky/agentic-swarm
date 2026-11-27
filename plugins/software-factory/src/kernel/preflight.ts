@@ -12,6 +12,6 @@ export {
   sandboxFindings,
   tmpHeadroom,
 } from "./preflight/checks.js";
-export { acpxOptionFindings, usedHarnesses } from "./preflight/config.js";
-export { nonModelFindings } from "./preflight/non-model.js";
+export { acpxOptionFindings } from "./preflight/config.js";
+export { launchBinaries, nonModelFindings } from "./preflight/non-model.js";
 export { preflight } from "./preflight/run.js";

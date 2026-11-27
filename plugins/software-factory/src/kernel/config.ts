@@ -9,7 +9,11 @@ export {
   processOverrideSchema,
   runConfigSchema,
 } from "./config/run-schema.js";
-export { ConfigError, configFilePaths } from "./config/load.js";
+export {
+  ConfigError,
+  configFilePaths,
+  processFilePath,
+} from "./config/load.js";
 
 export { loadConfigs, loadProcessConfig, loadRunConfig } from "./config/run.js";
 export {

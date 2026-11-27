@@ -7,7 +7,7 @@ import { acpxOptionProblems } from "../../harness/acpx/options.js";
 import { OMP_ID } from "../../harness/omp/types.js";
 import { YAML_LSP_BINARY, yamlLspBinary } from "../artifact-lsp.js";
 import { resolveBaseCommit } from "../baseline.js";
-import type { configFilePaths } from "../config.js";
+import { processFilePath, type configFilePaths } from "../config.js";
 import type { Finding } from "../findings.js";
 import { outcomeSchemaFor, outcomeSchemaNames } from "../outcome-schemas.js";
 import type { AliasContext } from "../preflight-aliases.js";
@@ -476,9 +476,7 @@ export async function configFindings(
   // A task type owns its flow and output schema. A type naming either one
   // wrongly would quarantine every task of that type or fail mid-turn, after
   // the plan spent, so pre-flight refuses the config instead.
-  const processFile = fs.existsSync(files.processOverride)
-    ? files.processOverride
-    : files.processDefault;
+  const processFile = processFilePath(files);
   findings.push(...semaphoreFindings(configs, files, processFile));
   findings.push(...taskTypeFindings(configs.process, processFile));
   // A trivial task implements in the front's session, so a follow-up declared

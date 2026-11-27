@@ -10,9 +10,8 @@ import {
   baseBranchFindings,
   resolveAliases,
   uniqueFindings,
-  usedHarnesses,
 } from "./config.js";
-import { nonModelFindings } from "./non-model.js";
+import { launchBinaries, nonModelFindings } from "./non-model.js";
 import type { PreflightInput, PreflightResult } from "./types.js";
 
 /**
@@ -26,23 +25,19 @@ export async function preflight(
   const { configs, paths, store } = input;
   const files = configs.files ?? configFilePaths(paths.repoRoot);
 
-  const used = usedHarnesses(configs.run.aliases);
   const binaries = input.binaries;
+  const registered: ReadonlySet<string> = new Set(input.harnesses.keys());
   const nonModel = await nonModelFindings({
     configs,
     files,
     // A launch builds only the harnesses it registers, so an unregistered bare
     // alias is the registration finding; it has no executable to check.
     binaries: binaries
-      ? Object.fromEntries(
-          [...used]
-            .filter((harness) => input.harnesses.has(harness))
-            .map((harness) => [harness, binaries[harness]]),
-        )
+      ? launchBinaries(configs.run.aliases, registered, binaries)
       : undefined,
     roots: paths,
     store,
-    harnesses: new Set(input.harnesses.keys()),
+    harnesses: registered,
   });
   const findings = [...nonModel.findings];
 

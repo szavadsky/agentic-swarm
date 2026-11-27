@@ -8,6 +8,7 @@ import {
   ConfigError,
   configFilePaths,
   loadConfigs,
+  processFilePath,
   resolveGoalPaths,
   resolveRoots,
 } from "../../kernel/config.js";
@@ -19,7 +20,7 @@ import {
   validateExpectation,
 } from "../../kernel/outcome.js";
 import { PLAN_CHECK_STEP } from "../../kernel/plan-check.js";
-import { nonModelFindings, usedHarnesses } from "../../kernel/preflight.js";
+import { launchBinaries, nonModelFindings } from "../../kernel/preflight.js";
 import {
   PLAN_REVIEW_STEP,
   validatePlanReviewDelivery,
@@ -322,9 +323,7 @@ function crossLayerBundle(
     return [`${abs}: ${(err as Error).message}`];
   }
   const bundleFiles = bundle.files ?? files;
-  const processFile = fs.existsSync(bundleFiles.processOverride)
-    ? bundleFiles.processOverride
-    : bundleFiles.processDefault;
+  const processFile = processFilePath(bundleFiles);
   return {
     configs: bundle,
     files: bundleFiles,
@@ -348,26 +347,6 @@ function registeredHarnesses(configs: ConfigBundle): ReadonlySet<string> {
   return ids;
 }
 
-/**
- * The executables a run config names without building a harness: a declared
- * harness entry binds one, and omp resolves through PATH. A bare alias harness
- * has no adapter `validate` can resolve, so its executable stays a launch
- * check; the map's keys scope the shared check to what the config declares.
- */
-function configuredBinaries(
-  configs: ConfigBundle,
-): Record<string, string | undefined> | undefined {
-  const declared = registeredHarnesses(configs);
-  const used = [...usedHarnesses(configs.run.aliases)].filter((harness) =>
-    declared.has(harness),
-  );
-  if (used.length === 0) return undefined;
-  const resolved = resolveHarnessBinaries(configs.run.harnesses);
-  return Object.fromEntries(
-    used.map((harness) => [harness, resolved[harness]]),
-  );
-}
-
 async function crossLayerFindings(
   abs: string,
   kind: ValidateKind,
@@ -377,11 +356,16 @@ async function crossLayerFindings(
   const bundleOrError = crossLayerBundle(abs, kind, opts);
   if (Array.isArray(bundleOrError)) return bundleOrError;
   const bundle = bundleOrError;
+  const registered = registeredHarnesses(bundle.configs);
   const nonModel = await nonModelFindings({
     configs: bundle.configs,
     files: bundle.files,
-    binaries: configuredBinaries(bundle.configs),
-    harnesses: registeredHarnesses(bundle.configs),
+    binaries: launchBinaries(
+      bundle.configs.run.aliases,
+      registered,
+      resolveHarnessBinaries(bundle.configs.run.harnesses),
+    ),
+    harnesses: registered,
     ...(bundle.roots ? { roots: bundle.roots } : {}),
   });
   return [
