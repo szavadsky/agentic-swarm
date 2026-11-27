@@ -13,6 +13,7 @@ import {
   INFRA_REDISPATCH_DELAYS_MS,
   runDispatch,
 } from "../../src/kernel/dispatch.js";
+import { DECIDE_STEP } from "../../src/kernel/pending-signal.js";
 import type { KernelRuntime } from "../../src/kernel/types.js";
 import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
 import type { TmpRepo } from "../helpers/tmp-repo.js";
@@ -22,6 +23,7 @@ import {
   goalCheckout,
   makeRuntime,
   outcome,
+  scriptDecider,
   scriptStallLeave,
   setupFlowRepo,
   whenTurn,
@@ -315,6 +317,8 @@ async function parksSecondConflictInsteadPart1(
     },
     { when: whenTurn({ step: "resolve" }) },
   );
+  // The decider reads the second conflict and parks it for the steward.
+  scriptDecider(harness, { summary: "park it", verdict: "reject" });
   // The wave-end steward is the fallback; it cannot settle this either.
   harness.script(
     (req, ctx) => {
@@ -351,8 +355,12 @@ async function parksSecondConflictInsteadPart2(
     runtime.configs.process.flows,
   );
   expect(state.tasks.task!.status).toBe("parked");
-  expect(state.tasks.task!.cause?.kind === "conflict").toBe(true);
-  // One resolve turn: the second conflict at the re-merge is the park.
+  expect(state.tasks.task!.cause?.kind).toBe("conflict");
+  // The second conflict at the re-merge raised the signal the decider
+  // answered; only the one resolve turn ran.
+  expect(
+    records.filter((r) => r.slug === "task" && r.step === DECIDE_STEP),
+  ).toHaveLength(1);
   expect(
     records.filter(
       (r) => r.slug === "task" && r.step === "resolve" && r.actor === "agent",
@@ -369,7 +377,7 @@ async function parksSecondConflictInsteadPart2(
 }
 
 function registerStewardPart3(): void {
-  it("parks a second conflict instead of resolving twice", async () => {
+  it("routes a second conflict to the decider instead of resolving twice", async () => {
     const { repo, goal } = setupFlowRepo({ aliases: stewardAliases });
     const checkout = goalCheckout(repo, goal);
     try {

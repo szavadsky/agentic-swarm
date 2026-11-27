@@ -291,10 +291,12 @@ function registerDerivePart5(): void {
       review(9, "changes", 3),
     ]);
     expect(afterThird.tasks.a!.round).toBe(3);
-    expect(afterThird.tasks.a!.phase).toBe("parked");
-    expect(afterThird.tasks.a!.park).toEqual(
-      cause("invalid outcome: changes on the last review call: review r3"),
-    );
+    expect(afterThird.tasks.a!.phase).toBe("decide");
+    expect(afterThird.tasks.a!.park).toBeUndefined();
+    expect(afterThird.tasks.a!.pendingSignal).toEqual({
+      kind: "invalid-outcome",
+      evidence: "changes on the last review call: review r3",
+    });
     expect(afterThird.tasks.a!.turns).toBe(6);
   });
 }

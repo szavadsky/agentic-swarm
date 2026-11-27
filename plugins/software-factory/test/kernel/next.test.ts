@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test";
 import { derive } from "../../src/kernel/derive.js";
 import { next } from "../../src/kernel/next.js";
 import type { Limits, StepRecord } from "../../src/kernel/types.js";
-import { rec, script, task, cause, causeText } from "./helpers.js";
-import { formatCause } from "../../src/kernel/cause.js";
+import { DECIDE_STEP } from "../../src/kernel/pending-signal.js";
+import { rec, script, task, cause } from "./helpers.js";
 
 const limits: Limits = {
   flows: {
@@ -157,7 +157,7 @@ function registerNextPart2(): void {
 }
 
 function registerNextPart3(): void {
-  it("parks changes on the last call and merges a last-call approve", () => {
+  it("routes changes on the last call to the decider and merges a last-call approve", () => {
     const lastCallChanges = deriveFlow(
       [task("a")],
       [
@@ -172,18 +172,10 @@ function registerNextPart3(): void {
         review(9, "changes", 3),
       ],
     );
-    expect(causeText(lastCallChanges.tasks.a!.park)).toContain(
-      "invalid-outcome: changes on the last review call",
-    );
+    expect(lastCallChanges.tasks.a!.phase).toBe(DECIDE_STEP);
+    expect(lastCallChanges.tasks.a!.park).toBeUndefined();
     expect(next(lastCallChanges, limits, new Set())).toEqual([
-      {
-        kind: "park",
-        slug: "a",
-        cause: {
-          kind: "invalid-outcome",
-          detail: expect.stringContaining("changes on the last review call"),
-        },
-      },
+      { kind: "step", slug: "a", step: DECIDE_STEP, round: 3 },
     ]);
 
     const lastCallApprove = deriveFlow(

@@ -141,7 +141,7 @@ async function settleOutcome(
   // The decide turn's verdict is read by derive against its signal, never
   // parked or debited here.
   if (isDecideStep(step)) return false;
-  if (step.qa) return qaStepOutcome(runtime, step, state, meta, outcome);
+  if (step.qa) return qaStepOutcome(outcome);
   if (step.review) {
     await reviewStepOutcome(runtime, step, state, meta, outcome);
     return true;
@@ -154,36 +154,11 @@ async function settleOutcome(
 }
 
 /** Only an accept carries the tree to the reviewer; a missing verdict is a contract breach. */
-async function qaStepOutcome(
-  runtime: KernelRuntime,
-  step: FlowStep,
-  state: TaskState,
-  meta: TaskMeta,
-  outcome: StepRecord["outcome"],
-): Promise<boolean> {
-  const qa = qaReportOf(outcome);
-  if (qa?.verdict === "changes") {
-    if (
-      isLastReviewCall(
-        step,
-        launchCounts(state.launches, step.id).changeRequests,
-      )
-    ) {
-      // The outcome validator refuses this; a delivered record is a contract
-      // breach, never a merge.
-      await appendPark(
-        runtime.store,
-        meta,
-        makeCause(
-          "invalid-outcome",
-          `qa changes on the last acceptance call: ${outcome?.summary ?? "no summary"}`,
-        ),
-      );
-    }
-    return true;
-  }
-  if (qa?.verdict !== "accept") return true;
-  return false;
+function qaStepOutcome(outcome: StepRecord["outcome"]): boolean {
+  // A last-call change request is refused by the outcome validator; a record
+  // that carries one still reaches derive, which raises the signal the
+  // decider answers.
+  return qaReportOf(outcome)?.verdict !== "accept";
 }
 
 // The summary leads and the why follows.
@@ -254,17 +229,6 @@ async function reviewStepOutcome(
       runtime.store,
       meta,
       makeCause("review-rejected", outcome.summary),
-    );
-  } else if (lastCall && outcome?.verdict === "changes") {
-    // The reviewer's outcome validator refuses this; a delivered record is a
-    // contract breach, never a merge.
-    await appendPark(
-      runtime.store,
-      meta,
-      makeCause(
-        "invalid-outcome",
-        `changes on the last review call: ${outcome.summary}`,
-      ),
     );
   } else if (
     lastCall &&

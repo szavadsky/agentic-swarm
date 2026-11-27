@@ -9,6 +9,7 @@ import {
 } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
+import { DECIDE_STEP } from "../../src/kernel/pending-signal.js";
 import { createDrainController } from "../../src/kernel/signals.js";
 import { ensureTaskWorktree } from "../../src/kernel/worktree.js";
 import { task, causeText } from "./helpers.js";
@@ -16,6 +17,7 @@ import {
   cleanupFlowRepo,
   makeRuntime,
   outcome,
+  scriptDecider,
   setupFlowRepo,
   scriptStallLeave,
   whenTurn,
@@ -162,7 +164,7 @@ function registerDispatchAdmissionPart6(): void {
 }
 
 function registerScriptCrashBudgetPart1(): void {
-  it("parks a deterministically throwing step after the same budget as a harness crash, across relaunches", async () => {
+  it("routes a deterministically throwing step to the decider after the same budget as a harness crash, across relaunches", async () => {
     const { repo, goal } = setupFlowRepo({
       limits: { concurrency: { overall: 1 } },
     });
@@ -185,6 +187,7 @@ async function scriptCrashBudgetFirstLaunch(
   };
   harness.script(throwing);
   harness.script(throwing);
+  scriptDecider(harness, { summary: "park it", verdict: "reject" });
   scriptStallLeave(harness, ["alpha"]);
   const runtime = await makeRuntime(repo, goal, { fake: harness });
   await writeTask(runtime, task("alpha", { scope: ["alpha-area"] }));
@@ -224,16 +227,13 @@ async function scriptCrashBudgetRelaunches(
     runtime.configs.process.flows,
   );
   expect(state.tasks.alpha!.turns).toBe(2);
-  expect(state.tasks.alpha!.phase).toBe("parked");
-  expect(causeText(state.tasks.alpha!.park)).toContain("infra-repeat: crash");
-  expect(causeText(state.tasks.alpha!.park)).toContain(
-    "simulated pre-harness throw",
-  );
-
-  // The parked step is not re-dispatched by a third launch.
+  expect(state.tasks.alpha!.phase).toBe("decide");
+  expect(state.tasks.alpha!.park).toBeUndefined();
+  expect(state.tasks.alpha!.pendingSignal?.kind).toBe("infra-repeat");
+  expect(state.tasks.alpha!.pendingSignal?.evidence).toContain("twice");
   const third = await runDispatch(runtime, { iteration: 3 });
   expect(third.reason).toBe("boundary");
-  expect(harness.calls).toHaveLength(3);
+  expect(harness.calls).toHaveLength(4);
   records = await runtime.store.listRecords();
   const scriptCrashes = records.filter(
     (r) =>
@@ -247,7 +247,7 @@ async function scriptCrashBudgetRelaunches(
   const settledAgentTurns = records.filter(
     (r) => r.slug === "alpha" && r.actor === "agent" && r.endedAt,
   );
-  expect(settledAgentTurns).toHaveLength(0);
+  expect(settledAgentTurns.map((r) => r.step)).toEqual([DECIDE_STEP]);
 }
 
 function registerScriptCrashBudgetPart2(): void {

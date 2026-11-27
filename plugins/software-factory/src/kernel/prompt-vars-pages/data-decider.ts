@@ -6,7 +6,7 @@ export const DECIDER_PAGE: PromptVariablesPage = {
   file: "decider.md",
   prompt: "decider",
   intro:
-    "The decide turn's prompt: a mechanical signal (an empty diff, a spent round bound, or red gates that survived their fixes) stopped the task and the kernel raised it instead of parking. The decider reads the signal, the branch, the checks log and the prior findings, then answers through its outcome verdict: approve continues past the stopped point and ships (accepting a red on a gates signal), changes grants the next fix round or fix budget, reject parks. It reuses the reviewer alias and session.",
+    "The decide turn's prompt: a mechanical signal (an empty diff, a spent round bound, red gates that survived their fixes, a crash, an overflow, a repeated tree, a merge that would not settle) stopped the task and the kernel raised it instead of parking. The decider reads the signal, the branch, the checks log and the prior findings, then answers through its outcome verdict: approve continues past the stopped point, retries the stopped step or the landing, and ships (accepting a red on a gates signal), changes grants the next fix round or fix budget, reject parks. It reuses the reviewer alias and session.",
   variables: {
     pending_signal:
       "the raised signal as `<kind>: <evidence>`; the sentence the kernel would have parked with",

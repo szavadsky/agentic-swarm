@@ -1,4 +1,4 @@
-/** The no-progress signal, and the kernel turn that decides it. */
+/** The mechanical-signal vocabulary, and the kernel turn that decides it. */
 import type { FlowDefinition, FlowStep } from "./types.js";
 
 /** The record step and phase of one decide turn. */

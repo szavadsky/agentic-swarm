@@ -61,16 +61,6 @@ function readyTaskAction(
   if (task.pendingSignal)
     return { kind: "step", slug, step: DECIDE_STEP, round: task.round };
   if (task.park) return park(slug, task.park);
-  if (task.loop) {
-    const loop = task.loop;
-    return park(
-      slug,
-      makeCause(
-        "no-progress",
-        `${loop.step} r${loop.round} repeats r${loop.firstRound} (${loop.fingerprint.slice(0, 8)})`,
-      ),
-    );
-  }
   const flow = limits.flows[task.flow];
   if (!flow)
     return park(

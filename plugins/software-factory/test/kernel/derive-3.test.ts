@@ -203,7 +203,7 @@ function registerDerivePart21(): void {
 }
 
 function registerDerivePart22(): void {
-  it("still sets the no-progress fingerprint for a non-empty repeat", () => {
+  it("raises the no-progress signal for a non-empty repeat", () => {
     const state = derive(
       [task("a", { flow: "just-implement" })],
       [
@@ -214,12 +214,11 @@ function registerDerivePart22(): void {
         implement(5, 1, { tree: "tree-A", commit: "cA2", base: "c0" }),
       ],
     );
-    expect(state.tasks.a!.phase).toBe("checks");
+    expect(state.tasks.a!.phase).toBe("decide");
     expect(state.tasks.a!.park).toBeUndefined();
-    expect(state.tasks.a!.loop).toMatchObject({
-      step: "implement",
-      round: 1,
-      firstRound: 1,
+    expect(state.tasks.a!.pendingSignal).toEqual({
+      kind: "no-progress",
+      evidence: expect.stringContaining("implement r1 repeats r1"),
     });
   });
 }
@@ -258,7 +257,6 @@ function registerDerivePart23(): void {
     const deferred = derive(tasks, prefix);
     expect(deferred.tasks.a!.phase).toBe("checks");
     expect(deferred.tasks.a!.park).toBeUndefined();
-    expect(deferred.tasks.a!.loop).toBeUndefined();
 
     const state = derive(tasks, [...prefix, redCheck(6)]);
     expect(state.tasks.a!.phase).toBe("decide");

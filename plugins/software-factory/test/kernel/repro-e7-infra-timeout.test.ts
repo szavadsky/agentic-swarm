@@ -2,27 +2,29 @@ import { describe, expect, it } from "bun:test";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
+import { DECIDE_STEP } from "../../src/kernel/pending-signal.js";
 import { task, causeText } from "./helpers.js";
 import {
   cleanupFlowRepo,
   makeRuntime,
+  outcome,
+  scriptDecider,
   setupFlowRepo,
   scriptStallLeave,
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
-import { formatCause } from "../../src/kernel/cause.js";
 import type { TmpRepo } from "../helpers/tmp-repo.js";
 
 /**
- * E7 inverted: an infra timeout or crash counts as a turn and parks the step
- * after two repeats on the same step, so a launch never re-dispatches a
- * deterministically failing step without bound. A reported quota/auth stop is
- * not timeout/crash and still counts nothing.
+ * E7 inverted: an infra timeout or crash counts as a turn and, on its second
+ * repeat of one step, raises the signal the decider answers, so a launch never
+ * re-dispatches a deterministically failing step without bound. A reported
+ * quota/auth stop is not timeout/crash and still counts nothing.
  */
 describe("E7 inverted — infra timeouts and crashes count as turn repeats", () => {
   for (const cause of ["timeout", "crash"] as const) {
-    it(`parks infra-repeat on the same step after two ${cause} stops`, async () => {
+    it(`raises infra-repeat on the same step after two ${cause} stops`, async () => {
       const { repo, goal } = setupFlowRepo({
         limits: { concurrency: { overall: 1 } },
       });
@@ -72,6 +74,7 @@ async function parksInfraRepeatPart1(
       },
     }),
   );
+  scriptDecider(harness, { summary: "park it", verdict: "reject" });
   scriptStallLeave(harness, ["alpha"]);
   const runtime = await makeRuntime(repo, goal, { fake: harness });
   await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
@@ -97,10 +100,12 @@ async function parksInfraRepeatPart1(
     runtime.configs.process.flows,
   );
   expect(state.tasks.alpha!.turns).toBe(2);
-  expect(state.tasks.alpha!.phase).toBe("parked");
-  expect(causeText(state.tasks.alpha!.park)).toContain(
-    `infra-repeat: ${cause}`,
-  );
+  expect(state.tasks.alpha!.phase).toBe("decide");
+  expect(state.tasks.alpha!.park).toBeUndefined();
+  expect(state.tasks.alpha!.pendingSignal).toEqual({
+    kind: "infra-repeat",
+    evidence: `implement reported ${cause}: ${cause === "timeout" ? "idle 30m" : "session not found"} twice`,
+  });
   return { runtime, harness };
 }
 
@@ -108,14 +113,26 @@ async function parksInfraRepeatPart2(
   scope: Awaited<ReturnType<typeof parksInfraRepeatPart1>>,
 ): Promise<void> {
   const { runtime, harness } = scope;
-  // The parked step is not re-dispatched by a third launch.
+  // A third launch hands the signal to the decider, whose reject parks it; the
+  // stopped step is never re-dispatched.
   const third = await runDispatch(runtime, { iteration: 3 });
   expect(third.reason).toBe("boundary");
-  expect(harness.calls).toHaveLength(3);
-  const turns = (await runtime.store.listRecords()).filter(
+  expect(harness.calls).toHaveLength(4);
+  const records = await runtime.store.listRecords();
+  expect(
+    records.filter((r) => r.slug === "alpha" && r.step === DECIDE_STEP),
+  ).toHaveLength(1);
+  const state = derive(
+    await runtime.store.listTasks(),
+    records,
+    runtime.configs.process.flows,
+  );
+  expect(state.tasks.alpha!.status).toBe("parked");
+  expect(state.tasks.alpha!.cause?.kind).toBe("infra-repeat");
+  const turns = records.filter(
     (r) => r.slug === "alpha" && r.actor === "agent",
   );
-  expect(turns).toHaveLength(2);
+  expect(turns).toHaveLength(3);
 }
 
 async function defersQuotaStopPart1(repo: TmpRepo, goal: string) {

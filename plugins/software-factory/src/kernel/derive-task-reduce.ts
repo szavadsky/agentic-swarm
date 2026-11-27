@@ -117,7 +117,6 @@ function finishReduction(
     verdict: state.verdict,
     commit: state.commit,
     park: terminal ? undefined : state.park,
-    loop: state.loop,
     gateFix: terminal ? undefined : state.gateFix || undefined,
     gateLastCall: terminal
       ? undefined

@@ -166,11 +166,17 @@ function applyVerdict(
         launchCounts(state.launches, rec.step).changeRequests,
       );
     if (isLastReview) {
-      state.park = makeCause(
-        "invalid-outcome",
-        `changes on the last review call: ${summary}`,
+      // The outcome validator refuses this, so a delivered record is a
+      // contract breach: the decider reads the request and decides ship, fix,
+      // or park.
+      raisePendingSignal(
+        state,
+        {
+          kind: "invalid-outcome",
+          evidence: `changes on the last review call: ${summary}`,
+        },
+        { kind: "past-step", index: idx },
       );
-      state.phase = "parked";
       state.changesPending = false;
       state.pendingChecks = null;
     } else {

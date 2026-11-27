@@ -155,7 +155,7 @@ export function settleDag(
   recs: readonly StepRecord[],
 ): void {
   if (!context.flow.dag) return;
-  if (state.park || state.loop) return;
+  if (state.park || state.pendingSignal) return;
   // A gate fix re-runs from the first step and a `changes` answer owns the
   // next round; both re-routing belongs to the turn rules, not this move.
   if (state.gateFix || state.cleanlinessRevision) return;

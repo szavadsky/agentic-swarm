@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { derive } from "../../src/kernel/derive.js";
 import type { StepRecord } from "../../src/kernel/types.js";
-import { rec, script, task, cause, causeText } from "./helpers.js";
+import { rec, script, task, cause } from "./helpers.js";
 
 const doneCheck = (seq: number): StepRecord =>
   script(seq, {
@@ -181,7 +181,6 @@ function registerDerivePart12(): void {
     const state = derive([task("a")], answered);
     expect(state.tasks.a!.phase).toBe("checks");
     expect(state.tasks.a!.park).toBeUndefined();
-    expect(state.tasks.a!.loop).toBeUndefined();
     expect(state.tasks.a!.verdict).toBe("changes");
     expect(state.tasks.a!.gateFix).toBeUndefined();
 
@@ -189,7 +188,6 @@ function registerDerivePart12(): void {
     expect(reviewed.tasks.a!.phase).toBe("qa");
     expect(reviewed.tasks.a!.round).toBe(2);
     expect(reviewed.tasks.a!.park).toBeUndefined();
-    expect(reviewed.tasks.a!.loop).toBeUndefined();
   });
 }
 
@@ -213,7 +211,7 @@ function registerDerivePart13(): void {
 }
 
 function registerDerivePart14(): void {
-  it("parks last-call changes after a reply-only fix", () => {
+  it("raises the last-call changes signal after a reply-only fix", () => {
     const flows = {
       "implement-review": {
         steps: [
@@ -253,11 +251,13 @@ function registerDerivePart14(): void {
       flows,
     );
     // The reply-only fix returns to review and consumes the single change
-    // request, so the next changes is refused instead of looping.
-    expect(state.tasks.a!.phase).toBe("parked");
-    expect(causeText(state.tasks.a!.park)).toContain(
-      "invalid-outcome: changes on the last review call",
-    );
+    // request, so the next changes is a last-call breach the decider answers.
+    expect(state.tasks.a!.phase).toBe("decide");
+    expect(state.tasks.a!.park).toBeUndefined();
+    expect(state.tasks.a!.pendingSignal).toEqual({
+      kind: "invalid-outcome",
+      evidence: "changes on the last review call: review r2",
+    });
     expect(state.tasks.a!.round).toBe(2);
   });
 }
@@ -281,7 +281,6 @@ function registerDerivePart15(): void {
     ]);
     expect(deferred.tasks.a!.phase).toBe("checks");
     expect(deferred.tasks.a!.park).toBeUndefined();
-    expect(deferred.tasks.a!.loop).toBeUndefined();
 
     const state = derive(tasks, [
       ...prefix,

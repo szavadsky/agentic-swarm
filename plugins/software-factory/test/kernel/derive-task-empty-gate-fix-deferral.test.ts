@@ -116,7 +116,6 @@ function emptyGateFixDeferralPart2(
     expect(reduction.phase).toBe("checks");
     expect(reduction.round).toBe(1);
     expect(reduction.park).toBeUndefined();
-    expect(reduction.loop).toBeUndefined();
     expect(reduction.gateFix).toBe(true);
   });
 
@@ -143,7 +142,6 @@ function emptyGateFixDeferralPart3(
     expect(reduction.phase).toBe("qa");
     expect(reduction.round).toBe(1);
     expect(reduction.park).toBeUndefined();
-    expect(reduction.loop).toBeUndefined();
   });
 
   it("green checks after an empty gate fix proceed to merge under just-implement", () => {
@@ -162,7 +160,6 @@ function emptyGateFixDeferralPart3(
     expect(reduction.phase).toBe("merge");
     expect(reduction.round).toBe(1);
     expect(reduction.park).toBeUndefined();
-    expect(reduction.loop).toBeUndefined();
   });
 }
 
@@ -208,7 +205,6 @@ function emptyGateFixDeferralPart4(
     expect(reduction.phase).toBe("implement");
     expect(reduction.round).toBe(1);
     expect(reduction.park).toBeUndefined();
-    expect(reduction.loop).toBeUndefined();
     expect(reduction.gateFix).toBe(true);
   });
 }
@@ -255,7 +251,6 @@ function emptyGateFixDeferralPart5(
     expect(reduction.round).toBe(2);
     expect(reduction.verdict).toBe("changes");
     expect(reduction.park).toBeUndefined();
-    expect(reduction.loop).toBeUndefined();
   });
 }
 
@@ -279,7 +274,6 @@ function emptyGateFixDeferralPart6(
     );
     expect(reduction.phase).toBe("merge");
     expect(reduction.park).toBeUndefined();
-    expect(reduction.loop).toBeUndefined();
   });
 
   it("an identical red after an empty merge-gates fix raises the empty-diff signal", () => {
@@ -345,7 +339,6 @@ function emptyGateFixDeferralPart7(
     expect(reduction.phase).toBe("qa");
     expect(reduction.round).toBe(1);
     expect(reduction.park).toBeUndefined();
-    expect(reduction.loop).toBeUndefined();
   });
 }
 

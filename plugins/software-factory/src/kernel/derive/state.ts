@@ -201,7 +201,6 @@ function taskStateFor(
     commit: terminal?.commit ?? reduction.commit,
     verdict: reduction.verdict,
     park: terminal ? undefined : reduction.park,
-    loop: terminal ? undefined : reduction.loop,
     gateFix: terminal ? undefined : reduction.gateFix,
     gateLastCall: terminal ? undefined : reduction.gateLastCall,
     cleanlinessRevision: terminal ? undefined : reduction.cleanlinessRevision,
@@ -269,7 +268,6 @@ export function addOrphanTaskStates(
       commit: terminal.commit,
       verdict: reduction.verdict,
       park: undefined,
-      loop: undefined,
       gateFix: undefined,
       gateLastCall: undefined,
     };
