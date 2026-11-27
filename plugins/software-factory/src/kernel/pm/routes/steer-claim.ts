@@ -1,6 +1,7 @@
 /** The steers one PM turn answers, including any injected while it ran. */
 import type { LiveAgents } from "../../../harness/types.js";
 import type { Steer } from "../../mailbox.js";
+import type { PromptLibrary } from "../../prompts.js";
 import type { LiveSteerSessions } from "../../sessions.js";
 import { steerInjectionNote } from "../prompts.js";
 
@@ -14,11 +15,17 @@ import { steerInjectionNote } from "../prompts.js";
 export class SteerClaim {
   private readonly steers: Map<string, Steer>;
   private readonly owns: (steer: Steer) => boolean;
+  private readonly prompts: PromptLibrary;
   private release: (() => void) | undefined;
 
-  constructor(steers: readonly Steer[], owns: (steer: Steer) => boolean) {
+  constructor(
+    steers: readonly Steer[],
+    owns: (steer: Steer) => boolean,
+    prompts: PromptLibrary,
+  ) {
     this.steers = new Map(steers.map((steer) => [steer.id, steer]));
     this.owns = owns;
+    this.prompts = prompts;
   }
 
   all(): Steer[] {
@@ -59,7 +66,7 @@ export class SteerClaim {
   ): Promise<boolean> {
     if (this.steers.has(steer.id)) return true;
     if (!this.owns(steer)) return false;
-    await steerSession(steerInjectionNote(steer));
+    await steerSession(steerInjectionNote(this.prompts, steer));
     this.steers.set(steer.id, steer);
     return true;
   }

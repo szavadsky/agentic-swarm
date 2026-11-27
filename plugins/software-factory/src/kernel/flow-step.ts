@@ -4,13 +4,13 @@ import { preexistingRed, recordedBaseGates } from "./baseline.js";
 import { makeCause } from "./cause.js";
 import { worktreeClean } from "./flow-commit.js";
 import {
+  admittedTarget,
   deciderSession,
   followUpSession,
   isFixTurn,
   isRelaunchStep,
   isTrivialImplementTurn,
   stepTarget,
-  type TurnTarget,
   trivialResumeSession,
 } from "./flow-context.js";
 import { finishCleanResolve } from "./flow-gates.js";
@@ -29,6 +29,7 @@ import { abortMerge, mergeHeadSha, prepareResolve } from "./merge-conflict.js";
 import { isDecideStep } from "./pending-signal.js";
 import { isAcceptanceStep, isVerdictStep } from "./review.js";
 import type {
+  AdmittedTier,
   FlowDefinition,
   FlowStep,
   KernelRuntime,
@@ -50,12 +51,12 @@ interface StepDeps {
   step: FlowStep;
   flow: FlowDefinition;
   iteration: number;
-  /** Admission chose this fallback-chain index; absent is the primary. */
-  tierIndex?: number;
+  /** The leg admission chose; absent is the alias's primary. */
+  tier?: AdmittedTier;
 }
 
 async function openStep(deps: StepDeps): Promise<StepRun | TaskActionResult> {
-  const { runtime, task, state, iteration, step, flow, tierIndex } = deps;
+  const { runtime, task, state, iteration, step, flow, tier } = deps;
   const records = await runtime.store.listRecords();
   const opened = await openTaskWorktree(runtime, task, state, iteration);
   if ("result" in opened) return opened.result;
@@ -84,7 +85,7 @@ async function openStep(deps: StepDeps): Promise<StepRun | TaskActionResult> {
     preexisting: new Set(),
     trivial: false,
     lastCall: false,
-    tierIndex,
+    tier,
   };
 }
 
@@ -288,26 +289,6 @@ async function prepareResolveStage(
   return undefined;
 }
 
-/** Starts the chain on the tier admission chose, if it still names one. */
-function admittedTierTarget(run: StepRun, target: TurnTarget): TurnTarget {
-  const index = run.tierIndex;
-  if (index === undefined) return target;
-  const chosen = target.tiers[index];
-  if (chosen === undefined) return target;
-  // Admission judged this tier against the caps, so the chain starts on it;
-  // the offset keeps the tier index absolute.
-  return {
-    ...target,
-    harness: chosen.harness,
-    model: chosen.model,
-    effort: chosen.effort,
-    subscription: chosen.subscription,
-    opaque: chosen.opaque,
-    tiers: target.tiers.slice(index),
-    tierOffset: target.tierOffset + index,
-  };
-}
-
 /**
  * A trivial goal implements in the front's own session; a review turn and a
  * fix turn resume their own step's session. Everything else starts de novo.
@@ -316,10 +297,9 @@ async function chooseSession(
   run: StepRun,
 ): Promise<TaskActionResult | undefined> {
   const { runtime, task, state, step, iteration, ensured } = run;
-  run.target = admittedTierTarget(
-    run,
-    stepTarget(runtime, task, state, step.id, run.records),
-  );
+  const fresh = stepTarget(runtime, task, state, step.id, run.records);
+  run.target =
+    run.tier === undefined ? fresh : admittedTarget(runtime, fresh, run.tier);
   run.trivial = isTrivialImplementTurn(runtime, task, state, step.id);
   run.turnCwd = ensured.path;
   run.session = isDecideStep(step)

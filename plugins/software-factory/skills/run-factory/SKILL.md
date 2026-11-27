@@ -95,6 +95,8 @@ bun bin/factory.ts status --repo "$REPO" --goal demo --json
   consult reads it as `[urgent]`.
 - Failed turn: open its `records/<n>-…/` directory (`started.yaml`, `end.yaml`,
   `outcome.yaml`, logs) before relaunching.
+- `factory records [--step <id>] [--role <role>] [--cause <kind>] [--iteration <n>] [--json]`
+  queries those records; YAML by default, `--json` for a JSON array.
 - `factory validate [--run-config <file>] [<file>]` checks one
   schema-enforced file with the gate's validators; `factory schemas --out <dir>`
   writes JSON Schemas for editors and the artifact LSP.

@@ -1,6 +1,7 @@
 /** Causes, task state and the actions derived from them. */
 
 import { z } from "zod";
+import type { ModelRef } from "../../harness/types.js";
 import type {
   GoalDecision,
   ProgressRepeat,
@@ -210,14 +211,25 @@ export interface State {
   epics: Record<string, EpicState>;
 }
 
+/**
+ * The resolved leg admission chose: the harness id, the model (effort
+ * included) and the quota pool one call draws on. Start matches this identity
+ * in the freshly resolved chain instead of re-applying a list index.
+ */
+export interface AdmittedTier {
+  harness: string;
+  model: ModelRef;
+  subscription?: string;
+}
+
 export type Action =
   | {
       kind: "step";
       slug: string;
       step: string;
       round: number;
-      /** Admission chose this fallback-chain index; absent is the primary. */
-      tierIndex?: number;
+      /** The leg admission chose; absent is the alias's primary. */
+      tier?: AdmittedTier;
     }
   | { kind: "checks"; slug: string }
   | { kind: "merge"; slug: string }

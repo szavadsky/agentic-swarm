@@ -15,6 +15,10 @@ export const INFRA_PROMPT_VARIABLES: PromptVariablesPage = {
     setup_command: "repository setup command; `none` when not needed",
     gate_commands:
       "configured gate commands as `- id: command` lines with any recorded status; `none` when the repo config declares none, which is when discovery is allowed",
+    current_infra:
+      "contents of the existing `infra.yaml`, or `none` when absent",
+    incident_evidence:
+      "gate timeout or cannot-start failure evidence on an incident turn; `none` during goal-start ingestion",
     infra_path:
       "path of the `infra.yaml` to write, naming each gate's command, speed and observed status; the one artifact the turn authors (the outcome file is the other)",
     outcome_path:

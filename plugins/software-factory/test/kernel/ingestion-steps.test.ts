@@ -98,6 +98,11 @@ function biggerFront(
   };
 }
 
+/** An annotated intent keeps these turns on ingestion, not slug triage. */
+function annotateIntent(goalDir: string): void {
+  fs.appendFileSync(path.join(goalDir, "intent.md"), "[[Demo]]\n");
+}
+
 async function emptyState(runtime: KernelRuntime): Promise<State> {
   return derive([], [], runtime.configs.process.flows);
 }
@@ -268,6 +273,7 @@ function registersBiggerScout(): void {
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
+      annotateIntent(goalDir);
       harness.script(biggerFront(goalDir), {
         when: whenTurn({ step: "front" }),
       });
@@ -339,6 +345,7 @@ function registersMissingCodeMap(): void {
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
+      annotateIntent(goalDir);
       harness.script(biggerFront(goalDir), {
         when: whenTurn({ step: "front" }),
       });
@@ -371,6 +378,7 @@ function registersRemovedScout(): void {
     const { repo, goalDir, goal } = setupFlowRepo({ process, classYaml: null });
     try {
       const harness = new FakeHarness({ id: "fake" });
+      annotateIntent(goalDir);
       harness.script(biggerFront(goalDir), {
         when: whenTurn({ step: "front" }),
       });
@@ -399,6 +407,7 @@ function registersBlockedScout(): void {
     });
     try {
       const harness = new FakeHarness({ id: "fake" });
+      annotateIntent(goalDir);
       harness.script(biggerFront(goalDir), {
         when: whenTurn({ step: "front" }),
       });

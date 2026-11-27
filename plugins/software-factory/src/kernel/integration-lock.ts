@@ -21,6 +21,45 @@ export async function integrationExclusive<T>(
 }
 
 /**
+ * Runs one boundary role's work in the integration checkout and checks the
+ * checkout before and after, without acquiring `integrationExclusive`. Callers
+ * that already hold the lock (e.g. merge checks) use this directly.
+ */
+export async function runContainedBoundaryTurn<T>(
+  runtime: KernelRuntime,
+  meta: BoundaryTurnMeta,
+  turn: () => Promise<T>,
+): Promise<T> {
+  const containment = { mode: "boundary" } as const;
+  const snapshot = await containmentSnapshot(
+    runtime,
+    runtime.paths.goalCheckout,
+    containment,
+  );
+  const result = await turn();
+  const breach = await containmentViolation(
+    runtime,
+    runtime.paths.goalCheckout,
+    runtime.paths.integrationBranch,
+    snapshot,
+    containment,
+  );
+  if (breach) {
+    await runtime.store.appendRecord(
+      scriptMeta(meta.iteration, "containment"),
+      {
+        ok: false,
+        cause: makeCause(
+          "containment",
+          `boundary-write: ${meta.step}: ${breach}`,
+        ),
+      },
+    );
+  }
+  return result;
+}
+
+/**
  * Runs one boundary role's work in the integration checkout under the merge
  * lock and checks the checkout before and after, like a task turn. The goal
  * artifacts are the boundary's deliverable (the plan, the tasks, the digest),
@@ -31,33 +70,7 @@ export async function runBoundaryTurn<T>(
   meta: BoundaryTurnMeta,
   turn: () => Promise<T>,
 ): Promise<T> {
-  return integrationExclusive(runtime, async () => {
-    const containment = { mode: "boundary" } as const;
-    const snapshot = await containmentSnapshot(
-      runtime,
-      runtime.paths.goalCheckout,
-      containment,
-    );
-    const result = await turn();
-    const breach = await containmentViolation(
-      runtime,
-      runtime.paths.goalCheckout,
-      runtime.paths.integrationBranch,
-      snapshot,
-      containment,
-    );
-    if (breach) {
-      await runtime.store.appendRecord(
-        scriptMeta(meta.iteration, "containment"),
-        {
-          ok: false,
-          cause: makeCause(
-            "containment",
-            `boundary-write: ${meta.step}: ${breach}`,
-          ),
-        },
-      );
-    }
-    return result;
-  });
+  return integrationExclusive(runtime, () =>
+    runContainedBoundaryTurn(runtime, meta, turn),
+  );
 }

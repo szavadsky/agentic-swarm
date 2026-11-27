@@ -32,16 +32,21 @@ async function recordOpenConcernIds(
 ): Promise<Set<string> | undefined> {
   const recordsDir = path.dirname(path.dirname(abs));
   if (path.basename(recordsDir) !== "records") return undefined;
-  const records = await createFolderStore(
+  const store = createFolderStore(
     path.dirname(recordsDir),
     undefined,
     process.taskTypes ?? {},
-  ).listRecords();
+  );
+  const [records, tasks] = await Promise.all([
+    store.listRecords(),
+    store.listTasks(),
+  ]);
   // The outcome being validated is the tree's own; its answers are the
   // proposal, not a resolution of the concerns it names.
   const current = path.basename(path.dirname(abs));
   return openConcernIds(
     records.filter((record) => recordDirName(record.seq, record) !== current),
+    tasks,
   );
 }
 

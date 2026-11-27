@@ -1,0 +1,9 @@
+iteration: 2
+slug: delta
+step: pm
+round: 1
+actor: agent
+architect: main
+alias: pm
+seq: 8
+startedAt: 2026-01-02T04:10:00.000Z

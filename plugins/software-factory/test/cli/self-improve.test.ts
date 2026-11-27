@@ -11,6 +11,7 @@ import {
   processOverrideSchema,
 } from "../../src/kernel/config.js";
 import { requiredAliases } from "../../src/kernel/preflight/checks.js";
+import { architectureFlowForReason } from "../../src/kernel/architect-flow.js";
 import type { ArchitectureFlow } from "../../src/kernel/types.js";
 import {
   MANIFEST,
@@ -19,7 +20,7 @@ import {
 import { testPriceSource } from "../helpers/price-source.js";
 import { treeFile } from "../helpers/run-configs.js";
 import { createTmpRepo } from "../helpers/tmp-repo.js";
-import type { AssessmentVisibility } from "./self-improve-launch.js";
+import type { LaunchVisibility } from "./self-improve-launch.js";
 import {
   launchHarness,
   packFile,
@@ -74,16 +75,6 @@ function installPlugin(repoDir: string): void {
     expect(`${line}: ${result.stderr}`).toBe(`${line}: `);
     expect(result.status).toBe(0);
   }
-}
-
-/** The flow a launch reason selects, or a failure naming the missing reason. */
-function flowFor(
-  flows: readonly ArchitectureFlow[],
-  reason: ArchitectureFlow["when"][number],
-): ArchitectureFlow {
-  const flow = flows.find((entry) => entry.when.includes(reason));
-  if (!flow) throw new Error(`no architecture flow for reason ${reason}`);
-  return flow;
 }
 
 function stepIds(flow: ArchitectureFlow): string[] {
@@ -165,8 +156,12 @@ function surfaceTest(): void {
         `${surface.label} has no section`,
       ).toBe(true);
     }
-    // The skill names the two files it ships, so a reader can wire them in.
-    for (const file of ["config/process.yaml", "prompts/assess-run.md"]) {
+    // The skill names the files it ships, so a reader can wire them in.
+    for (const file of [
+      "config/process.yaml",
+      "prompts/assess-run.md",
+      "prompts/status-review.md",
+    ]) {
       expect(skill).toContain(file);
       expect(fs.existsSync(path.join(PLUGIN_DIR, file))).toBe(true);
     }
@@ -204,7 +199,11 @@ function machineSpecificsTest(): void {
     expect(fence(skill, "yaml self-improve-run-example").join("\n")).toMatch(
       /assess:/,
     );
-    for (const file of ["config/process.yaml", "prompts/assess-run.md"]) {
+    for (const file of [
+      "config/process.yaml",
+      "prompts/assess-run.md",
+      "prompts/status-review.md",
+    ]) {
       const text = fs.readFileSync(path.join(PLUGIN_DIR, file), "utf8");
       expect(text).not.toMatch(machinePattern());
     }
@@ -225,20 +224,24 @@ function overlayTest(): void {
       const process = loadProcessConfig(repo.dir);
       expect(flowPromptFindings(process, processFile, repo.dir)).toEqual([]);
       expect(requiredAliases(process).has("assess")).toBe(true);
-      const flows = process.architecture.flows ?? [];
-      expect(stepIds(flowFor(flows, "initial"))).toEqual([
-        "architect",
-        "planreview",
-        "pm",
-      ]);
+      expect(stepIds(architectureFlowForReason(process, "initial", 1))).toEqual(
+        ["architect", "planreview", "pm"],
+      );
       for (const reason of [
         "concerns",
         "iteration-done",
         "steer",
         "relaunch",
       ] as const) {
-        expect(stepIds(flowFor(flows, reason))).toEqual([
+        expect(stepIds(architectureFlowForReason(process, reason, 2))).toEqual([
           "assess",
+          "architect",
+          "planreview",
+          "pm",
+        ]);
+        expect(stepIds(architectureFlowForReason(process, reason, 3))).toEqual([
+          "assess",
+          "statusreview",
           "architect",
           "planreview",
           "pm",
@@ -250,20 +253,27 @@ function overlayTest(): void {
   });
 }
 
-function assessmentTest(): void {
+function flowRotationTest(): void {
   it(
-    "runs the previous-run assessment before the architect on a relaunch",
-    async () => runsTwoLaunches(),
-    90_000,
+    "rotates the flows by iteration parity and adjudicates the odd review",
+    async () => runsRotatingFlows(),
+    150_000,
   );
 }
 
-/** A first launch ends at the iteration limit; the relaunch assesses it. */
-async function runsTwoLaunches(): Promise<void> {
+/**
+ * Three bounded launches: the initial consult, then one iteration of each
+ * parity flow, so the scenario shows the even flow without the adversarial
+ * review and the odd flow with it.
+ */
+async function runsRotatingFlows(): Promise<void> {
   const repo = createTmpRepo();
   const goalDir = path.join(repo.dir, ".factory/artifacts/demo");
   const taskDir = path.join(goalDir, "tasks");
-  const seen: AssessmentVisibility = { assessmentInPack: new Map() };
+  const seen: LaunchVisibility = {
+    assessmentInPack: new Map(),
+    statusReviewInPack: new Map(),
+  };
   try {
     writeLaunchRepo(repo);
     installPlugin(repo.dir);
@@ -294,11 +304,12 @@ async function runsTwoLaunches(): Promise<void> {
       harnesses: { fake: launchHarness(goalDir, taskDir, seen) },
       priceSource: testPriceSource(repo.dir),
     });
-    const first = await captured(() => dispatch(args, deps()));
-    expect(first.code, first.out).toBe(3);
-    const second = await captured(() => dispatch(args, deps()));
-    expect(second.code, second.out).toBe(3);
+    for (const launch of [1, 2, 3]) {
+      const result = await captured(() => dispatch(args, deps()));
+      expect(result.code, `launch ${launch}: ${result.out}`).toBe(3);
+    }
     assertAssessmentTurn(goalDir, seen);
+    assertFlowRotation(goalDir, seen);
   } finally {
     repo.cleanup();
   }
@@ -312,7 +323,7 @@ describe("self-improve plugin", () => {
 
 describe("self-improve flows", () => {
   overlayTest();
-  assessmentTest();
+  flowRotationTest();
 });
 
 interface Captured {
@@ -336,33 +347,119 @@ async function captured(fn: () => Promise<number>): Promise<Captured> {
   }
 }
 
-function assertAssessmentTurn(
-  goalDir: string,
-  seen: AssessmentVisibility,
-): void {
+/** The configured flow steps one iteration settled, in record order. */
+function flowSteps(started: Started[], iteration: number): string[] {
+  const flow = new Set([
+    "assess",
+    "statusreview",
+    "architect",
+    "planreview",
+    "pm",
+  ]);
+  return started
+    .filter((record) => record.iteration === iteration && flow.has(record.step))
+    .sort((a, b) => a.seq - b.seq)
+    .map((record) => record.step);
+}
+
+function architectOf(started: Started[], iteration: number): Started {
+  const architect = started.find(
+    (record) => record.step === "architect" && record.iteration === iteration,
+  );
+  if (architect === undefined) {
+    throw new Error(`iteration ${iteration} has no architect record`);
+  }
+  return architect;
+}
+
+function recordedOutcome(goalDir: string, record: Started): unknown {
+  return yaml.parse(
+    fs.readFileSync(
+      path.join(goalDir, "records", record.dir, "outcome.yaml"),
+      "utf8",
+    ),
+  );
+}
+
+/** Every post-initial consult assesses; the first has no previous run. */
+function assertAssessmentTurn(goalDir: string, seen: LaunchVisibility): void {
   const started = readStarted(goalDir);
   const assessments = started.filter((record) => record.step === "assess");
-  expect(assessments.map((record) => record.iteration)).toEqual([2]);
-  const architecture = started.find(
-    (record) => record.step === "architect" && record.iteration === 2,
-  );
-  expect(architecture).toBeDefined();
-  expect(assessments[0]!.seq).toBeLessThan(architecture!.seq);
+  expect(assessments.map((record) => record.iteration)).toEqual([2, 3]);
+  expect(assessments[0]!.seq).toBeLessThan(architectOf(started, 2).seq);
+  expect(assessments[1]!.seq).toBeLessThan(architectOf(started, 3).seq);
   expect(seen.assessmentInPack.get(1)).toBe(false);
   expect(seen.assessmentInPack.get(2)).toBe(true);
-  const assessment = path.join(goalDir, "iterations/2/assessment.md");
-  expect(fs.readFileSync(assessment, "utf8")).toContain(
-    "Previous-run assessment",
-  );
-  expect(fs.readFileSync(packFile(goalDir, 2), "utf8")).toContain(
-    `- assessment: ${assessment}`,
-  );
-  const outcomeFile = path.join(
-    goalDir,
-    "records",
-    assessments[0]!.dir,
-    "outcome.yaml",
-  );
-  const recorded = yaml.parse(fs.readFileSync(outcomeFile, "utf8"));
+  expect(seen.assessmentInPack.get(3)).toBe(true);
+  for (const iteration of [2, 3]) {
+    const assessment = path.join(
+      goalDir,
+      `iterations/${iteration}/assessment.md`,
+    );
+    expect(fs.readFileSync(assessment, "utf8")).toContain(
+      "Previous-run assessment",
+    );
+    expect(fs.readFileSync(packFile(goalDir, iteration), "utf8")).toContain(
+      `- assessment: ${assessment}`,
+    );
+  }
+  const recorded = recordedOutcome(goalDir, assessments[0]!) as {
+    summary?: string;
+  };
   expect(recorded.summary).toContain("assessed the previous run");
+}
+
+/**
+ * The initial flow runs alone; the even iteration keeps the architect's status
+ * ownership; the odd iteration reviews it first and the architect answers every
+ * number the review delivered.
+ */
+function assertFlowRotation(goalDir: string, seen: LaunchVisibility): void {
+  const started = readStarted(goalDir);
+  const initial = flowSteps(started, 1);
+  expect(initial).toContain("architect");
+  expect(initial).not.toContain("assess");
+  expect(initial).not.toContain("statusreview");
+
+  const even = flowSteps(started, 2);
+  expect(even).toContain("assess");
+  expect(even).not.toContain("statusreview");
+
+  const odd = flowSteps(started, 3);
+  expect(odd).toContain("assess");
+  expect(odd).toContain("statusreview");
+  expect(odd.indexOf("statusreview")).toBeGreaterThan(odd.indexOf("assess"));
+  expect(odd.indexOf("statusreview")).toBeLessThan(odd.indexOf("architect"));
+
+  expect(seen.statusReviewInPack.get(2)).toBe(false);
+  expect(seen.statusReviewInPack.get(3)).toBe(true);
+  const review = path.join(goalDir, "iterations/3/status-review.md");
+  const reviewText = fs.readFileSync(review, "utf8");
+  const findings = reviewText
+    .split("\n")
+    .filter((line) => /^\d+\.\s/.test(line));
+  expect(findings.length).toBeGreaterThan(0);
+  expect(fs.readFileSync(packFile(goalDir, 3), "utf8")).toContain(
+    `- status review: ${review}`,
+  );
+
+  const answers = (
+    recordedOutcome(goalDir, architectOf(started, 3)) as {
+      statusReviewAnswers?: { finding: number; adjudication: string }[];
+    }
+  ).statusReviewAnswers;
+  expect(answers?.map((answer) => answer.finding)).toEqual(
+    findings.map((_line, index) => index + 1),
+  );
+  expect(answers?.map((answer) => answer.adjudication)).toEqual(
+    findings.map((_line, index) => (index % 2 === 0 ? "upheld" : "dismissed")),
+  );
+  expect(
+    (
+      recordedOutcome(goalDir, architectOf(started, 2)) as Record<
+        string,
+        unknown
+      >
+    ).statusReviewAnswers,
+  ).toBeUndefined();
 }

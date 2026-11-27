@@ -1,9 +1,11 @@
 /** The prompt-variable descriptors, one entry per template variable. */
 
 import { DECIDER_PAGE } from "./data-decider.js";
+import { FRAGMENT_PROMPT_VARIABLES } from "./data-fragments.js";
 import { INFRA_PROMPT_VARIABLES } from "./data-infra.js";
 import { PLAN_CHECKER_PAGE } from "./data-plan-checker.js";
 import { REPAIR_PROMPT_VARIABLES } from "./data-repair.js";
+import { REVIEWER_PROMPT_PAGES } from "./data-reviewer.js";
 import type { PromptVariablesPage } from "./types.js";
 
 /** The acceptance variables both QA prompts read: the code QA and browser QA. */
@@ -152,7 +154,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       class_types:
         "the configured development types each front class may write, rendered by the front turn",
       code_map_path:
-        "path of the code map a `when: [bigger]` scout step wrote; `none` when no scout ran",
+        "absolute path of the code map a `when: [bigger]` scout step writes; the file may not exist yet when the front runs",
     },
   },
   {
@@ -164,7 +166,11 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       intent_path:
         "path to the goal's `intent.md`, the only file the turn may edit",
       steer:
-        "the pending steer as `- <id> (<relPath>):` plus its full indented text",
+        "the pending steer as `- <id> (<relPath>):` plus its full indented text; `none` on a slug-triage turn",
+      annotate:
+        "`true` on a slug-triage turn: add `[[Slug]]` annotations in place; `false` on a steer turn",
+      triage_note:
+        "the front's note that the goal intent carries no `[[Slug]]` annotations; empty on a steer turn",
       outcome_path:
         "path where the outcome file must be written when the harness asks for a file",
       validate_cmd:
@@ -172,7 +178,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       outcome_schema:
         "outcome examples from the kernel schema; renderer default",
     },
-    note: "The turn's record carries the unified diff of the edit; the next architect pack renders it beside the pending steer.",
+    note: "The turn's record carries the unified diff of the edit; the next architect pack renders a steer's diff beside the pending steer, while a slug-triage turn's record is the annotation diff the architect's intent already carries.",
   },
   {
     file: "pm.md",
@@ -248,7 +254,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
   {
     file: "cleanliness-revision.md",
     intro:
-      "The cleanliness revision follow-up instruction (fix or justify), included by `implementer.md` on a cleanliness revision turn. It contains no turn variables.",
+      "The cleanliness revision follow-up instruction (clean up, ignore or override), included by `implementer.md` on a cleanliness revision turn. It contains no turn variables.",
     variables: {},
   },
   {
@@ -266,69 +272,7 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     variables: QA_VARIABLES,
   },
   DECIDER_PAGE,
-  {
-    file: "reviewer.md",
-    prompt: "reviewer",
-    intro:
-      "`reviewer.md` is the shared reviewer composition for task reviews: an author-neutral intro, the author's body, the duties partial named by `author`, the verdict sentence, and the turn block common to every review. The task reviewer renders it with `author: implementer`, which selects `implementer-body`, `review-implementer` and `review-implementer-turn`. All turn variables stay in the final `## This turn` block.",
-    variables: {
-      worktree:
-        "task worktree for a task review; goal checkout for a plan review",
-      author:
-        "role whose body the reviewer includes (`implementer` by default); renderer default",
-      checks_result:
-        "latest checks record's failing-check text, or `pass` when green; `no checks run` when the render has no checks record (renderer default)",
-      checks_tree:
-        "the checked tree's hash; `unknown` without a checks record (renderer default)",
-      checks_log:
-        "the checks record's directory; `unknown` without a checks record (renderer default)",
-      outcome_path:
-        "path where the outcome file must be written when the harness asks for a file",
-      validate_cmd:
-        "absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default",
-      outcome_schema:
-        "outcome examples from the kernel schema; renderer default",
-    },
-  },
-  {
-    file: "review-implementer.md",
-    prompt: "reviewer",
-    author: "implementer",
-    intro:
-      "The diff-review duties, included by `reviewer.md` when `author: implementer`. It selects its decision block with `last_call`.",
-    variables: {
-      last_call:
-        "`true` when this review is the step's last call; selects `review-implementer-last-call`",
-    },
-  },
-  {
-    file: "review-implementer-last-call.md",
-    intro:
-      "The ship-or-park decision, included by `review-implementer.md` on the last call. It contains no turn variables.",
-    variables: {},
-  },
-  {
-    file: "review-implementer-turn.md",
-    prompt: "reviewer",
-    author: "implementer",
-    variables: {
-      task_path: "path to the task file the diff is judged against",
-      base_hash:
-        "commit hash before this task's first turn; the range spans every round",
-      head_hash: "commit hash after the latest implementer turn",
-      round: "1-based review round of this step's own change-request budget",
-      max_rounds:
-        "this review step's total review calls: its change-request bound plus the last call",
-      base_gates:
-        "the base tree's recorded gate result, and the only evidence a red gate predates the task: commit plus `green`, the pre-existing failing checks, or `not recorded`; a claimed pre-existing failure is a finding unless this record lists it",
-      prior_findings:
-        "previous round's numbered summary and concerns, plus any legacy forward lines (summary first); empty string in round 1",
-      upscope_ask:
-        "escalation ask for a standalone task review, answered as `upscope: yes|no` with the verdict; empty string when this task is part of an architect plan",
-      fix_dispositions:
-        "the current fix round's summary plus one numbered reply per prior finding; round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; renderer default",
-    },
-  },
+  ...REVIEWER_PROMPT_PAGES,
   {
     file: "adjudicator.md",
     prompt: "adjudicator",
@@ -485,16 +429,5 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
   },
   INFRA_PROMPT_VARIABLES,
   ...REPAIR_PROMPT_VARIABLES,
-  {
-    file: "resume.md",
-    prompt: "resume",
-    variables: {
-      branch: "task branch the relaunch continues; empty when none",
-      reason:
-        "`relaunch` after an interruption, `fallback` for a tier that continues edited work, `trivial` in the front's session",
-      session_cwd:
-        "directory the resumed session's tools run in; trivial turns only",
-      worktree: "absolute worktree a trivial turn must use; trivial turns only",
-    },
-  },
+  ...FRAGMENT_PROMPT_VARIABLES,
 ];

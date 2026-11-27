@@ -13,6 +13,7 @@ import {
   runIngestionSteps,
 } from "./ingestion.js";
 import { runBoundaryTurn } from "./integration-lock.js";
+import { triageIntentSlugs } from "./intent.js";
 import { scanInbox } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import {
@@ -334,12 +335,43 @@ function ingestionStop(failed: IngestionResult): FrontResult {
   };
 }
 
+/**
+ * The front's bigger-goal slug triage: one intent turn adds the annotations
+ * that key the architect's intent status. A triage that did not deliver is the
+ * front phase's stop, never a silent pass to the architect.
+ */
+async function triageBiggerGoal(
+  runtime: KernelRuntime,
+  iteration: number,
+): Promise<FrontResult | undefined> {
+  const triage = await triageIntentSlugs(runtime, iteration);
+  if (!triage) return undefined;
+  return {
+    action: triage.blocked ? "blocked" : "infra",
+    cause: triage.cause,
+    step: "intent",
+  };
+}
+
+/** Whether an earlier front turn started for this goal (sealed or unsealed). */
+async function frontClassified(runtime: KernelRuntime): Promise<boolean> {
+  return (await runtime.store.listRecords()).some(
+    (record) => record.actor === "agent" && record.step === "front",
+  );
+}
+
 /** Resumes a goal whose class the front already wrote: only the steps run. */
 async function resumeClassified(
   runtime: KernelRuntime,
   opts: FrontRunOptions,
   existing: FrontClass,
 ): Promise<FrontResult> {
+  // A pre-written class is not a front classification: only a goal an earlier
+  // front turn classified gets its triage retried.
+  if (existing.class === "bigger" && (await frontClassified(runtime))) {
+    const triage = await triageBiggerGoal(runtime, opts.iteration);
+    if (triage) return triage;
+  }
   const resumed = await runIngestionSteps(runtime, opts.iteration, true);
   if (resumed.cause) return ingestionStop(resumed);
   return await resultFor(runtime, existing, {
@@ -383,6 +415,12 @@ async function classifyFront(
       cause: `front turn wrote no ${CLASS_FILE} at ${runtime.store.pathOf({ area: "goal", rel: CLASS_FILE })}`,
       step: "front",
     };
+  }
+  // The bigger goal's intent gets its slug annotations before any later step
+  // reads it; the front's pack only notes the gap.
+  if (cls.class === "bigger") {
+    const triage = await triageBiggerGoal(runtime, opts.iteration);
+    if (triage) return triage;
   }
   const after = await runIngestionSteps(runtime, opts.iteration, true);
   if (after.cause) return ingestionStop(after);

@@ -11,11 +11,18 @@ export interface ParsedArgs {
   repo: string;
   goal?: string;
   iterations?: number;
+  /** `factory records --iteration <n>`: one iteration only. */
+  iteration?: number;
   runConfig?: string;
   pinGateOverride?: string;
   intent?: string;
   file?: string;
+  /** `factory validate` step override, `factory records --step <id>`. */
   step?: string;
+  /** `factory records --role <role>`: the prompt a step ran as. */
+  role?: string;
+  /** `factory records --cause <kind>`: the record cause kind. */
+  cause?: string;
   /** Output directory for `factory schemas`. */
   out?: string;
   /** `factory status --json`: print the machine-readable snapshot. */

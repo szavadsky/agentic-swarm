@@ -96,6 +96,10 @@ export const ARCHITECT_REASONS = [
 ] as const;
 export type ArchitectReason = (typeof ARCHITECT_REASONS)[number];
 
+/** Iteration parity a flow may select on when several flows share a reason. */
+export const FLOW_PARITIES = ["even", "odd"] as const;
+export type FlowParity = (typeof FLOW_PARITIES)[number];
+
 /** Steps the kernel binds to its own boundary machinery in an architect flow. */
 export const BUILTIN_ARCHITECTURE_FLOW_STEPS = [
   "architect",
@@ -114,9 +118,15 @@ export interface ArchitectureFlowStep extends RepairSpec {
   alias?: string;
 }
 
-/** One architect flow and the launch reasons that select it. */
+/**
+ * One architect flow and the launch reasons that select it. A flow that names a
+ * `parity` is preferred on iterations of that parity, so two flows sharing a
+ * reason rotate by iteration.
+ */
 export interface ArchitectureFlow {
   when: ArchitectReason[];
+  /** Iteration parity this flow is preferred on; absent runs on either. */
+  parity?: FlowParity;
   steps: ArchitectureFlowStep[];
 }
 
@@ -286,10 +296,11 @@ export interface Limits {
 export type StepActor = "agent" | "script";
 
 /**
- * Why a launch ran again: a technical glitch (infra stop or fallback hop),
- * a bona fide change request (a review `changes`), a QA finding that sent the
- * work back, or a bona fide failure (agent `failed`/`blocked` or no outcome
- * after reminders).
+ * Why a launch ran again: a technical glitch (a zero-usage, no-output infra
+ * stop, or a fallback hop), a bona fide change request (a review `changes`), a
+ * QA finding that sent the work back, or a bona fide failure (agent
+ * `failed`/`blocked` or no outcome after reminders). A genuine infra stop (a
+ * crash, quota, timeout, …) is no glitch and stores no launch kind.
  */
 export type LaunchKind = "glitch" | "change-request" | "qa-finding" | "failure";
 

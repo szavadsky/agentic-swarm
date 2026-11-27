@@ -96,12 +96,34 @@ function slotDir(env: NodeJS.ProcessEnv): string {
   );
 }
 
-function assignmentMessage(name: string, wt: string): string {
-  return (
-    `Your assignment is the file bootstrap/assignments/${name}.md in this git ` +
-    `worktree (${wt}). Read bootstrap/assignments/RULES.md and the ` +
-    `assignment in full, then carry it out to completion.`
+function bootstrapAssignmentTemplatePath(wt: string): string {
+  const override = path.join(wt, ".factory/prompts/bootstrap-assignment.md");
+  if (fs.existsSync(override)) return override;
+  const builtin = path.resolve(
+    import.meta.dir,
+    "../../../prompts/bootstrap-assignment.md",
   );
+  if (fs.existsSync(builtin)) return builtin;
+  throw new DispatchError(
+    `bootstrap-assignment prompt template not found at ${override} or ${builtin}`,
+    1,
+  );
+}
+
+function assignmentMessage(name: string, wt: string): string {
+  const templatePath = bootstrapAssignmentTemplatePath(wt);
+  const template = fs.readFileSync(templatePath, "utf8");
+  const rendered = template
+    .replaceAll(/\{\{\s*name\s*\}\}/g, name)
+    .replaceAll(/\{\{\s*worktree\s*\}\}/g, wt)
+    .trim();
+  if (/\{\{|\{%/.test(rendered)) {
+    throw new DispatchError(
+      `bootstrap-assignment template at ${templatePath} contains unresolved tags`,
+      1,
+    );
+  }
+  return rendered;
 }
 
 /** A failing child with its captured output on stderr, or undefined. */

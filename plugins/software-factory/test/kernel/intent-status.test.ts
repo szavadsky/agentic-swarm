@@ -15,12 +15,13 @@ import { task } from "./helpers.js";
 
 const SECTIONS = [
   {
+    slug: "StatusAndDashboard",
     section: "Status reporting and dashboard",
     status: "works" as const,
     note: "intent view reads the artifact",
   },
-  { section: "Sandbox", status: "not-built" as const },
-  { section: "Steering", status: "friction" as const, note: "debounce" },
+  { slug: "Sandbox", status: "not-built" as const },
+  { slug: "Steering", status: "friction" as const, note: "debounce" },
 ];
 
 type Store = ReturnType<typeof createFolderStore>;
@@ -175,6 +176,34 @@ describe("intent status collection", () => {
 
       expect(status.iteration).toBe(2);
       expect(status.intentStatus).toEqual({ iteration: 2, sections: SECTIONS });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reads a pre-slug artifact by its section heading", async () => {
+    const { root, store } = await newStore();
+    try {
+      const artifact = {
+        iteration: 1,
+        sections: [
+          {
+            section: "Sandbox",
+            status: "not-built" as const,
+            note: "no bwrap",
+          },
+        ],
+      };
+      await store.iterations.write(
+        1,
+        INTENT_STATUS_FILE,
+        JSON.stringify(artifact),
+      );
+      await appendMerge(store, 1);
+
+      const status = await collect(store);
+
+      expect(status.intentStatus).toEqual(artifact);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

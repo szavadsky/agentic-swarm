@@ -1,5 +1,6 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { childEnv } from "../../core/env.js";
+import { hostOs } from "../../core/os/index.js";
 import { sandboxedSpec } from "../../core/sandbox.js";
 import {
   registerChildGroup,
@@ -176,14 +177,13 @@ export class OmpRpc {
 
   kill(signal: NodeJS.Signals = "SIGTERM"): void {
     if (this.exitResult) return;
-    try {
-      if (this.pid > 0) process.kill(-this.pid, signal);
-      else this.child.kill(signal);
-    } catch {
-      try {
-        this.child.kill(signal);
-      } catch {}
+    if (this.pid > 0) {
+      hostOs().killGroup(this.pid, signal);
+      return;
     }
+    try {
+      this.child.kill(signal);
+    } catch {}
   }
 
   /** Closes stdin (drains accepted commands) and waits; kills after `graceMs`. */

@@ -10,6 +10,7 @@ import type {
 } from "../harness/types.js";
 import type { ConflictSnapshot } from "./merge-conflict.js";
 import type {
+  AdmittedTier,
   Cause,
   FlowDefinition,
   FlowStep,
@@ -106,6 +107,10 @@ export interface TaskActionResult {
   cancelled?: boolean;
 }
 
+export interface TaskGateRun extends TaskActionResult {
+  checks: import("../core/checks/types.js").CheckResult[];
+}
+
 type Contained = Awaited<
   ReturnType<typeof import("./worktree.js").containmentSnapshot>
 >;
@@ -136,8 +141,8 @@ export interface StepRun {
     snapshot: ConflictSnapshot;
   };
   target?: TurnTarget;
-  /** Admission chose this fallback-chain index; absent is the primary. */
-  tierIndex?: number;
+  /** The leg admission chose; absent is the alias's primary. */
+  tier?: AdmittedTier;
   session?: SessionRef;
   trivial: boolean;
   /** This step's turn continues one recovery sealed as a bare crash. */

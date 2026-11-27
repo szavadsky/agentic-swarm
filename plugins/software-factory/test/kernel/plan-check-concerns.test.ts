@@ -29,6 +29,7 @@ import {
   whenTurn,
   writeTask,
 } from "./s2-helpers.js";
+import { writeHold } from "./steer-holds-helpers.js";
 
 const ALIASES = {
   architect: { harness: "fake", model: "fake-architect" },
@@ -126,11 +127,58 @@ function registerConcernFiltering(): void {
     ).toEqual([CONCERN_ID]);
   });
 
-  it("formats the open concern line with the id the checker names", () => {
+  it("formats the open concern line with the id the checker names and any PM mark", () => {
     const [concern] = openConcerns([concernRaised(1)]);
     expect(formatOpenConcern(concern!)).toBe(
       `- ${CONCERN_ID} [risk/architect]: ${CONCERN_TEXT} — beta implement r1`,
     );
+    expect(formatOpenConcern(concern!, ["gamma", "alpha"])).toBe(
+      `- ${CONCERN_ID} [risk/architect]: ${CONCERN_TEXT} · holds alpha, gamma — beta implement r1`,
+    );
+  });
+
+  it("closes a task-answered concern when a base continuation of its follow-up merges", () => {
+    const tasked = concernAnswered(2, {
+      action: "task",
+      slug: "alpha",
+      reason: "alpha continuation resolves it",
+    });
+    const alpha = task("alpha");
+    const alpha2 = task("alpha-2", { base: "alpha" });
+    const alpha3 = task("alpha-3", { base: "alpha-2" });
+    const tasks = [alpha, alpha2, alpha3];
+    // Before any continuation merges, the concern stays open.
+    expect(
+      openConcerns([concernRaised(1), tasked], tasks).map((c) => c.id),
+    ).toEqual([CONCERN_ID]);
+    // Merging alpha-2 (base: alpha) closes the concern.
+    const mergedAlpha2 = script(3, {
+      slug: "alpha-2",
+      step: "merge",
+      ok: true,
+    });
+    expect(
+      openConcerns([concernRaised(1), tasked, mergedAlpha2], tasks),
+    ).toEqual([]);
+    expect(
+      forwardedConcerns([concernRaised(1), tasked, mergedAlpha2], { tasks }),
+    ).toEqual([]);
+    // Transitive continuation alpha-3 -> alpha-2 -> alpha also closes it.
+    const mergedAlpha3 = script(3, {
+      slug: "alpha-3",
+      step: "merge",
+      ok: true,
+    });
+    expect(
+      openConcerns([concernRaised(1), tasked, mergedAlpha3], tasks),
+    ).toEqual([]);
+    // A subsequent raise after the continuation merged reopens the concern.
+    expect(
+      openConcerns(
+        [concernRaised(1), tasked, mergedAlpha2, concernRaised(4)],
+        tasks,
+      ).map((c) => c.id),
+    ).toEqual([CONCERN_ID]);
   });
 }
 
@@ -362,6 +410,24 @@ function resolveConcernTurn(
   };
 }
 
+function archCheckTurn(onPrompt: (prompt: string) => void): FakeTurnHandler {
+  return (req, ctx) => {
+    onPrompt(req.prompt);
+    ctx.writeOutcome(
+      outcome({
+        summary: "architect ruling",
+        planCheck: {
+          verdict: "architect",
+          evidence: [],
+          followUps: [],
+          concerns: [],
+        },
+      }),
+    );
+    return fakeTurnResult(req);
+  };
+}
+
 function registerConcernsInCheckTurn(): void {
   it("briefs the checker with the open concern and accepts its resolution", async () => {
     const { repo, goal } = setupFlowRepo({ aliases: ALIASES });
@@ -385,6 +451,39 @@ function registerConcernsInCheckTurn(): void {
         `- ${CONCERN_ID} [risk/architect]: ${CONCERN_TEXT}`,
       );
       expect(openConcerns(await runtime.store.listRecords())).toEqual([]);
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+
+  it("carries the PM's blocking hold mark on open_concerns and omits empty pass marks", async () => {
+    const { repo, goal } = setupFlowRepo({ aliases: ALIASES });
+    try {
+      const { harness, runtime, state } = await concernedCheckGoal(repo, goal);
+      writeHold(runtime, CONCERN_ID, ["beta"]);
+      let heldPrompt = "";
+      harness.script(
+        archCheckTurn((text) => (heldPrompt = text)),
+        { when: whenTurn({ step: PLAN_CHECK_STEP }) },
+      );
+
+      await runPlanCheck(runtime, { iteration: 1, round: 1, state });
+      expect(heldPrompt).toContain(
+        `- ${CONCERN_ID} [risk/architect]: ${CONCERN_TEXT} · holds beta — beta implement r1`,
+      );
+
+      // A passed-on hold (slugs: []) leaves the line without a holds suffix.
+      writeHold(runtime, CONCERN_ID, []);
+      let passedPrompt = "";
+      harness.script(
+        archCheckTurn((text) => (passedPrompt = text)),
+        { when: whenTurn({ step: PLAN_CHECK_STEP }) },
+      );
+
+      await runPlanCheck(runtime, { iteration: 1, round: 2, state });
+      expect(passedPrompt).toContain(
+        `- ${CONCERN_ID} [risk/architect]: ${CONCERN_TEXT} — beta implement r1`,
+      );
     } finally {
       cleanupFlowRepo(repo);
     }

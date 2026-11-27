@@ -116,6 +116,12 @@ async function runBiggerFront(opts: {
     classYaml: null,
     gates: opts.gates ?? [],
   });
+  // An annotated intent keeps these turns on infra, not slug triage.
+  fs.writeFileSync(
+    path.join(goalDir, "intent.md"),
+    "# Goal\n\n[[Demo]] Test goal.\n",
+    "utf8",
+  );
   const harness = new FakeHarness({ id: "fake" });
   harness.script(biggerFront(goalDir), { when: whenTurn({ step: "front" }) });
   harness.script(infraTurn(goalDir, opts.infra), {
@@ -197,6 +203,54 @@ describe("infra.yaml schema", () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("infra.yaml incident schema", () => {
+  it("validates incident verdicts: infra requires handling, red forbids handling, gates stays required", () => {
+    const infraValid: InfraReport = {
+      gates: [],
+      incident: {
+        verdict: "infra",
+        handling: "stop-task-types",
+        taskTypes: ["computer-use"],
+        fix: {
+          layer: "repo",
+          path: ".factory/repo.yaml",
+          summary: "increase timeout",
+        },
+      },
+    };
+    expect(infraSchema.parse(infraValid)).toEqual(infraValid);
+
+    const redValid: InfraReport = {
+      gates: [],
+      incident: {
+        verdict: "red",
+        fix: {
+          layer: "run",
+          path: "src/app.ts",
+          summary: "task introduced infinite loop",
+        },
+      },
+    };
+    expect(infraSchema.parse(redValid)).toEqual(redValid);
+
+    expect(
+      infraSchema.safeParse({ gates: [], incident: { verdict: "infra" } })
+        .success,
+    ).toBe(false);
+    expect(
+      infraSchema.safeParse({
+        gates: [],
+        incident: { verdict: "red", handling: "stop" },
+      }).success,
+    ).toBe(false);
+    expect(
+      infraSchema.safeParse({
+        incident: { verdict: "infra", handling: "retry" },
+      }).success,
+    ).toBe(false);
   });
 });
 

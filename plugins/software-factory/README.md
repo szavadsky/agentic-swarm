@@ -31,6 +31,8 @@ bun bin/factory.ts init   --repo <path> --goal <name> [--intent <file>]
 bun bin/factory.ts run    --repo <path> --goal <name> --run-config <file> [--iterations N]
                           [--pin-gate-override <reason>]
 bun bin/factory.ts status --repo <path> --goal <name> [--json]
+bun bin/factory.ts records --repo <path> --goal <name> [--step <id>] [--role <role>]
+                          [--cause <kind>] [--iteration <n>] [--json]
 bun bin/factory.ts steer  --repo <path> --goal <name> <file | ->
 bun bin/factory.ts validate [--step <id>] [--run-config <file>] [<file>]
 bun bin/factory.ts schemas --out <dir>
@@ -48,7 +50,9 @@ derived state and parked causes; `--json` prints `status.json`, the snapshot
 the kernel rewrites after each agent launch and finish, together with the
 static `dashboard.html` rendered beside it and the page's vendored `vendor/`
 assets;
-`steer` drops a file into the inbox atomically. `validate` checks one
+`records` queries the append-only step records by step, role, cause kind and
+iteration, printing YAML or, with `--json`, a JSON array. `steer` drops a file
+into the inbox atomically. `validate` checks one
 schema-enforced file with the gate's validators (tasks/*.md with its
 directory's dependency graph and flow existence against the merged process
 config, class.yaml, outcome.yaml keyed by the step in the sibling
@@ -57,8 +61,8 @@ process.yaml, infra.yaml) and, for a repo, process or run file, the non-model
 pre-flight checks without launching a harness or probing a model; exit 0 valid,
 1 invalid or unknown kind. `schemas`
 writes every kernel file schema as JSON Schema (`task`, `outcome`, `qa`, `hold`,
-`class`, `infra`, `repo`, `run`, `process`, `gate`) into `--out` for editors and
-the artifact LSP. `variables`
+`class`, `infra`, `repo`, `run`, `process`, `gate`, `record`) into `--out` for
+editors and the artifact LSP. `variables`
 renders `prompts/VARIABLES.md` from the typed prompt-variable descriptor; the
 prompt tests fail when the committed file differs from that render.
 
@@ -257,6 +261,8 @@ architecture:                   # the plan review flow, before the PM derives ta
         - { id: pm }
         # A custom id runs one agent turn on its prompt and alias:
         # - { id: assess, prompt: previous-run-assessment, alias: architect }
+    # Two flows sharing a reason rotate by iteration parity:
+    # - { when: [concerns, iteration-done, steer, relaunch], parity: odd, steps: [...] }
 pm:
   steps:
     - { id: derive }            # the built-in ladder that writes the task files
@@ -279,8 +285,12 @@ observed. The kernel runs those gates when none are configured and appends the
 report to the front's pack, so the architect reads a red or flaky gate before
 its turn. The shipped `scout` step runs for bigger goals and writes the code map
 the context packs carry; without a scout step the packs keep the shallow
-directory index. Adding an ingestion agent (e.g. a requirements step) is a
-config edit, and its turn is recorded like any flow step.
+directory index. A bigger goal's unannotated intent gets one intent-agent turn
+before those steps: the front notes the missing `[[Slug]]` annotations in its
+pack, and the intent agent adds them in place without changing the intent's
+wording, so the architect's per-slug `intentStatus` validates against the
+intent. Adding an ingestion agent (e.g. a requirements step) is a config edit,
+and its turn is recorded like any flow step.
 
 A step may name `repairPrompt` (the template its in-session repair ask
 renders) and `deliverable` (the product the ask and the missing-outcome finding
@@ -334,11 +344,15 @@ and keeps today's single-architect flow.
 
 The `architecture` flow completes before the PM derives tasks. `flows` holds
 one step list per launch reason (`initial`, `concerns`, `iteration-done`,
-`steer`, `relaunch`); a reason no list names runs the `initial` flow. The
-built-in ids `architect`, `planreview` and `pm` run the kernel's own stages
-and take no prompt, alias or repair fields; any other id runs one agent turn and
-must name a `prompt` and `alias`, so an assessment before the architect or
-another reviewer after it is a config edit.
+`steer`, `relaunch`); a reason no list names runs the `initial` flow. A flow
+may also name `parity: even` or `parity: odd`: among the flows naming the same
+reason, the one whose parity matches the iteration wins, and a flow without a
+parity runs on either. That is how two consult flows rotate from iteration to
+iteration. The built-in ids `architect`, `planreview` and `pm` run the
+kernel's own stages and take no prompt, alias or repair fields; any other id
+runs one agent turn and must name a `prompt` and `alias`, so an assessment or
+an adversarial reviewer before the architect, or another reviewer after it, is
+a config edit.
 Each alias in `reviewers` gets one fresh read-only review turn that delivers
 `planReview` findings (`technical`, `planNotes`) and no verdict. With `architectReturn:
 on-technical-concerns`, technical findings get one `planReturn` architect turn
@@ -469,7 +483,11 @@ Pre-flight refuses an alias that names a subscription and such a tier with
 neither declaration. A tier that keeps the primary's harness and model keeps
 inheriting the alias's subscription. A turn that lands on a tier keeps the
 launch on it, and dispatch throttles each pool and model within the overall
-limit.
+limit. Admission remembers the leg it chose by identity — harness, model and
+pool, not its position — and the step resolves that identity again when it
+starts, so a chain reordered by a pool latching in between still runs the
+admitted leg; when the admitted leg itself latched, the turn moves to the next
+live leg after it and never back to one admission left at its cap.
 
 A tier that answers quota latches its pool. The stop's stated reset
 (`Resets in 130h19m23s`, `Resets in 33m53s`, `retry-after-ms=38240413`) sets

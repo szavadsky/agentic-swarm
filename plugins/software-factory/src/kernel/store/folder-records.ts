@@ -14,6 +14,7 @@ import type {
   TaskStatus,
   TurnRecord,
 } from "../types.js";
+import { migrateStallRoutes } from "../types/outcome.js";
 import { FolderStoreCore, isENOENT } from "./folder-core.js";
 
 const RECORD_DIR = /^(\d{5})-/;
@@ -58,7 +59,11 @@ function normalizeOutcome(raw: unknown, recordId: string): RecordedOutcome {
     };
   }
 
-  const outcome = { ...raw } as any;
+  // Old outcomes spell the retired park action `continue`; read it as the
+  // current `replace`, exactly as outcome ingest does.
+  const outcome = {
+    ...(migrateStallRoutes(raw) as Record<string, unknown>),
+  } as any;
 
   // Normalize
   const concerns: unknown[] = Array.isArray(outcome.concerns)

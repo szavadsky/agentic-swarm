@@ -48,6 +48,7 @@ Every turn, in this order.
 ### 1. Completeness check
 
 - Evaluate your whole scope against the intent: completeness, quality, correctness of what exists — not only the last iteration. Answer from the intent, the pack and evidence.
+- Check test runtimes in the pack against goal start; plan work to reduce test time while keeping tests on their merits.
 - Truly blocked, or does continuing make sense? Among non-blocked items: what is incomplete, and what must be redone? Name it in the plan.
 - Reuse this evaluation context for planning below.
 - Output: the reasons to continue and the next thing worth dispatching.
@@ -142,7 +143,8 @@ A complete outcome for this step:
 status: done
 summary: the requested work is complete and the gates pass
 intentStatus:
-  - section: M1 — Work is never lost to the kernel
+  - slug: KernelCore
+    section: KernelCore
     status: works
     note: every flow step renders a filled outcome example
 concerns:
@@ -160,6 +162,10 @@ epicConsults:
 planReviewMarks:
   - finding: 1
     mark: helpful
+statusReviewAnswers:
+  - finding: 1
+    adjudication: upheld
+    answer: the task merged in iteration 2; record 00042 carries the review verdict
 \`\`\`
 
 The other decision is also valid:
@@ -168,7 +174,8 @@ The other decision is also valid:
 status: done
 summary: the requested work is complete and the gates pass
 intentStatus:
-  - section: M1 — Work is never lost to the kernel
+  - slug: KernelCore
+    section: KernelCore
     status: works
     note: every flow step renders a filled outcome example
 concerns:
@@ -186,6 +193,10 @@ epicConsults:
 planReviewMarks:
   - finding: 1
     mark: helpful
+statusReviewAnswers:
+  - finding: 1
+    adjudication: upheld
+    answer: the task merged in iteration 2; record 00042 carries the review verdict
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -199,6 +210,13 @@ planReviewMarks:
 ## Plan review marks
 
 In \`## Plan review\`, mark every numbered finding in your outcome \`planReviewMarks\`. One \`{finding, mark}\` entry per numbered finding: \`helpful\` or \`unhelpful\`. \`helpful\` means it changed or clarified the plan or caught a real issue; \`unhelpful\` means it was wrong, stale or noise. Findings are advisory: you decide; the mark records whether the finding helped, not whether you obeyed it.
+## Status review
+
+When the pack carries a \`## Status review\` section, read the review it names
+and adjudicate every numbered finding in \`statusReviewAnswers\`: \`upheld\` when
+it stands — correct the plan or the status you report — and \`dismissed\` with
+the evidence that refutes it. One entry per finding.
+
 - \`verdict\` is used on review steps, \`decision\` on the architect step.
 
 
@@ -248,6 +266,7 @@ Every turn, in this order.
 ### 1. Completeness check
 
 - Evaluate your whole scope against the intent: completeness, quality, correctness of what exists — not only the last iteration. Answer from the intent, the pack and evidence.
+- Check test runtimes in the pack against goal start; plan work to reduce test time while keeping tests on their merits.
 - Truly blocked, or does continuing make sense? Among non-blocked items: what is incomplete, and what must be redone? Name it in the plan.
 - Reuse this evaluation context for planning below.
 - Output: the reasons to continue and the next thing worth dispatching.
@@ -445,7 +464,7 @@ Every new task file names a \`type\`; \`kind\` and \`flow\` are legacy fields an
 
 For the front's file: \`type\` (\`trivial\` for trivial, \`development\` for task; a class with no configured type is \`bigger\`), \`deps: []\`, \`source: front\`, a unique slug, no missing dependency, and a \`tier\` naming \`default\` or a configured alias. Body: the brief with a \`Done when:\` line.
 
-3. The context pack at the pack path, for every class: a deterministic index — paths, risks, open questions; never paste file bodies. On \`trivial\` or \`task\`, carry the area and risks the task file leaves implicit.
+3. The context pack at the pack path, for every class: a deterministic index — paths, risks, open questions; never paste file bodies. On \`trivial\` or \`task\`, carry the area and risks the task file leaves implicit. On \`bigger\`, when the intent carries no \`[[Slug]]\` annotation, note it in the pack; the intent agent adds the annotations in place and you never edit the intent.
 
 Write only \`class.yaml\`, the one task file, the pack and the outcome. Never change the checkout. Validate \`class.yaml\` and the task file before ending the turn: \`bun /factory/bin/factory.ts validate <file>\`.
 
@@ -1091,6 +1110,7 @@ concerns:
     calibration: fyi
     text: the retry path has no test without a live harness
     evidence: test/prompts.test.ts
+    dismiss: immaterial
 debtClosed: []
 steerAnswers:
   - steer: s1
@@ -1109,6 +1129,7 @@ concerns:
     calibration: fyi
     text: the retry path has no test without a live harness
     evidence: test/prompts.test.ts
+    dismiss: immaterial
 debtClosed: []
 steerAnswers:
   - steer: s1
@@ -1164,6 +1185,7 @@ Forward only what the calibration calls remarkable.
 - round: \`1\` of \`3\`
 - base gates: base abc1234def: green — the base tree's recorded gate result: commit plus \`green\`, the pre-existing failing checks, or \`not recorded\`; a claimed "pre-existing" failure is a finding unless this record lists it; when it is \`not recorded\`, every such claim is a finding
 - prior findings: \`\` — empty in round 1; numbered, each answered by a change, a reply, or both
+- prior concerns: \`\` — empty when none; author and QA concerns on this task — copy each immaterial concern's \`kind\`, \`calibration\`, \`text\` (and \`evidence\` when present) into \`concerns\` with \`dismiss: immaterial\`, and leave material ones undismissed
 - standalone upscope: \`\` — empty when this task is part of an architect plan; then give no upscope field
 - fix dispositions: \`\` — round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty. Re-judge each finding against the diff or its reply; a reply is judged on its argument, not on whether the diff evidences it.
 - checks: \`pass\`
@@ -1368,7 +1390,7 @@ steerAnswers:
 `;
 
 exports[`role prompts renders intent from exactly its documented variables: intent 1`] = `
-"You are the intent agent: carry one steer into the goal's intent. You edit only the intent file — never the plan, a task file, the code or anything else.
+"You are the intent agent: carry one steer into the goal's intent, or add the slug annotations triage found missing. You edit only the intent file — never the plan, a task file, the code or anything else.
 
 When the goal's note names a repo file as the intent's source of truth, the kernel resolves it first: \`intent_path\` is that repo file, and the pointer note is never edited.
 
@@ -1445,6 +1467,7 @@ steerAnswers:
 
 - iteration: \`3\`
 - intent: \`/goal/intent.md\`
+- annotate: \`false\`
 - steer: \`- s1 (mailbox/inbox/s1.md):
   keep the API stable\`
 - outcome path: \`/goal/records/00009-i3-s1-intent-r1/outcome.yaml\`
@@ -1815,6 +1838,7 @@ Every turn, in this order.
 ### 1. Completeness check
 
 - Evaluate your whole scope against the intent: completeness, quality, correctness of what exists — not only the last iteration. Answer from the intent, the pack and evidence.
+- Check test runtimes in the pack against goal start; plan work to reduce test time while keeping tests on their merits.
 - Truly blocked, or does continuing make sense? Among non-blocked items: what is incomplete, and what must be redone? Name it in the plan.
 - Reuse this evaluation context for planning below.
 - Output: the reasons to continue and the next thing worth dispatching.
@@ -2150,6 +2174,7 @@ Every turn, in this order.
 ### 1. Completeness check
 
 - Evaluate your whole scope against the intent: completeness, quality, correctness of what exists — not only the last iteration. Answer from the intent, the pack and evidence.
+- Check test runtimes in the pack against goal start; plan work to reduce test time while keeping tests on their merits.
 - Truly blocked, or does continuing make sense? Among non-blocked items: what is incomplete, and what must be redone? Name it in the plan.
 - Reuse this evaluation context for planning below.
 - Output: the reasons to continue and the next thing worth dispatching.
@@ -2233,7 +2258,8 @@ A complete outcome for this step:
 status: done
 summary: the requested work is complete and the gates pass
 intentStatus:
-  - section: M1 — Work is never lost to the kernel
+  - slug: KernelCore
+    section: KernelCore
     status: works
     note: every flow step renders a filled outcome example
 concerns:
@@ -2251,6 +2277,10 @@ epicConsults:
 planReviewMarks:
   - finding: 1
     mark: helpful
+statusReviewAnswers:
+  - finding: 1
+    adjudication: upheld
+    answer: the task merged in iteration 2; record 00042 carries the review verdict
 \`\`\`
 
 The other decision is also valid:
@@ -2259,7 +2289,8 @@ The other decision is also valid:
 status: done
 summary: the requested work is complete and the gates pass
 intentStatus:
-  - section: M1 — Work is never lost to the kernel
+  - slug: KernelCore
+    section: KernelCore
     status: works
     note: every flow step renders a filled outcome example
 concerns:
@@ -2277,6 +2308,10 @@ epicConsults:
 planReviewMarks:
   - finding: 1
     mark: helpful
+statusReviewAnswers:
+  - finding: 1
+    adjudication: upheld
+    answer: the task merged in iteration 2; record 00042 carries the review verdict
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -2290,6 +2325,13 @@ planReviewMarks:
 ## Plan review marks
 
 In \`## Plan review\`, mark every numbered finding in your outcome \`planReviewMarks\`. One \`{finding, mark}\` entry per numbered finding: \`helpful\` or \`unhelpful\`. \`helpful\` means it changed or clarified the plan or caught a real issue; \`unhelpful\` means it was wrong, stale or noise. Findings are advisory: you decide; the mark records whether the finding helped, not whether you obeyed it.
+## Status review
+
+When the pack carries a \`## Status review\` section, read the review it names
+and adjudicate every numbered finding in \`statusReviewAnswers\`: \`upheld\` when
+it stands — correct the plan or the status you report — and \`dismissed\` with
+the evidence that refutes it. One entry per finding.
+
 - \`verdict\` is used on review steps, \`decision\` on the architect step.
 
 
@@ -2339,6 +2381,7 @@ Every turn, in this order.
 ### 1. Completeness check
 
 - Evaluate your whole scope against the intent: completeness, quality, correctness of what exists — not only the last iteration. Answer from the intent, the pack and evidence.
+- Check test runtimes in the pack against goal start; plan work to reduce test time while keeping tests on their merits.
 - Truly blocked, or does continuing make sense? Among non-blocked items: what is incomplete, and what must be redone? Name it in the plan.
 - Reuse this evaluation context for planning below.
 - Output: the reasons to continue and the next thing worth dispatching.
@@ -2754,6 +2797,7 @@ Every turn, in this order.
 ### 1. Completeness check
 
 - Evaluate your whole scope against the intent: completeness, quality, correctness of what exists — not only the last iteration. Answer from the intent, the pack and evidence.
+- Check test runtimes in the pack against goal start; plan work to reduce test time while keeping tests on their merits.
 - Truly blocked, or does continuing make sense? Among non-blocked items: what is incomplete, and what must be redone? Name it in the plan.
 - Reuse this evaluation context for planning below.
 - Output: the reasons to continue and the next thing worth dispatching.
@@ -2837,7 +2881,8 @@ A complete outcome for this step:
 status: done
 summary: the requested work is complete and the gates pass
 intentStatus:
-  - section: M1 — Work is never lost to the kernel
+  - slug: KernelCore
+    section: KernelCore
     status: works
     note: every flow step renders a filled outcome example
 concerns:
@@ -2855,6 +2900,10 @@ epicConsults:
 planReviewMarks:
   - finding: 1
     mark: helpful
+statusReviewAnswers:
+  - finding: 1
+    adjudication: upheld
+    answer: the task merged in iteration 2; record 00042 carries the review verdict
 \`\`\`
 
 The other decision is also valid:
@@ -2863,7 +2912,8 @@ The other decision is also valid:
 status: done
 summary: the requested work is complete and the gates pass
 intentStatus:
-  - section: M1 — Work is never lost to the kernel
+  - slug: KernelCore
+    section: KernelCore
     status: works
     note: every flow step renders a filled outcome example
 concerns:
@@ -2881,6 +2931,10 @@ epicConsults:
 planReviewMarks:
   - finding: 1
     mark: helpful
+statusReviewAnswers:
+  - finding: 1
+    adjudication: upheld
+    answer: the task merged in iteration 2; record 00042 carries the review verdict
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -2894,6 +2948,13 @@ planReviewMarks:
 ## Plan review marks
 
 In \`## Plan review\`, mark every numbered finding in your outcome \`planReviewMarks\`. One \`{finding, mark}\` entry per numbered finding: \`helpful\` or \`unhelpful\`. \`helpful\` means it changed or clarified the plan or caught a real issue; \`unhelpful\` means it was wrong, stale or noise. Findings are advisory: you decide; the mark records whether the finding helped, not whether you obeyed it.
+## Status review
+
+When the pack carries a \`## Status review\` section, read the review it names
+and adjudicate every numbered finding in \`statusReviewAnswers\`: \`upheld\` when
+it stands — correct the plan or the status you report — and \`dismissed\` with
+the evidence that refutes it. One entry per finding.
+
 - \`verdict\` is used on review steps, \`decision\` on the architect step.
 
 
@@ -2943,6 +3004,7 @@ Every turn, in this order.
 ### 1. Completeness check
 
 - Evaluate your whole scope against the intent: completeness, quality, correctness of what exists — not only the last iteration. Answer from the intent, the pack and evidence.
+- Check test runtimes in the pack against goal start; plan work to reduce test time while keeping tests on their merits.
 - Truly blocked, or does continuing make sense? Among non-blocked items: what is incomplete, and what must be redone? Name it in the plan.
 - Reuse this evaluation context for planning below.
 - Output: the reasons to continue and the next thing worth dispatching.
@@ -3358,6 +3420,7 @@ Every turn, in this order.
 ### 1. Completeness check
 
 - Evaluate your whole scope against the intent: completeness, quality, correctness of what exists — not only the last iteration. Answer from the intent, the pack and evidence.
+- Check test runtimes in the pack against goal start; plan work to reduce test time while keeping tests on their merits.
 - Truly blocked, or does continuing make sense? Among non-blocked items: what is incomplete, and what must be redone? Name it in the plan.
 - Reuse this evaluation context for planning below.
 - Output: the reasons to continue and the next thing worth dispatching.
@@ -3441,7 +3504,8 @@ A complete outcome for this step:
 status: done
 summary: the requested work is complete and the gates pass
 intentStatus:
-  - section: M1 — Work is never lost to the kernel
+  - slug: KernelCore
+    section: KernelCore
     status: works
     note: every flow step renders a filled outcome example
 concerns:
@@ -3459,6 +3523,10 @@ epicConsults:
 planReviewMarks:
   - finding: 1
     mark: helpful
+statusReviewAnswers:
+  - finding: 1
+    adjudication: upheld
+    answer: the task merged in iteration 2; record 00042 carries the review verdict
 \`\`\`
 
 The other decision is also valid:
@@ -3467,7 +3535,8 @@ The other decision is also valid:
 status: done
 summary: the requested work is complete and the gates pass
 intentStatus:
-  - section: M1 — Work is never lost to the kernel
+  - slug: KernelCore
+    section: KernelCore
     status: works
     note: every flow step renders a filled outcome example
 concerns:
@@ -3485,6 +3554,10 @@ epicConsults:
 planReviewMarks:
   - finding: 1
     mark: helpful
+statusReviewAnswers:
+  - finding: 1
+    adjudication: upheld
+    answer: the task merged in iteration 2; record 00042 carries the review verdict
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -3498,6 +3571,13 @@ planReviewMarks:
 ## Plan review marks
 
 In \`## Plan review\`, mark every numbered finding in your outcome \`planReviewMarks\`. One \`{finding, mark}\` entry per numbered finding: \`helpful\` or \`unhelpful\`. \`helpful\` means it changed or clarified the plan or caught a real issue; \`unhelpful\` means it was wrong, stale or noise. Findings are advisory: you decide; the mark records whether the finding helped, not whether you obeyed it.
+## Status review
+
+When the pack carries a \`## Status review\` section, read the review it names
+and adjudicate every numbered finding in \`statusReviewAnswers\`: \`upheld\` when
+it stands — correct the plan or the status you report — and \`dismissed\` with
+the evidence that refutes it. One entry per finding.
+
 - \`verdict\` is used on review steps, \`decision\` on the architect step.
 
 
@@ -3547,6 +3627,7 @@ Every turn, in this order.
 ### 1. Completeness check
 
 - Evaluate your whole scope against the intent: completeness, quality, correctness of what exists — not only the last iteration. Answer from the intent, the pack and evidence.
+- Check test runtimes in the pack against goal start; plan work to reduce test time while keeping tests on their merits.
 - Truly blocked, or does continuing make sense? Among non-blocked items: what is incomplete, and what must be redone? Name it in the plan.
 - Reuse this evaluation context for planning below.
 - Output: the reasons to continue and the next thing worth dispatching.

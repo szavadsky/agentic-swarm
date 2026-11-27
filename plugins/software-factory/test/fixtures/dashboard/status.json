@@ -164,16 +164,17 @@
     "iteration": 2,
     "sections": [
       {
+        "slug": "StatusAndDashboard",
         "section": "Status reporting <and> dashboard",
         "status": "works",
         "note": "Intent view reads the architect artifact"
       },
       {
-        "section": "Sandbox",
+        "slug": "Sandbox",
         "status": "not-built"
       },
       {
-        "section": "Steering",
+        "slug": "Steering",
         "status": "friction",
         "note": "Debounce <tuning> still open"
       }

@@ -4,8 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { runBoundary } from "../../src/kernel/boundary.js";
-import { loadConfigs } from "../../src/kernel/config.js";
+import { loadConfigs, packageRoot } from "../../src/kernel/config.js";
 import { dryRunPrompts } from "../../src/kernel/prompt-dry-run.js";
+import { loadPrompts } from "../../src/kernel/prompts.js";
 import { sagaReminderVar } from "../../src/kernel/saga-reminder.js";
 import { outcome } from "./e2e-helpers.js";
 import { task } from "./helpers.js";
@@ -74,9 +75,10 @@ async function architectPrompt(
 
 describe("saga reminder", () => {
   it("renders no reminder at the threshold and one past it", () => {
-    expect(sagaReminderVar(20, 20)).toBe("");
-    expect(sagaReminderVar(20, undefined)).toBe("");
-    const past = sagaReminderVar(21, 20);
+    const prompts = loadPrompts(loadConfigs(packageRoot).process, packageRoot);
+    expect(sagaReminderVar(prompts, 20, 20)).toBe("");
+    expect(sagaReminderVar(prompts, 20, undefined)).toBe("");
+    const past = sagaReminderVar(prompts, 21, 20);
     expect(past).toContain("## Consider a saga");
     expect(past).toContain("This goal holds 21 tasks, past the configured 20.");
   });

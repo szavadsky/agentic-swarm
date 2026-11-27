@@ -1,6 +1,8 @@
 /**
- * Zero-usage, zero-output turns are technical glitches: a launch class the
- * chain retries or fails over, never a reminder, never waste.
+ * The one glitch predicate. Zero-usage, zero-output turns are technical
+ * glitches: a launch class the chain retries or fails over, never a reminder,
+ * never waste. Both the waste ledger and the launch-kind metric ask this
+ * predicate, so a genuine infra failure is never excused as a glitch.
  */
 
 import type { Stop, Usage } from "../harness/types.js";
@@ -19,7 +21,8 @@ function namesFailure(stop: Stop | undefined): boolean {
  * at zero usage — a harness that never reports usage can still deliver;
  * its work is not a glitch. A stop naming a genuine infra
  * cause (quota, network, auth, crash, timeout, overflow, rate) or a
- * model-side refusal/truncation keeps its own classification.
+ * model-side refusal/truncation keeps its own classification (the waste ledger
+ * or the quota bucket) and stores no glitch launch kind.
  */
 export function isGlitchTurn(rec: {
   usage?: Usage;

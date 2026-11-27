@@ -20,6 +20,7 @@ import {
   infraPath,
   missingGateCause,
   readInfra,
+  readInfraRaw,
 } from "./infra.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import { scriptMeta } from "./record.js";
@@ -196,6 +197,8 @@ function ingestionStepVars(
     class_types: frontClassTypesVar(runtime.configs.process.taskTypes),
     code_map_path: extra.codeMapPath,
     infra_path: extra.infraPath,
+    current_infra: readInfraRaw(runtime.store.goalDir),
+    incident_evidence: "none",
   };
 }
 

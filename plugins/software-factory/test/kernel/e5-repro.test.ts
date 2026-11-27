@@ -5,7 +5,6 @@ import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { executeTaskAction } from "../../src/kernel/flow.js";
-import { GATE_LAST_CALL_TEXT } from "../../src/kernel/prompts.js";
 import type { Action } from "../../src/kernel/types.js";
 import { integrationHead } from "../../src/kernel/worktree.js";
 import { task, causeText } from "./helpers.js";
@@ -224,14 +223,15 @@ async function drivesThreeDifferingRedFixesParksPart1(
     runtime.configs.process.flows,
   );
 
-  return { promptsSeen, records, state };
+  return { promptsSeen, records, runtime, state };
 }
 
 async function drivesThreeDifferingRedFixesParksPart2(
   repo: ReturnType<typeof setupFlowRepo>["repo"],
   scope: Awaited<ReturnType<typeof drivesThreeDifferingRedFixesParksPart1>>,
 ) {
-  const { state, promptsSeen, records } = scope;
+  const { state, promptsSeen, records, runtime } = scope;
+  const lastCallText = runtime.prompts.render("gate-last-call", {}).trim();
   expect(state.tasks.task!.status).toBe("parked");
   expect(state.tasks.task!.cause?.kind).toBe("gates");
   expect(formatCause(state.tasks.task!.cause!)).toContain("package");
@@ -240,11 +240,11 @@ async function drivesThreeDifferingRedFixesParksPart2(
   expect(promptsSeen).toHaveLength(4);
 
   // Fix 1 and 2 prompts do NOT have last call text
-  expect(promptsSeen[1]).not.toContain(GATE_LAST_CALL_TEXT);
-  expect(promptsSeen[2]).not.toContain(GATE_LAST_CALL_TEXT);
+  expect(promptsSeen[1]).not.toContain(lastCallText);
+  expect(promptsSeen[2]).not.toContain(lastCallText);
 
   // Fix 3 (last call) prompt MUST have last call text
-  expect(promptsSeen[3]).toContain(GATE_LAST_CALL_TEXT);
+  expect(promptsSeen[3]).toContain(lastCallText);
 
   // Verify checks ran 4 times and all 4 failed
   const checks = records.filter(

@@ -67,7 +67,8 @@ interface WorkRow {
 type WorkTotals = Omit<WorkRow, "name">;
 
 interface IntentRow {
-  section: string;
+  slug: string;
+  section: string | null;
   /** Enum value, also the badge modifier. */
   status: IntentStatusEntry["status"];
   /** Display wording: `not-built` reads as "not built". */
@@ -252,7 +253,8 @@ function statusView(summary: StatusDocument["summary"]): StatusView {
 
 function intentView(artifact: IntentStatusArtifact | undefined): IntentView {
   const rows: IntentRow[] = (artifact?.sections ?? []).map((entry) => ({
-    section: entry.section,
+    slug: entry.slug ?? entry.section ?? "",
+    section: entry.slug === undefined ? null : (entry.section ?? null),
     status: entry.status,
     label: INTENT_LABEL[entry.status],
     note: entry.note ?? null,

@@ -6,11 +6,16 @@ import { isAncestor } from "../../core/git/commit.js";
 import { GitError, git } from "../../core/git/exec.js";
 import { parseWorktreeList } from "../../core/git/status.js";
 import { reapGateProcesses } from "../gates.js";
+import {
+  recordGoalBaseBranch,
+  resolveCurrentCheckout,
+  resolveGoalFollowTarget,
+} from "../goal-base.js";
 import { landStoreCommits } from "../store-backend.js";
 import type { KernelRuntime } from "../types.js";
-import type { MergeAttempt } from "./types.js";
 import { goalWorktreeRoot, mergeScratchPath } from "./names.js";
 import { sweepWorktrees } from "./sweep.js";
+import type { MergeAttempt } from "./types.js";
 
 export async function integrationHead(runtime: KernelRuntime): Promise<string> {
   const res = await git(runtime.paths.repoRoot, [
@@ -156,15 +161,14 @@ export async function resetWorktreeToCommit(
  * was, so the next launch tries again.
  */
 async function followBase(runtime: KernelRuntime): Promise<void> {
-  const { goalCheckout } = runtime.paths;
-  const baseBranch = runtime.configs.repo.baseBranch;
-  const base = (
-    await git(runtime.paths.repoRoot, [
-      "rev-parse",
-      "--verify",
-      `${baseBranch}^{commit}`,
-    ])
-  ).stdout.trim();
+  const { goalCheckout, repoRoot, integrationBranch } = runtime.paths;
+  const target = await resolveGoalFollowTarget(
+    repoRoot,
+    integrationBranch,
+    runtime.configs.repo.baseBranch,
+  );
+  if (!target) return;
+  const { branch: baseBranch, commit: base } = target;
   const head = (await git(goalCheckout, ["rev-parse", "HEAD"])).stdout.trim();
   if (await isAncestor(goalCheckout, base, head)) return;
 
@@ -187,7 +191,7 @@ async function followBase(runtime: KernelRuntime): Promise<void> {
  * Creates (or recovers) the stable integration checkout. It is the only
  * worktree the merge queue moves; task worktrees are disposable.
  */
-/** Creates the integration worktree, or recreates it on the wrong branch. */
+/** Creates the integration worktree from the current checkout, or recreates it on the wrong branch. */
 async function ensureIntegrationCheckout(
   runtime: KernelRuntime,
   goalCheckout: string,
@@ -205,15 +209,23 @@ async function ensureIntegrationCheckout(
     if (await branchExists(runtime, integrationBranch)) {
       await git(repoRoot, ["worktree", "add", goalCheckout, integrationBranch]);
     } else {
-      const base = runtime.configs.repo.baseBranch;
+      const checkout = await resolveCurrentCheckout(repoRoot);
+      const startRef = checkout?.commit ?? runtime.configs.repo.baseBranch;
       await git(repoRoot, [
         "worktree",
         "add",
         "-b",
         integrationBranch,
         goalCheckout,
-        base,
+        startRef,
       ]);
+      if (checkout) {
+        await recordGoalBaseBranch(
+          repoRoot,
+          integrationBranch,
+          checkout.branch,
+        );
+      }
     }
   }
 

@@ -1,0 +1,6 @@
+status: done
+summary: routed the stalled task
+stallRoutes:
+  - slug: delta
+    action: continue
+    reason: continue with the amended task

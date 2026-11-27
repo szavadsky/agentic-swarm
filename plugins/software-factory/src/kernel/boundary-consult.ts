@@ -45,10 +45,12 @@ import { compactSession, subarchitectTarget } from "./flow-context.js";
 import { packGates } from "./infra.js";
 import { contextCodeMap } from "./ingestion.js";
 import { runBoundaryTurn } from "./integration-lock.js";
+import { architectIntentStatusFindings } from "./intent-slugs.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import type { PlanFile } from "./plan-file.js";
 import { type PlanSnapshot, snapshotPlans } from "./pm.js";
 import { scriptMeta } from "./record.js";
+import { testRuntimeComparison } from "./test-runtimes.js";
 import type { KernelRuntime, StepRecord, TaskFile } from "./types.js";
 import { integrationHead } from "./worktree.js";
 
@@ -61,6 +63,7 @@ async function epicPackInput(
   openForEpic: readonly string[],
 ): Promise<ContextPackInput> {
   const audience: ConcernAudience = { kind: "epic", epic: opts.epic };
+  const testRuntimes = testRuntimeComparison(opts.records);
   return {
     goal: path.basename(runtime.paths.goalDir),
     iteration: opts.iteration,
@@ -90,6 +93,7 @@ async function epicPackInput(
     setup: runtime.configs.repo.setup,
     gates: packGates(runtime.store.goalDir, runtime.configs.repo.gates),
     baseGates: recordedBaseGates([...opts.records]),
+    ...(testRuntimes ? { testRuntimes } : {}),
     forwarded: forwardedConcerns([...opts.records], {
       tasks: opts.tasks,
       audience,
@@ -204,6 +208,8 @@ async function runSubarchitectTurn(
           digest_path: opts.digestPath ?? "",
         },
         expectation: KERNEL_TURN_STEPS.subarchitect,
+        validate: (outcome) =>
+          architectIntentStatusFindings(runtime.store, outcome),
         session,
         settle: (_record, outcome, live) =>
           compactDecidedConsult(runtime, outcome, live),

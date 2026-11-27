@@ -189,7 +189,7 @@ function registerDerivePart29(): void {
 }
 
 function registerDerivePart30(): void {
-  it("parks a task as infra when every red check on it could not start, instead of looping into an empty-diff park", () => {
+  it("keeps a task on checks (never parking as gate could not start) when every red check on it is infra", () => {
     const state = derive(
       [task("a")],
       [
@@ -198,13 +198,11 @@ function registerDerivePart30(): void {
         infraRedCheck(3),
       ],
     );
-    expect(state.tasks.a!.phase).toBe("parked");
-    expect(causeText(state.tasks.a!.park)).toContain(
-      "infra: gate could not start: typecheck",
-    );
+    expect(state.tasks.a!.phase).toBe("checks");
+    expect(state.tasks.a!.park).toBeUndefined();
   });
 
-  it("classifies a missing gate runner without details as infra in the derive path", () => {
+  it("classifies a missing gate runner without details as infra in the derive path without parking", () => {
     const state = derive(
       [task("a")],
       [
@@ -225,10 +223,8 @@ function registerDerivePart30(): void {
         }),
       ],
     );
-    expect(state.tasks.a!.phase).toBe("parked");
-    expect(causeText(state.tasks.a!.park)).toContain(
-      "infra: gate could not start: typecheck",
-    );
+    expect(state.tasks.a!.phase).toBe("checks");
+    expect(state.tasks.a!.park).toBeUndefined();
   });
 }
 

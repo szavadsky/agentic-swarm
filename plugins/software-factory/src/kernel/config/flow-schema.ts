@@ -7,6 +7,7 @@ import {
   BOUNDARY_STEPS,
   BUILTIN_ARCHITECTURE_FLOW_STEPS,
   BUILTIN_INGESTION_IDS,
+  FLOW_PARITIES,
 } from "../types.js";
 import type {
   ArchitectureFlow,
@@ -368,10 +369,7 @@ export const boundaryOverrideSchema = z
  */
 const promptSpecSchema = turnSchema.omit({ alias: true });
 
-/**
- * One architect-flow step: a built-in id binds its kernel stage and names no
- * turn fields; a non-built-in id names its prompt and alias.
- */
+/** A built-in architect-flow step binds its stage; a custom one names prompt and alias. */
 export const architectureFlowStepSchema = z
   .object({
     id: z
@@ -416,10 +414,11 @@ export const architectureFlowStepSchema = z
     },
   );
 
-/** One launch-reason flow: at least one reason and a step list ending in `pm`. */
+/** One launch-reason flow: reasons, optional parity and steps ending in `pm`. */
 export const architectureFlowSchema = z
   .object({
     when: z.array(z.enum(ARCHITECT_REASONS)).min(1),
+    parity: z.enum(FLOW_PARITIES).optional(),
     steps: z.array(architectureFlowStepSchema).min(1),
   })
   .strict()

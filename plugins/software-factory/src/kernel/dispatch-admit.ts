@@ -16,7 +16,12 @@ import {
   startAction,
 } from "./dispatch-start.js";
 import { iterationSpend, iterationStart } from "./dispatch-state.js";
-import { stepTarget } from "./flow-context.js";
+import {
+  stepTarget,
+  tierIdentity,
+  type ResolvedTier,
+  type TurnTarget,
+} from "./flow-context.js";
 import { loadPriceTable } from "./openrouter.js";
 import type {
   Action,
@@ -102,10 +107,7 @@ function turnAllows(state: DispatchState, turnsUsed: number): boolean {
 }
 
 /** One tier's pool and model caps against the turns already running. */
-function tierAdmits(
-  state: DispatchState,
-  tier: ReturnType<typeof stepTarget>["tiers"][number],
-): boolean {
+function tierAdmits(state: DispatchState, tier: ResolvedTier): boolean {
   if (tier.subscription !== undefined) {
     const poolLimit =
       state.runtime.limits.concurrency.perSubscription[tier.subscription];
@@ -129,22 +131,20 @@ function tierAdmits(
 /**
  * The target's tiers in configured order, first one admitted by its caps.
  * A capped pool falls back to the next tier in the chain instead of waiting;
- * every tier capped still waits. The chosen index rides the action so the
- * step runs on the same tier admission judged.
+ * every tier capped still waits. The chosen leg's identity rides the action so
+ * the step starts on the same leg admission judged, even if the chain is
+ * re-resolved and its order changes.
  */
 function admitTarget(
   state: DispatchState,
   slug: string,
-  target: ReturnType<typeof stepTarget>,
-): number | undefined {
+  target: TurnTarget,
+): ResolvedTier | undefined {
   if (target.unavailable !== undefined) {
     noteInfra(state, slug, target.unavailable);
     return undefined;
   }
-  for (let index = 0; index < target.tiers.length; index += 1) {
-    if (tierAdmits(state, target.tiers[index]!)) return index;
-  }
-  return undefined;
+  return target.tiers.find((tier) => tierAdmits(state, tier));
 }
 
 /** A started task turn is admitted only below all three concurrency limits. */
@@ -170,13 +170,19 @@ function admitStep(
     action.step,
     records,
   );
-  const tierIndex = admitTarget(state, action.slug, target);
-  if (tierIndex === undefined) return;
-  const chosen = target.tiers[tierIndex]!;
-  startAction(state, { ...action, tierIndex }, taskState, task, true, {
-    subscription: chosen.subscription,
-    model: chosen.model.id,
-  });
+  const tier = admitTarget(state, action.slug, target);
+  if (tier === undefined) return;
+  startAction(
+    state,
+    { ...action, tier: tierIdentity(tier) },
+    taskState,
+    task,
+    true,
+    {
+      subscription: tier.subscription,
+      model: tier.model.id,
+    },
+  );
 }
 
 /** Checks and merges run while draining once the task itself has started. */

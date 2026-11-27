@@ -4,6 +4,7 @@ import path from "node:path";
 import type { Usage } from "../../harness/types.js";
 import { recordedBaseGates } from "../baseline.js";
 import { formatCause } from "../cause.js";
+import { indexDismissals, isConcernDismissed } from "../concern-dismissal.js";
 import { costText, medianMs, worstMs } from "../metrics.js";
 import type { QaCatchSource, QaCatches } from "../qa.js";
 import type {
@@ -172,9 +173,14 @@ function concernLine(rec: StepRecord, concern: Concern, prefix = ""): string {
 }
 
 export function concernLines(recs: StepRecord[], kind?: string): string[] {
+  const dismissals = indexDismissals(recs);
   return recs.flatMap((rec) =>
     (rec.outcome?.concerns ?? [])
-      .filter((concern) => !kind || concern.kind === kind)
+      .filter(
+        (concern) =>
+          (!kind || concern.kind === kind) &&
+          !isConcernDismissed(dismissals, rec, concern),
+      )
       .map((concern) => concernLine(rec, concern)),
   );
 }
@@ -197,9 +203,14 @@ export function summaryParkedByKind(
 }
 
 export function ownerRemarkableLines(recs: StepRecord[]): string[] {
+  const dismissals = indexDismissals(recs);
   return recs.flatMap((rec) =>
     (rec.outcome?.concerns ?? [])
-      .filter((concern) => concern.calibration === "owner")
+      .filter(
+        (concern) =>
+          concern.calibration === "owner" &&
+          !isConcernDismissed(dismissals, rec, concern),
+      )
       .map((concern) => concernLine(rec, concern, `[${concern.kind}] `)),
   );
 }

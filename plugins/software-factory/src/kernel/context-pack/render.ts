@@ -22,6 +22,7 @@ import {
   appendSteers,
   appendTaskFiles,
   appendTaskStatus,
+  appendTestRuntimes,
   appendWaste,
   parkedLines,
   pendingLines,
@@ -187,6 +188,7 @@ function appendIndexBody(lines: string[], input: ContextPackInput): void {
   );
   appendInfra(lines, input);
   appendBaseGates(lines, input);
+  appendTestRuntimes(lines, input);
   appendSteers(lines, input);
   appendWholeOrBrief(lines, "pmAnswers", input, (out) =>
     appendPmAnswers(out, input),
@@ -281,6 +283,7 @@ export function renderContextData(input: ContextPackInput): string {
     codeMap: input.codeMap ?? [],
     infra: { setup: input.setup, gates: input.gates },
     baseGates: input.baseGates ?? null,
+    testRuntimes: input.testRuntimes ?? null,
     steers,
     pmAnswers: input.pmAnswers ?? [],
     spikeFindings: [...(input.spikeFindings ?? [])].sort((a, b) =>

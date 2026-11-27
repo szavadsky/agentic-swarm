@@ -7,6 +7,12 @@ export const concernSchema = z.object({
   calibration: z.enum(["fyi", "architect", "owner"]),
   text: z.string().min(1),
   evidence: z.string().optional(),
+  dismiss: z
+    .enum(["immaterial"])
+    .optional()
+    .describe(
+      "review steps only: dismiss an author or QA concern as immaterial",
+    ),
 });
 
 /** One ingested concern's kernel-assigned id: `<recordId>#<n>`, 1-based in the record's outcome. */
@@ -94,6 +100,28 @@ export const stallRouteEntrySchema = z.object({
 });
 export type StallRouteEntry = z.infer<typeof stallRouteEntrySchema>;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * A recorded outcome from before the park decision vocabulary spells the
+ * acted-on park `continue`. It wrote one continuation task, which the current
+ * vocabulary calls a replace, so the retired spelling reads as one: recorded
+ * outcomes stay valid under the current schema, and no live prompt offers it.
+ */
+export function migrateStallRoutes(raw: unknown): unknown {
+  if (!isRecord(raw) || !Array.isArray(raw.stallRoutes)) return raw;
+  return {
+    ...raw,
+    stallRoutes: raw.stallRoutes.map((route) =>
+      isRecord(route) && route.action === "continue"
+        ? { ...route, action: "replace" }
+        : route,
+    ),
+  };
+}
+
 /** One plan item's check result: what the checker inspected and what it showed. */
 export const planCheckEvidenceSchema = z.object({
   item: outcomeSlugSchema,
@@ -174,6 +202,20 @@ export const planReviewMarkSchema = z.object({
 });
 export type PlanReviewMark = z.infer<typeof planReviewMarkSchema>;
 
+/**
+ * One architect adjudication of an adversarial status-review finding: the
+ * finding's 1-based number, whether it stands, and the evidence that decides it.
+ */
+const statusReviewAnswerSchema = z.object({
+  finding: z.number().int().positive(),
+  adjudication: z
+    .enum(["upheld", "dismissed"])
+    .describe(
+      "upheld: the claim was wrong; dismissed: the evidence refutes it",
+    ),
+  answer: z.string().min(1),
+});
+
 /** One plan-review finding: the plan line it concerns and what would satisfy it. */
 export const planReviewFindingSchema = z.object({
   planLine: z.string().min(1).describe("the plan line or bullet it concerns"),
@@ -207,7 +249,14 @@ export type PlanReviewOutcome = z.infer<typeof planReviewOutcomeSchema>;
  * is not built yet, or where the owner meets friction.
  */
 export const intentStatusEntrySchema = z.object({
-  section: z.string().min(1).describe("intent section heading"),
+  // The parser accepts a pre-slug entry (`section` only) so historical records
+  // stay valid; `intentStatusSlugFindings` reports a missing slug on new outcomes.
+  slug: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("intent slug from a [[Slug]] annotation"),
+  section: z.string().min(1).optional().describe("intent section heading"),
   status: z.enum(["works", "not-built", "friction"]),
   note: z.string().optional().describe("short evidence or friction detail"),
 });
@@ -306,6 +355,12 @@ export const outcomeSchema = z.object({
     .array(planReviewMarkSchema)
     .optional()
     .describe("architect step only: one mark per plan-review finding"),
+  statusReviewAnswers: z
+    .array(statusReviewAnswerSchema)
+    .optional()
+    .describe(
+      "architect step only: one adjudication per adversarial status-review finding",
+    ),
 });
 
 export type Concern = z.infer<typeof concernSchema>;

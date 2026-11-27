@@ -13,7 +13,7 @@ import {
   GATE_OUTPUT_CAP,
   isAdvisoryCheck,
   isInfraCheck,
-  normaliseFindings,
+  normaliseGateReports,
   readGateReports,
 } from "./gates-normalise.js";
 import {
@@ -206,6 +206,7 @@ function gateDetails(
   findings: readonly Finding[],
   reportError: string | undefined,
   res?: ProcessResult,
+  testRuntimes?: Record<string, number>,
 ): Record<string, unknown> {
   const details: Record<string, unknown> = {
     roots: [cwd],
@@ -219,6 +220,7 @@ function gateDetails(
     details.cause = `exit ${res.code}`;
   }
   if (findings.length > 0) details.findings = findings;
+  if (testRuntimes) details.testRuntimes = testRuntimes;
   if (reportError) details.error = reportError;
   return details;
 }
@@ -253,14 +255,21 @@ export async function runDeclaredGate(
   const reports = readGateReports(cwd, gate);
   const capped = capGateOutput(`${res.stdout}\n${res.stderr}`, [cwd]);
   let findings: Finding[] = [];
+  let testRuntimes: Record<string, number> | undefined;
   let reportError = reports.error;
   if (!reportError) {
     try {
-      findings = await normaliseFindings(gate, {
-        ...reports.contents,
-        exitCode: res.code,
-        log: capped.output,
-      });
+      const normalised = await normaliseGateReports(
+        gate,
+        {
+          ...reports.contents,
+          exitCode: res.code,
+          log: capped.output,
+        },
+        cwd,
+      );
+      findings = normalised.findings;
+      testRuntimes = normalised.testRuntimes;
     } catch (error) {
       reportError = error instanceof Error ? error.message : String(error);
     }
@@ -292,7 +301,15 @@ export async function runDeclaredGate(
         { lowercase: false },
       ),
       ...(gate.advisory && !ok ? { advisory: true } : {}),
-      details: gateDetails(gate, cwd, capped, findings, reportError, res),
+      details: gateDetails(
+        gate,
+        cwd,
+        capped,
+        findings,
+        reportError,
+        res,
+        testRuntimes,
+      ),
     },
   };
 }

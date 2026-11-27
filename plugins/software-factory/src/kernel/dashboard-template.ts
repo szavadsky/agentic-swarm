@@ -210,10 +210,10 @@ footer { margin-top: 2rem; color: var(--pico-muted-color); font-size: .78rem; }
   <div class="chart-box"><canvas id="intent-chart" role="img" aria-label="Intent sections by status"></canvas></div>
   <div class="table-wrap">
   <table>
-    <thead><tr><th scope="col">Intent section</th><th scope="col">Status</th><th scope="col">Note</th></tr></thead>
+    <thead><tr><th scope="col">Intent slug</th><th scope="col">Status</th><th scope="col">Note</th></tr></thead>
     <tbody>
     {% for row in summary.intent.rows %}
-      <tr><td>{{ row.section | escape }}</td><td><span class="badge intent-{{ row.status | escape }}">{{ row.label | escape }}</span></td><td>{% if row.note %}{{ row.note | escape }}{% else %}<span class="muted">—</span>{% endif %}</td></tr>
+      <tr><td><code class="slug">{{ row.slug | escape }}</code>{% if row.section %}<span class="title">{{ row.section | escape }}</span>{% endif %}</td><td><span class="badge intent-{{ row.status | escape }}">{{ row.label | escape }}</span></td><td>{% if row.note %}{{ row.note | escape }}{% else %}<span class="muted">—</span>{% endif %}</td></tr>
     {% endfor %}
     </tbody>
   </table>

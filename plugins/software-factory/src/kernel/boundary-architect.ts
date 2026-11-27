@@ -25,6 +25,7 @@ import {
 } from "./flow-context.js";
 import { subarchitectDelivery } from "./hierarchy.js";
 import { runBoundaryTurn } from "./integration-lock.js";
+import { architectIntentStatusFindings } from "./intent-slugs.js";
 import { formatSteers } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { snapshotPlans } from "./pm.js";
@@ -70,11 +71,14 @@ async function architectTurn(
           depth: String(context.runtime.configs.process.hierarchy?.depth ?? 1),
           subarchitect_block: steered?.block ?? "",
           saga_reminder: sagaReminderVar(
+            context.runtime.prompts,
             context.tasks.length,
             context.runtime.configs.process.sagaTaskCount,
           ),
         },
         expectation: KERNEL_TURN_STEPS.architect,
+        validate: (outcome) =>
+          architectIntentStatusFindings(context.runtime.store, outcome),
         session,
         ...(steered
           ? {

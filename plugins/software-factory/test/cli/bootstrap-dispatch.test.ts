@@ -21,6 +21,9 @@ const DISPATCH_LOGIC = path.join(
 );
 
 const AGENTD_OK = `#!/bin/sh
+if [ -n "$FACTORY_ARGV_LOG" ]; then
+  printf '%s\n' "$@" > "$FACTORY_ARGV_LOG"
+fi
 printf '%s\n' '{"type":"step_start","sessionID":"ses_fake"}'
 printf '%s\n' '{"type":"tool_use"}'
 printf '%s\n' '{"type":"step_finish"}'
@@ -66,6 +69,13 @@ function seedRepo(): TmpRepo {
     "plugins/software-factory/src/cli/commands/promote.ts",
     fs.readFileSync(
       path.join(PACKAGE_ROOT, "src/cli/commands/promote.ts"),
+      "utf8",
+    ),
+  );
+  repo.writeFile(
+    "plugins/software-factory/prompts/bootstrap-assignment.md",
+    fs.readFileSync(
+      path.join(PACKAGE_ROOT, "prompts/bootstrap-assignment.md"),
       "utf8",
     ),
   );
@@ -194,10 +204,19 @@ describe("dispatch logic", () => {
   it("creates the worktree, runs the executable and prints the summary", async () => {
     const s = setup(AGENTD_OK);
     const logs = path.join(s.root, "logs");
+    const argvLog = path.join(s.root, "argv.txt");
     const lines: string[] = [];
     try {
-      expect(await runIt(s, lines, { model: "custom/model" })).toBe(0);
+      expect(
+        await runIt(s, lines, {
+          model: "custom/model",
+          extraEnv: { FACTORY_ARGV_LOG: argvLog },
+        }),
+      ).toBe(0);
       const out = lines.join("\n");
+      const argv = fs.readFileSync(argvLog, "utf8");
+      expect(argv).toContain(`bootstrap/assignments/${s.name}.md`);
+      expect(argv).toContain(s.wt);
       expect(out).toContain(
         `assignment=${s.name} model=custom/model exit=0 log=`,
       );
@@ -287,6 +306,97 @@ describe("dispatch settings", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+});
+
+describe("bootstrap-assignment template lookup", () => {
+  it("prefers .factory/prompts/bootstrap-assignment.md over the built-in template", async () => {
+    const s = setup(AGENTD_OK);
+    const argvLog = path.join(s.root, "argv-override.txt");
+    try {
+      s.repo.writeFile(
+        ".factory/prompts/bootstrap-assignment.md",
+        "Override assignment {{name}} at {{worktree}}\n",
+      );
+      s.repo.commit("override prompt");
+      s.repo.git(["branch", "-f", "factory-v3", "HEAD"]);
+      expect(
+        await runIt(s, [], {
+          model: "custom/model",
+          extraEnv: { FACTORY_ARGV_LOG: argvLog },
+        }),
+      ).toBe(0);
+      expect(fs.readFileSync(argvLog, "utf8")).toContain(
+        `Override assignment ${s.name} at ${s.wt}`,
+      );
+    } finally {
+      cleanupRun(s);
+    }
+  }, 60_000);
+});
+
+describe("bootstrap-assignment template errors", () => {
+  it("throws DispatchError when neither override nor built-in template exists", () => {
+    const s = setup(AGENTD_OK);
+    try {
+      fs.rmSync(
+        path.join(
+          s.repo.dir,
+          "plugins/software-factory/prompts/bootstrap-assignment.md",
+        ),
+      );
+      s.repo.commit("drop builtin prompt");
+      s.repo.git(["branch", "-f", "factory-v3", "HEAD"]);
+      const res = spawnSync(
+        "bun",
+        [
+          path.join(
+            "plugins/software-factory",
+            "scripts/bootstrap-dispatch.ts",
+          ),
+          s.name,
+        ],
+        {
+          cwd: s.repo.dir,
+          timeout: 60_000,
+          env: {
+            ...process.env,
+            PATH: `${s.fakeBin}:${process.env.PATH}`,
+            FACTORY_BOOTSTRAP_RUNS: path.join(s.root, "logs"),
+            FACTORY_SLOT_DIR: path.join(s.root, "slots"),
+            FACTORY_DISPATCH_BIN: path.join(s.fakeBin, FAKE_BIN),
+            FACTORY_DISPATCH_MODEL: "custom/model",
+            FACTORY_DISPATCH_TIMEOUT: "30s",
+          },
+          encoding: "utf8",
+        },
+      );
+      expect(res.status).toBe(1);
+      expect(res.stderr).toContain(
+        "bootstrap-assignment prompt template not found",
+      );
+    } finally {
+      cleanupRun(s);
+    }
+  }, 60_000);
+});
+
+describe("bootstrap-assignment unresolved tags", () => {
+  it("throws DispatchError when an override leaves unresolved template tags", async () => {
+    const s = setup(AGENTD_OK);
+    try {
+      s.repo.writeFile(
+        ".factory/prompts/bootstrap-assignment.md",
+        "Override {{name}} with {{unknown_var}}\n",
+      );
+      s.repo.commit("bad override prompt");
+      s.repo.git(["branch", "-f", "factory-v3", "HEAD"]);
+      await expect(runIt(s, [], { model: "custom/model" })).rejects.toThrow(
+        "contains unresolved tags",
+      );
+    } finally {
+      cleanupRun(s);
+    }
+  }, 60_000);
 });
 
 describe.skipIf(DISPATCH_SH === undefined)(

@@ -1,6 +1,7 @@
 /** The command table and the process exit codes each command returns. */
 
 import path from "node:path";
+import yaml from "yaml";
 import { formatCause } from "../../kernel/cause.js";
 import { loadConfigs } from "../../kernel/config.js";
 import type { LaunchResult } from "../../kernel/launch.js";
@@ -13,6 +14,7 @@ import { writePromptVariables } from "../../kernel/prompt-vars.js";
 import { writeKernelSchemas } from "../../kernel/schemas.js";
 import {
   initGoal,
+  queryRecords,
   readSteerSource,
   statusGoal,
   steerGoal,
@@ -133,6 +135,22 @@ async function statusCommand(
   return 0;
 }
 
+/** `records`: print the goal's append-only records, filtered, as YAML or JSON. */
+async function recordsCommand(parsed: ParsedArgs): Promise<number> {
+  if (!parsed.goal) throw new Error("records requires --goal <name>");
+  const records = await queryRecords(parsed.repo, parsed.goal, {
+    step: parsed.step,
+    role: parsed.role,
+    cause: parsed.cause,
+    iteration: parsed.iteration,
+  });
+  const text = parsed.json
+    ? JSON.stringify(records, null, 2)
+    : yaml.stringify(records);
+  console.log(text.trimEnd());
+  return 0;
+}
+
 async function steerCommand(parsed: ParsedArgs): Promise<number> {
   if (!parsed.goal) throw new Error("steer requires --goal <name>");
   if (!parsed.file)
@@ -208,6 +226,7 @@ const COMMANDS: Record<string, CommandHandler> = {
   run: runCommand,
   init: initCommand,
   status: statusCommand,
+  records: recordsCommand,
   steer: steerCommand,
   validate: validateCommand,
   variables: variablesCommand,
@@ -233,6 +252,7 @@ export async function dispatch(
       "init",
       "run",
       "status",
+      "records",
       "steer",
       "validate",
       "schemas",

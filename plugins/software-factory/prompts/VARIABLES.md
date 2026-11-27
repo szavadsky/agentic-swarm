@@ -22,7 +22,7 @@ Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable
 - `pack-preparer` — `calibration`, `outcome`
 - `scout` — `plan-read-only`, `calibration`, `outcome`
 
-The shared definitions exist once as partials: `scope` (the predicted-area rule: out-of-area judgement, upscope condition; includes `plan-read-only`), `plan-read-only` (the plan, intent, other task files and records are read-only), `task-size` (what one task is: one implementer session, one seam, one reviewable diff, one done-when, and the split/merge criteria; included by `front`, `plan-standard` and `pm`), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract, with a filled example and its alternative rendered from the kernel outcome schema), `task-frontmatter` (the task-file frontmatter shape rendered from the kernel task schema, plus the configured task types and tiers; included by the authoring roles), `clean-code` (the code standard; the repo layer's `codingRules` file replaces its content per repo while the fragment name stays fixed, so implementer, QA, steward and adjudicator prompts render the same rule text through their shared bodies), `remarkable` (the remarkable definition), `finding-standards` (the no-praise, no-restating, no-taste rule shared by both reviews), `qa-acceptance` (the acceptance duties and verdicts the code QA and browser QA share), `qa-turn` (the turn block those two QA prompts share), `browser-tests` (the browser-surface turn the browser QA adds before the code QA), `plan-review-marks` (the plan-review mark meaning, shared by the architect's turn and return), `plan-history` (merged work is history: what a merged bullet collapses to; included by `plan-standard`), `spike-report-general` (what a spike's done-when says; included by `pm` and `architect-body`), `verdict` (which step each of `verdict` and `decision` belongs to, for review and architect steps) and the role bodies `implementer-body` and `architect-body` (everything before the role's turn block; a reviewer includes its author's body by role name, so the plan review reuses the reviewer template over `architect-body`).
+The shared definitions exist once as partials: `scope` (the predicted-area rule: out-of-area judgement, upscope condition; includes `plan-read-only`), `plan-read-only` (the plan, intent, other task files and records are read-only), `task-size` (what one task is: one implementer session, one seam, one reviewable diff, one done-when, and the split/merge criteria; included by `front`, `plan-standard` and `pm`), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract, with a filled example and its alternative rendered from the kernel outcome schema), `task-frontmatter` (the task-file frontmatter shape rendered from the kernel task schema, plus the configured task types and tiers; included by the authoring roles), `clean-code` (the code standard; the repo layer's `codingRules` file replaces its content per repo while the fragment name stays fixed, so implementer, QA, reviewer, steward and adjudicator prompts render the same rule text through their shared bodies), `remarkable` (the remarkable definition), `finding-standards` (the no-praise, no-restating, no-taste rule shared by both reviews), `qa-acceptance` (the acceptance duties and verdicts the code QA and browser QA share), `qa-turn` (the turn block those two QA prompts share), `browser-tests` (the browser-surface turn the browser QA adds before the code QA), `plan-review-marks` (the plan-review mark meaning, shared by the architect's turn and return), `plan-history` (merged work is history: what a merged bullet collapses to; included by `plan-standard`), `spike-report-general` (what a spike's done-when says; included by `pm` and `architect-body`), `verdict` (which step each of `verdict` and `decision` belongs to, for review and architect steps) and the role bodies `implementer-body` and `architect-body` (everything before the role's turn block; a reviewer includes its author's body by role name, so the plan review reuses the reviewer template over `architect-body`).
 
 The architect's body is assembled from fragments so a reviewer and a subarchitect share the whole body: `architect-bounds` (the bounds), `architect-turn` (the consult's turn order, completeness check, stop decision and plan edit), `plan-standard` (what the plan carries and its granularity, with `plan-history` and `task-size`), `plan-rules` (debt, parked work and ADRs) and `architect-scope` (tiers and calibration, with `plan-rules` inside). `architect-body` is that shared body plus `outcome`; `architect-assignment` adds the top architect's role line before the bounds. `architect-goal` adds the top's scope (the whole goal, the register at depth 2, steers), and `architect-epic` adds the subarchitect's epic scope and upward brief. The plan reviewer includes `architect-assignment` and the whole `architect-body`; the architect's return includes `architect-assignment`.
 
@@ -102,18 +102,20 @@ One epic's architect, below the top architect: the same bounds, turn order, plan
 - `task_types` — configured task types with their flow, kind, output schema, nogit/promote flags and use-when; renderer default
 - `tiers` — run-config alias names; renderer default
 - `class_types` — the configured development types each front class may write, rendered by the front turn
-- `code_map_path` — path of the code map a `when: [bigger]` scout step wrote; `none` when no scout ran
+- `code_map_path` — absolute path of the code map a `when: [bigger]` scout step writes; the file may not exist yet when the front runs
 
 ## intent.md
 
 - `iteration` — 1-based iteration number of the consult that carries the steer
 - `intent_path` — path to the goal's `intent.md`, the only file the turn may edit
-- `steer` — the pending steer as `- <id> (<relPath>):` plus its full indented text
+- `steer` — the pending steer as `- <id> (<relPath>):` plus its full indented text; `none` on a slug-triage turn
+- `annotate` — `true` on a slug-triage turn: add `[[Slug]]` annotations in place; `false` on a steer turn
+- `triage_note` — the front's note that the goal intent carries no `[[Slug]]` annotations; empty on a steer turn
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome examples from the kernel schema; renderer default
 
-The turn's record carries the unified diff of the edit; the next architect pack renders it beside the pending steer.
+The turn's record carries the unified diff of the edit; the next architect pack renders a steer's diff beside the pending steer, while a slug-triage turn's record is the annotation diff the architect's intent already carries.
 
 ## pm.md
 
@@ -157,7 +159,7 @@ The turn's record carries the unified diff of the edit; the next architect pack 
 
 ## cleanliness-revision.md
 
-The cleanliness revision follow-up instruction (fix or justify), included by `implementer.md` on a cleanliness revision turn. It contains no turn variables.
+The cleanliness revision follow-up instruction (clean up, ignore or override), included by `implementer.md` on a cleanliness revision turn. It contains no turn variables.
 
 ## qa.md
 
@@ -253,6 +255,7 @@ The ship-or-park decision, included by `review-implementer.md` on the last call.
 - `max_rounds` — this review step's total review calls: its change-request bound plus the last call
 - `base_gates` — the base tree's recorded gate result, and the only evidence a red gate predates the task: commit plus `green`, the pre-existing failing checks, or `not recorded`; a claimed pre-existing failure is a finding unless this record lists it
 - `prior_findings` — previous round's numbered summary and concerns, plus any legacy forward lines (summary first); empty string in round 1
+- `prior_concerns` — undismissed concerns raised by implementer and QA turns on this task; empty string when none
 - `upscope_ask` — escalation ask for a standalone task review, answered as `upscope: yes|no` with the verdict; empty string when this task is part of an architect plan
 - `fix_dispositions` — the current fix round's summary plus one numbered reply per prior finding; round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; renderer default
 
@@ -341,7 +344,7 @@ The flow's `resolve` step renders this same prompt with the same variables: the 
 - `checkout` — path to the stable goal checkout (integration worktree)
 - `tasks_dir` — directory holding one `<slug>.md` task file per task
 - `existing_tasks` — existing task files as `- slug | status | hash | deps: a,b` lines (`none` when empty), then parked slugs with their cause
-- `open_concerns` — the open concerns a merged follow-up or an earlier check has not answered, one `- <id> [kind/calibration]: <text> — <source>` line each; debt-kind concerns stay in the pack's debt register, not this list; `none` when empty
+- `open_concerns` — the open concerns a merged follow-up or an earlier check has not answered, one `- <id> [kind/calibration]: <text>` line each, then `· holds <slugs>` when the PM marked it, then ` — <source>`; debt-kind concerns stay in the pack's debt register, not this list; `none` when empty
 - `gate_record_path` — `end.yaml` of the newest record that ran gates, to read instead of running them; `none recorded` when no gate has run
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
@@ -378,6 +381,8 @@ The ingestion gate discovery: with repo-config gates present it copies them exac
 - `checkout` — path to the stable goal checkout (integration worktree) the gates run in
 - `setup_command` — repository setup command; `none` when not needed
 - `gate_commands` — configured gate commands as `- id: command` lines with any recorded status; `none` when the repo config declares none, which is when discovery is allowed
+- `current_infra` — contents of the existing `infra.yaml`, or `none` when absent
+- `incident_evidence` — gate timeout or cannot-start failure evidence on an incident turn; `none` during goal-start ingestion
 - `infra_path` — path of the `infra.yaml` to write, naming each gate's command, speed and observed status; the one artifact the turn authors (the outcome file is the other)
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
@@ -436,9 +441,63 @@ The architect's repair ask, named by the architect boundary step's `repairPrompt
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome examples from the kernel schema, narrowed to the fields this turn delivers; supplied by the repair ask
 
+## bootstrap-assignment.md
+
+The dispatch message passed to a bootstrapped agent slot by `bootstrap-dispatch`. Read directly from the repo override or package `prompts/` directory without LiquidJS because an operator checkout may have no `node_modules`.
+
+- `name` — assignment file basename under `bootstrap/assignments/<name>.md`
+- `worktree` — absolute path to the slot's git worktree
+
+## digest-steer.md
+
+The synthetic steer body posted to PM on resume when an interrupted iteration leaves a launch digest.
+
+- `iteration` — 1-based iteration number being resumed
+- `digest` — trimmed markdown content of `digest.md`
+- `digest_rel` — goal-relative path to `digest.md`
+
+## gate-last-call.md
+
+The final-round ask prepended to `findings` when a checks fix turn reaches its last call.
+
+## merge-conflict.md
+
+The merge-conflict resolution ask prepended to `findings` before an integration resolve turn.
+
+- `integration_head` — short commit hash of the current integration head
+- `conflicts` — comma-separated conflicted paths, or fallback message when none
+
+## pm-ladder.md
+
+The escalation/retry restatement rendered into `repair` on round 2+ of a PM, PM steer, PM stall, PM concerns, or PM plan-check turn.
+
+- `mode` — `plan`, `steer`, `stall`, `concerns`, or `plan-check`
+- `escalated` — `"true"` when the rung holds an escalated mandate, else empty
+- `retry` — `"true"` when the rung is a fresh rolled-back retry, else empty
+- `alias` — target alias running this rung
+- `model` — model ID behind `alias`
+- `findings` — formatted `- <reason>` rejection lines from the prior round, or empty
+
+## pm-steer-inject.md
+
+The mid-turn message injected into a live PM steer turn when another steer arrives for the same scope.
+
+- `steer` — formatted steer block for the newly arrived steer
+
 ## resume.md
 
 - `branch` — task branch the relaunch continues; empty when none
 - `reason` — `relaunch` after an interruption, `fallback` for a tier that continues edited work, `trivial` in the front's session
 - `session_cwd` — directory the resumed session's tools run in; trivial turns only
 - `worktree` — absolute worktree a trivial turn must use; trivial turns only
+
+## saga-reminder.md
+
+The optional architect reminder rendered into `saga_reminder` when open task count exceeds `process.sagaTaskCount`.
+
+- `task_count` — number of open and ready tasks in the goal
+- `threshold` — configured `process.sagaTaskCount` limit
+
+## standalone-upscope.md
+
+The standalone-task scope question rendered into `upscope_ask` for delivery acceptance when no architect planned the task.

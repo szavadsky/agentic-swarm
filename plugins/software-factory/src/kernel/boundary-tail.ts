@@ -352,7 +352,7 @@ export async function runPmStage(
  * boundary's.
  */
 async function releaseConcernMarks(context: ConsultContext): Promise<void> {
-  const open = openConcernIds(context.records);
+  const open = openConcernIds(context.records, context.tasks);
   if (open.size === 0) return;
   let holds: Awaited<ReturnType<typeof readHolds>>["holds"];
   try {

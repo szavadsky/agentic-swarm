@@ -1,5 +1,6 @@
 /** The gate types: what a producer's output normalises into, and one declared gate run. */
 
+import type { Finding } from "../core/checks/findings.js";
 import type { CheckResult } from "../core/checks/types.js";
 import type { ProcessResult } from "../core/proc.js";
 
@@ -46,4 +47,10 @@ export interface GateReports {
 export interface DeclaredGateRun {
   res: ProcessResult;
   check: CheckResult;
+}
+
+/** Normalised findings and optional passing per-test runtimes from one gate's reports. */
+export interface NormalisedGateReports {
+  findings: Finding[];
+  testRuntimes?: Record<string, number>;
 }

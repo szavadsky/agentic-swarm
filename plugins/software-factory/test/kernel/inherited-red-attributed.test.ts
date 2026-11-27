@@ -243,7 +243,7 @@ describe("a stamped record still charges a new failure", () => {
 });
 
 describe("a stamped record keeps a non-task red out of the fix", () => {
-  it("parks an infra red as infra, never naming the inherited red", () => {
+  it("keeps an infra red off gateFix and never parks as gate could not start, ignoring the inherited red", () => {
     const reduction = reduceTask(
       task("a"),
       [
@@ -258,9 +258,9 @@ describe("a stamped record keeps a non-task red out of the fix", () => {
       ],
       ONE_FIX_FLOW,
     );
-    expect(reduction.phase).toBe("parked");
-    expect(reduction.park?.kind).toBe("infra");
-    expect(causeText(reduction.park)).toBe("infra: gate could not start: boot");
+    expect(reduction.phase).toBe("checks");
+    expect(reduction.gateFix).toBeFalsy();
+    expect(reduction.park).toBeUndefined();
   });
 
   it("blocks a merge on a new failure under an already-red merge gate", () => {

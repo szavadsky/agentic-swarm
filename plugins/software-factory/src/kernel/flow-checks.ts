@@ -74,7 +74,7 @@ export async function runChecks(
   }
   const prior = await runtime.store.listRecords();
   const preexisting = preexistingRed(recordedBaseGates(prior));
-  await runTaskGates(
+  const gated = await runTaskGates(
     runtime,
     task,
     taskMeta(task, state, iteration),
@@ -82,5 +82,7 @@ export async function runChecks(
     preexisting,
     prior,
   );
+  if (gated.infra) return { infra: gated.infra };
+  if (gated.cancelled) return { cancelled: true };
   return {};
 }
