@@ -14,7 +14,7 @@ export interface GateCheckMeta {
 
 export interface CappedGateOutput {
   output: string;
-  /** The head was dropped; a bun report resumes at its next file header. */
+  /** The head was dropped; the output is the tail of a longer log. */
   truncated: boolean;
 }
 

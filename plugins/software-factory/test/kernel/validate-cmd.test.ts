@@ -189,13 +189,13 @@ function validateCmdPart1() {
   it("resolves to the running build's bin/factory.ts, absolute", () => {
     const bin = path.join(packageRoot, "bin", "factory.ts");
     expect(fs.existsSync(bin)).toBe(true);
-    expect(validateCmd()).toBe(`bun ${bin} validate`);
+    expect(validateCmd()).toBe(`${process.execPath} ${bin} validate`);
     expect(path.isAbsolute(bin)).toBe(true);
   });
 
   it("quotes a build path with spaces", () => {
     expect(validateCmd("/tmp/with space/bin/factory.ts")).toBe(
-      'bun "/tmp/with space/bin/factory.ts" validate',
+      `${process.execPath} "/tmp/with space/bin/factory.ts" validate`,
     );
   });
 

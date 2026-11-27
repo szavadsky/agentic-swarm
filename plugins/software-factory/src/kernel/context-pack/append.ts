@@ -1,7 +1,7 @@
 /** One appender per pack section. */
 
 import { formatCause } from "../cause.js";
-import { OPEN_TASK_STATUSES } from "../derive.js";
+import { openEpicTask } from "../derive.js";
 import type { OpenDebt } from "../derive.js";
 import { renderInfraSection } from "../infra.js";
 import { spikeReportPath } from "../spike-report.js";
@@ -66,7 +66,7 @@ export function appendSection(
 function epicStatusLine(name: string, input: ContextPackInput): string {
   const epic = input.state.epics[name]!;
   const open = epic.tasks.filter((slug) =>
-    OPEN_TASK_STATUSES.has(input.state.tasks[slug]?.status ?? "pending"),
+    openEpicTask(input.state.tasks[slug]),
   ).length;
   const total = epic.tasks.length;
   return `- \`${name}\`: ${epic.done ? "done" : "open"} — subarchitect ${epic.decision ?? "no turn"}; ${open} of ${total} ${total === 1 ? "task" : "tasks"} open`;

@@ -1,6 +1,6 @@
 /** Constants and predicates shared by the debt and state reducers. */
 
-import type { StepRecord, TaskFile, TaskStatus } from "../types.js";
+import type { StepRecord, TaskFile, TaskState, TaskStatus } from "../types.js";
 
 /**
  * The script record the launch appends when the front path stops: a front
@@ -16,6 +16,17 @@ export const OPEN_TASK_STATUSES: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
   "running",
   "parked",
 ]);
+
+/**
+ * A task that still owes its epic work: a retired park is history because the
+ * continuation that landed its kept work settled the park's debt.
+ */
+export function openEpicTask(task: TaskState | undefined): boolean {
+  return (
+    task?.supersededBy === undefined &&
+    OPEN_TASK_STATUSES.has(task?.status ?? "pending")
+  );
+}
 
 /** Continuation edges: each slug's `base`, inverted to the tasks continuing it. */
 export function baseContinuations(

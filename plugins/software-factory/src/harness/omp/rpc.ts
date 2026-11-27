@@ -6,12 +6,13 @@ import {
   registerChildGroup,
   unregisterChildGroup,
 } from "../../core/shutdown.js";
-import { OmpRpcExit, OmpRpcTimeout } from "./errors.js";
+import { stopDetails } from "../details.js";
+import { OmpRpcExit, OmpRpcProtocol, OmpRpcTimeout } from "./errors.js";
 import type { OmpRpcOptions } from "./types.js";
 
 export type { OmpRpcOptions } from "./types.js";
 
-export { OmpRpcExit, OmpRpcTimeout };
+export { OmpRpcExit, OmpRpcProtocol, OmpRpcTimeout };
 
 // Only frames someone awaits are retained; message_end reaches the harness
 // through onFrame and is not held for the whole turn.
@@ -40,6 +41,7 @@ export class OmpRpc {
   private readonly retained: any[] = [];
   private readonly waiters = new Set<Waiter>();
   private buffer = "";
+  private fault?: OmpRpcProtocol;
   private stderrText = "";
   private readonly maxStderrBytes: number;
   private nextId = 0;
@@ -136,6 +138,7 @@ export class OmpRpc {
         this.stderr(),
       );
     }
+    if (this.fault) throw this.fault;
     const id = payload.id ?? `r${++this.nextId}`;
     const frame = { id, type: command, ...payload };
     try {
@@ -215,6 +218,7 @@ export class OmpRpc {
   }
 
   private onStdout(chunk: string): void {
+    if (this.fault) return;
     this.buffer += chunk;
     let index: number;
     while (true) {
@@ -227,10 +231,26 @@ export class OmpRpc {
       try {
         frame = JSON.parse(line);
       } catch {
-        continue;
+        this.failProtocol("invalid JSON", line);
+        return;
+      }
+      if (typeof frame?.type !== "string") {
+        this.failProtocol("frame has no type", line);
+        return;
       }
       this.accept(frame);
     }
+  }
+
+  /** The first malformed stdout line ends every wait; later lines are ignored. */
+  private failProtocol(problem: string, line: string): void {
+    if (this.fault) return;
+    const fault = new OmpRpcProtocol(
+      `omp RPC protocol fault (${problem}): ${stopDetails(line)}`,
+    );
+    this.fault = fault;
+    console.error(`[omp] ${fault.message}`);
+    this.rejectWaiters(fault);
   }
 
   private accept(frame: any): void {
@@ -252,6 +272,7 @@ export class OmpRpc {
     timeoutMs: number,
     label: string,
   ): Promise<any> {
+    if (this.fault) return Promise.reject(this.fault);
     const existing = this.retained.findIndex(match);
     if (existing >= 0)
       return Promise.resolve(this.retained.splice(existing, 1)[0]);

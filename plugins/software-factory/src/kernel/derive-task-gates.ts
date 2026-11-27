@@ -24,6 +24,7 @@ import type {
 } from "./derive-types.js";
 import { raisePendingSignal } from "./derive-task-state.js";
 import { attributedFailures, isInfraCheck } from "./gates.js";
+import { isDecideStep } from "./pending-signal.js";
 import { isRecoveryCrash } from "./recovery-seal.js";
 import { checksFixLimit, isLastChecksFixCall } from "./review.js";
 import type { Cause, StepRecord } from "./types.js";
@@ -253,7 +254,7 @@ function applyMergeGates(
   state.pendingChecks = null;
 }
 
-/** A conflict either gets the flow's single resolve turn or parks. */
+/** A conflict either gets the flow's single resolve turn or the decider's call. */
 function applyMergeConflict(
   context: ReduceContext,
   state: ReduceState,
@@ -262,9 +263,20 @@ function applyMergeConflict(
   const resolveStep = context.flow.steps.some((step) => step.id === "resolve");
   if (state.resolveRan || !resolveStep) {
     // The one resolve turn already ran for this merge attempt, or the flow
-    // config has no resolve step: the conflict is the park.
-    state.park = cause;
-    state.phase = "parked";
+    // config has no resolve step: a retry cannot settle it mechanically, so the
+    // decider judges whether the branch still ships, needs a fix, or parks.
+    raisePendingSignal(
+      state,
+      {
+        kind: "conflict",
+        evidence: `${
+          state.resolveRan
+            ? "the merge conflicted again after its resolve turn"
+            : "the merge conflicted and the flow has no resolve step"
+        }: ${cause.detail}`,
+      },
+      { kind: "merge" },
+    );
     return;
   }
   state.gateFix = false;
@@ -277,9 +289,10 @@ function applyMergeConflict(
 
 /**
  * A crash the script reports counts like a harness crash on the same step: a
- * throwing pre-harness step parks after two repeats instead of redispatching
- * forever. Only reported crashes on flow steps count; bare recovery seals,
- * script phases, quota/rate/network/auth/overflow/glitch and drain stay free.
+ * throwing pre-harness step raises its signal after two repeats instead of
+ * redispatching forever. Only reported crashes on flow steps count; bare
+ * recovery seals, script phases, quota/rate/network/auth/overflow/glitch and
+ * drain stay free.
  */
 export function applyScriptFailure(
   context: ReduceContext,
@@ -300,7 +313,7 @@ export function applyScriptFailure(
   recordInfraRepeat(state, rec.step, stop);
 }
 
-/** Counts a repeated infra crash on one step; the second parks. */
+/** Counts a repeated infra crash on one step; the second raises its signal. */
 export function recordInfraRepeat(
   state: ReduceState,
   step: string,
@@ -312,10 +325,25 @@ export function recordInfraRepeat(
     state.infraRepeatCount = 1;
   }
   state.turns += 1;
-  if (state.infraRepeatCount >= 2) {
-    state.park = makeCause("infra-repeat", infraDetail(stop));
+  if (state.infraRepeatCount < 2) return;
+  if (isDecideStep(step)) {
+    // The deciding agent itself stopped twice: keep the signal it owed for the
+    // PM instead of redispatching the same turn forever.
+    state.park = makeCause(
+      state.pendingSignal?.kind ?? "infra-repeat",
+      `${state.pendingSignal?.evidence ?? infraDetail(stop)}; the decide turn stopped twice`,
+    );
     state.phase = "parked";
+    return;
   }
+  raisePendingSignal(
+    state,
+    {
+      kind: "infra-repeat",
+      evidence: `${step} reported ${infraDetail(stop)} twice`,
+    },
+    { kind: "retry-step", step },
+  );
 }
 
 /** `cause: details`, with the infra-only fields read off the narrowed union. */

@@ -419,8 +419,9 @@ function registerFallbackLaunchPart(): void {
       [...records, reviewChanges(4, 4)],
       flow,
     );
-    expect(lastCall.phase).toBe("parked");
-    expect(lastCall.park?.kind).toBe("invalid-outcome");
+    expect(lastCall.phase).toBe("decide");
+    expect(lastCall.park).toBeUndefined();
+    expect(lastCall.pendingSignal?.kind).toBe("invalid-outcome");
   });
 }
 

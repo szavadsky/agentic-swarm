@@ -58,6 +58,8 @@ export type Stop =
    * exit code and signal are kept outside the cut, followed by the last
    * non-banner stderr line, the last ACP error frame, or a synthetic cause.
    * Other crash paths use stderr or fall back to their exit facts.
+   * `protocol` is a harness stdout line that is not a frame; `details`
+   * carries the malformed line.
    * `network` is a transport loss (reset socket, failed fetch) or an error the
    * provider itself marked retryable; `quota` and `rate` are retried alike.
    * `unavailable` means the turn never reached a harness: its alias had no live
@@ -74,7 +76,8 @@ export type Stop =
         | "overflow"
         | "timeout"
         | "unavailable"
-        | "glitch";
+        | "glitch"
+        | "protocol";
       details?: string;
     };
 

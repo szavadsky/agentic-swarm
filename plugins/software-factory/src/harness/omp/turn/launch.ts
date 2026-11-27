@@ -14,7 +14,7 @@ import type {
 } from "../../types.js";
 import { zeroUsage } from "../../usage.js";
 import { classifyOmpTurn } from "../classify.js";
-import { OmpRpcExit, OmpRpcTimeout } from "../rpc.js";
+import { OmpRpcExit, OmpRpcProtocol, OmpRpcTimeout } from "../rpc.js";
 import type { OmpRpc } from "../rpc.js";
 import type { OmpDirs, OmpRuntime } from "../runtime.js";
 import { DEFAULT_TOOLS } from "../types.js";
@@ -30,11 +30,13 @@ function isInside(parent: string, child: string): boolean {
 export function launchFailure(error: unknown): Stop {
   return classifyOmpTurn({
     failure:
-      error instanceof OmpRpcTimeout
-        ? { timedOut: true }
-        : error instanceof OmpRpcExit
-          ? { code: error.code, signal: error.signal, stderr: error.stderr }
-          : { stderr: String(error) },
+      error instanceof OmpRpcProtocol
+        ? { protocol: error.message }
+        : error instanceof OmpRpcTimeout
+          ? { timedOut: true }
+          : error instanceof OmpRpcExit
+            ? { code: error.code, signal: error.signal, stderr: error.stderr }
+            : { stderr: String(error) },
   });
 }
 

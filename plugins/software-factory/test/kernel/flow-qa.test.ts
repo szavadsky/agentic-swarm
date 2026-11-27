@@ -391,7 +391,7 @@ describe("default development flow", () => {
 });
 
 describe("QA contract breaches", () => {
-  it("parks a QA change once its own change requests are spent", () => {
+  it("raises the last-call signal when QA changes after its own requests are spent", () => {
     const reduction = reduceTask(
       task("a"),
       [
@@ -401,9 +401,12 @@ describe("QA contract breaches", () => {
       ],
       DEFAULT_FLOWS["implement-review"]!,
     );
-    expect(reduction.phase).toBe("parked");
-    expect(reduction.park?.kind).toBe("invalid-outcome");
-    expect(reduction.park?.detail).toContain("last acceptance call");
+    expect(reduction.phase).toBe("decide");
+    expect(reduction.park).toBeUndefined();
+    expect(reduction.pendingSignal).toEqual({
+      kind: "invalid-outcome",
+      evidence: "qa changes on the last acceptance call: qa",
+    });
   });
 
   it("parks a QA change with no findings instead of sending an empty fix", () => {

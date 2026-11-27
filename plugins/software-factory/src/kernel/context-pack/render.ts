@@ -141,7 +141,7 @@ export function renderContextPack(input: ContextPackInput): string {
   appendSection(
     lines,
     "## Parked by cause (terminal; continue via a new slug)",
-    parkedLines(view.groups.allParked),
+    parkedLines(view.groups.parked),
   );
   appendSection(
     lines,
@@ -262,7 +262,7 @@ export function renderContextData(input: ContextPackInput): string {
       cause: task.cause ?? null,
     })),
     epics: input.state.epics,
-    parked: view.groups.allParked.map((task) => ({
+    parked: view.groups.parked.map((task) => ({
       slug: task.slug,
       cause: task.cause ?? makeCause("unknown", "no recorded cause"),
     })),

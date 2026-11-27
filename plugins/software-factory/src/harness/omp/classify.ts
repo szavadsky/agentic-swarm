@@ -130,6 +130,12 @@ export function classifyOmpTurn(input: OmpTurnOutcomeInput): Stop {
   if (input.abortReason || input.failure?.timedOut) {
     return { kind: "infra", cause: "timeout" };
   }
+  if (input.failure?.protocol) {
+    return withDetails(
+      { kind: "infra", cause: "protocol" },
+      input.failure.protocol,
+    );
+  }
   if (input.promptResult?.status === "error") {
     return classifyOmpError(input.promptResult.error);
   }

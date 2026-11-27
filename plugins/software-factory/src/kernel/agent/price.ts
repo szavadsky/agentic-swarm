@@ -1,16 +1,14 @@
 /** Pricing and closing the turn's record. */
 
 import type { ModelRef, TurnResult } from "../../harness/types.js";
-import { makeCause } from "../cause.js";
 import { launchKindOf } from "../metrics.js";
 import { loadPriceTable } from "../openrouter.js";
 import { failedOutcome } from "../outcome.js";
 import { pricedServed, pricedUsage } from "../pricing.js";
-import { appendPark } from "../record.js";
 import { statusSource, writeStatus } from "../status.js";
 import type { LaunchKind, RecordEnd } from "../types.js";
 import type { AgentTurnResult, AgentTurnState, TurnPricing } from "./types.js";
-import { isHalted, overflowed } from "./chain.js";
+import { isHalted } from "./chain.js";
 
 /** Prices the aggregate, the per-model split and the compaction input. */
 async function priceTurn(
@@ -132,21 +130,8 @@ export async function finalizeTurn(
   const record = await state.started.finish(
     turnRecordEnd(state, settled, pricing),
   );
-  // An overflow that survived the de-novo retry cannot succeed on this item:
-  // park it so a later launch does not burn another attempt.
-  if (overflowed(state.stop) && state.spec.meta.slug) {
-    await appendPark(
-      state.runtime.store,
-      {
-        iteration: state.spec.meta.iteration,
-        slug: state.spec.meta.slug,
-        round: state.spec.meta.round,
-        revision: state.spec.meta.revision ?? 0,
-        architect: state.spec.meta.architect,
-      },
-      makeCause("overflow", ""),
-    );
-  }
+  // An overflow that survived the de-novo retry is a signal for the decider,
+  // raised by derive from the turn record; the agent layer never parks it.
   await writeStatus(statusSource(state.runtime));
   return { record, outcome: state.outcome ?? undefined, text: state.text };
 }
