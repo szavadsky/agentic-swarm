@@ -28,8 +28,11 @@ gates:
     # environment exported to the command, with each directory created per worktree
     env:
       TMPDIR: .cache/gate  # this gate's own scratch root, never shared with another worktree
-    # the suite's wall is the test-suite-optimize cut, not this ceiling; 300 is the 5-minute goal the parallel runner now meets
-    timeoutSec: 300
+    # the suite's wall is the test-suite-optimize cut, not this ceiling: the clean
+    # full suite measured 292s and a green run 361.8s under the run's concurrent
+    # task checks, so 300 killed green runs (two timeouts, 75 of 392 files
+    # unstarted). 900 is the kernel default.
+    timeoutSec: 900
     # the machine report the kernel reads to name failed cases on base too
     format:
       junit: .cache/gate/junit.xml  # run-tests.ts writes it here (FACTORY_JUNIT_PATH); missing or empty is red
