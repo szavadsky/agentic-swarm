@@ -6,6 +6,7 @@ import { KERNEL_STEPS } from "./types.js";
 import type { Cause, CauseKind, StepRecord } from "./types.js";
 import { isQuotaStop, quotaStopsOf } from "./waste-quota.js";
 import { rebuttedReviewsOf } from "./waste-rebutted.js";
+import { rerunWaste } from "./waste-rerun.js";
 import type {
   WasteCounts,
   WasteReason,
@@ -26,7 +27,7 @@ export const WASTE_REASONS: readonly WasteReason[] = [
   "structureContainment",
   "structureOutcomeChannel",
   "structureInfra",
-  "flakyTestRejection",
+  "incorrectRejection",
 ];
 
 export const WASTE_REASON_LABEL: Record<WasteReason, string> = {
@@ -35,7 +36,7 @@ export const WASTE_REASON_LABEL: Record<WasteReason, string> = {
   structureContainment: "structure: containment",
   structureOutcomeChannel: "structure: outcome channel",
   structureInfra: "structure: infra",
-  flakyTestRejection: "flaky-test rejection",
+  incorrectRejection: "incorrect rejection",
 };
 
 export function emptyWasteCounts(): WasteCounts {
@@ -45,7 +46,7 @@ export function emptyWasteCounts(): WasteCounts {
     structureContainment: 0,
     structureOutcomeChannel: 0,
     structureInfra: 0,
-    flakyTestRejection: 0,
+    incorrectRejection: 0,
   };
 }
 
@@ -73,7 +74,7 @@ const PRIORITY = {
   containment: 30,
   implementerFailure: 40,
   outcomeChannel: 50,
-  flakyRejection: 60,
+  incorrectRejection: 60,
 } as const;
 
 function isAgentTurn(rec: StepRecord): boolean {
@@ -228,8 +229,8 @@ function zeroDiffFix(
   if (!after) return undefined;
   if (after.ok === true) {
     return {
-      reason: "flakyTestRejection",
-      priority: PRIORITY.flakyRejection,
+      reason: "incorrectRejection",
+      priority: PRIORITY.incorrectRejection,
       evidence: after,
       detail: `fixed nothing after red ${gate}; the same tree passed ${gate} (${recordPath(before)} then ${recordPath(after)})`,
     };
@@ -332,6 +333,7 @@ function ownCandidate(rec: StepRecord, role: string): Candidate | undefined {
 function collectCandidates(
   ordered: readonly StepRecord[],
   roleOf: (step: string) => string,
+  history: readonly StepRecord[],
 ): Map<number, Candidate> {
   const candidates = new Map<number, Candidate>();
   const counted = ordered.filter(
@@ -352,6 +354,17 @@ function collectCandidates(
       rec,
       zeroDiffFix(ordered, rec, roleOf(rec.step)),
     );
+  }
+  // A park in an earlier iteration still names this iteration's re-run: the
+  // first agent turn after it repeats work the infra fault threw away.
+  const measured = new Set(ordered.map((rec) => rec.seq));
+  for (const rerun of rerunWaste([...history, ...ordered], measured)) {
+    addOwnCandidate(candidates, rerun.turn, {
+      reason: "incorrectRejection",
+      priority: PRIORITY.incorrectRejection,
+      evidence: rerun.evidence,
+      detail: rerun.detail,
+    });
   }
   return candidates;
 }
@@ -398,7 +411,7 @@ export function wasteAccounting(input: WasteInput): WasteAccounting {
   const ordered = [...input.records].sort((a, b) => a.seq - b.seq);
   const entries = wasteEntries(
     ordered,
-    collectCandidates(ordered, input.roleOf),
+    collectCandidates(ordered, input.roleOf, input.history ?? []),
     input.roleOf,
   );
   const counts = emptyWasteCounts();

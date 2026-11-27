@@ -59,7 +59,6 @@ What differs from [INTENT.md](INTENT.md) on `main` after goal `delta` landed (75
 - **[[StatusAndDashboard]]** — *partial*. Intent completion is keyed by free-text section, not by slug, and only the architect reports it (`src/kernel/types/outcome.ts:206-212`, `summary/intent-status.ts:9-13`).
 - **[[TestRuntimeTracking]]** — *partial*. Checks carry `durationMs` and steps `wallMs` (`src/kernel/record.ts:70-82`, `src/core/checks/types.ts:97`); `testRuns` still counts checks. No per-test runtimes, no comparison with goal start, no invitation in the architect prompts.
 - **[[UsageAndPriceTracking]]** — *partial*. *[run]* 155 of 347 agent turns unpriced (118 pi/deepseek, 34 agy/gemini, 2 ernie, 1 other): $11.72 reported against $36.80 at list. Timed-out turns record zero usage (D12).
-- **[[WastedTurnTracking]]** — *partial*. *[run]* The metric counts 6 wasted turns (1.7%) but none of the ~60 records re-run after the 11 timeout parks, which intent counts as incorrect rejections.
 - **[[Traceability]]** — *missing*. No slug parsing (the only `\[\[` in `src/` is an ANSI regex, `src/kernel/gates-normalise.ts:21`), no triage note or agent that adds missing slugs, no per-slug status footnote, no deterministic check.
 
 ### Harness, quota, gates

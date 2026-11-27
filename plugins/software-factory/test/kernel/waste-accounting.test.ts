@@ -219,7 +219,7 @@ async function countsEachReasonPerRoleAliasNamesPart1(
     structureContainment: 1,
     structureOutcomeChannel: 1,
     structureInfra: 1,
-    flakyTestRejection: 1,
+    incorrectRejection: 1,
   });
   expect(
     one.waste.entries.map((entry) => [entry.reason, entry.record]),
@@ -229,7 +229,7 @@ async function countsEachReasonPerRoleAliasNamesPart1(
     ["structureContainment", pathOf(records, 3)],
     ["structureOutcomeChannel", pathOf(records, 5)],
     ["structureInfra", pathOf(records, 6)],
-    ["flakyTestRejection", pathOf(records, 8)],
+    ["incorrectRejection", pathOf(records, 8)],
     ["implementerFailure", pathOf(records, 10)],
   ]);
   // The park is the proof for the turn it ended, not a wasted turn itself.
@@ -261,7 +261,7 @@ async function countsEachReasonPerRoleAliasNamesPart2(
     structureContainment: 1,
     structureOutcomeChannel: 1,
     structureInfra: 1,
-    flakyTestRejection: 1,
+    incorrectRejection: 1,
   });
   expect(one.roles.implementer!.rebuttedReviews).toBe(0);
   expect(one.roles.reviewer!.waste.implementerFailure).toBe(0);
@@ -303,7 +303,7 @@ async function countsEachReasonPerRoleAliasNamesPart3(
   expect(text).toContain("  - structure: containment: 1");
   expect(text).toContain("  - structure: outcome channel: 1");
   expect(text).toContain("  - structure: infra: 1");
-  expect(text).toContain("  - flaky-test rejection: 1");
+  expect(text).toContain("  - incorrect rejection: 1");
   expect(text).toContain(
     `${pathOf(records, 1)}: implementer/implementer (implement r1) — complete implementer failure — outcome failed: nothing landed`,
   );
@@ -317,7 +317,7 @@ async function countsEachReasonPerRoleAliasNamesPart3(
     `${pathOf(records, 6)}: implementer/implementer (implement r1) — structure: infra — infra: network (ECONNRESET)`,
   );
   expect(text).toContain(
-    `${pathOf(records, 8)}: implementer/implementer (implement r1) — flaky-test rejection — fixed nothing after red checks; the same tree passed checks`,
+    `${pathOf(records, 8)}: implementer/implementer (implement r1) — incorrect rejection — fixed nothing after red checks; the same tree passed checks`,
   );
   expect(text).toContain(
     `${pathOf(records, 10)}: implementer/implementer (implement r2) — complete implementer failure — empty-diff: implement r2 committed no changes`,
@@ -357,7 +357,7 @@ function registerWasteAccountingPart2(): void {
     });
     expect(accounting.turns).toBe(1);
     expect(accounting.counts.implementerFailure).toBe(1);
-    expect(accounting.counts.flakyTestRejection).toBe(0);
+    expect(accounting.counts.incorrectRejection).toBe(0);
     expect(accounting.entries[0]).toMatchObject({
       reason: "implementerFailure",
       record: pathOf(records, 2),
@@ -404,9 +404,9 @@ function registerWasteAccountingPart3(): void {
       records,
       roleOf: (step) => ROLE_BY_STEP[step as keyof typeof ROLE_BY_STEP] ?? step,
     });
-    expect(accounting.counts.flakyTestRejection).toBe(1);
+    expect(accounting.counts.incorrectRejection).toBe(1);
     expect(accounting.entries[0]).toMatchObject({
-      reason: "flakyTestRejection",
+      reason: "incorrectRejection",
       record: pathOf(records, 2),
       evidence: pathOf(records, 4),
       detail: expect.stringContaining("red merge-checks"),
