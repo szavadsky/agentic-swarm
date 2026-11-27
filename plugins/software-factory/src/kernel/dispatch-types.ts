@@ -88,14 +88,20 @@ export interface DispatchState {
   cancelled: boolean;
   drain?: Cause;
   seenSteers: Set<string>;
-  /** Fresh files seen once but not yet stable: steer id -> last content hash. */
-  settling: Map<string, string>;
   holds: Hold[];
   /** The running PM turn a due steer is injected into instead of a new turn. */
   liveSteers: LiveSteerSessions;
   sleep: (ms: number) => Promise<void>;
   /** The iteration's dollar brake, if configured. */
   usdLimit?: number;
+}
+
+/** An inbox batch's debounce standing: how much pends and how long until it is due. */
+export interface SteerBatch {
+  /** Unclaimed inbox steers waiting on the debounce. */
+  pending: number;
+  /** Milliseconds until the newest pending content has held; 0 when due or nothing pends. */
+  waitMs: number;
 }
 
 /** An inbox claim result: the holds in force, whether a steer turn ran, and its fault. */
@@ -105,6 +111,8 @@ export interface SteerPoll {
   /** An inbox read failed: the iteration ends as an infra stop. */
   error?: string;
   urgent?: string;
+  /** The batch is inside its debounce window; the loop waits this long before the next pass. */
+  heldMs?: number;
 }
 
 export interface SteerWatchOptions {
@@ -132,6 +140,11 @@ export interface SteerWatch {
    * iteration as an infra stop instead of vanishing inside the timer.
    */
   take(): string | undefined;
+  /**
+   * Reports the batch's debounce standing against the same clocks the watch
+   * tick uses; the poll gates its claims on it.
+   */
+  batch(steers: readonly Steer[]): SteerBatch;
   /** Stops the timer; a dispatch that ends must not leave it running. */
   stop(): void;
 }

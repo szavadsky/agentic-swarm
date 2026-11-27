@@ -44,7 +44,6 @@ What differs from [INTENT.md](INTENT.md) on `main` after goal `delta` landed (75
 
 ### Steers and launch
 
-- **[[SteerMailboxPolling]]** — *partial*. The 60 s debounce (`limits.steerDebounceSeconds`) only delays the watch's wake during a running turn; any other dispatch pass claims a steer after a 50 ms settle, so a burst can cost several PM turns (`src/kernel/dispatch-poll.ts:56-100`, `dispatch-watch.ts:18-21`).
 - **[[SteerTriageAndUrgentDrain]]** — *partial*. An urgent steer arriving during a PM turn is injected like any other (`src/kernel/dispatch-watch.ts:102-111`, `dispatch.ts:232`); drain starts only if it is still pending at a poll (`dispatch-admit.ts:29-42`). No hold for a steer that asks to wait for the boundary: *[run]* `e625288b` said "evaluate at the next boundary" and the digest was rewritten 83 s after filing.
 - **[[LaunchBoundsAndDrain]]** — *partial*. `--iterations` is the only bound that is a launch argument (`src/cli/dispatch/args.ts:42-44`); checker rounds, wall time and USD are config and bound an iteration (`src/kernel/config/run-schema.ts:225-227`, `dispatch-admit.ts:38-60`). Missing: wait-and-retry on infra, a subscription-use limit, the stop file (only SIGINT/SIGTERM, `src/core/shutdown.ts`). A drain that ends with an infra fault still runs the steward, stall-PM and checker stages (`dispatch-end.ts:270-305`).
 

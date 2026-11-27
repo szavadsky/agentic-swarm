@@ -98,7 +98,8 @@ async function runSettledSteerSecondPass(
 function registerMidRunSteerHoldsPart1(): void {
   it("does not claim a fresh steer that is still growing across the settle interval", async () => {
     const { repo, goal } = setupFlowRepo({
-      limits: { concurrency: { overall: 1 } },
+      // The settle window must outlast the writer's cadence.
+      limits: { concurrency: { overall: 1 }, steerDebounceSeconds: 0.02 },
     });
     try {
       const harness = new FakeHarness({ id: "fake" });

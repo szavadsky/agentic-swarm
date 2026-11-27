@@ -638,15 +638,17 @@ Gates run once on the base; a red base is recorded and warned once, not fatal.
 its own five-second timer, independent of the turns it runs, so a steer that
 arrives during a long turn gets its one PM steer turn before that turn ends: a
 steer is announced once its content has held for
-`limits.steerDebounceSeconds` (default 60), everything announced together gets
-one turn, and a steer that arrives before the goal has a plan waits for the
-plan, because the PM routes nothing without one. A steer that arrives while
-nothing is in flight takes the same PM turn at the next boundary, before
-the architect: the PM answers it, writes its task or spike, routes it to the
-intent agent, or hands it to the architect. An `intent` route is carried into
-`intent.md` first, and the architect's pack shows the diff and the steer
-record. A steer the PM cannot route reaches the architect, who marks it
-processed and writes its answer to `mailbox/outbox/steer-<id>.md`.
+`limits.steerDebounceSeconds` (default 60); the configured debounce gates every
+dispatch pass, so a pass with a steer inside its window waits the remainder out.
+Everything announced together gets one turn, and a steer that arrives before the
+goal has a plan waits for the plan, because the PM routes nothing without one.
+A steer that arrives while nothing is in flight takes the same PM turn at the
+next boundary, before the architect: the PM answers it, writes its task or
+spike, routes it to the intent agent, or hands it to the architect. An
+`intent` route is carried into `intent.md` first, and the architect's pack
+shows the diff and the steer record. A steer the PM cannot route reaches the
+architect, who marks it processed and writes its answer to
+`mailbox/outbox/steer-<id>.md`.
 
 A steer whose file starts with `urgent: true` frontmatter is the exception: it
 is not answered by the PM. Dispatch stops starting new work, in-flight tasks

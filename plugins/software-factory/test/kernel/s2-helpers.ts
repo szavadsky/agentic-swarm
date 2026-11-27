@@ -207,6 +207,8 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
       limits: {
         iterations: 1,
         concurrency: { overall: 1 },
+        // Tests that exercise the debounce set their own window; 0.1 ms rounds to 0.
+        steerDebounceSeconds: 0.0001,
         ...(opts.limits ?? {}),
       },
     }),

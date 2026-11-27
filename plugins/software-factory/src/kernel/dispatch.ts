@@ -16,7 +16,7 @@ import type {
   SteerWatch,
 } from "./dispatch-types.js";
 import { readInitialHolds, settledTurns } from "./dispatch-state.js";
-import { createSteerWatch } from "./dispatch-watch.js";
+import { createSteerWatch, STEER_DEBOUNCE_MS } from "./dispatch-watch.js";
 import { scanInbox } from "./mailbox.js";
 import { next } from "./next.js";
 import { LiveSteerSessions } from "./sessions.js";
@@ -60,7 +60,6 @@ async function prepareDispatch(
     infra: new Map(),
     cancelled: false,
     seenSteers: new Set(opts.seenSteers ?? []),
-    settling: new Map(),
     holds: [],
     liveSteers: new LiveSteerSessions(),
     sleep:
@@ -78,6 +77,21 @@ async function prepareDispatch(
 
 async function settleRunning(state: DispatchState): Promise<void> {
   await Promise.allSettled([...state.running.values()].map((r) => r.promise));
+}
+
+/** Waits out a debounced steer batch; the watch's own wake ends it early. */
+async function waitForBatch(ms: number, watch: SteerWatch): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, ms);
+      }),
+      watch.wake(),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -214,7 +228,9 @@ async function admitWave(
  * when nothing is dispatchable does the wave run the steward, the stall PM and
  * the plan check, and only then does an infra fault end it. An inbox watch on
  * its own timer wakes the loop for a settled steer, so the wait on running
- * turns cannot delay that steer's PM turn past them.
+ * turns cannot delay that steer's PM turn past them. Every dispatch pass
+ * honors the same debounce, so a pass holding an inside-window batch waits
+ * the remainder out before it ends the wave.
  */
 export async function runDispatch(
   runtime: KernelRuntime,
@@ -223,12 +239,13 @@ export async function runDispatch(
   const prepared = await prepareDispatch(runtime, opts);
   if ("reason" in prepared) return prepared;
   const state = prepared;
-  const debounceMs = runtime.limits.steerDebounceMs;
+  const debounceMs = runtime.limits.steerDebounceMs ?? STEER_DEBOUNCE_MS;
+  let heldSince: number | undefined;
   const watch = createSteerWatch(runtime.store, state.seenSteers, {
     ...(opts.steerWatchTickMs !== undefined
       ? { tickMs: opts.steerWatchTickMs }
       : {}),
-    ...(debounceMs !== undefined ? { debounceMs } : {}),
+    debounceMs,
     deliver: (steer) => state.liveSteers.inject(steer),
   });
   try {
@@ -260,6 +277,21 @@ export async function runDispatch(
           watch.wake(),
         ]);
         continue;
+      }
+      // Pending steers inside their debounce window keep the pass alive: the
+      // batch gets its one claim and PM turn before the wave ends. A live
+      // writer keeps restarting its window; the two-window cap ends the wait
+      // instead of stalling the wave forever.
+      const heldMs = stage.polled.heldMs;
+      if (heldMs !== undefined) {
+        heldSince ??= Date.now();
+        const left = 2 * debounceMs - (Date.now() - heldSince);
+        if (left > 0 && !state.cancelled && !state.opts.signals?.shouldStop()) {
+          await waitForBatch(Math.min(heldMs, left), watch);
+          continue;
+        }
+      } else {
+        heldSince = undefined;
       }
       const ended = await waveEnd(
         state,

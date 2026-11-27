@@ -1,8 +1,8 @@
 /**
  * The inbox poll: the dispatch loop's single mailbox consumer, run between
- * dispatch decisions and never inside a turn. It claims one settle window per
- * new batch, runs exactly one PM steer turn, and re-reads the holds that turn
- * may have rewritten against the tasks on disk.
+ * dispatch decisions and never inside a turn. It claims one batch only once
+ * the configured debounce has held, runs exactly one PM steer turn, and
+ * re-reads the holds that turn may have rewritten against the tasks on disk.
  */
 import { answerSettledSpikeSteers } from "./boundary-spike.js";
 import { openConcernIds } from "./context-pack/misc.js";
@@ -13,62 +13,10 @@ import { readHolds, type Steer, scanInbox } from "./mailbox.js";
 import { runSteerPm, steerScopeGroups } from "./pm.js";
 import type { State, StepRecord, TaskFile } from "./types.js";
 
-/** First sight: a stable file is claimed now, a growing one waits on its hash. */
-async function claimFirstSight(
-  state: DispatchState,
-  steers: Steer[],
-): Promise<{ claim: Steer[]; firstIds: Set<string> }> {
-  const firstSight = steers.filter(
-    (steer) => !state.seenSteers.has(steer.id) && !state.settling.has(steer.id),
-  );
-  const claim: Steer[] = [];
-  const firstIds = new Set(firstSight.map((steer) => steer.id));
-  if (firstSight.length === 0) return { claim, firstIds };
-  const settled = new Map(
-    (await scanInbox(state.runtime.store)).map((steer) => [steer.id, steer]),
-  );
-  for (const steer of firstSight) {
-    const stable = settled.get(steer.id);
-    if (stable) claim.push(stable);
-    else state.settling.set(steer.id, steer.hash);
-  }
-  return { claim, firstIds };
-}
-
-/** A remembered file is claimed once its content held across a later pass. */
-function claimSettling(
-  state: DispatchState,
-  steers: Steer[],
-  firstIds: ReadonlySet<string>,
-): Steer[] {
-  const claim: Steer[] = [];
-  for (const steer of steers) {
-    if (state.seenSteers.has(steer.id) || firstIds.has(steer.id)) continue;
-    const before = state.settling.get(steer.id);
-    if (before === undefined) continue;
-    if (before === steer.hash) claim.push(steer);
-    else state.settling.set(steer.id, steer.hash);
-  }
-  return claim;
-}
-
-/**
- * A newly seen batch gets one settle window for the whole batch; a
- * still-growing file is remembered by content hash and claimed only once that
- * content held across a later pass.
- */
-async function claimSteers(
-  state: DispatchState,
-  steers: Steer[],
-): Promise<Steer[]> {
-  const first = await claimFirstSight(state, steers);
-  const claim = [
-    ...first.claim,
-    ...claimSettling(state, steers, first.firstIds),
-  ];
+function claimSteers(state: DispatchState, steers: Steer[]): Steer[] {
+  const claim = steers.filter((steer) => !state.seenSteers.has(steer.id));
   for (const steer of claim) {
     state.seenSteers.add(steer.id);
-    state.settling.delete(steer.id);
   }
   return claim;
 }
@@ -212,7 +160,10 @@ export async function pollSteers(
   if (!(await state.runtime.store.plans.exists())) {
     return { hold, steerTurn: false };
   }
-  const claim = await claimSteers(state, steers);
+  const batch = watch.batch(steers);
+  if (batch.pending === 0) return { hold, steerTurn: false };
+  if (batch.waitMs > 0) return { hold, steerTurn: false, heldMs: batch.waitMs };
+  const claim = claimSteers(state, steers);
   if (claim.length === 0) return { hold, steerTurn: false };
   const holdError = await runSteerBatch(state, snapshot, tasks, claim);
   return {
