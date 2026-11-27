@@ -227,12 +227,29 @@ async function resumesDispatchProgressReRunsPart1() {
     return fakeTurnResult(req);
   });
   // Beta's runner crashes mid-turn: a mechanical park with turns left.
-  harness.script((req, ctx) => {
-    ctx.writeOutcome(
-      outcome({ status: "failed", summary: "runner crashed mid-turn" }),
-    );
-    return fakeTurnResult(req);
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(
+        outcome({ status: "failed", summary: "runner crashed mid-turn" }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ slug: "beta", step: "implement" }) },
+  );
+  // Gamma's review rejects: a live park that stays open after beta-2 lands so
+  // wave end still has open work to re-check.
+  harness.script(writeFileTurn("gamma.txt", "gamma implemented"), {
+    when: whenTurn({ slug: "gamma", step: "implement" }),
   });
+  harness.script(
+    (req, ctx) => {
+      ctx.writeOutcome(
+        outcome({ summary: "gamma rejected", verdict: "reject" }),
+      );
+      return fakeTurnResult(req);
+    },
+    { when: whenTurn({ slug: "gamma", step: "review" }) },
+  );
   harness.script(
     (req, ctx) => {
       ctx.writeOutcome(
@@ -271,7 +288,7 @@ async function resumesDispatchProgressReRunsPart2(
   scope: Awaited<ReturnType<typeof resumesDispatchProgressReRunsPart1>>,
 ) {
   const { harness } = scope;
-  scriptStallLeave(harness, ["beta"]);
+  scriptStallLeave(harness, ["beta", "gamma"]);
   const runtime = await makeRuntime(repo, goal, { fake: harness });
   harness.script((req, ctx) => {
     const cont = task("beta-2", {
@@ -334,9 +351,10 @@ async function resumesDispatchProgressReRunsPart3(
 
   await writeTask(runtime, task("alpha", { scope: ["alpha.txt"] }));
   await writeTask(runtime, task("beta", { scope: ["beta.txt"] }));
+  await writeTask(runtime, task("gamma", { scope: ["gamma.txt"] }));
   fs.writeFileSync(
     path.join(runtime.store.goalDir, "plan.md"),
-    "# Plan\n\n- alpha — Alpha.\n- beta — Beta.\n",
+    "# Plan\n\n- alpha — Alpha.\n- beta — Beta.\n- gamma — Gamma.\n",
     "utf8",
   );
 

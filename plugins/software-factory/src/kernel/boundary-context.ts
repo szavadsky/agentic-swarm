@@ -9,7 +9,7 @@ import { git } from "../core/git/exec.js";
 import { recordedGoalStart } from "./baseline.js";
 import { formatCause, makeCause } from "./cause.js";
 import { epicSummaryRelPath, type SpikeFinding } from "./context-pack.js";
-import { OPEN_TASK_STATUSES } from "./derive.js";
+import { openEpicTask } from "./derive.js";
 import { stepTarget } from "./flow-context.js";
 import {
   expireHold,
@@ -310,8 +310,8 @@ export function parseRegister(
 ): { epics: EpicRow[]; findings: string[] } {
   if (depth === 1) return { epics: [], findings: [] };
   const rows = tasks.flatMap((task) => {
-    const status = state.tasks[task.slug]?.status;
-    if (status === undefined || !OPEN_TASK_STATUSES.has(status)) return [];
+    const taskState = state.tasks[task.slug];
+    if (taskState === undefined || !openEpicTask(taskState)) return [];
     return [{ slug: task.slug, ...(task.epic ? { epic: task.epic } : {}) }];
   });
   return parseArchitectRegister(fs.readFileSync(plan.path, "utf8"), {

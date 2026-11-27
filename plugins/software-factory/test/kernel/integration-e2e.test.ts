@@ -408,7 +408,7 @@ async function expectLaunch2Steer(ctx: E2ECtx): Promise<void> {
   expect(summaryOf(ctx.goalDir, 2)).toContain("merged: beta2, gamma");
   const two = await metricsOf(ctx.goalDir);
   expect(two.iterations.map((i) => i.n)).toEqual([1, 2]);
-  expect(two.iterations[1]!.turns).toBe(13);
+  expect(two.iterations[1]!.turns).toBe(12); // beta retired -> no wave-end plancheck
   expect(two.iterations[1]!.humanInterventions).toBe(1);
   expect(two.iterations[1]!.merged).toEqual(["beta2", "gamma"]);
   expect(two.totals.merged).toEqual(["alpha", "beta2", "gamma"]);
@@ -441,7 +441,7 @@ async function expectLaunch3(ctx: E2ECtx): Promise<void> {
   ).toBe(true);
   const three = await metricsOf(ctx.goalDir);
   expect(three.iterations.map((i) => i.n)).toEqual([1, 2, 3]);
-  expect(three.iterations[2]!.turns).toBe(3);
+  expect(three.iterations[2]!.turns).toBe(4); // boundary plancheck runs here instead of wave 2 end
   expect(three.totals.parked).toEqual(["beta"]);
   expect(three.totals.loopIncidents).toBe(0);
 }
