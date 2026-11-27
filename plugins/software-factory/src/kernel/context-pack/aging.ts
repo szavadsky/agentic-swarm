@@ -101,7 +101,7 @@ export function readyAging(input: ReadyAgingInput): ReadyAgingTask[] {
   const held = heldBy(
     input.holds,
     new Set(input.pendingSteers),
-    openConcernIds(input.records),
+    openConcernIds(input.records, input.tasks),
   );
   const context: AgingContext = {
     terminal,

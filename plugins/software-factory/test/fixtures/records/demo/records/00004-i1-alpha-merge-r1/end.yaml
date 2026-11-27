@@ -1,0 +1,4 @@
+ok: false
+cause: "merge failed: conflict in shared.txt"
+wallMs: 1500
+endedAt: 2026-01-02T03:20:31.500Z

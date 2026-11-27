@@ -307,6 +307,7 @@ export function loadPrompts(
       cleanliness_revision: "false",
       // A task with no environment notes renders none; promptVars supplies them per task.
       env_notes: "",
+      prior_concerns: "",
       fix_dispositions: "",
       outcome_schema: outcomeExampleVar(DEFAULT_PROMPT_AUTHOR, "any"),
       task_frontmatter: taskFrontmatterVar(),
@@ -323,8 +324,3 @@ export function loadPrompts(
     },
   });
 }
-
-/** Last-call instruction rendered on the checks step's final fix turn. */
-export const GATE_LAST_CALL_TEXT =
-  "make the gates green, or return `blocked`/`failed` with the cause";
-export const GATE_LAST_CALL_ASK = `This is the last call: ${GATE_LAST_CALL_TEXT}.`;

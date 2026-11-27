@@ -192,6 +192,12 @@ describe("crash inside ingestion", () => {
       runYaml: THREE_ITERATIONS,
     });
     try {
+      // An annotated intent keeps the resumed sequence on ingestion, not triage.
+      fs.writeFileSync(
+        path.join(goal.goalDir, "intent.md"),
+        "# Goal\n\n[[Demo]] Build the demo.\n",
+        "utf8",
+      );
       await killDuringScout(goal);
       const second = await relaunchAfterScoutCrash(goal);
       await expectIngestionResumed(goal, second);

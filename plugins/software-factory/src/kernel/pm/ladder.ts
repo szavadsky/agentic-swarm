@@ -260,7 +260,9 @@ async function rungTurnInput(
     planDiff: setup.planDiff,
     tasks,
     repair:
-      opts.round === 1 ? "" : pmLadderNote(opts.rung, target, opts.failure),
+      opts.round === 1
+        ? ""
+        : pmLadderNote(runtime.prompts, opts.rung, target, opts.failure),
     ...(session ? { session } : {}),
     compact: true,
     ...NO_TURN_INPUTS,

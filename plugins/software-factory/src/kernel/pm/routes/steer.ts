@@ -95,6 +95,7 @@ export async function runSteerPm(
   const claim = new SteerClaim(
     opts.steers,
     (steer) => pmScopeKey(steerScopeOf(runtime, steer)) === pmScopeKey(scope),
+    runtime.prompts,
   );
   let failure: string[] = [];
 
@@ -236,7 +237,10 @@ async function runSteerTurn(
       round,
       planList: setup.planList,
       tasks,
-      repair: round === 1 ? "" : steerLadderNote(rung, target, failure),
+      repair:
+        round === 1
+          ? ""
+          : steerLadderNote(runtime.prompts, rung, target, failure),
       ...NO_TURN_INPUTS,
       steers: formatSteerTurn(claim.all()),
       onLive: (agents) => claim.attach(agents, opts.liveSteers),

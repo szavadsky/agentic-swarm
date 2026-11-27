@@ -1,14 +1,17 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { FakeHarness } from "../../src/harness/fake/index.js";
+import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
+import { infraPath } from "../../src/kernel/infra.js";
 import { judgeGoalHead } from "../../src/kernel/integrate.js";
 import type { KernelRuntime } from "../../src/kernel/types.js";
 import {
   cleanupFlowRepo,
   goalCheckout,
   makeRuntime,
+  outcome,
   setupFlowRepo,
+  whenTurn,
 } from "./s2-helpers.js";
 
 const aliases = {
@@ -140,15 +143,26 @@ function registerRedReuse(): void {
 }
 
 function registerInfra(): void {
-  it("records a gate that could not start without calling the head red", async () => {
-    const { repo, goal } = setupFlowRepo({
+  it("routes a gate that could not start through infra verdict without calling the head red", async () => {
+    const { repo, goalDir, goal } = setupFlowRepo({
       aliases,
       gates: [{ id: "broken", command: "exit 127" }],
     });
     try {
-      const runtime = await makeRuntime(repo, goal, {
-        fake: new FakeHarness({ id: "fake" }),
-      });
+      const harness = new FakeHarness({ id: "fake" });
+      harness.script(
+        (req, ctx) => {
+          fs.writeFileSync(
+            infraPath(goalDir),
+            "gates: []\nincident:\n  verdict: infra\n  handling: stop\n",
+            "utf8",
+          );
+          ctx.writeOutcome(outcome({ summary: "broken gate is infra" }));
+          return fakeTurnResult(req);
+        },
+        { when: whenTurn({ step: "infra" }), fallback: true },
+      );
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
       const judged = await judgeGoalHead(
         runtime,
         1,
@@ -157,6 +171,9 @@ function registerInfra(): void {
       expect(judged).toBeDefined();
       expect(judged!.red).toEqual([]);
       expect(judged!.record.ok).toBe(false);
+      expect(judged!.record.checks?.[0]?.details).toMatchObject({
+        kind: "infra",
+      });
 
       // An infra run is no verdict: the next wave end gates the tree again.
       const rejudged = await judgeGoalHead(

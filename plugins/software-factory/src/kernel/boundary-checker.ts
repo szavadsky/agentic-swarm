@@ -82,7 +82,6 @@ export async function runChecker(
   const gate = (architect?: string) =>
     consultGate({
       plan,
-      steerWaiting: context.steers.length > 0,
       records: context.records,
       bound: runtime.limits.planCheckRounds,
       ...(architect ? { architect } : {}),

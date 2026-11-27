@@ -7,6 +7,7 @@ import {
   tokenTotal,
   zeroUsage,
 } from "../../harness/usage.js";
+import { isGlitchTurn } from "../glitch.js";
 import { qaReportOf } from "../qa.js";
 import { pricedRecord } from "../pricing.js";
 import type {
@@ -195,18 +196,23 @@ export function hasFallbackHop(
 }
 
 /**
- * The launch kind a turn's own facts give, none for a normal turn. A turn that
- * delivered after a reminder delivered: its repair finding is recorded, so it
- * is no failure. A cancellation is the operator stopping the turn, not the
- * model failing.
+ * The launch kind a turn's own facts give, none for a normal turn. A glitch is
+ * `isGlitchTurn`'s answer, the same predicate the waste ledger asks; a fallback
+ * hop is a glitch launch too, because the turn left the tier. A genuine infra
+ * stop is never a glitch: it keeps its own classification and stores no glitch
+ * kind. A turn that delivered after a reminder delivered: its repair finding
+ * is recorded, so it is no failure. A cancellation is the operator stopping
+ * the turn, not the model failing.
  */
 export function launchKindOf(rec: {
   stop?: Stop;
   outcome?: Outcome;
   attempts?: readonly TurnAttempt[];
   repairFindings?: readonly string[];
+  usage?: Usage;
+  edits?: { files?: number };
 }): LaunchKind | undefined {
-  if (rec.stop?.kind === "infra") return "glitch";
+  if (isGlitchTurn(rec)) return "glitch";
   if (hasFallbackHop(rec.attempts)) return "glitch";
   if (rec.outcome?.verdict === "changes") return "change-request";
   if (qaReportOf(rec.outcome ?? undefined)?.verdict === "changes")

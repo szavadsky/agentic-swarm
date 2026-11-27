@@ -21,6 +21,15 @@ export interface StatusResult {
   statusJson?: string;
 }
 
+/** `factory records` filters; absent fields match every record. */
+export interface RecordQuery {
+  step?: string;
+  role?: string;
+  /** A typed cause kind; the query refuses a value the schema does not know. */
+  cause?: string;
+  iteration?: number;
+}
+
 export interface StatusOptions {
   json?: boolean;
   /** Price cache and fetcher for a snapshot derived before the kernel ever ran. */

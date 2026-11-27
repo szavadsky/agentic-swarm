@@ -104,7 +104,7 @@ export async function handleStepResult(
   }
   if (await settleOutcome(runtime, task, step, state, meta, outcome))
     return fallback(results);
-  await settleGates(
+  const gated = await settleGates(
     runtime,
     task,
     step,
@@ -116,7 +116,8 @@ export async function handleStepResult(
     record,
     outcome,
   );
-  return fallback(results);
+  const base = fallback(results);
+  return base.infra || base.cancelled ? base : gated;
 }
 
 /** True when the step kind settled the record itself (park, debt, or a waited verdict). */
@@ -268,9 +269,14 @@ async function reviewStepOutcome(
   } else if (
     lastCall &&
     outcome?.verdict === "approve" &&
-    outcome.concerns.length > 0
+    outcome.concerns.some((c) => c.dismiss !== "immaterial")
   ) {
-    await appendDebt(runtime.store, meta, outcome.concerns, outcome.summary);
+    await appendDebt(
+      runtime.store,
+      meta,
+      outcome.concerns.filter((c) => c.dismiss !== "immaterial"),
+      outcome.summary,
+    );
   }
   // No `else`: a done review always carries a verdict — outcome repair fails
   // the turn otherwise — so a missing verdict never reaches settle.
@@ -287,11 +293,14 @@ async function adjudicateStepOutcome(
       meta,
       makeCause("review-rejected", outcome.summary),
     );
-  } else if (outcome?.verdict === "approve" && outcome.concerns.length > 0) {
+  } else if (
+    outcome?.verdict === "approve" &&
+    outcome.concerns.some((c) => c.dismiss !== "immaterial")
+  ) {
     await appendDebt(
       runtime.store,
       meta,
-      outcome.concerns,
+      outcome.concerns.filter((c) => c.dismiss !== "immaterial"),
       outcome.summary,
       "adjudicated review concerns recorded as debt",
     );
@@ -310,8 +319,8 @@ async function settleGates(
   prior: readonly StepRecord[],
   record: StepRecord,
   outcome: StepRecord["outcome"],
-): Promise<void> {
-  if (!checksDue(flow, step.id)) return;
+): Promise<TaskActionResult> {
+  if (!checksDue(flow, step.id)) return {};
   // QA may accept the very tree the preceding checks judged. Its own edits
   // change the tree, so they still gate before the reviewer reads them.
   const qaJudgedTree =
@@ -319,8 +328,8 @@ async function settleGates(
     qaReportOf(outcome)?.verdict === "accept" &&
     record.tree !== undefined &&
     record.tree === lastGreenChecksTree(prior, task.slug);
-  if (qaJudgedTree) return;
-  const checks = await runTaskGates(
+  if (qaJudgedTree) return {};
+  const gated = await runTaskGates(
     runtime,
     task,
     meta,
@@ -328,11 +337,14 @@ async function settleGates(
     preexisting,
     prior,
   );
+  if (gated.infra) return { infra: gated.infra };
+  if (gated.cancelled) return { cancelled: true };
   if (step.id === "resolve") {
     // One resolve, then the checks own the verdict: a resolution that breaks a
     // gate parks instead of spending a blind fix loop on a branch already
     // passed review.
-    const red = redGateCause(checks, preexisting);
+    const red = redGateCause(gated.checks, preexisting);
     if (red) await appendPark(runtime.store, meta, red);
   }
+  return {};
 }

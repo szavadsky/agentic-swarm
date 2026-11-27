@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createActiveTimer, detectSuspend, getClock } from "./clock.js";
 import { childEnv } from "./env.js";
+import { hostOs } from "./os/index.js";
 import { sandboxedSpec } from "./sandbox.js";
 import { registerChildGroup, unregisterChildGroup } from "./shutdown.js";
 import type { ProcessResult } from "./types.js";
@@ -100,17 +101,6 @@ class HeadTailBuffer {
   }
 }
 
-/** SIGTERM the child's process group, falling back to the child alone. */
-function terminateGroup(child: ReturnType<typeof spawn>, pid: number): void {
-  try {
-    process.kill(-pid, "SIGTERM");
-  } catch {
-    try {
-      child.kill("SIGTERM");
-    } catch {}
-  }
-}
-
 /** SIGKILL the child's process group; without a group, kill the child alone. */
 function killGroupNow(child: ReturnType<typeof spawn>): void {
   const pid = child.pid;
@@ -120,20 +110,17 @@ function killGroupNow(child: ReturnType<typeof spawn>): void {
     } catch {}
     return;
   }
-  try {
-    process.kill(-pid, "SIGKILL");
-  } catch {
-    try {
-      child.kill("SIGKILL");
-    } catch {}
-  }
+  hostOs().killGroup(pid, "SIGKILL");
 }
 
 /** The spawn spec for a string shell command or an argument array. */
 function commandSpec(
   cmd: string | string[],
 ): { executable: string; args: string[] } | { error: string } {
-  if (typeof cmd === "string") return sandboxedSpec("bash", ["-c", cmd]);
+  if (typeof cmd === "string") {
+    const shell = hostOs().shell(cmd);
+    return sandboxedSpec(shell.executable, shell.args);
+  }
   const [executable, ...args] = cmd;
   if (executable === undefined) return { error: "Empty command array" };
   return sandboxedSpec(executable, args);
@@ -372,7 +359,7 @@ class ProcessRun {
       killGroupNow(this.child);
       return;
     }
-    terminateGroup(this.child, pid);
+    hostOs().killGroup(pid, "SIGTERM");
     setTimeout(() => {
       const latePid = this.child.pid;
       if (latePid && latePid > 0) killGroupNow(this.child);
@@ -382,9 +369,9 @@ class ProcessRun {
 
 /**
  * Runs a process with process-group cleanup on timeout, bounded output
- * capture, and support for string shell commands (via non-login `bash -c`,
- * so a developer's profile scripts cannot slow, alter or pollute a gate) or
- * argument arrays.
+ * capture, and support for string shell commands (through the host's
+ * non-login shell, so a developer's profile scripts cannot slow, alter or
+ * pollute a gate) or argument arrays.
  *
  * The promise resolves on `close`, or shortly after `exit`/timeout: stdio
  * streams are destroyed after a short grace period so a surviving grandchild

@@ -142,6 +142,8 @@ const PROMPT_DOCS: Record<string, string> = {
  * kernel turn names them at runtime. Each needs a reason, like an allowlist.
  */
 const RUNTIME_PROMPTS: Record<string, string> = {
+  "bootstrap-assignment":
+    "dispatched directly by CLI bootstrap without LiquidJS or node_modules",
   decider:
     "the kernel decide turn renders it on a signal; no flow step or config key names it",
 };

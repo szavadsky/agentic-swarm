@@ -2,6 +2,7 @@
 
 import { spawn } from "node:child_process";
 import { childEnv } from "../../../core/env.js";
+import { hostOs } from "../../../core/os/index.js";
 import { sandboxedSpec } from "../../../core/sandbox.js";
 import {
   isChildGroupAlive,
@@ -202,14 +203,13 @@ class PromptProcessRun {
 
   private killGroup(signal: NodeJS.Signals): void {
     if (this.closed) return;
-    try {
-      if (this.pid > 0) process.kill(-this.pid, signal);
-      else this.child?.kill(signal);
-    } catch {
-      try {
-        this.child?.kill(signal);
-      } catch {}
+    if (this.pid > 0) {
+      hostOs().killGroup(this.pid, signal);
+      return;
     }
+    try {
+      this.child?.kill(signal);
+    } catch {}
   }
 
   private clearTimers = (): void => {

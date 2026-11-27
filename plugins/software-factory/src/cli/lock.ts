@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { hostOs } from "../core/os/index.js";
 import { repositoryId } from "../kernel/config.js";
 import type {
   AcquireRunLockOptions,
@@ -60,13 +61,7 @@ export function getRunLockPath(
  * Checks if a PID is currently alive on the host.
  */
 export function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    // EPERM means process exists but we lack permission to signal
-    return (err as NodeJS.ErrnoException).code === "EPERM";
-  }
+  return hostOs().isProcessAlive(pid);
 }
 
 /**

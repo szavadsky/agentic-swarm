@@ -1,9 +1,10 @@
 /** The preflight entry point. */
 
-import { checkBase } from "../baseline.js";
+import { checkBase, resolveBaseCommit } from "../baseline.js";
 import { configFilePaths } from "../config.js";
+import { resolveGoalFollowTarget } from "../goal-base.js";
 import { checkScouts } from "../preflight-aliases.js";
-import type { PreflightInput, PreflightResult } from "./types.js";
+import { PreflightError } from "./checks.js";
 import {
   aliasContext,
   baseBranchFindings,
@@ -11,8 +12,8 @@ import {
   uniqueFindings,
   usedHarnesses,
 } from "./config.js";
-import { PreflightError } from "./checks.js";
 import { nonModelFindings } from "./non-model.js";
+import type { PreflightInput, PreflightResult } from "./types.js";
 
 /**
  * Validates configs, aliases, models, effort levels, fallbacks, binaries, the
@@ -57,13 +58,34 @@ export async function preflight(
 
   const result: PreflightResult = {};
   if (base.baseCommit && input.baseGates !== false) {
-    result.base = await checkBase(
-      configs,
-      store,
+    const target = await resolveGoalFollowTarget(
       paths.repoRoot,
+      paths.integrationBranch,
       configs.repo.baseBranch,
-      base.baseCommit,
     );
+    if (target) {
+      result.base = await checkBase(
+        configs,
+        store,
+        paths.repoRoot,
+        target.branch,
+        target.commit,
+      );
+    } else {
+      const integrationCommit = await resolveBaseCommit(
+        paths.repoRoot,
+        paths.integrationBranch,
+      );
+      if (integrationCommit) {
+        result.base = await checkBase(
+          configs,
+          store,
+          paths.repoRoot,
+          paths.integrationBranch,
+          integrationCommit,
+        );
+      }
+    }
   }
   return result;
 }

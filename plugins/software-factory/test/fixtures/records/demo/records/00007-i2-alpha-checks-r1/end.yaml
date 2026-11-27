@@ -1,0 +1,5 @@
+ok: false
+cause:
+  kind: infra
+  detail: gate runner crashed
+endedAt: 2026-01-02T04:09:02.000Z

@@ -12,6 +12,7 @@ import {
 } from "./baseline.js";
 import { frontPack, standaloneUpscopeAsk } from "./flow-context-front.js";
 import {
+  authorConcerns,
   bySeq,
   countRedGateRequests,
   fixDispositions,
@@ -32,7 +33,7 @@ import { outcomeExampleVar } from "./outcome-example.js";
 import { expectationForStep } from "./outcome.js";
 import { taskOutcomeSchema } from "./outcome-schemas.js";
 import { qaOutcomeSchema } from "./qa.js";
-import { CHECK_HANDOFF_DEFAULTS, GATE_LAST_CALL_ASK } from "./prompts.js";
+import { CHECK_HANDOFF_DEFAULTS, type PromptLibrary } from "./prompts.js";
 import { formatAcceptanceFindings, formatReviewFindings } from "./record.js";
 import {
   isLastChecksFixCall,
@@ -77,6 +78,7 @@ function readHandoff(
   flow: FlowDefinition,
   state: TaskState | undefined,
   stepId: string | undefined,
+  prompts: PromptLibrary,
 ): Handoff {
   const review = lastReview(records, task.slug, flow);
   const acceptance = lastAcceptance(records, task.slug, flow);
@@ -106,9 +108,8 @@ function readHandoff(
       (latest === checks || latest === mergeChecks) &&
       isLastChecksFixCall(flow, countRedGateRequests(records, task.slug)));
   if (isGateLastCall) {
-    findings = findings
-      ? `${GATE_LAST_CALL_ASK}\n\n${findings}`
-      : GATE_LAST_CALL_ASK;
+    const ask = prompts.render("gate-last-call", {}).trim();
+    findings = findings ? `${ask}\n\n${findings}` : ask;
   }
   return { review, acceptance, qaStep, checks, base, findings };
 }
@@ -198,7 +199,14 @@ export function promptVars(
   state?: TaskState,
   stepId?: string,
 ): Record<string, string> {
-  const handoff = readHandoff(records, task, flow, state, stepId);
+  const handoff = readHandoff(
+    records,
+    task,
+    flow,
+    state,
+    stepId,
+    runtime.prompts,
+  );
   const { qaStep, acceptance, review } = handoff;
   const step = stepId
     ? flow.steps.find((candidate) => candidate.id === stepId)
@@ -219,6 +227,7 @@ export function promptVars(
       state,
     ),
     prior_findings: priorFindings(qaStep, acceptance, review),
+    prior_concerns: qaStep ? "" : authorConcerns(records, task.slug, flow),
     fix_dispositions: fixDispositions(records, task.slug, flow, round, state),
     front_pack: frontPack(runtime, task, records) ?? "",
     // The standalone escalation ask for the reviewer; empty when this task is

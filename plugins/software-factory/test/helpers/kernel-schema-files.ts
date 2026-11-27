@@ -7,6 +7,7 @@ const FILES = [
   "outcome.schema.json",
   "process.schema.json",
   "qa.schema.json",
+  "record.schema.json",
   "repo.schema.json",
   "run.schema.json",
   "task.schema.json",

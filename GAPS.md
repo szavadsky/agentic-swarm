@@ -18,9 +18,7 @@ What differs from [INTENT.md](INTENT.md) on `main` after goal `delta` landed (75
 
 ### Architect, plan, checker
 
-- **[[PlanCompletenessChecker]]** — *partial*. The checker is skipped when a steer waits (`src/kernel/plan-check.ts:180-199`).
 - **[[ContextPackPreparer]]** — *differs*. Content by default: a section renders whole unless the preparer lists it in `packBriefs`, and only six sections can be briefed — planCheck, planReview, forwarded, spikeFindings, pmAnswers, codeMap (`prompts/pack-preparer.md:9-17`, `src/kernel/context-pack/sections.ts:9-20`, `render.ts:69-74`).
-- **[[SelfBuildArchitectFlowRotation]]** — *missing*. The self-improve overlay picks a flow by launch reason (`plugins/self-improve/config/process.yaml:9-27`); no flow has an adversarial architect-level status reviewer, and nothing rotates.
 - **[[BootstrapPreviousRunAssessor]]** — *partial*. `plugins/self-improve/prompts/assess-run.md` reads records, summaries, metrics and transcripts and writes `iterations/<n>/assessment.md`, appending one pointer line to the pack; it does not prepare the pack. Its record access is not a configured read-only grant (see [[KernelRecordsSeparation]]).
 
 ### Concerns

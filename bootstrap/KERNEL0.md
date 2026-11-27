@@ -30,7 +30,7 @@ Done when:
 
 ## 3. One launch
 
-1. Pre-flight: load and validate the three configs; resolve aliases → harness/model/effort (`Caps`); take the goal lock; reconcile orphans (worktrees, half-written records) by calling `derive`.
+1. Pre-flight: load and validate the three configs; resolve aliases → harness/model/effort (the per-model `ModelProbe`); take the goal lock; reconcile orphans (worktrees, half-written records) by calling `derive`.
 2. Boundary (start of every iteration):
    1. scan `mailbox/inbox`;
    2. first iteration of a launch only: cheap scout distils the previous launch (records, journal, transcripts by path) into `digest.md` — cost by role, loops, failures, interventions, with paths;
@@ -71,10 +71,11 @@ type Action = { kind: 'step'; slug: string; step: string; round: number } | { ki
 declare function derive(tasks: TaskFile[], records: StepRecord[]): State   // pure; crash recovery = call it again
 declare function next(state: State, limits: Limits, running: ReadonlySet<string>): Action[]   // pure
 
-// Harness: flows branch on Caps, never on harness id. Caps / Stop / Usage / SessionRef verbatim from advice:96-143.
+// Harness: flows branch on Caps, never on harness id. Stop / Usage / SessionRef verbatim from advice:96-143; effort sits on the separate ModelProbe.
 interface Harness {
   id: string
   caps(model: ModelRef): Promise<Caps>
+  probe?(model: ModelRef): Promise<ModelProbe>   // live model/effort discovery
   turn(req: { model: ModelRef; effort?: string; cwd: string; system?: string; prompt: string; session?: SessionRef
     outcomePath?: string; timeouts: { idleMs: number; wallMs: number }; opaque?: unknown }): Promise<TurnResult>
   compact?(ref: SessionRef): Promise<SessionRef>   // absent capability = type error at the call site

@@ -7,6 +7,7 @@ import { hasConflictMarkers, unmergedFiles } from "../core/git/merge.js";
 import { porcelainStatus } from "../core/git/status.js";
 import { formatBaseGates, recordedBaseGates } from "./baseline.js";
 import { gateCommandsText } from "./infra.js";
+import type { PromptLibrary } from "./prompts.js";
 import { commitEdits, scriptMeta } from "./record.js";
 import type { KernelRuntime, RecordEnd, StepRecord } from "./types.js";
 import { headSha, integrationHead, mergeRef, treeSha } from "./worktree.js";
@@ -21,13 +22,18 @@ export type { ConflictSnapshot } from "./merge-conflict-types.js";
  * head. The continuation first turn carries it when a `base:` merge conflicts,
  * so a reword stays one edit.
  */
-export function mergeConflictAsk(head: string, paths: string[]): string {
+export function mergeConflictAsk(
+  prompts: PromptLibrary,
+  head: string,
+  paths: string[],
+): string {
   const named = paths.join(", ") || "git reported no unmerged paths";
-  return [
-    `The integration head ${head.slice(0, 10)} conflicts with this task branch.`,
-    `Conflicted files: ${named}.`,
-    "Resolve the conflict in the worktree, keeping both sides' intent. Do not rebase, do not switch branches; the script commits the merge.",
-  ].join("\n");
+  return prompts
+    .render("merge-conflict", {
+      integration_head: head.slice(0, 10),
+      conflicts: named,
+    })
+    .trim();
 }
 export async function mergeHeadSha(cwd: string): Promise<string | null> {
   const res = await git(

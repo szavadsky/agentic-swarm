@@ -4,7 +4,6 @@ import path from "node:path";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
-import { GATE_LAST_CALL_TEXT } from "../../src/kernel/prompts.js";
 import { task } from "./helpers.js";
 import { formatCause } from "../../src/kernel/cause.js";
 import {
@@ -161,9 +160,10 @@ async function honorsChecksStepChangeRequests1ByPart2(
   expect(formatCause(state.tasks.task!.cause!)).toContain("unit");
 
   // Initial + Fix 1 + Fix 2 = 3 turns
+  const lastCallText = runtime.prompts.render("gate-last-call", {}).trim();
   expect(prompts).toHaveLength(3);
-  expect(prompts[1]).not.toContain(GATE_LAST_CALL_TEXT);
-  expect(prompts[2]).toContain(GATE_LAST_CALL_TEXT);
+  expect(prompts[1]).not.toContain(lastCallText);
+  expect(prompts[2]).toContain(lastCallText);
 }
 
 function registerFixRoundFollowUpModesPart4(): void {

@@ -14,6 +14,7 @@ import type {
   ReportDebt,
   StepRecord,
   SteerRoute,
+  TaskFile,
 } from "./types.js";
 import type {
   StatusConcern,
@@ -35,22 +36,24 @@ function recordPath(record: StepRecord): string {
   return `records/${recordDirName(record.seq, record)}`;
 }
 
-/** Every concern a record delivered, unfiltered: the count the page reports. */
+/** Every concern a record delivered, unfiltered (excluding review dismissal marks). */
 export function statusConcerns(
   records: readonly StepRecord[],
 ): StatusConcern[] {
   return records.flatMap((record) =>
-    (record.outcome?.concerns ?? []).map((concern) => ({
-      ...(concern.id ? { id: concern.id } : {}),
-      ...(record.slug ? { slug: record.slug } : {}),
-      step: record.step,
-      round: record.round,
-      kind: concern.kind,
-      calibration: concern.calibration,
-      text: concern.text,
-      ...(concern.evidence ? { evidence: concern.evidence } : {}),
-      record: recordPath(record),
-    })),
+    (record.outcome?.concerns ?? [])
+      .filter((concern) => concern.dismiss !== "immaterial")
+      .map((concern) => ({
+        ...(concern.id ? { id: concern.id } : {}),
+        ...(record.slug ? { slug: record.slug } : {}),
+        step: record.step,
+        round: record.round,
+        kind: concern.kind,
+        calibration: concern.calibration,
+        text: concern.text,
+        ...(concern.evidence ? { evidence: concern.evidence } : {}),
+        record: recordPath(record),
+      })),
   );
 }
 
@@ -72,6 +75,7 @@ function concernRecords(records: readonly StepRecord[]): Map<string, string> {
   const byId = new Map<string, string>();
   for (const record of [...records].sort((a, b) => a.seq - b.seq)) {
     for (const concern of record.outcome?.concerns ?? []) {
+      if (concern.dismiss === "immaterial") continue;
       byId.set(recordedConcernId(concern), recordPath(record));
     }
   }
@@ -86,9 +90,10 @@ function concernRecords(records: readonly StepRecord[]): Map<string, string> {
 export function openConcernEntries(
   records: readonly StepRecord[],
   debts: readonly ReportDebt[],
+  tasks?: readonly TaskFile[],
 ): StatusOpenConcern[] {
   const recordsById = concernRecords(records);
-  const forwarded: StatusOpenConcern[] = openConcerns(records).map(
+  const forwarded: StatusOpenConcern[] = openConcerns(records, tasks).map(
     (concern) => ({
       id: concern.id,
       kind: concern.kind as Concern["kind"],

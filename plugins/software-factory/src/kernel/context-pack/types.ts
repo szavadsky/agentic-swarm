@@ -6,6 +6,7 @@ import type { OpenDebt } from "../derive.js";
 import type { PackGate } from "../infra.js";
 import type { Steer } from "../mailbox.js";
 import type { WasteSpikeProposal } from "../metrics/types.js";
+import type { TestRuntimeComparison } from "../test-runtimes-types.js";
 import type { PACK_SECTIONS, packBriefSchema } from "./sections.js";
 import type {
   PlanCheckEvidence,
@@ -166,6 +167,8 @@ export interface ContextPackInput {
   gates: PackGate[];
   /** Last recorded pre-flight base run; absent when it was skipped. */
   baseGates?: BaseGateState;
+  /** Recorded CTRF per-test runtime comparison (current vs goal start); absent without CTRF runs. */
+  testRuntimes?: TestRuntimeComparison;
   forwarded: ForwardedConcern[];
   /** Every open debt-kind concern, the register's whole content. */
   debts: OpenDebt[];

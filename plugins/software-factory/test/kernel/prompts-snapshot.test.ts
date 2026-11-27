@@ -170,6 +170,7 @@ const ROLES: Record<string, Record<string, string>> = {
     checks_tree: "3ba247e47772a8ba5874d089990419f572432df8",
     checks_log: "/goal/records/1/alpha/checks",
     prior_findings: "",
+    prior_concerns: "",
     upscope_ask: "",
     fix_dispositions: "",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
@@ -202,6 +203,8 @@ const ROLES: Record<string, Record<string, string>> = {
     iteration: "3",
     intent_path: "/goal/intent.md",
     steer: "- s1 (mailbox/inbox/s1.md):\n  keep the API stable",
+    annotate: "false",
+    triage_note: "",
     outcome_path: "/goal/records/00009-i3-s1-intent-r1/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
     outcome_schema: BASE_SCHEMA,
@@ -371,20 +374,20 @@ describe("preset snapshots", () => {
  * lower a ceiling when its prompt shrinks.
  */
 const ROLE_BYTE_BUDGETS: Record<string, number> = {
-  architect: 11964,
-  subarchitect: 10652,
-  front: 6456,
+  architect: 12667,
+  subarchitect: 10773,
+  front: 6618,
   pm: 16247,
   implementer: 7011,
   qa: 8265,
-  reviewer: 9117,
+  reviewer: 9418,
   digest: 4446,
   steward: 4313,
-  intent: 3702,
+  intent: 3772,
   "plan-checker": 8254,
   "pack-preparer": 5393,
   scout: 3570,
-  "review-architect": 12132,
+  "review-architect": 12253,
   "architect-review-return": 4749,
 };
 

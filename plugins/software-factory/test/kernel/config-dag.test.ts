@@ -207,6 +207,21 @@ describe("architect flow step requirements", () => {
       ]).success,
     ).toBe(false);
   });
+
+  it("accepts only an even or odd iteration parity", () => {
+    const flows = (parity: string) => [
+      {
+        when: ["initial"],
+        parity,
+        steps: [{ id: "architect" }, { id: "pm" }],
+      },
+    ];
+    expect(architectureFlowsSchema.safeParse(flows("even")).success).toBe(true);
+    expect(architectureFlowsSchema.safeParse(flows("odd")).success).toBe(true);
+    expect(architectureFlowsSchema.safeParse(flows("both")).success).toBe(
+      false,
+    );
+  });
 });
 
 describe("architect flow selection", () => {
@@ -225,12 +240,62 @@ describe("architect flow selection", () => {
         ],
       },
     } as unknown as ProcessConfig;
-    expect(architectureFlowForReason(process, "concerns")).toEqual(
+    expect(architectureFlowForReason(process, "concerns", 2)).toEqual(
       process.architecture.flows![0]!,
     );
     expect(
-      architectureFlowForReason(process, "steer").steps.map((s) => s.id),
+      architectureFlowForReason(process, "steer", 2).steps.map((s) => s.id),
     ).toEqual(["architect", "planreview", "pm"]);
+  });
+
+  it("rotates the flows a reason shares by iteration parity", () => {
+    const process = {
+      architecture: {
+        flows: [
+          {
+            when: ["iteration-done"],
+            parity: "even",
+            steps: [{ id: "architect" }, { id: "pm" }],
+          },
+          {
+            when: ["iteration-done"],
+            parity: "odd",
+            steps: [{ id: "statusreview" }, { id: "architect" }, { id: "pm" }],
+          },
+        ],
+      },
+    } as unknown as ProcessConfig;
+    expect(
+      architectureFlowForReason(process, "iteration-done", 2).steps.map(
+        (s) => s.id,
+      ),
+    ).toEqual(["architect", "pm"]);
+    expect(
+      architectureFlowForReason(process, "iteration-done", 3).steps.map(
+        (s) => s.id,
+      ),
+    ).toEqual(["statusreview", "architect", "pm"]);
+  });
+
+  it("runs the only flow naming a reason whatever its parity", () => {
+    const process = {
+      architecture: {
+        flows: [
+          {
+            when: ["initial"],
+            steps: [{ id: "architect" }, { id: "pm" }],
+          },
+          {
+            when: ["steer"],
+            parity: "odd",
+            steps: [{ id: "architect" }, { id: "pm" }],
+          },
+        ],
+      },
+    } as unknown as ProcessConfig;
+    expect(
+      architectureFlowForReason(process, "steer", 4).steps.map((s) => s.id),
+    ).toEqual(["architect", "pm"]);
   });
 });
 

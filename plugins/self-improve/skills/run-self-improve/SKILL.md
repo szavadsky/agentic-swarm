@@ -44,13 +44,17 @@ reads only `SKILL.md` still gets this runbook). Then copy the flow files in:
 mkdir -p "$REPO/.factory/prompts"
 cp "$PLUGIN/config/process.yaml" "$REPO/.factory/process.yaml"
 cp "$PLUGIN/prompts/assess-run.md" "$REPO/.factory/prompts/assess-run.md"
+cp "$PLUGIN/prompts/status-review.md" "$REPO/.factory/prompts/status-review.md"
 ```
 
 - `config/process.yaml` is a process-layer overlay: it keeps the package
   default and only restates `architecture.flows` with the previous-run
   assessment first. On the first consult of a goal (`initial`) it runs
-  nothing extra; on `concerns`, `iteration-done`, `steer` and `relaunch` it
-  runs `assess-run` before the architect.
+  nothing extra. Every later consult (`concerns`, `iteration-done`, `steer`,
+  `relaunch`) runs `assess-run` before the architect; the flows rotate by
+  iteration parity, so odd iterations also run the adversarial architect-level
+  `status-review` agent between the assessment and the architect, and the
+  architect answers each of its numbered findings in `statusReviewAnswers`.
 - The overlay names the `assess` alias; the run layer binds it. Add it to the
   self-run's run config, on a cheap model — the assessment is evidence work,
   never the architect's model. The rest of the run layer stays yours:

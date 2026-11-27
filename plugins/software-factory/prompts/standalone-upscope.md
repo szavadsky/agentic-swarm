@@ -1,0 +1,1 @@
+This is a standalone task: no architect planned it. Is the real scope substantially higher than the front's predicted area above, and does the result require architecture input? Answer `upscope: yes` to park and escalate the goal to bigger, or `upscope: no` to judge normally. Always include your verdict; an upscope yes parks regardless of it.

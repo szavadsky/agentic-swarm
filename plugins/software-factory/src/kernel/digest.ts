@@ -295,15 +295,13 @@ export async function postLaunchDigest(
   if (!rel) return null;
   const digest = await runtime.store.iterations.read(iteration, "digest.md");
   if (digest === null) return null;
-  const text = [
-    `# Launch digest before iteration ${iteration}`,
-    "",
-    "The previous launch was interrupted; this launch resumes its iteration. Route this evidence like any steer: a repair to task, a finding to spike, an architecture decision to architect.",
-    "",
-    digest.trim(),
-    "",
-    `Digest: ${rel}`,
-  ].join("\n");
+  const text = runtime.prompts
+    .render("digest-steer", {
+      iteration: String(iteration),
+      digest: digest.trim(),
+      digest_rel: rel,
+    })
+    .trim();
   const hash = createHash("sha256").update(text).digest("hex").slice(0, 8);
   const id = `digest-${iteration}-${hash}`;
   if ((await scanInbox(runtime.store)).some((steer) => steer.id === id))

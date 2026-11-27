@@ -10,6 +10,7 @@ import {
   readDeliveredOutcome,
   validateExpectation,
 } from "../../src/kernel/outcome.js";
+import { qaOutcomeSchema } from "../../src/kernel/qa.js";
 
 describe("outcome delivery", () => {
   registerOutcomeDeliveryPart1();
@@ -19,6 +20,7 @@ describe("outcome delivery", () => {
   registerOutcomeDeliveryPart5();
   registerOutcomeDeliveryPart6();
   registerOutcomeDeliveryPart7();
+  registerOutcomeDeliveryPart8();
 });
 
 function registerOutcomeDeliveryPart1(): void {
@@ -153,6 +155,44 @@ function registerOutcomeDeliveryPart4(): void {
         { lastCall: true },
       ),
     ).toEqual([]);
+  });
+}
+
+function dismissOutcomeYaml(extra = ""): string {
+  return [
+    "status: done",
+    "summary: approved",
+    extra,
+    "concerns:",
+    "  - kind: risk",
+    "    calibration: architect",
+    "    text: retry window drops head names",
+    "    dismiss: immaterial",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function registerOutcomeDeliveryPart8(): void {
+  it("allows dismiss: immaterial on review outcomes only", () => {
+    const dismissed = parseOutcome(dismissOutcomeYaml("verdict: approve"));
+    expect(dismissed.concerns[0]?.dismiss).toBe("immaterial");
+    expect(validateExpectation(dismissed, "review")).toEqual([]);
+    expect(validateExpectation(dismissed, "any")).toEqual([
+      "concerns[].dismiss is only allowed on review steps",
+    ]);
+    const qaDismiss = parseOutcome(
+      dismissOutcomeYaml("qa: { verdict: accept, findings: [] }"),
+      qaOutcomeSchema,
+    );
+    expect(validateExpectation(qaDismiss, "qa")).toEqual([
+      "concerns[].dismiss is only allowed on review steps",
+    ]);
+    expect(() =>
+      parseOutcome(
+        "status: done\nsummary: ok\nverdict: approve\nconcerns:\n  - kind: risk\n    calibration: architect\n    text: x\n    dismiss: wrong\n",
+      ),
+    ).toThrow(/dismiss/);
   });
 }
 

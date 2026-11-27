@@ -12,6 +12,7 @@ import {
 } from "../mailbox.js";
 import { formatParkDefault } from "../park-route.js";
 import { formatPlanDiff, type PlanDocument } from "../plan-file.js";
+import type { PromptLibrary } from "../prompts.js";
 import { doneWhen, materialHash } from "../task-material.js";
 import type {
   Cause,
@@ -106,55 +107,40 @@ function provenanceNote(source: string): string {
 }
 
 export function pmLadderNote(
+  prompts: PromptLibrary,
   rung: { alias: string; mandate: PmMandate },
   target: TurnTarget,
   failure: string[],
 ): string {
-  return ladderNote(
-    rung,
-    target,
-    failure,
-    `derive the task files from the plan again, and if the plan itself cannot be turned into tasks, answer "blocked" with one question for the architect in the summary.`,
-    "Restated PM contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Write task files under the tasks directory, then the outcome.",
-  );
+  return ladderNote(prompts, "plan", rung, target, failure);
 }
 
 function ladderNote(
+  prompts: PromptLibrary,
+  mode: "plan" | "steer" | "stall" | "concerns" | "plan-check",
   rung: { alias: string; mandate: PmMandate },
   target: TurnTarget,
   failure: string[],
-  escalation: string,
-  contract: string,
 ): string {
-  const notes: string[] = [];
-  if (rung.mandate.startsWith("escalated")) {
-    notes.push(
-      `The PM ladder escalated to alias "${target.alias}" (model "${target.model.id}"). You hold a broader mandate: ${escalation}`,
-    );
-  }
-  if (rung.mandate.endsWith("retry")) {
-    notes.push(
-      `This is a fresh retry on alias "${target.alias}"; the previous turn's plan and task-file writes were rolled back to the pre-PM snapshot.`,
-    );
-  }
-  notes.push(contract);
-  if (failure.length > 0)
-    notes.push("", "Findings:", ...failure.map((reason) => `- ${reason}`));
-  return notes.join("\n");
+  return prompts
+    .render("pm-ladder", {
+      mode,
+      escalated: rung.mandate.startsWith("escalated") ? "true" : "",
+      retry: rung.mandate.endsWith("retry") ? "true" : "",
+      alias: target.alias,
+      model: target.model.id,
+      findings: failure.map((reason) => `- ${reason}`).join("\n"),
+    })
+    .trim();
 }
 
 export function steerLadderNote(
+  prompts: PromptLibrary,
   rung: { alias: string; mandate: PmMandate },
   target: TurnTarget,
   failure: string[],
 ): string {
-  return ladderNote(
-    rung,
-    target,
-    failure,
-    "route the steers again from their text, and if a steer cannot be routed, send it to the architect with an empty hold.",
-    "Restated PM steer contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Route each pending steer as task|spike|intent|architect|stall (or {architect: id}), write one hold file per steer, write task files only for task and spike steers with source steer: <id>, then the outcome with steerRoutes.",
-  );
+  return ladderNote(prompts, "steer", rung, target, failure);
 }
 
 /**
@@ -163,11 +149,15 @@ export function steerLadderNote(
  * and no second PM starts. The contract is restated because the steer was not
  * in the turn's opening prompt.
  */
-export function steerInjectionNote(steer: Steer): string {
-  return [
-    "A steer arrived while this turn was running. Route it in this turn's steerRoutes as well (task|spike|intent|architect|stall, answer only a task route), then rewrite the outcome so it carries the route:",
-    formatSteerTurn([steer]),
-  ].join("\n");
+export function steerInjectionNote(
+  prompts: PromptLibrary,
+  steer: Steer,
+): string {
+  return prompts
+    .render("pm-steer-inject", {
+      steer: formatSteerTurn([steer]),
+    })
+    .trim();
 }
 
 /**
@@ -270,17 +260,21 @@ function slugFactLines(
 }
 
 export function stallLadderNote(
+  prompts: PromptLibrary,
   rung: { alias: string; mandate: PmMandate },
   target: TurnTarget,
   failure: string[],
 ): string {
-  return ladderNote(
-    rung,
-    target,
-    failure,
-    "route the stalled slugs again from their records, and if a slug cannot continue, leave it parked with a reason for the architect.",
-    "Restated PM stall contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Route every parked slug in stallRoutes, then write the outcome: `amend` rewrites the slug's own file and bumps `revision` by one (refused past the brief's `amends:` limit), `cancel` writes no task file, `replace` writes one task with a new slug, `base:` naming the parked slug and the same done-when, `split` writes one task per separable outcome, `leave` writes nothing.",
-  );
+  return ladderNote(prompts, "stall", rung, target, failure);
+}
+
+export function concernsLadderNote(
+  prompts: PromptLibrary,
+  rung: { alias: string; mandate: PmMandate },
+  target: TurnTarget,
+  failure: string[],
+): string {
+  return ladderNote(prompts, "concerns", rung, target, failure);
 }
 /**
  * One brief entry per checker follow-up: its kind, slug, dead dep and reason,
@@ -310,15 +304,10 @@ export async function planCheckPmBrief(
 }
 
 export function planCheckLadderNote(
+  prompts: PromptLibrary,
   rung: { alias: string; mandate: PmMandate },
   target: TurnTarget,
   failure: string[],
 ): string {
-  return ladderNote(
-    rung,
-    target,
-    failure,
-    "route the checker's follow-ups again from their brief, and if a slug cannot continue, leave it with a reason for the architect.",
-    "Restated PM plan-check contract: you are the PM — never edit the plan, never plan, never implement, never invent intent. Route every follow-up in planCheckRoutes, then write the outcome: `continue` carries the checker's kind — `amend` rewrites the slug's own file and bumps `revision` by one (refused past the brief's `amends:` limit), `cancel` writes no task file, `replace` writes one task with a new slug, `base:` naming the parked slug and the same done-when, `split` writes one task per separable outcome, a dead dep is written as the dep task or dropped from the slug's list, `unmerged` work continues its branch; `leave` writes nothing.",
-  );
+  return ladderNote(prompts, "plan-check", rung, target, failure);
 }

@@ -17,7 +17,7 @@ export {
   snapshotTurn,
 } from "./pm/reconcile.js";
 export { runPlanCheckPm } from "./pm/routes/plan-check.js";
-export { runStallPm } from "./pm/routes/stall.js";
+export { runStallPm, unmarkedConcerns } from "./pm/routes/stall.js";
 export { runSteerPm } from "./pm/routes/steer.js";
 export {
   epicPmScopes,

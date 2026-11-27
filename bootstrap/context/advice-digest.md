@@ -52,7 +52,7 @@ Markers: `manifesto.md:204` says all items decided; `*Confirm*` readings are U4-
 | O12 | N12/N12b: same-model reviewer with different focus is valid; pairing per task-type flow; no wave review; reviewer sees neither edits nor reasoning | decided, manifesto:43-45,186,199 | Reviewer prompt/context builder; flow config |
 | O13 | N13: import everything reasonable; intent/principles/observation decide | decided, manifesto:5,187 | None (scope rule) |
 | O14 | N14: interface plus plain folder first; other storage backends later | decided, manifesto:125,188 | Artifact-storage interface + folder backend |
-| O15 | N15: highest supported effort, resolved at pre-flight | confirmed, manifesto:140,200 | `Caps.effort` per-model probe (advice:148 gap) |
+| O15 | N15: highest supported effort, resolved at pre-flight | confirmed, manifesto:140,200 | `ModelProbe.effort` per-model probe at pre-flight (advice:148 gap) |
 | O16 | N16: pinned last-good, no-model E2E promotion gate, metrics, fixed benchmark | agreed, manifesto:132,190 | Launch pinning + E2E gate + metrics |
 | O17 | N17: repo conventions win | agreed, manifesto:71,191 | Prompts/defaults only |
 | O18 | N18: opaque harness config passed at launch | agreed, manifesto:84,192 | Harness config passthrough |
@@ -74,11 +74,11 @@ No M-labelled review bullets exist (see discrepancy). The derivable review-like 
 | X7 | advice:147 says resume is cwd-bound (`SessionRef.cwd`); advice:295 says Claude Code resumes by id from any dir, Codex needs `--cd`, OpenCode is location-bound | Make cwd a per-harness requirement/probe, not a universal invariant. |
 | X8 | advice:148: quota/rate/overload share one transient bucket, overflow has no pattern, classifier tests `stopReason === "abort"` while streams emit `"aborted"` (VERIFIED classify.ts:104) | Fix Stop classification in S1 before trusting infra-vs-task accounting. |
 | X9 | advice:21 deletes close-up as a launch but advice:86 keeps `closeup-N.yaml` + ok record because v2 counts iterations from them | Keep the record, not the launch; derive keeps counting. |
-| X10 | advice:148 says `Caps.effort` has no per-model probe; manifesto:140 requires pre-flight effort resolution | Add per-model effort probe in S1/pre-flight; otherwise `effort: highest` silently degrades. |
+| X10 | advice:148 says `Caps.effort` has no per-model probe; manifesto:140 requires pre-flight effort resolution | Move effort off `Caps` to the optional `ModelProbe.effort`; pre-flight refuses a configured effort the probe does not list. |
 
 ## 5. Concrete technical recommendations (advice §4-§6)
 
-- **Harness contract**: `Caps` per model probed at pre-flight (resume, compact none/local/server, fork, subagents none/spawn/steer, structuredOutput none/native, effort[], usage.cache/cost); flows branch on `Caps`, never harness id; optional ops (`compact`/`fork`/`import`) on a separate object so a missing capability is a type error (advice:96-149).
+- **Harness contract**: `Caps` per model probed at pre-flight (resume, compact none/local/server, fork, subagents none/spawn/steer, structuredOutput none/native, usage.cache/cost); flows branch on `Caps`, never harness id; effort is not on `Caps` — the optional `probe` returns `ModelProbe.effort` (`string[]` or `null`) — and optional ops (`compact`/`fork`/`import`) sit on a separate object so a missing capability is a type error (advice:96-149).
 - **Stop union**: `done`/`cancelled`/`refusal`/`truncated(max-tokens|turn-limit)`/`infra(quota|rate|auth|crash|overflow|timeout)`; infra never consumes review rounds or item budget; refusal/truncated are task-side (advice:132-146).
 - **SessionRef**: harness, id, cwd, model, `lastRequestStartedAt` (hot/cold from request start, not turn end), retentionTier short/long, compacted (read from session-file `compaction` entries) (advice:140-148).
 - **Functional core**: pure `derive(plan, records) -> State` + `next(state, limits) -> Action[]`; shell appends records; crash recovery = call `derive` again; no state file to corrupt (advice:186-191).

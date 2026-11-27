@@ -7,6 +7,7 @@ import type { TurnRequest } from "../../src/harness/types.js";
 import { derive } from "../../src/kernel/derive.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { isInfraCheck, runGates } from "../../src/kernel/gates.js";
+import { infraPath } from "../../src/kernel/infra.js";
 import type { KernelRuntime } from "../../src/kernel/types.js";
 import { task } from "./helpers.js";
 import {
@@ -285,32 +286,50 @@ function testScriptGateFailureTail() {
 }
 
 function testScriptGateTimeoutInfra() {
-  it("non-test script gate timeout parks as infra, not a fail verdict", async () => {
-    const { repo, goal } = setupFlowRepo({
+  it("non-test script gate timeout routes to infra verdict when persistent, never a fail verdict", async () => {
+    const { repo, goalDir, goal } = setupFlowRepo({
       gates: [{ id: "hang-gate", command: "sleep 10", timeoutSec: 0.2 }],
     });
     const harness = new FakeHarness({ id: "fake" });
-    harness.script((req: TurnRequest, ctx) => {
-      fs.writeFileSync(path.join(req.cwd!, "hang.txt"), "hang\n", "utf8");
-      ctx.writeOutcome(outcome({ summary: "v1" }));
-      return fakeTurnResult(req);
-    });
-    scriptStallLeave(harness, ["hang-task"]);
+    harness.script(
+      (req: TurnRequest, ctx) => {
+        fs.writeFileSync(path.join(req.cwd!, "hang.txt"), "hang\n", "utf8");
+        ctx.writeOutcome(outcome({ summary: "v1" }));
+        return fakeTurnResult(req);
+      },
+      { when: whenTurn({ step: "implement" }) },
+    );
+    harness.script(
+      (req: TurnRequest, ctx) => {
+        fs.writeFileSync(
+          infraPath(goalDir),
+          "gates: []\nincident:\n  verdict: infra\n  handling: stop\n",
+          "utf8",
+        );
+        ctx.writeOutcome(outcome({ summary: "timeout classified infra" }));
+        return fakeTurnResult(req);
+      },
+      { when: whenTurn({ step: "infra" }) },
+    );
 
     const runtime = await makeRuntime(repo, goal, { fake: harness });
     try {
       await writeTask(runtime, task("hang-task", { scope: ["hang.txt"] }));
       const result = await runDispatch(runtime, { iteration: 1 });
-      expect(result.reason).toBe("boundary");
+      expect(result.reason).toBe("infra");
 
       const records = await runtime.store.listRecords();
+      const checks = records.find(
+        (r) => r.slug === "hang-task" && r.step === "checks",
+      );
+      expect(checks?.ok).toBe(false);
+      expect(checks?.checks?.[0]?.details).toMatchObject({ kind: "infra" });
       const state = derive(
         await runtime.store.listTasks(),
         records,
         runtime.configs.process.flows,
       );
-      expect(state.tasks["hang-task"]!.status).toBe("parked");
-      expect(state.tasks["hang-task"]!.cause?.kind).toBe("infra");
+      expect(state.tasks["hang-task"]!.status).not.toBe("parked");
     } finally {
       cleanupFlowRepo(repo);
     }

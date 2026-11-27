@@ -45,6 +45,12 @@ const VALUE_FLAGS: readonly ValueFlag[] = [
     },
   },
   {
+    name: "--iteration",
+    apply: (result, value) => {
+      result.iteration = parsePositiveInt("--iteration", value);
+    },
+  },
+  {
     name: "--run-config",
     apply: (result, value) => {
       if (!value) throw new Error("--run-config requires a path");
@@ -71,6 +77,20 @@ const VALUE_FLAGS: readonly ValueFlag[] = [
     apply: (result, value) => {
       if (!value) throw new Error("--step requires a step id");
       result.step = value;
+    },
+  },
+  {
+    name: "--role",
+    apply: (result, value) => {
+      if (!value.trim()) throw new Error("--role requires a role name");
+      result.role = value;
+    },
+  },
+  {
+    name: "--cause",
+    apply: (result, value) => {
+      if (!value.trim()) throw new Error("--cause requires a cause kind");
+      result.cause = value;
     },
   },
   {

@@ -55,6 +55,7 @@ export type {
 export { causeSchema } from "./types/state.js";
 export type {
   Action,
+  AdmittedTier,
   Cause,
   CauseKind,
   EpicState,
@@ -78,6 +79,7 @@ export {
   DEFAULT_ARCHITECTURE_FLOWS,
   DEFAULT_PM_FLOW_STEPS,
   DEFAULT_TIMEOUTS,
+  FLOW_PARITIES,
   KERNEL_STEPS,
 } from "./types/flow.js";
 export type {
@@ -88,6 +90,7 @@ export type {
   BoundaryStep,
   BuiltinIngestionId,
   FlowDefinition,
+  FlowParity,
   FlowStep,
   FollowUp,
   IngestionStepConfig,

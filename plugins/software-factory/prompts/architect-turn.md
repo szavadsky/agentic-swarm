@@ -5,6 +5,7 @@ Every turn, in this order.
 ### 1. Completeness check
 
 - Evaluate your whole scope against the intent: completeness, quality, correctness of what exists — not only the last iteration. Answer from the intent, the pack and evidence.
+- Check test runtimes in the pack against goal start; plan work to reduce test time while keeping tests on their merits.
 - Truly blocked, or does continuing make sense? Among non-blocked items: what is incomplete, and what must be redone? Name it in the plan.
 - Reuse this evaluation context for planning below.
 - Output: the reasons to continue and the next thing worth dispatching.

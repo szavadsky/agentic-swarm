@@ -286,6 +286,71 @@ export function appendInfra(lines: string[], input: ContextPackInput): void {
   lines.push("", ...renderInfraSection(input.setup, input.gates).split("\n"));
 }
 
+const TEST_RUNTIME_ROW_CAP = 20;
+
+function formatDurationMs(ms: number): string {
+  return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(2)}s`;
+}
+
+function formatDeltaMs(deltaMs: number): string {
+  if (deltaMs > 0) return `+${formatDurationMs(deltaMs)}`;
+  if (deltaMs < 0) return `-${formatDurationMs(-deltaMs)}`;
+  return "0ms";
+}
+
+function pluralTests(count: number): string {
+  return `${count} ${count === 1 ? "test" : "tests"}`;
+}
+
+function escapeTableCell(value: string): string {
+  return value.replace(/\|/g, "\\|").replace(/\s+/g, " ").trim();
+}
+
+export function appendTestRuntimes(
+  lines: string[],
+  input: ContextPackInput,
+): void {
+  const comparison = input.testRuntimes;
+  if (!comparison) return;
+  lines.push("", "## Test runtimes (current vs goal start)");
+  const { goalStart, current, deltaMs, deltaPct, rows } = comparison;
+  if (!current) {
+    lines.push(
+      `- goal-start: ${formatDurationMs(goalStart.totalMs)} across ${pluralTests(goalStart.testCount)} (${goalStart.step})`,
+      "- current: not recorded",
+    );
+    return;
+  }
+  const pct =
+    deltaPct === null
+      ? ""
+      : `, ${deltaPct >= 0 ? "+" : ""}${deltaPct.toFixed(1)}%`;
+  lines.push(
+    `- total: ${formatDurationMs(current.totalMs)} across ${pluralTests(current.testCount)} vs goal-start ${formatDurationMs(goalStart.totalMs)} across ${pluralTests(goalStart.testCount)} (${formatDeltaMs(deltaMs ?? 0)}${pct})`,
+    "| test | current | goal-start | delta |",
+    "|---|---|---|---|",
+  );
+  for (const row of rows.slice(0, TEST_RUNTIME_ROW_CAP)) {
+    const cur = row.currentMs !== null ? formatDurationMs(row.currentMs) : "-";
+    const base =
+      row.goalStartMs !== null ? formatDurationMs(row.goalStartMs) : "-";
+    const delta =
+      row.currentMs === null
+        ? "removed"
+        : row.goalStartMs === null
+          ? "new"
+          : formatDeltaMs(row.deltaMs ?? 0);
+    lines.push(
+      `| ${escapeTableCell(row.name)} | ${cur} | ${base} | ${delta} |`,
+    );
+  }
+  if (rows.length > TEST_RUNTIME_ROW_CAP) {
+    lines.push(
+      `- ... +${rows.length - TEST_RUNTIME_ROW_CAP} more tests (full list in context-data.json)`,
+    );
+  }
+}
+
 export function appendBaseGates(
   lines: string[],
   input: ContextPackInput,

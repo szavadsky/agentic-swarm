@@ -381,7 +381,7 @@ function registerRepairFindingsAndLaunchKindsPart1(): void {
 }
 
 function registerRepairFindingsAndLaunchKindsPart2(): void {
-  it("marks infra stops as glitches", async () => {
+  it("leaves a genuine infra stop out of the glitch class", async () => {
     const { root, fake, runtime } = await setupLocal2();
     try {
       fake.script((req) =>
@@ -397,7 +397,9 @@ function registerRepairFindingsAndLaunchKindsPart2(): void {
       });
 
       expect(result.outcome).toBeUndefined();
-      expect(result.record.launchKind).toBe("glitch");
+      // A quota stop names a genuine infra failure; only a zero-usage,
+      // no-output glitch takes the glitch launch kind.
+      expect(result.record.launchKind).toBeUndefined();
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

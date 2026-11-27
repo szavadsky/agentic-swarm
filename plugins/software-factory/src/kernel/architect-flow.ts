@@ -1,14 +1,16 @@
 /**
  * The architect consult as a configured step list: one flow per launch
- * reason, selected from `process.architecture.flows`. Built-in ids run the
- * kernel's architect, plan-review and PM stages; any other id runs one agent
- * turn with the prompt and alias it names.
+ * reason, selected from `process.architecture.flows`. Flows that name a
+ * `parity` rotate by iteration, so two flows sharing a reason alternate.
+ * Built-in ids run the kernel's architect, plan-review and PM stages; any
+ * other id runs one agent turn with the prompt and alias it names.
  */
 import { runAgentTurn } from "./agent.js";
 import { runArchitectStage } from "./boundary-architect.js";
 import { boundaryPassPlan, infraCause } from "./boundary-context.js";
 import { boundaryResult } from "./boundary-state.js";
 import type { BoundaryResult, ConsultContext } from "./boundary-types.js";
+import { indexDismissals, isConcernDismissed } from "./concern-dismissal.js";
 import {
   reviewChangedPlans,
   runPmStage,
@@ -24,18 +26,22 @@ import type {
   ArchitectReason,
   ArchitectureFlow,
   ArchitectureFlowStep,
+  FlowParity,
   KernelRuntime,
 } from "./types.js";
 import { DEFAULT_ARCHITECTURE_FLOWS } from "./types.js";
 
-/** Non-FYI concerns the previous iteration recorded. */
+/** Non-FYI, non-dismissed concerns the previous iteration recorded. */
 function previousConcerns(context: ConsultContext): boolean {
+  const dismissals = indexDismissals(context.records);
   return context.records.some(
     (record) =>
       record.iteration === context.iteration - 1 &&
       record.endedAt !== undefined &&
       (record.outcome?.concerns ?? []).some(
-        (concern) => concern.calibration !== "fyi",
+        (concern) =>
+          concern.calibration !== "fyi" &&
+          !isConcernDismissed(dismissals, record, concern),
       ),
   );
 }
@@ -57,17 +63,29 @@ function architectureReason(context: ConsultContext): ArchitectReason {
   return priorIteration ? "iteration-done" : "initial";
 }
 
+/** The parity of an iteration; iteration numbers start at 1. */
+function iterationParity(iteration: number): FlowParity {
+  return iteration % 2 === 0 ? "even" : "odd";
+}
+
 /**
- * The flow a reason selects. A reason no flow names runs the `initial` flow;
- * a config with no flow naming initial runs the shipped default consult.
+ * The flow a reason and iteration select. Among the flows naming the reason, a
+ * parity-matching flow wins over one without a parity; a reason no flow names
+ * runs the `initial` flow; a config with no flow naming initial runs the
+ * shipped default consult.
  */
 export function architectureFlowForReason(
   process: KernelRuntime["configs"]["process"],
   reason: ArchitectReason,
+  iteration: number,
 ): ArchitectureFlow {
   const flows = process.architecture.flows ?? [];
+  const parity = iterationParity(iteration);
+  const matching = flows.filter((flow) => flow.when.includes(reason));
   const selected =
-    flows.find((flow) => flow.when.includes(reason)) ??
+    matching.find((flow) => flow.parity === parity) ??
+    matching.find((flow) => flow.parity === undefined) ??
+    matching[0] ??
     flows.find((flow) => flow.when.includes("initial")) ??
     DEFAULT_ARCHITECTURE_FLOWS[0]!;
   return selected;
@@ -175,6 +193,7 @@ export async function runArchitectureFlow(
   const flow = architectureFlowForReason(
     context.runtime.configs.process,
     architectureReason(context),
+    context.iteration,
   );
   for (const step of flow.steps) {
     if (step.id === "architect") {

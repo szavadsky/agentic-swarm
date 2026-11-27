@@ -191,7 +191,11 @@ export function buildStatus(input: StatusInput): StatusDocument {
     tasks,
     distance: view.distance,
     concerns: statusConcerns(input.records),
-    openConcerns: openConcernEntries(input.records, view.distance.openDebt),
+    openConcerns: openConcernEntries(
+      input.records,
+      view.distance.openDebt,
+      input.tasks,
+    ),
     steers: statusSteers(input.records, input.mailbox),
     cost: costView(totals),
     work: workView(totals),

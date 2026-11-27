@@ -13,6 +13,8 @@ Run from `plugins/software-factory`; `--repo` is the target checkout.
 bun bin/factory.ts init    --repo <path> --goal <name> [--intent <file>]
 bun bin/factory.ts run     --repo <path> --goal <name> [--run-config <file>] [--iterations N]
 bun bin/factory.ts status  --repo <path> --goal <name> [--json]
+bun bin/factory.ts records --repo <path> --goal <name> [--step <id>] [--role <role>]
+                           [--cause <kind>] [--iteration <n>] [--json]
 bun bin/factory.ts steer   --repo <path> --goal <name> <file | ->
 bun bin/factory.ts validate [--step <id>] [--run-config <file>] [<file>]
 bun bin/factory.ts schemas --out <dir>
@@ -27,7 +29,8 @@ bun bin/factory.ts variables --out <file>
 | `status --json` | Prints `status.json`, the snapshot written after each agent launch and finish. Before the first launch it derives the same document. |
 | `steer` | Writes a steer file into the mailbox inbox atomically. |
 | `validate` | Checks one schema-enforced file with the gate's validators: `tasks/*.md`, `class.yaml`, `outcome.yaml`, `mailbox/holds/*.yaml`, `repo.yaml`, `run.yaml`, `process.yaml`, `infra.yaml`. `--run-config` names the run config explicitly, including one not named `run.yaml`. A repo, process or run file also gets the non-model pre-flight checks (required aliases and chains, unregistered alias, fallback harnesses, quota pools, task types and trivial-flow follow-ups, portability edges, configured executables, writable roots outside the repo) — launches nothing. Exit 0 valid, 1 invalid or unknown kind. |
-| `schemas` | Writes every kernel schema as JSON Schema (`task`, `outcome`, `hold`, `class`, `infra`, `repo`, `run`, `process`). |
+| `records` | Queries the append-only step records by `--step`, `--role`, `--cause` kind and `--iteration`; prints YAML or a JSON array with `--json`. Includes an unfinished record whose turn started but did not end. |
+| `schemas` | Writes every kernel schema as JSON Schema (`task`, `outcome`, `qa`, `hold`, `class`, `infra`, `repo`, `run`, `process`, `gate`, `record`). |
 | `variables` | Renders `prompts/VARIABLES.md` from the typed prompt-variable descriptor. |
 
 `init` creates the goal directory under the configured artifact root
@@ -100,7 +103,9 @@ decision parks the goal until a steer arrives.
 `started.yaml` (written before the turn), `end.yaml` (commits it and seals its
 files read-only) and `outcome.yaml` (the accepted agent outcome). Records are
 append-only and never rewritten. Read a failed turn's directory before
-relaunching; `end.yaml` names its stop and usage.
+relaunching; `end.yaml` names its stop and usage. `factory records` filters the
+merged view by step, role, cause kind and iteration; `factory schemas` publishes
+that shape as `record.schema.json`.
 
 Steering is the mailbox. The architect reads `mailbox/inbox/` at a boundary,
 moves the file to `mailbox/processed/` and writes its answer to

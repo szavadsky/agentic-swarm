@@ -1,5 +1,6 @@
 /** Open, closed and plan-owned debt extraction. */
 
+import { indexDismissals, isConcernDismissed } from "../concern-dismissal.js";
 import type { ConcernId, RecordedConcern, StepRecord } from "../types.js";
 import type { OpenDebt } from "./types.js";
 import { bySeq } from "./shared.js";
@@ -17,12 +18,16 @@ function citedIds(line: string): Set<string> {
   return new Set(line.match(/[\w.-]+#\d+/g) ?? []);
 }
 
-/** Every ingested debt concern's normalized text, by the id ingest assigned it. */
-function debtTextsById(records: readonly StepRecord[]): Map<ConcernId, string> {
+/** Every ingested non-dismissed debt concern's normalized text, by the id ingest assigned it. */
+function debtTextsById(
+  records: readonly StepRecord[],
+  dismissals = indexDismissals(records),
+): Map<ConcernId, string> {
   const byId = new Map<ConcernId, string>();
   for (const rec of records) {
     for (const concern of rec.outcome?.concerns ?? []) {
       if (concern.kind !== "debt" || !concern.id) continue;
+      if (isConcernDismissed(dismissals, rec, concern)) continue;
       byId.set(concern.id, normalizeDebtText(concern.text));
     }
   }
@@ -126,12 +131,16 @@ export function openDebts(
   records: readonly StepRecord[],
   plan?: string,
 ): OpenDebt[] {
+  const dismissals = indexDismissals(records);
   const byText = new Map<string, OpenDebt>();
   for (const rec of [...records].sort(bySeq)) {
     if (!rec.outcome) continue;
-    for (const concern of rec.outcome.concerns) addDebt(byText, rec, concern);
+    for (const concern of rec.outcome.concerns) {
+      if (isConcernDismissed(dismissals, rec, concern)) continue;
+      addDebt(byText, rec, concern);
+    }
   }
-  const byId = debtTextsById(records);
+  const byId = debtTextsById(records, dismissals);
   const { cited, quoted } = closedDebtTexts(records, byId);
   const owned = plan ? planOwnedDebtTexts(plan, byId) : new Set<string>();
   return [...byText.entries()]

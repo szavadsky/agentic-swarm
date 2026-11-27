@@ -7,20 +7,20 @@ import { preexistingRed, recordedBaseGates } from "../baseline.js";
 import { makeCause } from "../cause.js";
 import {
   advisoryChecks,
-  gateFlakeTests,
   isInfraCheck,
   newGateFailures,
   newRedChecks,
   runGates,
   stampAttribution,
 } from "../gates.js";
-import { integrationExclusive } from "../integration-lock.js";
 import {
-  appendGateFlake,
-  finishChecks,
-  scriptMeta,
-  startChecks,
-} from "../record.js";
+  adjudicateInfraChecks,
+  isTimeoutGate,
+  markInfraGates,
+  rerunGateSubset,
+} from "../infra-verdict.js";
+import { integrationExclusive } from "../integration-lock.js";
+import { finishChecks, scriptMeta, startChecks } from "../record.js";
 import { taskArchitect } from "../tasks.js";
 import type {
   Cause,
@@ -66,72 +66,67 @@ function judgedMergeChecks(
   };
 }
 
-/** The red merge's cause: the new gates it names, or the infra park. */
+/** The red merge's cause: the new gates it names. */
 function mergeRedCause(red: CheckResult[]): Cause {
   const actionable = red.filter((check) => !isInfraCheck(check));
-  if (actionable.length > 0)
-    return makeCause("gates", actionable.map((check) => check.name).join(", "));
-  return makeCause(
-    "infra",
-    `gate could not start: ${red.map((check) => check.name).join(", ")}`,
-  );
+  return makeCause("gates", actionable.map((check) => check.name).join(", "));
 }
 
-/** Runs (or reuses) merge gates; undefined means a gate failed and is recorded. */
-async function mergeChecks(
+type MergeChecksOutcome =
+  | { kind: "ok"; checks: CheckResult[]; skipCause?: Cause }
+  | { kind: "failed" }
+  | { kind: "infra"; infra?: MergeResult["infra"]; cancelled?: boolean };
+
+async function settleMergeChecks(
   runtime: KernelRuntime,
   task: TaskFile,
   iteration: number,
   round: number,
   scratch: string,
-  records: StepRecord[],
+  mergedTree: string,
   preexisting: ReadonlySet<string>,
   keptLand: boolean,
-): Promise<{ checks: CheckResult[]; skipCause?: Cause } | undefined> {
-  const mergedTree = await treeSha(scratch);
-  const judged = judgedMergeChecks(records, task.slug, mergedTree, preexisting);
-  if (judged) return judged;
-  const setup = await runWorktreeSetup({
-    commands: runtime.configs.repo.setup,
-    cwd: scratch,
-  });
-  if (!setup.ok) {
-    await failMerge(
-      runtime,
-      task,
-      iteration,
-      round,
-      makeCause("setup", setup.error ?? "unknown"),
-    );
-    return undefined;
-  }
-  const gate = await startChecks(
-    runtime.store,
-    {
-      iteration,
-      slug: task.slug,
-      round,
-      architect: taskArchitect(task),
-    },
-    { step: "merge-checks" },
-  );
+): Promise<MergeChecksOutcome> {
+  const meta = {
+    iteration,
+    slug: task.slug,
+    round,
+    architect: taskArchitect(task),
+  };
+  const gate = await startChecks(runtime.store, meta, { step: "merge-checks" });
   let ran = await runGates(runtime, scratch);
+  markInfraGates(ran);
   if (task.advisory) ran = advisoryChecks(ran);
-  if (keptLand) {
-    ran = await rerunRedKeptGates(
-      runtime,
-      {
-        iteration,
-        slug: task.slug,
-        round,
-        architect: taskArchitect(task),
-      },
-      scratch,
-      ran,
-      preexisting,
-    );
-  }
+  ran = await rerunMergeGates(
+    runtime,
+    meta,
+    scratch,
+    mergedTree,
+    ran,
+    preexisting,
+    keptLand,
+  );
+  const adjudicated = await adjudicateInfraChecks(
+    runtime,
+    iteration,
+    "merge-checks",
+    scratch,
+    ran,
+    preexisting,
+    { slug: task.slug, round, lock: false },
+  );
+  ran = adjudicated.checks;
   await finishChecks(gate, ran, { preexisting, tree: mergedTree });
+  if (adjudicated.infra || adjudicated.cancelled) {
+    await removeMergeScratch(runtime);
+    return {
+      kind: "infra",
+      ...(adjudicated.infra
+        ? { infra: { kind: "infra", ...adjudicated.infra } }
+        : {}),
+      ...(adjudicated.cancelled ? { cancelled: true } : {}),
+    };
+  }
   const red = newGateFailures(ran, preexisting);
   if (red.length > 0) {
     // The merge record closes outside `finishChecks`, so stamp its checks
@@ -144,9 +139,49 @@ async function mergeChecks(
       mergeRedCause(red),
       stampAttribution(ran, preexisting),
     );
-    return undefined;
+    return { kind: "failed" };
   }
-  return { checks: ran };
+  return { kind: "ok", checks: ran };
+}
+
+/** Runs (or reuses) merge gates; handles setup, timeout/flake reruns and infra adjudication. */
+async function mergeChecks(
+  runtime: KernelRuntime,
+  task: TaskFile,
+  iteration: number,
+  round: number,
+  scratch: string,
+  records: StepRecord[],
+  preexisting: ReadonlySet<string>,
+  keptLand: boolean,
+): Promise<MergeChecksOutcome> {
+  const mergedTree = await treeSha(scratch);
+  const judged = judgedMergeChecks(records, task.slug, mergedTree, preexisting);
+  if (judged) return { kind: "ok", ...judged };
+  const setup = await runWorktreeSetup({
+    commands: runtime.configs.repo.setup,
+    cwd: scratch,
+  });
+  if (!setup.ok) {
+    await failMerge(
+      runtime,
+      task,
+      iteration,
+      round,
+      makeCause("setup", setup.error ?? "unknown"),
+    );
+    return { kind: "failed" };
+  }
+  return settleMergeChecks(
+    runtime,
+    task,
+    iteration,
+    round,
+    scratch,
+    mergedTree,
+    preexisting,
+    keptLand,
+  );
 }
 
 /**
@@ -162,7 +197,7 @@ async function landMergedTask(
   round: number,
   scratch: string,
   head: string,
-  checked: NonNullable<Awaited<ReturnType<typeof mergeChecks>>>,
+  checked: Extract<MergeChecksOutcome, { kind: "ok" }>,
 ): Promise<void> {
   const { checks, skipCause } = checked;
   const commit = await headSha(scratch);
@@ -229,7 +264,10 @@ export async function mergeTask(
       preexisting,
       opts.keptLand === true,
     );
-    if (!checked) return {};
+    if (checked.kind === "failed") return {};
+    if (checked.kind === "infra") {
+      return checked.cancelled ? { cancelled: true } : { infra: checked.infra };
+    }
     await landMergedTask(
       runtime,
       task,
@@ -244,12 +282,11 @@ export async function mergeTask(
 }
 
 /**
- * One flake re-run for kept-land merge gates, mirroring the task-gate path: a
- * red gate re-runs once on the same tree, a flip to green lands with a
- * `gate-flake` record, and a repeat red leaves the branch parked. An infra
- * re-run is inconclusive: the red run stands.
+ * Re-runs timed-out merge gates once (in every mode) and red kept-land gates
+ * once on the same tree: a flip to green records a `gate-flake`, a repeat red
+ * lands on normal adjudication, and a repeat timeout routes to the infra turn.
  */
-async function rerunRedKeptGates(
+async function rerunMergeGates(
   runtime: KernelRuntime,
   meta: {
     iteration: number;
@@ -258,32 +295,21 @@ async function rerunRedKeptGates(
     architect?: string;
   },
   scratch: string,
+  tree: string,
   checks: CheckResult[],
   preexisting: ReadonlySet<string>,
+  keptLand: boolean,
 ): Promise<CheckResult[]> {
-  const red = newGateFailures(checks, preexisting).filter(
-    (check) => !isInfraCheck(check),
-  );
-  if (red.length === 0) return checks;
-  const rerun = await runGates(runtime, scratch, {
-    only: new Set(red.map((check) => check.name)),
-  });
-  const fresh = new Map(rerun.map((check) => [check.name, check]));
-  const flipped = red.filter((check) => fresh.get(check.name)?.ok === true);
-  if (flipped.length > 0) {
-    await appendGateFlake(runtime.store, meta, {
-      tree: await treeSha(scratch),
-      flakes: flipped.map((check) => ({
-        gate: check.name,
-        tests: gateFlakeTests(check),
-      })),
-      checks: flipped,
-    });
-  }
-  return checks.map((check) => {
-    const next = fresh.get(check.name);
-    if (!next || (!next.ok && isInfraCheck(next))) return check;
-    return next;
+  const failing = newGateFailures(checks, preexisting);
+  const timedOut = failing.filter(isTimeoutGate);
+  const red = keptLand ? failing.filter((check) => !isInfraCheck(check)) : [];
+  const targets = new Set([
+    ...red.map((check) => check.name),
+    ...timedOut.map((check) => check.name),
+  ]);
+  return rerunGateSubset(runtime, scratch, tree, checks, targets, {
+    meta,
+    replaceInfraFor: new Set(timedOut.map((check) => check.name)),
   });
 }
 
@@ -334,6 +360,57 @@ function judgedGoalHead(
  * once per head tree. The gates run in a detached scratch at the head, never
  * in the goal checkout, which the boundary also uses.
  */
+async function runGoalHeadScratchChecks(
+  runtime: KernelRuntime,
+  iteration: number,
+  head: string,
+  tree: string,
+  preexisting: ReadonlySet<string>,
+): Promise<GoalHeadJudgement | undefined> {
+  const scratch = await resetMergeScratch(runtime, head);
+  try {
+    const setup = await runWorktreeSetup({
+      commands: runtime.configs.repo.setup,
+      cwd: scratch,
+    });
+    if (!setup.ok) {
+      await runtime.store.appendRecord(scriptMeta(iteration, GOAL_HEAD_STEP), {
+        ok: false,
+        cause: makeCause("setup", setup.error ?? "unknown"),
+        tree,
+      });
+      return undefined;
+    }
+    const turn = await runtime.store.startRecord(
+      scriptMeta(iteration, GOAL_HEAD_STEP),
+    );
+    let checks = await runGates(runtime, scratch);
+    markInfraGates(checks);
+    const timedOut = newGateFailures(checks, preexisting).filter(isTimeoutGate);
+    if (timedOut.length > 0) {
+      const targets = new Set(timedOut.map((check) => check.name));
+      checks = await rerunGateSubset(runtime, scratch, tree, checks, targets, {
+        replaceInfraFor: targets,
+      });
+    }
+    checks = (
+      await adjudicateInfraChecks(
+        runtime,
+        iteration,
+        "goal-head",
+        scratch,
+        checks,
+        preexisting,
+        { lock: false },
+      )
+    ).checks;
+    const record = await finishChecks(turn, checks, { preexisting, tree });
+    return { record, red: newRedChecks(checks, preexisting) };
+  } finally {
+    await removeMergeScratch(runtime);
+  }
+}
+
 export async function judgeGoalHead(
   runtime: KernelRuntime,
   iteration: number,
@@ -351,32 +428,7 @@ export async function judgeGoalHead(
       red: newRedChecks(judged.checks ?? [], preexisting),
     };
 
-  return integrationExclusive(runtime, async () => {
-    const scratch = await resetMergeScratch(runtime, head);
-    try {
-      const setup = await runWorktreeSetup({
-        commands: runtime.configs.repo.setup,
-        cwd: scratch,
-      });
-      if (!setup.ok) {
-        await runtime.store.appendRecord(
-          scriptMeta(iteration, GOAL_HEAD_STEP),
-          {
-            ok: false,
-            cause: makeCause("setup", setup.error ?? "unknown"),
-            tree,
-          },
-        );
-        return undefined;
-      }
-      const turn = await runtime.store.startRecord(
-        scriptMeta(iteration, GOAL_HEAD_STEP),
-      );
-      const checks = await runGates(runtime, scratch);
-      const record = await finishChecks(turn, checks, { preexisting, tree });
-      return { record, red: newRedChecks(checks, preexisting) };
-    } finally {
-      await removeMergeScratch(runtime);
-    }
-  });
+  return integrationExclusive(runtime, () =>
+    runGoalHeadScratchChecks(runtime, iteration, head, tree, preexisting),
+  );
 }
