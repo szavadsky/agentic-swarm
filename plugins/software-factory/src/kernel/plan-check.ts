@@ -2,6 +2,7 @@ import { runAgentTurn } from "./agent.js";
 import { formatCause, makeCause } from "./cause.js";
 import type { PlanCheckPack } from "./context-pack.js";
 import { formatOpenConcern, openConcerns } from "./context-pack.js";
+import { openEpicTask } from "./derive.js";
 import { boundaryTarget } from "./flow-context.js";
 import { readHolds } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
@@ -24,21 +25,12 @@ import {
   type State,
   type StepRecord,
   type TaskFile,
-  type TaskStatus,
 } from "./types.js";
 import type { PlanCheckTurn, PlanCheckRound } from "./plan-check-types.js";
 export type { PlanCheckTurn } from "./plan-check-types.js";
 
 /** Agent step of a plan-checker turn; slug-less, so it stays out of the item's turn count. */
 export const PLAN_CHECK_STEP = "plancheck";
-
-/** Statuses that still owe the goal work: parked and ready/pending are the checker's business. */
-const OPEN_STATUSES: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
-  "pending",
-  "ready",
-  "running",
-  "parked",
-]);
 
 /**
  * The slugs one plan names as task bullets. Prose mentions and nested bullets
@@ -138,7 +130,7 @@ export function validatePlanCheck(
 /** Non-terminal task slugs, sorted: the work a boundary still owes the goal. */
 export function openWork(state: State): string[] {
   return Object.entries(state.tasks)
-    .filter(([, task]) => OPEN_STATUSES.has(task.status))
+    .filter(([, task]) => openEpicTask(task))
     .map(([slug]) => slug)
     .sort();
 }

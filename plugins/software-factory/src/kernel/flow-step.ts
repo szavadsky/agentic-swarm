@@ -53,10 +53,13 @@ interface StepDeps {
   iteration: number;
   /** The leg admission chose; absent is the alias's primary. */
   tier?: AdmittedTier;
+  /** Dispatch already holds this turn's semaphore counts. */
+  semaphoresHeld?: boolean;
 }
 
 async function openStep(deps: StepDeps): Promise<StepRun | TaskActionResult> {
-  const { runtime, task, state, iteration, step, flow, tier } = deps;
+  const { runtime, task, state, iteration, step, flow, tier, semaphoresHeld } =
+    deps;
   const records = await runtime.store.listRecords();
   const opened = await openTaskWorktree(runtime, task, state, iteration);
   if ("result" in opened) return opened.result;
@@ -86,6 +89,7 @@ async function openStep(deps: StepDeps): Promise<StepRun | TaskActionResult> {
     trivial: false,
     lastCall: false,
     tier,
+    semaphoresHeld,
   };
 }
 
@@ -303,7 +307,14 @@ async function chooseSession(
   run.trivial = isTrivialImplementTurn(runtime, task, state, step.id);
   run.turnCwd = ensured.path;
   run.session = isDecideStep(step)
-    ? await deciderSession(runtime, task, run.target, run.records, ensured.path)
+    ? await deciderSession(
+        runtime,
+        task,
+        run.target,
+        { iteration, round: state.round },
+        run.records,
+        ensured.path,
+      )
     : isAcceptanceStep(step) ||
         (run.relaunch && !run.trivial) ||
         (run.fix && !run.trivial)
@@ -312,6 +323,7 @@ async function chooseSession(
           task,
           run.target,
           step.id,
+          { iteration, round: state.round },
           run.records,
           ensured.path,
         )

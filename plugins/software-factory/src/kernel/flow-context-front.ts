@@ -77,16 +77,22 @@ export function isStandaloneTask(
 }
 
 /**
- * The escalation ask for a standalone review, empty for architect-plan tasks.
- * Rendered as the reviewer's `upscope_ask` variable; the reviewer answers it
- * as `upscope: yes|no` alongside its verdict.
+ * The escalation ask for the last agent of a standalone task, empty for
+ * architect-plan tasks. Rendered as the turn's `upscope_ask` variable; the
+ * agent answers it as `upscope: yes|no` alongside its outcome, and the ask
+ * names the front's predicted area from the context pack.
  */
 export function standaloneUpscopeAsk(
   runtime: KernelRuntime,
   task: TaskFile,
+  records: StepRecord[],
 ): string {
   if (!isStandaloneTask(runtime, task)) return "";
-  return runtime.prompts.render("standalone-upscope", {}).trim();
+  return runtime.prompts
+    .render("standalone-upscope", {
+      front_pack: frontPack(runtime, task, records) ?? "",
+    })
+    .trim();
 }
 
 /** Rewrites the front class to bigger so the next launch runs the architect. */

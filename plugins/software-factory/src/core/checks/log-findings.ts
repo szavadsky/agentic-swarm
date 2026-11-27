@@ -18,12 +18,12 @@ function lineFrom(value: string | undefined): number | undefined {
   return Number.isFinite(line) ? line : undefined;
 }
 
-function compileRegex(declared: LogRegex): RegExp {
+function compilePattern(pattern: string, label: string): RegExp {
   try {
-    return new RegExp(declared.pattern);
+    return new RegExp(pattern);
   } catch (error) {
     throw new GateReportError(
-      `log regex ${JSON.stringify(declared.pattern)} is invalid: ${
+      `${label} ${JSON.stringify(pattern)} is invalid: ${
         error instanceof Error ? error.message : String(error)
       }`,
     );
@@ -57,7 +57,7 @@ export function regexFindings(
 ): Finding[] {
   const findings: Finding[] = [];
   for (const declared of regexes) {
-    const pattern = compileRegex(declared);
+    const pattern = compilePattern(declared.pattern, "log regex");
     for (const text of log.split("\n")) {
       if (text.trim() === "") continue;
       const match = pattern.exec(text);
@@ -68,18 +68,9 @@ export function regexFindings(
 }
 
 const LOG_LOCATION = /^(.+?)(?:\((\d+)(?:,\d+)?\)|:(\d+)(?::\d+)?):\s*(.*)$/;
-const LOG_NOISE = [
-  /^-{3,}$/,
-  /^bun test v\d/,
-  /^tests gate: wall \d/,
-  /^\d+ (?:pass|fail|skip|todo|errors?)\b/,
-  /^\d+ expect\(\) calls$/,
-  /^Ran \d+ tests? across /,
-  /^Found \d+ errors?(?: in \d+ files?)?\.$/,
-];
 
-function isNoise(text: string): boolean {
-  return text === "" || LOG_NOISE.some((noise) => noise.test(text));
+function isNoise(text: string, noise: readonly RegExp[]): boolean {
+  return text === "" || noise.some((pattern) => pattern.test(text));
 }
 
 /** One finding per meaningful red log line when no report or regex names one. */
@@ -87,12 +78,16 @@ export function logFindings(
   check: string,
   log: string,
   exitCode: number | null,
+  noisePatterns: readonly string[] = [],
 ): Finding[] {
+  const noise = noisePatterns.map((pattern) =>
+    compilePattern(pattern, "log noise regex"),
+  );
   if (exitCode === 0) return [];
   const findings: Finding[] = [];
   for (const text of log.split("\n")) {
     const message = text.trim();
-    if (isNoise(message)) continue;
+    if (isNoise(message, noise)) continue;
     const located = LOG_LOCATION.exec(message);
     const file = located?.[1];
     const line = lineFrom(located?.[2] ?? located?.[3]);

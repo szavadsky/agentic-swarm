@@ -18,12 +18,15 @@ import {
   taskTypeSchema,
 } from "./flow-schema.js";
 import { DEFAULT_PM_FLOW, pmSchema } from "./pm-schema.js";
+import { semaphoreDeclarationsSchema } from "./semaphore-schema.js";
 
 /** Process layer: package default deep-merged with an optional repo override. */
 export const processConfigSchema = z
   .object({
     flows: z.record(z.string(), flowSchema).default({}),
     taskTypes: z.record(z.string(), taskTypeSchema).default({}),
+    /** Named semaphores the process layer owns: flow steps and agents reference them. */
+    semaphores: semaphoreDeclarationsSchema,
     boundary: boundarySchema,
     /** The goal-start step sequence: the branch first, the classifier, then extra steps. */
     ingestion: ingestionSchema.default(DEFAULT_INGESTION_STEPS),
@@ -170,6 +173,8 @@ export const harnessEntrySchema = z
      * Absent resolves through PATH.
      */
     binary: z.string().min(1).optional(),
+    /** Semaphore this harness's live sessions hold; names are global across layers. */
+    semaphore: z.string().min(1).optional(),
     /** Required: an absent policy would otherwise silently mean on. */
     compaction: compactionSchema,
     /**
@@ -222,6 +227,8 @@ export const DEFAULT_PARK_AMENDS = 1;
 export const limitsSchema = z
   .object({
     concurrency: concurrencySchema,
+    /** Semaphore every turn holds, or absent for the concurrency block alone. */
+    overallSemaphore: z.string().min(1).optional(),
     iterations: z.number().int().positive().default(1),
     /** Plan-checker rounds one consult owns; exhausted rounds consult the architect. */
     planCheckRounds: z.number().int().positive().default(2),
@@ -257,6 +264,8 @@ export const runConfigSchema = z
     sandbox: sandboxSchema.optional(),
     /** Harness id -> adapter binding; a harness id is a config name. */
     harnesses: z.record(z.string(), harnessEntrySchema).default({}),
+    /** Named semaphores the run layer owns: overall, harness and subscription limits. */
+    semaphores: semaphoreDeclarationsSchema,
     /**
      * Names a spawned harness or agent may inherit from the factory's own
      * environment, on top of the base toolchain set (PATH, HOME, bun/node

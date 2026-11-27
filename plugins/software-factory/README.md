@@ -116,6 +116,7 @@ gates:
     command: ./scripts/integration-tests         # writes the declared report
     format: { ctrf: reports/ctrf.json }           # standard test report
     serial: [database]                          # same-named gates in one repo never overlap
+    semaphores: [integration]                   # semaphores held for the whole command
     env: { TMPDIR: .cache/gate }                # per-worktree scratch directory
   - id: lint-strict
     command: bun run lint:strict
@@ -124,6 +125,8 @@ cleanliness:                                    # optional; default rules active
   maxFileSizeBytes: 1048576                     # default: 1048576 (1 MB)
   allowedExtensions: [ts, json, md]             # default: extensions present in base tree
   allowedFiles: [data/benchmark.csv]            # optional; explicit files exempt from the heuristic
+semaphores:
+  - { name: integration, max: 1 }   # named limits shared by gates and turns
 codingRules: .factory/prompts/coding-rules.md   # optional; replaces the factory default clean-code partial
 parkRoutes:                                     # optional; the PM stall turn's per-cause default
   gates:                                        # keyed by the kernel's closed cause vocabulary
@@ -148,7 +151,9 @@ matches a harness id against the price table exactly, or after dropping a
 leading provider segment the harness adds, an effort suffix the adapter keeps,
 and a free-tier spelling; a bare model name also matches a table model by its
 suffix, and a run-config `priceIds` entry wins over all of it and must name a
-row exactly, so a stale mapping stays unpriced. A turn the harness does not
+row exactly, so a stale mapping stays unpriced. A turn whose harness returns no
+token counters records zero counters with `tokensReported: false`, so replay
+reads it as unreported rather than a measured zero. A turn the harness does not
 price and no candidate names stays unpriced. Verified adapter
 behaviours live in `config/acpx-verify.md` so the acpx code carries no names.
 
@@ -179,6 +184,21 @@ waits. `env` maps variable names to worktree-relative directories; the
 kernel creates them and exports absolute paths, so two worktrees get two
 directories.
 
+Named semaphores bound what runs at once. Each layer declares the ones it owns
+as `{name, max}` (`semaphores` in `.factory/repo.yaml`, the process config and
+the run config); names are global, so any layer references another's and a name
+declared twice must agree on its max. A gate holds the names in its
+`semaphores` list for its whole command; a flow step's turns hold the names
+in its `semaphores` list around their harness calls, a harness entry holds the
+name in its `semaphore`, and an alias drawing on a subscription holds the
+semaphore declared under that subscription's name. A turn whose step,
+subscription and harness name one semaphore still takes one count; dispatch
+admits a turn whose fallback-chain tier has every semaphore free and falls back
+to the next tier when one is taken. `limits.overallSemaphore` names the
+semaphore every turn holds on top of the concurrency block. A reference to an
+undeclared name, or two layers declaring one name with different maxes, is a
+pre-flight finding.
+
 A gate's `format` gives its failures identities that survive assertion values
 and timings, so a red inherited from the base is not blamed on the task. A
 report failure is matched against the base by its fingerprint: one the base did
@@ -199,6 +219,8 @@ finding model: check, tool, file, line, rule, severity, message and fingerprint.
   for a tool that emits neither. Named groups `file`, `line`, `rule`,
   `severity` and `message` are read; the whole match is the message when the
   pattern names none.
+- `noise: [<regex>, ...]` lists line-level regular expressions ignored in the
+  exit-code-and-log fallback when no report or `regex` matches.
 
 A test report's red summary names its failing findings, and a missing, empty or
 unreadable report is red rather than a silent pass. A gate with no report still
@@ -402,15 +424,21 @@ extends: base.yaml                                   # inherit the shared aliase
 aliases:
   architect: { harness: opencode, model: opencode/minimax-m3.1-flash-free, effort: high }
   implementer: { harness: opencode, model: opencode/deepseek-v4.1-flash-free }
+semaphores:
+  - { name: all-turns, max: 3 }
+  - { name: opencode-go, max: 2 }
+  - { name: opencode, max: 2 }
 priceIds:                                            # harness model id -> OpenRouter id, when matching cannot resolve
   opencode/beam-free: reflection/beam-1.0-501b-a23b
 limits:
+  overallSemaphore: all-turns
   concurrency: { overall: 3, perSubscription: { opencode-go: 2 }, perModel: {} }
   iterations: 1
   iterationUsd: 5
 sessions: { dir: ~/.local/share/factory/sessions, keepRuns: 5, retention: short }
 harnesses:
   opencode:
+    semaphore: opencode   # this harness's own live sessions
     acpx: { agent: opencode acp, raw: true, compact: true }
     compaction: { enabled: true }                     # the adapter has a real /compact command
   agy:                                                # acpx adapter with no compaction command
@@ -612,15 +640,17 @@ Gates run once on the base; a red base is recorded and warned once, not fatal.
 its own five-second timer, independent of the turns it runs, so a steer that
 arrives during a long turn gets its one PM steer turn before that turn ends: a
 steer is announced once its content has held for
-`limits.steerDebounceSeconds` (default 60), everything announced together gets
-one turn, and a steer that arrives before the goal has a plan waits for the
-plan, because the PM routes nothing without one. A steer that arrives while
-nothing is in flight takes the same PM turn at the next boundary, before
-the architect: the PM answers it, writes its task or spike, routes it to the
-intent agent, or hands it to the architect. An `intent` route is carried into
-`intent.md` first, and the architect's pack shows the diff and the steer
-record. A steer the PM cannot route reaches the architect, who marks it
-processed and writes its answer to `mailbox/outbox/steer-<id>.md`.
+`limits.steerDebounceSeconds` (default 60); the configured debounce gates every
+dispatch pass, so a pass with a steer inside its window waits the remainder out.
+Everything announced together gets one turn, and a steer that arrives before the
+goal has a plan waits for the plan, because the PM routes nothing without one.
+A steer that arrives while nothing is in flight takes the same PM turn at the
+next boundary, before the architect: the PM answers it, writes its task or
+spike, routes it to the intent agent, or hands it to the architect. An
+`intent` route is carried into `intent.md` first, and the architect's pack
+shows the diff and the steer record. A steer the PM cannot route reaches the
+architect, who marks it processed and writes its answer to
+`mailbox/outbox/steer-<id>.md`.
 
 A steer whose file starts with `urgent: true` frontmatter is the exception: it
 is not answered by the PM. Dispatch stops starting new work, in-flight tasks
@@ -662,7 +692,8 @@ whose last implement turn committed no files, over implement turns), turns the
 unfinished ask and the rescue recovered, loop incidents (no-progress and
 empty-diff parks; a spike's empty finish and overflow parks are not loop
 incidents), wasted turns by reason and by role and alias (complete implementer
-failure; structure: protocol, containment, outcome channel, infra; flaky-test
+failure; structure: protocol, containment, outcome channel, infra;
+incorrect rejection — a flaky red, a gate timeout or an infra-misjudged
 rejection), quota stops that landed no work reported apart from waste (a
 failed launch that landed work still counts), rebutted review turns counted
 apart as accepted tax, QA-only catches per task (findings no gate failure or

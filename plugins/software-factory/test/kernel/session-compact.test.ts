@@ -309,6 +309,7 @@ async function resumesRecordingHarnessPart2(
       taskFile,
       target(fake),
       "implement",
+      { iteration: 1, round: 1 },
       records,
       worktree,
     );
@@ -322,6 +323,7 @@ async function resumesRecordingHarnessPart2(
         taskFile,
         target(other),
         "implement",
+        { iteration: 1, round: 1 },
         records,
         worktree,
       ),
@@ -336,6 +338,7 @@ async function resumesRecordingHarnessPart2(
           taskFile,
           target(other),
           "implement",
+          { iteration: 1, round: 1 },
           records,
           worktree,
         )

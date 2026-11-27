@@ -267,7 +267,10 @@ describe("prompts: repair examples", () => {
     expect(pm).not.toContain("planCheck:");
     expect(pm).not.toContain("verdict:");
     expect(outcomeExampleVar("plan-checker", "any")).toContain("planCheck:");
-    expect(outcomeExampleVar("reviewer", "review")).toContain("upscope: no");
+    expect(outcomeExampleVar("reviewer", "review")).not.toContain("upscope");
+    expect(
+      outcomeExampleVar("reviewer", "review", undefined, ["upscope"]),
+    ).toContain("upscope: no");
     expect(outcomeExampleVar("implementer", "any")).toContain("replies:");
     expect(outcomeExampleVar("implementer", "any")).not.toContain(
       "steerRoutes:",

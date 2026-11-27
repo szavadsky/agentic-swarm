@@ -16,16 +16,19 @@ export class SteerClaim {
   private readonly steers: Map<string, Steer>;
   private readonly owns: (steer: Steer) => boolean;
   private readonly prompts: PromptLibrary;
+  private readonly onClaim: ((steer: Steer) => void) | undefined;
   private release: (() => void) | undefined;
 
   constructor(
     steers: readonly Steer[],
     owns: (steer: Steer) => boolean,
     prompts: PromptLibrary,
+    onClaim?: (steer: Steer) => void,
   ) {
     this.steers = new Map(steers.map((steer) => [steer.id, steer]));
     this.owns = owns;
     this.prompts = prompts;
+    this.onClaim = onClaim;
   }
 
   all(): Steer[] {
@@ -68,6 +71,9 @@ export class SteerClaim {
     if (!this.owns(steer)) return false;
     await steerSession(steerInjectionNote(this.prompts, steer));
     this.steers.set(steer.id, steer);
+    // The run's claimed set learns the injected steer now: a later dispatch
+    // pass, resume read or watch tick must never claim it again.
+    this.onClaim?.(steer);
     return true;
   }
 }

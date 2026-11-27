@@ -36,6 +36,10 @@ export function addUsage(a: Usage, b: Usage): Usage {
   const costUsd = sumKnown(a.costUsd, b.costUsd);
   const listCostUsd = sumKnown(a.listCostUsd, b.listCostUsd);
   const harnessCostUsd = sumKnown(a.harnessCostUsd, b.harnessCostUsd);
+  const tokensReported =
+    a.tokensReported === false || b.tokensReported === false
+      ? false
+      : (a.tokensReported ?? b.tokensReported);
   return {
     in: a.in + b.in,
     cacheRead: a.cacheRead + b.cacheRead,
@@ -46,6 +50,7 @@ export function addUsage(a: Usage, b: Usage): Usage {
     ...(costUsd !== undefined ? { costUsd } : {}),
     ...(listCostUsd !== undefined ? { listCostUsd } : {}),
     ...(harnessCostUsd !== undefined ? { harnessCostUsd } : {}),
+    ...(tokensReported !== undefined ? { tokensReported } : {}),
   };
 }
 

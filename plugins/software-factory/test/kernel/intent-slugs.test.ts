@@ -9,6 +9,7 @@ import {
   intentProse,
   intentStatusSlugFindings,
   parseIntentSlugs,
+  resolveGoalIntent,
 } from "../../src/kernel/intent-slugs.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type { ArtifactStore, Outcome } from "../../src/kernel/types.js";
@@ -258,5 +259,157 @@ describe("factory validate intent status", () => {
       "- slug: Nope\n  status: works",
     );
     expect(findings).toEqual([]);
+  });
+});
+
+const POINTER_INTENT = [
+  "# Goal: full — everything in INTENT.md built, tested and documented",
+  "",
+  "Review intent file (`INTENT.md` at the repo root, source of truth) and make sure everything specified in intent is built.",
+  "",
+  "Footnote: `GAPS.md` lists known gaps.",
+].join("\n");
+
+describe("pointer intent slugs", () => {
+  async function pointerSetup(
+    pointer: string,
+    referenced?: { rel: string; body: string },
+  ): Promise<{
+    root: string;
+    checkout: string;
+    store: ReturnType<typeof createFolderStore>;
+  }> {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pointer-slugs-"));
+    const checkout = path.join(root, "repo");
+    fs.mkdirSync(checkout, { recursive: true });
+    if (referenced) {
+      const target = path.join(checkout, referenced.rel);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, referenced.body, "utf8");
+    }
+    const store = createFolderStore(path.join(root, "goal"), undefined, {});
+    await store.ensureLayout();
+    await store.writeFile("intent.md", pointer);
+    return { root, checkout, store };
+  }
+
+  it("parses slugs from the referenced file when intent.md is a pointer", async () => {
+    const { root, checkout, store } = await pointerSetup(POINTER_INTENT, {
+      rel: "INTENT.md",
+      body: INTENT,
+    });
+    try {
+      const resolved = await resolveGoalIntent(store, { checkout });
+      expect(resolved).toEqual({
+        kind: "pointer",
+        path: "INTENT.md",
+        text: INTENT,
+        slugs: parseIntentSlugs(INTENT),
+      });
+      await expect(
+        architectIntentStatusFindings(
+          store,
+          archOutcome([
+            { slug: "KernelCore", status: "works" },
+            { slug: "ModelEconomics", status: "friction" },
+          ]),
+          { checkout },
+        ),
+      ).resolves.toEqual([]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an unknown slug against the referenced file", async () => {
+    const { root, checkout, store } = await pointerSetup(POINTER_INTENT, {
+      rel: "INTENT.md",
+      body: INTENT,
+    });
+    try {
+      await expect(
+        architectIntentStatusFindings(
+          store,
+          archOutcome([{ slug: "Nope", status: "works" }]),
+          { checkout },
+        ),
+      ).resolves.toEqual([
+        'unknown intent slug "Nope": no [[Nope]] annotation in INTENT.md',
+      ]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports a missing referenced file as a validation finding rather than an empty slug set", async () => {
+    const { root, checkout, store } = await pointerSetup(
+      "# Goal\n\nBuild as specified in `MISSING.md`.\n",
+    );
+    try {
+      const resolved = await resolveGoalIntent(store, { checkout });
+      expect(resolved.kind).toBe("missing-source");
+      const findings = await architectIntentStatusFindings(
+        store,
+        archOutcome([{ slug: "KernelCore", status: "works" }]),
+        { checkout },
+      );
+      expect(findings).toHaveLength(1);
+      expect(findings[0]).toContain("MISSING.md");
+      expect(findings[0]).not.toContain("unknown intent slug");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a pointer reference that escapes the checkout", async () => {
+    const { root, checkout, store } = await pointerSetup(
+      "# Goal\n\nBuild as specified in `../outside.md`.\n",
+    );
+    try {
+      fs.writeFileSync(path.join(root, "outside.md"), INTENT, "utf8");
+      const findings = await architectIntentStatusFindings(
+        store,
+        archOutcome([{ slug: "KernelCore", status: "works" }]),
+        { checkout },
+      );
+      expect(findings).toHaveLength(1);
+      expect(findings[0]).toContain("../outside.md");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps inline annotated goal intents on intent.md even when prose mentions a source", async () => {
+    const inline = [
+      "# Goal",
+      "",
+      "- [[InlineOnly]] Build as specified in `INTENT.md`.",
+    ].join("\n");
+    const { root, checkout, store } = await pointerSetup(inline, {
+      rel: "INTENT.md",
+      body: INTENT,
+    });
+    try {
+      const resolved = await resolveGoalIntent(store, { checkout });
+      expect(resolved.kind).toBe("inline");
+      await expect(
+        architectIntentStatusFindings(
+          store,
+          archOutcome([{ slug: "InlineOnly", status: "works" }]),
+          { checkout },
+        ),
+      ).resolves.toEqual([]);
+      await expect(
+        architectIntentStatusFindings(
+          store,
+          archOutcome([{ slug: "KernelCore", status: "works" }]),
+          { checkout },
+        ),
+      ).resolves.toEqual([
+        'unknown intent slug "KernelCore": no [[KernelCore]] annotation in intent.md',
+      ]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

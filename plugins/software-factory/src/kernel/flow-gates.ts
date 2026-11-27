@@ -128,7 +128,12 @@ export async function runTaskGates(
   // `nogit` type delivers outside git, so it has no report to gate.
   if (task.kind === "spike" && !task.nogit) {
     checks.push(
-      await checkSpikeReport(worktree, task.slug, await headSha(worktree)),
+      await checkSpikeReport(
+        worktree,
+        task.slug,
+        await headSha(worktree),
+        runtime.prompts,
+      ),
     );
   }
   if (task.advisory) checks = advisoryChecks(checks);

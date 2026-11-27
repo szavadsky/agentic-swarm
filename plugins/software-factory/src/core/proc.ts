@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import type { Writable } from "node:stream";
 import { createActiveTimer, detectSuspend, getClock } from "./clock.js";
 import { childEnv } from "./env.js";
 import { hostOs } from "./os/index.js";
@@ -16,6 +17,7 @@ interface RunProcessOptions {
   env?: Record<string, string>;
   timeoutSec?: number;
   maxOutputBytes?: number;
+  /** Written then closed; without it stdin closes at once. */
   stdin?: string;
   /** Aborts the child (group SIGTERM, then SIGKILL) and resolves with `aborted`. */
   signal?: AbortSignal;
@@ -177,14 +179,26 @@ function unregisterGrouped(child: ReturnType<typeof spawn>): void {
   if (child.pid && child.pid > 0) unregisterChildGroup(child.pid);
 }
 
-/** Feeds the optional stdin payload and closes the pipe. */
+/** The writable half of a child's stdin pipe. */
+type StdinPipe = Pick<Writable, "on" | "write" | "end">;
+
+/**
+ * Feeds the optional stdin payload. Without one the pipe closes at once, so a
+ * child that reads stdin sees EOF instead of blocking. A payload write is
+ * best-effort: an early exit raises EPIPE on the pipe, which must not escape.
+ */
 function writeStdin(
-  child: ReturnType<typeof spawn>,
-  stdin: string | undefined,
+  stdin: StdinPipe | null | undefined,
+  payload: string | undefined,
 ): void {
-  if (stdin === undefined || !child.stdin) return;
-  child.stdin.write(stdin);
-  child.stdin.end();
+  if (!stdin) return;
+  if (payload === undefined) {
+    stdin.end();
+    return;
+  }
+  stdin.on("error", () => {});
+  stdin.write(payload);
+  stdin.end();
 }
 
 /** One run's mutable state, wired to the promise it resolves. */
@@ -240,7 +254,7 @@ class ProcessRun {
     const pid = this.child.pid;
     if (pid && pid > 0) this.options.onSpawn?.(pid);
     this.wireStreams();
-    writeStdin(this.child, this.options.stdin);
+    writeStdin(this.child.stdin, this.options.stdin);
     this.wireAbort();
     this.armTimeout();
     this.wireExit();

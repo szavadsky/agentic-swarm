@@ -2,6 +2,8 @@
  * Starting one dispatch action: the transient-fault quarantine, the async
  * agent turn with its completion hook, and the terminal script steps.
  */
+
+import type { Release } from "../core/semaphores-types.js";
 import { isTransientInfraCause } from "../harness/fallback.js";
 import { makeCause } from "./cause.js";
 import type { DispatchState, InfraFault } from "./dispatch-types.js";
@@ -138,7 +140,7 @@ async function executeAndRecord(
   }
 }
 
-/** Starts an async turn; its promise settles the slug's quarantine when done. */
+/** Starts an async turn; its promise settles the slug's quarantine when done and releases the reservation. */
 export function startAction(
   state: DispatchState,
   action: Action & { slug: string },
@@ -146,10 +148,12 @@ export function startAction(
   task: TaskFile,
   agent: boolean,
   quota?: { subscription?: string; model?: string },
+  release?: Release,
 ): void {
   const promise = executeAndRecord(state, action, taskState, task).finally(
     () => {
       state.running.delete(action.slug);
+      release?.();
     },
   );
   state.running.set(action.slug, {

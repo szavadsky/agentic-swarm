@@ -20,6 +20,9 @@ Commit the report at `{{ report_path }}` first, then refine it.
 
 - task: `{{task_path}}`
 - front pack: `{{front_pack}}` — read before the task when not empty
+  {%- if upscope_ask != '' %}
+- standalone upscope: {{upscope_ask}}
+  {%- endif %}
 - worktree: `{{worktree}}`{{resume_note}}
 - spike report: `{{report_path}}` — a spike commits its finding here; the check is red until it is non-empty. Empty on a development task and on a `nogit` task, whose product lives outside git
 - setup command: `{{setup_command}}`

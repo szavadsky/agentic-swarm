@@ -13,8 +13,8 @@ import { makeCause } from "./cause.js";
 import { openConcernIds } from "./context-pack/misc.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import {
+  answerFromStoredRoute,
   expireHold,
-  markProcessed,
   readHolds,
   type Steer,
   steerResponses,
@@ -105,13 +105,7 @@ async function deliverSteerAnswer(
   answer: string,
 ): Promise<void> {
   const { runtime } = context;
-  await writeOutbox(
-    runtime.store,
-    steer.id,
-    `# Steer ${steer.id}\n\n${answer}\n\nSource: ${steer.relPath}`,
-  );
-  await markProcessed(runtime.store, steer);
-  await expireHold(runtime.store, steer.id);
+  await answerFromStoredRoute(runtime.store, steer, answer);
 }
 
 async function recordSteerPresented(

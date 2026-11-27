@@ -23,8 +23,8 @@ const BASE_OUTCOME_FIELDS = [
 /**
  * Reporting fields a prompt's turns deliver beyond the base shape and the one
  * field its expectation gates: the PM routes steers, stalls and plan-check
- * follow-ups, the checker reports a plan check, a standalone review answers
- * the upscope ask.
+ * follow-ups, and the checker reports a plan check. An ask-only field arrives
+ * through `extraFields`, so an unasked step's example does not show it.
  */
 const PROMPT_OUTCOME_FIELDS: Record<string, string[]> = {
   architect: [
@@ -39,7 +39,6 @@ const PROMPT_OUTCOME_FIELDS: Record<string, string[]> = {
   pm: ["steerRoutes", "stallRoutes", "planCheckRoutes"],
   "plan-checker": ["planCheck"],
   "review-architect": ["planReview"],
-  reviewer: ["upscope"],
 };
 
 /** Sample prose per schema leaf; the path includes `[]` for an array's items. */
@@ -166,12 +165,14 @@ function sampleNode(
 function exampleFields(
   prompt: string,
   expectation: OutcomeExpectation,
+  extraFields: readonly string[] = [],
 ): Set<string> {
   const gated = expectationField(expectation);
   return new Set([
     ...BASE_OUTCOME_FIELDS,
     ...(PROMPT_OUTCOME_FIELDS[prompt] ?? []),
     ...(gated ? [gated] : []),
+    ...extraFields,
   ]);
 }
 
@@ -180,12 +181,13 @@ function sampleOutcome(
   prompt: string,
   expectation: OutcomeExpectation,
   schema: z.ZodType<Outcome>,
+  extraFields: readonly string[] = [],
 ): Record<string, unknown> {
   const root = z.toJSONSchema(schema) as JsonRoot;
   if (root.type !== "object" || !root.properties) {
     throw new Error("outcome example needs a top-level object schema");
   }
-  const fields = exampleFields(prompt, expectation);
+  const fields = exampleFields(prompt, expectation, extraFields);
   const defs = root.$defs ?? {};
   const sample: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(root.properties)) {
@@ -212,8 +214,9 @@ export function outcomeExamples(
   prompt: string,
   expectation: OutcomeExpectation,
   schema: z.ZodType<Outcome> = outcomeSchema,
+  extraFields: readonly string[] = [],
 ): OutcomeExamples {
-  const sample = sampleOutcome(prompt, expectation, schema);
+  const sample = sampleOutcome(prompt, expectation, schema, extraFields);
   const alternative = structuredClone(sample);
   if (expectation === "review") alternative.verdict = "changes";
   if (expectation === "architect") alternative.decision = "done";
@@ -257,8 +260,14 @@ export function outcomeExampleVar(
   prompt: string,
   expectation: OutcomeExpectation,
   schema: z.ZodType<Outcome> = outcomeSchema,
+  extraFields: readonly string[] = [],
 ): string {
-  const { primary, alternative } = outcomeExamples(prompt, expectation, schema);
+  const { primary, alternative } = outcomeExamples(
+    prompt,
+    expectation,
+    schema,
+    extraFields,
+  );
   return [
     "A complete outcome for this step:",
     "",

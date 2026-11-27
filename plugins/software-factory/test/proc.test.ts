@@ -10,6 +10,7 @@ describe("Process runner & output capping (§5, §9)", () => {
   processRunnerOutputCapping59Part3();
   processRunnerOutputCapping59Part4();
   processRunnerOutputCapping59Part5();
+  processRunnerOutputCapping59Part6();
 });
 
 function processRunnerOutputCapping59Part1() {
@@ -179,5 +180,31 @@ function processRunnerOutputCapping59Part5() {
     });
     expect(res.aborted).toBe(true);
     expect(res.code).toBeNull();
+  });
+}
+
+function processRunnerOutputCapping59Part6() {
+  it("closes an idle stdin pipe so a child that reads it exits promptly", async () => {
+    const res = await runProcess({
+      cmd: ["cat"],
+      cwd: process.cwd(),
+      timeoutSec: 5,
+    });
+
+    expect(res.timedOut).toBe(false);
+    expect(res.code).toBe(0);
+    expect(res.stdout).toBe("");
+  });
+
+  it("contains the EPIPE of an early-exit child that never reads stdin", async () => {
+    const res = await runProcess({
+      cmd: ["true"],
+      cwd: process.cwd(),
+      stdin: "x".repeat(1024 * 1024),
+      timeoutSec: 5,
+    });
+
+    expect(res.code).toBe(0);
+    expect(res.signal).toBeUndefined();
   });
 }

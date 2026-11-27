@@ -3,6 +3,7 @@
 export type {
   ConcernAudience,
   ContextPackInput,
+  EpicSummaryRef,
   IntentChange,
   PlanCheckPack,
   PlanReviewPack,

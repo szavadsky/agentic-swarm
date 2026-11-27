@@ -13,17 +13,30 @@ import type {
   PackSection,
 } from "./types.js";
 import { formatPlanFinding, numberedPlanFindings } from "./plan-findings.js";
+import type { PromptLibrary } from "../prompts.js";
 
-/** The headings a full section and its brief share, so only the content differs. */
+/** Headings that carry no prompt text; planReview and codeMap render theirs. */
 export const SECTION_HEADINGS = {
   planCheck: "## Plan check (the evidence that summoned the architect)",
-  planReview:
-    "## Plan review (advisory findings; mark each finding helpful or unhelpful in planReviewMarks)",
   forwarded: "## Forwarded concerns (architect/owner)",
   spikeFindings: "## Spike findings",
   pmAnswers: "## PM steer answers",
-  codeMap: "## Code map (shallow; read paths directly)",
-} as const satisfies Record<PackSection, string>;
+} as const satisfies Record<
+  Exclude<PackSection, "planReview" | "codeMap">,
+  string
+>;
+
+/** The section heading: two sections carry instruction text from prompt fragments. */
+export function sectionHeading(
+  section: PackSection,
+  prompts: PromptLibrary,
+): string {
+  if (section === "planReview")
+    return prompts.render("pack-plan-review", {}).trimEnd();
+  if (section === "codeMap")
+    return prompts.render("pack-code-map", {}).trimEnd();
+  return SECTION_HEADINGS[section];
+}
 
 export function short(hash: string | undefined): string {
   return hash ? hash.slice(0, 10) : "-";
@@ -62,6 +75,15 @@ export function appendSection(
   lines.push("", title, ...entries);
 }
 
+/** The top pack's link and one-line rollup for one epic, as a line suffix. */
+function epicSummarySuffix(name: string, input: ContextPackInput): string {
+  if (input.epic !== undefined) return "";
+  const summary = input.epicSummaries?.find((ref) => ref.epic === name);
+  if (!summary) return "";
+  const rollup = summary.rollup ? ` — ${summary.rollup}` : "";
+  return `${rollup} — ${summary.path}`;
+}
+
 /** One epic's rollup line. */
 function epicStatusLine(name: string, input: ContextPackInput): string {
   const epic = input.state.epics[name]!;
@@ -69,7 +91,7 @@ function epicStatusLine(name: string, input: ContextPackInput): string {
     openEpicTask(input.state.tasks[slug]),
   ).length;
   const total = epic.tasks.length;
-  return `- \`${name}\`: ${epic.done ? "done" : "open"} — subarchitect ${epic.decision ?? "no turn"}; ${open} of ${total} ${total === 1 ? "task" : "tasks"} open`;
+  return `- \`${name}\`: ${epic.done ? "done" : "open"} — subarchitect ${epic.decision ?? "no turn"}; ${open} of ${total} ${total === 1 ? "task" : "tasks"} open${epicSummarySuffix(name, input)}`;
 }
 
 /** The status table and the epic rollup. */
@@ -167,12 +189,13 @@ export function appendPlanCheck(
 export function appendPlanReview(
   lines: string[],
   input: ContextPackInput,
+  prompts: PromptLibrary,
 ): void {
   const review = input.planReview;
   if (!review) return;
   lines.push(
     "",
-    SECTION_HEADINGS.planReview,
+    sectionHeading("planReview", prompts),
     `- iteration ${review.iteration}, reviewers ${review.reviewers
       .map((alias) => `\`${alias}\``)
       .join(", ")}`,
@@ -207,12 +230,13 @@ const SPIKE_PROPOSALS_HEADING =
   "## Spike proposals (recurring waste at the configured threshold)";
 
 /** The section naming recurring waste at the threshold; no pack can drop it. */
-export function spikeProposalsSection(
+function spikeProposalsSection(
   proposals: readonly WasteSpikeProposal[],
+  prompts: PromptLibrary,
 ): string {
   const lines = [
     SPIKE_PROPOSALS_HEADING,
-    "- each line is a proposal, never a task: plan a spike into the cause, or a named fix",
+    prompts.render("pack-spike-proposals", {}).trimEnd(),
   ];
   for (const proposal of proposals) {
     lines.push(
@@ -226,10 +250,11 @@ export function spikeProposalsSection(
 export function appendSpikeProposals(
   lines: string[],
   input: ContextPackInput,
+  prompts: PromptLibrary,
 ): void {
   const proposals = input.spikeProposals ?? [];
   if (proposals.length === 0) return;
-  lines.push("", spikeProposalsSection(proposals));
+  lines.push("", spikeProposalsSection(proposals, prompts));
 }
 
 /**
@@ -252,11 +277,12 @@ export function appendForwarded(
   }
 }
 
-export function appendDebts(lines: string[], input: ContextPackInput): void {
-  lines.push(
-    "",
-    "## Debt register (open debt-kind concerns; own one by citing its id in a plan bullet, or close it with `debtClosed: [{id, reason}]`)",
-  );
+export function appendDebts(
+  lines: string[],
+  input: ContextPackInput,
+  prompts: PromptLibrary,
+): void {
+  lines.push("", prompts.render("pack-debt-register", {}).trimEnd());
   if (input.debts.length === 0) {
     lines.push("- none open");
     return;
@@ -276,9 +302,13 @@ export function appendOpenRecords(
   for (const record of input.openRecords) lines.push(`- ${record}`);
 }
 
-export function appendCodeMap(lines: string[], input: ContextPackInput): void {
+export function appendCodeMap(
+  lines: string[],
+  input: ContextPackInput,
+  prompts: PromptLibrary,
+): void {
   if (!input.codeMap || input.codeMap.length === 0) return;
-  lines.push("", SECTION_HEADINGS.codeMap);
+  lines.push("", sectionHeading("codeMap", prompts));
   lines.push(...input.codeMap.map((entry) => `- ${entry}`));
 }
 

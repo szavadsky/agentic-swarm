@@ -1,10 +1,25 @@
 import { describe, expect, it } from "bun:test";
+import fs from "node:fs";
+import yaml from "yaml";
+import { GateReportError } from "../../../src/core/checks/findings.js";
 import { repoConfigSchema } from "../../../src/kernel/config.js";
 import { normaliseFindings } from "../../../src/kernel/gates-normalise.js";
 import type { GateConfig } from "../../../src/kernel/types.js";
+import { treeFile } from "../../helpers/run-configs.js";
 
 function gate(patch: Partial<GateConfig> = {}): GateConfig {
   return { id: "tests", command: "true", serial: [], ...patch };
+}
+
+function selfBuildGate(id: string): GateConfig {
+  const file = treeFile(".factory/repo.yaml");
+  if (!file) throw new Error("tree carries no .factory/repo.yaml");
+  const repo = repoConfigSchema.parse(
+    yaml.parse(fs.readFileSync(file, "utf8")),
+  );
+  const found = repo.gates.find((g) => g.id === id);
+  if (!found) throw new Error(`.factory/repo.yaml defines no ${id} gate`);
+  return found;
 }
 
 const CTRF = {
@@ -251,26 +266,109 @@ function registerSarifFindings(): void {
 }
 
 function registerLogFallback(): void {
-  it("works by exit code and log when the gate writes no report", async () => {
-    const findings = await normaliseFindings(gate(), {
+  it("filters runner noise declared by the self-build repo config", async () => {
+    const typecheck = selfBuildGate("typecheck");
+    const tscFindings = await normaliseFindings(typecheck, {
       exitCode: 1,
       log: [
         "src/a.ts(12,3): error TS2322: Type 'string' is not assignable",
         "1 error",
+        "Found 1 error in 1 file.",
       ].join("\n"),
     });
-    expect(findings).toEqual([
+    expect(tscFindings).toEqual([
       expect.objectContaining({
-        check: "tests",
+        check: "typecheck",
         tool: "log",
         file: "src/a.ts",
         line: 12,
         severity: "error",
       }),
     ]);
+
+    const tests = selfBuildGate("tests");
+    const bunFindings = await normaliseFindings(tests, {
+      exitCode: 1,
+      log: [
+        "bun test v1.4.4 (38afee6c8)",
+        "---",
+        "tests gate: wall 1.2s (--parallel=4; slowest: a.test.ts 0.5s)",
+        "test/a.test.ts:5:10: error: expected 1 to be 2",
+        "0 pass",
+        "1 fail",
+        "1 expect() calls",
+        "Ran 1 test across 1 file.",
+      ].join("\n"),
+    });
+    expect(bunFindings).toEqual([
+      expect.objectContaining({
+        check: "tests",
+        tool: "log",
+        file: "test/a.test.ts",
+        line: 5,
+        severity: "error",
+        message: "error: expected 1 to be 2",
+      }),
+    ]);
+
     expect(
-      await normaliseFindings(gate(), { exitCode: 0, log: "all green" }),
+      await normaliseFindings(tests, { exitCode: 0, log: "all green" }),
     ).toEqual([]);
+  });
+
+  it("keeps runner lines as findings when no noise patterns are configured", async () => {
+    const findings = await normaliseFindings(gate(), {
+      exitCode: 1,
+      log: [
+        "bun test v1.4.4 (38afee6c8)",
+        "src/a.ts(12,3): error TS2322: Type 'string' is not assignable",
+        "1 error",
+        "Found 1 error in 1 file.",
+      ].join("\n"),
+    });
+    expect(findings.map((finding) => finding.message)).toEqual([
+      "bun test v1.4.4 (38afee6c8)",
+      "error TS2322: Type 'string' is not assignable",
+      "1 error",
+      "Found 1 error in 1 file.",
+    ]);
+  });
+
+  it("filters another runner's declared noise patterns", async () => {
+    const findings = await normaliseFindings(
+      gate({
+        id: "py",
+        format: {
+          noise: ["^=+ .* =+$", "^\\d+ failed, \\d+ passed in "],
+        },
+      }),
+      {
+        exitCode: 1,
+        log: [
+          "=== test session starts ===",
+          "tests/test_calc.py:9: AssertionError",
+          "1 failed, 2 passed in 0.12s",
+        ].join("\n"),
+      },
+    );
+    expect(findings).toEqual([
+      expect.objectContaining({
+        check: "py",
+        tool: "log",
+        file: "tests/test_calc.py",
+        line: 9,
+        message: "AssertionError",
+      }),
+    ]);
+  });
+
+  it("rejects an invalid noise regex", async () => {
+    await expect(
+      normaliseFindings(gate({ format: { noise: ["["] } }), {
+        exitCode: 0,
+        log: "",
+      }),
+    ).rejects.toThrow(GateReportError);
   });
 
   it("uses a declared regex as the escape hatch before the raw log", async () => {
@@ -299,7 +397,7 @@ function registerLogFallback(): void {
     });
   });
 
-  it("no longer accepts a runner enum in the gate format", () => {
+  it("validates gate format schemas including noise patterns", () => {
     expect(
       repoConfigSchema.safeParse({
         gates: [{ id: "py", command: "pytest", format: { pattern: "pytest" } }],
@@ -316,5 +414,26 @@ function registerLogFallback(): void {
         ],
       }).success,
     ).toBe(true);
+    expect(
+      repoConfigSchema.safeParse({
+        gates: [
+          {
+            id: "py",
+            command: "pytest",
+            format: { noise: ["^=+ .* =+$"] },
+          },
+        ],
+      }).success,
+    ).toBe(true);
+    expect(
+      repoConfigSchema.safeParse({
+        gates: [{ id: "py", command: "pytest", format: { noise: [] } }],
+      }).success,
+    ).toBe(false);
+    expect(
+      repoConfigSchema.safeParse({
+        gates: [{ id: "py", command: "pytest", format: { noise: [""] } }],
+      }).success,
+    ).toBe(false);
   });
 }

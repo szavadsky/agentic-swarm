@@ -138,6 +138,7 @@ async function startsDeNovoReasonLoggedAliasPart2(
         tierOffset: 0,
       },
       "review",
+      { iteration: 2, round: 3 },
       records,
       worktree,
     ),
@@ -155,6 +156,7 @@ async function startsDeNovoReasonLoggedAliasPart2(
         tierOffset: 0,
       },
       "review",
+      { iteration: 2, round: 3 },
       movedRecords,
       worktree,
     ),
@@ -180,6 +182,7 @@ async function startsDeNovoReasonLoggedAliasPart3(
       tierOffset: 0,
     },
     "review",
+    { iteration: 2, round: 3 },
     records,
     worktree,
   );
@@ -197,6 +200,9 @@ async function startsDeNovoReasonLoggedAliasPart3(
     expect(fallback.slug).toBe("task");
     expect(fallback.actor).toBe("script");
     expect(fallback.ok).toBe(false);
+    // The prior session is iteration 1: the record follows the turn starting now.
+    expect(fallback.iteration).toBe(2);
+    expect(fallback.round).toBe(3);
   }
 }
 
@@ -329,6 +335,7 @@ function registerReviewSessionResumePart6(): void {
           tierOffset: 0,
         },
         "review",
+        { iteration: 1, round: 1 },
         records,
         worktree,
       );

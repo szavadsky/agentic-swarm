@@ -82,6 +82,7 @@ describe("gate process tree lifecycle", () => {
   gateProcessTreeLifecyclePart2();
   gateProcessTreeLifecyclePart3();
   gateProcessTreeLifecyclePart4();
+  gateProcessTreeLifecyclePart5();
 });
 
 function gateProcessTreeLifecyclePart1() {
@@ -259,6 +260,26 @@ process.exit(0);
       killGroup(leader);
       cleanupFlowRepo(repo);
       fs.rmSync(shared, { recursive: true, force: true });
+    }
+  });
+}
+
+function gateProcessTreeLifecyclePart5() {
+  it("exits promptly when a gate reads stdin", async () => {
+    const dir = tmpDir("stdin");
+    try {
+      const gate: GateConfig = {
+        id: "stdin-reader",
+        command: "cat",
+        serial: [],
+        timeoutSec: 5,
+      };
+      const { res, check } = await runDeclaredGate(dir, gate);
+      expect(res.timedOut).toBe(false);
+      expect(res.code).toBe(0);
+      expect(check.ok).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 }

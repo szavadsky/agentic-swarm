@@ -4,17 +4,17 @@ Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable
 
 ## Prompts and their partials
 
-- `architect` — `architect-assignment` (`architect-bounds`), `architect-goal`, `architect-body` (`architect-turn`, `plan-standard` (`plan-history`, `task-size`), `architect-scope` (`plan-rules`, `calibration`)), `outcome`, `plan-review-marks`, `verdict`
-- `subarchitect` — `architect-bounds`, `architect-epic`, `architect-body` (`architect-turn`, `plan-standard` (`plan-history`, `task-size`), `architect-scope` (`plan-rules`, `calibration`)), `outcome`
-- `front` — `task-size`, `plan-read-only`, `calibration`, `outcome`, `task-frontmatter`
+- `architect` — `architect-assignment` (`architect-bounds`), `architect-goal`, `architect-body` (`architect-turn`, `plan-standard` (`plan-history`, `task-scope`, `task-size`), `architect-scope` (`plan-rules`, `calibration`)), `outcome`, `plan-review-marks`, `verdict`
+- `subarchitect` — `architect-bounds`, `architect-epic`, `architect-body` (`architect-turn`, `plan-standard` (`plan-history`, `task-scope`, `task-size`), `architect-scope` (`plan-rules`, `calibration`)), `outcome`
+- `front` — `task-scope`, `task-size`, `plan-read-only`, `calibration`, `outcome`, `task-frontmatter`
 - `infra` — `plan-read-only`, `calibration`, `outcome`
 - `intent` — `calibration`, `outcome`
-- `pm` — `task-size`, `plan-read-only`, `spike-report-general`, `calibration`, `outcome`, `task-frontmatter`
-- `implementer` — `cleanliness-revision`, `implementer-body`, `clean-code`, `scope` (`plan-read-only`), `calibration`, `outcome`
-- `qa` — `implementer-body`, `qa-acceptance`, `qa-turn`
-- `browser-qa` — `implementer-body`, `browser-tests`, `qa-acceptance`, `qa-turn`
-- `reviewer` — `<author>-body` (`implementer-body` by default), `review-<author>` duties, `review-<author>-turn` inputs, `verdict`
-- `review-architect` — `architect-assignment` (`architect-bounds`), `architect-body` (`architect-turn`, `plan-standard` (`plan-history`, `task-size`), `architect-scope` (`plan-rules`, `calibration`)), `finding-standards`, `outcome`
+- `pm` — `task-scope`, `task-size`, `plan-read-only`, `spike-report-general`, `calibration`, `outcome`, `task-frontmatter`
+- `implementer` — `cleanliness-revision`, `implementer-body` (`task-scope`), `clean-code`, `scope` (`plan-read-only`), `calibration`, `outcome`
+- `qa` — `implementer-body` (`task-scope`), `qa-acceptance`, `qa-turn`
+- `browser-qa` — `implementer-body` (`task-scope`), `browser-tests`, `qa-acceptance`, `qa-turn`
+- `reviewer` — `<author>-body` (`implementer-body` by default, with `task-scope`), `review-<author>` duties, `review-<author>-turn` inputs, `verdict`
+- `review-architect` — `architect-assignment` (`architect-bounds`), `architect-body` (`architect-turn`, `plan-standard` (`plan-history`, `task-scope`, `task-size`), `architect-scope` (`plan-rules`, `calibration`)), `finding-standards`, `outcome`
 - `architect-review-return` — `architect-assignment`, `plan-review-marks`, `calibration`, `outcome`
 - `digest` — `calibration`, `outcome`
 - `steward` — `clean-code`, `calibration`, `outcome`
@@ -22,9 +22,9 @@ Template syntax: [LiquidJS](https://liquidjs.com), strict mode (unknown variable
 - `pack-preparer` — `calibration`, `outcome`
 - `scout` — `plan-read-only`, `calibration`, `outcome`
 
-The shared definitions exist once as partials: `scope` (the predicted-area rule: out-of-area judgement, upscope condition; includes `plan-read-only`), `plan-read-only` (the plan, intent, other task files and records are read-only), `task-size` (what one task is: one implementer session, one seam, one reviewable diff, one done-when, and the split/merge criteria; included by `front`, `plan-standard` and `pm`), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract, with a filled example and its alternative rendered from the kernel outcome schema), `task-frontmatter` (the task-file frontmatter shape rendered from the kernel task schema, plus the configured task types and tiers; included by the authoring roles), `clean-code` (the code standard; the repo layer's `codingRules` file replaces its content per repo while the fragment name stays fixed, so implementer, QA, reviewer, steward and adjudicator prompts render the same rule text through their shared bodies), `remarkable` (the remarkable definition), `finding-standards` (the no-praise, no-restating, no-taste rule shared by both reviews), `qa-acceptance` (the acceptance duties and verdicts the code QA and browser QA share), `qa-turn` (the turn block those two QA prompts share), `browser-tests` (the browser-surface turn the browser QA adds before the code QA), `plan-review-marks` (the plan-review mark meaning, shared by the architect's turn and return), `plan-history` (merged work is history: what a merged bullet collapses to; included by `plan-standard`), `spike-report-general` (what a spike's done-when says; included by `pm` and `architect-body`), `verdict` (which step each of `verdict` and `decision` belongs to, for review and architect steps) and the role bodies `implementer-body` and `architect-body` (everything before the role's turn block; a reviewer includes its author's body by role name, so the plan review reuses the reviewer template over `architect-body`).
+The shared definitions exist once as partials: `scope` (the predicted-area rule: out-of-area judgement, upscope condition; includes `plan-read-only`), `plan-read-only` (the plan, intent, other task files and records are read-only), `task-scope` (the trivial/task/bigger class definitions and that a class changes only by escalation; included by `front`, `plan-standard`, `pm`, `implementer-body` and `adjudicator`), `task-size` (what one task is: one implementer session, one seam, one reviewable diff, one done-when, and the split/merge criteria; included by `front`, `plan-standard` and `pm`), `calibration` (concerns and calibration, with `remarkable` inside it), `outcome` (the outcome contract, with a filled example and its alternative rendered from the kernel outcome schema), `task-frontmatter` (the task-file frontmatter shape rendered from the kernel task schema, plus the configured task types and tiers; included by the authoring roles), `clean-code` (the code standard; the repo layer's `codingRules` file replaces its content per repo while the fragment name stays fixed, so implementer, QA, reviewer, steward and adjudicator prompts render the same rule text through their shared bodies), `remarkable` (the remarkable definition), `finding-standards` (the no-praise, no-restating, no-taste rule shared by both reviews), `qa-acceptance` (the acceptance duties and verdicts the code QA and browser QA share), `qa-turn` (the turn block those two QA prompts share), `browser-tests` (the browser-surface turn the browser QA adds before the code QA), `plan-review-marks` (the plan-review mark meaning, shared by the architect's turn and return), `plan-history` (merged work is history: what a merged bullet collapses to; included by `plan-standard`), `spike-report-general` (what a spike's done-when says; included by `pm` and `architect-body`), `verdict` (which step each of `verdict` and `decision` belongs to, for review and architect steps) and the role bodies `implementer-body` and `architect-body` (everything before the role's turn block; a reviewer includes its author's body by role name, so the plan review reuses the reviewer template over `architect-body`).
 
-The architect's body is assembled from fragments so a reviewer and a subarchitect share the whole body: `architect-bounds` (the bounds), `architect-turn` (the consult's turn order, completeness check, stop decision and plan edit), `plan-standard` (what the plan carries and its granularity, with `plan-history` and `task-size`), `plan-rules` (debt, parked work and ADRs) and `architect-scope` (tiers and calibration, with `plan-rules` inside). `architect-body` is that shared body plus `outcome`; `architect-assignment` adds the top architect's role line before the bounds. `architect-goal` adds the top's scope (the whole goal, the register at depth 2, steers), and `architect-epic` adds the subarchitect's epic scope and upward brief. The plan reviewer includes `architect-assignment` and the whole `architect-body`; the architect's return includes `architect-assignment`.
+The architect's body is assembled from fragments so a reviewer and a subarchitect share the whole body: `architect-bounds` (the bounds), `architect-turn` (the consult's turn order, completeness check, stop decision and plan edit), `plan-standard` (what the plan carries and its granularity, with `plan-history`, `task-scope` and `task-size`), `plan-rules` (debt, parked work and ADRs) and `architect-scope` (tiers and calibration, with `plan-rules` inside). `architect-body` is that shared body plus `outcome`; `architect-assignment` adds the top architect's role line before the bounds. `architect-goal` adds the top's scope (the whole goal, the register at depth 2, steers), and `architect-epic` adds the subarchitect's epic scope and upward brief. The plan reviewer includes `architect-assignment` and the whole `architect-body`; the architect's return includes `architect-assignment`.
 
 `calibration` is the default calibration partial. The process config may replace its content per repo; the prompt template does not change.
 
@@ -153,6 +153,7 @@ The turn's record carries the unified diff of the edit; the next architect pack 
 - `gate_commands` — configured compile/lint/test commands as `- id: command` lines; `none` when empty
 - `base_gates` — the base tree's recorded gate result: commit plus `green`, or the pre-existing failing checks; `not recorded` when pre-flight has no trustworthy base run
 - `findings` — previous acceptance round's summary and findings for this task (QA or review), plus any legacy forward lines (summary first); gate failures when the latest record is red checks; empty string before the first acceptance. Each numbered finding is answered by a change, a reply or both
+- `upscope_ask` — escalation ask for this turn when it is the last agent of a reviewer-less standalone task, answered as `upscope: yes|no`; empty otherwise
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome examples from the kernel schema; renderer default
@@ -179,6 +180,7 @@ The QA step's acceptance prompt: the implementer's Work, Bounds and Code standar
 - `gate_commands` — configured compile/lint/test commands as `- id: command` lines; `none` when empty
 - `prior_findings` — the last acceptance's findings (QA or review), numbered; empty before the first acceptance
 - `fix_dispositions` — the current fix round's summary plus one numbered reply per prior finding; round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; renderer default
+- `upscope_ask` — standalone escalation ask on a flow's last acceptance; empty otherwise
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome examples narrowed to the base fields and `qa`; supplied by the turn
@@ -201,6 +203,7 @@ The browser-test acceptance prompt: the QA body plus one browser-surface turn be
 - `gate_commands` — configured compile/lint/test commands as `- id: command` lines; `none` when empty
 - `prior_findings` — the last acceptance's findings (QA or review), numbered; empty before the first acceptance
 - `fix_dispositions` — the current fix round's summary plus one numbered reply per prior finding; round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; renderer default
+- `upscope_ask` — standalone escalation ask on a flow's last acceptance; empty otherwise
 - `outcome_path` — path where the outcome file must be written when the harness asks for a file
 - `validate_cmd` — absolute `bun <build>/bin/factory.ts validate` for this launch; renderer default
 - `outcome_schema` — outcome examples narrowed to the base fields and `qa`; supplied by the turn
@@ -256,7 +259,7 @@ The ship-or-park decision, included by `review-implementer.md` on the last call.
 - `base_gates` — the base tree's recorded gate result, and the only evidence a red gate predates the task: commit plus `green`, the pre-existing failing checks, or `not recorded`; a claimed pre-existing failure is a finding unless this record lists it
 - `prior_findings` — previous round's numbered summary and concerns, plus any legacy forward lines (summary first); empty string in round 1
 - `prior_concerns` — undismissed concerns raised by implementer and QA turns on this task; empty string when none
-- `upscope_ask` — escalation ask for a standalone task review, answered as `upscope: yes|no` with the verdict; empty string when this task is part of an architect plan
+- `upscope_ask` — escalation ask for the last agent of a standalone task, answered as `upscope: yes|no` alongside its outcome; empty unless this review is that agent
 - `fix_dispositions` — the current fix round's summary plus one numbered reply per prior finding; round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; renderer default
 
 ## adjudicator.md
@@ -273,6 +276,7 @@ The review-adjudication prompt: a step after a review re-judges that review's `c
 - `checks_result` — latest checks text, or `pass` when green (renderer default)
 - `checks_tree` — the checked tree's hash (renderer default)
 - `checks_log` — the checks record's directory (renderer default)
+- `upscope_ask` — escalation ask for this turn when it is the last agent of a standalone task, answered as `upscope: yes|no`; empty otherwise
 - `outcome_path` — path for the outcome file the harness asks for
 - `validate_cmd` — absolute validate command for this launch; renderer default
 - `outcome_schema` — outcome examples; renderer default
@@ -500,4 +504,33 @@ The optional architect reminder rendered into `saga_reminder` when open task cou
 
 ## standalone-upscope.md
 
-The standalone-task scope question rendered into `upscope_ask` for delivery acceptance when no architect planned the task.
+The standalone-task scope question rendered into `upscope_ask` for the last agent of a flow when no architect planned the task.
+
+- `front_pack` — path to the front's context pack carrying the predicted area and risks; empty when no front record classified this task
+
+## pack-plan-review.md
+
+The plan-review section heading the script renders into the context pack; no turn renders this file directly.
+
+## pack-code-map.md
+
+The code-map section heading the script renders into the context pack; no turn renders this file directly.
+
+## pack-debt-register.md
+
+The debt-register section heading the script renders into the context pack; no turn renders this file directly.
+
+## pack-spike-proposals.md
+
+The rule under the spike-proposals heading the script renders into the context pack; no turn renders this file directly.
+
+## pack-parked-by-cause.md
+
+The parked-tasks section heading the script renders into the context pack; no turn renders this file directly.
+
+## spike-report-gate.md
+
+The spike gate's fix instruction, rendered into the check output when the committed report is missing or blank.
+
+- `summary` — the check summary naming the problem and the report path
+- `report_path` — repo-relative path the spike commits its finding to

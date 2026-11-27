@@ -25,6 +25,7 @@ const usageSchema = z.object({
   costUsd: z.number().optional(),
   listCostUsd: z.number().optional(),
   harnessCostUsd: z.number().optional(),
+  tokensReported: z.boolean().optional(),
 });
 
 const stopSchema = z.discriminatedUnion("kind", [

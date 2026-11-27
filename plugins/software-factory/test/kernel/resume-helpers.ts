@@ -79,7 +79,7 @@ export function setupRepo(): {
       "  intent: { harness: fake, model: fake-intent }",
       "  plan-reviewer: { harness: fake, model: fake-plan-review }",
       "  pack-preparer: { harness: fake, model: fake-pack-prep }",
-      "limits: { iterations: 3, concurrency: { overall: 1 } }",
+      "limits: { iterations: 3, concurrency: { overall: 1 }, steerDebounceSeconds: 0.0001 }",
       `worktreeRoot: ../${base}-wt`,
       `sessions: { dir: ../${base}-sessions, keepRuns: 2, retention: short }`,
       "",
@@ -265,8 +265,8 @@ export function setLimits(repo: TmpRepo, extra: string): void {
   const file = path.join(repo.dir, ".factory/run.yaml");
   const text = fs.readFileSync(file, "utf8");
   const next = text.replace(
-    "limits: { iterations: 3, concurrency: { overall: 1 } }",
-    `limits: { iterations: 3, concurrency: { overall: 1 }, ${extra} }`,
+    "limits: { iterations: 3, concurrency: { overall: 1 }, steerDebounceSeconds: 0.0001 }",
+    `limits: { iterations: 3, concurrency: { overall: 1 }, steerDebounceSeconds: 0.0001, ${extra} }`,
   );
   expect(next).not.toBe(text);
   fs.writeFileSync(file, next, "utf8");

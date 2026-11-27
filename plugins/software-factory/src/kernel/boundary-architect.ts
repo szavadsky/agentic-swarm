@@ -78,7 +78,9 @@ async function architectTurn(
         },
         expectation: KERNEL_TURN_STEPS.architect,
         validate: (outcome) =>
-          architectIntentStatusFindings(context.runtime.store, outcome),
+          architectIntentStatusFindings(context.runtime.store, outcome, {
+            checkout: context.runtime.paths.goalCheckout,
+          }),
         session,
         ...(steered
           ? {

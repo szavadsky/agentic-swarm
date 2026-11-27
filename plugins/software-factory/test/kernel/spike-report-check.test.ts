@@ -6,12 +6,14 @@ import { git } from "../../src/core/git/exec.js";
 import { FakeHarness, fakeTurnResult } from "../../src/harness/fake/index.js";
 import { runDispatch } from "../../src/kernel/dispatch.js";
 import { formatCause } from "../../src/kernel/cause.js";
+import { packageRoot } from "../../src/kernel/config.js";
 import {
   checkSpikeReport,
   spikeFinding,
   SPIKE_REPORT_CHECK,
   spikeReportPath,
 } from "../../src/kernel/spike-report.js";
+import { loadPromptLibrary } from "../../src/kernel/prompts.js";
 import type {
   ArtifactStore,
   KernelRuntime,
@@ -91,6 +93,23 @@ describe("checkSpikeReport", () => {
     return (await git(dir, ["rev-parse", "HEAD"])).stdout.trim();
   }
 
+  it("renders the fix instruction through the supplied prompt library", async () => {
+    const { repo } = setupFlowRepo();
+    try {
+      const base = (await git(repo.dir, ["rev-parse", "HEAD"])).stdout.trim();
+      const prompts = loadPromptLibrary({
+        builtinDir: path.join(packageRoot, "prompts"),
+        overrides: { "spike-report-gate": "{{ summary }}: custom instruction" },
+      });
+      const check = await checkSpikeReport(repo.dir, slug, base, prompts);
+      expect(check.output).toBe(
+        `no report committed at ${reportPath}: custom instruction`,
+      );
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  });
+
   it("is red for a whitespace-only committed report", async () => {
     const { repo } = setupFlowRepo();
     try {
@@ -98,6 +117,9 @@ describe("checkSpikeReport", () => {
       const check = await checkSpikeReport(repo.dir, slug, commit);
       expect(check.ok).toBe(false);
       expect(check.summary).toBe(`report is blank at ${reportPath}`);
+      expect(check.output).toBe(
+        `${check.summary}: write the finding to ${reportPath} and commit it.`,
+      );
     } finally {
       cleanupFlowRepo(repo);
     }
@@ -113,6 +135,9 @@ describe("checkSpikeReport", () => {
       const check = await checkSpikeReport(repo.dir, slug, base);
       expect(check.ok).toBe(false);
       expect(check.summary).toBe(`no report committed at ${reportPath}`);
+      expect(check.output).toBe(
+        `${check.summary}: write the finding to ${reportPath} and commit it.`,
+      );
     } finally {
       cleanupFlowRepo(repo);
     }

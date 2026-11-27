@@ -33,21 +33,20 @@ import {
 } from "./context-pack.js";
 import { derive, openDebts } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
+import { latestEpicSummaries } from "./epic-summary.js";
 import { packGates } from "./infra.js";
 import { contextCodeMap } from "./ingestion.js";
 import { runKeptLand } from "./integrate.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import { carryIntentSteers, intentChanges } from "./intent.js";
 import {
+  answerFromStoredRoute,
   collectSteerRoutes,
-  expireHold,
   formatPmAnswers,
   type Hold,
-  markProcessed,
   readHolds,
   type Steer,
   scanInbox,
-  writeOutbox,
 } from "./mailbox.js";
 import {
   DEFAULT_WASTE_SPIKE_THRESHOLD,
@@ -220,13 +219,7 @@ async function steerAction(
   if (!routed.answer) return "architect";
   // A `task` steer still in the inbox is a crash between the PM's answer and
   // its mark-processed: answer it from the stored route now.
-  await writeOutbox(
-    runtime.store,
-    steer.id,
-    `# Steer ${steer.id}\n\n${routed.answer}\n\nSource: ${steer.relPath}`,
-  );
-  await markProcessed(runtime.store, steer);
-  await expireHold(runtime.store, steer.id);
+  await answerFromStoredRoute(runtime.store, steer, routed.answer);
   return "handled";
 }
 
@@ -288,7 +281,7 @@ async function readHoldsSafe(context: ConsultContext): Promise<Hold[]> {
 
 /** The pack input for one goal consult: every fact its templates render. */
 async function packInput(context: ConsultContext): Promise<ContextPackInput> {
-  const { runtime } = context;
+  const { runtime, iteration, state } = context;
   const holds = await readHoldsSafe(context);
   const aged = agedReady(context, holds);
   // A debt any active plan owns leaves the register, whichever architect wrote it.
@@ -325,7 +318,8 @@ async function packInput(context: ConsultContext): Promise<ContextPackInput> {
     ),
     digestPath: context.digestPath,
     tasks: context.tasks,
-    state: context.state,
+    state,
+    epicSummaries: await latestEpicSummaries(runtime.store, iteration, state),
     spikeFindings: await spikeFindings(
       runtime.store,
       context.records,
@@ -471,7 +465,10 @@ export async function writePack(
     context.packBriefs = preparer.briefs;
   await runtime.store.writeFile(
     context.packRel!,
-    renderContextPack({ ...input, ...(briefs ? { briefs } : {}) }),
+    renderContextPack(
+      { ...input, ...(briefs ? { briefs } : {}) },
+      context.runtime.prompts,
+    ),
   );
   if (preparer !== undefined && "failure" in preparer)
     await recordPackFallback(context, preparer.failure);

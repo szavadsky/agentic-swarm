@@ -7,11 +7,12 @@ import { acpxOptionProblems } from "../../harness/acpx/options.js";
 import { OMP_ID } from "../../harness/omp/types.js";
 import { YAML_LSP_BINARY, yamlLspBinary } from "../artifact-lsp.js";
 import { resolveBaseCommit } from "../baseline.js";
-import { configFilePaths } from "../config.js";
+import { processFilePath, type configFilePaths } from "../config.js";
 import type { Finding } from "../findings.js";
 import { outcomeSchemaFor, outcomeSchemaNames } from "../outcome-schemas.js";
-import { checkAlias } from "../preflight-aliases.js";
 import type { AliasContext } from "../preflight-aliases.js";
+import { checkAlias } from "../preflight-aliases.js";
+import { mergeSemaphoreDeclarations } from "../semaphores.js";
 import type {
   AliasConfig,
   ArtifactStore,
@@ -361,7 +362,96 @@ export async function unconfiguredTaskFindings(
     }));
 }
 
-/** The static config findings: aliases, fallbacks, pools, process types, tiers. */
+/** Every semaphore name a config layer references, with the file and key to blame. */
+function semaphoreReferences(
+  configs: ConfigBundle,
+  files: ReturnType<typeof configFilePaths>,
+  processFile: string,
+): { name: string; file: string; key: string }[] {
+  const references: { name: string; file: string; key: string }[] = [];
+  const overall = configs.run.limits.overallSemaphore;
+  if (overall !== undefined) {
+    references.push({
+      name: overall,
+      file: files.run,
+      key: "limits.overallSemaphore",
+    });
+  }
+  for (const [id, entry] of Object.entries(configs.run.harnesses ?? {})) {
+    if (entry.semaphore !== undefined) {
+      references.push({
+        name: entry.semaphore,
+        file: files.run,
+        key: `harnesses.${id}.semaphore`,
+      });
+    }
+  }
+  for (const gate of configs.repo.gates) {
+    for (const name of gate.semaphores ?? []) {
+      references.push({
+        name,
+        file: files.repo,
+        key: `gates.${gate.id}.semaphores`,
+      });
+    }
+  }
+  for (const [flow, definition] of Object.entries(configs.process.flows)) {
+    for (const step of definition.steps) {
+      for (const name of step.semaphores ?? []) {
+        references.push({
+          name,
+          file: processFile,
+          key: `flows.${flow}.steps.${step.id}.semaphores`,
+        });
+      }
+    }
+  }
+  return references;
+}
+
+/**
+ * Semaphore declarations are global: a name used in two layers is one
+ * semaphore, so a differing max is refused instead of letting one layer win.
+ * Every reference must name a declaration from some layer, so a typo in a
+ * gate, harness, step or the overall limit fails before a turn or gate runs.
+ */
+function semaphoreFindings(
+  configs: ConfigBundle,
+  files: ReturnType<typeof configFilePaths>,
+  processFile: string,
+): Finding[] {
+  const findings: Finding[] = [];
+  const { declarations, conflicts } = mergeSemaphoreDeclarations(configs);
+  for (const conflict of conflicts) {
+    const file =
+      conflict.layer === "repo"
+        ? files.repo
+        : conflict.layer === "process"
+          ? processFile
+          : files.run;
+    findings.push({
+      file,
+      key: `semaphores.${conflict.name}`,
+      message: `max ${conflict.max} conflicts with max ${conflict.previousMax} declared in another layer`,
+    });
+  }
+  const declared = new Set(declarations.map((declaration) => declaration.name));
+  for (const { name, file, key } of semaphoreReferences(
+    configs,
+    files,
+    processFile,
+  )) {
+    if (declared.has(name)) continue;
+    findings.push({
+      file,
+      key,
+      message: `no semaphore named "${name}" is declared in any layer`,
+    });
+  }
+  return findings;
+}
+
+/** The static config findings: aliases, fallbacks, pools, process types, tiers, semaphores. */
 export async function configFindings(
   configs: ConfigBundle,
   files: ReturnType<typeof configFilePaths>,
@@ -386,9 +476,8 @@ export async function configFindings(
   // A task type owns its flow and output schema. A type naming either one
   // wrongly would quarantine every task of that type or fail mid-turn, after
   // the plan spent, so pre-flight refuses the config instead.
-  const processFile = fs.existsSync(files.processOverride)
-    ? files.processOverride
-    : files.processDefault;
+  const processFile = processFilePath(files);
+  findings.push(...semaphoreFindings(configs, files, processFile));
   findings.push(...taskTypeFindings(configs.process, processFile));
   // A trivial task implements in the front's session, so a follow-up declared
   // on a step of that flow would never run: refuse it instead of letting the

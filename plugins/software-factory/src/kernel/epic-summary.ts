@@ -1,4 +1,4 @@
-import { epicSummaryRelPath } from "./context-pack.js";
+import { epicSummaryRelPath, type EpicSummaryRef } from "./context-pack.js";
 import { reportView } from "./report-view.js";
 import type {
   ArtifactStore,
@@ -33,6 +33,11 @@ function epicConcernLines(record: StepRecord): string[] {
   );
 }
 
+/** One line: whitespace collapsed, ends trimmed. */
+function oneLine(text: string): string {
+  return text.trim().replace(/\s+/g, " ");
+}
+
 /**
  * One epic's iteration status summary: the facts this iteration derived for the
  * epic, plus the subarchitect's own paragraph and upward brief. The script
@@ -65,7 +70,7 @@ function epicSummaryText(
     `architect: ${epic}`,
     "",
     "## Epic",
-    `- summary: ${outcome.summary}`,
+    `- summary: ${oneLine(outcome.summary)}`,
     "",
     "## Tasks",
     ...(
@@ -87,6 +92,52 @@ function epicSummaryText(
     ...(brief.length > 0 ? brief.map((line) => `- ${line}`) : ["- none"]),
     "",
   ].join("\n");
+}
+
+/**
+ * The one-line rollup an epic's iteration summary carries under `## Epic`: the
+ * line the writer above put there, read back for the top pack's link.
+ */
+function epicSummaryRollup(text: string): string | undefined {
+  const lines = text.split("\n");
+  const heading = lines.indexOf("## Epic");
+  if (heading < 0) return undefined;
+  for (const line of lines.slice(heading + 1)) {
+    if (line.startsWith("## ")) return undefined;
+    if (!line.startsWith("- summary: ")) continue;
+    const rollup = oneLine(line.slice("- summary: ".length));
+    return rollup === "" ? undefined : rollup;
+  }
+  return undefined;
+}
+
+/**
+ * Each epic's latest iteration summary before `iteration`, newest first, and
+ * its one-line rollup. An epic left out because its job is done keeps the
+ * iteration that finished it: the top pack links that summary, not a missing
+ * one. Epics with no summary stay absent.
+ */
+export async function latestEpicSummaries(
+  store: ArtifactStore,
+  iteration: number,
+  state: Pick<State, "epics">,
+): Promise<EpicSummaryRef[]> {
+  const refs: EpicSummaryRef[] = [];
+  for (const epic of Object.keys(state.epics).sort()) {
+    for (let n = iteration - 1; n >= 1; n--) {
+      const rel = epicSummaryRelPath(n, epic);
+      const text = await store.readFile(rel);
+      if (text === null) continue;
+      const rollup = epicSummaryRollup(text);
+      refs.push({
+        epic,
+        path: store.pathOf({ area: "goal", rel }),
+        ...(rollup ? { rollup } : {}),
+      });
+      break;
+    }
+  }
+  return refs;
 }
 
 /**

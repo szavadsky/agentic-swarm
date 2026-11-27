@@ -27,13 +27,18 @@ import {
   resumeGate,
 } from "./launch-resume.js";
 import type { GoalRun, IterationRun } from "./launch-run.js";
-import { type Hold, scanInbox, sweepHolds } from "./mailbox.js";
+import {
+  collectSteerRoutes,
+  type Hold,
+  scanInbox,
+  sweepHolds,
+} from "./mailbox.js";
 import { runSteerPm } from "./pm.js";
 import { scriptMeta } from "./record.js";
 import {
+  hasUnreadableArtifact,
   RESUME_REFUSED_STEP,
   RESUME_STEP,
-  hasUnreadableArtifact,
 } from "./resume.js";
 import { taskStatuses, validateTaskGraph } from "./tasks.js";
 import type { State } from "./types.js";
@@ -277,13 +282,15 @@ async function runDispatchStage(it: IterationRun): Promise<void> {
 
 /**
  * Only steers the dying pass already claimed stay seen: architect-seen (a
- * presented/unanswered record) or PM-claimed (a hold file). Anything else in
- * the inbox never reached either consumer, so dispatch must give it its PM
- * steer turn instead of dropping it as already read.
+ * presented/unanswered record) or PM-claimed (a hold file or a committed
+ * route record). Anything else in the inbox never reached a consumer, so
+ * dispatch must give it its PM steer turn instead of dropping it as already
+ * read.
  */
 async function resumeSeenSteers(it: IterationRun): Promise<string[]> {
   const inbox = await scanInbox(it.run.store);
   const holdSteers = new Set(it.resumeHolds.map((h) => h.steer));
+  const routed = new Set(collectSteerRoutes(it.recordsBefore).keys());
   const presented = new Set<string>();
   for (const rec of it.recordsBefore) {
     if (
@@ -293,7 +300,9 @@ async function resumeSeenSteers(it: IterationRun): Promise<string[]> {
       presented.add(rec.slug);
   }
   const seen = inbox
-    .filter((s) => holdSteers.has(s.id) || presented.has(s.id))
+    .filter(
+      (s) => holdSteers.has(s.id) || presented.has(s.id) || routed.has(s.id),
+    )
     .map((s) => s.id);
   // The digest steer was just claimed by the resume PM turn; dispatch must not
   // hand it a second PM turn.

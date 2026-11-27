@@ -222,6 +222,8 @@ export type Action =
       round: number;
       /** The leg admission chose; absent is the alias's primary. */
       tier?: AdmittedTier;
+      /** Dispatch holds this turn's semaphore counts; the turn must not take them again. */
+      semaphoresHeld?: boolean;
     }
   | { kind: "checks"; slug: string }
   | { kind: "merge"; slug: string }

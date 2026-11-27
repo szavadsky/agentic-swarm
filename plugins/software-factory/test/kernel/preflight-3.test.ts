@@ -318,11 +318,11 @@ function registerPreFlightPart24(): void {
 }
 
 function registerPreFlightPart25(): void {
-  it("validates each fallback effort against its own harness probe", async () => {
+  it("validates each fallback effort against its own harness probe, never the alias's", async () => {
     const f = await fixture(
       RUN_HEAD_NO_HIGHEST.replace(
         "implementer: { harness: fake, model: impl }",
-        "implementer: { harness: fake, model: impl, effort: max, fallbacks: [{ harness: other, model: far, effort: high }, { model: near, effort: high }] }",
+        "implementer: { harness: fake, model: impl, effort: max, fallbacks: [{ harness: other, model: far, effort: high }, { harness: other, model: near }] }",
       ),
     );
     try {
@@ -331,13 +331,38 @@ function registerPreFlightPart25(): void {
         "other",
         new FakeHarness({ id: "other", probe: { effort: ["low", "high"] } }),
       );
+      // The alias's max is not offered by "other": an inherited effort would
+      // refuse this run, so passing pins the fallback's own (absent) effort.
       await preflight({ ...f.input, harnesses });
       const fallbacks = f.configs.run.aliases.implementer!.fallbacks!;
-      expect(fallbacks[0]).toMatchObject({ effort: "high" });
-      // The fallback without a fixed effort stays effort-less (harness default):
-      // fallback effort is never inherited from the alias.
-      expect("model" in fallbacks[1]! ? fallbacks[1]!.effort : undefined).toBe(
-        "high",
+      expect(fallbacks[0]).toMatchObject({ harness: "other", effort: "high" });
+      const second = fallbacks[1]!;
+      expect("alias" in second).toBe(false);
+      expect("model" in second ? second.effort : undefined).toBeUndefined();
+    } finally {
+      f.repo.cleanup();
+    }
+  });
+}
+
+function registerPreFlightPart26(): void {
+  it("refuses a configured effort when the harness cannot probe one", async () => {
+    const f = await fixture(
+      RUN_HEAD_NO_HIGHEST.replace(
+        "implementer: { harness: fake, model: impl }",
+        "implementer: { harness: plain, model: impl, effort: high }",
+      ),
+    );
+    try {
+      const harnesses = new Map(f.input.harnesses);
+      harnesses.set("plain", new FakeHarness({ id: "plain" }));
+      const err = await refusal({ ...f.input, harnesses });
+      expect(err.findings).toContainEqual(
+        expect.objectContaining({
+          key: "aliases.implementer.effort",
+          message:
+            'effort "high" cannot be validated: harness "plain" does not report an effort surface for model "impl"',
+        }),
       );
     } finally {
       f.repo.cleanup();
@@ -359,4 +384,6 @@ describe("pre-flight", () => {
   registerPreFlightPart24();
 
   registerPreFlightPart25();
+
+  registerPreFlightPart26();
 });

@@ -41,7 +41,8 @@ parkRoutes:                                    # optional; the PM stall turn's p
   and exports absolute paths, so two worktrees never share one.
 - `format` names the report the command writes (`junit`, `ctrf` or `sarif`);
   missing, empty or unreadable is red; `format.junit` is exported as
-  `FACTORY_JUNIT_PATH`; a tool with no report uses a declared `regex` list.
+  `FACTORY_JUNIT_PATH`; a tool with no report uses a declared `regex` list, and
+  `noise` lists regex patterns for runner lines ignored by the log fallback.
 - Gates run once on the base; a red base is recorded and warned once, not fatal.
 - With no `gates` configured, the goal's `infra.yaml` (written by the shipped
   `infra` ingestion step) supplies the commands the task runs; a configured gate
