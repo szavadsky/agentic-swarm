@@ -24,28 +24,6 @@ import type { GateConfig } from "./types.js";
 export const GATE_OUTPUT_CAP = 4000;
 
 export const ANSI = new RegExp("\\u001b\\[[0-9;]*m", "g");
-/** `bun test v1.4.4 (38afee6c8)`: names the runner, not the failure. */
-export const BUN_BANNER = /^bun test v\d[^\s(]*(?: \([0-9a-f]+\))?$/;
-/** `tests gate: wall 63.8s (...)`: run-tests.ts's timing report, not a failure. */
-export const TESTS_GATE_WALL = /^tests gate: wall \d+(?:\.\d+)?s(?:\s|$)/;
-/** `src/a.ts(12,3): error TS2322:` — tsc's default format, the one a piped gate gets. */
-export const TSC_PAREN = /^(.+?)\((\d+),\d+\):\s+error\s+(TS\d+):/;
-/** `src/a.ts:12:3 - error TS2322:` — tsc's `--pretty` (TTY) format. */
-export const TSC_DASH = /^(.+?):(\d+):\d+\s+-\s+error\s+(TS\d+):/;
-/** A tsc diagnostic with no file of its own, such as a missing type package. */
-export const TSC_GLOBAL = /^error\s+(TS\d+):\s*(.+)$/;
-/** Bun's default reporter: `(fail) suite > test [1.2ms]`. */
-export const BUN_FAIL = /^\(fail\)\s+(.+?)(?:\s+\[\d+(?:\.\d+)?ms\])?$/;
-/** Bun prints a per-file header before that file's failures. */
-export const BUN_FILE = /^(.+?\.(?:test|spec)\.[cm]?[jt]sx?):$/;
-/** A file-level failure bun reports instead of a test result. */
-export const BUN_UNHANDLED = "# Unhandled error between tests";
-/** Bun's tally; it ends the per-file reporter block. */
-export const BUN_SUMMARY =
-  /^(?:\d+ (?:pass|fail|skip|todo|errors?)|\d+ expect\(\) calls|Ran \d+ tests? across .*)$/;
-/** tsc's tally; it carries no diagnostic identity. */
-export const TSC_SUMMARY = /^Found \d+ errors?(?: in \d+ files?)?\.$/;
-export const SEPARATOR = /^-{3,}$/;
 /** An absolute path; its prefix is a run root, never part of the failure. */
 export const ABSOLUTE_PATH = /(?<![\w:/])\/(?:[^\s:'"()/]+\/)+[^\s:'"()/]+/g;
 /** Stateless membership test for the pattern above (`/g` makes `.test` stateful). */
@@ -105,8 +83,7 @@ export function gateCheckMeta(check: CheckResult): GateCheckMeta {
 
 /**
  * Caps gate output for the prompt on a line boundary: a half line at the cut
- * cannot become a failure identity, and the `truncated` flag lets signature
- * matching resume at a report block instead of at an arbitrary detail line.
+ * cannot become a failure identity.
  *
  * When the run roots are known they are normalised before cutting: the window
  * is the last `GATE_OUTPUT_CAP` characters, so a longer root would otherwise

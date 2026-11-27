@@ -2,7 +2,12 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { gateSignatures, runGates } from "../../src/kernel/gates.js";
+import {
+  gateFailureIdentities,
+  gateSignatures,
+  newGateFailures,
+  runGates,
+} from "../../src/kernel/gates.js";
 import type { KernelRuntime } from "../../src/kernel/types.js";
 
 /** A CTRF report: one failed vitest case under a passing suite summary. */
@@ -153,7 +158,9 @@ describe("a gate with no report", () => {
       const [run] = await runGates(runtimeWith(root, [gate]), root);
       expect(run!.ok).toBe(false);
       expect(run!.summary).toBe("exit 1");
-      expect([...gateSignatures(run!)]).toEqual(["src/a.ts:12 TS2322"]);
+      expect([...gateSignatures(run!)]).toEqual([
+        "line: src/a.ts(12,3): error TS2322: Type 'string' is not assignable",
+      ]);
       expect(run!.details).toMatchObject({
         findings: [
           {
@@ -168,6 +175,83 @@ describe("a gate with no report", () => {
       });
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("adjudicates a shell-only gate fixture by exit code and log, plus optional regexes", async () => {
+    const baseRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gate-shell-base-"));
+    const taskRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gate-shell-task-"));
+    try {
+      const baseGate = {
+        id: "shell-check",
+        command: 'echo "check failed: missing manifest in $(pwd)/dist"; exit 2',
+        serial: [],
+      };
+      const [baseRed] = await runGates(
+        runtimeWith(baseRoot, [baseGate]),
+        baseRoot,
+      );
+      const preexisting = gateFailureIdentities(baseRed!);
+
+      const sameTaskGate = {
+        id: "shell-check",
+        command: 'echo "check failed: missing manifest in $(pwd)/dist"; exit 2',
+        serial: [],
+      };
+      const [sameRun] = await runGates(
+        runtimeWith(taskRoot, [sameTaskGate]),
+        taskRoot,
+      );
+      expect(sameRun!.ok).toBe(false);
+      expect(sameRun!.summary).toBe("exit 2");
+      expect(newGateFailures([sameRun!], preexisting)).toEqual([]);
+
+      const extraTaskGate = {
+        id: "shell-check",
+        command:
+          'echo "check failed: missing manifest in $(pwd)/dist"; echo "check failed: bad checksum"; exit 2',
+        serial: [],
+      };
+      const [extraRun] = await runGates(
+        runtimeWith(taskRoot, [extraTaskGate]),
+        taskRoot,
+      );
+      expect(
+        newGateFailures([extraRun!], preexisting).map((c) => c.name),
+      ).toEqual(["shell-check"]);
+
+      const regexGate = {
+        id: "shell-regex",
+        command:
+          'echo "FAIL rule-alpha (12ms)"; echo "info: ignored detail"; exit 1',
+        serial: [],
+        format: {
+          regex: [{ pattern: "^FAIL (?<rule>\\S+)", tool: "shell" }],
+        },
+      };
+      const [regexBase] = await runGates(
+        runtimeWith(baseRoot, [regexGate]),
+        baseRoot,
+      );
+      const [regexRepeat] = await runGates(
+        runtimeWith(taskRoot, [
+          {
+            ...regexGate,
+            command:
+              'echo "FAIL rule-alpha (99ms)"; echo "info: different detail"; exit 1',
+          },
+        ]),
+        taskRoot,
+      );
+      expect([...gateSignatures(regexBase!)]).toEqual([
+        "shell-regex > rule-alpha",
+      ]);
+      expect(
+        newGateFailures([regexRepeat!], gateFailureIdentities(regexBase!)),
+      ).toEqual([]);
+    } finally {
+      fs.rmSync(baseRoot, { recursive: true, force: true });
+      fs.rmSync(taskRoot, { recursive: true, force: true });
     }
   });
 });
