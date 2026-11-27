@@ -6,6 +6,7 @@ import { fingerprintText } from "../core/fingerprint.js";
 import { isAncestor } from "../core/git/commit.js";
 import { git } from "../core/git/exec.js";
 import type { ProcessResult } from "../core/proc.js";
+import type { BaseGateState, BaselineResult } from "./baseline-types.js";
 import { resolveGoalPaths } from "./config.js";
 import {
   capGateOutput,
@@ -22,6 +23,7 @@ import {
   UNIDENTIFIED_GATE_FAILURE,
 } from "./gates.js";
 import { resolveGates } from "./infra.js";
+import { semaphoresFor } from "./semaphores.js";
 import type {
   ArtifactStore,
   ConfigBundle,
@@ -30,9 +32,7 @@ import type {
   StepRecord,
 } from "./types.js";
 
-import type { BaselineResult, BaseGateState } from "./baseline-types.js";
-
-export type { BaselineResult, BaseGateState } from "./baseline-types.js";
+export type { BaseGateState, BaselineResult } from "./baseline-types.js";
 
 /** Record step for a baseline that could not run: infra, never a red verdict. */
 const BASELINE_INFRA_STEP = "baseline-infra";
@@ -211,6 +211,7 @@ async function runBaseGates(
   if (gates.length === 0 && configs.repo.setup.length === 0) return [];
   const dir = scratchPath(configs, repoRoot);
   const root = path.resolve(repoRoot);
+  const semaphores = semaphoresFor(configs);
   try {
     const added = await git(
       root,
@@ -254,7 +255,7 @@ async function runBaseGates(
     }
     const checks: CheckResult[] = [];
     for (const gate of gates) {
-      const { res, check } = await runDeclaredGate(dir, gate, root);
+      const { res, check } = await runDeclaredGate(dir, gate, root, semaphores);
       checks.push(gateCheck(gate, res, check));
     }
     return checks;

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { stallDecisionSchema } from "../types/outcome.js";
 import { causeKindSchema } from "../types/state.js";
+import { semaphoreDeclarationsSchema } from "./semaphore-schema.js";
 
 export const packageRoot = fileURLToPath(new URL("../../..", import.meta.url));
 
@@ -45,6 +46,8 @@ const gateSchema = z
     id: z.string().min(1),
     command: z.string().min(1),
     serial: z.array(z.string().min(1)).default([]),
+    /** Semaphores this gate holds for its command; names are global across layers. */
+    semaphores: z.array(z.string().min(1)).optional(),
     /** Per-gate wall in seconds; non-positive falls back to the 900 s default. */
     timeoutSec: z.number().optional(),
     /** A red from this gate is recorded and shown, never blocking. */
@@ -109,6 +112,8 @@ export const repoConfigSchema = z
     identity: identitySchema.optional(),
     setup: z.array(z.string().min(1)).default([]),
     gates: z.array(gateSchema).default([]),
+    /** Named semaphores the repo layer owns: gate and CI-step limits. */
+    semaphores: semaphoreDeclarationsSchema,
     /** A launch that resolves no gate stops before dispatch unless this is false. */
     requireGates: z.boolean().default(true),
     codingRules: codingRulesPathSchema.optional(),

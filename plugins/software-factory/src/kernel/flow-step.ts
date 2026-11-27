@@ -53,10 +53,13 @@ interface StepDeps {
   iteration: number;
   /** The leg admission chose; absent is the alias's primary. */
   tier?: AdmittedTier;
+  /** Dispatch already holds this turn's semaphore counts. */
+  semaphoresHeld?: boolean;
 }
 
 async function openStep(deps: StepDeps): Promise<StepRun | TaskActionResult> {
-  const { runtime, task, state, iteration, step, flow, tier } = deps;
+  const { runtime, task, state, iteration, step, flow, tier, semaphoresHeld } =
+    deps;
   const records = await runtime.store.listRecords();
   const opened = await openTaskWorktree(runtime, task, state, iteration);
   if ("result" in opened) return opened.result;
@@ -86,6 +89,7 @@ async function openStep(deps: StepDeps): Promise<StepRun | TaskActionResult> {
     trivial: false,
     lastCall: false,
     tier,
+    semaphoresHeld,
   };
 }
 

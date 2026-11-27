@@ -1,12 +1,13 @@
 /** Repository, run and fallback configuration shapes. */
 
-import type { Repo } from "../../core/git/repo.js";
 import type { FindingSeverity } from "../../core/checks/findings.js";
+import type { Repo } from "../../core/git/repo.js";
 import type { SandboxCommand } from "../../core/sandbox.js";
+import type { SemaphoreDeclaration } from "../../core/semaphores-types.js";
 import type { CacheTtl, Harness } from "../../harness/types.js";
 import type { PriceSource } from "../openrouter.js";
-import type { PoolReset } from "../quota-pools.js";
 import type { PromptLibrary } from "../prompts.js";
+import type { PoolReset } from "../quota-pools.js";
 import type {
   ArchitectureConfig,
   BoundaryStep,
@@ -18,10 +19,10 @@ import type {
   Timeouts,
   TurnSpec,
 } from "./flow.js";
-import type { TaskTypeDefinition } from "./tasks.js";
-import type { ArtifactStore } from "./records.js";
 import type { StallDecision } from "./outcome.js";
+import type { ArtifactStore } from "./records.js";
 import type { CauseKind } from "./state.js";
+import type { TaskTypeDefinition } from "./tasks.js";
 
 /** A repo-declared regex over a gate log for a tool that emits no report. */
 export interface GateRegex {
@@ -41,6 +42,8 @@ export interface GateConfig {
    * other because the key includes the repository.
    */
   serial: string[];
+  /** Semaphores held for this gate's command; absent holds none. */
+  semaphores?: string[];
   /**
    * Environment variables mapped to worktree-relative directories. The kernel
    * creates them and exports absolute paths, so two worktrees get two dirs.
@@ -128,6 +131,8 @@ export interface RepoConfig {
   identity?: { name: string; email: string };
   setup: string[];
   gates: GateConfig[];
+  /** Named semaphores this layer declares; names are global across layers. */
+  semaphores?: SemaphoreDeclaration[];
   /** Absent reads as required; false is the explicit no-gate opt-out. */
   requireGates?: boolean;
   /** Repo-relative rule file replacing the factory default coding rules; absent uses the factory default. */
@@ -152,6 +157,8 @@ export interface ProcessConfig {
    * flow, kind and output schema; a task file names only the type.
    */
   taskTypes: Record<string, TaskTypeDefinition>;
+  /** Named semaphores this layer declares: flow-step and agent limits. */
+  semaphores?: SemaphoreDeclaration[];
   /** Each kernel boundary step's prompt and alias; pre-flight requires these aliases. */
   boundary: Record<BoundaryStep, TurnSpec>;
   /** The goal-start step sequence: the branch first, the classifier, then extra steps. */
@@ -234,6 +241,8 @@ export interface HarnessConfig {
   acpx?: import("../../harness/acpx/config.js").AcpxConfig;
   /** Executable override; absent resolves through PATH. */
   binary?: string;
+  /** Semaphore this harness's live sessions hold; absent means no harness limit. */
+  semaphore?: string;
   /** Compaction policy for this harness; every entry declares one. */
   compaction: HarnessCompactionConfig;
   /** Opaque adapter options: acpx `args`/`env`, omp overlay keys. */
@@ -246,6 +255,8 @@ export interface RunConfig {
   sandbox?: SandboxCommand;
   /** Harness id -> adapter binding, binary override or opaque options. */
   harnesses?: Record<string, HarnessConfig>;
+  /** Named semaphores this layer declares: overall, harness and subscription limits. */
+  semaphores?: SemaphoreDeclaration[];
   /** Extra environment names a spawned harness or agent inherits. */
   envAllowlist?: string[];
   /** Harness model id -> OpenRouter model id, for ids matching cannot resolve. */
@@ -256,6 +267,8 @@ export interface RunConfig {
       perSubscription: Record<string, number>;
       perModel: Record<string, number>;
     };
+    /** Semaphore every turn holds, on top of the concurrency block. */
+    overallSemaphore?: string;
     iterations: number;
     /** Plan-checker re-runs per iteration; exhausted rounds consult the architect. */
     planCheckRounds: number;

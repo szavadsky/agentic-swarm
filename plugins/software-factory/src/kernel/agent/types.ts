@@ -31,6 +31,10 @@ export interface AgentTurnSpec {
   /** iteration/slug/step/round/taskHash/base; actor, alias, model come from the target. */
   meta: Omit<RecordStart, "actor" | "alias" | "model">;
   vars: Record<string, string>;
+  /** Semaphores the step names; the turn holds them around each harness call. */
+  semaphores?: readonly string[];
+  /** The caller (dispatch admission) already holds this turn's counts. */
+  semaphoresHeld?: boolean;
   expectation: OutcomeExpectation;
   /**
    * The step's contract beyond the outcome schema: findings that send the

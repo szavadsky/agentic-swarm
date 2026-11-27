@@ -196,6 +196,8 @@ export interface FlowStep extends RepairSpec {
   /** Non-script steps name their prompt and alias; script steps (`checks`) name neither. */
   prompt?: string;
   alias?: string;
+  /** Semaphores this agent step's turns hold; absent holds none beyond its tier's. */
+  semaphores?: string[];
   /** Review steps carry the verdict contract and consume a review round. */
   review?: boolean;
   /**

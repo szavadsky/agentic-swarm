@@ -116,6 +116,7 @@ gates:
     command: ./scripts/integration-tests         # writes the declared report
     format: { ctrf: reports/ctrf.json }           # standard test report
     serial: [database]                          # same-named gates in one repo never overlap
+    semaphores: [integration]                   # semaphores held for the whole command
     env: { TMPDIR: .cache/gate }                # per-worktree scratch directory
   - id: lint-strict
     command: bun run lint:strict
@@ -124,6 +125,8 @@ cleanliness:                                    # optional; default rules active
   maxFileSizeBytes: 1048576                     # default: 1048576 (1 MB)
   allowedExtensions: [ts, json, md]             # default: extensions present in base tree
   allowedFiles: [data/benchmark.csv]            # optional; explicit files exempt from the heuristic
+semaphores:
+  - { name: integration, max: 1 }   # named limits shared by gates and turns
 codingRules: .factory/prompts/coding-rules.md   # optional; replaces the factory default clean-code partial
 parkRoutes:                                     # optional; the PM stall turn's per-cause default
   gates:                                        # keyed by the kernel's closed cause vocabulary
@@ -178,6 +181,21 @@ two repositories never wait on each other, and a gate that names none never
 waits. `env` maps variable names to worktree-relative directories; the
 kernel creates them and exports absolute paths, so two worktrees get two
 directories.
+
+Named semaphores bound what runs at once. Each layer declares the ones it owns
+as `{name, max}` (`semaphores` in `.factory/repo.yaml`, the process config and
+the run config); names are global, so any layer references another's and a name
+declared twice must agree on its max. A gate holds the names in its
+`semaphores` list for its whole command; a flow step's turns hold the names
+in its `semaphores` list around their harness calls, a harness entry holds the
+name in its `semaphore`, and an alias drawing on a subscription holds the
+semaphore declared under that subscription's name. A turn whose step,
+subscription and harness name one semaphore still takes one count; dispatch
+admits a turn whose fallback-chain tier has every semaphore free and falls back
+to the next tier when one is taken. `limits.overallSemaphore` names the
+semaphore every turn holds on top of the concurrency block. A reference to an
+undeclared name, or two layers declaring one name with different maxes, is a
+pre-flight finding.
 
 A gate's `format` gives its failures identities that survive assertion values
 and timings, so a red inherited from the base is not blamed on the task. A
@@ -404,15 +422,21 @@ extends: base.yaml                                   # inherit the shared aliase
 aliases:
   architect: { harness: opencode, model: opencode/minimax-m3.1-flash-free, effort: high }
   implementer: { harness: opencode, model: opencode/deepseek-v4.1-flash-free }
+semaphores:
+  - { name: all-turns, max: 3 }
+  - { name: opencode-go, max: 2 }
+  - { name: opencode, max: 2 }
 priceIds:                                            # harness model id -> OpenRouter id, when matching cannot resolve
   opencode/beam-free: reflection/beam-1.0-501b-a23b
 limits:
+  overallSemaphore: all-turns
   concurrency: { overall: 3, perSubscription: { opencode-go: 2 }, perModel: {} }
   iterations: 1
   iterationUsd: 5
 sessions: { dir: ~/.local/share/factory/sessions, keepRuns: 5, retention: short }
 harnesses:
   opencode:
+    semaphore: opencode   # this harness's own live sessions
     acpx: { agent: opencode acp, raw: true, compact: true }
     compaction: { enabled: true }                     # the adapter has a real /compact command
   agy:                                                # acpx adapter with no compaction command
