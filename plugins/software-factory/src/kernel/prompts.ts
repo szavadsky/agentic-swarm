@@ -325,6 +325,8 @@ export function loadPrompts(
       env_notes: "",
       prior_concerns: "",
       fix_dispositions: "",
+      // A render that knows no flow step asks no standalone escalation.
+      upscope_ask: "",
       outcome_schema: outcomeExampleVar(DEFAULT_PROMPT_AUTHOR, "any"),
       task_frontmatter: taskFrontmatterVar(),
       task_types: taskTypesVar(process.taskTypes),

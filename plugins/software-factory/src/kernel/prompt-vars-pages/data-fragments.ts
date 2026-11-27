@@ -93,8 +93,11 @@ export const FRAGMENT_PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
     file: "standalone-upscope.md",
     prompt: "standalone-upscope",
     intro:
-      "The standalone-task scope question rendered into `upscope_ask` for delivery acceptance when no architect planned the task.",
-    variables: {},
+      "The standalone-task scope question rendered into `upscope_ask` for the last agent of a flow when no architect planned the task.",
+    variables: {
+      front_pack:
+        "path to the front's context pack carrying the predicted area and risks; empty when no front record classified this task",
+    },
   },
   {
     file: "pack-plan-review.md",

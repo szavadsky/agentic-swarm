@@ -36,6 +36,7 @@ import { qaOutcomeSchema } from "./qa.js";
 import { CHECK_HANDOFF_DEFAULTS, type PromptLibrary } from "./prompts.js";
 import { formatAcceptanceFindings, formatReviewFindings } from "./record.js";
 import {
+  agentSteps,
   isLastChecksFixCall,
   isAcceptanceStep,
   launchCounts,
@@ -217,6 +218,15 @@ export function promptVars(
   const schema = qaStep
     ? qaOutcomeSchema
     : taskOutcomeSchema(task, runtime.configs.process.taskTypes);
+  // Only a flow's last agent receives the standalone escalation ask; the
+  // reviewer is that agent in every built-in review flow, and a
+  // reviewer-less flow asks its implementer instead.
+  const lastAgent =
+    step !== undefined && agentSteps(flow).at(-1)?.id === step.id;
+  const upscopeAsk = lastAgent
+    ? standaloneUpscopeAsk(runtime, task, records)
+    : "";
+  const askFields = upscopeAsk !== "" ? ["upscope"] : [];
   return {
     ...commonVars(
       runtime,
@@ -230,9 +240,9 @@ export function promptVars(
     prior_concerns: qaStep ? "" : authorConcerns(records, task.slug, flow),
     fix_dispositions: fixDispositions(records, task.slug, flow, round, state),
     front_pack: frontPack(runtime, task, records) ?? "",
-    // The standalone escalation ask for the reviewer; empty when this task is
-    // part of an architect plan. The implementer template ignores it.
-    upscope_ask: standaloneUpscopeAsk(runtime, task),
+    // The standalone escalation ask for the flow's last agent; empty when
+    // this task is part of an architect plan.
+    upscope_ask: upscopeAsk,
     // A relaunched or trivial turn overrides it with `resumeNote` before
     // rendering the implement prompt.
     resume_note: "",
@@ -244,6 +254,7 @@ export function promptVars(
       step?.prompt ?? "implementer",
       expectation,
       schema,
+      askFields,
     ),
   };
 }

@@ -128,9 +128,9 @@ function promptsOutcomeExamplesValidity() {
 
 function promptsOutcomeExamplesCoverage() {
   it("renders every outcome field some step writes, so a new field cannot go missing", () => {
-    // `forward` is parse-only for old records; no step writes it.
+    // `forward` is parse-only; `upscope` is ask-only, never in a default example.
     const written = Object.keys(outcomeSchema.shape).filter(
-      (field) => field !== "forward",
+      (field) => field !== "forward" && field !== "upscope",
     );
     const rendered = new Set(
       ROLE_EXPECTATIONS.flatMap(([prompt, expectation]) =>
@@ -176,7 +176,7 @@ function promptsOutcomeExamplesNarrowing() {
 
     const reviewer = outcomeExamples("reviewer", "review").primary;
     expect(reviewer).toHaveProperty("verdict");
-    expect(reviewer).toHaveProperty("upscope");
+    expect(reviewer).not.toHaveProperty("upscope");
     expect(reviewer).not.toHaveProperty("decision");
     expect(reviewer).not.toHaveProperty("planCheck");
 

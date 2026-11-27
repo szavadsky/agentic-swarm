@@ -41,12 +41,15 @@ function registerStandaloneUpscopePart2(): void {
     const { repo, goal, goalDir } = setupFlowRepo();
     try {
       const harness = new FakeHarness({ id: "fake" });
+      const prompts: string[] = [];
       harness.script((req, ctx) => {
+        prompts.push(req.prompt);
         fs.writeFileSync(path.join(req.cwd!, "task.txt"), "v1\n", "utf8");
         ctx.writeOutcome(outcome({ summary: "implemented" }));
         return fakeTurnResult(req);
       });
       harness.script((req, ctx) => {
+        prompts.push(req.prompt);
         ctx.writeOutcome(
           outcome({
             summary: "looks right",
@@ -60,9 +63,12 @@ function registerStandaloneUpscopePart2(): void {
       const runtime = await makeRuntime(repo, goal, { fake: harness });
       writeClass(goalDir, "class: task\nslug: solo\n");
       await writeTask(runtime, task("solo", { scope: ["task.txt"] }));
-
       const result = await runDispatch(runtime, { iteration: 1 });
       expect(result.reason).toBe("boundary");
+
+      const reviewerPrompt = prompts.at(-1) ?? "";
+      expect(reviewerPrompt).toContain("- standalone upscope:");
+      expect(reviewerPrompt).toMatch(/^upscope: no$/m);
 
       const state = derive(
         await runtime.store.listTasks(),
@@ -366,4 +372,119 @@ function registerStandaloneUpscopePart7(): void {
 
 describe("standalone implementer upscope", () => {
   registerStandaloneUpscopePart7();
+});
+
+function registerReviewerlessUpscope(): void {
+  it("asks a reviewer-less flow's last agent and escalates on upscope=yes", async () => {
+    const { repo, goal, goalDir } = setupFlowRepo({
+      classYaml: "class: trivial\nslug: solo\n",
+    });
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      let prompt = "";
+      harness.script((req, ctx) => {
+        prompt = req.prompt;
+        // A trivial turn keeps the front session's cwd and names the absolute
+        // task worktree in the prompt.
+        const worktree = /- worktree: `([^`]+)`/.exec(req.prompt)?.[1];
+        if (worktree === undefined) throw new Error("no worktree in prompt");
+        fs.writeFileSync(path.join(worktree, "task.txt"), "v1\n", "utf8");
+        ctx.writeOutcome(
+          outcome({
+            summary: "needs an architect: two seams, not one",
+            upscope: "yes",
+          }),
+        );
+        return fakeTurnResult(req);
+      });
+      scriptStallLeave(harness, ["solo"]);
+
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      // A trivial task implements in the front's session, so the front record
+      // must carry the session the implement turn resumes.
+      await runtime.store.appendRecord(
+        {
+          iteration: 1,
+          step: "front",
+          round: 1,
+          actor: "agent",
+          alias: "front",
+          model: { id: "fake-front" },
+        },
+        {
+          session: {
+            harness: "fake",
+            id: "front-solo",
+            cwd: goalDir,
+            model: { id: "fake-front" },
+            lastRequestStartedAt: new Date().toISOString(),
+            retentionTier: "short",
+            compacted: false,
+          },
+        },
+      );
+      const solo = task("solo", { flow: "just-implement" });
+      await writeTask(runtime, solo);
+      const records = await runtime.store.listRecords();
+      const pack = path.join(goalDir, "iterations/1/context-pack.md");
+
+      // Only the flow's last agent is asked: the same standalone task in a
+      // review flow asks the reviewer, while its implementer gets no ask.
+      const reviewFlow = runtime.configs.process.flows["implement-review"]!;
+      expect(
+        promptVars(
+          runtime,
+          solo,
+          "/worktrees/demo-tasks/solo",
+          records,
+          1,
+          reviewFlow,
+          undefined,
+          "implement",
+        ).upscope_ask,
+      ).toBe("");
+      expect(
+        promptVars(
+          runtime,
+          solo,
+          "/worktrees/demo-tasks/solo",
+          records,
+          1,
+          reviewFlow,
+          undefined,
+          "review",
+        ).upscope_ask,
+      ).toContain(pack);
+
+      const result = await runDispatch(runtime, { iteration: 1 });
+      expect(result.reason).toBe("boundary");
+
+      const ask = prompt
+        .split("\n")
+        .find((line) => line.startsWith("- standalone upscope:"));
+      expect(ask).toBeDefined();
+      expect(prompt).toContain(
+        "one task-sized change, well understood, with no design decision and no review",
+      );
+      expect(ask).toContain("standalone task");
+      expect(ask).toContain(pack);
+      expect(prompt).toMatch(/^upscope: no$/m);
+
+      const state = derive(
+        await runtime.store.listTasks(),
+        await runtime.store.listRecords(),
+        runtime.configs.process.flows,
+      );
+      expect(state.tasks.solo!.status).toBe("parked");
+      expect(causeText(state.tasks.solo!.cause)).toMatch(/^upscope: /);
+      expect(causeText(state.tasks.solo!.cause)).toContain("two seams");
+      expect(readClass(goalDir)).toEqual({ class: "bigger" });
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 60_000);
+}
+
+describe("standalone reviewer-less upscope", () => {
+  registerReviewerlessUpscope();
 });

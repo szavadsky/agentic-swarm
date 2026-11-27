@@ -12,4 +12,7 @@
   {{gate_commands}}
 - prior findings: `{{prior_findings}}` — the last acceptance's numbered findings; empty before the first acceptance
 - fix dispositions: `{{fix_dispositions}}` — round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; each prior finding is judged on its change or reply
+  {%- if upscope_ask != '' %}
+- standalone upscope: {{upscope_ask}}
+  {%- endif %}
 - outcome path: `{{outcome_path}}`

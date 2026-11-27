@@ -97,6 +97,15 @@ A merged task's bullet is history: the plan carries open work only. Collapse it 
 Its what, why, done-when, interface and unknown are gone from the plan. A milestone whose every task merged keeps only its heading, ending \` — merged\`.
 
 
+## Task scope
+
+- \`trivial\` — one task-sized change, well understood, with no design decision and no review.
+- \`task\` — one task-sized deliverable that needs implementation and review, but no plan or ordering.
+- \`bigger\` — anything needing a plan, several tasks, design decisions or ordering.
+
+A class changes only by escalation.
+
+
 ## Granularity and dispatch
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
@@ -315,6 +324,15 @@ A merged task's bullet is history: the plan carries open work only. Collapse it 
 Its what, why, done-when, interface and unknown are gone from the plan. A milestone whose every task merged keeps only its heading, ending \` — merged\`.
 
 
+## Task scope
+
+- \`trivial\` — one task-sized change, well understood, with no design decision and no review.
+- \`task\` — one task-sized deliverable that needs implementation and review, but no plan or ordering.
+- \`bigger\` — anything needing a plan, several tasks, design decisions or ordering.
+
+A class changes only by escalation.
+
+
 ## Granularity and dispatch
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
@@ -421,14 +439,19 @@ The plan, the intent, other tasks' files and the factory's records are read-only
 
 Read the intent and the goal checkout. Choose exactly one class:
 
+## Task scope
+
 - \`trivial\` — one task-sized change, well understood, with no design decision and no review.
 - \`task\` — one task-sized deliverable that needs implementation and review, but no plan or ordering.
-- \`bigger\` — anything needing a plan, several tasks, design decisions or ordering. You write no task.
+- \`bigger\` — anything needing a plan, several tasks, design decisions or ordering.
+
+A class changes only by escalation.
+
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
 
 
-When in doubt, choose \`bigger\`. A class changes only by escalation.
+When in doubt, choose \`bigger\`.
 
 ## Write
 
@@ -552,6 +575,15 @@ Five kinds of turns. When \`steers\`, \`stalls\`, \`plan_checks\` and \`concerns
 ## Derive
 
 For each task the plans yield, write one file in the tasks directory. A bullet belongs to the plan that carries it.
+
+## Task scope
+
+- \`trivial\` — one task-sized change, well understood, with no design decision and no review.
+- \`task\` — one task-sized deliverable that needs implementation and review, but no plan or ordering.
+- \`bigger\` — anything needing a plan, several tasks, design decisions or ordering.
+
+A class changes only by escalation.
+
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
 
@@ -791,6 +823,15 @@ exports[`role prompts renders implementer from exactly its documented variables:
 
 You implement one task in one worktree. The task file is the assignment: its done-when, edge cases and named approach. For a spike, the finding named in the brief is the product: write it, state the evidence, and do not manufacture a code diff. A spike commits its finding at the report path in the turn block, and the outcome cites that path.
 
+## Task scope
+
+- \`trivial\` — one task-sized change, well understood, with no design decision and no review.
+- \`task\` — one task-sized deliverable that needs implementation and review, but no plan or ordering.
+- \`bigger\` — anything needing a plan, several tasks, design decisions or ordering.
+
+A class changes only by escalation.
+
+
 ## Work
 
 1. Read the task file fully, then the code and tests it touches; read widely through read-only scouts if useful. If dependencies are missing, run the setup command first; a setup failure is infrastructure-broken — report it once, do not retry.
@@ -902,6 +943,15 @@ replies:
 
 exports[`role prompts renders qa from exactly its documented variables: qa 1`] = `
 "You implement one task in one worktree. The task file is the assignment: its done-when, edge cases and named approach. For a spike, the finding named in the brief is the product: write it, state the evidence, and do not manufacture a code diff. A spike commits its finding at the report path in the turn block, and the outcome cites that path.
+
+## Task scope
+
+- \`trivial\` — one task-sized change, well understood, with no design decision and no review.
+- \`task\` — one task-sized deliverable that needs implementation and review, but no plan or ordering.
+- \`bigger\` — anything needing a plan, several tasks, design decisions or ordering.
+
+A class changes only by escalation.
+
 
 ## Work
 
@@ -1050,6 +1100,15 @@ exports[`role prompts renders reviewer from exactly its documented variables: re
 
 You implement one task in one worktree. The task file is the assignment: its done-when, edge cases and named approach. For a spike, the finding named in the brief is the product: write it, state the evidence, and do not manufacture a code diff. A spike commits its finding at the report path in the turn block, and the outcome cites that path.
 
+## Task scope
+
+- \`trivial\` — one task-sized change, well understood, with no design decision and no review.
+- \`task\` — one task-sized deliverable that needs implementation and review, but no plan or ordering.
+- \`bigger\` — anything needing a plan, several tasks, design decisions or ordering.
+
+A class changes only by escalation.
+
+
 ## Work
 
 1. Read the task file fully, then the code and tests it touches; read widely through read-only scouts if useful. If dependencies are missing, run the setup command first; a setup failure is infrastructure-broken — report it once, do not retry.
@@ -1116,7 +1175,6 @@ steerAnswers:
   - steer: s1
     answer: the API stays stable
 verdict: approve
-upscope: no
 \`\`\`
 
 The other verdict is also valid:
@@ -1135,7 +1193,6 @@ steerAnswers:
   - steer: s1
     answer: the API stays stable
 verdict: changes
-upscope: no
 \`\`\`
 
 - \`done\`: the requested work is complete. \`blocked\`: an input you cannot obtain is missing; name it and the stage that owns it. \`failed\`: attempted and did not complete; cite evidence.
@@ -1186,7 +1243,6 @@ Forward only what the calibration calls remarkable.
 - base gates: base abc1234def: green — the base tree's recorded gate result: commit plus \`green\`, the pre-existing failing checks, or \`not recorded\`; a claimed "pre-existing" failure is a finding unless this record lists it; when it is \`not recorded\`, every such claim is a finding
 - prior findings: \`\` — empty in round 1; numbered, each answered by a change, a reply, or both
 - prior concerns: \`\` — empty when none; author and QA concerns on this task — copy each immaterial concern's \`kind\`, \`calibration\`, \`text\` (and \`evidence\` when present) into \`concerns\` with \`dismiss: immaterial\`, and leave material ones undismissed
-- standalone upscope: \`\` — empty when this task is part of an architect plan; then give no upscope field
 - fix dispositions: \`\` — round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty. Re-judge each finding against the diff or its reply; a reply is judged on its argument, not on whether the diff evidences it.
 - checks: \`pass\`
 - checks tree: \`3ba247e47772a8ba5874d089990419f572432df8\`
@@ -1887,6 +1943,15 @@ A merged task's bullet is history: the plan carries open work only. Collapse it 
 Its what, why, done-when, interface and unknown are gone from the plan. A milestone whose every task merged keeps only its heading, ending \` — merged\`.
 
 
+## Task scope
+
+- \`trivial\` — one task-sized change, well understood, with no design decision and no review.
+- \`task\` — one task-sized deliverable that needs implementation and review, but no plan or ordering.
+- \`bigger\` — anything needing a plan, several tasks, design decisions or ordering.
+
+A class changes only by escalation.
+
+
 ## Granularity and dispatch
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
@@ -2223,6 +2288,15 @@ A merged task's bullet is history: the plan carries open work only. Collapse it 
 Its what, why, done-when, interface and unknown are gone from the plan. A milestone whose every task merged keeps only its heading, ending \` — merged\`.
 
 
+## Task scope
+
+- \`trivial\` — one task-sized change, well understood, with no design decision and no review.
+- \`task\` — one task-sized deliverable that needs implementation and review, but no plan or ordering.
+- \`bigger\` — anything needing a plan, several tasks, design decisions or ordering.
+
+A class changes only by escalation.
+
+
 ## Granularity and dispatch
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
@@ -2430,6 +2504,15 @@ A merged task's bullet is history: the plan carries open work only. Collapse it 
 Its what, why, done-when, interface and unknown are gone from the plan. A milestone whose every task merged keeps only its heading, ending \` — merged\`.
 
 
+## Task scope
+
+- \`trivial\` — one task-sized change, well understood, with no design decision and no review.
+- \`task\` — one task-sized deliverable that needs implementation and review, but no plan or ordering.
+- \`bigger\` — anything needing a plan, several tasks, design decisions or ordering.
+
+A class changes only by escalation.
+
+
 ## Granularity and dispatch
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
@@ -2526,6 +2609,15 @@ Five kinds of turns. When \`steers\`, \`stalls\`, \`plan_checks\` and \`concerns
 ## Derive
 
 For each task the plans yield, write one file in the tasks directory. A bullet belongs to the plan that carries it.
+
+## Task scope
+
+- \`trivial\` — one task-sized change, well understood, with no design decision and no review.
+- \`task\` — one task-sized deliverable that needs implementation and review, but no plan or ordering.
+- \`bigger\` — anything needing a plan, several tasks, design decisions or ordering.
+
+A class changes only by escalation.
+
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
 
@@ -2846,6 +2938,15 @@ A merged task's bullet is history: the plan carries open work only. Collapse it 
 Its what, why, done-when, interface and unknown are gone from the plan. A milestone whose every task merged keeps only its heading, ending \` — merged\`.
 
 
+## Task scope
+
+- \`trivial\` — one task-sized change, well understood, with no design decision and no review.
+- \`task\` — one task-sized deliverable that needs implementation and review, but no plan or ordering.
+- \`bigger\` — anything needing a plan, several tasks, design decisions or ordering.
+
+A class changes only by escalation.
+
+
 ## Granularity and dispatch
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
@@ -3053,6 +3154,15 @@ A merged task's bullet is history: the plan carries open work only. Collapse it 
 Its what, why, done-when, interface and unknown are gone from the plan. A milestone whose every task merged keeps only its heading, ending \` — merged\`.
 
 
+## Task scope
+
+- \`trivial\` — one task-sized change, well understood, with no design decision and no review.
+- \`task\` — one task-sized deliverable that needs implementation and review, but no plan or ordering.
+- \`bigger\` — anything needing a plan, several tasks, design decisions or ordering.
+
+A class changes only by escalation.
+
+
 ## Granularity and dispatch
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
@@ -3149,6 +3259,15 @@ Five kinds of turns. When \`steers\`, \`stalls\`, \`plan_checks\` and \`concerns
 ## Derive
 
 For each task the plans yield, write one file in the tasks directory. A bullet belongs to the plan that carries it.
+
+## Task scope
+
+- \`trivial\` — one task-sized change, well understood, with no design decision and no review.
+- \`task\` — one task-sized deliverable that needs implementation and review, but no plan or ordering.
+- \`bigger\` — anything needing a plan, several tasks, design decisions or ordering.
+
+A class changes only by escalation.
+
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
 
@@ -3469,6 +3588,15 @@ A merged task's bullet is history: the plan carries open work only. Collapse it 
 Its what, why, done-when, interface and unknown are gone from the plan. A milestone whose every task merged keeps only its heading, ending \` — merged\`.
 
 
+## Task scope
+
+- \`trivial\` — one task-sized change, well understood, with no design decision and no review.
+- \`task\` — one task-sized deliverable that needs implementation and review, but no plan or ordering.
+- \`bigger\` — anything needing a plan, several tasks, design decisions or ordering.
+
+A class changes only by escalation.
+
+
 ## Granularity and dispatch
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
@@ -3676,6 +3804,15 @@ A merged task's bullet is history: the plan carries open work only. Collapse it 
 Its what, why, done-when, interface and unknown are gone from the plan. A milestone whose every task merged keeps only its heading, ending \` — merged\`.
 
 
+## Task scope
+
+- \`trivial\` — one task-sized change, well understood, with no design decision and no review.
+- \`task\` — one task-sized deliverable that needs implementation and review, but no plan or ordering.
+- \`bigger\` — anything needing a plan, several tasks, design decisions or ordering.
+
+A class changes only by escalation.
+
+
 ## Granularity and dispatch
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
@@ -3772,6 +3909,15 @@ Five kinds of turns. When \`steers\`, \`stalls\`, \`plan_checks\` and \`concerns
 ## Derive
 
 For each task the plans yield, write one file in the tasks directory. A bullet belongs to the plan that carries it.
+
+## Task scope
+
+- \`trivial\` — one task-sized change, well understood, with no design decision and no review.
+- \`task\` — one task-sized deliverable that needs implementation and review, but no plan or ordering.
+- \`bigger\` — anything needing a plan, several tasks, design decisions or ordering.
+
+A class changes only by escalation.
+
 
 One task is one implementer session, one seam, one reviewable diff, one done-when. V&V lives inside the dev task, never a separate V&V task. Split when a done-when needs two independent observables or crosses two interface seams; merge when two candidate tasks cannot be verified apart.
 

@@ -4,5 +4,7 @@
 - base gates: {{base_gates}} — the base tree's recorded gate result: commit plus `green`, the pre-existing failing checks, or `not recorded`; a claimed "pre-existing" failure is a finding unless this record lists it; when it is `not recorded`, every such claim is a finding
 - prior findings: `{{prior_findings}}` — empty in round 1; numbered, each answered by a change, a reply, or both
 - prior concerns: `{{prior_concerns}}` — empty when none; author and QA concerns on this task — copy each immaterial concern's `kind`, `calibration`, `text` (and `evidence` when present) into `concerns` with `dismiss: immaterial`, and leave material ones undismissed
-- standalone upscope: `{{upscope_ask}}` — empty when this task is part of an architect plan; then give no upscope field
+  {%- if upscope_ask != '' %}
+- standalone upscope: {{upscope_ask}}
+  {%- endif %}
 - fix dispositions: `{{fix_dispositions}}` — round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty. Re-judge each finding against the diff or its reply; a reply is judged on its argument, not on whether the diff evidences it.
