@@ -200,9 +200,8 @@ async function continuesTaskBaseFromParkedTaskSPart1(
   goal: string,
 ) {
   const harness = new FakeHarness({ id: "fake" });
-  // beta continues the parked alpha and merges, so the wave-end stall gets
-  // the park even though the iteration merged.
-  scriptStallLeave(harness, ["alpha"]);
+  // beta continues the parked alpha and merges, so the park retires: the
+  // wave end offers it no stall turn even though the iteration merged.
   harness.script((req, ctx) => {
     fs.writeFileSync(path.join(req.cwd!, "alpha.txt"), "alpha\n", "utf8");
     ctx.writeOutcome(outcome({ summary: "alpha implemented" }));
@@ -241,6 +240,10 @@ async function continuesTaskBaseFromParkedTaskSPart1(
     await runtime.store.listTasks(),
     records,
     runtime.configs.process.flows,
+  );
+  expect(state.tasks.alpha!.supersededBy).toBe("beta");
+  expect(records.filter((record) => record.step === "stall-routes")).toEqual(
+    [],
   );
 
   return { integrationHead, records, state };

@@ -159,7 +159,8 @@ function keptLandParkKind(
  * kept-land left the branch unresolved) and a base conflict (the branch could
  * not take the head in — the same merge caught one step earlier, so the same
  * turn owns it). A gates park is listed too; whether it is a candidate is the
- * gate evidence's call.
+ * gate evidence's call. A retired park is history: the continuation that
+ * landed its kept work settles it, so no turn is offered.
  */
 export function stewardParks(
   tasks: readonly TaskFile[],
@@ -172,7 +173,7 @@ export function stewardParks(
   for (const t of tasks) {
     if (attempted.has(t.slug) || frozen?.has(t.slug)) continue;
     const s = state.tasks[t.slug];
-    if (s?.status !== "parked") continue;
+    if (s?.status !== "parked" || s.supersededBy !== undefined) continue;
     // The kept-land attempt is the fresher evidence: a branch it could not land
     // keeps the cause that stopped it, whatever the park that parked it said.
     const kept = keptLandParkKind(keptLeft.get(t.slug));

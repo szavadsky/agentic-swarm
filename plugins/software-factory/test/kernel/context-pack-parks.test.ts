@@ -10,8 +10,8 @@ import { cause, script, task } from "./helpers.js";
 /** A park retired by a base continuation, a live park, and the input both renders read. */
 function parkedPackInput(): ContextPackInput {
   const parked = [
-    task("base"),
-    task("base-next", { base: "base" }),
+    task("base", { epic: "auth" }),
+    task("base-next", { base: "base", epic: "auth" }),
     task("live"),
   ];
   const records = [
@@ -58,7 +58,7 @@ function packSection(pack: string, heading: string): string {
 }
 
 describe("pack park section", () => {
-  it("keeps a park retired by a base continuation in the markdown and the data", () => {
+  it("hides a park retired by a base continuation from the markdown and the data", () => {
     const input = parkedPackInput();
     const pack = renderContextPack(input);
     const data = JSON.parse(renderContextData(input));
@@ -68,10 +68,17 @@ describe("pack park section", () => {
         pack,
         "## Parked by cause (terminal; continue via a new slug)",
       ),
-    ).toBe("\n- base: round limit\n- live: gates: unit\n");
+    ).toBe("\n- live: gates: unit\n");
     expect(data.parked).toEqual([
-      { slug: "base", cause: cause("round limit") },
       { slug: "live", cause: cause("gates: unit") },
     ]);
+  });
+
+  it("counts a retired park out of its epic's open tasks", () => {
+    const pack = renderContextPack(parkedPackInput());
+
+    expect(pack).toContain(
+      "- `auth`: done — subarchitect no turn; 0 of 2 tasks open",
+    );
   });
 });
