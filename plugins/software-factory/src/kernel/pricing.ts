@@ -268,16 +268,20 @@ export function pricedUsage(
   opts: { cachedPrefix?: boolean; priceIds?: Record<string, string> } = {},
 ): PricedUsage {
   if (!usage) return { usage: zeroUsage(), costKnown: false };
+  const stamped =
+    tokenTotal(usage) === 0 && usage.tokensReported === undefined
+      ? { ...usage, tokensReported: false }
+      : usage;
   const harness =
-    usage.harnessCostUsd ??
-    (usage.listCostUsd === undefined ? usage.costUsd : undefined);
-  const costUsd = priceUsage(usage, model ?? "", table, opts);
-  const listCostUsd = priceTableOnly(usage, model ?? "", table, opts);
+    stamped.harnessCostUsd ??
+    (stamped.listCostUsd === undefined ? stamped.costUsd : undefined);
+  const costUsd = priceUsage(stamped, model ?? "", table, opts);
+  const listCostUsd = priceTableOnly(stamped, model ?? "", table, opts);
   if (costUsd === undefined) {
     // Drop the harness's unpriced figure: a raw `0` must not sum into a total
     // as if it were a known zero. The original figure stays visible as
     // `harnessCostUsd`, and the list price stays when the table has the model.
-    const unpriced: Usage = { ...usage };
+    const unpriced: Usage = { ...stamped };
     delete unpriced.costUsd;
     if (harness !== undefined) unpriced.harnessCostUsd = harness;
     else delete unpriced.harnessCostUsd;
@@ -285,7 +289,7 @@ export function pricedUsage(
     else delete unpriced.listCostUsd;
     return { usage: unpriced, costKnown: false };
   }
-  const priced: Usage = { ...usage, costUsd };
+  const priced: Usage = { ...stamped, costUsd };
   if (harness !== undefined) priced.harnessCostUsd = harness;
   else delete priced.harnessCostUsd;
   if (listCostUsd !== undefined) priced.listCostUsd = listCostUsd;
@@ -333,6 +337,18 @@ export function pricedRecord(
       costKnown = costKnown && attemptPriced.costKnown;
     }
     priced = { usage, costKnown };
+  }
+  const attempts = rec.attempts ?? [];
+  if (
+    priced.usage.tokensReported === undefined &&
+    tokenTotal(priced.usage) === 0 &&
+    attempts.length > 0 &&
+    attempts.every((attempt) => tokenTotal(attempt.usage) === 0)
+  ) {
+    priced = {
+      ...priced,
+      usage: { ...priced.usage, tokensReported: false },
+    };
   }
   let { usage, costKnown } = priced;
   if (rec.compactUsage && reportsUsage(rec.compactUsage)) {

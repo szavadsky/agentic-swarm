@@ -91,6 +91,11 @@ export type Usage = {
   cacheWrite1h: number;
   out: number;
   reasoningOut: number;
+  /**
+   * false means the harness returned no token counters (a zero, not a measured zero);
+   * absent on records before the marker and when the harness reported counters.
+   */
+  tokensReported?: boolean;
   costUsd?: number;
   /** List-price equivalent from OpenRouter's model list, ignoring any harness figure. */
   listCostUsd?: number;

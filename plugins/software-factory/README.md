@@ -151,7 +151,9 @@ matches a harness id against the price table exactly, or after dropping a
 leading provider segment the harness adds, an effort suffix the adapter keeps,
 and a free-tier spelling; a bare model name also matches a table model by its
 suffix, and a run-config `priceIds` entry wins over all of it and must name a
-row exactly, so a stale mapping stays unpriced. A turn the harness does not
+row exactly, so a stale mapping stays unpriced. A turn whose harness returns no
+token counters records zero counters with `tokensReported: false`, so replay
+reads it as unreported rather than a measured zero. A turn the harness does not
 price and no candidate names stays unpriced. Verified adapter
 behaviours live in `config/acpx-verify.md` so the acpx code carries no names.
 
