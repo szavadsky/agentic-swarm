@@ -22,6 +22,11 @@ gates:
     # environment exported to the command, with each directory created per worktree
     env:
       TMPDIR: .cache/gate  # this gate's scratch root, off shared /tmp so concurrent runs never collide
+    # tsc summary lines are noise in the exit-code-and-log fallback; diagnostics stay findings
+    format:
+      noise:
+        - '^\d+ errors?\b'
+        - '^Found \d+ errors?(?: in \d+ files?)?\.$'
   - id: tests  # the suite gate's name in reds and reruns, and the owner of the junit report
     # the same entry point, with the gate id as its argument
     command: plugins/software-factory/scripts/gates.sh plugins/software-factory tests
@@ -33,6 +38,14 @@ gates:
     # the machine report the kernel reads to name failed cases on base too
     format:
       junit: .cache/gate/junit.xml  # run-tests.ts writes it here (FACTORY_JUNIT_PATH); missing or empty is red
+      # bun test and run-tests.ts banner/summary lines when a fallback reads raw log lines
+      noise:
+        - '^-{3,}$'
+        - '^bun test v\d'
+        - '^tests gate: wall \d'
+        - '^\d+ (?:pass|fail|skip|todo|errors?)\b'
+        - '^\d+ expect\(\) calls$'
+        - '^Ran \d+ tests? across '
   - id: format  # the formatter gate's name in reds and reruns; any reformat diff is a red
     # the same entry point, with the gate id as its argument
     command: plugins/software-factory/scripts/gates.sh plugins/software-factory format

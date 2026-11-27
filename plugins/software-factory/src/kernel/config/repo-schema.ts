@@ -58,6 +58,7 @@ const gateSchema = z
         ctrf: gateReportPathSchema.optional(),
         sarif: gateReportPathSchema.optional(),
         regex: z.array(gateRegexSchema).optional(),
+        noise: z.array(z.string().min(1)).optional(),
       })
       .strict()
       .refine(
@@ -65,9 +66,10 @@ const gateSchema = z
           val.junit !== undefined ||
           val.ctrf !== undefined ||
           val.sarif !== undefined ||
-          (val.regex !== undefined && val.regex.length > 0),
+          (val.regex !== undefined && val.regex.length > 0) ||
+          (val.noise !== undefined && val.noise.length > 0),
         {
-          message: "format must contain junit, ctrf, sarif or regex",
+          message: "format must contain junit, ctrf, sarif, regex or noise",
         },
       )
       .optional(),

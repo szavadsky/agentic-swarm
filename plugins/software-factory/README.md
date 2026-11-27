@@ -199,6 +199,8 @@ finding model: check, tool, file, line, rule, severity, message and fingerprint.
   for a tool that emits neither. Named groups `file`, `line`, `rule`,
   `severity` and `message` are read; the whole match is the message when the
   pattern names none.
+- `noise: [<regex>, ...]` lists line-level regular expressions ignored in the
+  exit-code-and-log fallback when no report or `regex` matches.
 
 A test report's red summary names its failing findings, and a missing, empty or
 unreadable report is red rather than a silent pass. A gate with no report still

@@ -47,15 +47,17 @@ export interface GateConfig {
    */
   env?: Record<string, string>;
   /**
-   * Report paths the command writes before it exits, or the log regexes that
-   * name its findings when it writes no report. `junit` is converted to CTRF
-   * with `junit-to-ctrf`; `ctrf` and `sarif` are read natively.
+   * Report paths the command writes before it exits, or the log regexes and
+   * noise patterns that normalise its findings when it writes no report.
+   * `junit` is converted to CTRF with `junit-to-ctrf`; `ctrf` and `sarif` are
+   * read natively.
    */
   format?: {
     junit?: string;
     ctrf?: string;
     sarif?: string;
     regex?: GateRegex[];
+    noise?: string[];
   };
   /**
    * Wall for this gate's command, in seconds. Absent or not a positive finite
