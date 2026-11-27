@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { makeFinding } from "../../src/core/checks/findings.js";
 import type { CheckResult } from "../../src/core/checks/types.js";
 import {
   type BaseGateState,
@@ -43,25 +44,6 @@ function base(checks: CheckResult[]): BaseGateState {
   return { commit: "base-commit", ok: false, checks };
 }
 
-const FAILING_TEST =
-  'import { expect, it } from "bun:test";\nit("alpha > one", () => { expect(1).toBe(2); });\n';
-
-const MISSING_IMPORT =
-  'import { expect, it } from "bun:test";\n' +
-  'import { nope } from "./missing.js";\n' +
-  'it("loads", () => { expect(nope).toBe(1); });\n';
-
-/** A real bun run in `root`; it must be red for the mixed report under test. */
-function bunRun(root: string): string {
-  const run = Bun.spawnSync(["bun", "test"], {
-    cwd: root,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  expect(run.exitCode).not.toBe(0);
-  return `${run.stdout.toString()}\n${run.stderr.toString()}`.trim();
-}
-
 function makeRoot(prefix: string, files: Record<string, string>): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   for (const [name, text] of Object.entries(files)) {
@@ -73,48 +55,34 @@ function makeRoot(prefix: string, files: Record<string, string>): string {
 }
 
 function gateFailureSignaturesPart1() {
-  it("collapses tsc diagnostics to file:line and code", () => {
+  it("strips ANSI escapes and skips blank lines in raw log output", () => {
     const output = [
-      "src/a.ts(12,3): error TS2322: Type 'string' is not assignable to type 'number'.",
-      "src/b.ts:7:9 - error TS2345: Argument of type 'x' is not assignable.",
-      "error TS2688: Cannot find type definition file for 'bun'.",
-      "Found 3 errors in 2 files.",
+      "",
+      "\u001b[31merror: step failed\u001b[0m",
+      "   ",
+      "detail: missing artifact",
     ].join("\n");
-    expect([...gateSignatures(check("typecheck", output))]).toEqual([
-      "src/a.ts:12 TS2322",
-      "src/b.ts:7 TS2345",
-      "tsc TS2688: Cannot find type definition file for 'bun'.",
+    expect([...gateSignatures(check("shell", output))]).toEqual([
+      "line: error: step failed",
+      "line: detail: missing artifact",
     ]);
   });
 
-  it("keeps bun test names unique per file and ignores timings and the banner", () => {
-    const lines = [
-      "bun test v1.4.4 (38afee6c8)",
-      "other.test.ts:",
-      "error: expect(received).toBe(expected)",
-      "(fail) alpha > fails one [1.21ms]",
-      "sample.test.ts:",
-      "(fail) alpha > fails one [0.04ms]",
-      " 1 pass",
-      " 2 fail",
+  it("prefers structured regex findings over raw output lines", () => {
+    const findings = [
+      makeFinding({
+        check: "shell",
+        tool: "regex",
+        file: "src/a.txt",
+        rule: "check-alpha",
+        severity: "error",
+        message: "expected 1",
+      }),
     ];
-    const signatures = (wall: string) => [
-      ...gateSignatures(check("tests", [...lines, wall].join("\n"))),
-    ];
-    const first = signatures(
-      "tests gate: wall 63.8s (--parallel=8; serial: 6 files; slowest: test/kernel/flow.test.ts 37.1s)",
-    );
-    // The runner always prints its wall line; a slower run must not look like
-    // a new failure to the baseline signature or the gate-flake record.
-    const second = signatures(
-      "tests gate: wall 74.2s (--parallel=8; serial: 6 files; slowest: test/kernel/flow.test.ts 41.9s)",
-    );
-    const expected = [
-      "other.test.ts > alpha > fails one",
-      "sample.test.ts > alpha > fails one",
-    ];
-    expect(first).toEqual(expected);
-    expect(second).toEqual(expected);
+    const c = check("shell", "FAIL src/a.txt check-alpha [12ms]\nextra noise", {
+      details: { findings },
+    });
+    expect([...gateSignatures(c)]).toEqual(["shell > src/a.txt > check-alpha"]);
   });
 }
 
@@ -243,31 +211,54 @@ function registerInheritedRedIsMatchedPerSignatureNotPerGatePart2(): void {
 }
 
 function registerInheritedRedIsMatchedPerSignatureNotPerGatePart3(): void {
-  it("fails a new bun test under an already-red tests gate", () => {
-    const baseOutput = [
-      "suite.test.ts:",
-      "(fail) alpha > one [0.10ms]",
-      " 1 pass",
-      " 1 fail",
-    ].join("\n");
-    const inherited = preexistingRed(base([check("tests", baseOutput)]));
-    const same = [
-      "suite.test.ts:",
-      "(fail) alpha > one [0.20ms]",
-      " 1 pass",
-      " 1 fail",
-    ].join("\n");
-    expect(newGateFailures([check("tests", same)], inherited)).toEqual([]);
-    const extra = [
-      "suite.test.ts:",
-      "(fail) alpha > one [0.11ms]",
-      "(fail) alpha > two [0.01ms]",
-      " 1 pass",
-      " 2 fail",
-    ].join("\n");
-    expect(
-      newGateFailures([check("tests", extra)], inherited).map((c) => c.name),
-    ).toEqual(["tests"]);
+  it("matches structured regex findings across timing drift and fails a new rule", async () => {
+    const root = makeRoot("gate-regex-drift-", {});
+    try {
+      const baseGate = {
+        id: "suite",
+        command: 'echo "FAIL alpha::one [0.10ms]"; exit 1',
+        serial: [],
+        format: {
+          regex: [{ pattern: "^FAIL (?<rule>\\S+)", tool: "custom" }],
+        },
+      };
+      const runtime = (gates: unknown) =>
+        ({
+          paths: { repoRoot: root },
+          configs: { repo: { gates } },
+          store: { goalDir: root },
+        }) as unknown as KernelRuntime;
+
+      const [baseRun] = await runGates(runtime([baseGate]), root);
+      const inherited = preexistingRed(base([baseRun!]));
+
+      const [sameRun] = await runGates(
+        runtime([
+          {
+            ...baseGate,
+            command: 'echo "FAIL alpha::one [0.42ms]"; exit 1',
+          },
+        ]),
+        root,
+      );
+      expect(newGateFailures([sameRun!], inherited)).toEqual([]);
+
+      const [extraRun] = await runGates(
+        runtime([
+          {
+            ...baseGate,
+            command:
+              'echo "FAIL alpha::one [0.11ms]"; echo "FAIL alpha::two [0.01ms]"; exit 1',
+          },
+        ]),
+        root,
+      );
+      expect(
+        newGateFailures([extraRun!], inherited).map((c) => c.name),
+      ).toEqual(["suite"]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("does not blame a task that fixed the inherited red", () => {
@@ -291,45 +282,38 @@ function registerInheritedRedIsMatchedPerSignatureNotPerGatePart4(): void {
 }
 
 function registerInheritedRedIsMatchedPerSignatureNotPerGatePart5(): void {
-  it("matches a real mixed bun run across roots and still fails a new import", () => {
-    const files = {
-      "test/fail.test.ts": FAILING_TEST,
-      "test/load.test.ts": MISSING_IMPORT,
-    };
-    // The three roots a gate runs from: the task worktree, the baseline scratch
-    // worktree, and the package-only export temp dir.
-    const baseline = makeRoot("preflight-probe-", files);
-    const worktree = makeRoot("gate-worktree-", files);
-    const exported = makeRoot("factory-gates.", {
-      ...files,
-      "test/extra.test.ts": MISSING_IMPORT,
-    });
+  it("matches a shell-only gate across roots and still fails a new error line", async () => {
+    const script =
+      'echo "missing $(pwd)/src/base.txt"; ' +
+      'if [ -f "$(pwd)/extra.flag" ]; then echo "missing $(pwd)/src/extra.txt"; fi; ' +
+      "exit 1";
+    const baseline = makeRoot("preflight-probe-", {});
+    const worktree = makeRoot("gate-worktree-", {});
+    const exported = makeRoot("factory-gates.", { "extra.flag": "1" });
+    const runtimeFor = (dir: string) =>
+      ({
+        paths: { repoRoot: dir },
+        configs: {
+          repo: {
+            gates: [{ id: "shell", command: script }],
+          },
+        },
+        store: { goalDir: dir },
+      }) as unknown as KernelRuntime;
     try {
-      const baselineOutput = bunRun(baseline);
-      expect([
-        ...gateSignatures(rooted("tests", baselineOutput, baseline)),
-      ]).toContain(
-        "test/load.test.ts > error: Cannot find module './missing.js' from '<root>/test/load.test.ts'",
-      );
+      const [baseRun] = await runGates(runtimeFor(baseline), baseline);
+      expect([...gateSignatures(baseRun!)]).toEqual([
+        "line: missing <root>/src/base.txt",
+      ]);
 
-      // The same failing test and load error from two roots are the same red.
-      const inherited = preexistingRed(
-        base([rooted("tests", baselineOutput, baseline)]),
-      );
+      const inherited = preexistingRed(base([baseRun!]));
+      const [worktreeRun] = await runGates(runtimeFor(worktree), worktree);
+      expect(newGateFailures([worktreeRun!], inherited)).toEqual([]);
+
+      const [extraRun] = await runGates(runtimeFor(exported), exported);
       expect(
-        newGateFailures(
-          [rooted("tests", bunRun(worktree), worktree)],
-          inherited,
-        ),
-      ).toEqual([]);
-
-      // An import that fails only now is still the task's, even though the
-      // gate was already red for another failure.
-      const fresh = newGateFailures(
-        [rooted("tests", bunRun(exported), exported)],
-        inherited,
-      );
-      expect(fresh.map((c) => c.name)).toEqual(["tests"]);
+        newGateFailures([extraRun!], inherited).map((c) => c.name),
+      ).toEqual(["shell"]);
     } finally {
       for (const root of [baseline, worktree, exported])
         fs.rmSync(root, { recursive: true, force: true });

@@ -15,10 +15,10 @@ import {
 } from "../types.js";
 import {
   FRONT_STOP_STEP,
-  OPEN_TASK_STATUSES,
   baseContinuations,
   depsSatisfied,
   landingFacts,
+  openEpicTask,
   supersedingContinuation,
 } from "./shared.js";
 import type { OrphanReductions, TaskReduction } from "./types.js";
@@ -201,7 +201,6 @@ function taskStateFor(
     commit: terminal?.commit ?? reduction.commit,
     verdict: reduction.verdict,
     park: terminal ? undefined : reduction.park,
-    loop: terminal ? undefined : reduction.loop,
     gateFix: terminal ? undefined : reduction.gateFix,
     gateLastCall: terminal ? undefined : reduction.gateLastCall,
     cleanlinessRevision: terminal ? undefined : reduction.cleanlinessRevision,
@@ -269,7 +268,6 @@ export function addOrphanTaskStates(
       commit: terminal.commit,
       verdict: reduction.verdict,
       park: undefined,
-      loop: undefined,
       gateFix: undefined,
       gateLastCall: undefined,
     };
@@ -291,17 +289,15 @@ export function applySubarchitectDecisions(
   }
 }
 
-/** `done` also waits for every task in the epic to land. */
+/** `done` also waits for every task in the epic to land; a retired park already has. */
 export function closeEpics(
   epics: Record<string, EpicState>,
-  statuses: ReadonlyMap<string, TaskStatus>,
+  taskStates: Readonly<Record<string, TaskState>>,
 ): void {
   for (const epic of Object.values(epics)) {
     epic.done =
       (epic.decision === undefined || epic.decision === "done") &&
-      !epic.tasks.some((slug) =>
-        OPEN_TASK_STATUSES.has(statuses.get(slug) ?? "pending"),
-      );
+      !epic.tasks.some((slug) => openEpicTask(taskStates[slug]));
   }
 }
 

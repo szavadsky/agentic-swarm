@@ -9,6 +9,7 @@ import {
   cleanupFlowRepo,
   makeRuntime,
   outcome,
+  scriptDecider,
   scriptStallLeave,
   setupFlowRepo,
   writeTask,
@@ -16,7 +17,7 @@ import {
 import { formatCause } from "../../src/kernel/cause.js";
 
 describe("KERNEL0 scenario 9 — no progress over the item history", () => {
-  it("parks on an A, B, A sequence that only a history comparison catches", async () => {
+  it("routes an A, B, A sequence that only a history comparison catches to the decider", async () => {
     const { repo, goal } = setupFlowRepo({
       process: {
         flows: {
@@ -64,6 +65,7 @@ async function parksBSequenceOnlyHistoryPart1(
   harness.script(implement("B", "attempt B"));
   harness.script(changes("round 2 needs work"));
   harness.script(implement("A", "attempt A again"));
+  scriptDecider(harness, { summary: "park it", verdict: "reject" });
   scriptStallLeave(harness, ["task"]);
 
   const runtime = await makeRuntime(repo, goal, { fake: harness });
@@ -78,10 +80,12 @@ async function parksBSequenceOnlyHistoryPart1(
     runtime.configs.process.flows,
   );
   expect(state.tasks.task!.status).toBe("parked");
-  expect(state.tasks.task!.cause?.kind === "no-progress").toBe(true);
-  expect(causeText(state.tasks.task!.cause)).toContain("implement r3");
-  expect(state.tasks.task!.turns).toBe(5);
-  expect(harness.calls.length).toBe(6);
+  expect(state.tasks.task!.cause?.kind).toBe("no-progress");
+  expect(causeText(state.tasks.task!.cause)).toContain(
+    "implement r3 repeats r1",
+  );
+  expect(state.tasks.task!.turns).toBe(6);
+  expect(harness.calls.length).toBe(7);
 
   const incidents = records.filter(
     (r) =>

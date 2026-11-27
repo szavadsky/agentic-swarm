@@ -219,15 +219,17 @@ function shellQuote(word: string): string {
 }
 
 /**
- * The `validate_cmd` prompt variable: the running build's `bin/factory.ts
- * validate`, absolute, so it runs from any task worktree. Resolved from the
- * running build (packageRoot), never from PATH or cwd. The optional path
- * exists for tests; production always uses the running build.
+ * The `validate_cmd` prompt variable: the running runtime (pinned by
+ * `process.execPath`) running the build's `bin/factory.ts validate`, both
+ * absolute, so it runs from any task worktree and depends on neither PATH nor
+ * the bin's exec bit. Resolved from the running build (packageRoot), never
+ * from PATH or cwd. The optional path exists for tests; production always uses
+ * the running build.
  */
 export function validateCmd(
   binPath: string = path.join(packageRoot, "bin", "factory.ts"),
 ): string {
-  return `bun ${shellQuote(binPath)} validate`;
+  return `${shellQuote(process.execPath)} ${shellQuote(binPath)} validate`;
 }
 
 /**

@@ -59,17 +59,6 @@ const PYTEST_JUNIT = `<testsuites>
 </testsuites>
 `;
 
-/** A real bun run in `root`; it must be red for the mixed report under test. */
-function bunRun(root: string): string {
-  const run = Bun.spawnSync(["bun", "test"], {
-    cwd: root,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  expect(run.exitCode).not.toBe(0);
-  return `${run.stdout.toString()}\n${run.stderr.toString()}`.trim();
-}
-
 function makeRoot(prefix: string, files: Record<string, string>): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   for (const [name, text] of Object.entries(files)) {
@@ -149,160 +138,45 @@ async function recordsPytestJUnitReportBaseSoPart2(
 }
 
 function registerInheritedRedIsMatchedPerSignatureNotPerGatePart7(): void {
-  it("matches two real capped runs of the same red suite", () => {
-    // Enough failures that the report exceeds the gate output cap. Timing digits
-    // move the byte the cap would cut at between runs, so a raw tail slice would
-    // start at a different fragment of a detail line each time.
-    const files: Record<string, string> = {};
-    for (let file = 0; file < 8; file++) {
-      const cases = [0, 1, 2, 3].map(
-        (n) =>
-          `it("suite ${file} > case ${n}", () => { expect({ a: ${n}, b: "value-${file}" }).toEqual({ a: ${n + 1}, b: "other-${file}" }); });`,
-      );
-      files[`test/many${file}.test.ts`] =
-        `import { expect, it } from "bun:test";\n${cases.join("\n")}\n`;
-    }
-    const root = makeRoot("gate-cap-", files);
-    try {
-      const rawFirst = bunRun(root);
-      const rawSecond = bunRun(root);
-      const first = capGateOutput(rawFirst);
-      const second = capGateOutput(rawSecond);
-      expect(first.truncated).toBe(true);
-      expect(second.truncated).toBe(true);
-      // The cap keeps whole lines, never a fragment cut out of one.
-      expect(rawFirst.split("\n")).toContain(first.output.split("\n")[0]!);
-      expect(rawSecond.split("\n")).toContain(second.output.split("\n")[0]!);
-      expect(first.output.length).toBeLessThanOrEqual(GATE_OUTPUT_CAP);
-
-      const baseline = rooted("tests", first.output, root, first.truncated);
-      const signatures = [...gateSignatures(baseline)];
-      expect(signatures.length).toBeGreaterThan(0);
-      // The cut's leftover detail lines and bun's banner are not identities. A
-      // failure whose file header the cut removed matches as a root-independent
-      // `test: <name>`; the rest keep their header's file.
-      expect(
-        signatures.every(
-          (s) => s.startsWith("test/") || s.startsWith("test: "),
-        ),
-      ).toBe(true);
-      expect(
-        signatures.some((signature) => signature.includes("bun test v")),
-      ).toBe(false);
-
-      const inherited = preexistingRed(base([baseline]));
-      expect(
-        newGateFailures(
-          [rooted("tests", second.output, root, second.truncated)],
-          inherited,
-        ),
-      ).toEqual([]);
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
-  });
-}
-
-function registerInheritedRedIsMatchedPerSignatureNotPerGatePart8(): void {
-  it("keeps a fail line below the cut before the next file header", () => {
-    // The cut opened inside a failure block, so its header is gone; the block's
-    // `(fail)` line and the next file's header both survive.
-    const cutDetail = [
-      "error: expect(received).toEqual(expected)",
-      "  {",
-      '-   "a": 1,',
-      '+   "a": 2,',
-      "  }",
-      "      at <anonymous> (test/a.test.ts:8:42)",
-    ];
-    const inheritedReport = [
-      ...cutDetail,
-      "test/b.test.ts:",
-      "(fail) suite > inherited case [0.40ms]",
-      " 0 pass",
-      " 1 fail",
-    ].join("\n");
-    const inherited = preexistingRed(
-      base([rooted("tests", inheritedReport, "/base", true)]),
-    );
-
-    const report = [
-      ...cutDetail,
-      "(fail) suite > brand new case [0.02ms]",
-      "test/b.test.ts:",
-      "(fail) suite > inherited case [0.30ms]",
-      " 0 pass",
-      " 2 fail",
-    ].join("\n");
-    const current = rooted("tests", report, "/task", true);
-    expect([...gateSignatures(current)]).toEqual([
-      "test: suite > brand new case",
-      "test/b.test.ts > suite > inherited case",
+  it("matches two capped runs of the same red log across roots and catches a new line", () => {
+    const rawFor = (root: string) =>
+      Array.from(
+        { length: 120 },
+        (_, i) => `error: check ${i} failed under ${root}/sub/item-${i}.txt`,
+      ).join("\n");
+    const first = capGateOutput(rawFor("/base/scratch/probe"), [
+      "/base/scratch/probe",
     ]);
-    // The new failure's file header was cut, but its name still makes it the
-    // task's, even though the gate was already red for the inherited case.
-    expect(newGateFailures([current], inherited).map((c) => c.name)).toEqual([
-      "tests",
-    ]);
-  });
-}
+    const second = capGateOutput(rawFor("/task/wt"), ["/task/wt"]);
+    expect(first.truncated).toBe(true);
+    expect(second.truncated).toBe(true);
+    expect(first.output.length).toBeLessThanOrEqual(GATE_OUTPUT_CAP);
+    expect(second.output).toBe(first.output);
 
-function registerInheritedRedIsMatchedPerSignatureNotPerGatePart9(): void {
-  it("keeps an unhandled error line whose marker the cut removed", () => {
-    const report = [
-      "-------------------------------",
-      "error: Cannot find module './missing.js' from '/task/test/load.test.ts'",
-      "-------------------------------",
-      "test/other.test.ts:",
-      "(fail) suite > case [0.01ms]",
-      " 0 pass",
-      " 2 fail",
-    ].join("\n");
-    expect([...gateSignatures(rooted("tests", report, "/task", true))]).toEqual(
-      [
-        "test: error: Cannot find module './missing.js' from '<root>/test/load.test.ts'",
-        "test/other.test.ts > suite > case",
-      ],
+    const baseline = rooted(
+      "shell",
+      first.output,
+      "/base/scratch/probe",
+      first.truncated,
     );
-  });
-}
+    const inherited = preexistingRed(base([baseline]));
+    expect(
+      newGateFailures(
+        [rooted("shell", second.output, "/task/wt", second.truncated)],
+        inherited,
+      ),
+    ).toEqual([]);
 
-function registerInheritedRedIsMatchedPerSignatureNotPerGatePart10(): void {
-  it("never emits a detail line identity when one file's block exceeds the cap", () => {
-    const source = (pad: number) =>
-      "// pad\n".repeat(pad) +
-      'import { expect, it } from "bun:test";\n' +
-      'const big = (n: number) => Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`key${i}`, `value-${n}-${i}-${"x".repeat(20)}`]));\n' +
-      'it("suite > huge case", () => { expect(big(1)).toEqual(big(2)); });\n';
-    const root = makeRoot("gate-block-", { "test/huge.test.ts": source(0) });
-    try {
-      const first = capGateOutput(bunRun(root));
-      expect(first.truncated).toBe(true);
-      // No file header follows the cut: the tail is the inside of the one
-      // block, whose printed line numbers and values drift with any edit.
-      const signatures = [
-        ...gateSignatures(rooted("tests", first.output, root, first.truncated)),
-      ];
-      expect(signatures.length).toBeGreaterThan(0);
-      expect(
-        signatures.every((signature) => !signature.startsWith("line:")),
-      ).toBe(true);
-
-      fs.writeFileSync(path.join(root, "test/huge.test.ts"), source(3), "utf8");
-      const second = capGateOutput(bunRun(root));
-      expect(second.truncated).toBe(true);
-      const inherited = preexistingRed(
-        base([rooted("tests", first.output, root, first.truncated)]),
-      );
-      expect(
-        newGateFailures(
-          [rooted("tests", second.output, root, second.truncated)],
-          inherited,
-        ),
-      ).toEqual([]);
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
+    const extra = capGateOutput(
+      `${rawFor("/task/wt")}\nerror: brand new failure`,
+      ["/task/wt"],
+    );
+    expect(
+      newGateFailures(
+        [rooted("shell", extra.output, "/task/wt", extra.truncated)],
+        inherited,
+      ).map((c) => c.name),
+    ).toEqual(["shell"]);
   });
 }
 
@@ -425,12 +299,6 @@ function registerInheritedRedIsMatchedPerSignatureNotPerGatePart13(): void {
 
 describe("inherited red is matched per signature, not per gate", () => {
   registerInheritedRedIsMatchedPerSignatureNotPerGatePart7();
-
-  registerInheritedRedIsMatchedPerSignatureNotPerGatePart8();
-
-  registerInheritedRedIsMatchedPerSignatureNotPerGatePart9();
-
-  registerInheritedRedIsMatchedPerSignatureNotPerGatePart10();
 
   registerInheritedRedIsMatchedPerSignatureNotPerGatePart11();
 

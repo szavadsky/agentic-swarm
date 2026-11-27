@@ -7,7 +7,20 @@ import { makeCause } from "./cause.js";
 import { advancePendingChecks } from "./derive-task-gates.js";
 import type { ReduceContext, ReduceState } from "./derive-types.js";
 import { applyAnswer, startFixRound } from "./derive-task-verdict.js";
-import type { StepRecord } from "./types.js";
+import type { CauseKind, StepRecord } from "./types.js";
+
+/**
+ * Signals the kernel raised for a cause it would otherwise have parked. A
+ * reject keeps that cause kind so the steward, the PM and the metrics route
+ * the park by what actually stopped the task, never by who confirmed it.
+ */
+const MECHANICAL_PARK_KINDS: ReadonlySet<CauseKind> = new Set([
+  "conflict",
+  "infra-repeat",
+  "overflow",
+  "no-progress",
+  "invalid-outcome",
+]);
 
 /** A refused stop or an agent's terminal status parks the task with its cause. */
 export function checkTerminalStatus(
@@ -73,12 +86,12 @@ export function applyDecideTurn(
     return;
   }
   if (verdict === "reject") {
-    // A gate park keeps its kind: the red gates are the cause the steward and
-    // the PM route by, and the decider's summary is the direction on top.
+    // A mechanical cause keeps its kind: it is what the steward and the PM
+    // route by, and the decider's summary is the direction on top.
     state.park =
-      signal.kind === "gates"
+      signal.kind === "gates" || MECHANICAL_PARK_KINDS.has(signal.kind)
         ? makeCause(
-            "gates",
+            signal.kind,
             `${signal.evidence}; the decider rejected: ${outcome.summary ?? "no summary"}`,
           )
         : makeCause(
@@ -103,6 +116,14 @@ function approveSignal(
 ): void {
   if (resume?.kind === "checks") {
     advancePendingChecks(context, state, resume.pending);
+    return;
+  }
+  if (resume?.kind === "retry-step") {
+    // A crash or overflow left the branch unjudged: approving retries the step
+    // that stopped, with its gate-fix and change-answer flags intact.
+    state.stepIndex = context.flowIndex.get(resume.step) ?? state.stepIndex;
+    state.phase = resume.step;
+    state.pendingChecks = null;
     return;
   }
   if (resume?.kind === "merge") {

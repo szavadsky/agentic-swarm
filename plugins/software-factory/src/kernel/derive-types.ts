@@ -5,7 +5,6 @@ import type {
   FlowDefinition,
   FlowStep,
   PendingSignal,
-  ProgressRepeat,
   ReviewVerdict,
   StepLaunches,
   TaskFile,
@@ -30,7 +29,6 @@ export interface TaskReduction {
   verdict?: ReviewVerdict;
   commit?: string;
   park?: Cause;
-  loop?: ProgressRepeat;
   gateFix?: boolean;
   gateLastCall?: boolean;
   cleanlinessRevision?: boolean;
@@ -60,10 +58,12 @@ export interface ReduceContext {
 
 /**
  * How the decider's approve resumes from the point a signal stopped: past the
- * flow step that raised it, into the checks it gated, or into a fresh landing.
+ * flow step that raised it, retrying the stopped step itself, into the checks
+ * it gated, or into a fresh landing.
  */
 export type SignalResume =
   | { kind: "past-step"; index: number }
+  | { kind: "retry-step"; step: string }
   | { kind: "checks"; pending: PendingChecks }
   | { kind: "merge" };
 
@@ -80,7 +80,6 @@ export interface ReduceState {
   verdict?: ReviewVerdict;
   commit?: string;
   park?: Cause;
-  loop?: ProgressRepeat;
   gateFix: boolean;
   gateLastCall: boolean;
   gateFixCount: number;

@@ -97,11 +97,3 @@ export type TaskStatus =
  * Flow step ids are open so a configured flow (not this union) drives dispatch.
  */
 export type TaskPhase = string;
-
-/** A completed step repeated an earlier fingerprint in the item's history. */
-export interface ProgressRepeat {
-  fingerprint: string;
-  step: string;
-  round: number;
-  firstRound: number;
-}

@@ -77,7 +77,8 @@ export function heldBoundaryCause(
  * ladder attempt counts too — the park then goes to the architect — so each
  * park costs at most one PM turn. A slug that parks again after an amended
  * rerun is a new park and gets its own decision; `limits.parkAmends` bounds
- * how many of those decisions may amend it.
+ * how many of those decisions may amend it. A retired park is history: the
+ * continuation that landed its kept work settles it, so no turn is offered.
  */
 export function undecidedParked(
   records: readonly StepRecord[],
@@ -103,7 +104,8 @@ export function undecidedParked(
             record.endedAt &&
             record.slug !== undefined &&
             record.seq > last &&
-            state.tasks[record.slug]?.status === "parked",
+            state.tasks[record.slug]?.status === "parked" &&
+            state.tasks[record.slug]?.supersededBy === undefined,
         )
         .map((record) => record.slug!),
     ),

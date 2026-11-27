@@ -35,6 +35,14 @@ interface AgentTurn {
   replyCount: number;
 }
 
+/** A productive turn that repeated a fingerprint the history already holds. */
+interface StepRepeat {
+  fingerprint: string;
+  step: string;
+  round: number;
+  firstRound: number;
+}
+
 /**
  * One ended agent record: ignored infra turns first, then the counted turn,
  * fingerprint and the step's rule. A record that parks leaves `phase` parked.
@@ -52,11 +60,13 @@ export function applyAgentTurn(
   const isTimeoutOrCrash =
     isInfra && (stop.cause === "timeout" || stop.cause === "crash");
 
-  // Infra without a valid outcome: a reported timeout/crash counts as a turn
-  // and parks after two repeats on the same step; bare recovery seals (free
-  // interruptions) and other infra stay free and resumable.
+  // Infra without a valid outcome: a reported timeout/crash counts as a turn,
+  // its second stop on one step raises the repeat signal; bare recovery seals
+  // (free interruptions) and other infra stay free and resumable. An overflow
+  // its de-novo retry did not cure is the overflow signal, never a park.
   if (isInfra && !hasOutcome) {
-    if (isTimeoutOrCrash && !isRecoveryCrash(rec))
+    if (stop?.cause === "overflow") raiseOverflowSignal(state, rec, stop);
+    else if (isTimeoutOrCrash && !isRecoveryCrash(rec))
       recordInfraRepeat(state, rec.step, stop);
     return;
   }
@@ -75,7 +85,7 @@ export function applyAgentTurn(
   if (rec.tree !== undefined) state.countedTree = rec.tree;
   const carriedWork = takeCreationAdvance(state, priorTree);
   const replyCount = rec.outcome?.replies?.length ?? 0;
-  const answeredReview = trackFingerprint(
+  const { answeredReview, repeat } = trackFingerprint(
     context,
     state,
     rec,
@@ -90,6 +100,62 @@ export function applyAgentTurn(
     answeredReview,
     replyCount,
   });
+  raiseRepeatSignal(context, state, repeat);
+}
+
+/** A step's turn overflowed without an outcome: the decider owns the next move. */
+function raiseOverflowSignal(
+  state: ReduceState,
+  rec: StepRecord,
+  stop: NonNullable<StepRecord["stop"]>,
+): void {
+  const details = stop.kind === "infra" ? stop.details : undefined;
+  if (isDecideStep(rec.step)) {
+    // The deciding agent itself could not run: keep the signal it owed and let
+    // the PM settle it instead of redispatching the same turn forever.
+    state.park = makeCause(
+      state.pendingSignal?.kind ?? "overflow",
+      `${state.pendingSignal?.evidence ?? "no signal"}; the decide turn overflowed`,
+    );
+    state.phase = "parked";
+    return;
+  }
+  raisePendingSignal(
+    state,
+    {
+      kind: "overflow",
+      evidence: `overflow in ${rec.step}${details ? `: ${details}` : ""}`,
+    },
+    { kind: "retry-step", step: rec.step },
+  );
+}
+
+/**
+ * A repeated tree is a mechanical signal, not a kernel park: the decider
+ * judges whether the branch already holds the work or needs another turn.
+ */
+function raiseRepeatSignal(
+  context: ReduceContext,
+  state: ReduceState,
+  repeat: StepRepeat | undefined,
+): void {
+  if (
+    repeat === undefined ||
+    state.terminal ||
+    state.park ||
+    state.pendingSignal
+  )
+    return;
+  const index = context.flowIndex.get(repeat.step);
+  if (index === undefined) return;
+  raisePendingSignal(
+    state,
+    {
+      kind: "no-progress",
+      evidence: `${repeat.step} r${repeat.round} repeats r${repeat.firstRound} (${repeat.fingerprint.slice(0, 8)})`,
+    },
+    { kind: "past-step", index },
+  );
 }
 
 /** A counted turn's target: a kernel turn, a flow step, or a record to ignore here. */
@@ -146,8 +212,8 @@ function trackFingerprint(
   priorTree: string | undefined,
   carriedWork: boolean | null,
   replyCount: number,
-): boolean {
-  if (isDecideStep(rec.step)) return false;
+): { answeredReview: boolean; repeat?: StepRepeat } {
+  if (isDecideStep(rec.step)) return { answeredReview: false };
   const answeredIndex = context.flowIndex.get(rec.step);
   const answeredStep =
     answeredIndex === undefined ? undefined : context.steps[answeredIndex];
@@ -177,20 +243,21 @@ function trackFingerprint(
     (isVerdictStep(answeredStep) && state.replyOnlyFix)
       ? null
       : stepFingerprint(context.task.kind, rec, state.lastTree);
-  if (fp) {
-    const prior = state.seen.get(fp);
-    if (prior && !state.loop) {
-      state.loop = {
-        fingerprint: fp,
-        step: rec.step,
-        round: rec.round,
-        firstRound: prior.round,
-      };
-    } else if (!prior) {
-      state.seen.set(fp, { step: rec.step, round: rec.round });
-    }
+  if (!fp) return { answeredReview };
+  const prior = state.seen.get(fp);
+  if (!prior) {
+    state.seen.set(fp, { step: rec.step, round: rec.round });
+    return { answeredReview };
   }
-  return answeredReview;
+  return {
+    answeredReview,
+    repeat: {
+      fingerprint: fp,
+      step: rec.step,
+      round: rec.round,
+      firstRound: prior.round,
+    },
+  };
 }
 
 function checkCleanlinessJustification(
@@ -354,7 +421,7 @@ function applyQa(
 ): void {
   const qa = qaReportOf(outcome);
   if (qa?.verdict === "changes") {
-    applyQaChanges(context, state, rec, qa);
+    applyQaChanges(context, state, rec, qa, idx);
     return;
   }
   if (qa?.verdict === "accept") {
@@ -376,6 +443,7 @@ function applyQaChanges(
   state: ReduceState,
   rec: StepRecord,
   qa: { findings: readonly string[] },
+  idx: number,
 ): void {
   if (
     isLastReviewCall(
@@ -383,13 +451,16 @@ function applyQaChanges(
       state.launches[rec.step]?.changeRequests ?? 0,
     )
   ) {
-    // The outcome validator refuses this; a recorded changes on the last call
-    // is a contract breach, never a merge.
-    state.park = makeCause(
-      "invalid-outcome",
-      `qa changes on the last acceptance call: ${rec.outcome?.summary ?? "no summary"}`,
+    // The outcome validator refuses this, so a delivered record is a contract
+    // breach: the decider reads the request and decides ship, fix, or park.
+    raisePendingSignal(
+      state,
+      {
+        kind: "invalid-outcome",
+        evidence: `qa changes on the last acceptance call: ${rec.outcome?.summary ?? "no summary"}`,
+      },
+      { kind: "past-step", index: idx },
     );
-    state.phase = "parked";
     state.changesPending = false;
     state.pendingChecks = null;
   } else if (qa.findings.length === 0) {

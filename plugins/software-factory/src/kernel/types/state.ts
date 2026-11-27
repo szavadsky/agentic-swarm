@@ -2,13 +2,7 @@
 
 import { z } from "zod";
 import type { ModelRef } from "../../harness/types.js";
-import type {
-  GoalDecision,
-  ProgressRepeat,
-  TaskKind,
-  TaskPhase,
-  TaskStatus,
-} from "./tasks.js";
+import type { GoalDecision, TaskKind, TaskPhase, TaskStatus } from "./tasks.js";
 import type { Concern, ConcernId, ReviewVerdict } from "./outcome.js";
 
 /**
@@ -68,7 +62,7 @@ export interface StepLaunches {
 }
 
 /**
- * A no-progress signal a turn raised instead of parking it in the kernel: the
+ * A mechanical signal a turn raised instead of parking it in the kernel: the
  * decider turn reads it, the branch and the checks log, then decides through
  * its outcome. `evidence` is the sentence the park would have carried.
  */
@@ -107,8 +101,6 @@ export interface TaskState {
    * to stop counting the park.
    */
   supersededBy?: string;
-  /** No-progress over the item's history; the next action is the loop park. */
-  loop?: ProgressRepeat;
   /** A red gate run sent the task back to implement: the fix turn resumes its session, and only a merged-result fix skips the next review. */
   gateFix?: boolean;
   /** True when this gate-fix turn is the last allowed fix turn before red gates park. */
@@ -117,7 +109,7 @@ export interface TaskState {
   cleanlinessRevision?: boolean;
   /** True when the author justified a cleanliness hit to advance to review. */
   cleanlinessJustified?: boolean;
-  /** A no-progress signal awaiting its decide turn; the next action is `decide`. */
+  /** A mechanical signal awaiting its decide turn; the next action is `decide`. */
   pendingSignal?: PendingSignal;
 }
 

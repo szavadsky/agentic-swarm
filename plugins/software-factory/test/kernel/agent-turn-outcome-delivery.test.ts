@@ -17,7 +17,7 @@ import type {
   RepoConfig,
   RunConfig,
 } from "../../src/kernel/types.js";
-import { TEST_ARCHITECTURE, TEST_BOUNDARY, task, cause } from "./helpers.js";
+import { TEST_ARCHITECTURE, TEST_BOUNDARY, task } from "./helpers.js";
 
 function runtimeFor(fake: FakeHarness, root: string): KernelRuntime {
   const scope1 = runtimeForPart1();
@@ -245,7 +245,7 @@ function resumedOverflowPart2(scope: ReturnType<typeof resumedOverflowPart1>) {
 
 function resumedOverflowPart3(scope: ReturnType<typeof resumedOverflowPart1>) {
   const { flows } = scope;
-  it("parks a de-novo overflow with cause overflow", async () => {
+  it("raises the overflow signal when the de-novo retry overflows", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
     const fake = new FakeHarness({ id: "fake" });
     const runtime = runtimeFor(fake, root);
@@ -265,12 +265,14 @@ function resumedOverflowPart3(scope: ReturnType<typeof resumedOverflowPart1>) {
     expect(fake.calls).toHaveLength(1);
     expect(result.record.stop).toEqual({ kind: "infra", cause: "overflow" });
     const records = await runtime.store.listRecords();
-    expect(records.find((r) => r.step === "park")?.cause).toEqual(
-      cause("overflow"),
-    );
+    expect(records.find((r) => r.step === "park")).toBeUndefined();
     const state = derive([task("a")], records, flows);
-    expect(state.tasks.a!.status).toBe("parked");
-    expect(state.tasks.a!.cause).toEqual(cause("overflow"));
+    expect(state.tasks.a!.status).toBe("ready");
+    expect(state.tasks.a!.phase).toBe("decide");
+    expect(state.tasks.a!.pendingSignal).toEqual({
+      kind: "overflow",
+      evidence: "overflow in implement",
+    });
     expect(state.tasks.a!.turns).toBe(0);
     fs.rmSync(root, { recursive: true, force: true });
   });
@@ -278,7 +280,7 @@ function resumedOverflowPart3(scope: ReturnType<typeof resumedOverflowPart1>) {
 
 function resumedOverflowPart4(scope: ReturnType<typeof resumedOverflowPart1>) {
   const { priorSession, flows } = scope;
-  it("parks when the de-novo retry overflows too", async () => {
+  it("raises the overflow signal when the de-novo retry overflows too", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-agent-"));
     const fake = new FakeHarness({ id: "fake" });
     const runtime = runtimeFor(fake, root);
@@ -302,8 +304,12 @@ function resumedOverflowPart4(scope: ReturnType<typeof resumedOverflowPart1>) {
     expect(fake.calls).toHaveLength(2);
     expect(result.record.stop).toEqual({ kind: "infra", cause: "overflow" });
     const state = derive([task("a")], await runtime.store.listRecords(), flows);
-    expect(state.tasks.a!.status).toBe("parked");
-    expect(state.tasks.a!.cause).toEqual(cause("overflow"));
+    expect(state.tasks.a!.status).toBe("ready");
+    expect(state.tasks.a!.phase).toBe("decide");
+    expect(state.tasks.a!.pendingSignal).toEqual({
+      kind: "overflow",
+      evidence: "overflow in implement",
+    });
     fs.rmSync(root, { recursive: true, force: true });
   });
 }

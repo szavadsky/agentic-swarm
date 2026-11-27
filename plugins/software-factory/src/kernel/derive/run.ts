@@ -62,7 +62,7 @@ export function derive(
   addOrphanTaskStates(orphans, taskStates);
 
   applySubarchitectDecisions(sorted, epics);
-  closeEpics(epics, statuses);
+  closeEpics(epics, taskStates);
 
   const goal = settleGoal(sorted, epics);
   // A decided iteration resumes only for the ready work its decision left. One

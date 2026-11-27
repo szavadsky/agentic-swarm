@@ -99,6 +99,8 @@ export interface OmpTurnFailure {
   stderr?: string;
   /** The adapter's own wall/idle timer caused the kill. */
   timedOut?: boolean;
+  /** A stdout line that was not an RPC frame, as the fault described it. */
+  protocol?: string;
 }
 
 /** Fields one omp turn's stop is classified from. */

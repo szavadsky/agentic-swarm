@@ -1,8 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import { renderDashboard } from "../../src/kernel/dashboard.js";
 import { derive } from "../../src/kernel/derive.js";
+import { undecidedParked } from "../../src/kernel/dispatch-holds.js";
 import { reportView } from "../../src/kernel/report-view.js";
 import { buildStatus } from "../../src/kernel/status.js";
+import { stewardParks } from "../../src/kernel/steward/candidates.js";
 import type { StepRecord } from "../../src/kernel/types.js";
 import { cause, rec, script, task } from "./helpers.js";
 
@@ -152,5 +154,40 @@ describe("status distance and dashboard", () => {
     expect(html).toContain("1 merged");
     expect(html).toContain("1 parked");
     expect(html).not.toContain('task-base"');
+  });
+});
+
+describe("retired park consumers", () => {
+  it("settles an epic holding a retired park and offers it no PM or steward turn", () => {
+    const tasks = [
+      task("base", { epic: "auth" }),
+      task("base-next", { base: "base", epic: "auth" }),
+    ];
+    const records = [park("base", 1), merge("base-next", 2)];
+    const state = derive(tasks, records);
+
+    expect(state.tasks.base!.supersededBy).toBe("base-next");
+    expect(state.epics.auth).toEqual({
+      tasks: ["base", "base-next"],
+      done: true,
+    });
+    expect(undecidedParked(records, state, 1)).toEqual([]);
+    expect(stewardParks(tasks, state, new Set(), undefined)).toEqual([]);
+  });
+
+  it("keeps the epic open and offers both turns for a live park beside a retired one", () => {
+    const tasks = [
+      task("base", { epic: "auth" }),
+      task("base-next", { base: "base", epic: "auth" }),
+      task("live", { epic: "auth" }),
+    ];
+    const records = [park("base", 1), merge("base-next", 2), park("live", 3)];
+    const state = derive(tasks, records);
+
+    expect(state.epics.auth!.done).toBe(false);
+    expect(undecidedParked(records, state, 1)).toEqual(["live"]);
+    expect(stewardParks(tasks, state, new Set(), undefined)).toEqual([
+      { slug: "live", kind: "gates" },
+    ]);
   });
 });

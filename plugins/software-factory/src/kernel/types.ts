@@ -44,7 +44,6 @@ export type {
 } from "./types/outcome.js";
 export type {
   GoalDecision,
-  ProgressRepeat,
   TaskFile,
   TaskFileFinding,
   TaskKind,
