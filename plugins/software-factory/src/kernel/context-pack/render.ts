@@ -262,6 +262,7 @@ export function renderContextData(input: ContextPackInput): string {
       cause: task.cause ?? null,
     })),
     epics: input.state.epics,
+    epicSummaries: input.epicSummaries ?? [],
     parked: view.groups.parked.map((task) => ({
       slug: task.slug,
       cause: task.cause ?? makeCause("unknown", "no recorded cause"),

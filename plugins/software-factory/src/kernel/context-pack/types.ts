@@ -79,6 +79,18 @@ export interface SpikeFinding {
 }
 
 /**
+ * One epic's latest iteration summary, the top pack's link to it and the
+ * one-line rollup its `## Epic` section carries.
+ */
+export interface EpicSummaryRef {
+  epic: string;
+  /** Absolute path of the summary file the architect reads. */
+  path: string;
+  /** The summary's one-line rollup; absent when it carries none. */
+  rollup?: string;
+}
+
+/**
  * One pending steer the intent agent carried into the goal's intent, or tried
  * and failed to carry. The architect plans from the diff and sees the steer
  * itself in the pending list.
@@ -151,6 +163,11 @@ export interface ContextPackInput {
   state: State;
   /** Findings of spikes that produced one; the architect plans from them. */
   spikeFindings?: SpikeFinding[];
+  /**
+   * Each epic's latest summary at or before the previous iteration; the top
+   * pack links it beside the epic's rollup. Absent in an epic's own pack.
+   */
+  epicSummaries?: EpicSummaryRef[];
   running?: string[];
   /** Shallow directory index of the goal checkout, already grouped. */
   codeMap?: string[];

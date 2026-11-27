@@ -33,6 +33,7 @@ import {
 } from "./context-pack.js";
 import { derive, openDebts } from "./derive.js";
 import { writeLaunchDigest } from "./digest.js";
+import { latestEpicSummaries } from "./epic-summary.js";
 import { packGates } from "./infra.js";
 import { contextCodeMap } from "./ingestion.js";
 import { runKeptLand } from "./integrate.js";
@@ -288,7 +289,7 @@ async function readHoldsSafe(context: ConsultContext): Promise<Hold[]> {
 
 /** The pack input for one goal consult: every fact its templates render. */
 async function packInput(context: ConsultContext): Promise<ContextPackInput> {
-  const { runtime } = context;
+  const { runtime, iteration, state } = context;
   const holds = await readHoldsSafe(context);
   const aged = agedReady(context, holds);
   // A debt any active plan owns leaves the register, whichever architect wrote it.
@@ -325,7 +326,8 @@ async function packInput(context: ConsultContext): Promise<ContextPackInput> {
     ),
     digestPath: context.digestPath,
     tasks: context.tasks,
-    state: context.state,
+    state,
+    epicSummaries: await latestEpicSummaries(runtime.store, iteration, state),
     spikeFindings: await spikeFindings(
       runtime.store,
       context.records,

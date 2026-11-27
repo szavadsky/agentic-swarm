@@ -399,3 +399,86 @@ describe("boundary ready aging", () => {
     }
   }, 90_000);
 });
+
+const EPIC_SUMMARY = `# Iteration 1 summary — epic \`alpha\`
+
+status: epic-met
+decision: done
+architect: alpha
+
+## Epic
+- summary: alpha built the parser
+
+## Tasks
+- merged (1): alpha.build
+
+## Concerns
+- none
+
+## Upward brief
+- none
+`;
+
+describe("boundary epic summary links", () => {
+  it("links each epic's latest summary with its rollup in the top pack", async () => {
+    const { repo, goal } = setupFlowRepo();
+    try {
+      const harness = new FakeHarness({ id: "fake" });
+      const runtime = await makeRuntime(repo, goal, { fake: harness });
+      await writeRuntimeTask(runtime, task("alpha.build", { epic: "alpha" }));
+      await writeRuntimeTask(runtime, task("beta.build", { epic: "beta" }));
+      await runtime.store.appendRecord(
+        scriptMeta(1, "subarchitect", { architect: "alpha" }),
+        {
+          ok: true,
+          outcome: {
+            status: "done",
+            summary: "planned alpha",
+            concerns: [],
+            forward: [],
+            decision: "continue",
+          },
+        },
+      );
+      await runtime.store.writeFile(
+        "iterations/1/epics/alpha/summary.md",
+        EPIC_SUMMARY,
+      );
+
+      const planPath = path.join(runtime.store.goalDir, "plan.md");
+      fs.writeFileSync(planPath, "# Plan\n\n## alpha.build\n", "utf8");
+      harness.script((req, ctx) => {
+        fs.appendFileSync(planPath, "\n## next\n", "utf8");
+        ctx.writeOutcome(
+          outcome({ summary: "saw both epics", decision: "continue" }),
+        );
+        return fakeTurnResult(req);
+      });
+      harness.script((req, ctx) => {
+        ctx.writeOutcome(outcome({ summary: "no new tasks" }));
+        return fakeTurnResult(req);
+      });
+
+      const boundary = await runBoundary(runtime, { relaunch: false });
+      expect(boundary.iteration).toBe(2);
+      const pack = fs.readFileSync(
+        path.join(runtime.store.goalDir, contextPackRelPath(2)),
+        "utf8",
+      );
+      const alphaSummary = path.join(
+        runtime.store.goalDir,
+        "iterations/1/epics/alpha/summary.md",
+      );
+      expect(pack).toContain(
+        `- \`alpha\`: open — subarchitect continue; 1 of 1 task open — alpha built the parser — ${alphaSummary}`,
+      );
+      // Beta has no summary yet: its rollup stays, and no link dangles.
+      expect(pack).toContain(
+        "- `beta`: open — subarchitect no turn; 1 of 1 task open",
+      );
+      expect(pack).not.toContain("iterations/1/epics/beta/summary.md");
+    } finally {
+      cleanupFlowRepo(repo);
+    }
+  }, 90_000);
+});

@@ -62,6 +62,15 @@ export function appendSection(
   lines.push("", title, ...entries);
 }
 
+/** The top pack's link and one-line rollup for one epic, as a line suffix. */
+function epicSummarySuffix(name: string, input: ContextPackInput): string {
+  if (input.epic !== undefined) return "";
+  const summary = input.epicSummaries?.find((ref) => ref.epic === name);
+  if (!summary) return "";
+  const rollup = summary.rollup ? ` — ${summary.rollup}` : "";
+  return `${rollup} — ${summary.path}`;
+}
+
 /** One epic's rollup line. */
 function epicStatusLine(name: string, input: ContextPackInput): string {
   const epic = input.state.epics[name]!;
@@ -69,7 +78,7 @@ function epicStatusLine(name: string, input: ContextPackInput): string {
     openEpicTask(input.state.tasks[slug]),
   ).length;
   const total = epic.tasks.length;
-  return `- \`${name}\`: ${epic.done ? "done" : "open"} — subarchitect ${epic.decision ?? "no turn"}; ${open} of ${total} ${total === 1 ? "task" : "tasks"} open`;
+  return `- \`${name}\`: ${epic.done ? "done" : "open"} — subarchitect ${epic.decision ?? "no turn"}; ${open} of ${total} ${total === 1 ? "task" : "tasks"} open${epicSummarySuffix(name, input)}`;
 }
 
 /** The status table and the epic rollup. */
