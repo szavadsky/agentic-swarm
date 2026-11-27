@@ -6,14 +6,15 @@ import { makeCause } from "../cause.js";
 import { scriptMeta } from "../record.js";
 import type { ArtifactStore, StepRecord } from "../types.js";
 import { collectSteerRoutes } from "./routes.js";
-import { scanInbox } from "./steer.js";
-import type { Hold, HoldFinding, ReadHoldsOptions, Steer } from "./types.js";
 import {
-  YAML_HOLD,
   archiveName,
   contentHash,
   holdFileSchema,
+  markProcessed,
+  scanInbox,
+  YAML_HOLD,
 } from "./steer.js";
+import type { Hold, HoldFinding, ReadHoldsOptions, Steer } from "./types.js";
 
 /** Where the PM's steer turn writes one `<steer-id>.yaml` per structured steer. */
 export function holdsDir(store: ArtifactStore): string {
@@ -169,6 +170,27 @@ export async function writeOutbox(
   const name = `steer-${id}.md`;
   await store.mailbox.write("outbox", name, `${text.trim()}\n`);
   return store.mailbox.rel("outbox", name);
+}
+
+/**
+ * Delivers a committed route's answer and moves the steer out of the inbox:
+ * the outbox file is the whole answer, the inbox file is marked processed so
+ * the steer is not answered twice, and the PM's hold on it expires. The
+ * outbox write comes first, so a crash leaves one answer whose next pass
+ * finishes the mark-processed.
+ */
+export async function answerFromStoredRoute(
+  store: ArtifactStore,
+  steer: Steer,
+  answer: string,
+): Promise<void> {
+  await writeOutbox(
+    store,
+    steer.id,
+    `# Steer ${steer.id}\n\n${answer}\n\nSource: ${steer.relPath}`,
+  );
+  await markProcessed(store, steer);
+  await expireHold(store, steer.id);
 }
 
 /** The line every provisional answer carries; the real answer replaces the whole file. */

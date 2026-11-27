@@ -40,15 +40,13 @@ import { runKeptLand } from "./integrate.js";
 import { runBoundaryTurn } from "./integration-lock.js";
 import { carryIntentSteers, intentChanges } from "./intent.js";
 import {
+  answerFromStoredRoute,
   collectSteerRoutes,
-  expireHold,
   formatPmAnswers,
   type Hold,
-  markProcessed,
   readHolds,
   type Steer,
   scanInbox,
-  writeOutbox,
 } from "./mailbox.js";
 import {
   DEFAULT_WASTE_SPIKE_THRESHOLD,
@@ -221,13 +219,7 @@ async function steerAction(
   if (!routed.answer) return "architect";
   // A `task` steer still in the inbox is a crash between the PM's answer and
   // its mark-processed: answer it from the stored route now.
-  await writeOutbox(
-    runtime.store,
-    steer.id,
-    `# Steer ${steer.id}\n\n${routed.answer}\n\nSource: ${steer.relPath}`,
-  );
-  await markProcessed(runtime.store, steer);
-  await expireHold(runtime.store, steer.id);
+  await answerFromStoredRoute(runtime.store, steer, routed.answer);
   return "handled";
 }
 

@@ -8,7 +8,7 @@ import { makeCause } from "./cause.js";
 import { derive } from "./derive.js";
 import { admitAction, updateDrain } from "./dispatch-admit.js";
 import { drainForPromote, waveEnd } from "./dispatch-end.js";
-import { pollSteers } from "./dispatch-poll.js";
+import { answerStoredTaskSteers, pollSteers } from "./dispatch-poll.js";
 import type {
   DispatchOptions,
   DispatchResult,
@@ -134,15 +134,21 @@ async function readLoop(state: DispatchState): Promise<LoopRead> {
   };
 }
 
-/** Answer the spike steers whose linked tasks settled in the last pass. */
+/** Answer the routed steers whose answer exists after the last pass. */
 async function answerSettledSteers(state: DispatchState): Promise<void> {
   const read = await readLoop(state);
+  const scanned = await scanInbox(state.runtime.store, { settleMs: 0 });
+  const answered = await answerStoredTaskSteers(
+    state.runtime.store,
+    read.recordsBefore,
+    scanned,
+  );
   await answerSettledSpikeSteers(
     state.runtime,
     read.tasks,
     read.snapshot,
     read.recordsBefore,
-    await scanInbox(state.runtime.store, { settleMs: 0 }),
+    scanned.filter((steer) => !answered.has(steer.id)),
   );
 }
 
