@@ -209,6 +209,20 @@ export function loadPromptLibrary(opts: {
   };
 }
 
+let builtinLibrary: PromptLibrary | undefined;
+
+/**
+ * The package's built-in prompts without a repo or process layer; the fallback
+ * for kernel text rendered outside a launch (pack instructions, check output),
+ * while a runtime passes its own library to honor repo shadows.
+ */
+export function builtinPrompts(): PromptLibrary {
+  builtinLibrary ??= loadPromptLibrary({
+    builtinDir: path.join(packageRoot, "prompts"),
+  });
+  return builtinLibrary;
+}
+
 /**
  * Double-quotes a shell word only when it needs it; backslash-escapes the
  * characters a double-quoted word still interprets.

@@ -1,0 +1,1 @@
+- each line is a proposal, never a task: plan a spike into the cause, or a named fix

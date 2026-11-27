@@ -96,4 +96,49 @@ export const FRAGMENT_PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
       "The standalone-task scope question rendered into `upscope_ask` for delivery acceptance when no architect planned the task.",
     variables: {},
   },
+  {
+    file: "pack-plan-review.md",
+    prompt: "pack-plan-review",
+    intro:
+      "The plan-review section heading the script renders into the context pack; no turn renders this file directly.",
+    variables: {},
+  },
+  {
+    file: "pack-code-map.md",
+    prompt: "pack-code-map",
+    intro:
+      "The code-map section heading the script renders into the context pack; no turn renders this file directly.",
+    variables: {},
+  },
+  {
+    file: "pack-debt-register.md",
+    prompt: "pack-debt-register",
+    intro:
+      "The debt-register section heading the script renders into the context pack; no turn renders this file directly.",
+    variables: {},
+  },
+  {
+    file: "pack-spike-proposals.md",
+    prompt: "pack-spike-proposals",
+    intro:
+      "The rule under the spike-proposals heading the script renders into the context pack; no turn renders this file directly.",
+    variables: {},
+  },
+  {
+    file: "pack-parked-by-cause.md",
+    prompt: "pack-parked-by-cause",
+    intro:
+      "The parked-tasks section heading the script renders into the context pack; no turn renders this file directly.",
+    variables: {},
+  },
+  {
+    file: "spike-report-gate.md",
+    prompt: "spike-report-gate",
+    intro:
+      "The spike gate's fix instruction, rendered into the check output when the committed report is missing or blank.",
+    variables: {
+      summary: "the check summary naming the problem and the report path",
+      report_path: "repo-relative path the spike commits its finding to",
+    },
+  },
 ];

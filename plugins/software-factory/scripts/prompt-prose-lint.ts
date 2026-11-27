@@ -6,16 +6,6 @@ import ts from "typescript";
 
 const ALLOWLIST_REL = "config/prompt-prose-allowlist.json";
 
-const SKIP_PREFIXES = [
-  "src/cli/commands/goal.ts",
-  "src/cli/dispatch/usage.ts",
-  "src/kernel/context-pack/",
-  "src/kernel/dashboard-template.ts",
-  "src/kernel/prompt-vars-pages/",
-  "src/kernel/prompt-vars.ts",
-  "src/kernel/summary/",
-];
-
 const AGENT_PROSE_CUE =
   /\b(you are (the|an|a) |you hold a |your assignment|your verdict|carry it out|restated pm|never edit the plan|never invent intent|this is the last call|this is a standalone task|this is a fresh retry|the pm ladder|the previous launch was interrupted|resolve the conflict in the worktree|do not rebase|do not switch branches|weigh whether it is one plan|consider a saga|a steer arrived while|rewrite the outcome|route this evidence|route each pending|route every parked|route every follow-up|make the gates green)\b/i;
 
@@ -82,8 +72,28 @@ function isIgnoredSink(node: ts.Node): boolean {
   return false;
 }
 
+/**
+ * A prompt-variable page's `variables` record documents each variable; its
+ * meanings are reference prose, not text any turn renders.
+ */
+function isVariableDoc(node: ts.Node): boolean {
+  if (!ts.isPropertyAssignment(node)) return false;
+  const record = node.parent;
+  if (!ts.isObjectLiteralExpression(record)) return false;
+  const holder = record.parent;
+  if (!ts.isPropertyAssignment(holder) || holder.name.getText() !== "variables")
+    return false;
+  const page = holder.parent;
+  return (
+    ts.isObjectLiteralExpression(page) &&
+    page.properties.some(
+      (prop) => ts.isPropertyAssignment(prop) && prop.name.getText() === "file",
+    )
+  );
+}
+
 function isPromptSinkAncestor(node: ts.Node): boolean {
-  if (ts.isPropertyAssignment(node)) {
+  if (ts.isPropertyAssignment(node) && !isVariableDoc(node)) {
     const prop = node.name.getText();
     return (
       PROMPT_SINK_PROPS.has(prop) || (prop === "message" && isHarnessCall(node))
@@ -164,7 +174,6 @@ export function promptProseProblems(root: string): string[] {
   const problems: string[] = [];
   for (const file of collectTsFiles(path.join(root, "src"))) {
     const rel = path.relative(root, file).split(path.sep).join("/");
-    if (SKIP_PREFIXES.some((prefix) => rel.startsWith(prefix))) continue;
     const hits = proseViolations(file);
     if (hits.length === 0) continue;
     seenFiles.add(rel);

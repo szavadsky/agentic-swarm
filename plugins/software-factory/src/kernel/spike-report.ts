@@ -2,6 +2,8 @@ import type { CheckResult } from "../core/checks/types.js";
 import { fingerprintText } from "../core/fingerprint.js";
 import { GitError, git } from "../core/git/exec.js";
 import { readGoalFile } from "./store.js";
+import { builtinPrompts } from "./prompts.js";
+import type { PromptLibrary } from "./prompts.js";
 import type { ArtifactStore, StepRecord } from "./types.js";
 
 /** Check name a spike's task gates carry for its report. */
@@ -101,6 +103,7 @@ export async function checkSpikeReport(
   worktree: string,
   slug: string,
   commit: string,
+  prompts: PromptLibrary = builtinPrompts(),
 ): Promise<CheckResult> {
   const reportPath = spikeReportPath(slug);
   const report = await committedSpikeReport(
@@ -119,7 +122,9 @@ export async function checkSpikeReport(
     ok: problem === undefined,
     summary,
     output: problem
-      ? `${summary}: write the finding to ${reportPath} and commit it.`
+      ? prompts
+          .render("spike-report-gate", { summary, report_path: reportPath })
+          .trimEnd()
       : "",
     fingerprint: fingerprintText(`${SPIKE_REPORT_CHECK}:${summary}`, {
       lowercase: false,

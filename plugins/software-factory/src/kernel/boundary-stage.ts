@@ -473,7 +473,10 @@ export async function writePack(
     context.packBriefs = preparer.briefs;
   await runtime.store.writeFile(
     context.packRel!,
-    renderContextPack({ ...input, ...(briefs ? { briefs } : {}) }),
+    renderContextPack(
+      { ...input, ...(briefs ? { briefs } : {}) },
+      context.runtime.prompts,
+    ),
   );
   if (preparer !== undefined && "failure" in preparer)
     await recordPackFallback(context, preparer.failure);

@@ -501,3 +501,30 @@ The optional architect reminder rendered into `saga_reminder` when open task cou
 ## standalone-upscope.md
 
 The standalone-task scope question rendered into `upscope_ask` for delivery acceptance when no architect planned the task.
+
+## pack-plan-review.md
+
+The plan-review section heading the script renders into the context pack; no turn renders this file directly.
+
+## pack-code-map.md
+
+The code-map section heading the script renders into the context pack; no turn renders this file directly.
+
+## pack-debt-register.md
+
+The debt-register section heading the script renders into the context pack; no turn renders this file directly.
+
+## pack-spike-proposals.md
+
+The rule under the spike-proposals heading the script renders into the context pack; no turn renders this file directly.
+
+## pack-parked-by-cause.md
+
+The parked-tasks section heading the script renders into the context pack; no turn renders this file directly.
+
+## spike-report-gate.md
+
+The spike gate's fix instruction, rendered into the check output when the committed report is missing or blank.
+
+- `summary` — the check summary naming the problem and the report path
+- `report_path` — repo-relative path the spike commits its finding to

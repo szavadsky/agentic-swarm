@@ -125,7 +125,7 @@ export async function writeEpicPack(
     openForEpic,
   );
   const rel = epicContextPackRelPath(opts.iteration, opts.epic);
-  await runtime.store.writeFile(rel, renderContextPack(input));
+  await runtime.store.writeFile(rel, renderContextPack(input, runtime.prompts));
   return rel;
 }
 
