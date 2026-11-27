@@ -14,6 +14,7 @@ import {
   toLimits,
 } from "../../src/kernel/config.js";
 import { writePriceCache } from "../../src/kernel/openrouter.js";
+import { DECIDE_STEP } from "../../src/kernel/pending-signal.js";
 import type { PriceTable } from "../../src/kernel/pricing.js";
 import { loadPrompts } from "../../src/kernel/prompts.js";
 import { createArtifactStore } from "../../src/kernel/store-backend.js";
@@ -24,7 +25,6 @@ import type {
 } from "../../src/kernel/types.js";
 import { prepareIntegrationCheckout } from "../../src/kernel/worktree.js";
 import { createTmpRepo, type TmpRepo } from "../helpers/tmp-repo.js";
-import { DECIDE_STEP } from "../../src/kernel/pending-signal.js";
 import { scriptKernelRoleFallbacks } from "./fake-defaults.js";
 
 export interface FlowRepoOptions {
@@ -33,6 +33,7 @@ export interface FlowRepoOptions {
     id: string;
     command: string;
     serial?: string[];
+    semaphores?: string[];
     env?: Record<string, string>;
     format?: {
       junit?: string;
@@ -51,6 +52,11 @@ export interface FlowRepoOptions {
   /** Raw `.factory/process.yaml` override. */
   process?: Record<string, unknown>;
   limits?: Record<string, unknown>;
+  semaphores?: { name: string; max: number }[];
+  repoSemaphores?: { name: string; max: number }[];
+  harnessSemaphores?: Record<string, string>;
+  /** Alias name -> quota pool the alias draws on; applied to the default aliases. */
+  subscriptions?: Record<string, string>;
   /** Seed for the repo-local price cache, for harnesses that report no cost. */
   priceTable?: PriceTable;
   aliases?: Record<
@@ -149,10 +155,12 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
         id: g.id,
         command: g.command,
         ...(g.serial ? { serial: g.serial } : {}),
+        ...(g.semaphores ? { semaphores: g.semaphores } : {}),
         ...(g.env ? { env: g.env } : {}),
         ...(g.format ? { format: g.format } : {}),
         ...(g.timeoutSec !== undefined ? { timeoutSec: g.timeoutSec } : {}),
       })),
+      ...(opts.repoSemaphores ? { semaphores: opts.repoSemaphores } : {}),
       ...(opts.identity ? { identity: opts.identity } : {}),
       ...(opts.parkRoutes ? { parkRoutes: opts.parkRoutes } : {}),
     }),
@@ -165,13 +173,42 @@ export function setupFlowRepo(opts: FlowRepoOptions = {}): FlowRepo {
         ...opts.aliases,
       }
     : DEFAULT_ALIASES;
+  const bindings = Object.fromEntries(
+    Object.entries(aliases).map(([name, alias]) => {
+      const subscription = opts.subscriptions?.[name];
+      return [
+        name,
+        subscription === undefined ? alias : { ...alias, subscription },
+      ];
+    }),
+  );
   repo.writeFile(
     ".factory/run.yaml",
     yaml.stringify({
-      aliases,
+      ...(opts.semaphores ? { semaphores: opts.semaphores } : {}),
+      ...(opts.harnessSemaphores
+        ? {
+            harnesses: Object.fromEntries(
+              Object.entries(opts.harnessSemaphores).map(([id, semaphore]) => [
+                id,
+                {
+                  semaphore,
+                  options: {},
+                  compaction: {
+                    enabled: false,
+                    reason: "the test harness runs no compaction command",
+                  },
+                },
+              ]),
+            ),
+          }
+        : {}),
+      aliases: bindings,
       limits: {
         iterations: 1,
         concurrency: { overall: 1 },
+        // Tests that exercise the debounce set their own window; 0.1 ms rounds to 0.
+        steerDebounceSeconds: 0.0001,
         ...(opts.limits ?? {}),
       },
     }),

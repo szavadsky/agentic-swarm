@@ -9,17 +9,36 @@ import {
   rootFindings,
   unconfiguredTaskFindings,
   uniqueFindings,
+  usedHarnesses,
 } from "./config.js";
 import {
   harnessRegistrationFindings,
   portabilityFindings,
   sandboxFindings,
 } from "./checks.js";
+import type { AliasConfig } from "../types.js";
 import type { NonModelInput, NonModelResult } from "./types.js";
 
 interface NonModelCheck {
   readonly id: string;
   run(input: NonModelInput, result: NonModelResult): Promise<void> | void;
+}
+
+/**
+ * The executables the binary check reads: every harness some alias or
+ * fallback can run that the launch registers. A harness no alias runs has no
+ * executable to check; an unregistered one is the registration finding.
+ */
+export function launchBinaries(
+  aliases: Record<string, AliasConfig>,
+  registered: ReadonlySet<string>,
+  binaries: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+  return Object.fromEntries(
+    [...usedHarnesses(aliases)]
+      .filter((harness) => registered.has(harness))
+      .map((harness) => [harness, binaries[harness]]),
+  );
 }
 
 /**

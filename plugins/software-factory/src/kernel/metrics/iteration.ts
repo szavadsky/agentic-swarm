@@ -136,6 +136,7 @@ function accumulateTurns(
 function iterationIncidents(
   all: StepRecord[],
   recs: StepRecord[],
+  history: readonly StepRecord[],
   roleByStep: Record<string, string>,
   roles: Record<string, RoleMetrics>,
   aliases: Record<string, AliasMetrics>,
@@ -149,6 +150,7 @@ function iterationIncidents(
   parkIncidents(all, incidents);
   const waste = wasteAccounting({
     records: all,
+    history,
     roleOf: (step) => roleByStep[step] ?? DEFAULT_ROLE_BY_STEP[step] ?? step,
   });
   for (const entry of waste.entries) recordWaste(roles, aliases, entry);
@@ -349,10 +351,12 @@ export function iterationMetrics(
   );
   const acc = accumulateTurns(recs, roleByStep, prices, priceIds);
   const all = records.filter((r) => r.iteration === n);
+  const history = records.filter((r) => r.iteration !== n);
   const gateRecords = [...all, ...launchBaselines(records, n)];
   const { incidents, waste, planReviewMarks } = iterationIncidents(
     all,
     recs,
+    history,
     roleByStep,
     acc.roles,
     acc.aliases,

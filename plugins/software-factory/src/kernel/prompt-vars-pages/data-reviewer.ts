@@ -62,7 +62,7 @@ export const REVIEWER_PROMPT_PAGES: readonly PromptVariablesPage[] = [
       prior_concerns:
         "undismissed concerns raised by implementer and QA turns on this task; empty string when none",
       upscope_ask:
-        "escalation ask for a standalone task review, answered as `upscope: yes|no` with the verdict; empty string when this task is part of an architect plan",
+        "escalation ask for the last agent of a standalone task, answered as `upscope: yes|no` alongside its outcome; empty unless this review is that agent",
       fix_dispositions:
         "the current fix round's summary plus one numbered reply per prior finding; round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; renderer default",
     },

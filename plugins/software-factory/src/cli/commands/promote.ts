@@ -23,7 +23,7 @@ import type { GateVerdicts, PromoteOptions, RunResult } from "./types.js";
 export type { GateVerdicts, PromoteOptions, RunResult } from "./types.js";
 
 /** Tree paths the suite and the schema gate read: the rev's copy, never the operator's. */
-export const PROMOTE_TREE_PATHS: readonly string[] = [
+const PROMOTE_TREE_PATHS: readonly string[] = [
   ".factory/repo.yaml",
   "bootstrap/run",
   "bootstrap/promote.sh",

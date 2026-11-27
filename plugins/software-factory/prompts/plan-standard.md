@@ -20,6 +20,8 @@ Write from your whole scope's perspective — interactions, layers, sequence.
 
 {% include 'plan-history' %}
 
+{% include 'task-scope' %}
+
 ## Granularity and dispatch
 
 {% include 'task-size' -%}

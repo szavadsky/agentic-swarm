@@ -220,7 +220,14 @@ export async function normaliseGateReports(
     gate.format?.regex ?? [],
   );
   if (fromRegex.length > 0) return withRuntimes(fromRegex);
-  return withRuntimes(logFindings(gate.id, artifacts.log, artifacts.exitCode));
+  return withRuntimes(
+    logFindings(
+      gate.id,
+      artifacts.log,
+      artifacts.exitCode,
+      gate.format?.noise ?? [],
+    ),
+  );
 }
 
 /**

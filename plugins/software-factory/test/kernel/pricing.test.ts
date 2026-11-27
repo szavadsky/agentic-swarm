@@ -94,6 +94,19 @@ function priceUsageAtAggregationTimePart2() {
     expect(
       addUsage(usage({ costUsd: 0.2 }), usage({ costUsd: 0 })).costUsd,
     ).toBe(0.2);
+    // Summation never invents the marker: two unmarked zero values stay
+    // unmarked, and one marked side makes the sum marked.
+    expect(
+      addUsage(usage({ costUsd: 0 }), zeroUsage()).tokensReported,
+    ).toBeUndefined();
+    expect(
+      addUsage(usage({ tokensReported: false }), usage({ costUsd: 0.2 }))
+        .tokensReported,
+    ).toBe(false);
+    expect(
+      addUsage(usage({ costUsd: 0.2 }), usage({ tokensReported: false }))
+        .tokensReported,
+    ).toBe(false);
   });
 
   it("keeps a repriced table figure out of the harness column", () => {

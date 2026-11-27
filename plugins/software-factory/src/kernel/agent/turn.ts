@@ -48,6 +48,8 @@ async function prepareTurn(
       spec.target.prompt,
       spec.expectation,
       spec.outcomeSchema ?? outcomeSchema,
+      // A turn asked the standalone scope question answers it in its outcome.
+      spec.vars.upscope_ask ? ["upscope"] : [],
     ),
   });
   // The rendered step prompt is the cost driver; a repair ask is small and
@@ -358,6 +360,7 @@ function renderRepairPrompt(
       state.spec.target.prompt,
       state.spec.expectation,
       state.spec.outcomeSchema ?? outcomeSchema,
+      state.spec.vars.upscope_ask ? ["upscope"] : [],
     ),
   };
   // The unfinished ask stands alone in a session that may not have survived:

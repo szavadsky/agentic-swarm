@@ -3,12 +3,9 @@
  * concurrency limits, the target's quota pools, and the step/script/terminal
  * split. Admission never parks a task; holds only keep unstarted work out.
  */
+
+import type { Release } from "../core/semaphores-types.js";
 import { makeCause } from "./cause.js";
-import type {
-  ActiveHolds,
-  DispatchState,
-  SteerPoll,
-} from "./dispatch-types.js";
 import {
   dispatchable,
   noteInfra,
@@ -16,13 +13,21 @@ import {
   startAction,
 } from "./dispatch-start.js";
 import { iterationSpend, iterationStart } from "./dispatch-state.js";
+import type {
+  ActiveHolds,
+  DispatchState,
+  SteerPoll,
+} from "./dispatch-types.js";
 import {
+  findStep,
+  flowOf,
   stepTarget,
   tierIdentity,
   type ResolvedTier,
   type TurnTarget,
 } from "./flow-context.js";
 import { loadPriceTable } from "./openrouter.js";
+import { semaphoresFor, turnSemaphoreNames } from "./semaphores.js";
 import type {
   Action,
   State,
@@ -128,23 +133,50 @@ function tierAdmits(state: DispatchState, tier: ResolvedTier): boolean {
   return true;
 }
 
+interface ReservedTier {
+  tier: ResolvedTier;
+  release: Release;
+}
+
 /**
- * The target's tiers in configured order, first one admitted by its caps.
- * A capped pool falls back to the next tier in the chain instead of waiting;
- * every tier capped still waits. The chosen leg's identity rides the action so
- * the step starts on the same leg admission judged, even if the chain is
- * re-resolved and its order changes.
+ * Takes every semaphore the tier needs in one all-or-nothing reservation. A
+ * contended set takes nothing, so admission tries the next tier instead of
+ * waiting on a fallback that could run now.
+ */
+function reserveTurn(
+  state: DispatchState,
+  stepSemaphores: readonly string[] | undefined,
+  tier: ResolvedTier,
+): Release | undefined {
+  return semaphoresFor(state.runtime.configs).tryAcquire(
+    turnSemaphoreNames(state.runtime.configs, stepSemaphores, tier),
+  );
+}
+
+/**
+ * The target's tiers in configured order, first one admitted by its caps and
+ * whose semaphores are all free. A capped or contended tier falls back to the
+ * next tier in the chain instead of waiting; every tier blocked still waits.
+ * The chosen tier's identity and its held release ride the action so the step
+ * starts on the same leg admission judged, even if the chain is re-resolved.
  */
 function admitTarget(
   state: DispatchState,
   slug: string,
   target: TurnTarget,
-): ResolvedTier | undefined {
+  semaphores: readonly string[] | undefined,
+): ReservedTier | undefined {
   if (target.unavailable !== undefined) {
     noteInfra(state, slug, target.unavailable);
     return undefined;
   }
-  return target.tiers.find((tier) => tierAdmits(state, tier));
+  for (const tier of target.tiers) {
+    if (!tierAdmits(state, tier)) continue;
+    const release = reserveTurn(state, semaphores, tier);
+    if (release === undefined) continue;
+    return { tier, release };
+  }
+  return undefined;
 }
 
 /** A started task turn is admitted only below all three concurrency limits. */
@@ -170,18 +202,24 @@ function admitStep(
     action.step,
     records,
   );
-  const tier = admitTarget(state, action.slug, target);
-  if (tier === undefined) return;
+  const step = findStep(flowOf(state.runtime, task), action.step);
+  const admitted = admitTarget(state, action.slug, target, step.semaphores);
+  if (admitted === undefined) return;
   startAction(
     state,
-    { ...action, tier: tierIdentity(tier) },
+    {
+      ...action,
+      tier: tierIdentity(admitted.tier),
+      semaphoresHeld: true,
+    },
     taskState,
     task,
     true,
     {
-      subscription: tier.subscription,
-      model: tier.model.id,
+      subscription: admitted.tier.subscription,
+      model: admitted.tier.model.id,
     },
+    admitted.release,
   );
 }
 

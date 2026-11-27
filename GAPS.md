@@ -14,7 +14,6 @@ What differs from [INTENT.md](INTENT.md) on `main` after goal `delta` landed (75
 
 - **[[InfraAgent]]** — *partial*. Ingestion only: `prompts/infra.md` writes `infra.yaml` (`src/kernel/ingestion.ts:261-273`). On an infra failure no agent runs: dispatch returns `infra` and the launch stops (`src/kernel/dispatch-end.ts:71,110,316`, `launch-goal.ts:58-65`); nothing decides infra vs really red, fixes config, or prescribes retry / ignore / fall back / stop task types / escalate in structured output. *[run]* 11 of 14 parks were tests-gate timeouts that only a config change (timeout or semaphore) would have prevented.
 - **[[GoalBranchAndSteward]]** — *differs*. The goal branch is cut from `repo.baseBranch`, set once at `goal init`, not from the repo's current branch at goal start (`src/cli/commands/goal.ts:47-56`, `src/kernel/worktree/checkout.ts:57-63,208`).
-- **[[StandaloneTaskUpscope]]** — *partial*. The last reviewer gets "the front's predicted area above" (`src/kernel/flow-context-front.ts:84-96`), but its prompt carries neither that area nor the trivial/task/bigger definitions, which live only in `prompts/front.md:9-15` (`prompts/review-implementer-turn.md:6`). A flow that ends without a reviewer is never asked.
 
 ### Architect, plan, checker
 
@@ -44,7 +43,6 @@ What differs from [INTENT.md](INTENT.md) on `main` after goal `delta` landed (75
 
 ### Steers and launch
 
-- **[[SteerMailboxPolling]]** — *partial*. The 60 s debounce (`limits.steerDebounceSeconds`) only delays the watch's wake during a running turn; any other dispatch pass claims a steer after a 50 ms settle, so a burst can cost several PM turns (`src/kernel/dispatch-poll.ts:56-100`, `dispatch-watch.ts:18-21`).
 - **[[SteerTriageAndUrgentDrain]]** — *partial*. An urgent steer arriving during a PM turn is injected like any other (`src/kernel/dispatch-watch.ts:102-111`, `dispatch.ts:232`); drain starts only if it is still pending at a poll (`dispatch-admit.ts:29-42`). No hold for a steer that asks to wait for the boundary: *[run]* `e625288b` said "evaluate at the next boundary" and the digest was rewritten 83 s after filing.
 - **[[LaunchBoundsAndDrain]]** — *partial*. `--iterations` is the only bound that is a launch argument (`src/cli/dispatch/args.ts:42-44`); checker rounds, wall time and USD are config and bound an iteration (`src/kernel/config/run-schema.ts:225-227`, `dispatch-admit.ts:38-60`). Missing: wait-and-retry on infra, a subscription-use limit, the stop file (only SIGINT/SIGTERM, `src/core/shutdown.ts`). A drain that ends with an infra fault still runs the steward, stall-PM and checker stages (`dispatch-end.ts:270-305`).
 
@@ -61,7 +59,6 @@ What differs from [INTENT.md](INTENT.md) on `main` after goal `delta` landed (75
 - **[[StatusAndDashboard]]** — *partial*. Intent completion is keyed by free-text section, not by slug, and only the architect reports it (`src/kernel/types/outcome.ts:206-212`, `summary/intent-status.ts:9-13`).
 - **[[TestRuntimeTracking]]** — *partial*. Checks carry `durationMs` and steps `wallMs` (`src/kernel/record.ts:70-82`, `src/core/checks/types.ts:97`); `testRuns` still counts checks. No per-test runtimes, no comparison with goal start, no invitation in the architect prompts.
 - **[[UsageAndPriceTracking]]** — *partial*. *[run]* 155 of 347 agent turns unpriced (118 pi/deepseek, 34 agy/gemini, 2 ernie, 1 other): $11.72 reported against $36.80 at list. Timed-out turns record zero usage (D12).
-- **[[WastedTurnTracking]]** — *partial*. *[run]* The metric counts 6 wasted turns (1.7%) but none of the ~60 records re-run after the 11 timeout parks, which intent counts as incorrect rejections.
 - **[[Traceability]]** — *missing*. No slug parsing (the only `\[\[` in `src/` is an ANSI regex, `src/kernel/gates-normalise.ts:21`), no triage note or agent that adds missing slugs, no per-slug status footnote, no deterministic check.
 
 ### Harness, quota, gates

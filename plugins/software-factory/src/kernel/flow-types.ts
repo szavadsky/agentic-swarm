@@ -143,6 +143,8 @@ export interface StepRun {
   target?: TurnTarget;
   /** The leg admission chose; absent is the alias's primary. */
   tier?: AdmittedTier;
+  /** Dispatch already holds this turn's semaphore counts. */
+  semaphoresHeld?: boolean;
   session?: SessionRef;
   trivial: boolean;
   /** This step's turn continues one recovery sealed as a bare crash. */

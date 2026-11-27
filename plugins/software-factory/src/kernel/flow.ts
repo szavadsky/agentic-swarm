@@ -36,6 +36,7 @@ export async function executeTaskAction(
       step,
       flow,
       tier: action.tier,
+      semaphoresHeld: action.semaphoresHeld,
     });
   }
   if (action.kind === "checks") {

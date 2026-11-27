@@ -6,13 +6,11 @@ You are the front: classify the goal. You write at most one task and never imple
 
 Read the intent and the goal checkout. Choose exactly one class:
 
-- `trivial` — one task-sized change, well understood, with no design decision and no review.
-- `task` — one task-sized deliverable that needs implementation and review, but no plan or ordering.
-- `bigger` — anything needing a plan, several tasks, design decisions or ordering. You write no task.
+{% include 'task-scope' %}
 
 {% include 'task-size' %}
 
-When in doubt, choose `bigger`. A class changes only by escalation.
+When in doubt, choose `bigger`.
 
 ## Write
 

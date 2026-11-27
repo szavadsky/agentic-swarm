@@ -1,7 +1,6 @@
 /** Pack measurement, fallback chains and opaque-turn delivery. */
 
 import { git } from "../../core/git/exec.js";
-import { portable } from "../../harness/types.js";
 import type {
   PoolLatch,
   ServedUsage,
@@ -10,19 +9,21 @@ import type {
   TurnResult,
   Usage,
 } from "../../harness/types.js";
+import { portable } from "../../harness/types.js";
 import { addUsage, zeroUsage } from "../../harness/usage.js";
 import { resumeNote, tierPoolKey } from "../flow-context.js";
 import {
   latchPool,
   markPoolExhausted,
-  poolExhausted,
   type PoolCall,
   type PoolReset,
+  poolExhausted,
   poolResetAt,
   settlePoolProbe,
   takePoolCall,
   writePoolResets,
 } from "../quota-pools.js";
+import { semaphoresFor, turnSemaphoreNames } from "../semaphores.js";
 import type { KernelRuntime } from "../types.js";
 import { absorbChainCall, chainOutcome } from "./chain-result.js";
 import type { AgentTurnSpec, ChainResult, ChainState, Tier } from "./types.js";
@@ -349,6 +350,12 @@ async function runTierCall(
   timeouts: { idleMs: number; wallMs: number },
 ): Promise<TurnResult> {
   const pool = tierPoolKey(tier);
+  const release =
+    spec.semaphoresHeld === true
+      ? undefined
+      : await semaphoresFor(runtime.configs).acquire(
+          turnSemaphoreNames(runtime.configs, spec.semaphores, tier),
+        );
   let result: TurnResult;
   try {
     result = await runChainTier(
@@ -365,6 +372,8 @@ async function runTierCall(
     if (call.kind === "probe")
       await settleProbe(runtime, pool, call.claim, false);
     throw err;
+  } finally {
+    release?.();
   }
   await markTierQuota(runtime, tier, result);
   if (call.kind === "probe")

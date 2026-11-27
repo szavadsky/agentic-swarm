@@ -33,6 +33,8 @@ const QA_VARIABLES: Record<string, string> = {
     "the last acceptance's findings (QA or review), numbered; empty before the first acceptance",
   fix_dispositions:
     "the current fix round's summary plus one numbered reply per prior finding; round 1 carries the cleanliness revision turn's summary/replies and is otherwise empty; renderer default",
+  upscope_ask:
+    "standalone escalation ask on a flow's last acceptance; empty otherwise",
   outcome_path:
     "path where the outcome file must be written when the harness asks for a file",
   validate_cmd:
@@ -243,6 +245,8 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
         "the base tree's recorded gate result: commit plus `green`, or the pre-existing failing checks; `not recorded` when pre-flight has no trustworthy base run",
       findings:
         "previous acceptance round's summary and findings for this task (QA or review), plus any legacy forward lines (summary first); gate failures when the latest record is red checks; empty string before the first acceptance. Each numbered finding is answered by a change, a reply or both",
+      upscope_ask:
+        "escalation ask for this turn when it is the last agent of a reviewer-less standalone task, answered as `upscope: yes|no`; empty otherwise",
       outcome_path:
         "path where the outcome file must be written when the harness asks for a file",
       validate_cmd:
@@ -291,6 +295,8 @@ export const PROMPT_VARIABLES: readonly PromptVariablesPage[] = [
         "latest checks text, or `pass` when green (renderer default)",
       checks_tree: "the checked tree's hash (renderer default)",
       checks_log: "the checks record's directory (renderer default)",
+      upscope_ask:
+        "escalation ask for this turn when it is the last agent of a standalone task, answered as `upscope: yes|no`; empty otherwise",
       outcome_path: "path for the outcome file the harness asks for",
       validate_cmd:
         "absolute validate command for this launch; renderer default",

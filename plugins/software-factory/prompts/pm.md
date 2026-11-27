@@ -16,6 +16,8 @@ Five kinds of turns. When `steers`, `stalls`, `plan_checks` and `concerns` are a
 
 For each task the plans yield, write one file in the tasks directory. A bullet belongs to the plan that carries it.
 
+{% include 'task-scope' %}
+
 {% include 'task-size' %}
 
 The bullet gives what, why and the done-when; you formalize the rest from it and the repo:

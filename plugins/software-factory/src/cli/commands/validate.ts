@@ -5,8 +5,11 @@ import path from "node:path";
 import yaml from "yaml";
 import { OMP_ID } from "../../harness/omp/types.js";
 import {
+  ConfigError,
   configFilePaths,
   loadConfigs,
+  processFilePath,
+  resolveGoalPaths,
   resolveRoots,
 } from "../../kernel/config.js";
 import { architectIntentStatusFindings } from "../../kernel/intent-slugs.js";
@@ -17,7 +20,7 @@ import {
   validateExpectation,
 } from "../../kernel/outcome.js";
 import { PLAN_CHECK_STEP } from "../../kernel/plan-check.js";
-import { nonModelFindings, usedHarnesses } from "../../kernel/preflight.js";
+import { launchBinaries, nonModelFindings } from "../../kernel/preflight.js";
 import {
   PLAN_REVIEW_STEP,
   validatePlanReviewDelivery,
@@ -177,6 +180,44 @@ function recordGoalDir(abs: string): string | undefined {
   return path.dirname(recordsDir);
 }
 
+function hasFactoryConfig(dir: string): boolean {
+  return (
+    fs.existsSync(path.join(dir, ".factory", "repo.yaml")) ||
+    fs.existsSync(path.join(dir, ".factory", "process.yaml"))
+  );
+}
+
+/**
+ * The checkout root for resolving a pointer `intent.md`: prefers the goal's
+ * active worktree checkout when it exists on disk so committed triage/steer
+ * edits on the goal branch apply, and falls back to the repo root.
+ */
+function validationCheckoutRoot(
+  abs: string,
+  goalDir: string,
+  repoFallback?: string,
+): string {
+  const fromFile = findRepoRoot(path.dirname(abs));
+  const fromCwd = findRepoRoot(process.cwd());
+  const root =
+    (fromFile && hasFactoryConfig(fromFile) ? fromFile : undefined) ??
+    (repoFallback ? path.resolve(repoFallback) : undefined) ??
+    (fromCwd && hasFactoryConfig(fromCwd) ? fromCwd : undefined) ??
+    fromFile ??
+    fromCwd ??
+    process.cwd();
+  const goal = path.basename(goalDir);
+  if (/^[a-z0-9][a-z0-9-]*$/.test(goal) && hasFactoryConfig(root)) {
+    try {
+      const { goalCheckout } = resolveGoalPaths(loadConfigs(root), root, goal);
+      if (fs.existsSync(goalCheckout)) return goalCheckout;
+    } catch (err) {
+      if (!(err instanceof ConfigError)) throw err;
+    }
+  }
+  return root;
+}
+
 /**
  * One outcome's findings for the step it was given for: `--step` wins, the
  * record's `started.yaml` supplies it otherwise. Without either, only the
@@ -226,7 +267,11 @@ async function outcomeResult(
           undefined,
           process.taskTypes ?? {},
         );
-        delivery.push(...(await architectIntentStatusFindings(store, outcome)));
+        delivery.push(
+          ...(await architectIntentStatusFindings(store, outcome, {
+            checkout: validationCheckoutRoot(abs, goalDir, opts.repo),
+          })),
+        );
       }
     }
     if (step === PLAN_REVIEW_STEP) {
@@ -278,9 +323,7 @@ function crossLayerBundle(
     return [`${abs}: ${(err as Error).message}`];
   }
   const bundleFiles = bundle.files ?? files;
-  const processFile = fs.existsSync(bundleFiles.processOverride)
-    ? bundleFiles.processOverride
-    : bundleFiles.processDefault;
+  const processFile = processFilePath(bundleFiles);
   return {
     configs: bundle,
     files: bundleFiles,
@@ -304,26 +347,6 @@ function registeredHarnesses(configs: ConfigBundle): ReadonlySet<string> {
   return ids;
 }
 
-/**
- * The executables a run config names without building a harness: a declared
- * harness entry binds one, and omp resolves through PATH. A bare alias harness
- * has no adapter `validate` can resolve, so its executable stays a launch
- * check; the map's keys scope the shared check to what the config declares.
- */
-function configuredBinaries(
-  configs: ConfigBundle,
-): Record<string, string | undefined> | undefined {
-  const declared = registeredHarnesses(configs);
-  const used = [...usedHarnesses(configs.run.aliases)].filter((harness) =>
-    declared.has(harness),
-  );
-  if (used.length === 0) return undefined;
-  const resolved = resolveHarnessBinaries(configs.run.harnesses);
-  return Object.fromEntries(
-    used.map((harness) => [harness, resolved[harness]]),
-  );
-}
-
 async function crossLayerFindings(
   abs: string,
   kind: ValidateKind,
@@ -333,11 +356,16 @@ async function crossLayerFindings(
   const bundleOrError = crossLayerBundle(abs, kind, opts);
   if (Array.isArray(bundleOrError)) return bundleOrError;
   const bundle = bundleOrError;
+  const registered = registeredHarnesses(bundle.configs);
   const nonModel = await nonModelFindings({
     configs: bundle.configs,
     files: bundle.files,
-    binaries: configuredBinaries(bundle.configs),
-    harnesses: registeredHarnesses(bundle.configs),
+    binaries: launchBinaries(
+      bundle.configs.run.aliases,
+      registered,
+      resolveHarnessBinaries(bundle.configs.run.harnesses),
+    ),
+    harnesses: registered,
     ...(bundle.roots ? { roots: bundle.roots } : {}),
   });
   return [

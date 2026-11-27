@@ -169,8 +169,10 @@ function upscopeDetail(summary: string | undefined, why: string): string {
 /**
  * Escalation parks with the status-upscope cause; a standalone task also
  * rewrites the class. The task is not relaunchable by dispatch — the next
- * launch's front reads the bigger class and runs the architect. A missing or
- * invalid class.yaml records why and parks without rewriting.
+ * launch's front reads the bigger class and runs the architect. A missing
+ * class.yaml records why and parks without rewriting; admission refuses an
+ * invalid one and containment reports a mid-turn edit, so this read cannot
+ * throw.
  */
 async function parkUpscope(
   runtime: KernelRuntime,
@@ -178,23 +180,7 @@ async function parkUpscope(
   meta: TaskMeta,
   outcome: StepRecord["outcome"],
 ): Promise<void> {
-  let cls: ReturnType<typeof readFrontClass>;
-  try {
-    cls = readFrontClass(runtime);
-  } catch (err) {
-    await appendPark(
-      runtime.store,
-      meta,
-      makeCause(
-        "upscope",
-        upscopeDetail(
-          outcome?.summary,
-          `no readable class.yaml: ${(err as Error).message}`,
-        ),
-      ),
-    );
-    return;
-  }
+  const cls = readFrontClass(runtime);
   const standalone =
     cls !== null && cls.class !== "bigger" && cls.slug === task.slug;
   if (standalone) escalateFrontClassToBigger(runtime);

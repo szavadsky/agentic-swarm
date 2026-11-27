@@ -3,13 +3,11 @@ import { makeCause } from "../../cause.js";
 import { boundaryTarget, type TurnTarget } from "../../flow-context.js";
 import { carryIntentSteers } from "../../intent.js";
 import {
-  expireHold,
+  answerFromStoredRoute,
   formatSteerRoute,
   formatSteerTurn,
   isArchitectRoute,
-  markProcessed,
   type Steer,
-  writeOutbox,
 } from "../../mailbox.js";
 import { scriptMeta } from "../../record.js";
 import type { LiveSteerSessions } from "../../sessions.js";
@@ -57,6 +55,8 @@ interface SteerPmOpts {
   scope?: PmScope;
   /** The dispatch watch's live session; the boundary has none and queues. */
   liveSteers?: LiveSteerSessions;
+  /** The run's seen set learns a steer injected mid-turn. */
+  onClaim?: (steer: Steer) => void;
 }
 
 /**
@@ -70,8 +70,9 @@ interface SteerPmOpts {
  * Accepted routes commit to a `steer-routes` script record; a failed rung's
  * routes die with its rollback, so the boundary never reads them. A legacy
  * turn with no `steerRoutes` keeps the old contract: any write is restored and
- * the steer reaches the architect. An exhausted or infra-stopped ladder falls
- * back the same way, so a steer turn never blocks dispatch. Findings the graph
+ * the steer reaches the architect. An exhausted ladder falls back the
+ * same way, so a steer turn never blocks dispatch; an infra stop commits a
+ * route set that validated and keeps the steer with its consumer. Findings the graph
  * already raised before the first rung do not fail a rung: they come back as
  * `architect`. With no plan every claimed steer is the architect's, who takes
  * it into the whole plan.
@@ -96,6 +97,7 @@ export async function runSteerPm(
     opts.steers,
     (steer) => pmScopeKey(steerScopeOf(runtime, steer)) === pmScopeKey(scope),
     runtime.prompts,
+    opts.onClaim,
   );
   let failure: string[] = [];
 
@@ -154,16 +156,21 @@ async function settleSteerRung(
     outcome,
   );
   const introduced = introducedFindings(findings, setup.baselineKeys);
-  if (outcome.status === "done" && introduced.length === 0) {
+  const stop = result.record.stop;
+  if (
+    introduced.length === 0 &&
+    (outcome.status === "done" || stop?.kind === "infra")
+  ) {
     return {
-      run: await acceptSteerRoutes(
+      run: await routedRung(
         runtime,
         opts,
-        claim.byId(),
+        claim,
+        setup,
         outcome.steerRoutes,
-        setup.baseline,
         findings,
         round,
+        stop?.kind === "infra" ? stop : undefined,
       ),
     };
   }
@@ -177,6 +184,44 @@ async function settleSteerRung(
     result,
   );
   return exit ? { run: exit } : { failure: reasons };
+}
+
+/**
+ * A validated route set: accepted normally, or committed when the harness
+ * stops on infrastructure. A committed set keeps the steer with the consumer
+ * its route names instead of dropping it for the next launch to claim again;
+ * the intent carry waits for a boundary, which repairs that route's edit.
+ */
+async function routedRung(
+  runtime: KernelRuntime,
+  opts: SteerPmOpts,
+  claim: SteerClaim,
+  setup: PmTurnSetup,
+  routes: NonNullable<Outcome["steerRoutes"]>,
+  findings: string[],
+  round: number,
+  infra: Extract<SteerPmRun, { status: "infra" }>["stop"] | undefined,
+): Promise<SteerPmRun> {
+  if (infra === undefined) {
+    return acceptSteerRoutes(
+      runtime,
+      opts,
+      claim.byId(),
+      routes,
+      setup.baseline,
+      findings,
+      round,
+    );
+  }
+  await commitSteerRoutes(
+    runtime,
+    opts.iteration,
+    opts.scope,
+    claim.byId(),
+    routes,
+    round,
+  );
+  return { status: "infra", stop: infra };
 }
 
 /** An exhausted ladder sends its last findings, or the bare exhaustion, out. */
@@ -306,25 +351,25 @@ async function carryAcceptedIntents(
   });
 }
 
-/** Commits the accepted routes, applies their holds or answers, and exits. */
-async function acceptSteerRoutes(
+/**
+ * Commits a validated route set: one script record, then each route's answer
+ * or hold. The boundary reads routes from this record only, never from the
+ * agent rung outcomes: a failed rung's routes die with its rollback.
+ */
+async function commitSteerRoutes(
   runtime: KernelRuntime,
-  opts: { iteration: number; scope?: PmScope },
+  iteration: number,
+  scope: PmScope | undefined,
   claim: ReadonlyMap<string, Steer>,
   routes: NonNullable<Outcome["steerRoutes"]>,
-  baseline: string[],
-  findings: string[],
   round: number,
-): Promise<SteerPmRun> {
+): Promise<NonNullable<Outcome["steerRoutes"]>> {
   const accepted = [...routes].sort((a, b) => a.steer.localeCompare(b.steer));
-  // The boundary reads routes from this record only, never from the agent
-  // rung outcomes: a failed rung's routes die with its rollback.
+  const architect = scopeEpic(scope ?? { kind: "goal" });
   await runtime.store.appendRecord(
-    scriptMeta(opts.iteration, "steer-routes", {
+    scriptMeta(iteration, "steer-routes", {
       round,
-      ...(scopeEpic(opts.scope ?? { kind: "goal" })
-        ? { architect: scopeEpic(opts.scope ?? { kind: "goal" }) }
-        : {}),
+      ...(architect ? { architect } : {}),
     }),
     {
       ok: true,
@@ -341,18 +386,36 @@ async function acceptSteerRoutes(
     const steer = claim.get(entry.steer);
     if (!steer) continue;
     if (entry.route === "task") {
-      const answer = entry.answer?.trim() ?? "";
-      await writeOutbox(
+      await answerFromStoredRoute(
         runtime.store,
-        steer.id,
-        `# Steer ${steer.id}\n\n${answer}\n\nSource: ${steer.relPath}`,
+        steer,
+        entry.answer?.trim() ?? "",
       );
-      await markProcessed(runtime.store, steer);
-      await expireHold(runtime.store, steer.id);
     } else {
       await ensureSteerHold(runtime, steer.id, entry.route);
     }
   }
+  return accepted;
+}
+
+/** Commits the accepted routes, carries their intent edits, and exits. */
+async function acceptSteerRoutes(
+  runtime: KernelRuntime,
+  opts: { iteration: number; scope?: PmScope },
+  claim: ReadonlyMap<string, Steer>,
+  routes: NonNullable<Outcome["steerRoutes"]>,
+  baseline: string[],
+  findings: string[],
+  round: number,
+): Promise<SteerPmRun> {
+  const accepted = await commitSteerRoutes(
+    runtime,
+    opts.iteration,
+    opts.scope,
+    claim,
+    routes,
+    round,
+  );
   await carryAcceptedIntents(runtime, opts.iteration, claim, accepted);
   const remaining = unfixedBaseline(baseline, findings);
   // `stall` drains the goal and an intent steer still needs its next consult;

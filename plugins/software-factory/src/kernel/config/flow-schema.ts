@@ -2,18 +2,19 @@
 
 import { z } from "zod";
 import { dagEdges } from "../dag.js";
+
+import type {
+  ArchitectureFlow,
+  BoundaryStep,
+  BuiltinIngestionId,
+  IngestionStepConfig,
+} from "../types.js";
 import {
   ARCHITECT_REASONS,
   BOUNDARY_STEPS,
   BUILTIN_ARCHITECTURE_FLOW_STEPS,
   BUILTIN_INGESTION_IDS,
   FLOW_PARITIES,
-} from "../types.js";
-import type {
-  ArchitectureFlow,
-  BoundaryStep,
-  BuiltinIngestionId,
-  IngestionStepConfig,
 } from "../types.js";
 
 const ingestionClassSchema = z.enum(["trivial", "task", "bigger"]);
@@ -148,6 +149,7 @@ export const flowStepSchema = z
       ),
     prompt: z.string().min(1).optional(),
     alias: z.string().min(1).optional(),
+    semaphores: z.array(z.string().min(1)).optional(), // named step limits
     /** Prompt template for the missing-outcome repair ask; defaults to `delivery-repair`. */
     repairPrompt: z.string().min(1).optional(),
     /** Prompt template for the no-outcome-at-all ask; absent keeps the repair ask. */

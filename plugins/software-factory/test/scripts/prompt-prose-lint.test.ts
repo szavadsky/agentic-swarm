@@ -65,6 +65,22 @@ describe("promptProseProblems", () => {
     expect(problems[0]).toContain("src/cli/bad-dispatch.ts:1");
     expect(problems[1]).toContain("src/kernel/bad-repair.ts:1");
   });
+
+  it("scans paths the former skip list exempted", () => {
+    write(
+      "src/kernel/context-pack/bad.ts",
+      'export const NOTE = "This is the last call: make the gates green.";\n',
+    );
+    write(
+      "src/kernel/summary/bad.ts",
+      'export const NOTE = "You are the reviewer. Answer approve or changes.";\n',
+    );
+
+    const problems = promptProseProblems(root);
+    expect(problems).toHaveLength(2);
+    expect(problems[0]).toContain("src/kernel/context-pack/bad.ts:1");
+    expect(problems[1]).toContain("src/kernel/summary/bad.ts:1");
+  });
 });
 
 describe("promptProseProblems filtering and allowlist", () => {
@@ -80,7 +96,7 @@ describe("promptProseProblems filtering and allowlist", () => {
     );
     write(
       "src/kernel/prompt-vars-pages/custom.ts",
-      'export const INTRO = "You are the implementer role prompt.";\n',
+      'export default { file: "custom.md", prompt: "custom", variables: { repair: "the validator findings from the previous ask; empty string on the first ask" } };\n',
     );
 
     expect(promptProseProblems(root)).toEqual([]);

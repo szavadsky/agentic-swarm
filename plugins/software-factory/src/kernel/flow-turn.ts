@@ -14,11 +14,10 @@ import {
   firstBase,
   priorStepCommit,
   promptVars,
-  revisionBase,
   resumeNote,
+  revisionBase,
 } from "./flow-context.js";
 import { parkTask, recordBaseAdvance, taskMeta } from "./flow-meta.js";
-import { isDecideStep } from "./pending-signal.js";
 import type { StepRun, TaskActionResult } from "./flow-state.js";
 import { trackHarnessTimeouts } from "./flow-timeouts.js";
 import {
@@ -31,6 +30,7 @@ import {
   unresolvedResolve,
 } from "./merge-conflict.js";
 import { taskOutcomeSchema } from "./outcome-schemas.js";
+import { isDecideStep } from "./pending-signal.js";
 import { qaOutcomeSchema } from "./qa.js";
 import {
   isAcceptanceStep,
@@ -308,6 +308,8 @@ export async function runTurn(
       taskHash: materialHash(task),
     },
     vars: run.vars!,
+    semaphores: step.semaphores,
+    semaphoresHeld: run.semaphoresHeld,
     expectation: step.qa
       ? "qa"
       : step.review || step.adjudicate !== undefined

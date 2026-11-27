@@ -125,6 +125,7 @@ const ROLES: Record<string, Record<string, string>> = {
     task_path: "/goal/tasks/alpha.md",
     cleanliness_revision: "false",
     front_pack: "/goal/iterations/3/context-pack.md",
+    upscope_ask: "",
     worktree: "/worktrees/demo-tasks/alpha",
     resume_note: "",
     report_path: ".factory/spikes/alpha.md",
@@ -154,6 +155,7 @@ const ROLES: Record<string, Record<string, string>> = {
     fix_dispositions: "",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
+    upscope_ask: "",
     outcome_schema: QA_SCHEMA,
   },
   reviewer: {
@@ -341,6 +343,27 @@ describe("role prompts", () => {
   });
 });
 
+describe("task scope fragment", () => {
+  it("renders the same class definitions into every agent that may upscope", () => {
+    const lib = library();
+    const fragment = lib.render("task-scope", {}).trim();
+    expect(fragment.length).toBeGreaterThan(0);
+    for (const role of [
+      "front",
+      "architect",
+      "subarchitect",
+      "pm",
+      "implementer",
+      "qa",
+      "reviewer",
+      "review-architect",
+    ] as const) {
+      const rendered = lib.render(role, ROLES[role]!);
+      expect(rendered.split(fragment).length - 1, role).toBe(1);
+    }
+  });
+});
+
 describe("preset snapshots", () => {
   for (const preset of ["autonomous", "principal", "detailed"]) {
     for (const role of ["architect", "subarchitect", "pm"]) {
@@ -374,20 +397,20 @@ describe("preset snapshots", () => {
  * lower a ceiling when its prompt shrinks.
  */
 const ROLE_BYTE_BUDGETS: Record<string, number> = {
-  architect: 12667,
-  subarchitect: 10773,
+  architect: 13004,
+  subarchitect: 11110,
   front: 6618,
-  pm: 16247,
-  implementer: 7011,
-  qa: 8265,
-  reviewer: 9418,
+  pm: 16516,
+  implementer: 7349,
+  qa: 8603,
+  reviewer: 9625,
   digest: 4446,
   steward: 4313,
   intent: 3772,
   "plan-checker": 8254,
   "pack-preparer": 5393,
   scout: 3570,
-  "review-architect": 12253,
+  "review-architect": 12590,
   "architect-review-return": 4749,
 };
 

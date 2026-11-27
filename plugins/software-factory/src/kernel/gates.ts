@@ -5,12 +5,12 @@ import type { CheckAttribution, CheckResult } from "../core/checks/types.js";
 import { fingerprintText } from "../core/fingerprint.js";
 import { KeyedMutex } from "../core/mutex.js";
 import { type ProcessResult, runProcess } from "../core/proc.js";
-import type { CappedGateOutput, DeclaredGateRun } from "./gates-types.js";
+import type { Semaphores } from "../core/semaphores.js";
 import { trackGateGroup } from "./gate-processes.js";
 import {
   capGateOutput,
-  gateReportPaths,
   GATE_OUTPUT_CAP,
+  gateReportPaths,
   isAdvisoryCheck,
   isInfraCheck,
   normaliseGateReports,
@@ -22,7 +22,9 @@ import {
   gateSignatures,
   UNIDENTIFIED_GATE_FAILURE,
 } from "./gates-signatures.js";
+import type { CappedGateOutput, DeclaredGateRun } from "./gates-types.js";
 import { resolveGates } from "./infra.js";
+import { semaphoresFor } from "./semaphores.js";
 import type { GateConfig, KernelRuntime } from "./types.js";
 
 export const GATE_TIMEOUT_SEC = 900;
@@ -41,7 +43,6 @@ export function gateTimeoutSec(gate: Pick<GateConfig, "timeoutSec">): number {
 }
 
 export { reapGateProcesses } from "./gate-processes.js";
-export type { GateInfra } from "./gates-types.js";
 export {
   capGateOutput,
   GATE_OUTPUT_CAP,
@@ -55,6 +56,7 @@ export {
   gateSignatures,
   UNIDENTIFIED_GATE_FAILURE,
 } from "./gates-signatures.js";
+export type { GateInfra } from "./gates-types.js";
 
 /**
  * Branch checks and merged-result gates share ports, caches and build dirs only
@@ -226,16 +228,33 @@ function gateDetails(
 }
 
 /**
+ * Runs one gate holding the semaphores it declares, so a live turn naming the
+ * same semaphore finishes first. Names are global: a gate and a turn share one
+ * count, whichever layer declared the limit.
+ */
+export async function runDeclaredGate(
+  cwd: string,
+  gate: GateConfig,
+  repoRoot = cwd,
+  semaphores?: Semaphores,
+): Promise<DeclaredGateRun> {
+  const release = await semaphores?.acquire(gate.semaphores ?? []);
+  try {
+    return await runGateUnheld(cwd, gate, repoRoot);
+  } finally {
+    release?.();
+  }
+}
+
+/**
  * Runs one gate as declared and records what it produced. A declared report is
  * written to its worktree-relative path — `junit` is also exported as
  * `FACTORY_JUNIT_PATH` for runners that honour it — and read once into the one
  * findings model; a gate with no report falls back to its log and exit code.
- * Both `runGates` and the baseline use this, so a gate executes and is recorded
- * identically on base and in a task worktree. `repoRoot` names the repository
- * whose worktrees share the gate's `serial` mutexes; it defaults to `cwd` for
- * a caller running one tree in isolation.
+ * `repoRoot` names the repository whose worktrees share the gate's `serial`
+ * mutexes; it defaults to `cwd` for a caller running one tree in isolation.
  */
-export async function runDeclaredGate(
+async function runGateUnheld(
   cwd: string,
   gate: GateConfig,
   repoRoot = cwd,
@@ -337,7 +356,12 @@ export async function runGates(
       ? declared
       : declared.filter((gate) => only.has(gate.id));
   for (const gate of gates) {
-    const { check } = await runDeclaredGate(cwd, gate, runtime.paths.repoRoot);
+    const { check } = await runDeclaredGate(
+      cwd,
+      gate,
+      runtime.paths.repoRoot,
+      semaphoresFor(runtime.configs),
+    );
     results.push(check);
   }
   return results;

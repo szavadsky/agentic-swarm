@@ -119,6 +119,7 @@ const ROLES: Record<string, Record<string, string>> = {
     cleanliness_revision: "false",
     task_path: "/goal/tasks/alpha.md",
     front_pack: "/goal/iterations/3/context-pack.md",
+    upscope_ask: "",
     worktree: "/worktrees/demo-tasks/alpha",
     resume_note: "",
     report_path: ".factory/spikes/alpha.md",
@@ -148,6 +149,7 @@ const ROLES: Record<string, Record<string, string>> = {
     fix_dispositions: "",
     outcome_path: "/worktrees/demo-tasks/alpha/outcome.yaml",
     validate_cmd: "bun /factory/bin/factory.ts validate",
+    upscope_ask: "",
     outcome_schema: QA_SCHEMA,
   },
   reviewer: {

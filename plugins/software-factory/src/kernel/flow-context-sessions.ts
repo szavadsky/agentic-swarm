@@ -16,6 +16,7 @@ import type {
   CompactionReview,
   ResumeNoteOptions,
   ResumeReason,
+  TaskMeta,
   TrivialResume,
   TurnTarget,
 } from "./flow-types.js";
@@ -89,6 +90,7 @@ export async function followUpSession(
   task: TaskFile,
   target: TurnTarget,
   stepId: string,
+  meta: Pick<TaskMeta, "iteration" | "round">,
   records: StepRecord[],
   worktree: string,
 ): Promise<SessionRef | undefined> {
@@ -122,11 +124,10 @@ export async function followUpSession(
       `[factory] follow-up "${task.slug}" step "${stepId}" starts de novo: ` +
         fallback,
     );
-    const last = priors.at(-1)!;
     await runtime.store.appendRecord(
-      scriptMeta(last.iteration, RESUME_FALLBACK_STEP, {
+      scriptMeta(meta.iteration, RESUME_FALLBACK_STEP, {
         slug: task.slug,
-        round: last.round,
+        round: meta.round,
         revision: task.revision,
       }),
       {
@@ -150,6 +151,7 @@ export async function deciderSession(
   runtime: KernelRuntime,
   task: TaskFile,
   target: TurnTarget,
+  meta: Pick<TaskMeta, "iteration" | "round">,
   records: StepRecord[],
   worktree: string,
 ): Promise<SessionRef | undefined> {
@@ -164,12 +166,13 @@ export async function deciderSession(
           task,
           target,
           review.id,
+          meta,
           records,
           worktree,
         );
   return (
     reviewer ??
-    followUpSession(runtime, task, target, DECIDE_STEP, records, worktree)
+    followUpSession(runtime, task, target, DECIDE_STEP, meta, records, worktree)
   );
 }
 

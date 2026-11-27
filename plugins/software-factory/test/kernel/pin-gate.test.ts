@@ -18,13 +18,7 @@ import type { PinGate } from "../../src/kernel/preflight/types.js";
 import { createFolderStore } from "../../src/kernel/store.js";
 import type { StepRecord } from "../../src/kernel/types.js";
 import { testPriceSource } from "../helpers/price-source.js";
-import {
-  cleanup,
-  DEFAULT_RUN_YAML,
-  type E2EGoal,
-  makeGoal,
-  outcome,
-} from "./e2e-helpers.js";
+import { cleanup, type E2EGoal, makeGoal, outcome } from "./e2e-helpers.js";
 import { scriptKernelRoleFallbacks } from "./fake-defaults.js";
 
 const PACKAGE_ROOT = path.resolve(import.meta.dir, "../..");
@@ -56,13 +50,6 @@ function pinDir(
   fs.mkdirSync(build, { recursive: true });
   if (gate !== null) writeGate(build, gate);
   return build;
-}
-
-function withoutArchitectAlias(): string {
-  return DEFAULT_RUN_YAML.replace(
-    "  architect: { harness: fake, model: fake-architect }\n",
-    "",
-  );
 }
 
 function recordsIn(goalDir: string): Promise<StepRecord[]> {
@@ -324,23 +311,24 @@ describe("factory run under a pin gate", () => {
 });
 
 describe("pin gate override record", () => {
-  it("records the reason in the run's records and continues", async () => {
+  it("runs the goal to done under a red pin and records the reason", async () => {
     const root = tmpDir("factory-pin-override-");
-    const goal = makeGoal({ runYaml: withoutArchitectAlias() });
+    const goal = makeGoal();
     try {
-      await expect(
-        runGoal({
-          repo: goal.repo.dir,
-          goal: "demo",
-          iterations: 1,
-          pinBuild: pinDir(root, REV, { typecheck: "fail" }),
-          pinGateOverride: "known red snapshot test, owner promotion ruling",
-          harnesses: { fake: doneHarness() },
-          priceSource: testPriceSource(goal.repo.dir),
-        }),
-      ).rejects.toThrow(/aliases\.architect/);
+      const result = await runGoal({
+        repo: goal.repo.dir,
+        goal: "demo",
+        iterations: 1,
+        pinBuild: pinDir(root, REV, { typecheck: "fail" }),
+        pinGateOverride: "known red snapshot test, owner promotion ruling",
+        harnesses: { fake: doneHarness() },
+        priceSource: testPriceSource(goal.repo.dir),
+      });
+      // The override carries the run past the red gate to a real outcome.
+      expect(result.stop).toBe("done");
 
-      const override = (await recordsIn(goal.goalDir)).find(
+      const records = await recordsIn(goal.goalDir);
+      const override = records.find(
         (record) => record.step === "pin-gate-override",
       );
       expect(override?.iteration).toBe(0);
@@ -349,6 +337,7 @@ describe("pin gate override record", () => {
         "known red snapshot test, owner promotion ruling",
       );
       expect(override?.cause?.detail).toContain("gate red: typecheck fail");
+      expect(records.some((record) => record.actor === "agent")).toBe(true);
     } finally {
       cleanup(goal);
       fs.rmSync(root, { recursive: true, force: true });

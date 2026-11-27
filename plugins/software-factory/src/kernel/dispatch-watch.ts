@@ -11,7 +11,11 @@
  * Nothing is announced before a plan exists: the PM routes nothing without one,
  * so the steer waits for the plan instead of waking the loop to no end.
  */
-import type { SteerWatch, SteerWatchOptions } from "./dispatch-types.js";
+import type {
+  SteerBatch,
+  SteerWatch,
+  SteerWatchOptions,
+} from "./dispatch-types.js";
 import { type Steer, scanInbox } from "./mailbox.js";
 import type { ArtifactStore } from "./types.js";
 
@@ -41,18 +45,15 @@ function message(err: unknown): string {
 }
 
 /**
- * Restarts a steer's window when its content is new or changed, and returns
- * the sighting that has been holding when it is not.
+ * Returns the sighting that has been holding, or stores a new one for content
+ * that is new or changed and returns that.
  */
-function track(
-  state: WatchState,
-  steer: Steer,
-  now: number,
-): Sighting | undefined {
+function track(state: WatchState, steer: Steer, now: number): Sighting {
   const before = state.sightings.get(steer.id);
   if (before !== undefined && before.hash === steer.hash) return before;
-  state.sightings.set(steer.id, { hash: steer.hash, since: now });
-  return undefined;
+  const sighting: Sighting = { hash: steer.hash, since: now };
+  state.sightings.set(steer.id, sighting);
+  return sighting;
 }
 
 /** Forget the files that left the inbox; their next name is a new steer. */
@@ -60,6 +61,39 @@ function prune(state: WatchState, present: ReadonlySet<string>): void {
   for (const id of state.sightings.keys()) {
     if (!present.has(id)) state.sightings.delete(id);
   }
+}
+
+/**
+ * The batch waiting on the debounce window. A new or changed steer restarts the
+ * wait for the whole batch, so drops inside one window are claimed together.
+ * `waitMs` is how long the newest steer still has to hold; zero means the batch
+ * is due now.
+ */
+function pendingBatch(
+  state: WatchState,
+  steers: Steer[],
+  now: number,
+  claimed: (steer: Steer) => boolean,
+): { steers: Steer[]; waitMs: number } {
+  prune(state, new Set(steers.map((steer) => steer.id)));
+  const pending: Steer[] = [];
+  let newest: Sighting | undefined;
+  for (const steer of steers) {
+    const sighting = track(state, steer, now);
+    if (claimed(steer)) continue;
+    pending.push(steer);
+    if (newest === undefined || sighting.since > newest.since) {
+      newest = sighting;
+    }
+  }
+  const waitMs =
+    pending.length === 0 || newest === undefined
+      ? 0
+      : Math.max(0, state.debounceMs - (now - newest.since));
+  return {
+    steers: pending,
+    waitMs,
+  };
 }
 
 /**
@@ -74,25 +108,20 @@ async function dueSteers(
   steers: Steer[],
   now: number,
 ): Promise<Steer[]> {
-  prune(state, new Set(steers.map((steer) => steer.id)));
-  const held: Steer[] = [];
-  for (const steer of steers) {
-    if (state.seen.has(steer.id) || state.announced.has(steer.id)) {
-      state.sightings.delete(steer.id);
-      continue;
-    }
-    const sighting = track(state, steer, now);
-    if (sighting === undefined || now - sighting.since < state.debounceMs) {
-      continue;
-    }
-    held.push(steer);
-  }
-  if (held.length === 0 || !(await store.plans.exists())) return [];
+  const batch = pendingBatch(
+    state,
+    steers,
+    now,
+    (steer) => state.seen.has(steer.id) || state.announced.has(steer.id),
+  );
+  if (batch.steers.length === 0 || batch.waitMs > 0) return [];
+  if (!(await store.plans.exists())) return [];
   // The plan probe yielded: a tick that ran meanwhile may have selected one of
   // these already, so re-check and claim before delivery starts.
-  return held.filter((steer) => {
-    if (state.announced.has(steer.id)) return false;
-    state.sightings.delete(steer.id);
+  return batch.steers.filter((steer) => {
+    if (state.seen.has(steer.id) || state.announced.has(steer.id)) {
+      return false;
+    }
     state.announced.add(steer.id);
     return true;
   });
@@ -169,6 +198,12 @@ export function createSteerWatch(
       const failed = error;
       error = undefined;
       return failed;
+    },
+    batch(steers: readonly Steer[]): SteerBatch {
+      const pending = pendingBatch(state, [...steers], Date.now(), (steer) =>
+        state.seen.has(steer.id),
+      );
+      return { pending: pending.steers.length, waitMs: pending.waitMs };
     },
     stop(): void {
       clearInterval(timer);

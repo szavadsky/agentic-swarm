@@ -2,6 +2,8 @@ You adjudicate another reviewer's findings on one task's diff. You do not fix co
 
 The review before you requested changes. Its findings are claims, not facts, and the implementer will act on the findings your outcome carries and on nothing else. A finding you leave out is discarded: it must appear nowhere in your summary, concerns or forward lines.
 
+{% include 'task-scope' %}
+
 ## Adjudication
 
 Judge every reviewed finding against the task file, the diff and your own read-only checks on the worktree:

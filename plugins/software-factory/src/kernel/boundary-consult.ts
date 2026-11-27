@@ -125,7 +125,7 @@ export async function writeEpicPack(
     openForEpic,
   );
   const rel = epicContextPackRelPath(opts.iteration, opts.epic);
-  await runtime.store.writeFile(rel, renderContextPack(input));
+  await runtime.store.writeFile(rel, renderContextPack(input, runtime.prompts));
   return rel;
 }
 
@@ -209,7 +209,9 @@ async function runSubarchitectTurn(
         },
         expectation: KERNEL_TURN_STEPS.subarchitect,
         validate: (outcome) =>
-          architectIntentStatusFindings(runtime.store, outcome),
+          architectIntentStatusFindings(runtime.store, outcome, {
+            checkout: runtime.paths.goalCheckout,
+          }),
         session,
         settle: (_record, outcome, live) =>
           compactDecidedConsult(runtime, outcome, live),

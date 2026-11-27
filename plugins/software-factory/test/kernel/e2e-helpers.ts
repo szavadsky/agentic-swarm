@@ -33,6 +33,7 @@ export interface GoalOptions {
   classYaml?: string | null;
 }
 
+/** No steer debounce unless a test sets one: 0.1 ms rounds to 0. */
 export const DEFAULT_RUN_YAML = [
   "aliases:",
   "  architect: { harness: fake, model: fake-architect }",
@@ -48,7 +49,7 @@ export const DEFAULT_RUN_YAML = [
   "  plan-reviewer: { harness: fake, model: fake-plan-review }",
   "  pack-preparer: { harness: fake, model: fake-pack-prep }",
   "  digest: { harness: fake, model: fake-digest }",
-  "limits: { iterations: 1, concurrency: { overall: 1 } }",
+  "limits: { iterations: 1, concurrency: { overall: 1 }, steerDebounceSeconds: 0.0001 }",
   "",
 ].join("\n");
 

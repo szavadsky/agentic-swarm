@@ -43,6 +43,16 @@ export function configFilePaths(
   };
 }
 
+/**
+ * The process layer a finding blames: the repo override when it exists, the
+ * package default otherwise.
+ */
+export function processFilePath(files: ConfigFiles): string {
+  return fs.existsSync(files.processOverride)
+    ? files.processOverride
+    : files.processDefault;
+}
+
 interface Layer {
   data?: unknown;
   findings: Finding[];

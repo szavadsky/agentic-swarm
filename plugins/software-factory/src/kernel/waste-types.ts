@@ -20,8 +20,12 @@ export interface WasteCounts {
   structureOutcomeChannel: number;
   /** Infra stopped the turn or a gate could not run. */
   structureInfra: number;
-  /** A gate red rejected the turn, the same tree then passed. */
-  flakyTestRejection: number;
+  /**
+   * A gate red, a gate that could not run, or an infra misjudgment rejected
+   * the turn although the work was not at fault: the same tree passed, or the
+   * task had to be re-run.
+   */
+  incorrectRejection: number;
 }
 
 export type WasteReason = keyof WasteCounts;
@@ -55,6 +59,12 @@ export interface WasteAccounting {
 export interface WasteInput {
   /** The iteration's records, in any order. */
   records: readonly StepRecord[];
+  /**
+   * Other iterations' records, evidence only. A gate timeout or an
+   * infra-misjudged rejection may park a task in an earlier iteration, so the
+   * turn that re-runs it lands here without its park.
+   */
+  history?: readonly StepRecord[];
   /** The role a step's prompt names, for the per-role counts. */
   roleOf(step: string): string;
 }

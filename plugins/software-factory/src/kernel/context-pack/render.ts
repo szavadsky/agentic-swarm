@@ -4,6 +4,8 @@ import { makeCause } from "../cause.js";
 import { reportView } from "../report-view.js";
 import type { ContextPackInput, PackSection } from "./types.js";
 import type { ReportView, TaskFile } from "../types.js";
+import type { PromptLibrary } from "../prompts.js";
+import { builtinPrompts } from "../prompts.js";
 import {
   appendAgedReady,
   appendBaseGates,
@@ -26,7 +28,7 @@ import {
   appendWaste,
   parkedLines,
   pendingLines,
-  SECTION_HEADINGS,
+  sectionHeading,
   short,
 } from "./append.js";
 
@@ -85,6 +87,7 @@ function appendWholeOrBrief(
   lines: string[],
   section: PackSection,
   input: ContextPackInput,
+  prompts: PromptLibrary,
   append: (out: string[]) => void,
 ): void {
   const brief = input.briefs?.find((entry) => entry.section === section);
@@ -100,7 +103,7 @@ function appendWholeOrBrief(
   }
   lines.push(
     "",
-    SECTION_HEADINGS[section],
+    sectionHeading(section, prompts),
     `- ${cappedSummary(brief.summary)}`,
     `- full: ${input.dataPath} (#${section})`,
   );
@@ -115,8 +118,13 @@ function appendWholeOrBrief(
  * heading, one line and a pointer, and every other section renders whole.
  * Uncapped: the status table and every pointer section render whole unless a
  * brief replaces them, and a capped summary never drops its pointer.
+ * Instruction-bearing headings render from prompt fragments through the
+ * library; the built-in library is the fallback.
  */
-export function renderContextPack(input: ContextPackInput): string {
+export function renderContextPack(
+  input: ContextPackInput,
+  prompts: PromptLibrary = builtinPrompts(),
+): string {
   const view = packView(input);
   const deps = taskDeps(input.tasks);
   const epicScope = input.epic ? `, epic \`${input.epic}\`` : "";
@@ -140,7 +148,7 @@ export function renderContextPack(input: ContextPackInput): string {
   appendTaskStatus(lines, input, view.tasks, deps);
   appendSection(
     lines,
-    "## Parked by cause (terminal; continue via a new slug)",
+    prompts.render("pack-parked-by-cause", {}).trimEnd(),
     parkedLines(view.groups.parked),
   );
   appendSection(
@@ -148,7 +156,7 @@ export function renderContextPack(input: ContextPackInput): string {
     "## Pending",
     pendingLines(input.state, view.groups.pending, deps),
   );
-  appendIndexBody(lines, input);
+  appendIndexBody(lines, input, prompts);
   return `${lines.join("\n")}\n`;
 }
 
@@ -168,33 +176,37 @@ function taskDeps(tasks: readonly TaskFile[]): Map<string, readonly string[]> {
 }
 
 /** Everything after the status table: whole unless the preparer briefed it. */
-function appendIndexBody(lines: string[], input: ContextPackInput): void {
+function appendIndexBody(
+  lines: string[],
+  input: ContextPackInput,
+  prompts: PromptLibrary,
+): void {
   appendAgedReady(lines, input);
-  appendWholeOrBrief(lines, "planCheck", input, (out) =>
+  appendWholeOrBrief(lines, "planCheck", input, prompts, (out) =>
     appendPlanCheck(out, input),
   );
-  appendWholeOrBrief(lines, "planReview", input, (out) =>
-    appendPlanReview(out, input),
+  appendWholeOrBrief(lines, "planReview", input, prompts, (out) =>
+    appendPlanReview(out, input, prompts),
   );
   appendWaste(lines, input);
-  appendSpikeProposals(lines, input);
-  appendWholeOrBrief(lines, "forwarded", input, (out) =>
+  appendSpikeProposals(lines, input, prompts);
+  appendWholeOrBrief(lines, "forwarded", input, prompts, (out) =>
     appendForwarded(out, input),
   );
-  appendDebts(lines, input);
+  appendDebts(lines, input, prompts);
   appendOpenRecords(lines, input);
-  appendWholeOrBrief(lines, "codeMap", input, (out) =>
-    appendCodeMap(out, input),
+  appendWholeOrBrief(lines, "codeMap", input, prompts, (out) =>
+    appendCodeMap(out, input, prompts),
   );
   appendInfra(lines, input);
   appendBaseGates(lines, input);
   appendTestRuntimes(lines, input);
   appendSteers(lines, input);
-  appendWholeOrBrief(lines, "pmAnswers", input, (out) =>
+  appendWholeOrBrief(lines, "pmAnswers", input, prompts, (out) =>
     appendPmAnswers(out, input),
   );
   appendIntentChanges(lines, input);
-  appendWholeOrBrief(lines, "spikeFindings", input, (out) =>
+  appendWholeOrBrief(lines, "spikeFindings", input, prompts, (out) =>
     appendSpikeFindings(out, input),
   );
   appendTaskFiles(lines, input);
@@ -262,6 +274,7 @@ export function renderContextData(input: ContextPackInput): string {
       cause: task.cause ?? null,
     })),
     epics: input.state.epics,
+    epicSummaries: input.epicSummaries ?? [],
     parked: view.groups.parked.map((task) => ({
       slug: task.slug,
       cause: task.cause ?? makeCause("unknown", "no recorded cause"),
