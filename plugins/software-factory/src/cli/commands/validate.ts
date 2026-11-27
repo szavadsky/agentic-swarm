@@ -5,8 +5,10 @@ import path from "node:path";
 import yaml from "yaml";
 import { OMP_ID } from "../../harness/omp/types.js";
 import {
+  ConfigError,
   configFilePaths,
   loadConfigs,
+  resolveGoalPaths,
   resolveRoots,
 } from "../../kernel/config.js";
 import { architectIntentStatusFindings } from "../../kernel/intent-slugs.js";
@@ -177,6 +179,44 @@ function recordGoalDir(abs: string): string | undefined {
   return path.dirname(recordsDir);
 }
 
+function hasFactoryConfig(dir: string): boolean {
+  return (
+    fs.existsSync(path.join(dir, ".factory", "repo.yaml")) ||
+    fs.existsSync(path.join(dir, ".factory", "process.yaml"))
+  );
+}
+
+/**
+ * The checkout root for resolving a pointer `intent.md`: prefers the goal's
+ * active worktree checkout when it exists on disk so committed triage/steer
+ * edits on the goal branch apply, and falls back to the repo root.
+ */
+function validationCheckoutRoot(
+  abs: string,
+  goalDir: string,
+  repoFallback?: string,
+): string {
+  const fromFile = findRepoRoot(path.dirname(abs));
+  const fromCwd = findRepoRoot(process.cwd());
+  const root =
+    (fromFile && hasFactoryConfig(fromFile) ? fromFile : undefined) ??
+    (repoFallback ? path.resolve(repoFallback) : undefined) ??
+    (fromCwd && hasFactoryConfig(fromCwd) ? fromCwd : undefined) ??
+    fromFile ??
+    fromCwd ??
+    process.cwd();
+  const goal = path.basename(goalDir);
+  if (/^[a-z0-9][a-z0-9-]*$/.test(goal) && hasFactoryConfig(root)) {
+    try {
+      const { goalCheckout } = resolveGoalPaths(loadConfigs(root), root, goal);
+      if (fs.existsSync(goalCheckout)) return goalCheckout;
+    } catch (err) {
+      if (!(err instanceof ConfigError)) throw err;
+    }
+  }
+  return root;
+}
+
 /**
  * One outcome's findings for the step it was given for: `--step` wins, the
  * record's `started.yaml` supplies it otherwise. Without either, only the
@@ -226,7 +266,11 @@ async function outcomeResult(
           undefined,
           process.taskTypes ?? {},
         );
-        delivery.push(...(await architectIntentStatusFindings(store, outcome)));
+        delivery.push(
+          ...(await architectIntentStatusFindings(store, outcome, {
+            checkout: validationCheckoutRoot(abs, goalDir, opts.repo),
+          })),
+        );
       }
     }
     if (step === PLAN_REVIEW_STEP) {

@@ -209,7 +209,9 @@ async function runSubarchitectTurn(
         },
         expectation: KERNEL_TURN_STEPS.subarchitect,
         validate: (outcome) =>
-          architectIntentStatusFindings(runtime.store, outcome),
+          architectIntentStatusFindings(runtime.store, outcome, {
+            checkout: runtime.paths.goalCheckout,
+          }),
         session,
         settle: (_record, outcome, live) =>
           compactDecidedConsult(runtime, outcome, live),

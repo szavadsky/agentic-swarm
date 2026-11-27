@@ -7,7 +7,14 @@ import { type AgentTurnResult, runAgentTurn } from "./agent.js";
 import type { IntentChange } from "./context-pack.js";
 import { boundaryTarget } from "./flow-context.js";
 import { unifiedDiff } from "./intent-diff.js";
-import { intentProse, parseIntentSlugs } from "./intent-slugs.js";
+import {
+  checkoutSourceFile,
+  intentProse,
+  parseIntentSlugs,
+  repoRel,
+  sourceReferenceTokens,
+} from "./intent-slugs.js";
+import type { IntentSourceFile } from "./intent-slugs-types.js";
 import { formatSteerTurn, type Steer } from "./mailbox.js";
 import { KERNEL_TURN_STEPS } from "./outcome.js";
 import { recordDirName } from "./store.js";
@@ -30,54 +37,23 @@ const INTENT_FILE = "intent.md";
 const SLUG_TRIAGE_NOTE =
   "the goal intent carries no [[Slug]] annotations; add them in place";
 
-/**
- * Phrases that make a path in the goal note the intent's source rather than a
- * passing file reference. The note is prose, so the pointer is read from the
- * line that names it, never guessed from a bare path.
- */
-const SOURCE_MARKER =
-  /\b(source of truth|authoritative|binds?|as specified in|specified in|as per)\b/i;
-
 function intentPath(runtime: KernelRuntime): string {
   return path.join(runtime.store.goalDir, INTENT_FILE);
-}
-
-/** A repo-relative path inside the goal checkout, or undefined outside it. */
-function repoRel(checkout: string, abs: string): string | undefined {
-  const rel = path.relative(checkout, abs);
-  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel))
-    return undefined;
-  return rel.split(path.sep).join("/");
-}
-
-interface IntentSource {
-  /** Repo-relative file the note names as the source of truth. */
-  rel: string;
-  /** Absolute path of that file in the goal checkout. */
-  abs: string;
 }
 
 /** The tracked checkout file a backticked token names, or undefined. */
 async function trackedSource(
   checkout: string,
   token: string,
-): Promise<IntentSource | undefined> {
-  const rel = token.trim().replace(/^\.\//, "");
-  if (rel === "" || path.isAbsolute(rel)) return undefined;
-  const abs = path.resolve(checkout, rel);
-  if (repoRel(checkout, abs) === undefined) return undefined;
-  try {
-    if (!fs.statSync(abs).isFile()) return undefined;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw err;
-  }
+): Promise<IntentSourceFile | undefined> {
+  const found = checkoutSourceFile(checkout, token);
+  if (found === undefined) return undefined;
   const listed = await git(
     checkout,
-    ["ls-files", "--error-unmatch", "--", rel],
+    ["ls-files", "--error-unmatch", "--", found.rel],
     { allowFail: true },
   );
-  return listed.code === 0 ? { rel, abs } : undefined;
+  return listed.code === 0 ? found : undefined;
 }
 
 /**
@@ -89,14 +65,11 @@ async function trackedSource(
 async function intentSource(
   runtime: KernelRuntime,
   note: string,
-): Promise<IntentSource | undefined> {
+): Promise<IntentSourceFile | undefined> {
   const checkout = path.resolve(runtime.paths.goalCheckout);
-  for (const line of note.split("\n")) {
-    if (!SOURCE_MARKER.test(line)) continue;
-    for (const match of line.matchAll(/`([^`\n]+)`/g)) {
-      const source = await trackedSource(checkout, match[1]!);
-      if (source !== undefined) return source;
-    }
+  for (const token of sourceReferenceTokens(note)) {
+    const source = await trackedSource(checkout, token);
+    if (source !== undefined) return source;
   }
   return undefined;
 }
