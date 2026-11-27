@@ -11,7 +11,7 @@ import type {
 import { zeroUsage } from "../../usage.js";
 import { classifyOmpTurn } from "../classify.js";
 import type { OmpTurnFailure } from "../classify.js";
-import { OmpRpcExit, OmpRpcTimeout } from "../rpc.js";
+import { OmpRpcExit, OmpRpcProtocol, OmpRpcTimeout } from "../rpc.js";
 import type { OmpRpc } from "../rpc.js";
 import { actualModel } from "../runtime.js";
 import type { OmpRuntime } from "../runtime.js";
@@ -81,6 +81,9 @@ function turnFailure(
   promptFailed: Error | undefined,
   rpc: OmpRpc,
 ): OmpTurnFailure | undefined {
+  if (promptFailed instanceof OmpRpcProtocol) {
+    return { protocol: promptFailed.message };
+  }
   if (promptFailed instanceof OmpRpcExit) {
     return {
       code: promptFailed.code,

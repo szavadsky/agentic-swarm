@@ -16,3 +16,11 @@ export class OmpRpcTimeout extends Error {
     this.name = "OmpRpcTimeout";
   }
 }
+
+/** An omp stdout line that is not an RPC frame: the protocol, not the model, failed. */
+export class OmpRpcProtocol extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OmpRpcProtocol";
+  }
+}
