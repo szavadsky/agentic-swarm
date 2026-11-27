@@ -92,7 +92,10 @@ function registerAliasFallbackTiersPart1(): void {
       t.runtime.configs.run.harnesses = {
         b: {
           acpx: { agent: "b-agent", raw: true },
-          compaction: { enabled: true },
+          compaction: {
+            enabled: false,
+            reason: "the test harness runs no compaction command",
+          },
         },
       };
 

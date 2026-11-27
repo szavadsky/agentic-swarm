@@ -307,7 +307,14 @@ async function chooseSession(
   run.trivial = isTrivialImplementTurn(runtime, task, state, step.id);
   run.turnCwd = ensured.path;
   run.session = isDecideStep(step)
-    ? await deciderSession(runtime, task, run.target, run.records, ensured.path)
+    ? await deciderSession(
+        runtime,
+        task,
+        run.target,
+        { iteration, round: state.round },
+        run.records,
+        ensured.path,
+      )
     : isAcceptanceStep(step) ||
         (run.relaunch && !run.trivial) ||
         (run.fix && !run.trivial)
@@ -316,6 +323,7 @@ async function chooseSession(
           task,
           run.target,
           step.id,
+          { iteration, round: state.round },
           run.records,
           ensured.path,
         )

@@ -1,9 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { recordedConcernId } from "../../src/core/concerns.js";
-import { dispatch } from "../../src/cli/dispatch.js";
+import { runValidate, withTmp, writeFile } from "../helpers/validate.js";
 
 /** The fields inference reads from a record directory's started.yaml. */
 const STARTED = (step: string, round = 1, revision?: number): string =>
@@ -48,51 +45,6 @@ function priorPark(
     `${record}/end.yaml`,
     "endedAt: 2024-01-01T00:00:00.000Z\nok: true\n",
   );
-}
-
-function writeFile(root: string, rel: string, content: string): string {
-  const abs = path.join(root, rel);
-  fs.mkdirSync(path.dirname(abs), { recursive: true });
-  fs.writeFileSync(abs, content, "utf8");
-  return abs;
-}
-
-async function runValidate(
-  file: string,
-  extraArgs: string[] = [],
-): Promise<{
-  code: number;
-  out: string;
-  err: string;
-}> {
-  const logs: string[] = [];
-  const errors: string[] = [];
-  const origLog = console.log;
-  const origErr = console.error;
-  console.log = (...args: unknown[]) => {
-    logs.push(args.map(String).join(" "));
-  };
-  console.error = (...args: unknown[]) => {
-    errors.push(args.map(String).join(" "));
-  };
-  try {
-    const code = await dispatch(["validate", ...extraArgs, file]);
-    return { code, out: logs.join("\n"), err: errors.join("\n") };
-  } finally {
-    console.log = origLog;
-    console.error = origErr;
-  }
-}
-
-function withTmp(fn: (root: string) => Promise<void>): () => Promise<void> {
-  return async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "factory-validate-"));
-    try {
-      await fn(root);
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
-  };
 }
 
 function factoryValidateQAOutcomesPart1() {

@@ -230,7 +230,7 @@ const SPIKE_PROPOSALS_HEADING =
   "## Spike proposals (recurring waste at the configured threshold)";
 
 /** The section naming recurring waste at the threshold; no pack can drop it. */
-export function spikeProposalsSection(
+function spikeProposalsSection(
   proposals: readonly WasteSpikeProposal[],
   prompts: PromptLibrary,
 ): string {
